@@ -1,0 +1,70 @@
+---
+title: Remove background
+description: "Cuts a subject out of a shot with a trained model, a frame at a time."
+---
+
+Remove background is a **Utility** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Reads the shot with a trained model and files how much of each pixel is the subject, one
+matte a frame. Another layer reads that matte through its Matte row, a **Set matte** or a
+track matte.
+
+**Robust Video Matting** reads the shot in order, carrying what it made of one frame into
+the next. **BiRefNet** reads each frame on its own, is slower by a long way, and is not
+trained on people alone.
+
+The model is an **addon**, installed from **Settings ▸ Addons**. Without it the effect
+wears a badge and leaves the picture alone. The badge names the pack the **Model** row
+asks for.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Analyse** | Button | - | - | - |
+| **Cancel** | Button | - | - | - |
+| **Model** | Dropdown | Robust Video Matting · BiRefNet | Robust Video Matting | - |
+| **View** | Dropdown | Composite · Matte | Composite | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Detail** | Dropdown | Portrait · Full body | Portrait | - |
+
+In the Effect Controls panel:
+
+- **Detail** is editable while **Model** is set to Robust Video Matting.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Analyse**: read the shot and file its matte. Only one analysis runs at a time.
+- **Cancel**: stop a run and keep the frames already read. A later Analyse carries on
+  from them on BiRefNet, and reads the shot from the top on Robust Video Matting.
+- **Model**: which trained model reads the frames.
+- **View**: the layer with its background cut away, or the matte itself as a grey
+  picture.
+- **Invert**: keeps the background and cuts the subject away.
+- **Detail**: how much of the frame Robust Video Matting works at. Portrait is head and
+  shoulders; Full body is a whole person at a distance.
+
+## Notes
+
+Frames the analysis has not reached render untouched.
+
+## Related
+
+- [Roto brush](/effects/utility/roto-brush/)
+- [Depth](/effects/utility/depth/)
+- [Set matte](/effects/utility/set-matte/)
+- [Mattes](/use/mattes/)
+- [Utility](/effects/#utility)
+- [Effects](/use/effects/)

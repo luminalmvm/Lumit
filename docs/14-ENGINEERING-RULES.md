@@ -106,6 +106,15 @@ machine".
   flag leak into export is a release-blocking bug.
 - GPU/CPU/CUDA implementations of one effect MAY differ within a documented tolerance
   (§6 golden tests); a single implementation MUST be bit-stable against itself.
+- A trained model is the one thing that cannot be bit-stable against itself: the same
+  weights on two graphics cards, or one card across two driver versions, differ in the low
+  bits. So a model never runs inside a render. It runs as a baked analysis whose answer is
+  written to a sidecar, and every key that answer is filed under carries the pack's hash
+  and the provider that ran it, so a result made under one backend is never served for
+  another. Once it is cached the answer is an input like any other and an export is stable
+  until the user asks for it again. Frame synthesis is the one model with no sidecar, and
+  it says so where it is chosen. The whole arrangement is in
+  [impl/addons.md](impl/addons.md) §7.
 
 ## 4. Error policy
 

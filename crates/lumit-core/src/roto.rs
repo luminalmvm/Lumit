@@ -27,6 +27,14 @@
 //! hash, keeps its cached matte, and keeps the name its rendered frame was
 //! filed under.
 //!
+//! A **prompt** is the second kind of edit, and it keeps the same company: a
+//! few taps saying "this thing, not that one", which a segmentation model reads
+//! into a first guess at the base frame's matte when the effect's seed row asks
+//! for one (docs/impl/addons.md §6.2). The taps are the edit and live here; the
+//! model's answer is derived like every other matte, and it goes through the
+//! same predicate, so a prompt spoils exactly the frames a stroke in its place
+//! would.
+//!
 //! There is deliberately **no roto-shaped op**: a stroke edit rides
 //! `Op::SetLayerEffects`, the coarse-and-exactly-invertible whole-stack commit
 //! every parameter edit already uses, so strokes undo, journal and replay with
@@ -51,7 +59,11 @@ use crate::model::{EffectInstance, EffectValue};
 /// The `roto/` sidecar tier's format version, fed into every hash here so a
 /// build that changes the meaning of a matte cannot read the old one back.
 /// Bumping it orphans every cached matte, which costs one re-propagation.
-pub const TIER_VERSION: u16 = 1;
+///
+/// Version 2 is the one that can seed the base frame from a segmentation model
+/// (docs/impl/addons.md §6.2): what a matte is a function of grew, so the
+/// mattes a version 1 build wrote are never asked for again.
+pub const TIER_VERSION: u16 = 2;
 
 /// The Roto brush's `match_name`, so the render path and the frame key can find
 /// the effect without importing the catalogue's type.
@@ -103,8 +115,31 @@ pub struct RotoStroke {
     pub frame: i64,
 }
 
+/// One segmentation prompt: the taps the user made on a frame, and what each
+/// of them claims.
+///
+/// Points are **source raster pixels**, as a stroke's are, so the prompt
+/// describes the file's frames and survives every comp-side transform. A label
+/// is 1 for a tap on the subject and 0 for one against it, one per point; a
+/// label list that does not match the points is refused at the seam it arrives
+/// through rather than stored.
+///
+/// The prompt is the edit and lives in the project file. The mask the model
+/// makes of it is derived, kept in the cache folder, and thrown away without
+/// loss, exactly as a matte is.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RotoPrompt {
+    pub id: Uuid,
+    /// The **source** frame index the taps were made on.
+    pub frame: i64,
+    /// Where the user tapped, in source raster pixels, in the order tapped.
+    pub points: Vec<(f32, f32)>,
+    /// One per point: 1 for the subject, 0 against it.
+    pub labels: Vec<u8>,
+}
+
 /// Everything a Roto brush instance carries that is not a parameter: the base
-/// frame and the stroke table, in document order.
+/// frame, the stroke table and the prompt table, in document order.
 ///
 /// Absent on an instance nobody has stroked, and left out of the saved file
 /// then, so a project written before roto existed reads and saves back byte for
@@ -119,6 +154,11 @@ pub struct RotoBlock {
     /// Ordered, undoable, journaled. Later strokes win where two overlap.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub strokes: Vec<RotoStroke>,
+    /// The taps a segmentation model is asked to read, ordered the same way and
+    /// left out of the saved file when there are none, so a project written
+    /// before this existed reads and saves back byte for byte.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub prompts: Vec<RotoPrompt>,
 }
 
 impl RotoBlock {
@@ -126,7 +166,7 @@ impl RotoBlock {
     /// block.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.base_frame.is_none() && self.strokes.is_empty()
+        self.base_frame.is_none() && self.strokes.is_empty() && self.prompts.is_empty()
     }
 
     /// The frames propagation could reach, as `(first, last)` over the strokes
@@ -161,6 +201,20 @@ impl RotoBlock {
             .filter(|s| between(base, frame, s.frame))
             .collect()
     }
+
+    /// The prompts that decide frame `frame`, by the same rule the strokes
+    /// follow: influence flows outward from the base, so a prompt on the far
+    /// side of it decides nothing here.
+    #[must_use]
+    pub fn contributing_prompts(&self, frame: i64) -> Vec<&RotoPrompt> {
+        let Some(base) = self.base_frame else {
+            return Vec::new();
+        };
+        self.prompts
+            .iter()
+            .filter(|p| between(base, frame, p.frame))
+            .collect()
+    }
 }
 
 /// Whether a stroke on frame `n` decides frame `f`, given the base: `n` is on
@@ -193,6 +247,19 @@ pub struct RotoSettings {
     pub flow_resolution: u32,
     /// The flow's regularisation, 0–100.
     pub flow_smoothness: f32,
+    /// What seeds the base frame, as the effect's Choice index: 0 the strokes
+    /// alone (the default), 1 a segmentation model reading the prompt.
+    pub seed: u32,
+    /// Which segmentation pack, and which version of it, read the prompt
+    /// (docs/impl/addons.md §7).
+    ///
+    /// Zeros unless the seed row says Segment, and zeros here even then: this
+    /// is a fact about the machine rather than about the document, and
+    /// `lumit-core` is the bottom of the crate graph and may not ask the crate
+    /// that opens a model. The render path fills it in when it builds the job,
+    /// which is what stops a run solved under one pack lending its frames to a
+    /// run under another.
+    pub identity: [u8; 32],
 }
 
 impl Default for RotoSettings {
@@ -201,6 +268,8 @@ impl Default for RotoSettings {
             refine_radius: 8.0,
             flow_resolution: 1,
             flow_smoothness: 50.0,
+            seed: 0,
+            identity: [0; 32],
         }
     }
 }
@@ -229,14 +298,34 @@ impl RotoSettings {
                 _ => d.flow_resolution,
             },
             flow_smoothness: float("flow_smoothness", d.flow_smoothness),
+            seed: match fx.param("seed") {
+                Some(EffectValue::Choice(v)) => *v,
+                _ => d.seed,
+            },
+            identity: d.identity,
         }
     }
 
+    /// Whether the base frame is seeded by a model reading the prompt.
+    #[must_use]
+    pub fn segments(&self) -> bool {
+        self.seed == crate::fx::effects::roto_brush::SEED_SEGMENT
+    }
+
     /// Feed the settings into a hash, in a fixed order.
+    ///
+    /// The model's identity is fed **only** where the seed row asks for a
+    /// model, so installing a segmentation pack renames nothing on a brush
+    /// that is seeded by its strokes, which is every brush in every project
+    /// written before this existed.
     pub fn feed(&self, h: &mut blake3::Hasher) {
         h.update(&self.refine_radius.to_bits().to_le_bytes());
         h.update(&self.flow_resolution.to_le_bytes());
         h.update(&self.flow_smoothness.to_bits().to_le_bytes());
+        h.update(&self.seed.to_le_bytes());
+        if self.segments() {
+            h.update(&self.identity);
+        }
     }
 }
 
@@ -254,11 +343,26 @@ fn feed_stroke(h: &mut blake3::Hasher, s: &RotoStroke) {
     }
 }
 
+/// Feed one prompt into a hash. Its **id is not in it**, for the reason a
+/// stroke's is not: the same taps ask the model the same question, and a prompt
+/// that was cleared and tapped again deserves the answer it already has.
+fn feed_prompt(h: &mut blake3::Hasher, p: &RotoPrompt) {
+    h.update(&p.frame.to_le_bytes());
+    h.update(&(p.points.len() as u64).to_le_bytes());
+    for (x, y) in &p.points {
+        h.update(&x.to_bits().to_le_bytes());
+        h.update(&y.to_bits().to_le_bytes());
+    }
+    h.update(&(p.labels.len() as u64).to_le_bytes());
+    h.update(&p.labels);
+}
+
 /// The **chain hash** of frame `frame`: everything the matte at that frame is a
 /// function of, apart from the media itself.
 ///
 /// The tier version, the settings, the base frame, and the contributing strokes
-/// in document order — [`RotoBlock::contributing`], which is the whole
+/// and prompts in document order ([`RotoBlock::contributing`] and
+/// [`RotoBlock::contributing_prompts`]), which together are the whole
 /// invalidation rule. Two frames on opposite sides of the base with the same
 /// distance from it hash differently, because the side is in the frame number
 /// the chain runs to.
@@ -281,6 +385,14 @@ pub fn chain_hash(block: &RotoBlock, settings: RotoSettings, frame: i64) -> Opti
     {
         feed_stroke(&mut h, s);
     }
+    h.update(b"prompts/");
+    for p in block
+        .prompts
+        .iter()
+        .filter(|p| between(base, frame, p.frame))
+    {
+        feed_prompt(&mut h, p);
+    }
     Some(*h.finalize().as_bytes())
 }
 
@@ -288,9 +400,10 @@ pub fn chain_hash(block: &RotoBlock, settings: RotoSettings, frame: i64) -> Opti
 /// media's own fingerprint, which the render path adds because only it knows
 /// one.
 ///
-/// The whole stroke table, not a prefix: a file holds a whole run, and a run
-/// under a different table is a different run. Which of its *frames* survive an
-/// edit is the chain hash's question, asked per record.
+/// The whole stroke table and the whole prompt table, not a prefix: a file
+/// holds a whole run, and a run under a different table is a different run.
+/// Which of its *frames* survive an edit is the chain hash's question, asked
+/// per record.
 #[must_use]
 pub fn key_hash(block: &RotoBlock, settings: RotoSettings) -> [u8; 32] {
     let mut h = blake3::Hasher::new();
@@ -301,6 +414,10 @@ pub fn key_hash(block: &RotoBlock, settings: RotoSettings) -> [u8; 32] {
     h.update(&(block.strokes.len() as u64).to_le_bytes());
     for s in &block.strokes {
         feed_stroke(&mut h, s);
+    }
+    h.update(&(block.prompts.len() as u64).to_le_bytes());
+    for p in &block.prompts {
+        feed_prompt(&mut h, p);
     }
     *h.finalize().as_bytes()
 }
@@ -346,7 +463,33 @@ mod tests {
         RotoBlock {
             base_frame: Some(base),
             strokes: frames.iter().map(|&f| stroke(f, 10.0)).collect(),
+            prompts: Vec::new(),
         }
+    }
+
+    fn prompt(frame: i64, x: f32) -> RotoPrompt {
+        RotoPrompt {
+            id: Uuid::now_v7(),
+            frame,
+            points: vec![(x, 6.0)],
+            labels: vec![1],
+        }
+    }
+
+    /// A block whose base frame is decided by a prompt rather than by a
+    /// stroke, with the seed row set to match.
+    fn prompted(base: i64, frames: &[i64]) -> (RotoBlock, RotoSettings) {
+        (
+            RotoBlock {
+                base_frame: Some(base),
+                strokes: Vec::new(),
+                prompts: frames.iter().map(|&f| prompt(f, 20.0)).collect(),
+            },
+            RotoSettings {
+                seed: crate::fx::effects::roto_brush::SEED_SEGMENT,
+                ..RotoSettings::default()
+            },
+        )
     }
 
     #[test]
@@ -413,6 +556,103 @@ mod tests {
         assert!(chain_hash(&b, RotoSettings::default(), 0).is_none());
         assert!(b.stroked_range().is_none());
         assert!(b.contributing(0).is_empty());
+    }
+
+    /// **A prompt obeys the purity sentence the strokes do.** The taps decide
+    /// the frames outward from the base on their own side and nothing else, so
+    /// a prompt is a contributor rather than a fact about the shot, and every
+    /// cache guarantee in the note holds for it unchanged.
+    #[test]
+    fn a_prompt_flows_outward_from_the_base_and_never_back() {
+        let (b, _) = prompted(10, &[10, 5, 15]);
+        let forward = b.contributing_prompts(20);
+        assert_eq!(forward.len(), 2);
+        assert!(forward.iter().all(|p| p.frame == 10 || p.frame == 15));
+        let back = b.contributing_prompts(4);
+        assert_eq!(back.len(), 2);
+        assert!(back.iter().all(|p| p.frame == 10 || p.frame == 5));
+        assert_eq!(b.contributing_prompts(10).len(), 1);
+        assert!(RotoBlock::default().contributing_prompts(0).is_empty());
+    }
+
+    /// **A prompt edit renames exactly the frames past it**, in both
+    /// directions, and leaves the far side of the base alone.
+    #[test]
+    fn a_prompt_renames_exactly_the_frames_past_it() {
+        let (before, s) = prompted(0, &[0]);
+        let mut after = before.clone();
+        after.prompts.push(prompt(20, 44.0));
+
+        for f in 0..20 {
+            assert_eq!(
+                chain_hash(&before, s, f),
+                chain_hash(&after, s, f),
+                "frame {f} was renamed by a prompt it does not depend on"
+            );
+        }
+        for f in 20..30 {
+            assert_ne!(chain_hash(&before, s, f), chain_hash(&after, s, f));
+        }
+        for f in -10..0 {
+            assert_eq!(chain_hash(&before, s, f), chain_hash(&after, s, f));
+        }
+        // Moving a tap is an edit, and it retires the run's whole file.
+        let mut moved = before.clone();
+        moved.prompts[0].points[0].0 += 1.0;
+        assert_ne!(key_hash(&before, s), key_hash(&moved, s));
+        let mut negative = before.clone();
+        negative.prompts[0].labels[0] = 0;
+        assert_ne!(
+            key_hash(&before, s),
+            key_hash(&negative, s),
+            "a tap against the subject asks a different question"
+        );
+    }
+
+    /// **A prompt cleared and tapped again keeps the cache it earned.** The id
+    /// is not in either hash, for the reason a stroke's is not.
+    #[test]
+    fn a_retapped_prompt_keeps_the_cache_it_earned() {
+        let (one, s) = prompted(0, &[3]);
+        let mut two = one.clone();
+        two.prompts[0].id = Uuid::now_v7();
+        assert_eq!(chain_hash(&one, s, 9), chain_hash(&two, s, 9));
+        assert_eq!(key_hash(&one, s), key_hash(&two, s));
+    }
+
+    /// **The seed row renames everything, and so does the pack behind it.**
+    ///
+    /// The identity is what fences `lendable`, which reads every sidecar of the
+    /// same media and trusts the chain hash alone: without this a run seeded by
+    /// one pack would lend its frames to a run seeded by another. And a brush
+    /// seeded by its strokes is renamed by neither, so installing a pack costs
+    /// every existing project nothing.
+    #[test]
+    fn the_seed_choice_and_the_pack_behind_it_rename_everything() {
+        let b = block(0, &[0]);
+        let strokes = RotoSettings::default();
+        let segment = RotoSettings {
+            seed: crate::fx::effects::roto_brush::SEED_SEGMENT,
+            ..strokes
+        };
+        assert_ne!(chain_hash(&b, strokes, 4), chain_hash(&b, segment, 4));
+        assert_ne!(key_hash(&b, strokes), key_hash(&b, segment));
+
+        let other_pack = RotoSettings {
+            identity: [9; 32],
+            ..segment
+        };
+        assert_ne!(chain_hash(&b, segment, 4), chain_hash(&b, other_pack, 4));
+        assert_ne!(key_hash(&b, segment), key_hash(&b, other_pack));
+
+        // The same pack installed beside a brush that reads its strokes is not
+        // an edit to that brush.
+        let installed = RotoSettings {
+            identity: [9; 32],
+            ..strokes
+        };
+        assert_eq!(chain_hash(&b, strokes, 4), chain_hash(&b, installed, 4));
+        assert_eq!(key_hash(&b, strokes), key_hash(&b, installed));
     }
 
     #[test]

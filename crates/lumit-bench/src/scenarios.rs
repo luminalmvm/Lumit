@@ -537,7 +537,7 @@ pub mod particulate {
                 &[],
                 &[],
                 std::slice::from_ref(&carriage),
-                &[],
+                &lumit_render::fxops::Side::NONE,
                 &[],
                 None,
                 None,

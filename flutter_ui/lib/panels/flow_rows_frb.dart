@@ -9,6 +9,8 @@
 // decides anything: it reads the group, writes the group, and lets the engine
 // work out what that means (the thin-view rule).
 
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
@@ -16,6 +18,7 @@ import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/retime.dart';
 
 import '../l10n/strings.dart';
+import '../shell/settings_window_frb.dart';
 import '../state/comp_time.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
@@ -71,6 +74,7 @@ class FlowRowsFrb extends StatelessWidget {
       open: open,
       onToggle: onToggle,
       rows: [
+        _engineRow(context, t, p, write),
         _choice(
           context,
           t,
@@ -142,6 +146,69 @@ class FlowRowsFrb extends StatelessWidget {
             key: const ValueKey('flow-always'),
             value: p.always,
             onChanged: (v) => write(flowParamsWith(p, always: v)),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// **Engine**: which machinery paints the in-between frame, Lumit's own
+  /// optical flow or a model pack the user installed (docs/impl/addons.md
+  /// §6.3). A model measures no motion, so every row under this one still
+  /// belongs to the built-in engine, and Motion blur and Datamosh keep its
+  /// vectors whatever this says.
+  ///
+  /// The line under the row is the promise that nothing downgrades quietly: a
+  /// layer asking for a model this machine cannot run is previewed with the
+  /// built-in engine and told so, and an export of it refuses to start.
+  Widget _engineRow(
+    BuildContext context,
+    LumitTheme t,
+    BridgeFlowParams p,
+    ValueChanged<BridgeFlowParams> write,
+  ) {
+    final row = _choice(
+      context,
+      t,
+      l10n.flowEngine,
+      'flow-engine',
+      flowEngineOptions,
+      p.engine,
+      (v) => write(flowParamsWith(p, engine: v)),
+    );
+    // The group's one extra reading, taken here beside the group itself and
+    // only for a layer that actually names a model: a layer on the built-in
+    // engine has nothing to ask and nothing to say. Asked of the layer,
+    // because a scene-linear source is one layer's answer and not the
+    // machine's.
+    final notice = p.engine == 0 ? null : flowEngineNotice(layer.flowEngineState());
+    if (notice == null) return row;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        row,
+        Padding(
+          padding: const EdgeInsets.only(
+              left: fxNameColumnWidth, bottom: 2, right: 4),
+          child: Row(
+            children: [
+              Flexible(
+                child: Text(
+                  notice,
+                  key: const ValueKey('flow-engine-notice'),
+                  style: t.small.copyWith(color: t.textMuted),
+                ),
+              ),
+              const SizedBox(width: 6),
+              HouseButton(
+                key: const ValueKey('flow-engine-open-addons'),
+                small: true,
+                frameless: true,
+                onPressed: () => unawaited(showSettingsWindowFrb(context,
+                    initialPage: SettingsPage.addons)),
+                child: Text(l10n.openAddons, style: t.small),
+              ),
+            ],
           ),
         ),
       ],
@@ -261,6 +328,8 @@ class FlowRowsFrb extends StatelessWidget {
 /// Shared with the Timeline fold-out so the two surfaces cannot disagree.
 /// Getters rather than consts so each read speaks the current language; the
 /// index-to-engine-code order is the part that must never change.
+List<String> get flowEngineOptions =>
+    [l10n.flowEngineBuiltIn, l10n.flowEngineRife];
 List<String> get flowResolutionOptions => [
       l10n.flowResolutionNative,
       l10n.flowResolutionHalf,
@@ -394,11 +463,28 @@ String? flowPresetLabel(double fps) {
   return null;
 }
 
+/// What the engine row has to say under itself, or null while the model engine
+/// is the one painting.
+///
+/// The state is asked of the engine rather than worked out here: whether a pack
+/// is installed, whether it opened, and whether the layer's source is footage it
+/// was trained on are all one answer, and the engine holds it against the same
+/// snapshot the render path reads (docs/impl/addons.md §6.3).
+String? flowEngineNotice(BridgeFlowEngineState state) => switch (state) {
+      BridgeFlowEngineState.ready => null,
+      BridgeFlowEngineState.runtimeMissing ||
+      BridgeFlowEngineState.packMissing =>
+        l10n.flowEngineNotInstalled,
+      BridgeFlowEngineState.failed => l10n.flowEngineFailed,
+      BridgeFlowEngineState.floatSource => l10n.flowEngineFloatSource,
+    };
+
 /// Copy-with over the generated struct, which has no `copyWith` of its own.
 /// Shared with the Timeline fold-out's rows, so one definition of "change one
 /// field of the group" serves both surfaces.
 BridgeFlowParams flowParamsWith(
   BridgeFlowParams p, {
+  int? engine,
   int? resolution,
   int? detail,
   double? smoothness,
@@ -408,6 +494,7 @@ BridgeFlowParams flowParamsWith(
   bool? always,
 }) =>
     BridgeFlowParams(
+      engine: engine ?? p.engine,
       resolution: resolution ?? p.resolution,
       detail: detail ?? p.detail,
       smoothness: smoothness ?? p.smoothness,

@@ -36,6 +36,21 @@ pub const MODE_OPTIONS: &[&str] = &["Matte", "Matte inverted"];
 /// rather than the stack's — at the stack seam it renders as Result.
 pub const VIEW_OPTIONS: &[&str] = &["Result", "Matte", "Boundary"];
 
+/// What decides the base frame's matte before the solve runs, in index order.
+///
+/// **Strokes** is the whole of v1: the scribbles seed the solve and nothing
+/// else is read. **Segment** hands the frame and the taps the user made to a
+/// segmentation model, takes its answer as the seeds, and stamps the strokes
+/// over the top, so the user still outranks the machine per pixel
+/// (docs/impl/addons.md §6.2). The model is an addon, and with none installed
+/// the effect says so rather than quietly seeding itself the other way.
+pub const SEED_OPTIONS: &[&str] = &["Strokes", "Segment"];
+
+/// The [`SEED_OPTIONS`] index that asks for a model. An index this build does
+/// not know reads as Strokes, which is the answer that needs nothing installed
+/// (14-ENGINEERING-RULES §4).
+pub const SEED_SEGMENT: u32 = 1;
+
 /// The resolution the flow is measured at, in index order. **Half by default**:
 /// the note's own default, and the setting the per-frame budget was measured
 /// against (docs/impl/roto.md §7).
@@ -90,6 +105,11 @@ pub struct RotoBrush {
     /// kept and the span says how far it got.
     #[action(label = "Cancel")]
     pub cancel: (),
+    /// What the base frame's matte starts from, one of [`SEED_OPTIONS`]. Part of
+    /// the matte's own name: a shot seeded one way and a shot seeded the other
+    /// are two different answers and must never share a cached frame.
+    #[choice(options = *SEED_OPTIONS, default = 0, label = "Seed from")]
+    pub seed: u32,
     /// Whether the matte keeps the subject or drops it.
     #[choice(options = *MODE_OPTIONS, default = 0, label = "Matte mode")]
     pub mode: u32,

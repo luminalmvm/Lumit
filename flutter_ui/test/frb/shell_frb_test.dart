@@ -23,6 +23,7 @@ import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/export.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/retime.dart';
 import 'package:lumit_flutter/src/rust/api/shell.dart';
 import 'package:lumit_flutter/theme/theme.dart';
 import 'package:lumit_flutter/widgets/controls.dart';
@@ -378,6 +379,14 @@ void main() {
         'viewer': [
           'settings-smooth-zoomed-viewer',
           'settings-show-tone-map',
+        ],
+        // The runtime row's own buttons are left out: which of Install, Load
+        // and Remove is drawn depends on what the machine running the suite has
+        // installed, and `settings_addons_frb_test` asserts that pair instead.
+        'addons': [
+          'settings-addon-check',
+          'settings-addon-install-from-file',
+          'settings-addon-show-folder',
         ],
         'previewAndCache': [
           'settings-playback-mode',
@@ -799,7 +808,7 @@ void main() {
     Future<void> open(
       WidgetTester tester, {
       Future<String?> Function()? picker,
-      void Function(CompositionReference comp)? before,
+      void Function(LumitState state, CompositionReference comp)? before,
     }) async {
       tester.view.physicalSize = const Size(1200, 1000);
       tester.view.devicePixelRatio = 1.0;
@@ -807,7 +816,7 @@ void main() {
       final p = freshProject();
       final comp = p.state.project!.newComposition(name: 'Scene');
       comp.addAdjustmentLayer();
-      before?.call(comp);
+      before?.call(p.state, comp);
 
       await tester.pumpWidget(hostPanel(
         child: Builder(
@@ -861,7 +870,7 @@ void main() {
     /// Timeline set it — already typed, not re-derived by the user.
     testWidgets('the rate and span default to the comp and its work area',
         (tester) async {
-      await open(tester, before: (comp) {
+      await open(tester, before: (_, comp) {
         // A 60 fps comp with a work area over frames 60..180 (1 s .. 3 s).
         comp.setWorkArea(
           span: const BridgeSpan(
@@ -1484,6 +1493,63 @@ void main() {
               .onPressed,
           isNull,
           reason: 'nothing is queued that the file cannot carry');
+
+      await tester.tap(find.byKey(const ValueKey('export-close')));
+      await tester.pumpAndSettle();
+    });
+
+    /// A layer whose Flow engine names a model this machine cannot run stops
+    /// the export in the footer, because a file is a thing the user keeps and
+    /// docs/08 §3.1 says an export never quietly downgrades. Preview is the
+    /// half that substitutes and says so; this half refuses
+    /// (docs/impl/addons.md §6.3).
+    testWidgets('an export that needs an addon this machine lacks is refused',
+        (tester) async {
+      final target = '${Directory.systemTemp.path}/needs-an-addon.mp4';
+      CompositionReference? subject;
+      await open(tester, picker: () async => target, before: (state, comp) {
+        subject = comp;
+        final footage = state.project!.importFootage(path: 'C:/c/shot.mov');
+        comp.addFootageLayer(footage: footage, asSequence: false);
+        final layer = comp.getLayers().last;
+        layer.setFlowEnabled(on_: true);
+        layer.setFlowParams(
+          params: BridgeFlowParams(
+            engine: 1,
+            resolution: 0,
+            detail: 1,
+            smoothness: 50,
+            occlusion: 0,
+            fallback: 0,
+            hudGuard: true,
+            always: false,
+          ),
+        );
+      });
+      await tester.tap(find.byKey(const ValueKey('export-choose')));
+      await tester.pumpAndSettle();
+
+      // On a machine with the pack installed there is nothing to refuse, so
+      // Export isn't pressed at all. A real export started here is still
+      // winding down when the next test presses Export.
+      if (!subject!.addonNeeded()) {
+        await tester.tap(find.byKey(const ValueKey('export-close')));
+        await tester.pumpAndSettle();
+        return;
+      }
+
+      await tester.tap(find.byKey(const ValueKey('export-start')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('An addon this project needs is not installed'),
+          findsOneWidget,
+          reason: 'the footer says what is wrong, in the reader\'s language');
+      expect(find.byKey(const ValueKey('export-open-addons')), findsOneWidget,
+          reason: 'and the page that mends it is one press away');
+      expect(exportQueueList().where((i) => i.path == target), isEmpty,
+          reason: 'nothing was queued and nothing was written');
+      expect(find.text('EXPORT QUEUE'), findsNothing,
+          reason: 'the dialogue stays up, holding what was typed into it');
 
       await tester.tap(find.byKey(const ValueKey('export-close')));
       await tester.pumpAndSettle();

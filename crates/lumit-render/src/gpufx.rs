@@ -6486,7 +6486,7 @@ mod tests {
             &[],
             &[],
             std::slice::from_ref(&carriage),
-            &[],
+            &crate::fxops::Side::NONE,
             &[],
             None,
             None,
@@ -6588,21 +6588,33 @@ mod tests {
     fn every_migrated_effect_has_a_gpu_entry() {
         for def in BUILTIN_DEFS.builtins() {
             let name = def.schema().match_name;
-            // **The Roto brush is the one argued exception**. It draws
+            // **The Roto brush is the first argued exception**. It draws
             // pixels, so it is an image op; it has no entry here because its
             // pass is Set matte's, run inline in `run_ops` over a matte nobody
             // picked. A `GpuEffect` of its own would be a kernel wrapper round
             // another effect's kernel, and the table would then name two ways of
-            // multiplying an alpha. Anything else that wants to opt out is
-            // argued for here, in these words, before it may.
+            // multiplying an alpha.
+            //
             // **The Node graph effect is the second.** It draws pixels, so it
             // is an image op; it has no entry here because what it runs is a
             // whole graph of other effects, reached through the closure list
             // `run_ops` carries beside its kernels (docs/impl/
             // node-graph-comp.md §2.4). A `GpuEffect` of its own would be a
             // kernel wrapper round every other kernel there is.
+            //
+            // **The planes tier is the third, for the same reason from the
+            // other end.** What Depth and Remove background draw is the plane
+            // their analysis filed, and both of the passes that takes are the
+            // same Set matte arithmetic over a plane nobody picked; the only
+            // thing either decides is which of the two to run. A kernel would
+            // be that `if` with a shader round it. Anything else that wants to
+            // opt out is argued for here, in these words, before it may.
             let walked = name == lumit_core::comp_graph::NODE_GRAPH;
-            if def.is_image_op() && name != lumit_core::roto::ROTO_BRUSH && !walked {
+            if def.is_image_op()
+                && name != lumit_core::roto::ROTO_BRUSH
+                && !walked
+                && lumit_core::planes::task_of_name(name).is_none()
+            {
                 assert!(
                     gpu_effect(name).is_some(),
                     "{name} is migrated and draws pixels, but has no GPU pass"
@@ -6798,7 +6810,7 @@ mod tests {
             &[],
             &[],
             &[],
-            &[],
+            &crate::fxops::Side::NONE,
             &[],
             None,
             None,
@@ -6955,7 +6967,7 @@ mod tests {
             &[],
             &[],
             &[],
-            &[],
+            &crate::fxops::Side::NONE,
             &[],
             None,
             None,
@@ -7019,7 +7031,7 @@ mod tests {
             &[],
             &[],
             &[],
-            &[],
+            &crate::fxops::Side::NONE,
             &[],
             None,
             None,
@@ -7121,7 +7133,7 @@ mod tests {
             &[],
             &[],
             &[],
-            &[],
+            &crate::fxops::Side::NONE,
             &[],
             None,
             None,
@@ -7204,7 +7216,7 @@ mod tests {
                 &[],
                 &[],
                 &[],
-                &[],
+                &crate::fxops::Side::NONE,
                 &[],
                 None,
                 None,
@@ -7235,6 +7247,91 @@ mod tests {
         assert_ne!(
             plain_gpu, smeared_gpu,
             "the motion-blur toggle must pick the other kernel"
+        );
+    }
+
+    /// **The k-th planes op binds the k-th plane** (docs/impl/addons.md §6.1,
+    /// §11 test 7).
+    ///
+    /// The twin of the LUT test below, on the carriage this programme added,
+    /// and it pins the same tempting failure: advancing the counter only when a
+    /// plane is actually there. The first slot is deliberately **empty** - the
+    /// passthrough every list allows, and the one a frame outside an analysed
+    /// span gets - so an implementation that skips it hands the second op the
+    /// first slot and draws the plane the wrong way up.
+    ///
+    /// The two ops differ by Invert alone, so the picture says which of them
+    /// bound the plane: the second draws it turned over, and the first would
+    /// draw it straight.
+    #[test]
+    fn the_kth_planes_op_binds_the_kth_slot() {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
+            lumit_gpu::no_adapter();
+            return;
+        };
+        let fx = ctx.fx();
+        let (w, h) = (4u32, 4u32);
+        let source: Vec<f32> = (0..(w * h)).flat_map(|_| [1.0f32, 0.0, 0.0, 1.0]).collect();
+        // A plane of one value, well away from a half so straight and turned
+        // over cannot be confused.
+        let plane: Vec<f32> = (0..(w * h)).flat_map(|_| [0.25f32; 4]).collect();
+        let plane = lumit_gpu::fx::upload_linear_f32(&ctx, &plane, w, h);
+
+        let first = lumit_core::fx::instantiate("depth").expect("depth is a built-in");
+        let mut second = first.clone();
+        for p in &mut second.params {
+            if p.id == "invert" {
+                p.value = lumit_core::model::EffectValue::Bool(true);
+            }
+        }
+        assert!(
+            matches!(
+                second.param("invert"),
+                Some(lumit_core::model::EffectValue::Bool(true))
+            ),
+            "the second op was not turned over"
+        );
+        let ops = lumit_core::fx::resolve_stack(
+            &[first, second],
+            0.0,
+            1000.0,
+            1.0,
+            &lumit_core::fx::MarkerContext::NONE,
+            std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
+        );
+        assert_eq!(ops.len(), 2, "two Depth ops, two slots to bind");
+
+        let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h);
+        let side = crate::fxops::Side {
+            roto: &[],
+            planes: &[None, Some(plane)],
+        };
+        let out = crate::fxops::run_ops(
+            fx,
+            &ctx,
+            tex,
+            w,
+            h,
+            &ops,
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &side,
+            &[],
+            None,
+            None,
+        );
+        let got = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
+        assert!(
+            (got[0] - 0.75).abs() < 1e-2,
+            "the plane came back at {} - 0.75 is the second op drawing it \
+             turned over, 0.25 is the first op having taken its slot",
+            got[0]
         );
     }
 
@@ -7306,7 +7403,7 @@ mod tests {
             &[],
             &[],
             &[],
-            &[],
+            &crate::fxops::Side::NONE,
             &[],
             None,
             None,
@@ -7411,7 +7508,7 @@ mod tests {
             ],
             &[],
             &[],
-            &[],
+            &crate::fxops::Side::NONE,
             &[],
             None,
             None,
@@ -7485,7 +7582,7 @@ mod tests {
             &[],
             &[],
             &[],
-            &[],
+            &crate::fxops::Side::NONE,
             &[],
             None,
             None,
@@ -7584,7 +7681,7 @@ mod tests {
                 mattes,
                 &[],
                 &[],
-                &[],
+                &crate::fxops::Side::NONE,
                 &[],
                 None,
                 None,
@@ -7682,7 +7779,7 @@ mod tests {
                 mattes,
                 &[],
                 &[],
-                &[],
+                &crate::fxops::Side::NONE,
                 &[],
                 None,
                 None,
@@ -7792,7 +7889,7 @@ mod tests {
                 mattes,
                 &[],
                 &[],
-                &[],
+                &crate::fxops::Side::NONE,
                 &[],
                 None,
                 None,
@@ -7891,7 +7988,7 @@ mod tests {
                 &[],
                 &[],
                 &[],
-                &[],
+                &crate::fxops::Side::NONE,
                 &[],
                 None,
                 None,
@@ -8007,7 +8104,7 @@ mod tests {
                 &[],
                 &[],
                 &[],
-                &[],
+                &crate::fxops::Side::NONE,
                 &[],
                 None,
                 None,
@@ -8107,7 +8204,7 @@ mod tests {
                 &[crate::fxops::LayerInput::Texture(matte_tex.clone())],
                 &[],
                 &[],
-                &[],
+                &crate::fxops::Side::NONE,
                 &[],
                 None,
                 None,
@@ -8211,7 +8308,7 @@ mod tests {
             &[crate::fxops::LayerInput::Absent, off],
             &[],
             &[],
-            &[],
+            &crate::fxops::Side::NONE,
             &[],
             None,
             None,

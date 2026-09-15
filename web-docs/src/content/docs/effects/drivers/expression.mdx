@@ -1,0 +1,59 @@
+---
+title: Expression
+description: "Hands out whatever an expression returns: a number, a point or a colour."
+---
+
+Expression is a **Drivers** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Type an expression - `time * 2`, `sin(time) * 50`, `[comp_width / 2, comp_height / 2]`,
+`[1, 0.5, 0]` - and the box hands out its answer on a wire, so a parameter can follow a
+line of arithmetic instead of its keyframes. It is the same language a property's own
+expression is written in, with the same names in scope: `time`, the comp's size and
+frame rate, `layer("…")` and `comp("…")`.
+
+The box always has four sockets - **Value**, **Colour**, **Point x** and **Point y** -
+and what the expression returns decides which of them carry anything on a given frame.
+A number fills Value. A pair, `[x, y]`, fills Point x and Point y. Three or four numbers,
+`[r, g, b]` or `[r, g, b, a]`, fill Colour. The other sockets carry nothing, and a
+parameter wired to one of them reads its own keyframes for that frame.
+
+An expression that cannot run - a typing mistake, a name that is not in scope, a division
+by nought, a result that is none of the three shapes - carries nothing at all, so whatever
+it drives keeps its keyframes rather than jumping to a number that only looks like an
+answer. The editor shows the sentence about why.
+
+The answer depends on the text and on the frame - the comp, the layer and the time - and
+on nothing else, so the preview and the export agree exactly.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Edit expression…** | Button | - | - | - |
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Edit expression…**: opens the editor for the text the box runs. The text itself is
+  not a parameter - it has no keyframes and nothing to wire into - which is why the box
+  has one button and no sliders.
+
+## Related
+
+- [Math](/effects/drivers/math/) - the arithmetic you can see, for one operation on two numbers.
+- [Split](/effects/drivers/split/) - a colour taken apart into four numbers, the same four-socket shape.
+- [Expressions](/use/expressions/) - the language, and the names it knows.
+- [The node graph](/use/nodes/) - where a driver is added and wired.
+- [Drivers](/effects/#drivers)
+- [Effects](/use/effects/)

@@ -631,6 +631,19 @@ class CompositionReference {
           .crateApiCompositionCompositionReferenceAddTextLayerAt(
               that: this, document: document, x: x, y: y);
 
+  /// Whether this composition names an addon this machine has not got, which
+  /// is the one refusal the export pre-flight makes that a person can act on.
+  ///
+  /// The dialogue asks after a refusal, to tell that one from the encoder's:
+  /// a `BridgeError` reaches Dart as a handle with nothing readable on it.
+  /// Asked of the document, not of the machine, because the machine's answer
+  /// is a different question: a machine with no addons at all is the usual
+  /// one, and it refuses nothing until a layer asks for a model (§6.3).
+  bool addonNeeded() =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceAddonNeeded(
+        that: this,
+      );
+
   /// The **shape every animated mask is actually showing** at `frame`, so the
   /// Viewer can draw a keyed mask's wireframe where the picture has it rather
   /// than where its still path used to be.

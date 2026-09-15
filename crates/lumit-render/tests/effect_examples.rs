@@ -535,7 +535,7 @@ fn unillustrable(match_name: &str) -> Option<&'static str> {
         // points for something else to use, and reaches whatever it drives
         // through a wire in the node graph. There is no picture of one.
         "wiggle" | "smooth" | "math" | "remap" | "audio_level" | "colour_cycle"
-        | "points_sample" | "layer_points" | "split" | "combine" => {
+        | "points_sample" | "layer_points" | "split" | "combine" | "expression" => {
             Some("a driver: it answers with a value, not a picture")
         }
         // The Compositing family. Merge lays one picture over another, Switch

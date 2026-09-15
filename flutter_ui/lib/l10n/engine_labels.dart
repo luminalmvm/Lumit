@@ -203,6 +203,7 @@ Map<String, String> get _table => {
       "Basic": l10n.fxBasic,
       "Bend": l10n.fxBend,
       "Bezier warp": l10n.fxBezierWarp,
+      "BiRefNet": l10n.fxBiRefNet,
       "Black and white": l10n.fxBlackAndWhite,
       "Blue blur": l10n.fxBlueBlur,
       "Blue from": l10n.fxBlueFrom,
@@ -458,6 +459,7 @@ Map<String, String> get _table => {
       "Combine with existing alpha": l10n.fxCombineWithExistingAlpha,
       "Completion": l10n.fxCompletion,
       "Complexity": l10n.fxComplexity,
+      "Composite": l10n.fxComposite,
       "Confidence": l10n.fxConfidence,
       "Contrast": l10n.fxContrast,
       "Conversion": l10n.fxConversion,
@@ -483,6 +485,7 @@ Map<String, String> get _table => {
       "Deep yellow": l10n.fxDeepYellow,
       "Density": l10n.fxDensity,
       "Depth": l10n.fxDepth,
+      "Depth Anything V2 Small": l10n.fxDepthAnythingV2Small,
       "Depth channel": l10n.fxDepthChannel,
       "Depth invert": l10n.fxDepthInvert,
       "Depth layer": l10n.fxDepthLayer,
@@ -528,6 +531,7 @@ Map<String, String> get _table => {
       "Evolution options": l10n.fxEvolutionOptions,
       "Exclusion": l10n.fxExclusion,
       "Exposure": l10n.fxExposure,
+      "Expression": l10n.fxExpression,
       "Extract channels": l10n.fxExtractChannels,
       "F-stop": l10n.fxFStop,
       "Fade": l10n.fxFade,
@@ -559,6 +563,7 @@ Map<String, String> get _table => {
       "Fractal type": l10n.fxFractalType,
       "Frame rate": l10n.fxFrameRate,
       "Frequency": l10n.fxFrequency,
+      "Full body": l10n.fxFullBody,
       "Full off": l10n.fxFullOff,
       "Full on": l10n.fxFullOn,
       "Gain": l10n.fxGain,
@@ -623,6 +628,7 @@ Map<String, String> get _table => {
       "Left top tangent x": l10n.fxLeftTopTangentX,
       "Left top tangent y": l10n.fxLeftTopTangentY,
       "Custom shader": l10n.fxCustomShader,
+      "Edit expression…": l10n.fxEditExpression,
       "Edit shader…": l10n.fxEditShader,
       "Load from file…": l10n.fxLoadFromFile,
       "LUT": l10n.fxLut,
@@ -689,6 +695,7 @@ Map<String, String> get _table => {
       "Mirror edges": l10n.fxMirrorEdges,
       "Mix": l10n.fxMix,
       "Mode": l10n.fxMode,
+      "Model": l10n.fxModel,
       "Mood lighting": l10n.fxMoodLighting,
       "More options": l10n.fxMoreOptions,
       "Mosaic": l10n.fxMosaic,
@@ -732,6 +739,7 @@ Map<String, String> get _table => {
       "Planes": l10n.fxPlanes,
       "Polar coordinates": l10n.fxPolarCoordinates,
       "Polar to rectangular": l10n.fxPolarToRectangular,
+      "Portrait": l10n.fxPortrait,
       "Position x": l10n.fxPositionX,
       "Position y": l10n.fxPositionY,
       "Position z": l10n.fxPositionZ,
@@ -756,6 +764,7 @@ Map<String, String> get _table => {
       "Reduce saturation": l10n.fxReduceSaturation,
       "Relief": l10n.fxRelief,
       "Reload channels": l10n.fxReloadChannels,
+      "Remove background": l10n.fxRemoveBackground,
       "Remove edge leak": l10n.fxRemoveEdgeLeak,
       "Rendered": l10n.fxRendered,
       "Repeat": l10n.fxRepeat,
@@ -772,6 +781,7 @@ Map<String, String> get _table => {
       "Rim brightness": l10n.fxRimBrightness,
       "Ripple": l10n.fxRipple,
       "Rise": l10n.fxRise,
+      "Robust Video Matting": l10n.fxRobustVideoMatting,
       "Roll speed": l10n.fxRollSpeed,
       "Rotation": l10n.fxRotation,
       "Rotation amount": l10n.fxRotationAmount,
@@ -801,6 +811,8 @@ Map<String, String> get _table => {
       "Screen shrink/grow": l10n.fxScreenShrinkGrow,
       "Screen softness": l10n.fxScreenSoftness,
       "Seed": l10n.fxSeed,
+      "Seed from": l10n.fxSeedFrom,
+      "Segment": l10n.fxSegment,
       "Segments": l10n.fxSegments,
       "Sepia": l10n.fxSepia,
       "Set channels": l10n.fxSetChannels,
@@ -859,6 +871,7 @@ Map<String, String> get _table => {
       "Streak length": l10n.fxStreakLength,
       "Stretch": l10n.fxStretch,
       "Strobe": l10n.fxStrobe,
+      "Strokes": l10n.fxStrokes,
       "Style": l10n.fxStyle,
       "Stylise": l10n.fxStylise,
       "Sub influence": l10n.fxSubInfluence,
@@ -1283,6 +1296,8 @@ String? importReason(String key, Map<String, String> args) {
       return l10n.aePropertyUnreadable(a('match_name'));
     case 'chunk_unreadable':
       return l10n.aeChunkUnreadable(a('chunk'));
+    case 'structure_unreadable':
+      return l10n.aeStructureUnreadable(a('count'));
 
     // Masks.
     case 'mask_feather_axes_differ':
@@ -1461,6 +1476,11 @@ String? effectBadge(String key) {
     // sentence goes in the detail slot beneath, untranslated.
     case 'shader_failed':
       return l10n.badgeShaderFailed;
+    // An effect that asks a trained model for a plane, on a machine without
+    // the addon (docs/impl/addons.md §6.1). The detail slot beneath names
+    // which one to install, untranslated, because it is an addon id.
+    case 'addon_missing':
+      return l10n.badgeAddonMissing;
     default:
       return null;
   }
@@ -1468,3 +1488,23 @@ String? effectBadge(String key) {
 
 /// Whether this build has a sentence for [key] — what the sync test asserts.
 bool hasEffectBadge(String key) => effectBadge(key) != null;
+
+/// What a model pack does, for the line under its name on the Addons page.
+///
+/// The word arrives as one of the four tasks a pack may declare in its manifest
+/// (docs/impl/addons.md §4). A task this build has no word for comes back as it
+/// arrived, which is what a catalogue written for a newer Lumit would send.
+String addonTask(String task) {
+  switch (task) {
+    case 'synthesis':
+      return l10n.addonTaskSynthesis;
+    case 'depth':
+      return l10n.addonTaskDepth;
+    case 'matte':
+      return l10n.addonTaskMatte;
+    case 'segmentation':
+      return l10n.addonTaskSegmentation;
+    default:
+      return task;
+  }
+}

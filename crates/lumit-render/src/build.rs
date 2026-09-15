@@ -1330,11 +1330,92 @@ pub fn build_comp_draws_at(
             format: lumit_media::PixelFormat::Srgb8,
             fx: Default::default(),
             colour_tables: Vec::new(),
+            // A comp reference runs no stack of its own here: its layers were
+            // walked whole, each with its own carriages already filled.
+            roto_mattes: Vec::new(),
+            planes: Vec::new(),
             nested: Some(nested),
             // A comp's layers were each interpreted as themselves while it was
             // realised; the picture that comes out is already working-space.
             colour_space: None,
         })
+    };
+
+    // **The roto mattes, the coverage carriage** (docs/impl/roto.md §5).
+    // One slot per enabled `roto_brush` op that resolves to an op at all, the
+    // same two conditions `mask_paths_for` applies, so this list stays 1:1 with
+    // the ops `run_ops` walks, with its own counter there.
+    //
+    // The lookup is by (instance, **source** frame): a matte describes the
+    // file's frames, so it survives every transform, retime and preview
+    // tier this layer applies, and one shot's mattes serve every comp cutting
+    // it. `None`, outside the propagated span, nothing propagated yet, the
+    // cache folder deleted, is the effect's passthrough and never a fault.
+    //
+    // No lock is held past this call: the store clones an `Arc` out from under
+    // its own guard, and what lands here is that same allocation.
+    let roto_mattes_for = |effects: &[lumit_core::model::EffectInstance],
+                           source_frame: i64|
+     -> Vec<Option<crate::draw::RotoMatteDraw>> {
+        use lumit_core::model::EffectNamespace;
+        effects
+            .iter()
+            .filter(|e| e.enabled && e.effect.namespace == EffectNamespace::Builtin)
+            .filter(|e| e.effect.match_name == lumit_core::roto::ROTO_BRUSH)
+            .filter(|e| {
+                lumit_core::fx::BUILTIN_DEFS
+                    .get(&e.effect.match_name)
+                    .is_some_and(|def| def.is_image_op())
+            })
+            .map(|e| {
+                let (width, height, gray) = crate::roto::matte(e.id, source_frame)?;
+                Some(crate::draw::RotoMatteDraw {
+                    width,
+                    height,
+                    gray,
+                })
+            })
+            .collect()
+    };
+
+    // **The planes - the analysis carriage** (docs/impl/addons.md §6.1).
+    // One slot per enabled planes-tier op that resolves to an op at all, on
+    // the one predicate `lumit_core::planes` owns, so this list stays 1:1 with
+    // the ops `run_ops` walks and has its own counter there.
+    //
+    // Looked up by (instance, **source** frame) for `roto_mattes_for`'s reason:
+    // a plane describes the file's frames, so it survives every transform,
+    // retime and preview tier the layer applies. `None` - outside the analysed
+    // span, nothing analysed yet, no pack installed, the cache folder deleted -
+    // is the effect's passthrough and never a fault.
+    //
+    // No lock is held past this call: the store clones an `Arc` out from under
+    // its own guard, and what lands here is that same allocation.
+    let planes_for = |effects: &[lumit_core::model::EffectInstance],
+                      source_frame: i64|
+     -> Vec<Option<crate::draw::PlaneDraw>> {
+        effects
+            .iter()
+            .filter(|e| e.enabled && lumit_core::planes::task_of(e).is_some())
+            .filter(|e| {
+                lumit_core::fx::BUILTIN_DEFS
+                    .get(&e.effect.match_name)
+                    .is_some_and(|def| def.is_image_op())
+            })
+            .map(|e| {
+                let (width, height, kind, data, content) =
+                    crate::planes::plane(e.id, source_frame)?;
+                Some(crate::draw::PlaneDraw {
+                    instance: e.id,
+                    source_frame,
+                    content,
+                    width,
+                    height,
+                    kind,
+                    data,
+                })
+            })
+            .collect()
     };
 
     // One referenced layer resolved into an input slot — the body
@@ -1407,6 +1488,19 @@ pub fn build_comp_draws_at(
         } else {
             Default::default()
         };
+        // The referenced layer's own baked pictures, on the same two
+        // predicates and the same (instance, source frame) lookup its own draw
+        // uses. Empty when its stack is not being folded in, which is when
+        // there are no ops to carry them to.
+        let src_frame = pixels_by_layer.get(&src.id).map_or(0, |px| px.source_frame);
+        let (roto_mattes, planes) = if fx.is_empty() {
+            (Vec::new(), Vec::new())
+        } else {
+            (
+                roto_mattes_for(&src.effects, src_frame),
+                planes_for(&src.effects, src_frame),
+            )
+        };
         Some(DofInputDraw {
             rgba: rgba.to_vec(),
             tex_w,
@@ -1414,6 +1508,8 @@ pub fn build_comp_draws_at(
             format,
             fx,
             colour_tables,
+            roto_mattes,
+            planes,
             nested: None,
             colour_space: crate::colour::footage_colour_space(doc, &src.kind),
         })
@@ -1558,43 +1654,6 @@ pub fn build_comp_draws_at(
                     return lumit_core::mask::MaskPolyline::default();
                 }
                 lumit_core::mask::mask_path_at(masks, e.mask_ref(param), self_default, slt)
-            })
-            .collect()
-    };
-
-    // **The roto mattes — the coverage carriage** (docs/impl/roto.md §5).
-    // One slot per enabled `roto_brush` op that resolves to an op at all — the
-    // same two conditions `mask_paths_for` applies, so this list stays 1:1 with
-    // the ops `run_ops` walks, with its own counter there.
-    //
-    // The lookup is by (instance, **source** frame): a matte describes the
-    // file's frames, so it survives every transform, retime and preview
-    // tier this layer applies, and one shot's mattes serve every comp cutting
-    // it. `None` — outside the propagated span, nothing propagated yet, the
-    // cache folder deleted — is the effect's passthrough and never a fault.
-    //
-    // No lock is held past this call: the store clones an `Arc` out from under
-    // its own guard, and what lands here is that same allocation.
-    let roto_mattes_for = |effects: &[lumit_core::model::EffectInstance],
-                           source_frame: i64|
-     -> Vec<Option<crate::draw::RotoMatteDraw>> {
-        use lumit_core::model::EffectNamespace;
-        effects
-            .iter()
-            .filter(|e| e.enabled && e.effect.namespace == EffectNamespace::Builtin)
-            .filter(|e| e.effect.match_name == lumit_core::roto::ROTO_BRUSH)
-            .filter(|e| {
-                lumit_core::fx::BUILTIN_DEFS
-                    .get(&e.effect.match_name)
-                    .is_some_and(|def| def.is_image_op())
-            })
-            .map(|e| {
-                let (width, height, gray) = crate::roto::matte(e.id, source_frame)?;
-                Some(crate::draw::RotoMatteDraw {
-                    width,
-                    height,
-                    gray,
-                })
             })
             .collect()
     };
@@ -2001,6 +2060,7 @@ pub fn build_comp_draws_at(
                 // No source frames of a group's own, so nothing was ever
                 // propagated: a Roto brush on a header passes through.
                 roto_mattes: roto_mattes_for(&group.effects, 0),
+                planes: planes_for(&group.effects, 0),
                 points_schedules: points_schedules_for(None, &group.effects, t_comp, frame_t),
                 flare_lens_files: flare_lens_files(&group.effects, t_comp),
                 // A Node graph effect on a group header applies to the
@@ -2177,6 +2237,19 @@ pub fn build_comp_draws_at(
             } else {
                 Default::default()
             };
+            // The matte source's own baked pictures, on the same two
+            // predicates and the same (instance, source frame) lookup the
+            // layer-input path uses. Empty when its stack is not being folded
+            // in, which is when there are no ops to carry them to.
+            let matte_frame = pixels_by_layer.get(&src.id).map_or(0, |px| px.source_frame);
+            let (matte_roto, matte_planes) = if fx.is_empty() {
+                (Vec::new(), Vec::new())
+            } else {
+                (
+                    roto_mattes_for(&src.effects, matte_frame),
+                    planes_for(&src.effects, matte_frame),
+                )
+            };
             Some(MatteDraw {
                 rgba: m_rgba.to_vec(),
                 tex_w: m_w,
@@ -2205,6 +2278,8 @@ pub fn build_comp_draws_at(
                 inverted: mr.inverted,
                 fx,
                 colour_tables,
+                roto_mattes: matte_roto,
+                planes: matte_planes,
                 nested,
                 colour_space: crate::colour::footage_colour_space(doc, &src.kind),
             })
@@ -2570,6 +2645,7 @@ pub fn build_comp_draws_at(
                     // nothing was ever propagated through it: a Roto brush
                     // there passes through, honestly.
                     roto_mattes: Vec::new(),
+                    planes: Vec::new(),
                     points_schedules: points_schedules_for(
                         Some(layer),
                         &layer.effects,
@@ -2780,6 +2856,7 @@ pub fn build_comp_draws_at(
             mattes: mattes_for(layer.id, &layer.effects, &layer.graph),
             mask_paths: mask_paths_for(&layer.effects, &layer.masks, lt),
             roto_mattes: roto_mattes_for(&layer.effects, source_frame),
+            planes: planes_for(&layer.effects, source_frame),
             points_schedules: points_schedules_for(Some(layer), &layer.effects, lt, frame_lt),
             flare_lens_files: flare_lens_files(&layer.effects, lt),
             // The graphs this layer's Node graph effects apply, lowered
@@ -3035,6 +3112,7 @@ fn graph_comp_draw(
         mattes: Vec::new(),
         mask_paths: Vec::new(),
         roto_mattes: Vec::new(),
+        planes: Vec::new(),
         points_schedules: Vec::new(),
         flare_lens_files: Vec::new(),
         graph_fx: Vec::new(),
@@ -3535,6 +3613,7 @@ fn read_draw(
         mattes: Vec::new(),
         mask_paths: Vec::new(),
         roto_mattes: Vec::new(),
+        planes: Vec::new(),
         points_schedules: Vec::new(),
         flare_lens_files: Vec::new(),
         graph_fx: Vec::new(),

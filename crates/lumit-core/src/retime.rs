@@ -323,10 +323,52 @@ impl FlowFallback {
     }
 }
 
+/// Which engine paints the in-between frame (docs/impl/addons.md §6.3).
+///
+/// The built-in one measures optical flow and warps the two frames along it,
+/// and it is always there. RIFE is a trained model that paints the frame
+/// directly, and it is an addon the user installs: a project that names it on
+/// a machine without the pack keeps the choice, previews with the built-in
+/// engine and says so, and refuses to export rather than quietly exporting
+/// something else. Nothing here picks it on its own.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum FlowEngineChoice {
+    /// The built-in dense inverse search, measured and warped on the card.
+    #[default]
+    Dis,
+    /// The RIFE model pack, which paints the frame and measures nothing.
+    Rife,
+}
+
+impl FlowEngineChoice {
+    /// The Choice option labels, in code order.
+    pub const OPTIONS: &'static [&'static str] = &["Built in", "RIFE"];
+
+    /// The engine for a stored Choice index, or `None` for an unknown code.
+    pub const fn from_code(code: u32) -> Option<Self> {
+        match code {
+            0 => Some(FlowEngineChoice::Dis),
+            1 => Some(FlowEngineChoice::Rife),
+            _ => None,
+        }
+    }
+
+    pub const fn code(self) -> u32 {
+        match self {
+            FlowEngineChoice::Dis => 0,
+            FlowEngineChoice::Rife => 1,
+        }
+    }
+}
+
 /// Optical-flow parameters (docs/08 §3.1). Every knob §3.1 specifies,
 /// plus the engagement override and the HUD guard.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FlowParams {
+    /// Which engine paints the in-between frame. Defaults to the built-in one,
+    /// so a project written before the choice existed reads as it rendered.
+    #[serde(default)]
+    pub engine: FlowEngineChoice,
     /// The resolution flow is measured at — independent of preview quality.
     /// Defaults to Native.
     #[serde(default)]
@@ -379,6 +421,7 @@ pub struct FlowParams {
 impl Default for FlowParams {
     fn default() -> Self {
         Self {
+            engine: FlowEngineChoice::Dis,
             resolution: FlowResolution::Native,
             detail: VectorDetail::Medium,
             smoothness: DEFAULT_SMOOTHNESS,
@@ -2813,6 +2856,7 @@ mod tests {
     #[test]
     fn flow_params_default_and_round_trip() {
         let d = FlowParams::default();
+        assert_eq!(d.engine, FlowEngineChoice::Dis);
         assert_eq!(d.resolution, FlowResolution::Native);
         assert_eq!(d.detail, VectorDetail::Medium);
         assert_eq!(d.smoothness, DEFAULT_SMOOTHNESS);
@@ -2821,6 +2865,7 @@ mod tests {
         assert!(d.hud_guard);
         assert!(!d.always);
         let set = FlowParams {
+            engine: FlowEngineChoice::Rife,
             resolution: FlowResolution::Quarter,
             detail: VectorDetail::Ultra,
             smoothness: 12.5,
@@ -2836,6 +2881,32 @@ mod tests {
         // documented defaults for everything it does not mention.
         let old: FlowParams = serde_json::from_str("{}").unwrap();
         assert_eq!(old, FlowParams::default());
+    }
+
+    /// A project written before the engine choice existed reads as the engine
+    /// it was rendered with (docs/impl/addons.md §6.3).
+    ///
+    /// Its own test rather than a line in the one above, because this is the
+    /// promise that matters when an addon is involved: a file that mentions no
+    /// engine must never come back naming a model the machine may not even
+    /// have, and the whole group has to survive the trip beside it.
+    #[test]
+    fn a_project_written_before_the_engine_choice_reads_as_built_in() {
+        let written = r#"{"resolution":"Half","detail":"High","smoothness":40.0,
+                          "occlusion":"Blend","fallback":"Nearest",
+                          "hud_guard":false,"always":true}"#;
+        let old: FlowParams = serde_json::from_str(written).unwrap();
+        assert_eq!(old.engine, FlowEngineChoice::Dis);
+        assert_eq!(old.resolution, FlowResolution::Half);
+        assert!(old.always, "the rest of the group came through unchanged");
+
+        let chosen = FlowParams {
+            engine: FlowEngineChoice::Rife,
+            ..FlowParams::default()
+        };
+        let back: FlowParams =
+            serde_json::from_value(serde_json::to_value(&chosen).unwrap()).unwrap();
+        assert_eq!(back.engine, FlowEngineChoice::Rife, "and a choice survives");
     }
 
     /// The choice enums agree with their option lists in both directions —
@@ -2854,6 +2925,10 @@ mod tests {
         for i in 0..FlowFallback::OPTIONS.len() as u32 {
             assert_eq!(FlowFallback::from_code(i).map(|v| v.code()), Some(i));
         }
+        for i in 0..FlowEngineChoice::OPTIONS.len() as u32 {
+            assert_eq!(FlowEngineChoice::from_code(i).map(|v| v.code()), Some(i));
+        }
+        assert_eq!(FlowEngineChoice::from_code(99), None);
         assert_eq!(FlowResolution::from_code(99), None);
         assert_eq!(VectorDetail::from_code(99), None);
         // Detail buys iterations monotonically, and the divisors are the

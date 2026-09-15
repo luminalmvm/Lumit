@@ -353,6 +353,30 @@ abstract class BridgeEffectInstance implements RustOpaqueInterface {
   /// what each removal will break. Answers the ids removed, in stored order.
   List<String> removeUnusedParameters();
 
+  /// Add one segmentation prompt to this Roto brush, on the **staged** copy.
+  ///
+  /// `points` are `[x0, y0, x1, y1, …]` in **source raster pixels**, as a
+  /// stroke's are and for the same reason, and `labels` carries one byte a
+  /// point: 1 for a tap on the subject, 0 for one against it. `frame` is the
+  /// source frame they were tapped on.
+  ///
+  /// **The first tap sets the base frame**, exactly as the first stroke does,
+  /// so a brush seeded by a prompt alone has somewhere to propagate from.
+  ///
+  /// The taps are read by the segmentation model only where the effect's seed
+  /// row says Segment; stored on a brush seeded by its strokes they change
+  /// nothing and cost nothing, which is what makes the row a switch rather
+  /// than a mode the document has to be converted between.
+  ///
+  /// **A tap on any other frame is refused**, because the model is only ever
+  /// asked about the base frame (docs/impl/addons.md §6.2). Stored anywhere
+  /// else it would be hashed into every frame's name on that side of the
+  /// base, retiring cached mattes while changing no picture at all.
+  void rotoAddPrompt(
+      {required List<double> points,
+      required List<int> labels,
+      required PlatformInt64 frame});
+
   /// Add one stroke to this Roto brush, on the **staged** copy.
   ///
   /// `points` are `[x0, y0, x1, y1, …]` in **source raster pixels** on the
@@ -375,11 +399,26 @@ abstract class BridgeEffectInstance implements RustOpaqueInterface {
       required BridgeRotoStrokeKind kind,
       required PlatformInt64 frame});
 
+  /// The frame the propagation runs outward from, or `None` on a brush
+  /// nothing has been drawn or tapped on yet.
+  ///
+  /// The Viewer needs it to know whether the frame on screen is the one a tap
+  /// may seed: a prompt is only ever read on the base frame, so a tap
+  /// anywhere else is the ordinary dab of a stroke it has always been.
+  PlatformInt64? rotoBaseFrame();
+
   /// Throw away every stroke and the base frame, on the staged copy — the
   /// panel's "start again". The cached mattes are not touched: they are keyed
   /// by the strokes that made them, so they are simply never asked for again,
   /// and an undo brings the strokes and their mattes both back.
   void rotoClear();
+
+  /// Every segmentation prompt this instance holds, for the overlay to draw
+  /// as rings over the picture.
+  ///
+  /// Read beside [`Self::roto_strokes`] and on the same terms: once a frame
+  /// and once a document revision, never per rebuild.
+  List<BridgeRotoPrompt> rotoPrompts();
 
   /// Move the base frame — the frame propagation runs outward from — on the
   /// staged copy.
@@ -387,6 +426,11 @@ abstract class BridgeEffectInstance implements RustOpaqueInterface {
   /// A real edit and not a preference: every cached matte depends on it, so
   /// moving it retires the whole run, which is exactly what a user asking for
   /// the shot to be re-decided from somewhere else means.
+  ///
+  /// The taps the new base can never read go with it, in this same staged
+  /// edit so one undo brings them back: the model is only ever asked about
+  /// the base frame, and a tap stranded on the old one would keep renaming
+  /// mattes without changing a picture (docs/impl/addons.md §6.2).
   void rotoSetBaseFrame({PlatformInt64? frame});
 
   /// Every stroke this instance holds, for the overlay to draw.

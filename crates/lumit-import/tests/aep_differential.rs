@@ -1200,38 +1200,7 @@ fn a_damaged_project_is_refused_or_partly_read_but_never_panics() {
     let started = std::time::Instant::now();
 
     for seed in 0_u64..64 {
-        // One tiny deterministic generator, so the sweep is the same on every
-        // machine and a failing seed can be run again on its own.
-        let mut state = seed.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
-        let mut next = move || {
-            state = state
-                .wrapping_mul(6_364_136_223_846_793_005)
-                .wrapping_add(1_442_695_040_888_963_407);
-            (state >> 33) as usize
-        };
-
-        let mut damaged = whole.clone();
-        match seed % 4 {
-            // Cut the file short somewhere past the header.
-            0 => damaged.truncate(16 + next() % whole.len()),
-            // Flip one byte anywhere.
-            1 => {
-                let at = next() % damaged.len();
-                damaged[at] ^= 0xFF;
-            }
-            // Overwrite four bytes with an enormous size word — the shape of
-            // the attack the container walk's one bounds check exists for.
-            2 => {
-                let at = next() % (damaged.len() - 4);
-                damaged[at..at + 4].copy_from_slice(&u32::MAX.to_be_bytes());
-            }
-            // Zero a run, which is how a partly-written file arrives.
-            _ => {
-                let at = next() % damaged.len();
-                let end = (at + 1 + next() % 4096).min(damaged.len());
-                damaged[at..end].fill(0);
-            }
-        }
+        let damaged = damage(&whole, seed);
 
         let outcome = std::panic::catch_unwind(|| lumit_import::aep::parse_capture(&damaged));
         let Ok(outcome) = outcome else {
@@ -1253,6 +1222,131 @@ fn a_damaged_project_is_refused_or_partly_read_but_never_panics() {
         "sixty-four damaged parses took {:?} — a length the file declared is \
          being trusted somewhere",
         started.elapsed()
+    );
+}
+
+/// The golden file damaged one of four ways, chosen and placed by `seed`.
+///
+/// One tiny deterministic generator, so the sweep is the same on every
+/// machine and a failing seed can be run again on its own.
+fn damage(whole: &[u8], seed: u64) -> Vec<u8> {
+    let mut state = seed.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
+    let mut next = move || {
+        state = state
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        (state >> 33) as usize
+    };
+
+    let mut damaged = whole.to_vec();
+    match seed % 4 {
+        // Cut the file short somewhere past the header.
+        0 => damaged.truncate(16 + next() % whole.len()),
+        // Flip one byte anywhere.
+        1 => {
+            let at = next() % damaged.len();
+            damaged[at] ^= 0xFF;
+        }
+        // Overwrite four bytes with an enormous size word — the shape of
+        // the attack the container walk's one bounds check exists for.
+        2 => {
+            let at = next() % (damaged.len() - 4);
+            damaged[at..at + 4].copy_from_slice(&u32::MAX.to_be_bytes());
+        }
+        // Zero a run, which is how a partly-written file arrives.
+        _ => {
+            let at = next() % damaged.len();
+            let end = (at + 1 + next() % 4096).min(damaged.len());
+            damaged[at..end].fill(0);
+        }
+    }
+    damaged
+}
+
+/// **The footage fallback answers every damaged file too, and only ever
+/// says what the whole read would have.**
+///
+/// The same sixty-four cases through `parse_capture_or_footage`, which is
+/// the road `open_aep` takes: no panic, no hang, and an answer that agrees
+/// with `parse_capture` wherever the rule says it must — a whole read that
+/// succeeded is handed back unchanged, a container refusal is the same
+/// refusal, and only "no item tree" may become a footage-only capture, which
+/// then holds no comps and says so. (The golden project is solids and comps
+/// with no file footage, so on this file the fallback always refuses; what
+/// this proves is the carve over real, damaged bytes, and the synthetic test
+/// in `aep::tests` proves the recovery.)
+#[test]
+fn the_damage_sweep_never_panics_on_the_fallback() {
+    use lumit_import::aep::{parse_capture, parse_capture_or_footage, AepError};
+
+    let whole = std::fs::read(fixtures().join("fixture.aep")).expect("the golden .aep");
+    let started = std::time::Instant::now();
+
+    for seed in 0_u64..64 {
+        let damaged = damage(&whole, seed);
+
+        let Ok(through_fallback) = std::panic::catch_unwind(|| parse_capture_or_footage(&damaged))
+        else {
+            panic!("seed {seed} panicked in the fallback; a malformed byte must be an error");
+        };
+        let full = parse_capture(&damaged);
+
+        match (full, through_fallback) {
+            (Ok(full), Ok(fallback)) => {
+                assert_eq!(
+                    fallback, full,
+                    "seed {seed}: a whole read is handed back as it is"
+                );
+            }
+            (Err(AepError::NoItemTree), Ok(fallback)) => {
+                assert!(fallback.footage_only, "seed {seed}");
+                assert!(fallback.capture.comps.is_empty(), "seed {seed}");
+                assert!(!fallback.capture.items.is_empty(), "seed {seed}");
+            }
+            (Err(full), Err(fallback)) => {
+                assert_eq!(fallback, full, "seed {seed}: the same refusal");
+                assert!(!fallback.to_string().is_empty(), "seed {seed}");
+            }
+            (full, fallback) => {
+                panic!("seed {seed}: the fallback answered {fallback:?} where the whole read gave {full:?}")
+            }
+        }
+    }
+
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(30),
+        "sixty-four fallback parses took {:?} — the carve is trusting a length somewhere",
+        started.elapsed()
+    );
+}
+
+/// **An intact file takes the full road.**
+///
+/// The fallback entry on the golden file is the whole parse, byte for byte,
+/// and the bundle it opens says nothing about footage only — so the report
+/// the bridge builds from it carries no structure row.
+#[test]
+fn an_intact_file_takes_the_full_road() {
+    use lumit_import::aep::{parse_capture, parse_capture_or_footage};
+    use lumit_import::{note_skipped_chunks, ImportReport, Reason};
+
+    let bytes = std::fs::read(fixtures().join("fixture.aep")).expect("the golden .aep");
+    let through_fallback = parse_capture_or_footage(&bytes).expect("the golden .aep parses");
+    let full = parse_capture(&bytes).expect("the golden .aep parses");
+    assert_eq!(through_fallback, full);
+    assert!(!through_fallback.footage_only);
+    assert_eq!(through_fallback.capture.comps.len(), 2);
+
+    let bundle = parsed();
+    assert!(!bundle.footage_only);
+    let mut report = ImportReport::default();
+    note_skipped_chunks(&bundle, &mut report);
+    assert!(
+        !report
+            .rows
+            .iter()
+            .any(|row| matches!(row.reason, Reason::StructureUnreadable { .. })),
+        "no structure row on a file whose structure read"
     );
 }
 

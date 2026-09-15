@@ -148,7 +148,13 @@ impl ProjectReference {
         // straight back. This is the session's copy being dropped, not the
         // answer.
         if let Some(state) = removed.as_ref().and_then(|s| s.read().ok()) {
-            lumit_render::track::forget(&lumit_render::track::owned_ids(&state.store.snapshot()));
+            let doc = state.store.snapshot();
+            lumit_render::track::forget(&lumit_render::track::owned_ids(&doc));
+            // The planes go the same way, and by id rather than wholesale: a
+            // plane is filed under an effect instance, so another project's
+            // are not this one's to drop. The `planes/` sidecar is untouched,
+            // so reopening reads them back.
+            lumit_render::planes::forget(&lumit_render::planes::owned_ids(&doc));
         }
         // The roto mattes go the same way and for the same reason: the
         // `roto/` sidecar is untouched, so reopening reads them back.

@@ -36,6 +36,8 @@ import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:lumit_flutter/src/rust/api/shell.dart'
     show setAutosave, setFullResDragPreviews;
 import 'package:lumit_flutter/src/rust/api/state.dart';
+import 'package:lumit_flutter/state/addons.dart';
+import 'package:lumit_flutter/state/addons_engine.dart';
 import 'package:lumit_flutter/state/comp_model.dart';
 import 'package:lumit_flutter/state/clipboard.dart';
 import 'package:lumit_flutter/state/comp_time.dart';
@@ -108,6 +110,13 @@ class LumitUiState extends ChangeNotifier {
   /// that builds this state must not call the engine merely by existing.
   late final UpdateService updates =
       UpdateService(currentVersion: () => versionFromBootLine(lumitVersion()));
+
+  /// The catalogue of addons, what is installed, and one install at a time.
+  ///
+  /// Here for the same reason the updater is: Settings draws it and anything
+  /// that sends the user to that page reads the same answer. Built lazily, so a
+  /// widget test that never opens the page never asks the engine anything.
+  late final AddonService addons = createAddonService();
 
   /// How big each layer's content is, for the Viewer's boxes and hit-testing.
   /// Held here because the answer is the document's, not a panel's, and

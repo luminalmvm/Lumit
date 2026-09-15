@@ -12546,6 +12546,18 @@
           "unit": "raw"
         },
         {
+          "id": "seed",
+          "label": "Seed from",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Strokes",
+            "Segment"
+          ],
+          "dividers_after": []
+        },
+        {
           "id": "mode",
           "label": "Matte mode",
           "kind": "choice",
@@ -12607,6 +12619,135 @@
         }
       ],
       "groups": [],
+      "matte_role": "none"
+    },
+    {
+      "slug": "depth",
+      "match_name": "depth",
+      "label": "Depth",
+      "version": 1,
+      "category": "Utility",
+      "category_slug": "utility",
+      "params": [
+        {
+          "id": "analyse",
+          "label": "Analyse",
+          "kind": "action",
+          "unit": "raw"
+        },
+        {
+          "id": "cancel",
+          "label": "Cancel",
+          "kind": "action",
+          "unit": "raw"
+        },
+        {
+          "id": "model",
+          "label": "Model",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Depth Anything V2 Small"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "view",
+          "label": "View",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Depth",
+            "Source"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "invert",
+          "label": "Invert",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        }
+      ],
+      "groups": [],
+      "matte_role": "none"
+    },
+    {
+      "slug": "remove-background",
+      "match_name": "remove_background",
+      "label": "Remove background",
+      "version": 1,
+      "category": "Utility",
+      "category_slug": "utility",
+      "params": [
+        {
+          "id": "analyse",
+          "label": "Analyse",
+          "kind": "action",
+          "unit": "raw"
+        },
+        {
+          "id": "cancel",
+          "label": "Cancel",
+          "kind": "action",
+          "unit": "raw"
+        },
+        {
+          "id": "model",
+          "label": "Model",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Robust Video Matting",
+            "BiRefNet"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "view",
+          "label": "View",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Composite",
+            "Matte"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "invert",
+          "label": "Invert",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "detail",
+          "label": "Detail",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Portrait",
+            "Full body"
+          ],
+          "dividers_after": []
+        }
+      ],
+      "groups": [],
+      "enabled_when": [
+        {
+          "param": "detail",
+          "on": "model",
+          "cond": "choice_is",
+          "value": 0
+        }
+      ],
       "matte_role": "none"
     },
     {
@@ -20076,6 +20217,24 @@
           "kind": "layer",
           "unit": "raw",
           "self_default": false
+        }
+      ],
+      "groups": [],
+      "matte_role": "none"
+    },
+    {
+      "slug": "expression",
+      "match_name": "expression",
+      "label": "Expression",
+      "version": 1,
+      "category": "Drivers",
+      "category_slug": "drivers",
+      "params": [
+        {
+          "id": "edit",
+          "label": "Edit expression…",
+          "kind": "action",
+          "unit": "raw"
         }
       ],
       "groups": [],

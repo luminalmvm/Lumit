@@ -13,7 +13,10 @@
 //! The important design decision is that this is a second *front end*, not a
 //! second importer: [`parse_capture`] fills the very same [`Capture`] the
 //! Bridge's bundle reader produces, so the mapping layer, the effect table, the
-//! placeholders and the report are shared and untouched. And the vocabulary is
+//! placeholders and the report are shared and untouched. When the file's item
+//! tree cannot be read at all, [`parse_capture_or_footage`] — the entry
+//! [`open_aep`] takes — falls back to the footage references alone rather than
+//! refusing, and says which errors do and do not fall back. And the vocabulary is
 //! funnelled: where the Bridge writes After Effects' own constant name
 //! (`SCREEN`, `ALPHA_INVERTED`), this route translates the file's numeric code
 //! into the same name through [`enums`], one table per enum, and a code no
@@ -86,6 +89,11 @@ pub struct Parsed {
     pub ae_version: Option<String>,
     /// Everything skipped along the way, ready to be report rows.
     pub skipped: Vec<Unreadable>,
+    /// The item tree could not be found, so the capture holds only the
+    /// footage references carved out of the file — no project block, no
+    /// comps, no layers (docs/11 §7's whole-file fallback, taken by
+    /// [`parse_capture_or_footage`]). [`parse_capture`] never sets it.
+    pub footage_only: bool,
 }
 
 /// Open an `.aep` and produce the same [`Bundle`] a Lumit Bridge folder does.
@@ -93,10 +101,12 @@ pub struct Parsed {
 /// The manifest is synthesised: the format string and schema version are this
 /// reader's own, the After Effects version comes out of the file, and there is
 /// no Bridge version or export date because no Bridge was involved.
-/// [`Bundle::source`] is what tells the report which route was taken.
+/// [`Bundle::source`] is what tells the report which route was taken, and
+/// [`Bundle::footage_only`] whether the whole project came or only its
+/// footage references did.
 pub fn open_aep(path: &Path) -> Result<Bundle, ImportError> {
     let bytes = std::fs::read(path)?;
-    let parsed = parse_capture(&bytes)?;
+    let parsed = parse_capture_or_footage(&bytes)?;
     Ok(Bundle {
         manifest: Manifest {
             format: Some(FORMAT.to_string()),
@@ -110,7 +120,89 @@ pub fn open_aep(path: &Path) -> Result<Bundle, ImportError> {
             unreadables: parsed.skipped,
         },
         source: BundleSource::Aep,
+        footage_only: parsed.footage_only,
     })
+}
+
+/// Parse a whole project, or — when its structure is gone — its footage
+/// references alone (docs/11 §7: "whole-file failure falls back to import
+/// footage references only where the footage table is readable").
+///
+/// The front door for the direct route ([`open_aep`] takes this road), and
+/// the one place the fallback is decided, so that it is a policy rather than
+/// an accident. The rule for which failures fall back comes from what
+/// [`parse_capture`] can fail with:
+///
+/// - [`AepError::Container`] means the bytes are not an After Effects project
+///   at all — no `RIFX`, the wrong form type, or a header cut short. There is
+///   nothing to carve footage out of, and doing so over arbitrary bytes would
+///   find arbitrary chunks; the refusal stands as it is.
+/// - [`AepError::NoItemTree`] means the container opened and walked but the
+///   `LIST Fold` the whole project hangs off could not be reached: its own
+///   name or size word is damaged, or a size word before it stopped the root
+///   walk. The footage records underneath may be whole, so they are looked
+///   for by their signature ([`rifx::carve`]) rather than through the tree.
+///   Everything that needs the tree — folders, comps, layers, the project
+///   block — is left out, not guessed at. When not one footage reference can
+///   be recovered either, the refusal is the same `NoItemTree` as before, so
+///   a file of rubbish never opens as an empty project.
+///
+/// Anything a *partial* walk skips inside a tree that did open is still a
+/// skipped-chunk row from [`parse_capture`], not this fallback.
+pub fn parse_capture_or_footage(bytes: &[u8]) -> Result<Parsed, AepError> {
+    match parse_capture(bytes) {
+        Err(AepError::NoItemTree) => {
+            let items = read_footage_only(bytes);
+            if items.is_empty() {
+                return Err(AepError::NoItemTree);
+            }
+            let ae_version = open_egg(bytes)
+                .ok()
+                .and_then(|root| root.ok().find(|chunk| chunk.id == *b"head"))
+                .and_then(|chunk| version_of(chunk.body));
+            Ok(Parsed {
+                capture: Capture {
+                    project: None,
+                    items,
+                    comps: Vec::new(),
+                },
+                ae_version,
+                skipped: Vec::new(),
+                footage_only: true,
+            })
+        }
+        other => other,
+    }
+}
+
+/// The footage references alone, found by their signature wherever they sit
+/// in the bytes — the walk [`parse_capture_or_footage`] takes when the item
+/// tree cannot be.
+///
+/// A reference is an `Item` whose descriptor says footage and which either
+/// names a file or is After Effects' own placeholder for one. A solid is
+/// footage to After Effects and not a reference to anything, and a footage
+/// record whose own path is damaged has nothing to relink, so neither is
+/// kept. With no tree there is no folder to put an item in, so the parent is
+/// left unknown rather than invented; an id met twice is one item.
+fn read_footage_only(bytes: &[u8]) -> Vec<Item> {
+    let mut items: Vec<Item> = Vec::new();
+    for entry in rifx::carve(bytes, *b"Item") {
+        let inside: Vec<Chunk<'_>> = entry.children().ok().collect();
+        let Some((kind_code, id, name)) = describe(&inside) else {
+            continue;
+        };
+        if kind_code != enums::ITEM_FOOTAGE || items.iter().any(|item| item.id == Some(id)) {
+            continue;
+        }
+        let item = read_footage(id, None, name, &inside);
+        let is_reference = item.kind.as_deref() == Some("footage")
+            && (item.path.is_some() || item.is_placeholder == Some(true));
+        if is_reference {
+            items.push(item);
+        }
+    }
+    items
 }
 
 /// Parse a whole project out of the bytes of an `.aep`.
@@ -118,6 +210,9 @@ pub fn open_aep(path: &Path) -> Result<Bundle, ImportError> {
 /// The caller does the reading, so this stays a pure function over a slice:
 /// nothing here touches the filesystem, allocates from a length the file
 /// declared, or can panic on a malformed byte.
+///
+/// Refuses a container with no item tree; [`parse_capture_or_footage`] is the
+/// entry that falls back to the footage references in that case.
 pub fn parse_capture(bytes: &[u8]) -> Result<Parsed, AepError> {
     let mut skipped = Vec::new();
     let mut root = Vec::new();
@@ -179,6 +274,7 @@ pub fn parse_capture(bytes: &[u8]) -> Result<Parsed, AepError> {
         },
         ae_version,
         skipped,
+        footage_only: false,
     })
 }
 
@@ -270,24 +366,9 @@ fn read_folder<'a>(
             continue;
         }
         let inside: Vec<Chunk<'_>> = entry.children().ok().collect();
-        let Some(descriptor) = inside.iter().find(|chunk| chunk.id == *b"idta") else {
+        let Some((kind_code, id, name)) = describe(&inside) else {
             continue;
         };
-        let (Some(kind_code), Some(id)) = (
-            u16_at(descriptor.body, 0),
-            u32_at(descriptor.body, 16).map(i64::from),
-        ) else {
-            continue;
-        };
-        // An item After Effects displays under its file's name stores an
-        // *empty* name chunk, so an empty one is no name rather than a name
-        // that happens to be blank. Saying so here is what lets a footage item
-        // fall back to its file name below, and everything else to `(unnamed)`.
-        let name = inside
-            .iter()
-            .find(|chunk| chunk.id == *b"Utf8")
-            .map(|chunk| chunk.text())
-            .filter(|name| !name.is_empty());
 
         match kind_code {
             enums::ITEM_FOLDER => {
@@ -313,7 +394,7 @@ fn read_folder<'a>(
                 comps.push((id, entry));
             }
             enums::ITEM_FOOTAGE => {
-                items.push(read_footage(id, parent_id, name, &inside));
+                items.push(read_footage(id, Some(parent_id), name, &inside));
             }
             // An item type from a newer After Effects: keep the row so the
             // report can name it, and say what the file said.
@@ -326,6 +407,26 @@ fn read_folder<'a>(
             }),
         }
     }
+}
+
+/// What an item's descriptor says about it: its kind code, its id, and the
+/// name the user gave it — or `None` when the `idta` is missing or too short
+/// to hold both, which makes the item unreadable rather than half-read.
+///
+/// An item After Effects displays under its file's name stores an *empty*
+/// name chunk, so an empty one is no name rather than a name that happens to
+/// be blank. Saying so here is what lets a footage item fall back to its file
+/// name in [`read_footage`], and everything else to `(unnamed)`.
+fn describe(inside: &[Chunk<'_>]) -> Option<(u16, i64, Option<String>)> {
+    let descriptor = inside.iter().find(|chunk| chunk.id == *b"idta")?;
+    let kind_code = u16_at(descriptor.body, 0)?;
+    let id = u32_at(descriptor.body, 16).map(i64::from)?;
+    let name = inside
+        .iter()
+        .find(|chunk| chunk.id == *b"Utf8")
+        .map(|chunk| chunk.text())
+        .filter(|name| !name.is_empty());
+    Some((kind_code, id, name))
 }
 
 /// A footage item — which is also how After Effects stores a solid.
@@ -365,7 +466,12 @@ fn read_folder<'a>(
 /// ride in the `ae` namespace and nothing downstream would read them — and an
 /// unchecked offset is exactly the silently-wrong import this route exists to
 /// avoid.
-fn read_footage(id: i64, parent_id: i64, name: Option<String>, inside: &[Chunk<'_>]) -> Item {
+fn read_footage(
+    id: i64,
+    parent_id: Option<i64>,
+    name: Option<String>,
+    inside: &[Chunk<'_>],
+) -> Item {
     let pin = inside.iter().find(|chunk| chunk.is_list(b"Pin "));
     let within: Vec<Chunk<'_>> = pin.map(|p| p.children().ok().collect()).unwrap_or_default();
     let settings = within.iter().find(|chunk| chunk.id == *b"sspc");
@@ -461,7 +567,7 @@ fn read_footage(id: i64, parent_id: i64, name: Option<String>, inside: &[Chunk<'
     Item {
         id: Some(id),
         name,
-        parent_id: Some(parent_id),
+        parent_id,
         kind: Some(kind.to_string()),
         path,
         is_placeholder: placeholder.map(|_| true),
@@ -1277,6 +1383,225 @@ mod tests {
     fn a_container_with_no_item_tree_is_refused() {
         let bytes = file(&chunk(b"head", &[0; 20]));
         assert_eq!(parse_capture(&bytes).unwrap_err(), AepError::NoItemTree);
+    }
+
+    /// A small project with every kind of item in it: a folder holding a
+    /// clip that was missing at save, a plate at the root, a placeholder, a
+    /// solid, and a comp with one layer. The shapes are the ones the tests
+    /// above pin one at a time, put together so the fallback has to tell
+    /// them apart.
+    fn project_with_every_kind_of_item() -> Vec<u8> {
+        let mut folder = idta(ITEM_FOLDER_KIND, 1);
+        folder.extend(chunk(b"Utf8", b"Shots"));
+        folder.extend(list(
+            b"Sfdr",
+            &list(
+                b"Item",
+                &footage_item(2, r"C:\Shoot\clip.mov", 1, &chunk(b"opti", b"MOoV\0\0")),
+            ),
+        ));
+
+        let plate = footage_item(3, "/media/plate.exr", 0, &chunk(b"opti", b"oEXR\0\0"));
+
+        let mut placeholder_asset = vec![0_u8; 10];
+        placeholder_asset.splice(4..6, 2_u16.to_be_bytes());
+        placeholder_asset.extend_from_slice(b"Original Source Deleted\0");
+        let placeholder = footage_item(4, "", 1, &chunk(b"opti", &placeholder_asset));
+
+        let mut solid_asset = b"Soli".to_vec();
+        solid_asset.resize(26, 0);
+        solid_asset.extend_from_slice(b"White Solid\0");
+        let solid = footage_item(5, "", 0, &chunk(b"opti", &solid_asset));
+
+        let mut comp = idta(ITEM_COMP_KIND, 6);
+        comp.extend(chunk(b"Utf8", b"Main"));
+        comp.extend(chunk(b"cdta", &[0; 204]));
+        comp.extend(list(b"Layr", &ldta(1000, 0, 0, 2000)));
+
+        let mut items = list(b"Item", &folder);
+        items.extend(list(b"Item", &plate));
+        items.extend(list(b"Item", &placeholder));
+        items.extend(list(b"Item", &solid));
+        items.extend(list(b"Item", &comp));
+        let mut body = chunk(b"head", &[0; 20]);
+        body.extend(list(b"Fold", &items));
+        file(&body)
+    }
+
+    /// **A project whose item tree is broken still imports its footage
+    /// references — and nothing else.**
+    ///
+    /// docs/11 §7's whole-file fallback. The `LIST Fold` every item hangs off
+    /// is damaged the two ways the sweep damages things: its size word
+    /// overwritten with an enormous one, which stops the root walk dead, and
+    /// its name flipped, which turns the whole tree into one leaf the walk
+    /// steps over. Either way `parse_capture` finds no tree; the fallback
+    /// finds the three references by their signature — the clip nested in
+    /// its folder, the plate at the root, the placeholder — with their names,
+    /// paths and flags exactly as the whole read gives them. The solid and the
+    /// comp are not references and do not come; no folder is invented for
+    /// the clip that had one; and the parse says it took the fallback.
+    #[test]
+    fn a_broken_item_tree_still_imports_its_footage() {
+        let whole = project_with_every_kind_of_item();
+        let intact = parse_capture(&whole).expect("the intact project parses");
+        assert_eq!(intact.capture.items.len(), 6);
+        assert_eq!(intact.capture.comps.len(), 1);
+        assert!(!intact.footage_only);
+
+        // `RIFX` + size + `Egg!` is twelve bytes; the `head` chunk is 8 + 20;
+        // then the folder's own `LIST` header.
+        let fold_at = 12 + 8 + 20;
+        assert_eq!(&whole[fold_at..fold_at + 4], b"LIST");
+        assert_eq!(&whole[fold_at + 8..fold_at + 12], b"Fold");
+
+        let mut size_broken = whole.clone();
+        size_broken[fold_at + 4..fold_at + 8].copy_from_slice(&u32::MAX.to_be_bytes());
+        let mut name_broken = whole.clone();
+        name_broken[fold_at] ^= 0xFF;
+
+        for (what, damaged) in [("size", &size_broken), ("name", &name_broken)] {
+            assert_eq!(
+                parse_capture(damaged).unwrap_err(),
+                AepError::NoItemTree,
+                "{what}: the whole read has no tree to walk"
+            );
+            let parsed = parse_capture_or_footage(damaged)
+                .unwrap_or_else(|error| panic!("{what}: the fallback answers, not {error}"));
+            assert!(parsed.footage_only, "{what}");
+            assert!(parsed.capture.comps.is_empty(), "{what}: no comps");
+            assert!(parsed.capture.project.is_none(), "{what}: no project block");
+            assert!(
+                parsed.skipped.is_empty(),
+                "{what}: nothing to skip in a walk that did not run"
+            );
+
+            let items = &parsed.capture.items;
+            assert_eq!(
+                items.len(),
+                3,
+                "{what}: three references, no solid, no comp"
+            );
+            assert!(items
+                .iter()
+                .all(|item| item.kind.as_deref() == Some("footage")));
+            assert!(
+                items.iter().all(|item| item.parent_id.is_none()),
+                "{what}: no folder invented"
+            );
+            assert!(items.iter().all(|layer| layer.colour.is_none()));
+
+            let clip = &items[0];
+            assert_eq!(clip.id, Some(2));
+            assert_eq!(clip.name.as_deref(), Some("clip.mov"));
+            assert_eq!(clip.path.as_deref(), Some(r"C:\Shoot\clip.mov"));
+            assert_eq!(clip.is_missing, Some(true));
+            assert_eq!(clip.is_placeholder, None);
+
+            let plate = &items[1];
+            assert_eq!(plate.id, Some(3));
+            assert_eq!(plate.name.as_deref(), Some("plate.exr"));
+            assert_eq!(plate.path.as_deref(), Some("/media/plate.exr"));
+            assert_eq!(plate.is_missing, Some(false));
+            assert_eq!((plate.width, plate.height), (Some(1920), Some(1080)));
+
+            let placeholder = &items[2];
+            assert_eq!(placeholder.id, Some(4));
+            assert_eq!(placeholder.name.as_deref(), Some("Original Source Deleted"));
+            assert_eq!(placeholder.is_placeholder, Some(true));
+            assert_eq!(placeholder.path, None);
+
+            // Everything the fallback says about a reference, the whole read
+            // said too — nothing is read differently for having been carved.
+            for item in items {
+                let same = intact
+                    .capture
+                    .items
+                    .iter()
+                    .find(|whole| whole.id == item.id)
+                    .expect("the whole read has the item");
+                assert_eq!(
+                    Item {
+                        parent_id: None,
+                        ..same.clone()
+                    },
+                    *item,
+                    "{what}: the carved item is the walked item minus its folder"
+                );
+            }
+        }
+    }
+
+    /// **Rubbish is still refused, never imported as footage.**
+    ///
+    /// The fallback is for a project whose *structure* is gone, not for bytes
+    /// that were never a project: zeros, noise, a header cut short, a
+    /// container with nothing in it, and a container whose only `Item` has no
+    /// descriptor all refuse through the new entry exactly as through the old
+    /// one — the same error, so the notice the user sees does not change —
+    /// and none of them becomes a capture of nothing.
+    #[test]
+    fn garbage_is_still_refused() {
+        let mut state = 0x9E37_79B9_7F4A_7C15_u64;
+        let noise: Vec<u8> = (0..4096)
+            .map(|_| {
+                state = state
+                    .wrapping_mul(6_364_136_223_846_793_005)
+                    .wrapping_add(1_442_695_040_888_963_407);
+                (state >> 56) as u8
+            })
+            .collect();
+        let empty_container = file(&chunk(b"head", &[0; 20]));
+        let item_without_descriptor = file(&list(b"Item", &chunk(b"Utf8", b"clip.mov")));
+
+        let cases: [(&str, &[u8]); 7] = [
+            ("zeros", &[0; 512]),
+            ("noise", &noise),
+            ("nothing", &[]),
+            ("a header cut short", b"RIFX\0\0"),
+            ("a header and no more", b"RIFX\0\0\0\x04Egg!"),
+            ("an empty container", &empty_container),
+            ("an item with no descriptor", &item_without_descriptor),
+        ];
+        for (what, bytes) in cases {
+            let refused = parse_capture(bytes).unwrap_err();
+            let through_fallback = parse_capture_or_footage(bytes)
+                .err()
+                .unwrap_or_else(|| panic!("{what} must be refused, not imported as footage"));
+            assert_eq!(
+                through_fallback, refused,
+                "{what}: the same refusal as before"
+            );
+        }
+        assert!(matches!(
+            parse_capture_or_footage(&[0; 512]).unwrap_err(),
+            AepError::Container(RifxError::NotRifx)
+        ));
+        assert_eq!(
+            parse_capture_or_footage(&empty_container).unwrap_err(),
+            AepError::NoItemTree
+        );
+    }
+
+    /// **A project with a tree takes the whole road, and the fallback never
+    /// second-guesses it.**
+    ///
+    /// The synthetic half of the differential's `an_intact_file_takes_the_full_road`:
+    /// with the tree readable the two entries agree byte for byte, the solid
+    /// and the comp come as they always did, and nothing says footage-only.
+    #[test]
+    fn a_project_with_a_tree_is_parsed_whole_through_the_fallback_entry() {
+        let bytes = project_with_every_kind_of_item();
+        let whole = parse_capture(&bytes).unwrap();
+        let through_fallback = parse_capture_or_footage(&bytes).unwrap();
+        assert_eq!(through_fallback, whole);
+        assert!(!through_fallback.footage_only);
+        assert_eq!(through_fallback.capture.items.len(), 6);
+        assert_eq!(through_fallback.capture.comps.len(), 1);
+        assert_eq!(
+            through_fallback.capture.items[4].kind.as_deref(),
+            Some("solid")
+        );
     }
 
     /// **A comp whose settings record is missing still imports, with a row

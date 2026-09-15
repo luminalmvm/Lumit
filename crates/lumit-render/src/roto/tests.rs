@@ -100,6 +100,83 @@ fn block_at(base: i64) -> RotoBlock {
             (cx - 6.0, cy),
             (cx + 6.0, cy),
         )],
+        prompts: Vec::new(),
+    }
+}
+
+/// The same shot seeded by a tap in the middle of the disc instead: no stroke
+/// at all, one prompt, and the seed row saying so.
+fn prompted_at(base: i64) -> (RotoBlock, RotoSettings) {
+    let (cx, cy) = Disc::centre(base);
+    (
+        RotoBlock {
+            base_frame: Some(base),
+            strokes: Vec::new(),
+            prompts: vec![lumit_core::roto::RotoPrompt {
+                id: uuid::Uuid::now_v7(),
+                frame: base,
+                points: vec![(cx, cy)],
+                labels: vec![1],
+            }],
+        },
+        RotoSettings {
+            seed: lumit_core::fx::effects::roto_brush::SEED_SEGMENT,
+            identity: [3; 32],
+            ..RotoSettings::default()
+        },
+    )
+}
+
+/// A model the test wrote down: it answers with the analytic disc of whichever
+/// frame the tap landed on, so every claim about the seeding is an assertion
+/// rather than a reading of somebody's weights.
+///
+/// It is deliberately soft at the rim, because a real model is: the band
+/// between the two thresholds is what [`lumit_roto::mask_seeds`] declines to
+/// seed and what the solve then decides from the frame's own colours.
+struct FakeModel {
+    /// Where the tap the model was asked about landed, so the test can assert
+    /// the prompt reached it in source pixels.
+    asked: std::sync::Arc<std::sync::Mutex<Vec<(f32, f32)>>>,
+    /// How many frames it was handed, which is what makes "the encoder runs
+    /// once" an assertion.
+    reads: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+}
+
+impl RotoModel for FakeModel {
+    fn embed(&mut self, rgba: &[u8], width: u32, height: u32) -> Result<(), RotoFailure> {
+        assert_eq!(rgba.len(), (width as usize) * (height as usize) * 4);
+        self.reads.fetch_add(1, Ordering::Relaxed);
+        Ok(())
+    }
+
+    fn mask(&mut self, points: &[(f32, f32)], labels: &[u8]) -> Result<Vec<f32>, RotoFailure> {
+        if let Ok(mut held) = self.asked.lock() {
+            held.extend_from_slice(points);
+        }
+        let positive = points
+            .iter()
+            .zip(labels)
+            .find(|(_, label)| **label == 1)
+            .map(|(point, _)| *point)
+            .ok_or(RotoFailure::ModelFailed)?;
+        // Which frame's disc the tap is inside, by where its centre would be.
+        let frame = ((positive.0 - 24.0) / 4.0).round() as i64;
+        let (cx, cy) = Disc::centre(frame);
+        Ok((0..H)
+            .flat_map(|y| (0..W).map(move |x| (x, y)))
+            .map(|(x, y)| {
+                let dx = x as f32 + 0.5 - cx;
+                let dy = y as f32 + 0.5 - cy;
+                let away = (dx * dx + dy * dy).sqrt();
+                // Sure inside, sure outside, unsure across the rim.
+                (1.0 - (away - (R - 1.0)) / 2.0).clamp(0.0, 1.0)
+            })
+            .collect())
+    }
+
+    fn made_with(&self) -> String {
+        "Test; sam2-written-down; 03; ONNX Runtime 0".into()
     }
 }
 
@@ -110,6 +187,9 @@ fn job(block: RotoBlock, frames: usize) -> RotoJob {
         settings: RotoSettings::default(),
         block,
         open: Box::new(move || Some(Box::new(Disc::new(frames)) as Box<dyn RotoFrames>)),
+        // Nothing seeded by its strokes ever opens one, so the default refuses:
+        // a test that reaches for a model without saying so fails loudly.
+        model: Box::new(|| Err(RotoFailure::ModelMissing)),
         propagate: true,
         stop_after: None,
     }
@@ -153,6 +233,72 @@ fn the_base_frame_is_cut_from_its_own_strokes() {
     assert!(!cancelled);
     assert_eq!((run.first_frame, run.last_frame), (0, 0));
     assert!(iou(&run, 0) >= 0.95, "base IoU {}", iou(&run, 0));
+}
+
+/// The same claim for a **prompted** base (docs/impl/addons.md §6.2, §11 test
+/// 10): the model proposes the subject, the seeds come off its answer, and the
+/// solve cuts the same disc out of the same frame.
+///
+/// What is asserted about the model is that it was handed the frame once and
+/// the tap in source pixels, which is the whole of the seam; what its answer
+/// looks like is the test's own arithmetic, so nothing here depends on a pack
+/// being installed.
+#[test]
+fn the_base_frame_is_cut_from_a_prompt_when_the_seed_row_asks() {
+    let _guard = serially();
+    set_test_cache_dir(None);
+    let asked = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let reads = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+
+    let (block, settings) = prompted_at(0);
+    let mut j = job(block, 1);
+    j.settings = settings;
+    j.model = {
+        let (asked, reads) = (asked.clone(), reads.clone());
+        Box::new(move || Ok(Box::new(FakeModel { asked, reads }) as Box<dyn RotoModel>))
+    };
+    let (run, cancelled) = propagate(j, &never(), &|_| {}).expect("a run");
+
+    assert!(!cancelled);
+    assert!(iou(&run, 0) >= 0.95, "prompted base IoU {}", iou(&run, 0));
+    assert_eq!(
+        asked.lock().expect("the taps").as_slice(),
+        &[Disc::centre(0)],
+        "the tap reached the model in source pixels"
+    );
+    assert_eq!(
+        reads.load(Ordering::Relaxed),
+        1,
+        "the encoder read the frame more than once"
+    );
+    assert!(
+        run.made_with.starts_with("Test; sam2-written-down;"),
+        "the record does not say what seeded it: {}",
+        run.made_with
+    );
+
+    // With no model on the machine the run is a refusal that names the reason,
+    // and never a matte cut some other way (docs/impl/addons.md §9).
+    let (block, settings) = prompted_at(0);
+    let mut j = job(block, 1);
+    j.settings = settings;
+    assert_eq!(
+        propagate(j, &never(), &|_| {}).unwrap_err(),
+        RotoFailure::ModelMissing
+    );
+
+    // And a brush carrying a prompt with the seed row back on its strokes never
+    // opens one at all: the job's opener refuses, and the run comes back
+    // anyway, cut from the strokes as it always was.
+    let (prompted, _) = prompted_at(0);
+    let mut block = block_at(0);
+    block.prompts = prompted.prompts;
+    let (run, _) = propagate(job(block, 1), &never(), &|_| {}).expect("a run");
+    assert!(
+        run.made_with.is_empty(),
+        "nothing seeded it but the strokes"
+    );
+    assert!(iou(&run, 0) >= 0.95, "stroked base IoU {}", iou(&run, 0));
 }
 
 /// §10 item 2: the disc translating, strokes on the base only, both directions
@@ -329,6 +475,7 @@ fn a_sidecar_whose_numbers_do_not_hold_together_is_refused() {
             height: 8,
             fps: 25.0,
             clip_frames: 4,
+            made_with: String::new(),
             frames: vec![FrameRecord {
                 frame: 0,
                 chain: [1_u8; 32],
@@ -595,6 +742,68 @@ fn a_propagate_resumes_from_its_own_partial_run() {
     );
 }
 
+/// The record of **what seeded the base frame** survives a lend
+/// (docs/impl/addons.md §7). The ordinary gesture reaches this on the very
+/// first press: a tap asks for the base frame alone and files it, then
+/// Propagate lends that base back by chain hash rather than opening the model
+/// again, so a run that never sees a model still has to say what cut it.
+#[test]
+fn the_lent_base_frame_keeps_what_seeded_it() {
+    let _guard = serially();
+    let dir = tempfile::tempdir().expect("a temp dir");
+    set_test_cache_dir(Some(dir.path().to_path_buf()));
+
+    let fingerprint = lumit_core::model::Fingerprint {
+        size: 4096,
+        head_tail_hash: "roto-provenance".into(),
+        mtime_secs: 0,
+    };
+    let frames = 4;
+    let (block, settings) = prompted_at(0);
+    let key = RotoKey::new(&fingerprint, &block, settings);
+    let instance = uuid::Uuid::now_v7();
+
+    // The solve a tap asks for on release: the model runs, and the record says
+    // which one.
+    let mut solo = job(block.clone(), frames);
+    solo.instance = instance;
+    solo.key = Some(key);
+    solo.settings = settings;
+    solo.model = Box::new(|| {
+        Ok(Box::new(FakeModel {
+            asked: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
+            reads: std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+        }) as Box<dyn RotoModel>)
+    });
+    solo.stop_after = Some(0);
+    run(solo, &never());
+    let partial = propagated(instance).expect("the solo run is in the store");
+    assert!(
+        partial.made_with.starts_with("Test; sam2-written-down;"),
+        "the solo did not record what seeded it: {}",
+        partial.made_with
+    );
+
+    // Then Propagate. The base comes out of that same file, so `job`'s default
+    // opener - which refuses - is never asked for a model at all, and the
+    // finished record still says what cut the base frame.
+    let mut full = job(block, frames);
+    full.instance = instance;
+    full.key = Some(key);
+    full.settings = settings;
+    run(full, &never());
+    let whole = propagated(instance).expect("the resumed run replaced it");
+    assert_eq!(
+        (whole.first_frame, whole.last_frame),
+        (0, frames as i64 - 1),
+        "the partial run did not resume"
+    );
+    assert_eq!(
+        whole.made_with, partial.made_with,
+        "the lent base frame lost the record of which pack seeded it"
+    );
+}
+
 /// §10 item 8's refusals, each produced and each named.
 #[test]
 fn every_refusal_has_a_name_and_none_is_a_fault() {
@@ -740,6 +949,7 @@ fn propagation_cost_per_frame() {
             (540.0, 540.0),
             (660.0, 540.0),
         )],
+        prompts: Vec::new(),
     };
     let mut j = job(block, frames);
     let shot = BigDisc::new(frames);
@@ -753,24 +963,25 @@ fn propagation_cost_per_frame() {
     );
 }
 
-/// §10 item 7's other half, and the whole point of the chain hash: **a stroke
-/// edit renames exactly the frames it invalidated**, through the real frame key
-/// the disk cache files pictures under.
-///
-/// Without this, a corrected shot would serve back the frames it banked before
-/// the correction — a wrong picture with a right name, which is the one failure
-/// a content-addressed cache exists to make impossible.
-#[test]
-fn a_correction_renames_exactly_the_frames_it_spoiled() {
+/// One comp of one footage layer wearing one Roto brush carrying `block`, at
+/// the media's own rate, so comp frame n is source frame n and the assertions
+/// above can talk about one number. Shared by the two tests below, which ask
+/// the same question of a stroke edit and of a prompt edit.
+fn a_document(
+    block: RotoBlock,
+    seed: u32,
+) -> (
+    std::sync::Arc<lumit_core::model::Document>,
+    lumit_core::model::Composition,
+    uuid::Uuid,
+) {
     use lumit_core::model::{
         Composition, Document, FootageItem, Layer, LayerKind, LinearColour, MediaRef, ProjectItem,
         Switches, TransformGroup,
     };
     use lumit_core::time::{CompTime, Duration, FrameRate, Rational};
 
-    // A comp at the media's own rate, so comp frame n is source frame n and the
-    // assertions below can talk about one number.
-    let build = |strokes: Vec<lumit_core::roto::RotoStroke>| {
+    {
         let item = uuid::Uuid::from_u128(7);
         let mut doc = Document::new();
         doc.items.push(ProjectItem::Footage(FootageItem {
@@ -789,10 +1000,10 @@ fn a_correction_renames_exactly_the_frames_it_spoiled() {
         let mut brush =
             lumit_core::fx::instantiate("roto_brush").expect("roto brush is a built-in");
         brush.id = uuid::Uuid::from_u128(9);
-        brush.roto = Some(RotoBlock {
-            base_frame: Some(0),
-            strokes,
-        });
+        brush.roto = Some(block);
+        if let Some(row) = brush.params.iter_mut().find(|p| p.id == "seed") {
+            row.value = lumit_core::model::EffectValue::Choice(seed);
+        }
         let mut layer = Layer {
             graph: Default::default(),
             markers: Vec::new(),
@@ -845,14 +1056,23 @@ fn a_correction_renames_exactly_the_frames_it_spoiled() {
         };
         doc.items.push(ProjectItem::Composition(comp.clone()));
         (std::sync::Arc::new(doc), comp, item)
-    };
+    }
+}
 
-    let base = stroke(0, RotoStrokeKind::Foreground, (10.0, 10.0), (20.0, 10.0));
-    let (doc_a, comp_a, item) = build(vec![base.clone()]);
-    let (doc_b, comp_b, _) = build(vec![
-        base,
-        stroke(10, RotoStrokeKind::Foreground, (30.0, 30.0), (40.0, 30.0)),
-    ]);
+/// A block on frame 0 carrying `strokes` and `prompts` and nothing else.
+fn block_of(strokes: Vec<DocStroke>, prompts: Vec<lumit_core::roto::RotoPrompt>) -> RotoBlock {
+    RotoBlock {
+        base_frame: Some(0),
+        strokes,
+        prompts,
+    }
+}
+
+/// The two names the same frame of two documents is filed under, asserted the
+/// same way for a stroke edit and for a prompt edit.
+fn renames_from(before: RotoBlock, after: RotoBlock, edited: usize) {
+    let (doc_a, comp_a, item) = a_document(before, 0);
+    let (doc_b, comp_b, _) = a_document(after, 0);
 
     let mut probes = std::collections::HashMap::new();
     probes.insert(
@@ -872,18 +1092,125 @@ fn a_correction_renames_exactly_the_frames_it_spoiled() {
         crate::cache::frame_key(doc, comp, frame, quality, &probes).expect("a named frame")
     };
 
-    for frame in 0..10 {
+    for frame in 0..edited {
         assert_eq!(
             key(&doc_a, &comp_a, frame),
             key(&doc_b, &comp_b, frame),
             "frame {frame} was renamed by a correction it cannot depend on"
         );
     }
-    for frame in 10..20 {
+    for frame in edited..edited + 10 {
         assert_ne!(
             key(&doc_a, &comp_a, frame),
             key(&doc_b, &comp_b, frame),
             "frame {frame} kept its name across a correction that changes it"
         );
     }
+}
+
+/// §10 item 7's other half, and the whole point of the chain hash: **a stroke
+/// edit renames exactly the frames it invalidated**, through the real frame key
+/// the disk cache files pictures under.
+///
+/// Without this, a corrected shot would serve back the frames it banked before
+/// the correction - a wrong picture with a right name, which is the one failure
+/// a content-addressed cache exists to make impossible.
+#[test]
+fn a_correction_renames_exactly_the_frames_it_spoiled() {
+    let base = stroke(0, RotoStrokeKind::Foreground, (10.0, 10.0), (20.0, 10.0));
+    renames_from(
+        block_of(vec![base.clone()], Vec::new()),
+        block_of(
+            vec![
+                base,
+                stroke(10, RotoStrokeKind::Foreground, (30.0, 30.0), (40.0, 30.0)),
+            ],
+            Vec::new(),
+        ),
+        10,
+    );
+}
+
+/// The same claim for a **prompt** edit (docs/impl/addons.md §11 test 10): a
+/// tap is a contributor like a stroke, so adding one on frame 10 renames frame
+/// 10 onward and nothing before it.
+///
+/// The frame key is the easiest thing to forget, and a mask drawn through it
+/// and not in it serves a banked frame after the prompt changes, forever.
+#[test]
+fn a_prompt_renames_exactly_the_frames_it_spoiled() {
+    let tap = |frame: i64, x: f32| lumit_core::roto::RotoPrompt {
+        id: uuid::Uuid::now_v7(),
+        frame,
+        points: vec![(x, 12.0)],
+        labels: vec![1],
+    };
+    renames_from(
+        block_of(Vec::new(), vec![tap(0, 10.0)]),
+        block_of(Vec::new(), vec![tap(0, 10.0), tap(10, 30.0)]),
+        10,
+    );
+}
+
+/// **What cut a prompted brush is in the frame key too** (docs/impl/addons.md
+/// §7, §13). The pack that read the base frame and the run that came out of it
+/// are both facts the document does not hold, so a key made from the rows
+/// alone names two different pictures the same: replace the pack, or land the
+/// propagation, and every frame already banked keeps its name forever.
+///
+/// The half a test can reach is the run: putting one in the store moves the
+/// host's answer without a row of the document moving. The installed pack's
+/// half is the same XOR into the same term. Asked of a brush whose seed row
+/// says Segment and of no other, which is what keeps every project written
+/// before this existed exactly where it was.
+#[test]
+fn what_cut_a_prompted_brush_is_in_the_frame_key() {
+    let _guard = serially();
+    let tap = lumit_core::roto::RotoPrompt {
+        id: uuid::Uuid::from_u128(11),
+        frame: 0,
+        points: vec![(10.0, 12.0)],
+        labels: vec![1],
+    };
+    let instance = uuid::Uuid::from_u128(9);
+    let mut probes = std::collections::HashMap::new();
+    probes.insert(
+        uuid::Uuid::from_u128(7),
+        crate::source::SourceProbe::Video {
+            fps: 30.0,
+            width: 64,
+            height: 64,
+            frames: 120,
+            audio: false,
+        },
+    );
+    let quality = crate::plan::Quality::default();
+    let named = |seed: u32| {
+        let (doc, comp, _) = a_document(block_of(Vec::new(), vec![tap.clone()]), seed);
+        crate::cache::frame_key(&doc, &comp, 0, quality, &probes).expect("a named frame")
+    };
+    let a_run = || {
+        run_from_planes(64, 64, 30.0, 120, &[(0, [7; 32], vec![255u8; 64 * 64])])
+            .expect("a run out of one written-down plane")
+    };
+
+    clear();
+    let before = named(lumit_core::fx::effects::roto_brush::SEED_SEGMENT);
+    publish(instance, a_run());
+    let after = named(lumit_core::fx::effects::roto_brush::SEED_SEGMENT);
+    clear();
+    assert_ne!(
+        before, after,
+        "a matte the model cut was drawn through a name that never moved"
+    );
+
+    // The same run under a brush seeded by its scribbles renames nothing.
+    let plain = named(0);
+    publish(instance, a_run());
+    let still = named(0);
+    clear();
+    assert_eq!(
+        plain, still,
+        "a brush on Strokes was renamed by something it never asked for"
+    );
 }

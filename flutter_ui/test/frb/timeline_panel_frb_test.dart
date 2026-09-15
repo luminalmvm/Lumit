@@ -941,6 +941,36 @@ void main() {
       expect(layer.getMasks().single.vertices, hasLength(before));
     });
 
+    /// Delete key on a Path key takes it away. Reported from the app: the key
+    /// stayed, because the shorter key list was refused.
+    testWidgets('Delete key removes a mask path key', (tester) async {
+      final p = withComp();
+      final layer = p.comp.addTextLayer();
+      await openMaskRow(tester, p, layer, 'Ellipse');
+      final id = layer.getMasks().single.id;
+      for (final f in [300, 900]) {
+        layer.toggleMaskPathKey(id: id, time: p.comp.timeOfFrame(frame: f));
+      }
+      p.uiState.model.refresh();
+      await tester.pumpAndSettle();
+
+      final row = '${masksPath(layer.internallayerId.toString())}/$id/path';
+      final menu = await tester.startGesture(
+          tester.getCenter(find.byKey(ValueKey<String>('tl-key-$row#1'))),
+          kind: PointerDeviceKind.mouse,
+          buttons: kSecondaryMouseButton);
+      await menu.up();
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('tl-key-menu-delete')));
+      await tester.pumpAndSettle();
+      expect([
+        for (final k in layer.getMasks().single.pathKeys)
+          p.comp.frameAtTime(time: k.time)
+      ], [
+        300
+      ]);
+    });
+
     /// **A mask's rows select like every other property row**, and a
     /// keyed one puts its diamonds on the lane. Both were missing: a mask value
     /// row could not be picked at all, so its curve never reached the graph,

@@ -23,6 +23,7 @@ use super::drivers::{
     audio_level::{AudioLevel, AudioLevelDef},
     colour_cycle::{ColourCycle, ColourCycleDef},
     combine::{Combine, CombineDef},
+    expression::{Expression, ExpressionDef},
     layer_points::{LayerPoints, LayerPointsDef},
     math::{Math, MathDef},
     points_sample::{PointsSample, PointsSampleDef},
@@ -81,6 +82,7 @@ use super::effects::{
     curves::{Curves, CurvesDef},
     custom_shader::{CustomShader, CustomShaderDef},
     datamosh::{Datamosh, DatamoshDef},
+    depth::{Depth, DepthDef},
     directional_blur::{DirectionalBlur, DirectionalBlurDef},
     displacement_map::{DisplacementMap, DisplacementMapDef},
     dof::{Dof, DofDef},
@@ -134,6 +136,7 @@ use super::effects::{
     radial_blur::{RadialBlur, RadialBlurDef},
     radial_wipe::{RadialWipe, RadialWipeDef},
     radio_waves::{RadioWaves, RadioWavesDef},
+    remove_background::{RemoveBackground, RemoveBackgroundDef},
     rgb_split::{RgbSplit, RgbSplitDef},
     ripple::{Ripple, RippleDef},
     roto_brush::{RotoBrush, RotoBrushDef},
@@ -288,6 +291,17 @@ crate::catalogue![
     // whose answer is a picture applied where it stands rather than a number
     // another layer reads.
     RotoBrushDef => RotoBrush,
+    // Depth (docs/08 §3.104), beside the Camera track and after the Roto
+    // brush: the fourth handle for a background job, and the second whose
+    // answer is a picture. It sits in Utility and not in Blur beside the
+    // Depth of field that reads it, because what it holds is a reading of the
+    // shot rather than a look laid over one.
+    DepthDef => Depth,
+    // Remove background (docs/08 §3.105), beside Depth: the same tier, the
+    // same shape and the other thing a model reads out of a shot. A matte
+    // rather than a reading, so it draws its answer into the layer's own alpha
+    // where Depth draws a grey picture.
+    RemoveBackgroundDef => RemoveBackground,
     InvertDef => Invert,
     TintDef => Tint,
     CurvesDef => Curves,
@@ -410,4 +424,9 @@ crate::catalogue![
     // a stream rather than a number, and the one node that reaches outside the
     // layer its graph belongs to.
     LayerPointsDef => LayerPoints,
+    // The box whose outputs are what an expression returns (node-graph.md
+    // §1.3). Last, because it arrived last: it declares four static outputs
+    // and fills only the ones the result's kind fits each frame, the shape
+    // Split has, since a port is a fact about the entry and not the node.
+    ExpressionDef => Expression,
 ];

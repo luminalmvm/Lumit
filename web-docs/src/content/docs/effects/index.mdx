@@ -221,6 +221,8 @@ Useful tools for specific tasks.
 | [Camera track](/effects/utility/camera-track/) | Works out how the camera moved in a shot. |
 | [Planar track](/effects/utility/planar-track/) | Follows a surface, or one or two points, and moves another layer with it. |
 | [Roto brush](/effects/utility/roto-brush/) | Cuts a subject out of a shot from a few strokes, carried frame to frame. |
+| [Depth](/effects/utility/depth/) | Reads how far away every pixel is, for other effects to use. |
+| [Remove background](/effects/utility/remove-background/) | Cuts a subject out of a shot with a trained model, a frame at a time. |
 | [Custom shader](/effects/utility/custom-shader/) | An effect you write yourself, as WGSL text or a graph of boxes. |
 | [Node graph](/effects/utility/node-graph/) | Applies a node graph composition to the layer, with the graph's Inputs as its rows. |
 
@@ -283,5 +285,6 @@ A driver is wired on a layer's own graph, see [The node graph](/use/nodes/), or 
 | [Combine](/effects/drivers/combine/) | Four numbers put together as a colour. |
 | [Points sample](/effects/drivers/points-sample/) | Turns a stream of points into numbers you can drive things with. |
 | [Layer points](/effects/drivers/layer-points/) | Brings another layer's points into this layer's graph. |
+| [Expression](/effects/drivers/expression/) | Hands out whatever an expression returns: a number, a point or a colour. |
 
 {/* END GENERATED */}

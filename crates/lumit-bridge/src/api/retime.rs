@@ -43,6 +43,11 @@ pub enum BridgeRetimeInterp {
 #[frb(non_opaque)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct BridgeFlowParams {
+    /// 0 the built-in engine, 1 RIFE, which one paints the in-between frame
+    /// (docs/impl/addons.md §6.3). RIFE is an addon the user installs, and a
+    /// machine without it previews with the built-in engine and says so on the
+    /// row; see [`flow_engine_state`].
+    pub engine: u32,
     /// 0 native, 1 half, 2 quarter — the size flow is *measured* at,
     /// independent of the preview quality tier.
     pub resolution: u32,
@@ -64,6 +69,7 @@ pub struct BridgeFlowParams {
 impl BridgeFlowParams {
     fn from_core(p: &lumit_core::retime::FlowParams) -> Self {
         Self {
+            engine: p.engine.code(),
             resolution: p.resolution.code(),
             detail: p.detail.code(),
             smoothness: p.smoothness,
@@ -77,11 +83,16 @@ impl BridgeFlowParams {
     /// Fold onto an existing set, so the keyframed input rate and any
     /// forward-compatible fields survive an edit of the plain ones.
     fn onto(&self, base: &lumit_core::retime::FlowParams) -> lumit_core::retime::FlowParams {
-        use lumit_core::retime::{FlowFallback, FlowResolution, OcclusionMode, VectorDetail};
+        use lumit_core::retime::{
+            FlowEngineChoice, FlowFallback, FlowResolution, OcclusionMode, VectorDetail,
+        };
         let mut out = base.clone();
         // An unknown code keeps what was there rather than snapping to a
         // default: the UI and the engine disagreeing is a bug, not a reason to
         // silently change the user's picture.
+        if let Some(v) = FlowEngineChoice::from_code(self.engine) {
+            out.engine = v;
+        }
         if let Some(v) = FlowResolution::from_code(self.resolution) {
             out.resolution = v;
         }
@@ -268,5 +279,68 @@ impl LayerReference {
         } else {
             BridgeRetimeInterp::Nearest
         })
+    }
+}
+
+/// What the Flow group's engine row has to say about the model engine
+/// (docs/impl/addons.md §6.3).
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BridgeFlowEngineState {
+    /// The chosen engine is the one painting. Nothing to say.
+    Ready,
+    /// No model runtime is installed, so no pack can run.
+    RuntimeMissing,
+    /// The runtime is installed and no synthesis pack is.
+    PackMissing,
+    /// The pack is installed and would not open or would not run. The row
+    /// says so; the library's own sentence stays on this side.
+    Failed,
+    /// The layer's source is scene-linear float, which the model was not
+    /// trained on, so the built-in engine painted the frame.
+    FloatSource,
+}
+
+impl LayerReference {
+    /// Whether the model engine is painting this layer, and what stands in its
+    /// way when it is not.
+    ///
+    /// Asked of the layer rather than of the machine, because one of the
+    /// answers is about the layer's own footage: a scene-linear source is
+    /// something the model was never trained on, and the layer beside it on
+    /// ordinary rushes is painted by the model all the same. A machine-wide
+    /// answer would put one layer's sentence on another layer's row.
+    ///
+    /// Read on the row rather than polled: the answer changes when the user
+    /// installs an addon or draws a frame, not while they scrub. The installed
+    /// packs are a snapshot the store keeps in memory, taken again only when
+    /// the addons folder changes, and the refusal is whatever the last frame
+    /// that asked for a model recorded.
+    ///
+    /// Preview substitutes the built-in engine and the row says so; an export
+    /// whose document names a model this machine cannot run refuses to start,
+    /// and one whose model gives up part way abandons the file
+    /// (docs/08 §3.1: an export never silently downgrades).
+    #[frb(sync)]
+    #[must_use]
+    pub fn flow_engine_state(&self) -> BridgeFlowEngineState {
+        if matches!(
+            lumit_ml::runtime::status(),
+            lumit_ml::RuntimeStatus::Missing
+        ) {
+            return BridgeFlowEngineState::RuntimeMissing;
+        }
+        if lumit_ml::synthesis::installed_identity().is_none() {
+            return BridgeFlowEngineState::PackMissing;
+        }
+        match lumit_render::synthesis_refusal(self.layer_id) {
+            None => BridgeFlowEngineState::Ready,
+            Some(lumit_render::SynthesisRefusal::RuntimeMissing) => {
+                BridgeFlowEngineState::RuntimeMissing
+            }
+            Some(lumit_render::SynthesisRefusal::PackMissing) => BridgeFlowEngineState::PackMissing,
+            Some(lumit_render::SynthesisRefusal::FloatSource) => BridgeFlowEngineState::FloatSource,
+            Some(lumit_render::SynthesisRefusal::Failed(_)) => BridgeFlowEngineState::Failed,
+        }
     }
 }

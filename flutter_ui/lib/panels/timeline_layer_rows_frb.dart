@@ -780,6 +780,10 @@ class _FlowRow extends StatelessWidget {
     }
 
     final control = switch (row.kind) {
+      FlowRowKind.engine =>
+        _choice('flow-engine', flowEngineOptions, p.engine, (v) {
+          write(flowParamsWith(p, engine: v));
+        }),
       FlowRowKind.resolution =>
         _choice('flow-resolution', flowResolutionOptions, p.resolution, (v) {
           write(flowParamsWith(p, resolution: v));

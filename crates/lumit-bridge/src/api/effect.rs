@@ -1924,6 +1924,7 @@ pub const BADGE_REASONS: &[&str] = &[
     "plugin_missing",
     "unknown_effect",
     "shader_failed",
+    "addon_missing",
 ];
 
 /// Why this instance is not doing its own work, if it is not.
@@ -1963,6 +1964,14 @@ fn badge_of(effect: &EffectInstance) -> (Option<String>, Option<String>) {
     // live and still saved, and the compiler's own sentence goes underneath.
     if let Some(why) = shader_error(effect) {
         return (Some("shader_failed".to_owned()), Some(why));
+    }
+    // An effect that asks a model for a plane, on a machine that has not got
+    // the model (docs/impl/addons.md §6.1, §9). Not a failure and not modal:
+    // the effect renders identity, its values are still live and still saved,
+    // and the detail names the addon to install. Read off the installed-packs
+    // snapshot, which is memory rather than a folder walk.
+    if let Some(addon) = lumit_render::planes::addon_missing(effect) {
+        return (Some("addon_missing".to_owned()), Some(addon));
     }
     // `def`, so a **layer style** is an instance this build knows rather than
     // one wearing the "never heard of it" badge.

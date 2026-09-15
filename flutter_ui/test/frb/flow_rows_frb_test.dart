@@ -10,6 +10,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/panels/effect_controls_panel_frb.dart';
+import 'package:lumit_flutter/panels/flow_rows_frb.dart';
 import 'package:lumit_flutter/panels/layer_fold_frb.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
@@ -144,6 +145,7 @@ void main() {
 
       // Sections start twirled open, so the rows are already built.
       for (final key in [
+        'flow-engine',
         'flow-resolution',
         'flow-detail',
         'flow-smoothness',
@@ -158,6 +160,7 @@ void main() {
 
       // Defaults, straight from the engine.
       final before = layer.getFlowParams();
+      expect(before.engine, 0, reason: 'the built-in engine');
       expect(before.resolution, 0, reason: 'native');
       expect(before.detail, 1, reason: 'medium');
       expect(before.smoothness, 50);
@@ -168,6 +171,7 @@ void main() {
       // A write of the whole group round-trips.
       layer.setFlowParams(
         params: BridgeFlowParams(
+          engine: 0,
           resolution: 2,
           detail: 3,
           smoothness: 12.5,
@@ -178,6 +182,7 @@ void main() {
         ),
       );
       final after = layer.getFlowParams();
+      expect(after.engine, 0);
       expect(after.resolution, 2);
       expect(after.detail, 3);
       expect(after.smoothness, 12.5);
@@ -185,6 +190,77 @@ void main() {
       expect(after.fallback, 1);
       expect(after.hudGuard, isFalse);
       expect(after.always, isTrue);
+    });
+
+    testWidgets('the engine is a row in the group, with two engines on it',
+        (tester) async {
+      final p = withComp();
+      final layer = footageLayer(p);
+      layer.setFlowEnabled(on_: true);
+      await mount(tester, p);
+
+      // Two, in the order the engine stores them: the code is the index, so a
+      // list drawn the other way round would rename what stored projects say.
+      expect(flowEngineOptions, ['Built in', 'RIFE']);
+
+      await tester.tap(find.byKey(const ValueKey('flow-engine')));
+      await tester.pumpAndSettle();
+      expect(find.text('Built in'), findsWidgets);
+      await tester.tap(find.text('RIFE').last);
+      await tester.pumpAndSettle();
+
+      // Written whole, as every row in this group is: one undo step, and the
+      // seven settings beside it come back untouched.
+      final after = layer.getFlowParams();
+      expect(after.engine, 1, reason: 'the chosen engine reaches the document');
+      expect(after.resolution, 0);
+      expect(after.detail, 1);
+      expect(after.smoothness, 50);
+      expect(after.hudGuard, isTrue);
+      expect(after.always, isFalse);
+    });
+
+    testWidgets('a machine without the pack says so under the engine row',
+        (tester) async {
+      final p = withComp();
+      final layer = footageLayer(p);
+      layer.setFlowEnabled(on_: true);
+      await mount(tester, p);
+
+      // Nothing to say while the built-in engine is the chosen one.
+      expect(find.byKey(const ValueKey('flow-engine-notice')), findsNothing);
+
+      layer.setFlowParams(
+        params: flowParamsWith(layer.getFlowParams(), engine: 1),
+      );
+      await mount(tester, p);
+
+      // What the line says is the engine's answer, so both endings are pinned:
+      // on a machine carrying the pack there is nothing to report, and on one
+      // without it the sentence and the way to mend it are both there.
+      final state = layer.flowEngineState();
+      if (state == BridgeFlowEngineState.ready) {
+        expect(find.byKey(const ValueKey('flow-engine-notice')), findsNothing,
+            reason: 'the chosen engine is the one painting');
+        expect(flowEngineNotice(state), isNull);
+      } else {
+        expect(find.byKey(const ValueKey('flow-engine-notice')), findsOneWidget,
+            reason: 'no silent downgrade: preview says what it did instead');
+        expect(
+            find.byKey(const ValueKey('flow-engine-open-addons')), findsOneWidget,
+            reason: 'and the page that mends it is one press away');
+      }
+
+      // The five answers, each with its own sentence and none of them empty.
+      expect(flowEngineNotice(BridgeFlowEngineState.ready), isNull);
+      expect(flowEngineNotice(BridgeFlowEngineState.packMissing),
+          'RIFE is not installed, using the built-in engine');
+      expect(flowEngineNotice(BridgeFlowEngineState.runtimeMissing),
+          'RIFE is not installed, using the built-in engine');
+      expect(flowEngineNotice(BridgeFlowEngineState.failed),
+          isNot(flowEngineNotice(BridgeFlowEngineState.packMissing)));
+      expect(flowEngineNotice(BridgeFlowEngineState.floatSource),
+          isNot(flowEngineNotice(BridgeFlowEngineState.failed)));
     });
 
     testWidgets('the input rate has a control, defaulting to Auto',
@@ -248,6 +324,7 @@ void main() {
       layer.setFlowEnabled(on_: true);
       layer.setFlowParams(
         params: BridgeFlowParams(
+          engine: 0,
           resolution: 1,
           detail: 3,
           smoothness: 80,

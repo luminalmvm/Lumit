@@ -2540,6 +2540,30 @@ class LayerReference {
       BridgeLib.instance.api.crateApiLayerLayerReferenceFadeOut(
           that: this, seconds: seconds, shape: shape);
 
+  /// Whether the model engine is painting this layer, and what stands in its
+  /// way when it is not.
+  ///
+  /// Asked of the layer rather than of the machine, because one of the
+  /// answers is about the layer's own footage: a scene-linear source is
+  /// something the model was never trained on, and the layer beside it on
+  /// ordinary rushes is painted by the model all the same. A machine-wide
+  /// answer would put one layer's sentence on another layer's row.
+  ///
+  /// Read on the row rather than polled: the answer changes when the user
+  /// installs an addon or draws a frame, not while they scrub. The installed
+  /// packs are a snapshot the store keeps in memory, taken again only when
+  /// the addons folder changes, and the refusal is whatever the last frame
+  /// that asked for a model recorded.
+  ///
+  /// Preview substitutes the built-in engine and the row says so; an export
+  /// whose document names a model this machine cannot run refuses to start,
+  /// and one whose model gives up part way abandons the file
+  /// (docs/08 §3.1: an export never silently downgrades).
+  BridgeFlowEngineState flowEngineState() =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceFlowEngineState(
+        that: this,
+      );
+
   /// **Insert a freeze at the playhead** (docs/04 §7.3,
   /// `retime.freeze_at_playhead`): the moment showing at `frame` is held for
   /// one second, everything after it is pushed that far later, and the map is
@@ -3415,10 +3439,13 @@ class LayerReference {
   /// the graph editor commits when a handle is dragged, and what a lane drag
   /// of several keys at once needs.
   ///
-  /// `keys` must name every key the mask has, in order; their `value` is
+  /// `keys` names every key the mask has, in order; their `value` is
   /// ignored, because a path key holds a shape rather than a number. Refused
   /// as a whole if the times are not strictly ascending: the evaluator walks
   /// the list assuming they are, and a half-applied reorder is not a mask.
+  ///
+  /// A shorter list is a delete. Each key it names is found by its time, and
+  /// the rest go. Deleting the last key leaves the shape that key held.
   bool setMaskPathKeys(
           {required UuidValue id, required List<BridgeKeyframe> keys}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceSetMaskPathKeys(

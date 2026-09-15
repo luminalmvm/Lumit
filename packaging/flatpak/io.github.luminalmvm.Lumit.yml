@@ -60,6 +60,8 @@ finish-args:
   - --filesystem=/media
   - --filesystem=/run/media
   - --filesystem=/mnt
+  # The Addons page downloads model packs; nothing else needs the network.
+  - --share=network
 
 modules:
   - name: lumit

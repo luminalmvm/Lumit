@@ -2662,6 +2662,70 @@ void main() {
           reason: 'the points the sweep missed stayed put');
     });
 
+    /// Picking a mask's Path row offers its points on the picture without the
+    /// layer being selected, so a drag there has to write too. Reported from
+    /// the app: the keyed path followed the pointer and snapped back on release.
+    testWidgets("a picked Path row's points stay where they are dragged",
+        (tester) async {
+      final p = withLayer();
+      p.layer.addMask(
+        mask: BridgeMask(
+          id: UuidValue.fromString(const Uuid().v4()),
+          name: 'Rectangle',
+          vertices: const [
+            BridgeVertex(
+                x: 860, y: 440, tanInX: 0, tanInY: 0, tanOutX: 0, tanOutY: 0),
+            BridgeVertex(
+                x: 1060, y: 440, tanInX: 0, tanInY: 0, tanOutX: 0, tanOutY: 0),
+            BridgeVertex(
+                x: 1060, y: 640, tanInX: 0, tanInY: 0, tanOutX: 0, tanOutY: 0),
+            BridgeVertex(
+                x: 860, y: 640, tanInX: 0, tanInY: 0, tanOutX: 0, tanOutY: 0),
+          ],
+          closed: true,
+          inverted: false,
+          opacity: const BridgeScalar.static_(100),
+          mode: BridgeMaskMode.add,
+          feather: const BridgeScalar.static_(0),
+          vertexFeather: const [],
+          expansion: const BridgeScalar.static_(0),
+          pathKeys: const [],
+        ),
+      );
+      final id = p.layer.getMasks().single.id;
+      for (final f in [0, 60]) {
+        p.layer.toggleMaskPathKey(id: id, time: p.comp.timeOfFrame(frame: f));
+      }
+      p.uiState.setSelection([]);
+      p.uiState.selectedProperties.value = [
+        '${p.layer.internallayerId}/masks/$id/path'
+      ];
+      p.uiState.model.refresh();
+      await mount(tester, p);
+
+      final fitted = fittedRect(tester, p.comp);
+      Offset onScreen(double x, double y) => Offset(
+            fitted.left + x / 1920 * fitted.width,
+            fitted.top + y / 1080 * fitted.height,
+          );
+      final drag = await tester.startGesture(onScreen(860, 440));
+      await tester.pump();
+      for (var i = 0; i < 10; i++) {
+        await drag.moveBy(const Offset(6, 0));
+        await tester.pump();
+      }
+      await drag.up();
+      await tester.pumpAndSettle();
+
+      final shown = p.comp.animatedMaskPathsAt(frame: 0).single.vertices;
+      expect(shown[0].x, greaterThan(861),
+          reason: 'the key under the playhead took the drag');
+      expect(shown[1].x, closeTo(1060, 0.001),
+          reason: 'only the point pressed on moved');
+      expect(p.layer.getMasks().single.pathKeys, hasLength(2),
+          reason: 'the drag reused the key there');
+    });
+
     /// **A shape layer's own art is correctable on the picture**, by the same
     /// gesture a mask's points take. Before this, art could be drawn and then
     /// only redrawn.

@@ -25,6 +25,11 @@ lumit-flow = { path = "../lumit-flow" }
 lumit-gpu = { path = "../lumit-gpu" }
 lumit-ingress = { path = "../lumit-ingress" }
 lumit-media = { path = "../lumit-media" }
+# The model runtime and the installed packs. Here for the reason the tracker
+# and the roto brush are: this is the one crate that can decode a clip, run the
+# model on it and hand the pixels to the compositor, and the Flow engine row is
+# answered where the frame is made (docs/impl/addons.md §6.3).
+lumit-ml = { path = "../lumit-ml" }
 lumit-project = { path = "../lumit-project" }
 lumit-text = { path = "../lumit-text" }
 # The camera tracker. The analysis job lives here because it is the one
