@@ -26,6 +26,7 @@ import 'package:lumit_flutter/panels/timeline_extras_frb.dart'
     show clipFillAlpha, clipFillSelectedAlpha, workAreaFrames, workAreaWith;
 import 'package:lumit_flutter/panels/timeline_panel_frb.dart'
     show TimelinePanelFrb;
+import 'package:lumit_flutter/panels/waveform_frb.dart' show WaveformPainter;
 import 'package:lumit_flutter/state/dock.dart' show Panel, PanelPane;
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
@@ -203,6 +204,27 @@ void main() {
         reason: "the track's Volume is not on this panel's lanes: it keeps "
             'its row under the twirl, and a clip wears its own gain line '
             'in its place');
+  });
+
+  testWidgets('a zoom fetches the wave again for the zoom it lands on',
+      (tester) async {
+    final p = await mount(tester);
+    final wave = find.byKey(ValueKey<String>('atl-wave-${p.music}'));
+    double span() {
+      final peaks = _painterOf(tester, wave).peaks;
+      expect(peaks, isNotNull, reason: 'the lane has its peaks');
+      return peaks!.endSeconds - peaks.startSeconds;
+    }
+
+    final before = span();
+    await _ctrlWheel(
+        tester,
+        tester
+            .getCenter(find.byKey(ValueKey<String>('atl-bar-grab-${p.music}'))),
+        -100);
+    expect(span(), lessThan(before),
+        reason: 'the zoom asked for the shorter window it now shows, rather '
+            'than waiting for a scroll to ask');
   });
 
   testWidgets('the first edit marks the comp mixed, and only the first',
@@ -652,6 +674,29 @@ void main() {
     await tester.pump();
     expect(fillAlpha(tester, clip), closeTo(clipFillAlpha, 0.001),
         reason: 'a click on empty ground means nothing is selected');
+  });
+
+  testWidgets('a zoom out fetches the clip picture for where the zoom lands',
+      (tester) async {
+    final p = await mountClips(tester);
+    final clip = p.top.getClips().single;
+    final wave = find.byKey(ValueKey<String>('atl-clip-wave-${clip.id}'));
+
+    await _ctrlWheel(tester, onBody(tester, clip, fromRight: 10), -100);
+    // A pick rebuilds the strip, so the picture is fetched for the zoomed-in
+    // view alone and no longer reaches the clip's head.
+    await tester.tapAt(onBody(tester, clip, fromRight: 20));
+    await settleFrb(tester, minRounds: 8);
+    final zoomedIn = _painterOf(tester, wave);
+    expect(zoomedIn.peaks!.startSeconds, greaterThan(zoomedIn.originSeconds),
+        reason: 'zoomed in on its tail, the clip holds only the tail');
+
+    await _ctrlWheel(tester, onBody(tester, clip, fromRight: 20), 100);
+    final zoomedOut = _painterOf(tester, wave);
+    expect(zoomedOut.peaks!.startSeconds,
+        lessThanOrEqualTo(zoomedOut.originSeconds + 1e-6),
+        reason: 'zoomed back out, the whole clip is on screen and the picture '
+            'was fetched from its head');
   });
 
   /// A press taken away is not a gesture, so what it claimed on Escape has to
@@ -1326,6 +1371,24 @@ void main() {
           reason: 'and the clip actually moved');
     });
   });
+}
+
+WaveformPainter _painterOf(WidgetTester tester, Finder wave) =>
+    tester.widget<CustomPaint>(wave).painter! as WaveformPainter;
+
+/// Ctrl and the wheel, rolled hard enough to reach the end of the zoom, then
+/// landed in one step so the build before the landing still holds the old
+/// scroll.
+Future<void> _ctrlWheel(WidgetTester tester, Offset at, double dy) async {
+  await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+  for (var i = 0; i < 12; i++) {
+    await tester.sendEventToBinding(
+        PointerScrollEvent(position: at, scrollDelta: Offset(0, dy)));
+  }
+  await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 300));
+  await settleFrb(tester, minRounds: 8);
 }
 
 /// A real, probeable WAV: half a second of 8 kHz mono square wave. Written

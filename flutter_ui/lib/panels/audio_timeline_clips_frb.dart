@@ -752,7 +752,11 @@ class _AudioClipStripState extends State<AudioClipStrip> {
   Widget _clip(LumitTheme t, BridgeClip clip) {
     final label = t.labelColour(widget.track.entry.info.label);
     final (left, width) = _place(clip);
-    _wantPicture(clip, left, width);
+    // After layout, since a zoom only moves the scroll there and the offset
+    // read during build is the last frame's.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _wantPicture(clip, left, width);
+    });
     final picked = widget.selected == clip.id.toString();
     return Positioned(
       key: ValueKey<String>('atl-clip-${clip.id}'),

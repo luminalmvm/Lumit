@@ -775,6 +775,13 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
       frames: _laneFrames,
       pad: TimelineAxis.pad,
     ));
+    // Once the zoom lands the pictures are asked for again, after the layout
+    // that puts the scroll where the zoom left it.
+    if (!_zoomMotion.moving) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _refreshPeaks(_lastTracks);
+      });
+    }
   }
 
   /// Point the flight's anchor at the playhead - held where it is if it is on
