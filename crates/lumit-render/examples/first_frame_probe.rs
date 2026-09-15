@@ -19,6 +19,7 @@ fn empty_doc() -> (std::sync::Arc<Document>, Uuid) {
     let mut doc = Document::new();
     let comp_id = Uuid::now_v7();
     doc.items.push(ProjectItem::Composition(Composition {
+        graph: None,
         master_volume_db: 0.0,
         sound_mix: false,
         groups: Vec::new(),

@@ -103,6 +103,7 @@ impl CompositionReference {
                 layer: Some(layer.id),
                 comp_time: t,
                 current_depth: 0,
+                inputs: None,
             });
             match lumit_render::build::parent_world_placement(comp, layer, t, context) {
                 Some(m) => {

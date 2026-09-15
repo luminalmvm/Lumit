@@ -14,11 +14,16 @@ publish = false
 [dependencies]
 lumit-core = { path = "../lumit-core" }
 lumit-audio = { path = "../lumit-audio" }
+# The resource governor's ledger (docs/13 §3). The renderer is what spends the
+# card, so it is the renderer that reserves against it and reads the pressure
+# the degradation ladder steps on.
+lumit-budget = { path = "../lumit-budget" }
 lumit-cache = { path = "../lumit-cache" }
 lumit-colour = { path = "../lumit-colour" }
 lumit-eval = { path = "../lumit-eval" }
 lumit-flow = { path = "../lumit-flow" }
 lumit-gpu = { path = "../lumit-gpu" }
+lumit-ingress = { path = "../lumit-ingress" }
 lumit-media = { path = "../lumit-media" }
 lumit-project = { path = "../lumit-project" }
 lumit-text = { path = "../lumit-text" }

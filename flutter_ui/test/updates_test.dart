@@ -301,6 +301,25 @@ void main() {
       expect(scratch.listSync(), isEmpty);
     });
 
+    /// A release GitHub published no `digest` for is verified by size alone —
+    /// older responses carry none, and refusing them would refuse every
+    /// release made before the field existed.
+    ///
+    /// The sharp half of this is what the verify must *not* do: with no digest
+    /// named and no signing key pinned, there is no answer to compute, so the
+    /// download is never read. Hashing it anyway is invisible here but hangs
+    /// every widget test that drives a download, because those run inside a
+    /// fake clock where a real file read never completes.
+    test('a release with no digest published is taken on its size', () async {
+      final body = utf8.encode('an installer nobody signed');
+      final service = serviceFor(body);
+      await service.check();
+      await service.downloadUpdate();
+
+      expect(service.stage, UpdateStage.ready);
+      expect(service.downloadedInstaller?.existsSync(), isTrue);
+    });
+
     test('a file that does not match its checksum is not run', () async {
       final body = utf8.encode('an installer, or is it');
       final service = serviceFor(body, digest: 'sha256:${'0' * 64}');

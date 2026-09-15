@@ -520,7 +520,7 @@ still leaving every derived control live.
 
 ### The layer graph: derived boxes down one way, stored wiring both
 
-`api::graph` is the Graph panel's whole surface, and it is shaped by the one rule the
+`api::graph` is the layer half of the Graph panel's surface, and it is shaped by the one rule the
 model rests on: **`Layer::effects` is still the only authority for the picture**
 ([impl/node-graph.md](impl/node-graph.md) §1.1). So what crosses splits in two, and the
 split is the design:
@@ -620,6 +620,70 @@ by a connect; and the **Tab search filters by the wire in hand**, so every row i
 one that would actually connect. Derived from `Signature::Data` and the schema's own
 `ParamKind::port_type`, so the entry's sockets and the wires `LayerGraph::validate`
 accepts cannot disagree.
+
+### The node graph composition: the same shape on the comp
+
+The other half is `CompositionReference`'s, and it is the layer graph's shape moved onto the
+comp ([impl/node-graph-comp.md](impl/node-graph-comp.md) §4.1):
+
+- `get_node_graph()` answers the whole graph in **one call**: the derived boxes with their
+    sockets, and the stored wiring beside them. It is asked on selection and on document
+    change and held in Dart exactly as `get_graph` is, never from a rebuild path.
+- `set_node_graph(instances, wiring)` is **one write, one `Op::SetCompGraph`, one undo
+    step**. There is no per-wire and no per-node call, and auto-wire folds into the add's
+    own commit.
+- `get_node_graph_instances()` hands out staged `BridgeEffectInstance` copies **at offset
+    zero**, a graph's clock being the comp's own; `new_graph_instance(name, graph)` mints one
+    uncommitted, as `new_driver` does, and `graph` names the comp a Node graph box applies.
+- `ProjectReference::new_node_graph(name, settings)` files a comp with its graph seeded, and
+    `LayerReference::add_node_graph_effect(graph)` binds one to a layer's stack.
+    `BridgeEffectInstance::node_graph_comp_id()` answers the bound comp for the card's header.
+- **Three names a stack cannot hold.** `LayerReference::add_effect` refuses `merge`, `switch`
+    and the bare `node_graph` with `BridgeError::NotAStackEffect`, and `list_effects` leaves
+    all three out. `list_graph_nodes()` is the node graph console's own catalogue, the
+    Compositing family and the drivers; the panel adds the Reads, the Inputs and the nested
+    graphs itself, from the project's items.
+- `BridgeCompModel::is_node_graph` **rides the comp model**: the Timeline, the Graph panel
+    and the project row read the one fact from an answer they already hold.
+- `BridgePrefixPoint` grows `graph`, naming a comp and a box rather than a layer and an
+    effect, which is how the Viewer's chip stops the picture at a box. `layer` is optional
+    beside it, a node graph having no layers to cut.
+- `render_frame_with_graph_preview(frame, scale, instances)` is the **live drag** on a box's
+    number, the driver preview's twin: the staged instances are patched onto the throwaway
+    clone by id and no document is touched.
+- **A refusal is a calm sentence here too.** A bad graph crosses as
+    `BridgeError::OpError` and the document is left as it was, so the panel declines a
+    mistyped drop from the read model's own types and the engine is the backstop.
+
+Round two adds five things to the same section, and no new idiom with them:
+
+- `BridgeLayerInfo::graph_inputs` is a **placed graph's Inputs** on the layer read model,
+    the `node_graph` instance bound to the comp the Precomp layer places, with its Inputs
+    copy refreshed as every clone's is. `None` on every other layer.
+    `LayerReference::get_graph_inputs()` hands out the staged copy, and **offers** a fresh
+    bound instance to a layer that places a graph but carries none, which is what a file
+    written before they existed opens as. Nothing is written for the offer:
+    `set_effects` is the commit, as it is for the stack and the styles, and it files
+    `Op::SetLayerGraphInputs`. The preview request carries the same staged instance in
+    `effects` and patches it by the same rule the commit uses, so nothing on the Dart side
+    of the seam changed.
+- `BridgeCompModel::graph_boxes` carries a node graph's **Fx boxes** with every parameter's
+    value, in document order and at offset zero, empty on a layer comp. The Timeline draws a
+    row and a lane per box from the held model and asks the engine nothing, which is the
+    reason the layers' effects ride there too.
+- **Graph groups have their own three calls.** `CompositionReference::save_graph_group(name,
+    colour, nodes)` answers the JSON text and Dart chooses where it goes;
+    `insert_graph_group(text, x, y)` is one `Op::SetCompGraph` and so one undo step, with
+    every node id minted at insert; `list_graph_groups()` lists the `.lumngrp` files beside
+    `list_node_groups()`'s `.lumgrp` ones, so neither listing can offer the other's file. A
+    text that is not one of ours is `BridgeError::InvalidEffect`, and one carrying an Output
+    is refused whole by the engine, a graph having exactly one.
+- `BridgeLayerInfo::collapse_forced` says the collapse switch is set and something forces an
+    intermediate anyway, which is what the Timeline's cell draws dimmed. Read at the layer's
+    own in point, the model carrying no playhead.
+- `BridgeGraphInput::preview` names the project item a picture Input stands in with when
+    nothing feeds it. It crosses both ways, so a graph read out and written back keeps the
+    one it has.
 
 ### The audio insert chain has no surface of its own
 

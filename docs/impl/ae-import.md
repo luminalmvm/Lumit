@@ -161,6 +161,9 @@ docs/10 §1.1's rule) and refuses only a newer *major* version.
   grades). The report is data first (a struct), prose second.
 - **The importer never fails a whole import**: a comp that cannot map imports as an
   empty comp with a report entry; parse errors on one item skip that item.
+- **Retime on a Precomp layer**: the importer writes the map onto the layer as it does for
+  footage, and since 2026-09-08 the renderer honours it, so a ramped precomp arrives
+  playing at the speed the project asked for (docs/04 §11.3).
 
 ## 5. The fixture (what `make-fixture.jsx` builds)
 

@@ -54,6 +54,7 @@ application at; the page scales it down, so oversized shots only cost bytes.
 | `layers-open.png` | [/panels/timeline/](/panels/timeline/) | Layers mode, a layer twirled open: shaped marks on two lanes. |
 | `layers-selected.png` | [/panels/timeline/](/panels/timeline/), [/tutorials/many-keyframes/](/tutorials/many-keyframes/) | The same, with one keyframe picked. |
 | `graph-mode.png` | [/panels/timeline/](/panels/timeline/) | Graph mode: the opacity curve of the picked property. |
+| `node-graph-comp.png` | [/use/node-graphs/](/use/node-graphs/) | A node graph composition: a Read forked through two effects, merged, and wired to the Output. |
 
 ## Waiting on the feature
 

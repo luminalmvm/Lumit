@@ -239,6 +239,11 @@ fn apple_log_to_linear() -> Vec<Op> {
 /// `None` when no directory exists — every vendored style then refuses by
 /// name. Same search shape as the export done-sound's, the one other data
 /// file shipped beside the binary.
+/// The most a vendored artefact may weigh. A shaper and a 65-point cube in
+/// text is under ten megabytes; sixty-four is room for the largest tier-two
+/// bake anyone would vendor and nothing like enough to matter.
+const ARTEFACT_FILE_BYTES: u64 = 64 << 20;
+
 fn vendored_dir() -> Option<PathBuf> {
     let exe_dir = std::env::current_exe()
         .ok()
@@ -268,7 +273,10 @@ fn vendored(style: &str) -> Option<VendoredArtefact> {
         return None;
     }
     let path = vendored_dir()?.join(format!("{style}.artefact"));
-    let text = std::fs::read_to_string(path).ok()?;
+    // Lumit's own file, shipped beside the executable — but the ceiling costs a
+    // line and means a corrupted or substituted artefact is a style that
+    // refuses by name rather than a machine that runs out of memory.
+    let text = lumit_ingress::read_to_string_capped(&path, ARTEFACT_FILE_BYTES).ok()?;
     VendoredArtefact::from_text(style, &text).ok()
 }
 

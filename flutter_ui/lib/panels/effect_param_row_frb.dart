@@ -585,13 +585,15 @@ class EffectParamRowFrb extends StatelessWidget {
           // A driven parameter is a line of code, not a number to drag, so it
           // gets the editor row instead of the value field.
           if (field0 case BridgeScalar_Expression expr) {
+            final owner = currentLayer;
+            if (owner == null) return Text('—', style: t.small);
             return EffectParamRowExpression(
               key: ValueKey<String>(
                   'fx-expression-$id-${param.id}-${param.hashCode}'),
               value: expr,
               comp: comp,
               frame: frame,
-              layer: currentLayer,
+              layer: owner,
               set: _set,
               setLive: _setLive,
             );
@@ -600,16 +602,19 @@ class EffectParamRowFrb extends StatelessWidget {
           final field = _scalarField(
             context,
             scalar: field0,
-            setExpression: () {
-              // Seed the expression with the value showing now, so turning one
-              // on does not move the picture until it is edited.
-              final sampled = sampleScalarWithContext(
-                  scalar: field0,
-                  time: timeOfFrame(comp, frame),
-                  layer: currentLayer);
-              _set(BridgeEffectValue.float(
-                  BridgeScalar.expression(sampled.toString())));
-            },
+            setExpression: currentLayer == null
+                ? null
+                : () {
+                    // Seed the expression with the value showing now, so
+                    // turning one on does not move the picture until it is
+                    // edited.
+                    final sampled = sampleScalarWithContext(
+                        scalar: field0,
+                        time: timeOfFrame(comp, frame),
+                        layer: currentLayer!);
+                    _set(BridgeEffectValue.float(
+                        BridgeScalar.expression(sampled.toString())));
+                  },
             frame: frame,
             sliderMin: sliderMin,
             sliderMax: sliderMax,
@@ -773,8 +778,12 @@ class EffectParamRowFrb extends StatelessWidget {
         }
         return Text('—', style: t.small);
 
+      // An owner with **no layers** is a node graph's box, where this row is a
+      // socket rather than a dropdown (docs/impl/node-graph-comp.md §4.3): it
+      // draws the dash, not a picker with nothing in it.
       case BridgeParamKind_Layer():
-        if (value case BridgeEffectValue_Layer(:final field0)) {
+        if (value case BridgeEffectValue_Layer(:final field0)
+            when ownerLayers.isNotEmpty) {
           return _layerPicker(context, id, field0);
         }
         return Text('—', style: t.small);
@@ -786,7 +795,8 @@ class EffectParamRowFrb extends StatelessWidget {
         return Text('—', style: t.small);
 
       case BridgeParamKind_MaskPath():
-        if (value case BridgeEffectValue_MaskPath(:final field0)) {
+        if (value case BridgeEffectValue_MaskPath(:final field0)
+            when ownerLayers.isNotEmpty) {
           return _maskPicker(context, id, field0);
         }
         return Text('—', style: t.small);
@@ -943,14 +953,20 @@ class EffectParamRowFrb extends StatelessWidget {
     return out;
   }
 
-  /// The layer this row's effect sits on.
+  /// The layer this row's effect sits on, or null where it sits on no layer.
   ///
   /// An expression is evaluated about a particular layer — `time`, `cut_in`,
   /// `layer()` all mean something only relative to one — so the row has to say
   /// which, and the effect stack it was drawn from knows.
-  LayerReference get currentLayer => ownerLayers
-      .firstWhere((i) => i.layer.internallayerId == ownerLayerId)
-      .layer;
+  ///
+  /// **A node graph has no layers** (docs/impl/node-graph-comp.md §4.3), so a
+  /// box's rows are drawn with an empty list and an owner nothing in it names.
+  /// This used to throw there. Null instead, and the rows that need a layer
+  /// draw the dash they already draw for a value they cannot show.
+  LayerReference? get currentLayer => ownerLayers
+      .where((i) => i.layer.internallayerId == ownerLayerId)
+      .map((i) => i.layer)
+      .firstOrNull;
 
   /// A number field for a scalar. A static value drags with live preview; an
   /// animated one shows the value under the playhead and a change writes it
@@ -1120,12 +1136,16 @@ class EffectParamRowFrb extends StatelessWidget {
     // A driven parameter is a line of code, not a number to drag — the same
     // answer the Float row gives.
     if (scalar case BridgeScalar_Expression expr) {
+      final owner = currentLayer;
+      if (owner == null) {
+        return Text('—', style: ThemeScope.of(context).theme.small);
+      }
       return EffectParamRowExpression(
         key: ValueKey<String>('fx-expression-$keyName-${param.hashCode}'),
         value: expr,
         comp: comp,
         frame: frame,
-        layer: currentLayer,
+        layer: owner,
         set: _set,
         setLive: _setLive,
       );
@@ -1156,14 +1176,16 @@ class EffectParamRowFrb extends StatelessWidget {
       // The same seed the Float row offers: a closed range keeps every
       // float affordance, and turning an expression on must not
       // move the picture until it is edited.
-      setExpression: () {
-        final sampled = sampleScalarWithContext(
-            scalar: scalar,
-            time: timeOfFrame(comp, frame),
-            layer: currentLayer);
-        _set(BridgeEffectValue.float(
-            BridgeScalar.expression(sampled.toString())));
-      },
+      setExpression: currentLayer == null
+          ? null
+          : () {
+              final sampled = sampleScalarWithContext(
+                  scalar: scalar,
+                  time: timeOfFrame(comp, frame),
+                  layer: currentLayer!);
+              _set(BridgeEffectValue.float(
+                  BridgeScalar.expression(sampled.toString())));
+            },
     );
 
     // The track is a setting (Settings, Interface, Range sliders): off, the

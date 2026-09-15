@@ -58,8 +58,13 @@ pub enum PipeError {
 
 /// The name of one broker's pipe, in the form the platform wants.
 ///
-/// The identifier is the host's own — a process id and a counter — so two
-/// brokers, and two copies of Lumit, never collide.
+/// `identifier` is 128 bits of operating-system randomness in hex
+/// ([`lumit_peer::Token`]), **not** a process id and a counter as it once was.
+/// The old name was unique, which is all a name has to be to keep two brokers
+/// apart — but it was also something any other program on the machine could
+/// work out, and the programs best placed to work it out are the other brokers,
+/// each running somebody else's plugin code. A name nobody can guess is most of
+/// the defence and costs nothing.
 #[must_use]
 pub fn pipe_name(identifier: &str) -> String {
     if cfg!(windows) {
@@ -75,16 +80,19 @@ pub fn pipe_name(identifier: &str) -> String {
 /// connects to a name nobody is listening on gets an error, and the race is
 /// avoided by never having it.
 ///
+/// The name is **claimed, never cleared**. This used to remove a file at the
+/// path first, on the reasoning that a stale socket from a crashed broker would
+/// otherwise refuse the bind — true of the old predictable names, and no longer
+/// a thing that can happen now the name is random. What that removal did make
+/// possible was for a program that had planted something at a predicted path to
+/// have it quietly deleted; refusing a name that is already taken is both safer
+/// and a better sign that something is wrong.
+///
 /// # Errors
 ///
-/// [`PipeError::Io`] if the name cannot be claimed.
+/// [`PipeError::Io`] if the name cannot be claimed, including because something
+/// is already there.
 pub fn listen(name: &str) -> Result<Listener, PipeError> {
-    // A Unix socket is a file, and a stale one from a broker that died without
-    // tidying up would refuse the bind. Removing it is safe: the name carries
-    // this process's own id.
-    if !cfg!(windows) {
-        let _ = std::fs::remove_file(name);
-    }
     let options = if cfg!(windows) {
         ListenerOptions::new().name(name.to_ns_name::<GenericNamespaced>()?)
     } else {

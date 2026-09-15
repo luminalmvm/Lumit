@@ -395,6 +395,13 @@ same decoded ring, so it is warm wherever the cache bar is warm.
   the same windowed mixdown over a different set of the mixer's own jobs, read as four
   numbers a wire can carry: Amplitude, Low, Peak and High.
 - Stereo is the v1 channel model; mono sources upmix centred.
+- **A node graph's Reads are its sound.** A node graph composition holds no layers, so the
+  mix walks the Read boxes in the Output's cone instead: a Read of footage contributes at
+  unity exactly as a Footage layer does, a Read of a composition exactly as a Precomp layer
+  does, and a Read nothing consumes is silent. The graph's own master volume applies as any
+  comp's does. Placed as a Precomp layer, the graph carries that sound under the layer's
+  Volume and Pan, and `kind_has_audio` consults the nested graph's Reads so the row wears
+  its mute switch ([impl/node-graph-comp.md](impl/node-graph-comp.md) §5.10).
 
 ## 7. Out of scope for v1
 
@@ -414,10 +421,11 @@ same decoded ring, so it is warm wherever the cache bar is warm.
   is **buses and sends**, which have nowhere to send to while every rack is an insert. So:
   per-layer volume and pan, per-layer and per-clip inserts, a master fader, meters, and
   the limiter, and no bus architecture.
-- **Audio retiming.** Retime is video-only in v1: a retimed Footage layer's own audio is
-  intended to mute with a badge whenever its retime map differs from identity ("Retime mutes
-  audio in this version") - the mute-on-retime detection and badge are **not yet wired**
-  ([TODO.md](TODO.md)). The reason it mutes rather than warps: unpitched audio warping sounds
+- **Audio retiming.** Retime is video-only in v1: a layer carrying a retime map contributes
+  no audio, and the mix enforces it from one guard above the kind match in the audio walk,
+  a Footage layer and a Precomp layer alike. `kind_has_audio` stays blind to the map, so
+  the row keeps its mute cell and the Timeline draws it dimmed with the tip *Retimed layers
+  are silent*. The reason it mutes rather than warps: unpitched audio warping sounds
   bad and pitch-preserving stretching is real work. Roadmap: a later release adds
   pitch-preserving audio retime
   (phase-vocoder or WSOLA class) as a per-layer opt-in following the same retime map

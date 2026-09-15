@@ -679,13 +679,19 @@ jobs:
         with:
           key: ffmpeg-${{ steps.ffmpeg.outputs.version }}
       # Engine crates must hold the line; the threshold may rise, never fall.
-      # The FFmpeg-free engine crates are all gated (measured 87–99% locally).
+      # The FFmpeg-free engine crates are all gated (measured 83–99% locally).
       # lumit-gpu is held out while its kernel tests skip on adapterless runners.
+      #
+      # A new engine crate goes in this list as it is added. Three that did not
+      # are here now: the bounded-ingress reader, the broker handshake and the
+      # governor's ledger are each a crate whose whole job is to be correct
+      # about a number, which is the kind of code a gate is for.
       - run: >
           cargo llvm-cov
           -p lumit-core -p lumit-project -p lumit-eval
           -p lumit-cache -p lumit-flow -p lumit-text -p lumit-colour
           -p lumit-track -p lumit-roto
+          -p lumit-ingress -p lumit-peer -p lumit-budget
           --fail-under-lines 80
 
   # The OFX host's conformance pass against real third-party plugins

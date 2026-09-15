@@ -162,6 +162,7 @@ pub(crate) fn map_layer(
         retime,
         interpolation,
         parked_flow: None,
+        graph_inputs: None,
         blend: blend(conv, &path, ae.blend.as_deref()),
         masks,
         paint: Vec::new(),

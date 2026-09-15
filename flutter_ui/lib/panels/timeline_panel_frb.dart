@@ -3283,7 +3283,6 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       // rather than dead-ending on a placeholder.
       return EmptyTimelineDrop(state: Provider.of<LumitState>(context));
     }
-
     // Everything this panel draws comes from the read model: zero
     // bridge calls per rebuild. The ListenableBuilder repaints the panel when
     // the model refreshes — which happens once per committed change.
@@ -3295,6 +3294,24 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
 
   Widget _body(
       BuildContext context, LumitUiState ui, CompositionReference comp) {
+    // A node graph has no layers to draw and no layer to take a drop
+    // (docs/impl/node-graph-comp.md §4.4): its boxes are on the canvas, which
+    // is where footage dropped on a graph belongs. The hint stands in for the
+    // layer table and the ruler over it; the comp tabs stay, because they are
+    // the way back out. The fact is the read model's, so this costs no call.
+    if (ui.model.isNodeGraph) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          CompTabsFrb(
+            state: Provider.of<LumitState>(context, listen: false),
+            uiState: ui,
+            onExport: () => exportFrb(context),
+          ),
+          const Expanded(child: NodeGraphTimeline()),
+        ],
+      );
+    }
     final scope = ThemeScope.of(context);
     final t = scope.theme;
     // How much motion the shell shows, for the zoom's flight.

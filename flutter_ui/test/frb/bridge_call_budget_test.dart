@@ -701,6 +701,63 @@ void main() {
       );
     });
 
+    /// The same claim for the **node graph's** canvas, which holds one
+    /// `getNodeGraph` and works in arithmetic over it (§4.2). Its own test
+    /// because it is a second canvas with its own read, and a hover over one
+    /// that asked the engine anything would be the same regression twice.
+    testWidgets('hovering the node graph canvas asks the engine nothing',
+        (tester) async {
+      final p = freshProject();
+      final graph = p.state.project!.newNodeGraph(name: 'Graph');
+      // Committed, so the hover crosses a canvas with a real box on it: a new
+      // instance on its own is never in the document.
+      final made = graph.newGraphInstance(name: 'blur');
+      graph.setNodeGraph(
+        instances: [...graph.getNodeGraphInstances(), made],
+        wiring: graph.getNodeGraph().wiring,
+      );
+      p.uiState.setSelectedComp(graph);
+      p.uiState.model.refresh();
+
+      await tester.pumpWidget(hostPanel(
+        state: p.state,
+        uiState: p.uiState,
+        child: const GraphPanelFrb(),
+        size: const Size(900, 600),
+      ));
+      await settleFrb(tester, minRounds: 4);
+      final out = graph.getNodeGraph().wiring.output;
+
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: Offset.zero);
+      addTearDown(mouse.removePointer);
+      await tester.pump();
+
+      counter
+        ..reset()
+        ..counting = true;
+      for (var pass = 0; pass < 2; pass++) {
+        for (final spot in [
+          tester.getCenter(
+              find.byKey(ValueKey<String>('graph-node-node:$out'))),
+          tester.getCenter(
+              find.byKey(const ValueKey<String>('comp-graph-canvas'))),
+          const Offset(700, 500),
+        ]) {
+          await mouse.moveTo(spot);
+          await tester.pump();
+        }
+      }
+      counter.counting = false;
+
+      expect(
+        counter.total,
+        0,
+        reason: 'the node graph canvas re-read the engine on a hover:\n'
+            '${counter.ranking()}',
+      );
+    });
+
     /// Twirling a layer open changes nothing in the document, so it should
     /// cost nothing at the seam. It used to cost a stack of
     /// `document_revision` calls: the read model checked whether the document

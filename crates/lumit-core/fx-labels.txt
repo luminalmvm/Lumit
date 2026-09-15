@@ -156,6 +156,7 @@ Combine with existing alpha
 Completion
 Complexity
 Composite on original
+Compositing
 Compressor
 Conductivity state
 Confidence
@@ -380,6 +381,7 @@ Image
 In front
 In high
 In low
+Index
 Inflate
 Initial speed
 Inner bevel
@@ -495,6 +497,7 @@ Maximum
 Maximum signal
 Maximum span length
 Median
+Merge
 Midtone contrast
 Midtones
 Min
@@ -515,6 +518,7 @@ NTSC
 Native
 Near blur
 Nearest distance
+Node graph
 Noise
 Noise type
 None
@@ -535,6 +539,7 @@ One point
 Opacity
 Opacity %
 Opacity over life
+Open graph
 Operate on alpha
 Operation
 Orange
@@ -795,6 +800,7 @@ Sub scaling
 Sub settings
 Subtract
 Surface
+Switch
 Symmetric
 Sync
 Taper
@@ -813,6 +819,7 @@ Tile centre y
 Tile height
 Tile width
 Time
+Time offset
 Tint
 Tint colour
 Tone

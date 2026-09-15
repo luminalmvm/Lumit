@@ -124,6 +124,17 @@ class CompModel extends ChangeNotifier {
     return fps > 0 ? fps : 60.0;
   }
 
+  /// Whether the fronted comp is a **node graph**: boxes and wires in place of
+  /// a layer stack (docs/impl/node-graph-comp.md §4.1).
+  ///
+  /// It rides the model rather than being asked for, so the Timeline, the
+  /// Graph panel and the project row read the one fact off an answer they
+  /// already hold. False for a layer comp and for no comp at all.
+  bool get isNodeGraph {
+    _freshen();
+    return _model?.isNodeGraph ?? false;
+  }
+
   /// The comp this model is bound to has gone — deleted, or undone out of
   /// existence — rather than merely being empty. A comp that is *there* always
   /// reads as a model, even with no layers in it, so the pair below says

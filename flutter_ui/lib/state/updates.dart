@@ -34,6 +34,7 @@ import 'package:flutter/foundation.dart';
 
 import 'cache_dir.dart';
 import 'install_site.dart';
+import 'release_signature.dart';
 import 'package:lumit_flutter/l10n/strings.dart';
 
 /// The repository releases are published from (the website reads the same one).
@@ -118,7 +119,19 @@ class UpdateRelease {
   /// The attachment's SHA-256 as `sha256:…`, when the API gives one. Newer
   /// GitHub responses carry a `digest` field; older ones do not, and a release
   /// without it is verified by size alone.
+  ///
+  /// Worth being clear about what this is: it comes back in the same answer as
+  /// [assetUrl], so it proves the file arrived as published and says nothing
+  /// about who published it. That is what [manifestUrl] is for.
   final String? sha256;
+
+  /// The release's signed manifest, and the detached signature over it.
+  ///
+  /// Null when the release carries no such attachment — every release made
+  /// since the signing key existed does, so on a build with a key pinned this
+  /// being null is itself the refusal (see `release_signature.dart`).
+  final Uri? manifestUrl;
+  final Uri? manifestSignatureUrl;
 
   /// What the release says to read before it is applied, a line at a time.
   /// Empty for most releases, which have nothing to say ([updateNoticeFrom]).
@@ -133,6 +146,8 @@ class UpdateRelease {
     required this.assetBytes,
     required this.delivery,
     this.sha256,
+    this.manifestUrl,
+    this.manifestSignatureUrl,
     this.notice = const [],
   });
 
@@ -182,6 +197,19 @@ class UpdateRelease {
     if (url is! String) return null;
     final size = chosen['size'];
 
+    // The signed manifest and its signature, if the release carries them. They
+    // are found by name rather than by suffix: they are the same two files on
+    // every release and on every platform.
+    Uri? attachment(String wanted) {
+      for (final raw in assets) {
+        if (raw is! Map) continue;
+        final asset = raw.cast<String, dynamic>();
+        final url = asset['browser_download_url'];
+        if (asset['name'] == wanted && url is String) return Uri.parse(url);
+      }
+      return null;
+    }
+
     final name = chosen['name'] as String;
     return UpdateRelease(
       version: versionFromTag(tag),
@@ -192,6 +220,8 @@ class UpdateRelease {
       assetBytes: size is int ? size : 0,
       delivery: deliveryFor(name, kind: kind, replaceable: replaceable),
       sha256: chosen['digest'] is String ? chosen['digest'] as String : null,
+      manifestUrl: attachment(releaseManifestName),
+      manifestSignatureUrl: attachment(releaseManifestSignatureName),
       notice: updateNoticeFrom(
           json['body'] is String ? json['body'] as String : ''),
     );
@@ -398,6 +428,11 @@ typedef InstallerLauncher = Future<void> Function(File file, String platform);
 /// tree it made itself.
 typedef ArchiveExtractor = Future<void> Function(File archive, Directory into);
 
+/// Fetching a small file whole — the signed release manifest and its signature.
+/// Capped rather than streamed, because both are a few hundred bytes and a
+/// server that says otherwise is not one to keep reading from.
+typedef SmallFileFetcher = Future<List<int>> Function(Uri url, int maxBytes);
+
 /// Starting the freshly swapped-in Lumit, once the old one is about to go.
 typedef Relauncher = Future<void> Function(File launcher);
 
@@ -424,6 +459,7 @@ class UpdateService extends ChangeNotifier {
 
   final ReleaseFetcher _fetch;
   final AssetDownloader _download;
+  final SmallFileFetcher _fetchBytes;
   final InstallerLauncher _launch;
   final ArchiveExtractor _extract;
   final Relauncher _relaunch;
@@ -444,6 +480,7 @@ class UpdateService extends ChangeNotifier {
     InstallSite? site,
     ReleaseFetcher? fetch,
     AssetDownloader? download,
+    SmallFileFetcher? fetchBytes,
     InstallerLauncher? launch,
     ArchiveExtractor? extract,
     Relauncher? relaunch,
@@ -453,6 +490,7 @@ class UpdateService extends ChangeNotifier {
   })  : platform = platform ?? Platform.operatingSystem,
         site = site ?? InstallSite.detect(),
         _fetch = fetch ?? _fetchReleaseJson,
+        _fetchBytes = fetchBytes ?? _fetchSmallFile,
         _download = download ?? _downloadAsset,
         _launch = launch ?? _launchInstaller,
         _extract = extract ?? _extractArchive,
@@ -644,14 +682,90 @@ class UpdateService extends ChangeNotifier {
     if (release.assetBytes > 0 && length != release.assetBytes) {
       return l10n.updateIncomplete;
     }
+    // The strong check first, where this build has a key to make it with.
+    //
+    // A digest out of the GitHub API proves the file arrived as published; a
+    // signature made with a key that lives nowhere near GitHub proves who
+    // published it. Where both are available the second is the one that
+    // decides, and a release that cannot answer it is refused rather than
+    // fallen back on — falling back would mean anything able to publish a
+    // release could also delete the manifest and be trusted again.
+    if (releaseSigningIsEnforced) {
+      return _verifySignature(release,
+          length: length, digest: await _digestOf(file));
+    }
+
     final expected = release.sha256;
     if (expected == null) return null;
     final wanted = expected.startsWith('sha256:')
         ? expected.substring('sha256:'.length)
         : expected;
-    final digest = await sha256.bind(file.openRead()).first;
-    if (digest.toString().toLowerCase() != wanted.toLowerCase()) {
+    if (await _digestOf(file) != wanted.toLowerCase()) {
       return l10n.updateChecksumMismatch;
+    }
+    return null;
+  }
+
+  /// The downloaded file's SHA-256, lower case, as the manifest and the API
+  /// both spell it.
+  ///
+  /// Read where the answer is about to be *used*, and nowhere else. It streams
+  /// the whole download, so a release that names no digest and is not signed
+  /// must not pay for it — and the sharper consequence is that a widget test
+  /// driving this service runs inside a fake clock, where a real file read
+  /// never completes at all and the test hangs until the harness gives up.
+  /// Hoisting this to the top of [_verify] for tidiness is the way back to
+  /// that, which is why it is a call and not a local.
+  static Future<String> _digestOf(File file) async =>
+      (await sha256.bind(file.openRead()).first).toString().toLowerCase();
+
+  /// The signed-manifest half of [_verify]. Reached only on a build that
+  /// carries a release signing key, where it is the whole decision.
+  ///
+  /// Returns null when the release is this key's and names this exact file, or
+  /// the sentence to show when it is not.
+  Future<String?> _verifySignature(
+    UpdateRelease release, {
+    required int length,
+    required String digest,
+  }) async {
+    final manifestUrl = release.manifestUrl;
+    final signatureUrl = release.manifestSignatureUrl;
+    if (manifestUrl == null || signatureUrl == null) {
+      return l10n.updateNotSigned;
+    }
+
+    final List<int> manifestBytes;
+    final String signature;
+    try {
+      manifestBytes = await _fetchBytes(manifestUrl, releaseManifestMaxBytes);
+      signature = utf8.decode(
+          await _fetchBytes(signatureUrl, releaseManifestMaxBytes));
+    } catch (_) {
+      // A manifest that will not come down is not a release to install. The
+      // network is the ordinary cause and the answer is the same either way:
+      // try again later.
+      return l10n.updateNotSigned;
+    }
+
+    final (manifest, trust) = await verifyManifest(manifestBytes, signature);
+    switch (trust) {
+      case ReleaseTrust.unsigned:
+        return l10n.updateNotSigned;
+      case ReleaseTrust.badSignature:
+      case ReleaseTrust.malformed:
+        return l10n.updateSignatureMismatch;
+      case ReleaseTrust.notInManifest:
+        return l10n.updateNotInManifest;
+      case ReleaseTrust.trusted:
+        break;
+    }
+
+    // The signature held up. Now the file has to be one the manifest names,
+    // at the size and digest it names it at.
+    final signed = manifest?.assetNamed(release.assetName);
+    if (signed == null || signed.size != length || signed.sha256 != digest) {
+      return l10n.updateNotInManifest;
     }
     return null;
   }
@@ -796,6 +910,37 @@ Future<Map<String, dynamic>> _fetchReleaseJson(Uri url) async {
       throw FormatException(l10n.updateBadReleaseData);
     }
     return json;
+  } finally {
+    client.close(force: true);
+  }
+}
+
+/// Fetch a small file whole, refusing one that turns out not to be small.
+///
+/// The release manifest and its signature, and nothing else. The cap is checked
+/// as the bytes arrive rather than from a `Content-Length` header, because the
+/// header is the server's claim and the bytes are the fact — and because this
+/// runs before anything about the release has been believed.
+Future<List<int>> _fetchSmallFile(Uri url, int maxBytes) async {
+  final client = HttpClient()..connectionTimeout = const Duration(seconds: 10);
+  try {
+    final request = await client.getUrl(url);
+    request.headers.set(HttpHeaders.userAgentHeader, 'Lumit');
+    final response = await request.close();
+    if (response.statusCode != 200) {
+      await response.drain<void>();
+      throw HttpException(l10n.updateDownloadAnswered('\${response.statusCode}'),
+          uri: url);
+    }
+    final bytes = <int>[];
+    await for (final chunk in response) {
+      bytes.addAll(chunk);
+      if (bytes.length > maxBytes) {
+        await response.drain<void>();
+        throw HttpException(l10n.updateBadReleaseData, uri: url);
+      }
+    }
+    return bytes;
   } finally {
     client.close(force: true);
   }

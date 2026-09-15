@@ -21,7 +21,7 @@ import 'solid.dart';
 import 'state.dart';
 part 'layer.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_clip`, `bridge_kind`, `bridge_switches`, `clamped_property`, `clip_ops`, `clip_source_duration`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit_puppet`, `commit_shape_items`, `commit`, `comp_time`, `composition`, `core`, `core`, `core`, `core`, `core`, `edit_shape_item`, `empty`, `empty`, `exr_path`, `instance_home`, `item`, `layer_time_of_frame`, `map_end_value`, `of`, `of`, `of`, `of`, `placed`, `project`, `rational_of`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_layer_info`, `read_layer`, `read`, `read`, `read`, `reanchored_span`, `reload_extract_channels`, `retime_or_identity`, `seed_extract_channels`, `source_length`, `unretime_op`, `with_effects`, `with_instances`, `write_at`, `write_at`, `write_at`, `write_at`, `write_fade`, `write_item_over`, `write_item`, `write_layer`, `write_over`, `write`, `write`, `write`, `write`
+// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_clip`, `bridge_kind`, `bridge_switches`, `clamped_property`, `clip_ops`, `clip_source_duration`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit_puppet`, `commit_shape_items`, `commit`, `comp_time`, `composition`, `core`, `core`, `core`, `core`, `core`, `document`, `edit_shape_item`, `empty`, `empty`, `exr_path`, `graph_inputs_for`, `instance_home`, `is_graph_inputs`, `item`, `layer_time_of_frame`, `map_end_value`, `of`, `of`, `of`, `of`, `placed_graph_of`, `placed`, `project`, `rational_of`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_layer_info`, `read_layer`, `read`, `read`, `read`, `reanchored_span`, `reload_extract_channels`, `retime_or_identity`, `seed_extract_channels`, `source_length`, `unretime_op`, `with_effects`, `with_instances`, `write_at`, `write_at`, `write_at`, `write_at`, `write_fade`, `write_item_over`, `write_item`, `write_layer`, `write_over`, `write`, `write`, `write`, `write`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `InstanceHome`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `try_from`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `comp_id`, `id`, `new`, `project_id`
@@ -620,6 +620,25 @@ class BridgeLayerInfo {
   /// carrying it here free.
   final List<BridgeEffectInstanceInfo> styles;
 
+  /// A placed node graph's **Inputs** (docs/impl/node-graph-comp.md §5.3):
+  /// the `node_graph` instance bound to the comp this Precomp layer places,
+  /// with its Inputs copy refreshed from the live graph as every clone's is.
+  ///
+  /// `None` on every layer that is not a Precomp of a node graph, and on one
+  /// that has not been given its Inputs yet, which is a layer from an older
+  /// file or an import. `LayerReference::get_graph_inputs` offers such a layer a
+  /// fresh one, which the user's next edit adopts.
+  final BridgeEffectInstanceInfo? graphInputs;
+
+  /// Whether collapse is set on this layer but something forces an
+  /// intermediate anyway (docs/06 §1.4, docs/impl/node-graph-comp.md §5.9),
+  /// which is what the Timeline's collapse cell draws dimmed.
+  ///
+  /// Read at the layer's own in point, the model carrying no playhead. Every
+  /// term of the rule but one is time-free, so the answer only ever drifts
+  /// where the layer's opacity is keyframed across 100%.
+  final bool collapseForced;
+
   /// The label colour index into the theme's palette, drawn as the outline's
   /// swatch. Out-of-range values wrap rather than fault.
   final int label;
@@ -751,6 +770,8 @@ class BridgeLayerInfo {
     required this.axisModes,
     required this.effects,
     required this.styles,
+    this.graphInputs,
+    required this.collapseForced,
     required this.label,
     this.matte,
     this.retime,
@@ -789,6 +810,8 @@ class BridgeLayerInfo {
       axisModes.hashCode ^
       effects.hashCode ^
       styles.hashCode ^
+      graphInputs.hashCode ^
+      collapseForced.hashCode ^
       label.hashCode ^
       matte.hashCode ^
       retime.hashCode ^
@@ -829,6 +852,8 @@ class BridgeLayerInfo {
           axisModes == other.axisModes &&
           effects == other.effects &&
           styles == other.styles &&
+          graphInputs == other.graphInputs &&
+          collapseForced == other.collapseForced &&
           label == other.label &&
           matte == other.matte &&
           retime == other.retime &&
@@ -2052,6 +2077,22 @@ class LayerReference {
   void addMask({required BridgeMask mask}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceAddMask(that: this, mask: mask);
 
+  /// Apply a **node graph** to this layer: the Node graph effect, bound to
+  /// `graph` (docs/impl/node-graph-comp.md §2.4).
+  ///
+  /// The effect's own door, because it is the one effect that cannot be added
+  /// by name: what it does is the graph it names, and an unbound one would
+  /// draw no rows and change no picture. The layer's picture becomes the
+  /// graph's first picture Input, the graph's other Inputs become this
+  /// effect's rows, and the Output is what it hands on.
+  ///
+  /// Refused when `graph` is not a node graph, and when it is this layer's
+  /// own composition: a comp that applied itself would be a loop, and the
+  /// nearest place to say so is here, before it is written.
+  void addNodeGraphEffect({required CompositionReference graph}) => BridgeLib
+      .instance.api
+      .crateApiLayerLayerReferenceAddNodeGraphEffect(that: this, graph: graph);
+
   /// Add a pin to this layer's puppet. Errors when there is no block yet:
   /// the first pin is what creates one, and it is the click that decides the
   /// reference time, so the caller says so with [`Self::set_puppet`].
@@ -2558,6 +2599,12 @@ class LayerReference {
         that: this,
       );
 
+  /// This layer's effect stack as staged copies.
+  ///
+  /// A **Node graph** effect's Inputs copy is brought up to the graph it
+  /// names on the way out (docs/impl/node-graph-comp.md §1.5), so a row added
+  /// inside that graph is offered here and lands in the document with the
+  /// user's next edit, never behind anybody's back.
   List<BridgeEffectInstance> getEffects() =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceGetEffects(
         that: this,
@@ -2626,6 +2673,23 @@ class LayerReference {
   /// every existing property control work on a driver row unchanged.
   List<BridgeEffectInstance> getGraphDrivers() =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceGetGraphDrivers(
+        that: this,
+      );
+
+  /// This layer's **node graph Inputs** as a staged copy
+  /// (docs/impl/node-graph-comp.md §5.3), or `None` on a layer that places
+  /// no node graph.
+  ///
+  /// The same handle [`Self::get_effects`] hands out, so the rows are read,
+  /// dragged, keyed and expression-driven through the path every other
+  /// parameter takes, and [`Self::set_effects`] is the commit.
+  ///
+  /// **Offered, never adopted.** A layer that places a graph but carries no
+  /// Inputs, one from a file written before they existed or an import, is
+  /// handed a fresh instance bound to that graph. Nothing is written for it:
+  /// the document only gains the Inputs when the user edits a row.
+  BridgeEffectInstance? getGraphInputs() =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceGetGraphInputs(
         that: this,
       );
 

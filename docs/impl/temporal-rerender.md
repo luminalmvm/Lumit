@@ -175,6 +175,16 @@ so what gets measured is comp-driven motion — transforms, effects, cameras, ne
 not the sub-frame motion of footage playing back beneath the adjustment, which is measured by
 putting the effect on the footage layer.
 
+**A node graph composition asks the same question of a different shape**, and the answer is
+[node-graph-comp.md](node-graph-comp.md) §5.2 rather than anything here. A graph has no
+below-stack and no layer, so the picture a box wants at another time is its own **input
+cone** evaluated there, which the lowering builds as steps keyed by box and time. The bound
+is this note's: only the first demanded time is taken at any time other than the frame's, so
+a window never nests, while a shift (Time offset, Posterize time) always applies. Read that
+section before touching the graph's temporal lowering; the shared piece is
+`strip_temporal_inputs`, which recurses into a graph draw and clears its neighbour lists so a
+graph inside a held or sampled below-stack holds a still exactly as a layer does.
+
 ## Traps
 - Re-rendering re-decodes nothing — every picture a sample reads was planned with the frame
   (the shutter moments ride on the layer's one decode job); re-resolving at `τ` must not

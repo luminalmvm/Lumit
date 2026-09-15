@@ -152,8 +152,90 @@ pub struct NestedInputDraw {
     pub key: Option<u128>,
 }
 
-/// Where a draw's pixels come from: decoded/synthesised bytes, or a nested
-/// comp realised recursively on the GPU (Precomp layers).
+/// One node graph's picture as plain data (docs/impl/node-graph-comp.md §2.3):
+/// the steps to walk, in an order where a step's inputs are always earlier
+/// than the step itself, and which one the Output shows.
+///
+/// # In plain terms
+///
+/// A node graph composition has boxes and wires instead of layers, so it needs
+/// its own middle step. This is it: the same honest description a draw list is,
+/// with one entry per box the Output can reach. Nothing here touches the
+/// graphics card. [`crate::realise::Realiser::realise_graph`] walks it and
+/// keeps one texture per step.
+pub struct GraphDraw {
+    /// The graph's own frame in logical pixels, whatever raster it is walked
+    /// at. Applied as an effect the walk runs at the host layer's raster
+    /// instead, and this is then the space the placements are written in.
+    pub width: u32,
+    pub height: u32,
+    /// Only what the Output reaches, in document order with the wires
+    /// respected, so an idle branch costs nothing.
+    pub steps: Vec<GraphStep>,
+    /// The step wired into the Output. `None` hands the picture back
+    /// unchanged: an Output nothing feeds, a graph this build could not lower,
+    /// and the passthrough a dangling Node graph effect degrades to.
+    pub output: Option<usize>,
+}
+
+/// One box of a [`GraphDraw`], with its inputs named as indices into the same
+/// plan's earlier steps. `None` anywhere an input could be is transparent,
+/// which is what an unwired socket reads.
+pub enum GraphStep {
+    /// The first picture Input: the picture handed in from outside, which is
+    /// the host layer's when the graph is applied as an effect and transparent
+    /// when the comp is viewed on its own.
+    Provided,
+    /// A further picture Input: a layer rendered alone, on the same carriage a
+    /// Light wrap's background plate travels (docs/impl/layer-input.md).
+    Picture(LayerInputDraw),
+    /// A project item at default placement, realised alone into the graph's
+    /// frame - the synthetic layer of §2.1.
+    Read(Box<CompLayerDraw>),
+    /// One catalogue effect, resolved to plain numbers at this frame. Always
+    /// exactly one op: the graph runs each box on its own, so `ops` holds one
+    /// entry and the parallel lists hold one slot each.
+    Fx {
+        /// The picture the op runs on, transparent when nothing is wired.
+        input: Option<usize>,
+        ops: lumit_core::fx::ResolvedStack,
+        /// The instance behind each op, as [`CompLayerDraw::fx_ids`] carries
+        /// it, so the profiler can name the box that spent the millisecond.
+        fx_ids: Vec<uuid::Uuid>,
+        /// The step wired into the `matte` socket. The row's own Channel and
+        /// Invert still apply, through the carriage they apply on a layer.
+        matte: Option<usize>,
+        /// The step wired into the effect's first non-matte layer-reference
+        /// socket - Light wrap's Background, Texturize's Texture. A second
+        /// such row on one effect is not carried: `EffectSchema::layer_input`
+        /// answers with one parameter, and that is the one the walk binds.
+        picture: Option<usize>,
+        /// 1:1 with the op, as [`CompLayerDraw::lut_files`] is with its stack.
+        colour_tables: Vec<Option<crate::colour::TableRequest>>,
+        /// 1:1 with the op, as [`CompLayerDraw::flare_lens_files`] is.
+        flare_lens_files: Vec<Option<String>>,
+    },
+    /// Picture A laid over picture B, the node a layer stack has no word for.
+    Merge {
+        a: Option<usize>,
+        b: Option<usize>,
+        /// An index into `BlendMode::ALL`, which is the Mode row's own menu.
+        mode: u32,
+        /// How much of A is laid on, 0 to 100.
+        opacity: f32,
+    },
+    /// One of several pictures, chosen by a number that keyframes and takes a
+    /// wire like any other. Out of range reads transparent, which is what an
+    /// unwired socket reads anyway.
+    Switch {
+        inputs: Vec<Option<usize>>,
+        index: i64,
+    },
+}
+
+/// Where a draw's pixels come from: decoded/synthesised bytes, a nested
+/// comp realised recursively on the GPU (Precomp layers), or a node graph
+/// walked box by box.
 pub enum DrawSource {
     Pixels {
         /// The picture itself. A decoded layer with nothing stamped into it
@@ -213,6 +295,11 @@ pub enum DrawSource {
     /// and its placement/opacity/`mask_cov` shape the coverage that
     /// attenuates the result. Only emitted with a live, non-empty stack.
     Adjust,
+    /// A **node graph composition** (docs/impl/node-graph-comp.md §2.3): the
+    /// whole of such a comp's draw list is one of these at identity placement,
+    /// so the Precomp layer arm, the matte arm and the layer-input arm all
+    /// reach it through the calls they already make.
+    Graph(Box<GraphDraw>),
 }
 
 /// The below-stack re-rendered at a held/sample time for a temporal adjustment
@@ -386,6 +473,20 @@ pub struct CompLayerDraw {
     /// because this is the only place that holds a layer's timing beside its
     /// stored tracks. A default schedule is the documented passthrough.
     pub points_schedules: Vec<lumit_core::fx::points::PointsSchedule>,
+    /// **Every Node graph effect's plan** (docs/impl/node-graph-comp.md §2.4):
+    /// one per enabled `node_graph` op, in stack order, holding the graph that
+    /// op applies already lowered to steps - the same one-predicate, one-order
+    /// rule the depth inputs follow, with its own counter in `run_ops` because
+    /// its predicate is a different one again.
+    ///
+    /// The realiser turns each into a closure and hands the list to `run_ops`,
+    /// which calls the k-th one where the k-th `node_graph` op would have
+    /// dispatched a kernel. A plan whose `output` is `None` - a comp that is
+    /// missing, is not a node graph, or is already on the visited path - hands
+    /// the picture back unchanged, which is the degrade a dangling reference
+    /// gets everywhere else. Empty on every layer that applies no graph, which
+    /// is almost all of them.
+    pub graph_fx: Vec<GraphDraw>,
     /// The `lens_file` paths of the layer's enabled built-in `lens_flare`
     /// effects, 1:1 with the stack's `lens_flare` ops —
     /// None = unset. The caller reads and hashes each file and passes the

@@ -8,6 +8,9 @@ license = "GPL-3.0-only"
 publish = false
 
 [dependencies]
+# The resource governor's ledger: every frame-sized texture is charged to it
+# (docs/13 §3).
+lumit-budget = { path = "../lumit-budget" }
 # `min_const_generics` is what makes Pod/Zeroable reach an array of any length -
 # the curve uniform is 325 vec4s. Another crate's feature union was providing it
 # on Windows and Linux and not on macOS, where the build stopped; it is asked

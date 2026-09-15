@@ -13,7 +13,7 @@ import 'package:uuid/uuid.dart';
 import 'roto.dart';
 part 'effect.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `animation_at`, `badge_of`, `bridge_param`, `bridge_shader_ty`, `bridge_unit`, `catalogue`, `clamp_animation`, `derived_params_of`, `document_for`, `fill_derived`, `hard_bounds`, `hidden_rows_of`, `is_audio_effect`, `is_audio_match_name`, `param`, `plugin_category_key`, `presets_in`, `read_at`, `read_at`, `read_at`, `read_instance_info`, `read`, `sample_at`, `scan_audio_plugins`, `seconds_of`, `shader_error`, `validated`, `write_at`, `write_at`, `write`
+// These functions are ignored because they are not marked as `pub`: `animation_at`, `badge_of`, `bridge_param`, `bridge_shader_ty`, `bridge_unit`, `catalogue`, `clamp_animation`, `core_unit`, `derived_params_of`, `document_for`, `fill_derived`, `hard_bounds`, `hidden_rows_of`, `is_audio_effect`, `is_audio_match_name`, `param`, `plugin_category_key`, `presets_in`, `read_at`, `read_at`, `read_at`, `read_instance_info`, `read`, `sample_at`, `scan_audio_plugins`, `seconds_of`, `shader_error`, `validated`, `with_live_inputs`, `write_at`, `write_at`, `write`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `get_effects`, `new`
 
@@ -29,8 +29,32 @@ part 'effect.freezed.dart';
 /// it on the layer's graph rather than its stack — `LayerReference::add_effect`
 /// decides that, so no caller has to. [`list_drivers`] still answers the
 /// canvas's narrower question: which entries may be *dropped on the graph*.
+/// **The Compositing family is left out**, as the drivers once were: a Merge
+/// and a Switch join pictures a node graph's wires bring them, and a layer
+/// stack has neither the wires nor the second picture, so offering one here
+/// would be offering a control that could never do anything. **The Node graph
+/// effect is left out too**, for the opposite reason: it goes on a stack, but
+/// only ever bound to a comp, so it is added through the door that names one
+/// (`LayerReference::add_node_graph_effect`) rather than by a name with no
+/// graph behind it.
 List<BridgeEffectInfo> listEffects() =>
     BridgeLib.instance.api.crateApiEffectListEffects();
+
+/// The node graph console's catalogue: the Drivers and the Compositing
+/// families, in schema order.
+///
+/// The two vocabularies that only a graph can hold, answered in one call
+/// because the console lists them together. The panel adds the Read boxes, the
+/// Input boxes and the nested graphs itself, from the project's own items:
+/// those name documents rather than catalogue entries, so no listing here
+/// could carry them.
+///
+/// **Layer points is left out** (docs/impl/node-graph-comp.md §5.1), through
+/// the engine's own [`lumit_core::comp_graph::offered_in_graph`]: it taps
+/// another layer's first producer, and a graph has no layers, so the box could
+/// only ever hand out the empty stream. Inside a graph the wire is the tap.
+List<BridgeEffectInfo> listGraphNodes() =>
+    BridgeLib.instance.api.crateApiEffectListGraphNodes();
 
 /// **All nine layer styles** (docs/impl/layer-styles.md §1), in §2's
 /// pinned painting order.
@@ -131,6 +155,16 @@ List<BridgePresetInfo> listPresets() =>
 /// something this person saved to use again, on any project.
 List<BridgePresetInfo> listNodeGroups() =>
     BridgeLib.instance.api.crateApiEffectListNodeGroups();
+
+/// Every `.lumngrp` **graph group** in the same library folder, sorted by
+/// name, which is what the node graph canvas's console offers
+/// (docs/impl/node-graph-comp.md §5.8).
+///
+/// Its own extension rather than the driver groups', so neither listing can
+/// offer the other's file: the two canvases hold different kinds of box, and a
+/// group of one means nothing to the other.
+List<BridgePresetInfo> listGraphGroups() =>
+    BridgeLib.instance.api.crateApiEffectListGraphGroups();
 
 /// Where the preset library lives, created on first ask — the save dialogue's
 /// default folder, so a saved preset appears in the listing without the user
@@ -280,6 +314,14 @@ abstract class BridgeEffectInstance implements RustOpaqueInterface {
   List<BridgeParamInfo> listParameters();
 
   String name();
+
+  /// The node graph composition this instance applies, for a **Node graph**
+  /// effect, and `None` for every other effect and for one nobody has bound.
+  ///
+  /// What the Effect controls card draws in its header and what its Open
+  /// action fronts. An id rather than a reference, because the card already
+  /// holds the project it is looking at.
+  UuidValue? nodeGraphCompId();
 
   /// Whether the vector pair keyed by `stem` is chained. A stem this
   /// effect has no pair for is unlinked, never an error.
@@ -665,6 +707,15 @@ class BridgeEffectInstanceInfo {
   /// on every rebuild and may not call.
   final List<String> hiddenRows;
 
+  /// The node graph this instance applies (docs/impl/node-graph-comp.md
+  /// §4.4), and `None` for every other effect.
+  ///
+  /// Beside [`Self::derived_params`] because it is the same class of fact: the
+  /// card draws the graph's name in its heading on every rebuild, and asking
+  /// the instance for its binding per card is the call in a build the budget
+  /// test forbids.
+  final UuidValue? nodeGraphComp;
+
   const BridgeEffectInstanceInfo({
     required this.id,
     required this.name,
@@ -677,6 +728,7 @@ class BridgeEffectInstanceInfo {
     this.badgeDetail,
     required this.derivedParams,
     required this.hiddenRows,
+    this.nodeGraphComp,
   });
 
   @override
@@ -691,7 +743,8 @@ class BridgeEffectInstanceInfo {
       badgeReason.hashCode ^
       badgeDetail.hashCode ^
       derivedParams.hashCode ^
-      hiddenRows.hashCode;
+      hiddenRows.hashCode ^
+      nodeGraphComp.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -708,7 +761,8 @@ class BridgeEffectInstanceInfo {
           badgeReason == other.badgeReason &&
           badgeDetail == other.badgeDetail &&
           derivedParams == other.derivedParams &&
-          hiddenRows == other.hiddenRows;
+          hiddenRows == other.hiddenRows &&
+          nodeGraphComp == other.nodeGraphComp;
 }
 
 @freezed

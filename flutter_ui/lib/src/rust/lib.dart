@@ -20,3 +20,17 @@ class F32Array4 extends NonGrowableListView<double> {
 
   F32Array4.init() : this(Float32List(arraySize));
 }
+
+class F64Array4 extends NonGrowableListView<double> {
+  static const arraySize = 4;
+
+  @internal
+  Float64List get inner => _inner;
+  final Float64List _inner;
+
+  F64Array4(this._inner)
+      : assert(_inner.length == arraySize),
+        super(_inner);
+
+  F64Array4.init() : this(Float64List(arraySize));
+}

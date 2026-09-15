@@ -1,0 +1,55 @@
+---
+title: Node graph
+description: "Applies a node graph composition to the layer, with the graph's Inputs as its rows."
+---
+
+Node graph is a **Utility** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Node graph applies a [node graph composition](/use/node-graphs/) to the layer. The
+layer's picture at this point in the stack goes in as the graph's first picture Input, the
+graph's other Input boxes appear as rows on this effect, and the graph's Output is what
+comes out. It is added from the **Node graphs** kicker of the effects console rather than
+by name, and one node graph applied inside another is how graphs nest. A composition is
+refused on itself.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Open graph** | Button | - | - | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Open graph**: fronts the node graph composition this effect applies.
+- The rows above Mix are the graph's Inputs, one per Input box, with the box's kind, range
+  and default.
+- **Mix**: how much of the graph's Output is used over the picture that went in.
+- **Blend**, **Matte**, **Invert**, **Channel**: the blend and matte rows every effect has.
+
+## Related
+
+- [Node graph compositions](/use/node-graphs/)
+- [Custom shader](/effects/utility/custom-shader/)
+- [Utility](/effects/#utility)
+- [Effects](/use/effects/)

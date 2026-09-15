@@ -630,6 +630,37 @@ impl PointsStream {
 /// producing older particles rather than growing the allocation without bound.
 pub const MAX_WINDOW_FRAMES: i64 = 100_000;
 
+/// The most frames [`Schedule::scan`] will **walk**, as against record.
+///
+/// # In plain terms
+///
+/// The scan starts at the layer's in point and steps one frame at a time to the
+/// frame being drawn, because the birth count carries a fraction forward and a
+/// fraction cannot be jumped over. Each step also asks the Emit rate what it is
+/// — through keyframes, expressions and driver wires — so a step is not free.
+///
+/// How many steps that is comes from the layer's own time, and a layer's time is
+/// a *retime curve*: a keyframe saying "at frame 10, this layer is at ten
+/// million seconds" is a thing a project file can say, and it used to mean a
+/// loop of six hundred million expression evaluations on the render thread. Not
+/// slow — stopped. That is the whole of this finding: a project file must not be
+/// able to hang the application, however unlikely the project.
+///
+/// A million frames is four and a half hours at 60 fps, which no layer's time
+/// legitimately reaches; below it nothing changes at all. Above it the walk
+/// starts late and [`Schedule::is_exact`] says so, so the effect can be badged
+/// rather than quietly drawing a different picture.
+///
+/// **On determinism** (docs/14 §3). A clamped scan gives a different answer from
+/// an unclamped one, because the births before the clamp would have shifted
+/// every later particle's birth *index*, and the index is what seeds its
+/// randomness. What §3 requires is that the same project gives the same pixels
+/// on every machine and every run, and a clamp at a fixed frame count does
+/// exactly that. What it cannot give is the answer an infinitely patient
+/// renderer would reach — and that renderer would take an hour a frame, so it is
+/// not an answer anybody was going to see either.
+pub const MAX_SCAN_FRAMES: i64 = 1_000_000;
+
 /// The birth schedule: which particles exist, and when each was born
 /// (particulate.md §3.1).
 ///
@@ -654,6 +685,9 @@ pub struct Schedule {
     counts: Vec<u32>,
     /// Births in total, from the in point to the end of the last frame here.
     total: u64,
+    /// Whether the walk reached the layer's in point, or started late because
+    /// the layer's time was carried past [`MAX_SCAN_FRAMES`].
+    exact: bool,
 }
 
 impl Schedule {
@@ -683,15 +717,23 @@ impl Schedule {
             first_birth: 0,
             counts: Vec::new(),
             total: 0,
+            exact: true,
         };
         if upto_frame < 0 {
             return sched;
         }
+        // Where the walk starts. Normally the in point; on a layer whose time
+        // has been carried somewhere absurd, [`MAX_SCAN_FRAMES`] back from the
+        // frame being drawn — which is still far enough back to cover the whole
+        // recorded window, so every particle that can be *seen* is computed
+        // from a walk that reached it.
+        let from = upto_frame.saturating_sub(MAX_SCAN_FRAMES).max(0);
+        sched.exact = from == 0;
         sched
             .counts
             .reserve((upto_frame - first_frame + 1).clamp(0, MAX_WINDOW_FRAMES) as usize);
         let mut carry = 0.0f64;
-        for f in 0..=upto_frame {
+        for f in from..=upto_frame {
             let rate = rate_at(f as f64 * dt);
             // A rate that is not a number is no rate at all; an engine crate
             // renders such a document rather than reporting it (docs/14 §4).
@@ -725,6 +767,21 @@ impl Schedule {
         self.dt
     }
 
+    /// Whether the walk reached the layer's in point.
+    ///
+    /// False only when the layer's own time is more than [`MAX_SCAN_FRAMES`]
+    /// past its in point — four and a half hours at 60 fps, which a retime
+    /// curve can reach and a timeline cannot. The particles that can be seen
+    /// are still computed properly; what differs from an unclamped walk is
+    /// their birth *indices*, and so their seeds.
+    ///
+    /// Read by the renderer so this can be said rather than left to be noticed:
+    /// silent degradation is a bug (docs/14 §8).
+    #[must_use]
+    pub fn is_exact(&self) -> bool {
+        self.exact
+    }
+
     /// Let go of the oldest recorded frames until at most `max` births remain.
     ///
     /// **Why a scan needs a second ceiling.** The window is Life plus its
@@ -736,12 +793,43 @@ impl Schedule {
     /// there are already many times the cap of newer ones in play. Both render
     /// paths read the trimmed schedule, so they see one candidate set and
     /// agree.
+    /// **Worked out in one pass, not one frame at a time.** The loop this
+    /// replaced summed the whole `counts` vector to ask "am I under yet?" and
+    /// then used `Vec::remove(0)`, which shifts everything left — so both
+    /// halves were linear inside a loop that could run once per frame. With the
+    /// hundred thousand frames [`MAX_WINDOW_FRAMES`] permits and a Life typed
+    /// long enough to fill them, that is 10¹⁰ operations for a trim, from a
+    /// number somebody can type into a control. It is a quadratic hiding behind
+    /// two innocent-looking lines, which is where they usually are.
     pub fn trim_to_newest(&mut self, max: u64) {
-        while self.candidates() > max && self.counts.len() > 1 {
-            let dropped = u64::from(self.counts.remove(0));
-            self.first_frame += 1;
-            self.first_birth = self.first_birth.saturating_add(dropped);
+        // Walk forward once, adding up what would be dropped, and stop at the
+        // first frame that leaves the rest under the ceiling.
+        let mut live = self.candidates();
+        if live <= max {
+            return;
         }
+        let mut drop_frames = 0usize;
+        let mut dropped_births = 0u64;
+        // Never the last frame: a schedule with no recorded frame at all has
+        // nothing to hand the renderer, and the old loop guarded that too.
+        let keepable = self.counts.len().saturating_sub(1);
+        for n in self.counts.iter().take(keepable) {
+            if live <= max {
+                break;
+            }
+            live = live.saturating_sub(u64::from(*n));
+            dropped_births = dropped_births.saturating_add(u64::from(*n));
+            drop_frames = drop_frames.saturating_add(1);
+        }
+        if drop_frames == 0 {
+            return;
+        }
+        // One shift for all of them rather than one per frame.
+        self.counts.drain(..drop_frames);
+        self.first_frame = self
+            .first_frame
+            .saturating_add(i64::try_from(drop_frames).unwrap_or(i64::MAX));
+        self.first_birth = self.first_birth.saturating_add(dropped_births);
     }
 
     /// The first frame [`counts`](Self::counts) describes, from the in point.

@@ -230,13 +230,18 @@ done
 # not libraries in Frameworks, and an outer bundle signature does not cover a
 # nested executable: notarisation named both by path and refused the whole app
 # for a Developer ID, a timestamp and a hardened runtime each of them lacked.
-# They take the app's own entitlements, because each one dlopens third-party
-# plugins and the hardened runtime refuses that without library validation off.
+#
+# They take Broker.entitlements, NOT the app's: each one dlopens third-party
+# plugins, which the hardened runtime refuses without library validation off,
+# and that entitlement belongs to the process that needs it rather than to the
+# application. A broker holds one bundle path and a pipe; the app holds the
+# project, the media and the network. Spending the weaker containment on the
+# smaller process is the whole point of there being two of them (docs/12 §2.3).
 for broker in "$app/Contents/MacOS/"lumit-*-broker; do
     [ -e "$broker" ] || continue
     # shellcheck disable=SC2086 # as above
     codesign --force $signopts --sign "$identity" \
-        --entitlements "$root/flutter_ui/macos/Runner/Release.entitlements" "$broker"
+        --entitlements "$root/flutter_ui/macos/Runner/Broker.entitlements" "$broker"
 done
 # Re-signing drops whatever entitlements the build applied, so they are named
 # again here rather than silently lost.

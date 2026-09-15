@@ -763,7 +763,10 @@ class LumitUiState extends ChangeNotifier {
   String get viewerPrefixStamp {
     final prefix = viewerPrefix;
     if (prefix == null) return '';
-    return '${prefix.layer.internallayerId}/${prefix.effect}';
+    final layer = prefix.layer;
+    if (layer != null) return '${layer.internallayerId}/${prefix.effect}';
+    final graph = prefix.graph;
+    return '${graph?.comp}/${graph?.node}';
   }
 
   /// The composition a view is bound to.
@@ -1159,6 +1162,21 @@ class LumitUiState extends ChangeNotifier {
   /// selection cannot name, the drivers among them.
   final ValueNotifier<BridgeNodeRef?> graphNode = ValueNotifier(null);
 
+  /// Which box the **node graph composition's** canvas has picked, or null for
+  /// none (docs/impl/node-graph-comp.md §4.2).
+  ///
+  /// Its own notifier rather than [graphNode] because a node graph's boxes are
+  /// plain ids and a layer graph's are a union: one field carrying either would
+  /// be two meanings in one place. The label rides along so the Node panel's
+  /// header and the Viewer's chip can name the box without a call, and
+  /// `picture` says whether the box makes one: a driver, a value Input and the
+  /// Output make none, so those offer no chip (§4.5).
+  ///
+  /// Cleared when the fronted composition changes, since a box names a box in
+  /// one graph and nothing at all in the next.
+  final ValueNotifier<({UuidValue id, String label, bool picture})?>
+      compGraphNode = ValueNotifier(null);
+
   /// The Custom shader whose **inner graph** the Graph panel is showing
   /// (docs/impl/custom-shader.md §4.2), or null when it shows the
   /// layer's own graph.
@@ -1370,8 +1388,24 @@ class LumitUiState extends ChangeNotifier {
     return null;
   }
 
+  /// The **node graph's** point: the comp, and the box the picture is read at
+  /// (docs/impl/node-graph-comp.md §4.5). Null unless a box that makes a
+  /// picture is picked. A driver, a value Input and the Output offer none.
+  ///
+  /// Derived from the canvas's own pick, so it costs no call: the box says
+  /// whether it makes a picture when it publishes itself.
+  BridgeGraphPoint? get viewerGraphPoint {
+    final comp = _selectedComp;
+    final box = compGraphNode.value;
+    if (comp == null || box == null || !box.picture) return null;
+    return BridgeGraphPoint(comp: comp.internalid, node: box.id);
+  }
+
   /// How [_atNodes] remembers one point.
   String? get _chipNodeKey {
+    if (viewerGraphPoint case final graph?) {
+      return 'graph:${graph.comp}/${graph.node}';
+    }
     final point = viewerPrefixPoint;
     if (point == null) return null;
     return '${point.$1.internallayerId}/${point.$2 ?? 'source'}';
@@ -1386,6 +1420,10 @@ class LumitUiState extends ChangeNotifier {
   /// point and so cuts nothing.
   BridgePrefixPoint? get viewerPrefix {
     if (!atSelectedEffect.value) return null;
+    // A node graph has no layers to cut, so its point names a comp and a box.
+    if (viewerGraphPoint case final graph?) {
+      return BridgePrefixPoint(graph: graph);
+    }
     final point = viewerPrefixPoint;
     if (point == null) return null;
     return BridgePrefixPoint(layer: point.$1, effect: point.$2);
@@ -1792,6 +1830,8 @@ class LumitUiState extends ChangeNotifier {
     // The Source box is picked on the canvas and nowhere else, so the effect
     // selection cannot be what tells the chip about it (N4).
     graphNode.addListener(_followSelectionWithChip);
+    // And the node graph's own pick, which names a point the same way.
+    compGraphNode.addListener(_followSelectionWithChip);
     // And the same for the comp the model itself is bound to: it can be undone
     // out of existence while it is the one being looked at.
     model.addListener(_frontLiveCompIfFrontedOneHasGone);
@@ -2097,6 +2137,7 @@ class LumitUiState extends ChangeNotifier {
       }
     }
     _selectedComp = reference;
+    if (moved) compGraphNode.value = null;
     model.bind(reference);
     if (moved && arriving != null) {
       final want = atFrame ?? compViews[arriving.toString()]?.frame ?? 0;

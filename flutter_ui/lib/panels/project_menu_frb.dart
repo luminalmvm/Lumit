@@ -22,6 +22,7 @@ import '../widgets/controls.dart';
 import 'project_columns_frb.dart';
 
 enum _ProjectMenuAction {
+  newNodeGraph,
   compSettings,
   rename,
   relink,
@@ -121,6 +122,15 @@ Future<void> showProjectMenuFrb({
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // The panel's own New node graph (docs/impl/node-graph-comp.md
+          // §4.4). It is here rather than beside New composition in the bottom
+          // bar because the bar keeps its three words, and this menu is the
+          // panel's only other surface.
+          MenuRow(
+            key: const ValueKey('project-menu-new-node-graph'),
+            onPressed: () => close(_ProjectMenuAction.newNodeGraph),
+            child: Text(l10n.newNodeGraph),
+          ),
           if (isComp)
             MenuRow(
               onPressed: () => close(_ProjectMenuAction.compSettings),
@@ -374,6 +384,13 @@ Future<void> showProjectMenuFrb({
   // that one that has gone, or cannot do it, leaves the rest standing.
   final acts = targets ?? [item];
   switch (action) {
+    case _ProjectMenuAction.newNodeGraph:
+      // The one funnel every route to a node graph goes through: it asks for
+      // the settings, makes the comp and fronts it. The panel re-reads after,
+      // as it does for its own edits.
+      await Provider.of<LumitState>(context, listen: false)
+          .newNodeGraph(context);
+      onLocalEdit();
     case _ProjectMenuAction.compSettings:
       if (item case ItemReference_Composition(:final field0)) {
         // Reachable now that the dialog takes a CompositionReference rather than

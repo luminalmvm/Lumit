@@ -34,7 +34,7 @@ There is no graph you can build that the stack view has to lie about.
 
 ### 1.1 The one rule
 
-**`Layer::effects` remains the only authority for the image chain.** The Graph panel
+**`Layer::effects` remains the only authority for a layer's image chain.** The Graph panel
 derives its image-path nodes — the Source node, one node per `EffectInstance` in stack
 order, the Layer out node — from the list, and every image-wire gesture lowers to the
 existing whole-stack `SetLayerEffects` commit:
@@ -66,10 +66,12 @@ the frame key.
 
 An effect's main **Input** port accepts exactly one wire and it is, by construction, the
 previous stack entry's Output. The panel never offers a gesture that would branch or skip
-the image chain (dropping an Output on an occupied Input re-routes; it never fans out).
+a layer's image chain (dropping an Output on an occupied Input re-routes; it never fans out).
 This is the honesty guarantee: every graph state has a stack rendering, because the image
-chain *is* the stack. Merging image chains is what layers and blend modes already do; a
-compositing merge node would be a new decision, deliberately not taken here.
+chain *is* the stack. Merging image chains is what layers and blend modes already do; the
+compositing merge node is a decision taken for the node graph composition
+([node-graph-comp.md](node-graph-comp.md)), which is its own kind of comp and leaves this
+graph exactly as it is.
 
 ### 1.2 What the document gains
 
@@ -508,7 +510,7 @@ without redesign. Its feature set is WP6's design document, not this note.
 - The compiled **evaluation graph** — the Graph panel draws the document (stack +
   wiring), never `lumit-eval`'s nodes; constant-folding, deduplication and pass-through
   elision remain invisible.
-- **Branched image chains** — §1.1's rule; the gesture does not exist.
+- **Branched image chains in a layer's graph** — §1.1's rule; the gesture does not exist.
 - **Other layers' internals** — a derived source node is a name and its output ports,
   never the other layer's own graph.
 - The Layer out node draws an **Audio** input port (the Nodes-workspace drawing) that

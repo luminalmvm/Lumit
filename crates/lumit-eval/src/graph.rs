@@ -255,6 +255,7 @@ mod tests {
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
+            graph_inputs: None,
             effects: Vec::new(),
             styles: Vec::new(),
             paint: Vec::new(),
@@ -285,6 +286,7 @@ mod tests {
 
     fn comp_with(layers: Vec<lumit_core::model::Layer>) -> Composition {
         Composition {
+            graph: None,
             master_volume_db: 0.0,
             sound_mix: false,
             groups: Vec::new(),

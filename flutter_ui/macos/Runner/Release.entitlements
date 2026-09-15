@@ -2,11 +2,30 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- See DebugProfile.entitlements: sandbox off and library validation
-	     disabled so the unsigned liblumit_bridge.dylib can be dlopen'd. -->
+	<!-- Library validation is deliberately NOT disabled here.
+
+	     It used to be, because the bridge dylib is dlopen'd and, in a
+	     development build, that dylib is unsigned. A release is not a
+	     development build: packaging/macos/make-dmg.sh signs every Mach-O in
+	     Contents/Frameworks with the same Developer ID as the app, which is
+	     exactly the condition library validation asks for. Keeping the
+	     entitlement meant the application ran all the time with the one
+	     protection that stops somebody else's code being loaded into it, for a
+	     reason that only applies when it is not signed at all.
+
+	     The processes that genuinely cannot have it are the plugin brokers,
+	     which load third-party OFX and CLAP bundles signed by their own
+	     vendors. Those are separate processes and take Broker.entitlements;
+	     `Bundle::open` and `AnyModule::open` are reached from the broker
+	     binaries and from tests, and from nowhere else in the application.
+
+	     DebugProfile.entitlements keeps it off, because a dev build really does
+	     load an unsigned dylib out of the Cargo target directory.
+
+	     The sandbox stays off: turning it on needs file-access and entitlement
+	     work of its own (a video editor reads footage from wherever the user
+	     keeps it), and is tracked rather than pretended at. -->
 	<key>com.apple.security.app-sandbox</key>
 	<false/>
-	<key>com.apple.security.cs.disable-library-validation</key>
-	<true/>
 </dict>
 </plist>

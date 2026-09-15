@@ -529,6 +529,202 @@ pub fn group_instantiated(preset: &GroupPreset, at: [f64; 2]) -> InsertedGroup {
     }
 }
 
+// --- Node graph groups ----------------------------------------------------
+//
+// **In plain terms.** The same idea as a node group, for the other canvas: pick
+// a few boxes out of a node graph composition, name the set, and drop it into
+// another graph later with its wires still on. What is saved is the boxes, the
+// wires between them and where they sat relative to one another.
+//
+// A different extension from the layer graph's, so neither listing can offer
+// the other's file: the two canvases hold different kinds of box and a group of
+// one means nothing to the other.
+
+/// A saved set of a node graph's boxes and the wires between them (§5.8).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CompGroupPreset {
+    pub format: u32,
+    pub name: String,
+    /// Which chip of the label palette the group wears, as an index.
+    #[serde(default)]
+    pub colour: u32,
+    /// The boxes, in the order the graph carried them. **Never the Output**:
+    /// every graph has exactly one and it cannot be deleted, so a second one
+    /// arriving in a group would be a graph the validator refuses.
+    pub nodes: Vec<crate::comp_graph::GraphNode>,
+    /// The wires with both ends inside the set.
+    #[serde(default)]
+    pub edges: Vec<crate::comp_graph::GraphEdge>,
+    /// One position per box, **relative to the set's top-left corner**, so a
+    /// group dropped anywhere keeps the shape it was saved in.
+    #[serde(default)]
+    pub layout: Vec<[f64; 2]>,
+}
+
+/// The current on-disk format version for a node graph group.
+pub const COMP_GROUP_FORMAT: u32 = 1;
+
+/// The file extension node graph groups use - a plain JSON document, beside the
+/// `.lumgrp` driver groups in the same per-user library.
+pub const COMP_GROUP_EXTENSION: &str = "lumngrp";
+
+/// Gather `members` out of `graph` as a saveable group.
+///
+/// Deterministic: the boxes come out in the graph's own order, never the
+/// selection's, so saving the same three twice writes the same file.
+#[must_use]
+pub fn comp_group_from_graph(
+    graph: &crate::comp_graph::CompGraph,
+    name: &str,
+    colour: u32,
+    members: &[uuid::Uuid],
+) -> CompGroupPreset {
+    use crate::comp_graph::GraphNode;
+    let wanted: Vec<uuid::Uuid> = graph
+        .nodes
+        .iter()
+        .map(GraphNode::id)
+        .filter(|id| members.contains(id))
+        .filter(|id| !matches!(graph.node(*id), Some(GraphNode::Output { .. })))
+        .collect();
+    let nodes: Vec<GraphNode> = graph
+        .nodes
+        .iter()
+        .filter(|n| wanted.contains(&n.id()))
+        .cloned()
+        .collect();
+
+    let at = |id: uuid::Uuid| {
+        graph
+            .layout
+            .iter()
+            .find(|(node, _)| *node == id)
+            .map_or([0.0, 0.0], |(_, xy)| *xy)
+    };
+    let places: Vec<[f64; 2]> = nodes.iter().map(|n| at(n.id())).collect();
+    // The set's top-left corner. An empty set has no corner and no layout, so
+    // the fold's identity never reaches the subtraction below.
+    let origin = places.iter().fold([f64::MAX, f64::MAX], |acc, p| {
+        [acc[0].min(p[0]), acc[1].min(p[1])]
+    });
+    let layout: Vec<[f64; 2]> = places
+        .iter()
+        .map(|p| [p[0] - origin[0], p[1] - origin[1]])
+        .collect();
+
+    CompGroupPreset {
+        format: COMP_GROUP_FORMAT,
+        name: name.to_owned(),
+        colour,
+        edges: graph
+            .edges
+            .iter()
+            .filter(|e| wanted.contains(&e.from) && wanted.contains(&e.to))
+            .cloned()
+            .collect(),
+        nodes,
+        layout,
+    }
+}
+
+/// Serialise a node graph group to its JSON text.
+pub fn comp_group_to_json(preset: &CompGroupPreset) -> Result<String, String> {
+    serde_json::to_string_pretty(preset).map_err(|e| e.to_string())
+}
+
+/// Parse node graph group JSON back. A newer `format` still loads, for the
+/// reason [`from_json`] gives.
+pub fn comp_group_from_json(text: &str) -> Result<CompGroupPreset, String> {
+    serde_json::from_str::<CompGroupPreset>(text).map_err(|e| e.to_string())
+}
+
+/// Everything one insert adds to a node graph - handed over in a piece so the
+/// caller extends four lists and commits once.
+#[derive(Debug, Clone)]
+pub struct InsertedCompGroup {
+    pub nodes: Vec<crate::comp_graph::GraphNode>,
+    pub edges: Vec<crate::comp_graph::GraphEdge>,
+    pub layout: Vec<(uuid::Uuid, [f64; 2])>,
+    pub group: crate::comp_graph::GraphGroup,
+}
+
+/// What inserting `preset` at canvas point `at` adds to a graph: fresh boxes,
+/// the wires between them re-pointed at those fresh ids, where each one sits,
+/// and the group that names them.
+///
+/// Every id is minted here, so inserting one group twice never makes two boxes
+/// share an id - the rule [`instantiated`] follows for an effect preset, and an
+/// Fx box takes a fresh instance id for the same reason. A Read keeps its item:
+/// the item is the project's, not the group's, and a Read of one this project
+/// lacks lands wearing the missing mark, which is how a deleted item already
+/// reads.
+#[must_use]
+pub fn comp_group_instantiated(preset: &CompGroupPreset, at: [f64; 2]) -> InsertedCompGroup {
+    use crate::comp_graph::{GraphEdge, GraphGroup, GraphNode};
+    let mut fresh = std::collections::BTreeMap::new();
+    let nodes: Vec<GraphNode> = preset
+        .nodes
+        .iter()
+        .cloned()
+        .map(|node| {
+            let id = uuid::Uuid::now_v7();
+            fresh.insert(node.id(), id);
+            match node {
+                GraphNode::Read {
+                    item, custom_name, ..
+                } => GraphNode::Read {
+                    id,
+                    item,
+                    custom_name,
+                },
+                GraphNode::Input { input, .. } => GraphNode::Input { id, input },
+                GraphNode::Output { .. } => GraphNode::Output { id },
+                GraphNode::Fx(mut inst) => {
+                    inst.id = id;
+                    GraphNode::Fx(inst)
+                }
+            }
+        })
+        .collect();
+
+    let edges: Vec<GraphEdge> = preset
+        .edges
+        .iter()
+        .filter_map(|e| {
+            // A wire naming a box the file does not carry is dropped rather
+            // than landing dangling: the graph would refuse the whole insert
+            // for it, and one bad wire must not cost the rig.
+            Some(GraphEdge {
+                from: *fresh.get(&e.from)?,
+                from_port: e.from_port.clone(),
+                to: *fresh.get(&e.to)?,
+                to_port: e.to_port.clone(),
+            })
+        })
+        .collect();
+
+    let layout: Vec<(uuid::Uuid, [f64; 2])> = nodes
+        .iter()
+        .enumerate()
+        .map(|(i, n)| {
+            let rel = preset.layout.get(i).copied().unwrap_or([0.0, 0.0]);
+            (n.id(), [at[0] + rel[0], at[1] + rel[1]])
+        })
+        .collect();
+
+    let group = GraphGroup {
+        name: preset.name.clone(),
+        colour: preset.colour,
+        members: nodes.iter().map(GraphNode::id).collect(),
+    };
+    InsertedCompGroup {
+        nodes,
+        edges,
+        layout,
+        group,
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::panic)]
 mod tests {
@@ -873,6 +1069,117 @@ mod tests {
         assert_eq!(layout[1].1, [560.0, 230.0]);
         assert_eq!(group.name, "Audio rig");
         assert_eq!(group.members.len(), 2);
+    }
+
+    // -- 5.8, a node graph's groups -------------------------------------------
+
+    /// A Read, a blur and an Output, wired in a line, with the first two
+    /// picked. The Output is picked too, to prove it is never saved.
+    fn wired_comp_graph() -> (crate::comp_graph::CompGraph, Vec<uuid::Uuid>, uuid::Uuid) {
+        use crate::comp_graph::{CompGraph, GraphEdge, GraphNode};
+        use crate::graph::{INPUT_PORT, OUTPUT_PORT};
+
+        let item = uuid::Uuid::now_v7();
+        let read = GraphNode::Read {
+            id: uuid::Uuid::now_v7(),
+            item,
+            custom_name: None,
+        };
+        let blur = GraphNode::Fx(crate::fx::instantiate("blur").unwrap());
+        let out = GraphNode::Output {
+            id: uuid::Uuid::now_v7(),
+        };
+        let wire = |from: &GraphNode, to: &GraphNode| GraphEdge {
+            from: from.id(),
+            from_port: OUTPUT_PORT.id.to_owned(),
+            to: to.id(),
+            to_port: INPUT_PORT.id.to_owned(),
+        };
+        let members = vec![read.id(), blur.id(), out.id()];
+        let graph = CompGraph {
+            edges: vec![wire(&read, &blur), wire(&blur, &out)],
+            layout: vec![
+                (read.id(), [100.0, 60.0]),
+                (blur.id(), [260.0, 90.0]),
+                (out.id(), [500.0, 300.0]),
+            ],
+            nodes: vec![read, blur, out],
+            exposed: Vec::new(),
+            groups: Vec::new(),
+        };
+        (graph, members, item)
+    }
+
+    #[test]
+    fn a_comp_group_saves_its_boxes_and_never_the_output() {
+        let (graph, members, _) = wired_comp_graph();
+        let preset = comp_group_from_graph(&graph, "Plate rig", 4, &members);
+
+        assert_eq!(
+            preset.nodes.len(),
+            2,
+            "the Read and the blur, not the Output"
+        );
+        assert!(!preset
+            .nodes
+            .iter()
+            .any(|n| matches!(n, crate::comp_graph::GraphNode::Output { .. })));
+        assert_eq!(
+            preset.edges.len(),
+            1,
+            "the wire between them is kept and the one leaving them is not"
+        );
+        assert_eq!(preset.layout, vec![[0.0, 0.0], [160.0, 30.0]]);
+        assert_eq!(preset.colour, 4);
+    }
+
+    #[test]
+    fn inserting_a_comp_group_mints_fresh_ids_and_keeps_a_reads_item() {
+        use crate::comp_graph::GraphNode;
+
+        let (graph, members, item) = wired_comp_graph();
+        let mut preset = comp_group_from_json(
+            &comp_group_to_json(&comp_group_from_graph(&graph, "Plate rig", 4, &members)).unwrap(),
+        )
+        .unwrap();
+        // A wire naming a box the file does not carry is dropped rather than
+        // landing dangling, which would cost the whole insert.
+        preset.edges.push(crate::comp_graph::GraphEdge {
+            from: uuid::Uuid::now_v7(),
+            from_port: "output".into(),
+            to: preset.nodes[1].id(),
+            to_port: "input".into(),
+        });
+
+        let added = comp_group_instantiated(&preset, [400.0, 200.0]);
+        assert_eq!(added.nodes.len(), 2);
+        assert!(
+            added
+                .nodes
+                .iter()
+                .all(|n| !preset.nodes.iter().any(|s| s.id() == n.id())),
+            "every id is fresh, so inserting twice never makes two boxes one"
+        );
+        // A Read keeps the item it names: the item is the project's, not the
+        // group's, and one this project lacks wears the missing mark.
+        match &added.nodes[0] {
+            GraphNode::Read { item: named, .. } => assert_eq!(*named, item),
+            other => panic!("the Read came back as {other:?}"),
+        }
+        assert_eq!(added.edges.len(), 1, "the dangling wire was dropped");
+        assert_eq!(added.edges[0].from, added.nodes[0].id());
+        assert_eq!(added.edges[0].to, added.nodes[1].id());
+        assert_eq!(added.layout[0].1, [400.0, 200.0]);
+        assert_eq!(added.layout[1].1, [560.0, 230.0]);
+        assert_eq!(added.group.name, "Plate rig");
+        assert_eq!(added.group.members.len(), 2);
+
+        // A second insert shares nothing with the first.
+        let again = comp_group_instantiated(&preset, [0.0, 0.0]);
+        assert!(added
+            .nodes
+            .iter()
+            .all(|a| !again.nodes.iter().any(|b| b.id() == a.id())));
     }
 
     /// A second insert of the same file shares nothing with the first — the

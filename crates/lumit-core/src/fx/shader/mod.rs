@@ -218,6 +218,16 @@ pub enum ShaderRefusal {
     UnknownType { field: String, ty: String },
     /// Two parameters would answer to one id.
     DuplicateId(String),
+    /// This session has already read [`MAX_CACHED_PROGRAMS`] distinct sources.
+    ///
+    /// Not the user's edit being wrong — every other refusal here is — but the
+    /// only honest answer while the cache cannot let anything go (see
+    /// [`program_for`]). It names a number and a remedy, which "the application
+    /// is using eleven gigabytes" would not.
+    TooManyPrograms {
+        /// The ceiling.
+        limit: usize,
+    },
 }
 
 impl std::fmt::Display for ShaderRefusal {
@@ -244,6 +254,11 @@ impl std::fmt::Display for ShaderRefusal {
             ShaderRefusal::UnknownType { field, ty } => write!(
                 f,
                 "`{field}` is a {ty}; a parameter may be f32, i32, u32, vec2<f32> or vec4<f32>"
+            ),
+            ShaderRefusal::TooManyPrograms { limit } => write!(
+                f,
+                "this session has read {limit} different shaders, which is as many as Lumit \
+                 keeps; reopen the project to start again"
             ),
             ShaderRefusal::DuplicateId(id) => {
                 write!(f, "two parameters would both answer to `{id}`")
@@ -333,28 +348,73 @@ pub fn hash64(bytes: &[u8]) -> u64 {
 /// The §2.2 refusals — a shader that binds its own group, shadows a host name,
 /// declares no `shade`, or declares a parameter the grammar cannot carry.
 ///
-/// ponytail: never evicts, so a session that types N distinct shaders holds N
-/// small records. Bound it (and stop leaking) if that ever shows up in a heap
-/// profile; the fix is an owned mirror of `ParamSchema`, which is why it was not
-/// done first.
+/// # What this does not do, and what it does instead
+///
+/// It does not evict, and it cannot: the entries are `&'static`, the render
+/// path holds them across frames, and `EffectDef::derived` hands their
+/// `ParamSchema` rows straight out under the same lifetime. Dropping one would
+/// dangle. A real bounded cache here needs those to be owned — an `Arc` program
+/// and an owned mirror of `ParamSchema` — and that is a change to the
+/// `EffectDef` trait every effect implements, not to this function.
+///
+/// What it does do is **stop being unbounded**. The Custom shader draws as you
+/// type, so a long editing session asks for a new distinct source every time
+/// the typing settles: without a ceiling that is a slow leak with a person's
+/// keyboard on the other end of it. [`MAX_CACHED_PROGRAMS`] is far past any
+/// session's worth of distinct texts, and past it a new source is refused by
+/// name rather than quietly leaked — a refusal the user can act on (reopen the
+/// project) instead of a memory figure nobody can explain.
+///
+/// ponytail: the ownership refactor above, after which this becomes an ordinary
+/// LRU and the ceiling stops being a refusal.
 pub fn program_for(source: &str) -> Result<&'static ShaderProgram, ShaderRefusal> {
-    let cache = cache();
+    program_in(cache(), source, MAX_CACHED_PROGRAMS)
+}
+
+/// [`program_for`], against a cache and a ceiling the caller names.
+///
+/// Split out for the tests, and specifically so the ceiling can be reached
+/// without reaching the *real* one: the shipped cache is process-wide, and a
+/// test that filled it would leave every test scheduled after it unable to read
+/// a shader. A private cache with a ceiling of three exercises the same lines.
+pub(crate) fn program_in(
+    cache: &ProgramCache,
+    source: &str,
+    limit: usize,
+) -> Result<&'static ShaderProgram, ShaderRefusal> {
     let key = hash64(source.as_bytes());
     if let Ok(map) = cache.read() {
         if let Some(hit) = map.get(&key) {
             return hit.clone();
         }
+        // Checked before the build, so a refused session does not pay for the
+        // assembly it is about to throw away.
+        if map.len() >= limit {
+            return Err(ShaderRefusal::TooManyPrograms { limit });
+        }
     }
     let built = build(source).map(|p| &*Box::leak(Box::new(p)));
     if let Ok(mut map) = cache.write() {
-        map.insert(key, built.clone());
+        // Re-checked under the write lock: two threads that both passed the
+        // read check above must not both insert past the ceiling.
+        if map.len() < limit || map.contains_key(&key) {
+            map.insert(key, built.clone());
+        }
     }
     built
 }
 
+/// How many distinct shader sources one session will read.
+///
+/// Each one costs its assembled module — a few kilobytes of WGSL — plus its
+/// derived rows, and none of it is ever given back (see [`program_for`]). Four
+/// thousand is far more distinct texts than a session of typing produces, and
+/// bounds the total at tens of megabytes rather than at nothing in particular.
+pub const MAX_CACHED_PROGRAMS: usize = 4_096;
+
 /// Every source this session has read, by its hash. Written once per distinct
 /// text and read on every frame that draws one.
-type ProgramCache = RwLock<HashMap<u64, Result<&'static ShaderProgram, ShaderRefusal>>>;
+pub(crate) type ProgramCache = RwLock<HashMap<u64, Result<&'static ShaderProgram, ShaderRefusal>>>;
 
 fn cache() -> &'static ProgramCache {
     static CACHE: OnceLock<ProgramCache> = OnceLock::new();

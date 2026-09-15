@@ -17,6 +17,7 @@ areas and components of Lumit.
 | **Footage item** | An asset referencing a media file from disk. |
 | **Folder** | A grouping item in the Project panel. |
 | **Composition** | A timeline holding layers. |
+| **[Node graph](/use/node-graphs/)** (composition) | A composition whose picture is made by boxes and wires instead of a layer stack. |
 
 ## Layers and time
 
@@ -41,6 +42,13 @@ areas and components of Lumit.
 | **Preview** | Playback inside Lumit. |
 | **Export** | Renders and outputs a composition as a file. |
 | **Playhead** | The current-time marker. |
+| **Read box** | A box bringing a project item into a node graph. |
+| **Input box** | A box standing for a value or a picture handed into a node graph from outside. |
+| **Output box** | The one box whose picture a node graph shows. |
+| **Merge** | The box laying one picture over another with a blend mode and an opacity. |
+| **Switch box** | The box showing one of its pictures, chosen by an index. |
+| **Time offset** | The box showing its input at another time. |
+| **Node graph effect** | The effect that applies a node graph to a layer, with the graph's Inputs as its rows. |
 
 ## Related
 

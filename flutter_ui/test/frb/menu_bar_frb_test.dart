@@ -292,6 +292,74 @@ void main() {
       expect(comps.single.name(), 'Comp 1');
     });
 
+    /// **New node graph** sits beside it on the menu and in the palette
+    /// (docs/impl/node-graph-comp.md §4.4): the same dialogue, the other door,
+    /// and one funnel behind both.
+    testWidgets('New node graph is on the Composition menu and the palette',
+        (tester) async {
+      final p = await mount(tester);
+
+      await choose(tester, 'Composition', 'New node graph');
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('comp-apply')));
+      await tester.pumpAndSettle();
+
+      final fromMenu = p.uiState.selectedComp;
+      expect(fromMenu, isNotNull, reason: 'the graph it made is fronted');
+      expect(fromMenu!.getModel().isNodeGraph, isTrue);
+      expect(fromMenu.getSettings().name, 'Node graph 1',
+          reason: 'a blank name is the engine\'s to fill in');
+
+      await choose(tester, 'Window', 'Command palette…');
+      await tester.pump();
+      await tester.enterText(
+          find.byKey(const ValueKey('palette-query')), 'node graph');
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('palette-item-New node graph')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('comp-apply')));
+      await tester.pumpAndSettle();
+
+      final fromPalette = p.uiState.selectedComp;
+      expect(fromPalette!.internalid, isNot(fromMenu.internalid),
+          reason: 'the palette made a second one');
+      expect(fromPalette.getModel().isNodeGraph, isTrue);
+      expect(fromPalette.getSettings().name, 'Node graph 2',
+          reason: 'node graphs are counted apart from the comps');
+    });
+
+    /// **A node graph applies to a layer as an effect** (§4.4). The layer's
+    /// Ctrl+Space console lists every one in the project under its own kicker,
+    /// leaving out the comp the selected layers are in, which the engine
+    /// refuses as a loop.
+    testWidgets('the layer console lists node graphs and applies one',
+        (tester) async {
+      final p = await mount(tester);
+      final comp = p.state.project!.newComposition(name: 'Scene');
+      final graph = p.state.project!.newNodeGraph(name: 'Wires');
+      final layer = comp.addSolidLayer();
+      p.uiState
+        ..setSelectedComp(comp)
+        ..setSelection([layer]);
+      await tester.pump();
+
+      p.uiState.requestConsole();
+      await tester.pumpAndSettle();
+      await tester.enterText(
+          find.byKey(const ValueKey('fx-console-query')), 'Wires');
+      await tester.pump();
+      expect(find.text('Node graphs'), findsWidgets,
+          reason: 'the graphs wear their own kicker');
+
+      await tester.tap(find.byKey(const ValueKey('fx-console-item-Wires')));
+      await tester.pumpAndSettle();
+
+      final applied = layer.getEffects().single;
+      expect(applied.name(), 'node_graph');
+      expect(applied.nodeGraphCompId(), graph.internalid,
+          reason: 'the effect is bound to the graph that was chosen');
+    });
+
     testWidgets('Composition settings… is disabled until a comp is fronted',
         (tester) async {
       final p = await mount(tester);

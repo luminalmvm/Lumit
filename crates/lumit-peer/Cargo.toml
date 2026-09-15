@@ -1,0 +1,24 @@
+[package]
+name = "lumit-peer"
+version.workspace = true
+edition = "2021"
+license = "GPL-3.0-only"
+# Never goes to crates.io: these crates are the application, and they
+# reference each other by path (docs/05-ARCHITECTURE.md).
+publish = false
+
+[dependencies]
+# The keyed hash the challenge-response is built on. Already in the tree
+# (lumit-core, lumit-media, lumit-render all key caches with it), and
+# `keyed_hash` is exactly the primitive this needs — a PRF, not a checksum.
+blake3 = "1"
+# The operating system's own random source, for the secret and the endpoint
+# token. Deliberately not a seeded generator: everything else random in this
+# application is seeded so that renders reproduce (docs/14 §3), and this is the
+# one place where reproducible would mean guessable.
+getrandom = "0.4"
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+
+[lints]
+workspace = true

@@ -155,6 +155,7 @@ impl DrivenVolume {
             layer: Some(self.layer),
             comp_time: t_comp,
             current_depth: 0,
+            inputs: None,
         });
         let tap = crate::audio_tap::DocumentAudio::pre_duck(&self.doc, comp, t_comp);
         lumit_core::fx::driven_volume_db(&self.graph, t - self.offset_s, context, Some(&tap))
@@ -441,6 +442,7 @@ fn bake_values(
                     layer: Some(chain.layer),
                     comp_time: t - chain.base_s,
                     current_depth: 0,
+                    inputs: None,
                 });
                 lumit_core::fx::resolve_drivers(&chain.graph, lt, context, None)
             } else {
@@ -2883,6 +2885,7 @@ mod tests {
         }));
         let comp_id = Uuid::now_v7();
         doc.items.push(ProjectItem::Composition(Composition {
+            graph: None,
             master_volume_db: 0.0,
             sound_mix: false,
             groups: Vec::new(),
@@ -2915,6 +2918,7 @@ mod tests {
                 retime: None,
                 interpolation: Default::default(),
                 parked_flow: None,
+                graph_inputs: None,
                 blend: Default::default(),
                 masks: Vec::new(),
                 paint: Vec::new(),
@@ -4134,6 +4138,7 @@ mod tests {
         guide.switches.guide = true;
         let outer_id = Uuid::now_v7();
         doc.items.push(ProjectItem::Composition(Composition {
+            graph: None,
             master_volume_db: 0.0,
             sound_mix: false,
             groups: Vec::new(),
@@ -4264,6 +4269,7 @@ mod tests {
         precomp.kind = LayerKind::Precomp { comp: inner_id };
         let outer_id = Uuid::now_v7();
         doc.items.push(ProjectItem::Composition(Composition {
+            graph: None,
             master_volume_db: 0.0,
             sound_mix: false,
             groups: Vec::new(),
@@ -4393,6 +4399,7 @@ mod tests {
         layer.switches = Switches::default();
         let comp_id = Uuid::now_v7();
         doc.items.push(ProjectItem::Composition(Composition {
+            graph: None,
             master_volume_db: 0.0,
             sound_mix: false,
             groups: Vec::new(),

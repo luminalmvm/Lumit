@@ -178,13 +178,27 @@ impl Ring {
             slot_bytes: SLOT_BYTES,
         };
         let mut options = OpenOptions::new();
-        options.read(true).write(true).create(true).truncate(true);
+        // `create_new`, not `create` + `truncate`: the ring is a real file in
+        // the temporary directory, and opening-and-truncating whatever is
+        // already at the path meant that anything which had guessed the path —
+        // and the paths used to be a process id and a counter — could have put
+        // something there first, a symbolic link included. The name is 128
+        // random bits now, so refusing a path that exists costs nothing and
+        // turns that into an error. `lumit_ofx::ipc::shm` does the same.
+        options.read(true).write(true).create_new(true);
         // FILE_FLAG_DELETE_ON_CLOSE. The broker still opens the file by name
         // while this handle is open; std's default share mode allows that.
         #[cfg(windows)]
         {
             use std::os::windows::fs::OpenOptionsExt;
             options.custom_flags(0x0400_0000);
+        }
+        // This user alone: the temporary directory is usually world-writable
+        // and a ring holds the audio of whatever is being edited.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
         }
         let file = options.open(path)?;
         file.set_len(SLOT_BYTES.saturating_mul(u64::from(RING_SLOTS)))?;
@@ -195,6 +209,29 @@ impl Ring {
             owned: Some(path.to_path_buf()),
             file: Some(file),
         })
+    }
+
+    /// Take the ring's file out of the directory, now that the broker has it
+    /// mapped. Unix only, and a no-op everywhere else.
+    ///
+    /// A Unix mapping is of the file, not of its name: once both processes have
+    /// called `mmap`, the name is doing nothing but letting other programs find
+    /// it. Removing it leaves the ring working in both, makes it impossible for
+    /// a third to open it by name, and has the kernel reclaim the space when the
+    /// last of the two exits — a crash included, which a destructor cannot
+    /// promise. Windows cannot unlink a mapped file at all, which is why the
+    /// handle carries `FILE_FLAG_DELETE_ON_CLOSE` instead.
+    ///
+    /// See `lumit_ofx::ipc::shm::Ring::unlink_now_it_is_shared`, which is the
+    /// same method for the same reason.
+    pub fn unlink_now_it_is_shared(&mut self) {
+        if cfg!(windows) {
+            return;
+        }
+        let Some(path) = self.owned.take() else {
+            return;
+        };
+        let _ = std::fs::remove_file(path);
     }
 
     /// Map a ring somebody else made. Called once, in the broker.

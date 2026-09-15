@@ -111,13 +111,16 @@ current frame. As well as the viewer to the right and the **Node panel**, which 
 picked box's parameter rows.
 
 :::note[What the graph does not draw]
-There are no branching image chains and no merge node: joining two pictures is what layers
-and [blend modes](/use/blend-modes/) already do. The Layer out box draws an **Audio**
+A layer's graph draws no branch and no merge: it is the layer's effect stack, seen as boxes.
+Branching and merging live in a
+[**node graph composition**](/use/node-graphs/), made with **New node graph**. The Layer
+out box draws an **Audio**
 input that currently takes no input, this is planned to be changed.
 :::
 
 ## Related
 
+- [Node graph compositions](/use/node-graphs/)
 - [Working with the node graph](/tutorials/node-graph/)
 - [Effects](/use/effects/)
 - [Expressions](/use/expressions/)

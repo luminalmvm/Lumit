@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- The plugin brokers only (docs/12 §2.3), and deliberately not the app.
+
+	     In plain terms: library validation is macOS refusing to load code into
+	     a process unless that code was signed by the same team as the process,
+	     or by Apple. A third-party OFX or CLAP plugin is, by definition, signed
+	     by somebody else — usually the plugin's vendor, sometimes nobody at
+	     all — so a process that hosts plugins cannot have it on.
+
+	     That is the whole reason the brokers exist. Each one is a separate
+	     process that loads exactly one plugin bundle and talks to the
+	     application over IPC, so the weakened containment a plugin needs is
+	     spent on a process that holds no project, no media handles and no
+	     window — rather than on the application, which holds all three.
+
+	     Release.entitlements therefore keeps library validation ON: everything
+	     the app itself loads (the bridge dylib, the FFmpeg libraries) is signed
+	     by the same identity in packaging/macos/make-dmg.sh, so it has no need
+	     of this and no business carrying it.
+
+	     The sandbox stays off here for the same reason it is off for the app:
+	     turning it on is an entitlement and file-access piece of work of its
+	     own, not a line in a plist. When it is taken on, this is the process to
+	     do it to first — a broker needs a pipe and one bundle path, which is
+	     about as small an authority as a sandbox profile ever gets to describe.
+	  -->
+	<key>com.apple.security.app-sandbox</key>
+	<false/>
+	<key>com.apple.security.cs.disable-library-validation</key>
+	<true/>
+</dict>
+</plist>

@@ -513,6 +513,7 @@ fn reference_comp(config: Option<&std::path::Path>) -> (std::sync::Arc<Document>
         layers.push(layer);
     }
     let comp = Composition {
+        graph: None,
         master_volume_db: 0.0,
         sound_mix: false,
         groups: Vec::new(),
@@ -566,6 +567,7 @@ fn solid_layer(name: &str, def: Uuid) -> Layer {
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,
+        graph_inputs: None,
         blend: Default::default(),
         masks: Vec::new(),
         paint: Vec::new(),

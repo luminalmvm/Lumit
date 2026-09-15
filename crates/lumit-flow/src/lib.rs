@@ -2485,12 +2485,16 @@ mod tests {
     /// mean. What must hold is that they are the same *picture*.
     #[test]
     fn gpu_synthesis_matches_the_cpu_within_tolerance() {
-        let Some(_) = gpu_flow() else { return };
-        let ctx = match lumit_gpu::GpuContext::headless() {
-            Ok(c) => c,
-            Err(_) => return,
+        // One device, not two: this used to build one inside `gpu_flow`, drop
+        // it, and then build a second for the synthesiser.
+        let Some(lease) = lumit_gpu::test_support::lease() else {
+            lumit_gpu::no_adapter();
+            return;
         };
-        let Ok(gs) = synth::GpuSynth::new(&ctx) else {
+        let Some(_flow) = gpu_flow_on(&lease) else {
+            return;
+        };
+        let Ok(gs) = synth::GpuSynth::new(&lease) else {
             return;
         };
         let (w, h) = (128, 96);
@@ -2737,12 +2741,19 @@ mod tests {
         }
     }
 
-    fn gpu_flow() -> Option<gpu::GpuFlow> {
-        let Ok(ctx) = lumit_gpu::GpuContext::headless() else {
-            lumit_gpu::no_adapter();
-            return None;
-        };
-        gpu_flow_on(&ctx)
+    /// A flow engine on the process's **shared** test device, with the lease
+    /// held for as long as the engine lives.
+    ///
+    /// It used to build a device of its own and then drop the `GpuContext`
+    /// while returning the `GpuFlow` made from it — so the tests here ran
+    /// several devices at once, in parallel, against one card, and one of them
+    /// outlived the context it was built on. The lease is what makes "one at a
+    /// time" true; returning it beside the engine is what makes "for as long as
+    /// it lives" true.
+    fn gpu_flow() -> Option<(lumit_gpu::test_support::Lease, gpu::GpuFlow)> {
+        let lease = lumit_gpu::test_support::lease()?;
+        let flow = gpu_flow_on(&lease)?;
+        Some((lease, flow))
     }
 
     /// The texture entry point must measure exactly what the CPU-grey entry
@@ -2757,7 +2768,7 @@ mod tests {
     /// numbers and the fields would visibly part company.
     #[test]
     fn gpu_texture_entry_matches_the_gray_entry() {
-        let Ok(ctx) = lumit_gpu::GpuContext::headless() else {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
             lumit_gpu::no_adapter();
             return;
         };
@@ -2874,7 +2885,9 @@ mod tests {
     /// within 1e-3 on the analytic scenes (impl note §6.5).
     #[test]
     fn gpu_matches_the_cpu_oracle() {
-        let Some(mut g) = gpu_flow() else { return };
+        let Some((_lease, mut g)) = gpu_flow() else {
+            return;
+        };
         let (w, h) = (192, 160);
         // Translation and rotation, same scenes the CPU tests use.
         let scenes = [
@@ -2943,7 +2956,9 @@ mod tests {
     /// Same inputs → same flow on the GPU too, bit for bit against itself.
     #[test]
     fn gpu_flow_is_deterministic() {
-        let Some(mut g) = gpu_flow() else { return };
+        let Some((_lease, mut g)) = gpu_flow() else {
+            return;
+        };
         let (w, h) = (160, 128);
         let a = render(w, h, |x, y| perlin(x, y, 9));
         let b = render(w, h, |x, y| perlin(x - 5.2, y + 3.4, 9));
@@ -2982,7 +2997,9 @@ mod tests {
     #[test]
     #[ignore = "manual benchmark; prints timings"]
     fn bench_flow_1080p() {
-        let Some(mut g) = gpu_flow() else { return };
+        let Some((_lease, mut g)) = gpu_flow() else {
+            return;
+        };
         let (w, h) = (960, 540);
         let a = render(w, h, |x, y| perlin(x, y, 3));
         let b = render(w, h, |x, y| perlin(x - 9.7, y + 4.3, 3));

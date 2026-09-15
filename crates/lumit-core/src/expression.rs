@@ -42,6 +42,14 @@ pub struct ExpressionContext {
     pub layer: Option<Uuid>,
     pub comp_time: f64,
     pub current_depth: u32,
+    /// The values a host hands a node graph's Inputs, by Input id
+    /// (docs/impl/node-graph-comp.md §5.5) - what `input("gain")` reads inside
+    /// a graph. `None` is every evaluation that is not a graph's, and an Input
+    /// nobody overrode falls back to its own default in the document.
+    ///
+    /// Shared rather than owned: one list serves every property in the graph,
+    /// and a context is cloned for each of them.
+    pub inputs: Option<Arc<[(String, crate::model::EffectValue)]>>,
 }
 
 impl ExpressionContext {
@@ -60,6 +68,7 @@ impl ExpressionContext {
             layer: None,
             comp_time: 0.0,
             current_depth: 0,
+            inputs: None,
         }
     }
 
@@ -89,6 +98,7 @@ impl ExpressionContext {
             layer: self.layer,
             comp_time: self.comp_time,
             current_depth: self.current_depth + 1,
+            inputs: self.inputs.clone(),
         }
     }
 }
@@ -502,6 +512,7 @@ mod tests {
         use crate::time::{Duration, FrameRate, Rational};
 
         let comp = Composition {
+            graph: None,
             master_volume_db: 0.0,
             sound_mix: false,
             groups: Vec::new(),
@@ -561,11 +572,94 @@ mod tests {
             switches: Switches::default(),
             interpolation: Default::default(),
             parked_flow: None,
+            graph_inputs: None,
             markers: Vec::new(),
             paint: Default::default(),
             puppet: None,
             extra: serde_json::Map::new(),
         }
+    }
+
+    /// A node graph's Inputs are readable by name inside the graph
+    /// (docs/impl/node-graph-comp.md §5.5): the host's own value where it
+    /// handed one over, the Input's declared default otherwise, a colour's
+    /// first channel, and the miss value for a picture or a name the graph
+    /// does not have.
+    #[test]
+    fn an_expression_reads_a_graphs_input_by_name() {
+        use crate::comp_graph::{CompGraph, GraphInput, GraphNode, InputKind};
+        use crate::model::{EffectValue, ProjectItem};
+
+        let declared = |id: &str, kind: InputKind, first: f64| GraphNode::Input {
+            id: Uuid::now_v7(),
+            input: GraphInput {
+                id: id.to_owned(),
+                label: format!("The {id}"),
+                kind,
+                default: [first, 0.25, 0.5, 1.0],
+                min: 0.0,
+                max: 100.0,
+                unit: crate::fx::Unit::Raw,
+                preview: None,
+            },
+        };
+        let graph = CompGraph {
+            nodes: vec![
+                declared("gain", InputKind::Number, 7.0),
+                declared("tint", InputKind::Colour, 0.75),
+                declared("plate", InputKind::Picture, 0.0),
+                GraphNode::Output { id: Uuid::now_v7() },
+            ],
+            edges: Vec::new(),
+            layout: Vec::new(),
+            exposed: Vec::new(),
+            groups: Vec::new(),
+        };
+        let (document, comp) = doc_with(Vec::new());
+        let mut doc = (*document).clone();
+        if let Some(ProjectItem::Composition(c)) = doc.item_mut(comp) {
+            c.graph = Some(graph);
+        }
+        let context = |values: Option<Vec<(String, EffectValue)>>| {
+            Arc::new(ExpressionContext {
+                document: Arc::new(doc.clone()),
+                comp: Some(comp),
+                layer: None,
+                comp_time: 2.0,
+                current_depth: 0,
+                inputs: values.map(Into::into),
+            })
+        };
+
+        // Nobody handed a value over: the Input's own default answers, by id
+        // or by the word on its row.
+        assert_eq!(evaluate("input(\"gain\")", Some(context(None))), 7.0);
+        assert_eq!(evaluate("input(\"The gain\")", Some(context(None))), 7.0);
+        // A colour answers its first channel, which is the number an
+        // expression on a number row can use.
+        assert_eq!(evaluate("input(\"tint\")", Some(context(None))), 0.75);
+        // A picture carries a texture, and an unknown name is a miss: both
+        // read as the module's miss value.
+        assert_eq!(evaluate("input(\"plate\")", Some(context(None))), -1.0);
+        assert_eq!(evaluate("input(\"nothing\")", Some(context(None))), -1.0);
+
+        // A host's own value comes first, and it is read at the graph's time,
+        // so a keyed row moves the answer.
+        let mut keyed = crate::anim::Property::fixed(0.0);
+        keyed.animation = crate::anim::Animation::Expression("time * 5.0".into());
+        let over = vec![("gain".to_owned(), EffectValue::Float(keyed))];
+        assert_eq!(
+            evaluate("input(\"gain\") + 1.0", Some(context(Some(over)))),
+            11.0,
+            "the host's value at the graph's own time"
+        );
+
+        // The depth guard holds: a value that names the Input it is standing
+        // in for gives up rather than spinning.
+        let mut itself = crate::anim::Property::fixed(0.0);
+        itself.animation = crate::anim::Animation::Expression("input(\"gain\")".into());
+        let loop_over = vec![("gain".to_owned(), EffectValue::Float(itself))];
+        let _ = evaluate("input(\"gain\")", Some(context(Some(loop_over))));
     }
 
     /// Expressions nest — a property may read another property that is itself
@@ -584,6 +678,7 @@ mod tests {
             layer: Some(driven_id),
             comp_time: 2.0,
             current_depth: 0,
+            inputs: None,
         });
         assert_eq!(evaluate("layer(\"Driven\").x + 1.0", Some(context)), 7.0);
     }
@@ -602,6 +697,7 @@ mod tests {
             layer: Some(a_id),
             comp_time: 0.0,
             current_depth: 0,
+            inputs: None,
         });
         // The value is meaningless; returning at all is the point.
         let _ = evaluate("layer(\"A\").x", Some(context));

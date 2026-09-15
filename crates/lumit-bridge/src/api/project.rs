@@ -199,17 +199,39 @@ impl ProjectReference {
     pub fn next_comp_name(&self) -> Result<String, BridgeError> {
         let state = self.state()?;
         let state = state.read().map_err(|_| BridgeError::ReadFailed)?;
-        Ok(Self::next_comp_name_in(&state.store.snapshot()))
+        Ok(Self::next_comp_name_in(&state.store.snapshot(), false))
     }
 
+    /// The name a node graph made right now would get, if nobody typed one.
+    /// The twin of [`Self::next_comp_name`], for the same reason: the New node
+    /// graph dialogue shows the name the engine would have chosen rather than
+    /// a guess made in Dart. Both go through the one counter below, so the
+    /// field and the making cannot disagree.
+    #[frb(sync)]
+    pub fn next_node_graph_name(&self) -> Result<String, BridgeError> {
+        let state = self.state()?;
+        let state = state.read().map_err(|_| BridgeError::ReadFailed)?;
+        Ok(Self::next_comp_name_in(&state.store.snapshot(), true))
+    }
+
+    /// `node_graph` counts and names the node graphs; otherwise the comps.
+    /// The two are counted apart, so making a graph does not push the next
+    /// comp's number along and neither reads as the other's.
     #[frb(ignore)]
-    fn next_comp_name_in(doc: &lumit_core::Document) -> String {
+    fn next_comp_name_in(doc: &lumit_core::Document, node_graph: bool) -> String {
         let existing = doc
             .items
             .iter()
-            .filter(|i| matches!(i, lumit_core::model::ProjectItem::Composition(_)))
+            .filter(|i| match i {
+                lumit_core::model::ProjectItem::Composition(c) => c.graph.is_some() == node_graph,
+                _ => false,
+            })
             .count();
-        format!("Comp {}", existing + 1)
+        if node_graph {
+            format!("Node graph {}", existing + 1)
+        } else {
+            format!("Comp {}", existing + 1)
+        }
     }
 
     /// Add a folder, as one undo step — the Project panel's bottom-bar Folder
@@ -261,6 +283,40 @@ impl ProjectReference {
         name: String,
         settings: Option<BridgeCompSettings>,
     ) -> Result<CompositionReference, BridgeError> {
+        self.new_comp_with(name, settings, None)
+    }
+
+    /// Add a **node graph** composition, filed and undone exactly as
+    /// [`Self::new_composition`] is, with its graph seeded: one Output box,
+    /// auto-placed (docs/impl/node-graph-comp.md §4.1).
+    ///
+    /// A comp is a layer stack or a node graph and is born one or the other,
+    /// which is why this is a door of its own rather than a switch on the
+    /// other: nothing turns one into the other afterwards.
+    ///
+    /// A blank name gets the next "Node graph N", counted over the node graphs
+    /// alone, as a comp's own name is counted over the comps.
+    #[frb(sync)]
+    pub fn new_node_graph(
+        &self,
+        name: String,
+        settings: Option<BridgeCompSettings>,
+    ) -> Result<CompositionReference, BridgeError> {
+        self.new_comp_with(
+            name,
+            settings,
+            Some(lumit_core::comp_graph::CompGraph::new_with_output()),
+        )
+    }
+
+    /// The body both doors share: the folder, the literal and the one batch.
+    #[frb(ignore)]
+    fn new_comp_with(
+        &self,
+        name: String,
+        settings: Option<BridgeCompSettings>,
+        graph: Option<lumit_core::comp_graph::CompGraph>,
+    ) -> Result<CompositionReference, BridgeError> {
         use lumit_core::model::{Composition, Folder, LinearColour, MotionBlur, ProjectItem};
         use lumit_core::ops::AutoFolderKind;
 
@@ -269,7 +325,7 @@ impl ProjectReference {
         let doc = state.store.snapshot();
 
         let name = if name.trim().is_empty() {
-            Self::next_comp_name_in(&doc)
+            Self::next_comp_name_in(&doc, graph.is_some())
         } else {
             name
         };
@@ -304,6 +360,7 @@ impl ProjectReference {
         };
 
         let comp = Composition {
+            graph,
             master_volume_db: 0.0,
             sound_mix: false,
             groups: Vec::new(),

@@ -118,6 +118,7 @@ pub(crate) fn base_layer(
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,
+        graph_inputs: None,
         blend: lumit_core::model::BlendMode::Normal,
         masks: Vec::new(),
         paint: Vec::new(),
@@ -278,6 +279,7 @@ pub(crate) fn fx_category_key(cat: lumit_core::fx::FxCategory) -> &'static str {
         // (`api::effect::NAMESPACE_AUDIO`), on purpose: a built-in and a
         // plugin belong under one Audio heading, and two keys would draw two.
         FxCategory::Audio => "audio",
+        FxCategory::Compositing => "compositing",
         FxCategory::Controls => "controls",
         FxCategory::Drivers => "drivers",
     }

@@ -494,6 +494,7 @@ fn add_comp(project: &ProjectReference, name: &str) -> CompositionReference {
     use lumit_core::time::{Duration, FrameRate, Rational};
 
     let comp = lumit_core::model::Composition {
+        graph: None,
         master_volume_db: 0.0,
         sound_mix: false,
         groups: Vec::new(),
@@ -3944,8 +3945,9 @@ fn the_viewer_asks_for_a_prefix_on_the_render_it_was_making_anyway() {
     for prefix in [
         None,
         Some(BridgePrefixPoint {
-            layer,
+            layer: Some(layer),
             effect: Some(uuid::Uuid::now_v7()),
+            graph: None,
         }),
     ] {
         assert!(
@@ -4772,6 +4774,18 @@ fn the_export_surface_refuses_calmly_and_never_panics() {
     std::fs::remove_file(&target).ok();
 }
 
+/// The export queue is one per process, so two tests queueing at once shift
+/// each other's absolute row numbers under the move that is being tested.
+/// Every test that queues takes this first.
+static EXPORT_QUEUE_TESTS: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Hold the process-wide export queue for the length of a test.
+fn export_queue_test() -> std::sync::MutexGuard<'static, ()> {
+    EXPORT_QUEUE_TESTS
+        .lock()
+        .unwrap_or_else(|poison| poison.into_inner())
+}
+
 /// The queue holds what it was given and starts nothing on its own.
 ///
 /// Added items wait: *Add to queue* is a list of work, not a start button, and
@@ -4781,6 +4795,7 @@ fn the_export_surface_refuses_calmly_and_never_panics() {
 /// as they were at queue time.
 #[test]
 fn the_queue_holds_its_items_until_it_is_started() {
+    let _queue = export_queue_test();
     use crate::api::export::{
         export_queue_cancel, export_queue_list, export_queue_remove, BridgeExportQueueState,
         BridgeExportSpec,
@@ -9422,6 +9437,9 @@ fn editing_a_mask_keeps_what_the_bridge_cannot_describe() {
 /// and the Linux CI runner ran out of memory under them.
 #[test]
 fn a_closed_project_is_forgotten_and_its_worker_channel_disconnects() {
+    // `close` empties the process-wide solve store, so this waits for the
+    // planar tests rather than emptying one mid-read.
+    let _solves = track_store_test();
     let project = LumitBridgeState::new_project(None).expect("project");
 
     // Stand in for `run_worker`: park the sender in the state, exactly where
@@ -11294,6 +11312,7 @@ fn a_driver_this_build_does_not_know_is_refused() {
 /// their absolute positions.
 #[test]
 fn the_queue_reorders_what_is_still_waiting() {
+    let _queue = export_queue_test();
     use crate::api::export::{
         export_queue_list, export_queue_move, export_queue_remove, BridgeExportSpec,
     };
@@ -12167,6 +12186,24 @@ fn the_project_colour_shelf_reads_writes_and_undoes_over_the_seam() {
     assert_eq!(project.project_swatches().expect("read"), vec![red, sky]);
 }
 
+/// The solve store `lumit_render::track` keeps is one per process, and
+/// `ProjectReference::close` empties the whole of it: this project's solves
+/// and every other's alike. Cargo runs tests in parallel threads within one
+/// process, so a close in one thread wiped the track a planar test had just
+/// published and the read that followed found nothing. Every test that
+/// publishes a solve or closes a project takes this first.
+static TRACK_STORE_TESTS: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Hold the process-wide solve store for the length of a test.
+///
+/// Reachable from the crate's other test modules, since every one of them can
+/// close a project and so empty the store.
+pub(crate) fn track_store_test() -> std::sync::MutexGuard<'static, ()> {
+    TRACK_STORE_TESTS
+        .lock()
+        .unwrap_or_else(|poison| poison.into_inner())
+}
+
 /// A comp with a footage layer wearing a Planar track, a second layer to pin,
 /// and a **written-down** planar track published under the effect's own id.
 ///
@@ -12175,13 +12212,19 @@ fn the_project_colour_shelf_reads_writes_and_undoes_over_the_seam() {
 /// repeating it here would be measuring the tracker again instead of the seam.
 /// The quad slides ten pixels right per frame, so a reading that lands on the
 /// wrong frame cannot pass by accident.
+///
+/// The guard it hands back is the process-wide solve store: hold it for the
+/// length of the test, or another thread's `close` will empty the track this
+/// one just published.
 fn a_planar_tracked_layer() -> (
     crate::api::project::ProjectReference,
     CompositionReference,
     LayerReference,
     LayerReference,
     Uuid,
+    std::sync::MutexGuard<'static, ()>,
 ) {
+    let guard = track_store_test();
     let project = LumitBridgeState::new_project(None).expect("a new project");
     let comp = project
         .new_composition(
@@ -12250,7 +12293,7 @@ fn a_planar_tracked_layer() -> (
             reanchors: 0,
         },
     );
-    (project, comp, shot, target, effect)
+    (project, comp, shot, target, effect, guard)
 }
 
 /// The status row's whole reading, and the gesture the effect exists for.
@@ -12258,7 +12301,7 @@ fn a_planar_tracked_layer() -> (
 fn a_planar_track_reports_its_span_and_writes_a_corner_pin() {
     use crate::api::track::{create_corner_pin, planar_status, BridgeTrackStage};
 
-    let (_project, _comp, shot, target, effect) = a_planar_tracked_layer();
+    let (_project, _comp, shot, target, effect, _solves) = a_planar_tracked_layer();
 
     let status = planar_status(shot, effect);
     assert_eq!(status.stage, BridgeTrackStage::Done);
@@ -12310,7 +12353,7 @@ fn a_planar_track_reports_its_span_and_writes_a_corner_pin() {
 fn a_corner_pin_is_refused_with_nothing_to_pin_or_nowhere_to_put_it() {
     use crate::api::track::create_corner_pin;
 
-    let (_project, _comp, shot, _target, effect) = a_planar_tracked_layer();
+    let (_project, _comp, shot, _target, effect, _solves) = a_planar_tracked_layer();
 
     // Clear the Pin layer row: the command has nowhere to put a pin.
     let mut staged = shot.get_effects().expect("the stack");
@@ -12338,7 +12381,7 @@ fn transform_keys_move_the_target_layer_and_obey_the_transform_row() {
     use crate::api::effect::{BridgeEffectValue, BridgeScalar};
     use crate::api::track::fire_effect_action;
 
-    let (_project, _comp, shot, target, effect) = a_planar_tracked_layer();
+    let (_project, _comp, shot, target, effect, _solves) = a_planar_tracked_layer();
 
     fire_effect_action(shot, effect, "transform_keys".into(), None)
         .expect("a track and a target layer");
@@ -12415,6 +12458,9 @@ fn transform_keys_move_the_target_layer_and_obey_the_transform_row() {
 /// released.
 #[test]
 fn saving_writes_the_file_while_a_reader_holds_the_project() {
+    // `close` empties the process-wide solve store, so this waits for the
+    // planar tests rather than emptying one mid-read.
+    let _solves = track_store_test();
     let (project, ..) = project_with_folder();
     let dir = std::env::temp_dir().join("lumit-save-lock-freedom");
     std::fs::remove_dir_all(&dir).ok();
@@ -12472,6 +12518,9 @@ fn saving_writes_the_file_while_a_reader_holds_the_project() {
 #[test]
 #[cfg(feature = "media")]
 fn a_cached_thumbnail_is_answered_while_a_reader_holds_the_project() {
+    // `close` empties the process-wide solve store, so this waits for the
+    // planar tests rather than emptying one mid-read.
+    let _solves = track_store_test();
     let dir = tempfile::tempdir().expect("temp dir");
     let Some(clip) = lumit_media::index::tests_support::fixture(dir.path()) else {
         return; // no ffmpeg on this machine
@@ -13620,6 +13669,9 @@ fn setting_a_shader_source_is_one_undo_step() {
 /// "no picture yet", not as an error.
 #[test]
 fn a_composition_draws_its_own_thumbnail_without_a_viewer() {
+    // `close` empties the process-wide solve store, so this waits for the
+    // planar tests rather than emptying one mid-read.
+    let _solves = track_store_test();
     let project = LumitBridgeState::new_project(None).expect("a new project");
     let comp = add_comp(&project, "Scene");
     comp.add_solid_layer(None).expect("something to draw");
@@ -13652,6 +13704,9 @@ fn a_composition_draws_its_own_thumbnail_without_a_viewer() {
 /// gained by storing an enlargement of one.
 #[test]
 fn a_thumbnail_is_never_larger_than_the_composition() {
+    // `close` empties the process-wide solve store, so this waits for the
+    // planar tests rather than emptying one mid-read.
+    let _solves = track_store_test();
     let project = LumitBridgeState::new_project(None).expect("a new project");
     let comp = add_comp(&project, "Scene");
     comp.set_settings(BridgeCompSettings {
@@ -13668,4 +13723,1038 @@ fn a_thumbnail_is_never_larger_than_the_composition() {
     assert_eq!((thumb.width, thumb.height), (64, 64));
 
     project.close().expect("closed");
+}
+
+// ---------------------------------------------------------------------------
+// The node graph composition (docs/impl/node-graph-comp.md §4.1).
+
+use crate::api::comp_graph::{
+    BridgeCompEdge, BridgeCompGraph, BridgeCompNodeKind, BridgeCompNodePosition, BridgeCompWiring,
+    BridgeGraphInput, BridgeInputKind, BridgeInputNode, BridgeReadNode,
+};
+
+/// A project with a node graph to wire, and a footage item to Read.
+fn node_graph_to_wire() -> (ProjectReference, CompositionReference, Uuid) {
+    let (project, _folder, filed, _loose) = project_with_folder();
+    let graph = project
+        .new_node_graph(String::new(), None)
+        .expect("a node graph");
+    (project, graph, filed.item_id())
+}
+
+/// The wiring as it stands, which is what every edit below starts from.
+fn wiring_of(graph: &CompositionReference) -> BridgeCompWiring {
+    graph.get_node_graph().expect("the graph").wiring
+}
+
+/// **The name the dialogue shows is the name the making would choose** (§4.4).
+/// Both read the one counter, so the field cannot promise "Node graph 2" and
+/// get "Node graph 3". Comps are counted apart, so making one of each does not
+/// push the other's number along.
+#[test]
+fn the_prefilled_node_graph_name_is_the_one_the_engine_would_pick() {
+    let project = LumitBridgeState::new_project(None).expect("a new project");
+
+    for _ in 0..3 {
+        let promised = project.next_node_graph_name().expect("the next name");
+        let made = project
+            .new_node_graph(String::new(), None)
+            .expect("a node graph");
+        assert_eq!(made.get_settings().expect("settings").name, promised);
+    }
+    assert_eq!(
+        project.next_node_graph_name().expect("the next name"),
+        "Node graph 4"
+    );
+    assert_eq!(
+        project.next_comp_name().expect("the next name"),
+        "Comp 1",
+        "three graphs left the comps' own count where it was"
+    );
+}
+
+/// **The whole graph crosses in one call**, and a fresh one is the Output box
+/// alone with its one socket (§4.1).
+#[test]
+fn a_new_node_graph_crosses_whole_with_its_output() {
+    let (project, graph, _) = node_graph_to_wire();
+
+    let read: BridgeCompGraph = graph.get_node_graph().expect("the graph");
+    assert_eq!(read.nodes.len(), 1, "a fresh graph is the Output alone");
+    let output = &read.nodes[0];
+    assert_eq!(output.kind, BridgeCompNodeKind::Output);
+    assert_eq!(output.label, "Output", "English on the wire");
+    assert!(output.outputs.is_empty(), "the Output hands nothing on");
+    assert_eq!(
+        output
+            .inputs
+            .iter()
+            .map(|p| (p.id.as_str(), p.port_type, p.wired))
+            .collect::<Vec<_>>(),
+        vec![("input", crate::api::graph::BridgePortType::Image, false)],
+        "one picture socket, and nothing is wired to it yet"
+    );
+    assert_eq!(read.wiring.output, output.id);
+    assert!(read.wiring.reads.is_empty());
+    assert!(read.wiring.edges.is_empty());
+    assert_eq!(
+        read.wiring.layout.len(),
+        1,
+        "the seeded Output is placed, so the canvas does not have to guess"
+    );
+    assert!(
+        graph
+            .get_node_graph_instances()
+            .expect("instances")
+            .is_empty(),
+        "and it holds no Fx boxes"
+    );
+
+    // The model carries the one fact every panel reads.
+    let model = graph.get_model().expect("the model");
+    assert!(model.is_node_graph);
+    assert!(model.layers.is_empty(), "a node graph has no layers");
+
+    // It is filed where a comp is filed, under the name the engine chose.
+    let names: Vec<String> = project
+        .get_items()
+        .expect("items")
+        .iter()
+        .filter_map(|i| match i {
+            ItemReference::Folder(f) => Some(f.clone()),
+            _ => None,
+        })
+        .flat_map(|f| f.get_children().expect("children"))
+        .filter_map(|i| i.name().ok())
+        .collect();
+    assert!(
+        names.contains(&"Node graph 1".to_owned()),
+        "filed into the Compositions folder as Node graph 1, not {names:?}"
+    );
+}
+
+/// A box added, wired and placed is **one write and one undo step**, and the
+/// node list comes back in the order it was sent (§3).
+#[test]
+fn a_read_is_added_wired_and_undone_in_one_step() {
+    let (project, graph, item) = node_graph_to_wire();
+
+    let mut wiring = wiring_of(&graph);
+    let read = Uuid::now_v7();
+    wiring.reads.push(BridgeReadNode {
+        id: read,
+        item,
+        custom_name: None,
+    });
+    wiring.edges.push(BridgeCompEdge {
+        from: read,
+        from_port: "output".into(),
+        to: wiring.output,
+        to_port: "input".into(),
+    });
+    wiring.layout.push(BridgeCompNodePosition {
+        node: read,
+        x: -240.0,
+        y: 20.0,
+    });
+    graph
+        .set_node_graph(Vec::new(), wiring)
+        .expect("a picture into the Output");
+
+    let after = graph.get_node_graph().expect("the graph");
+    assert_eq!(
+        after
+            .nodes
+            .iter()
+            .map(|n| (n.id, n.kind))
+            .collect::<Vec<_>>(),
+        vec![
+            (read, BridgeCompNodeKind::Read),
+            (after.wiring.output, BridgeCompNodeKind::Output),
+        ],
+        "the Reads come first and the Output last, as they were sent"
+    );
+    let brought_in = &after.nodes[0];
+    assert_eq!(brought_in.label, "filed.mp4", "a Read draws under its item");
+    assert!(!brought_in.missing);
+    assert!(brought_in.item.is_some(), "and names it for the panel");
+    assert!(
+        brought_in.outputs.iter().all(|p| p.wired),
+        "its picture socket has the wire on it"
+    );
+    assert!(after.nodes[1].inputs.iter().all(|p| p.wired));
+    assert_eq!(after.wiring.layout.len(), 2);
+
+    // One gesture, one undo step: the box, its wire and its place go together.
+    project.undo().expect("undone");
+    let back = graph.get_node_graph().expect("the graph");
+    assert_eq!(back.nodes.len(), 1, "the undo took the box");
+    assert!(back.wiring.edges.is_empty(), "and the wire with it");
+}
+
+/// **A refused graph leaves the document exactly as it was**, and the refusal
+/// is the engine's own calm sentence (§1.4).
+#[test]
+fn a_mistyped_wire_is_refused_and_changes_nothing() {
+    let (_project, graph, _) = node_graph_to_wire();
+
+    let mut wiring = wiring_of(&graph);
+    let before = wiring.clone();
+    let number = Uuid::now_v7();
+    wiring.inputs.push(BridgeInputNode {
+        id: number,
+        input: BridgeGraphInput {
+            id: "amount".into(),
+            label: "Amount".into(),
+            kind: BridgeInputKind::Number,
+            default: [1.0, 0.0, 0.0, 0.0],
+            min: 0.0,
+            max: 10.0,
+            unit: BridgeUnit::Raw,
+            preview: None,
+        },
+    });
+    wiring.edges.push(BridgeCompEdge {
+        from: number,
+        from_port: "value".into(),
+        to: wiring.output,
+        to_port: "input".into(),
+    });
+
+    let refusal = graph
+        .set_node_graph(Vec::new(), wiring)
+        .expect_err("a number is not a picture");
+    assert!(
+        matches!(refusal, BridgeError::OpError(_)),
+        "the engine's own refusal crosses, not a bridge one: {refusal:?}"
+    );
+    assert_eq!(
+        refusal.to_string(),
+        "a wire joins two ports of different types"
+    );
+    assert_eq!(
+        wiring_of(&graph),
+        before,
+        "a refused write leaves the document exactly as it was"
+    );
+}
+
+/// A Merge only lives in a node graph, so a layer's stack refuses it with its
+/// own calm sentence (§1.3), and the menu never offers it either.
+#[test]
+fn a_merge_is_refused_on_a_layer_stack() {
+    let (_project, layer) = project_with_layer();
+
+    let refusal = layer
+        .add_effect("merge".into())
+        .expect_err("a stack has no wires to bring a second picture");
+    assert!(matches!(refusal, BridgeError::NotAStackEffect));
+    assert_eq!(
+        refusal.to_string(),
+        "This effect only lives in a node graph"
+    );
+    assert!(
+        layer.get_effects().expect("stack").is_empty(),
+        "and nothing partial was written"
+    );
+    assert!(
+        layer.add_effect("node_graph".into()).is_err(),
+        "the Node graph effect is added through the door that names a graph"
+    );
+
+    let names = |list: Vec<crate::api::effect::BridgeEffectInfo>| -> Vec<String> {
+        list.into_iter().map(|e| e.name).collect()
+    };
+    let menu = names(list_effects());
+    assert!(!menu.contains(&"merge".to_owned()));
+    assert!(!menu.contains(&"switch".to_owned()));
+    assert!(!menu.contains(&"node_graph".to_owned()));
+    let console = names(crate::api::effect::list_graph_nodes());
+    assert!(
+        console.contains(&"merge".to_owned()) && console.contains(&"wiggle".to_owned()),
+        "the console's catalogue is the Compositing family and the drivers"
+    );
+}
+
+/// Applying a graph to a layer binds the comp and **derives the rows from its
+/// value Inputs** (§1.5), the first picture Input being the layer's own picture
+/// and so no row at all.
+#[test]
+fn a_node_graph_effect_binds_its_comp_and_derives_its_rows() {
+    let (project, graph, _) = node_graph_to_wire();
+    let comp = add_comp(&project, "Scene");
+    let layer = comp.add_solid_layer(None).expect("a solid");
+
+    let mut wiring = wiring_of(&graph);
+    for (id, label, kind) in [
+        ("source", "Source", BridgeInputKind::Picture),
+        ("amount", "Amount", BridgeInputKind::Number),
+    ] {
+        wiring.inputs.push(BridgeInputNode {
+            id: Uuid::now_v7(),
+            input: BridgeGraphInput {
+                id: id.into(),
+                label: label.into(),
+                kind,
+                default: [0.5, 0.0, 0.0, 0.0],
+                min: 0.0,
+                max: 1.0,
+                unit: BridgeUnit::Raw,
+                preview: None,
+            },
+        });
+    }
+    graph
+        .set_node_graph(Vec::new(), wiring)
+        .expect("two Inputs");
+
+    layer.add_node_graph_effect(&graph).expect("applied");
+    let stack = layer.get_effects().expect("stack");
+    assert_eq!(stack.len(), 1);
+    assert_eq!(stack[0].name(), "node_graph");
+    assert_eq!(
+        stack[0].node_graph_comp_id(),
+        Some(graph.id()),
+        "the card's header names the graph it applies"
+    );
+    let rows: Vec<String> = stack[0]
+        .get_info()
+        .derived_params
+        .into_iter()
+        .map(|p| p.id)
+        .collect();
+    assert_eq!(
+        rows,
+        vec!["amount".to_owned()],
+        "the value Inputs are rows; the first picture Input is the layer's own picture"
+    );
+
+    assert!(
+        layer.add_node_graph_effect(&comp).is_err(),
+        "a comp that is not a node graph has no graph to apply"
+    );
+}
+
+/// **Offered, never adopted** (§1.5): a stale Inputs copy on a committed
+/// instance is refreshed on the copies the bridge hands out, and the document
+/// is left alone until the user's next edit.
+#[test]
+fn a_stale_inputs_copy_is_refreshed_on_the_way_out() {
+    let (project, graph, _) = node_graph_to_wire();
+    let comp = add_comp(&project, "Scene");
+    let layer = comp.add_solid_layer(None).expect("a solid");
+    layer.add_node_graph_effect(&graph).expect("applied");
+
+    // A row added inside the graph, after the instance was bound.
+    let mut wiring = wiring_of(&graph);
+    wiring.inputs.push(BridgeInputNode {
+        id: Uuid::now_v7(),
+        input: BridgeGraphInput {
+            id: "spread".into(),
+            label: "Spread".into(),
+            kind: BridgeInputKind::Number,
+            default: [2.0, 0.0, 0.0, 0.0],
+            min: 0.0,
+            max: 8.0,
+            unit: BridgeUnit::Px,
+            preview: None,
+        },
+    });
+    graph.set_node_graph(Vec::new(), wiring).expect("one Input");
+    let landed = comp.document_revision().expect("a revision");
+
+    let rows: Vec<String> = layer.get_effects().expect("stack")[0]
+        .get_info()
+        .derived_params
+        .into_iter()
+        .map(|p| p.id)
+        .collect();
+    assert_eq!(rows, vec!["spread".to_owned()], "the new row is offered");
+    assert_eq!(
+        comp.get_model().expect("model").layers[0].info.effects[0]
+            .derived_params
+            .len(),
+        1,
+        "and the comp read model shows it too"
+    );
+    assert_eq!(
+        comp.document_revision().expect("a revision"),
+        landed,
+        "reading the stack adopts nothing"
+    );
+}
+
+/// A live drag on a box's number **substitutes and never writes**: the request
+/// carries the staged instance and the document does not move (§4.1).
+#[test]
+fn a_graph_drag_previews_without_touching_the_document() {
+    let (_project, graph, _) = node_graph_to_wire();
+
+    let blur = graph
+        .new_graph_instance("blur".into(), None)
+        .expect("a blur box");
+    let mut wiring = wiring_of(&graph);
+    wiring.edges.push(BridgeCompEdge {
+        from: blur.id(),
+        from_port: "output".into(),
+        to: wiring.output,
+        to_port: "input".into(),
+    });
+    graph
+        .set_node_graph(vec![blur], wiring)
+        .expect("a box wired to the Output");
+
+    let revision = graph.document_revision().expect("a revision");
+    let mut staged = graph.get_node_graph_instances().expect("instances");
+    assert_eq!(staged.len(), 1, "the Fx box rides the staged path");
+    staged[0]
+        .set_value(
+            "radius".into(),
+            BridgeEffectValue::Float(BridgeScalar::Static(40.0)),
+        )
+        .expect("staged");
+
+    assert!(
+        matches!(
+            graph.render_frame_with_graph_preview(0, 1.0, staged),
+            Err(BridgeError::InvalidWorkerState) | Ok(())
+        ),
+        "the drag dispatches, or says the worker is not up"
+    );
+    assert_eq!(
+        graph.document_revision().expect("a revision"),
+        revision,
+        "a preview commits nothing"
+    );
+}
+
+/// A Compositing entry and a driver are both fine on **this** canvas: it is the
+/// graph's own door, and they are what a graph is made of.
+#[test]
+fn the_graphs_own_door_takes_what_a_stack_refuses() {
+    let (_project, graph, _) = node_graph_to_wire();
+
+    for name in ["merge", "switch", "wiggle", "blur"] {
+        let instance = graph
+            .new_graph_instance(name.to_owned(), None)
+            .expect("the graph takes it");
+        assert_eq!(instance.name(), name);
+    }
+    assert!(
+        graph
+            .new_graph_instance("no_such_effect".into(), None)
+            .is_err(),
+        "a name the catalogue does not know is refused"
+    );
+    assert!(
+        graph.new_graph_instance("node_graph".into(), None).is_err(),
+        "a Node graph box with no graph bound would draw no sockets"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Round two: the placed graph, the box rows, the graph groups
+// (docs/impl/node-graph-comp.md §5.3, §5.7, §5.8, §5.9, §5.11).
+
+/// One Input declaration, so the tests below say only what they are about.
+fn an_input(id: &str, kind: BridgeInputKind) -> BridgeInputNode {
+    BridgeInputNode {
+        id: Uuid::now_v7(),
+        input: BridgeGraphInput {
+            id: id.to_owned(),
+            label: id.to_owned(),
+            kind,
+            default: [0.5, 0.0, 0.0, 0.0],
+            min: 0.0,
+            max: 1.0,
+            unit: BridgeUnit::Raw,
+            preview: None,
+        },
+    }
+}
+
+/// Give `graph` one value Input per name, keeping the ones it has.
+fn a_graph_with_inputs(graph: &CompositionReference, ids: &[&str]) {
+    let mut wiring = wiring_of(graph);
+    for id in ids {
+        wiring.inputs.push(an_input(id, BridgeInputKind::Number));
+    }
+    graph
+        .set_node_graph(Vec::new(), wiring)
+        .expect("the Inputs");
+}
+
+/// **A placed graph carries its Inputs** (§5.3): placing one binds them, the
+/// layer info draws them, and a row added inside the graph is offered on the
+/// next read without the document moving.
+#[test]
+fn a_placed_graph_carries_its_inputs_on_the_layer_info() {
+    let (project, graph, item) = node_graph_to_wire();
+    let comp = add_comp(&project, "Scene");
+    a_graph_with_inputs(&graph, &["amount"]);
+
+    let layer = comp.add_precomp_layer(&graph, None).expect("placed");
+    let inputs = layer
+        .get_info()
+        .expect("the layer info")
+        .graph_inputs
+        .expect("a placed graph carries its Inputs");
+    assert_eq!(inputs.name, "node_graph");
+    assert_eq!(
+        inputs.node_graph_comp,
+        Some(graph.id()),
+        "bound to the graph the layer places"
+    );
+    assert_eq!(
+        inputs
+            .derived_params
+            .iter()
+            .map(|p| p.id.clone())
+            .collect::<Vec<_>>(),
+        vec!["amount".to_owned()],
+        "the graph's value Inputs are the rows"
+    );
+
+    // A row added inside the graph is offered, and adopted by nothing.
+    a_graph_with_inputs(&graph, &["spread"]);
+    let landed = comp.document_revision().expect("a revision");
+    let rows: Vec<String> = layer
+        .get_info()
+        .expect("the layer info")
+        .graph_inputs
+        .expect("Inputs")
+        .derived_params
+        .into_iter()
+        .map(|p| p.id)
+        .collect();
+    assert_eq!(rows, vec!["amount".to_owned(), "spread".to_owned()]);
+    assert_eq!(
+        comp.document_revision().expect("a revision"),
+        landed,
+        "reading the Inputs adopts nothing"
+    );
+
+    // Every other layer has none, and is offered none.
+    let footage = FootageReference::new(project.id, item);
+    comp.add_footage_layer(&footage, false, None)
+        .expect("placed");
+    let plate = comp.get_layers().expect("layers")[0];
+    assert!(plate.get_info().expect("info").graph_inputs.is_none());
+    assert!(plate.get_graph_inputs().expect("asked").is_none());
+}
+
+/// **Offered, never adopted** (§5.3): a layer that places a graph but carries
+/// no Inputs, one from a file written before they existed or an import, is
+/// handed a fresh instance, and the document only gains it when a row is
+/// committed.
+#[test]
+fn a_layer_with_no_inputs_is_offered_a_fresh_one_and_adopts_it_on_commit() {
+    let (project, graph, _) = node_graph_to_wire();
+    let comp = add_comp(&project, "Scene");
+    a_graph_with_inputs(&graph, &["amount"]);
+    let layer = comp.add_precomp_layer(&graph, None).expect("placed");
+
+    // Strip them, which is how a layer from an older file arrives.
+    let state = project.state().expect("state");
+    state
+        .write()
+        .expect("write")
+        .store
+        .commit(Op::SetLayerGraphInputs {
+            comp: comp.id,
+            layer: layer.layer_id,
+            inputs: None,
+        })
+        .expect("stripped");
+    assert!(layer.get_info().expect("info").graph_inputs.is_none());
+
+    let revision = comp.document_revision().expect("a revision");
+    let mut offered = layer
+        .get_graph_inputs()
+        .expect("asked")
+        .expect("a placed graph is offered its Inputs");
+    assert_eq!(offered.name(), "node_graph");
+    assert_eq!(offered.node_graph_comp_id(), Some(graph.id()));
+    assert_eq!(
+        comp.document_revision().expect("a revision"),
+        revision,
+        "being offered them writes nothing"
+    );
+
+    offered
+        .set_value(
+            "amount".into(),
+            BridgeEffectValue::Float(BridgeScalar::Static(0.75)),
+        )
+        .expect("the derived row takes a value");
+    layer.set_effects(vec![offered], None).expect("committed");
+
+    let landed = layer
+        .get_info()
+        .expect("info")
+        .graph_inputs
+        .expect("the Inputs are the document's now");
+    assert!(
+        landed.values.iter().any(|v| {
+            v.id == "amount"
+                && matches!(
+                    v.value,
+                    BridgeEffectValue::Float(BridgeScalar::Static(x))
+                        if (x - 0.75).abs() < 1e-9
+                )
+        }),
+        "the edited row landed, got {:?}",
+        landed.values
+    );
+    assert_eq!(
+        state
+            .read()
+            .expect("read")
+            .store
+            .history()
+            .last()
+            .expect("a step")
+            .name,
+        "Edit node graph inputs",
+        "one step, named for what it did"
+    );
+
+    project.undo().expect("undone");
+    assert!(
+        layer.get_info().expect("info").graph_inputs.is_none(),
+        "one undo step takes the whole adoption back"
+    );
+}
+
+/// **The one rule** both the commit lookup and the preview request ask (§5.3):
+/// a stored instance by id, a fresh one by what it is bound to, and nothing
+/// else either way.
+#[test]
+fn the_graph_inputs_rule_names_a_stored_instance_and_a_fresh_one() {
+    use crate::api::layer::is_graph_inputs;
+
+    let (project, graph, item) = node_graph_to_wire();
+    let comp = add_comp(&project, "Scene");
+    a_graph_with_inputs(&graph, &["amount"]);
+    let placed = comp.add_precomp_layer(&graph, None).expect("placed");
+    let footage = FootageReference::new(project.id, item);
+    comp.add_footage_layer(&footage, false, None)
+        .expect("placed");
+    let plate = comp.get_layers().expect("layers")[0];
+
+    let state = project.state().expect("state");
+    let snapshot = || state.read().expect("read").store.snapshot();
+    let layer_of = |doc: &lumit_core::Document, reference: &LayerReference| {
+        doc.comp(comp.id)
+            .expect("the comp")
+            .layers
+            .iter()
+            .find(|l| l.id == reference.layer_id)
+            .expect("the layer")
+            .clone()
+    };
+    let doc = snapshot();
+    let stored = placed
+        .get_graph_inputs()
+        .expect("asked")
+        .expect("Inputs")
+        .get_effects();
+    let stranger = lumit_core::fx::instantiate("blur").expect("a blur");
+
+    assert!(is_graph_inputs(&doc, &layer_of(&doc, &placed), &stored));
+    assert!(!is_graph_inputs(&doc, &layer_of(&doc, &placed), &stranger));
+    assert!(
+        !is_graph_inputs(&doc, &layer_of(&doc, &plate), &stored),
+        "a footage layer places no graph, so nothing is its Inputs"
+    );
+
+    // A layer with none recognises a fresh instance bound to its own graph,
+    // and only that one.
+    state
+        .write()
+        .expect("write")
+        .store
+        .commit(Op::SetLayerGraphInputs {
+            comp: comp.id,
+            layer: placed.layer_id,
+            inputs: None,
+        })
+        .expect("stripped");
+    let doc = snapshot();
+    let fresh = placed
+        .get_graph_inputs()
+        .expect("asked")
+        .expect("offered")
+        .get_effects();
+    assert!(is_graph_inputs(&doc, &layer_of(&doc, &placed), &fresh));
+    assert!(!is_graph_inputs(&doc, &layer_of(&doc, &placed), &stranger));
+}
+
+/// A drag on an Inputs row **substitutes and never writes**: the staged
+/// instance rides the request and the document does not move (§5.3).
+#[test]
+fn an_inputs_drag_previews_without_touching_the_document() {
+    let (project, graph, _) = node_graph_to_wire();
+    let comp = add_comp(&project, "Scene");
+    a_graph_with_inputs(&graph, &["amount"]);
+    let layer = comp.add_precomp_layer(&graph, None).expect("placed");
+
+    let revision = comp.document_revision().expect("a revision");
+    let mut staged = layer
+        .get_graph_inputs()
+        .expect("asked")
+        .expect("a placed graph's Inputs");
+    staged
+        .set_value(
+            "amount".into(),
+            BridgeEffectValue::Float(BridgeScalar::Static(0.25)),
+        )
+        .expect("staged");
+
+    assert!(
+        matches!(
+            comp.render_frame_with_preview(0, 1.0, layer, vec![staged]),
+            Err(BridgeError::InvalidWorkerState) | Ok(())
+        ),
+        "the drag dispatches, or says the worker is not up"
+    );
+    assert_eq!(
+        comp.document_revision().expect("a revision"),
+        revision,
+        "a preview commits nothing"
+    );
+}
+
+/// **A graph's boxes ride the comp model** (§5.7): the Timeline draws a row per
+/// box from the held answer, and asks the engine nothing.
+#[test]
+fn the_comp_model_carries_a_graphs_boxes() {
+    let (project, graph, _) = node_graph_to_wire();
+    assert!(
+        graph.get_model().expect("the model").graph_boxes.is_empty(),
+        "a graph with no Fx box has no rows"
+    );
+    assert!(
+        add_comp(&project, "Scene")
+            .get_model()
+            .expect("the model")
+            .graph_boxes
+            .is_empty(),
+        "and a layer comp never has any"
+    );
+
+    let blur = graph
+        .new_graph_instance("blur".into(), None)
+        .expect("a blur box");
+    let blur_id = blur.id();
+    let mut wiring = wiring_of(&graph);
+    wiring.edges.push(BridgeCompEdge {
+        from: blur_id,
+        from_port: "output".into(),
+        to: wiring.output,
+        to_port: "input".into(),
+    });
+    graph
+        .set_node_graph(vec![blur], wiring)
+        .expect("a box wired to the Output");
+
+    let boxes = graph.get_model().expect("the model").graph_boxes;
+    assert_eq!(
+        boxes
+            .iter()
+            .map(|b| (b.id, b.name.clone()))
+            .collect::<Vec<_>>(),
+        vec![(blur_id, "blur".to_owned())],
+        "the Fx boxes in document order"
+    );
+    assert!(
+        boxes[0].values.iter().any(|v| v.id == "radius"),
+        "with every parameter's value, as a layer's effects have"
+    );
+
+    let glow = graph
+        .new_graph_instance("glow".into(), None)
+        .expect("a glow box");
+    let mut wiring = wiring_of(&graph);
+    wiring.edges.clear();
+    wiring.edges.push(BridgeCompEdge {
+        from: glow.id(),
+        from_port: "output".into(),
+        to: wiring.output,
+        to_port: "input".into(),
+    });
+    let instances = graph.get_node_graph_instances().expect("instances");
+    graph
+        .set_node_graph(
+            instances.into_iter().chain(std::iter::once(glow)).collect(),
+            wiring,
+        )
+        .expect("a second box");
+    assert_eq!(
+        graph.get_model().expect("the model").graph_boxes.len(),
+        2,
+        "the model follows the graph"
+    );
+}
+
+/// A graph group **saves the boxes and the wires between them**, and inserting
+/// it mints fresh ids wired the same way, in one undo step (§5.8).
+#[test]
+fn a_graph_group_saves_its_boxes_and_inserts_them_fresh() {
+    let (project, graph, _) = node_graph_to_wire();
+
+    let blur = graph
+        .new_graph_instance("blur".into(), None)
+        .expect("a blur box");
+    let glow = graph
+        .new_graph_instance("glow".into(), None)
+        .expect("a glow box");
+    let (blur_id, glow_id) = (blur.id(), glow.id());
+    let mut wiring = wiring_of(&graph);
+    wiring.edges.push(BridgeCompEdge {
+        from: blur_id,
+        from_port: "output".into(),
+        to: glow_id,
+        to_port: "input".into(),
+    });
+    wiring.edges.push(BridgeCompEdge {
+        from: glow_id,
+        from_port: "output".into(),
+        to: wiring.output,
+        to_port: "input".into(),
+    });
+    wiring.layout.push(BridgeCompNodePosition {
+        node: blur_id,
+        x: -400.0,
+        y: 0.0,
+    });
+    wiring.layout.push(BridgeCompNodePosition {
+        node: glow_id,
+        x: -200.0,
+        y: 0.0,
+    });
+    graph
+        .set_node_graph(vec![blur, glow], wiring)
+        .expect("two boxes wired into the Output");
+
+    let text = graph
+        .save_graph_group("Soft".into(), 2, vec![blur_id, glow_id])
+        .expect("saved");
+    assert!(
+        !text.contains("Output"),
+        "the Output is never saved, or the insert would refuse itself"
+    );
+
+    let before = graph.get_node_graph().expect("the graph");
+    graph
+        .insert_graph_group(text.clone(), 40.0, 60.0)
+        .expect("inserted");
+    let after = graph.get_node_graph().expect("the graph");
+
+    assert_eq!(after.nodes.len(), before.nodes.len() + 2, "two fresh boxes");
+    let fresh: Vec<Uuid> = after
+        .nodes
+        .iter()
+        .map(|n| n.id)
+        .filter(|id| !before.nodes.iter().any(|n| n.id == *id))
+        .collect();
+    assert_eq!(fresh.len(), 2);
+    assert!(
+        after.wiring.edges.iter().any(|e| e.from == fresh[0]
+            && e.to == fresh[1]
+            && e.from_port == "output"
+            && e.to_port == "input"),
+        "the wire between them came with them, re-pointed at the fresh ids"
+    );
+    assert!(
+        after
+            .wiring
+            .edges
+            .iter()
+            .any(|e| e.to == after.wiring.output),
+        "and the graph's own Output wire is untouched"
+    );
+    assert_eq!(
+        after.wiring.groups.last().expect("the group").name,
+        "Soft",
+        "the set lands named"
+    );
+
+    // One commit, so one undo step however many boxes it carried.
+    project.undo().expect("undone");
+    assert_eq!(
+        graph.get_node_graph().expect("the graph").nodes.len(),
+        before.nodes.len()
+    );
+
+    // Inserted twice, no two boxes share an id.
+    graph
+        .insert_graph_group(text.clone(), 0.0, 0.0)
+        .expect("once");
+    graph.insert_graph_group(text, 300.0, 0.0).expect("twice");
+    let ids: Vec<Uuid> = graph
+        .get_node_graph()
+        .expect("the graph")
+        .nodes
+        .iter()
+        .map(|n| n.id)
+        .collect();
+    let mut unique = ids.clone();
+    unique.sort_unstable();
+    unique.dedup();
+    assert_eq!(unique.len(), ids.len(), "every id is minted at insert");
+}
+
+/// A group file the engine did not write is refused, each in its own way: an
+/// unknown text is not one of ours, and a text carrying an Output is a graph
+/// the engine refuses **whole**, leaving the document as it was (§5.8).
+#[test]
+fn a_graph_group_that_is_not_one_is_refused() {
+    let (_project, graph, _) = node_graph_to_wire();
+
+    assert!(matches!(
+        graph.insert_graph_group("not a group at all".into(), 0.0, 0.0),
+        Err(BridgeError::InvalidEffect)
+    ));
+
+    let before = graph.get_node_graph().expect("the graph");
+    let with_an_output = format!(
+        r#"{{"format":1,"name":"Bad","colour":0,"nodes":[{{"Output":{{"id":"{}"}}}}],"edges":[],"layout":[[0.0,0.0]]}}"#,
+        Uuid::now_v7()
+    );
+    assert!(
+        matches!(
+            graph.insert_graph_group(with_an_output, 0.0, 0.0),
+            Err(BridgeError::OpError(_))
+        ),
+        "a second Output is a graph the validator refuses"
+    );
+    assert_eq!(
+        graph.get_node_graph().expect("the graph").nodes.len(),
+        before.nodes.len(),
+        "and a refused insert leaves the document exactly as it was"
+    );
+}
+
+/// The library lists the two kinds of group **apart** (§5.8): a graph group
+/// wears its own extension, and the probe knows a `nodes` array for one of
+/// ours.
+#[test]
+fn the_library_lists_graph_groups_apart_from_node_groups() {
+    let (_project, graph, _) = node_graph_to_wire();
+    let blur = graph
+        .new_graph_instance("blur".into(), None)
+        .expect("a blur box");
+    let blur_id = blur.id();
+    let wiring = wiring_of(&graph);
+    graph.set_node_graph(vec![blur], wiring).expect("one box");
+    let text = graph
+        .save_graph_group("Soft".into(), 0, vec![blur_id])
+        .expect("saved");
+
+    let dir = tempfile::tempdir().expect("tempdir");
+    std::fs::write(dir.path().join("soft.lumngrp"), &text).expect("write");
+    std::fs::write(dir.path().join("rig.lumgrp"), &text).expect("write");
+
+    let graphs =
+        crate::api::effect::presets_in(dir.path(), lumit_core::preset::COMP_GROUP_EXTENSION);
+    assert_eq!(
+        graphs.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(),
+        vec!["Soft"],
+        "one listing per extension, so neither offers the other's file"
+    );
+    assert!(graphs[0].path.ends_with("lumngrp"));
+}
+
+/// **A forced collapse is reported** (§5.9), so the Timeline's cell can draw
+/// itself dimmed: a placed node graph always forces, and a layer with the
+/// switch off is not forced at all.
+#[test]
+fn a_placed_graph_reports_its_forced_collapse() {
+    use crate::api::layer::BridgeLayerSwitch;
+
+    let (project, graph, item) = node_graph_to_wire();
+    let comp = add_comp(&project, "Scene");
+    let placed = comp.add_precomp_layer(&graph, None).expect("placed");
+    assert!(
+        !placed.get_info().expect("info").collapse_forced,
+        "the switch is off, so nothing is being forced"
+    );
+
+    placed
+        .set_switch(BridgeLayerSwitch::Collapse, true)
+        .expect("collapse on");
+    assert!(
+        placed.get_info().expect("info").collapse_forced,
+        "a graph draw needs its own intermediate, so collapse can never take"
+    );
+
+    let footage = FootageReference::new(project.id, item);
+    comp.add_footage_layer(&footage, false, None)
+        .expect("placed");
+    let plate = comp.get_layers().expect("layers")[0];
+    assert!(
+        !plate.get_info().expect("info").collapse_forced,
+        "a footage layer has no collapse to force"
+    );
+}
+
+/// A picture Input's **preview item** crosses both ways, so a graph read out
+/// and written back keeps the one it has (§5.11).
+#[test]
+fn a_picture_inputs_preview_item_round_trips() {
+    let (_project, graph, item) = node_graph_to_wire();
+
+    let mut wiring = wiring_of(&graph);
+    let mut input = an_input("source", BridgeInputKind::Picture);
+    input.input.preview = Some(item);
+    wiring.inputs.push(input);
+    graph
+        .set_node_graph(Vec::new(), wiring)
+        .expect("a picture Input with a stand-in");
+
+    let read = graph.get_node_graph().expect("the graph");
+    assert_eq!(read.wiring.inputs[0].input.preview, Some(item));
+
+    // And a write-back keeps it, which is what stops the panel dropping one.
+    graph
+        .set_node_graph(Vec::new(), read.wiring)
+        .expect("written back");
+    assert_eq!(
+        graph.get_node_graph().expect("the graph").wiring.inputs[0]
+            .input
+            .preview,
+        Some(item)
+    );
+}
+
+/// The two catalogues stay on their own sides of the fence (§5.1): the node
+/// graph console offers Time offset and refuses Layer points, and the layer's
+/// Add-effect menu leaves the whole Compositing family out.
+#[test]
+fn the_graph_console_offers_time_offset_and_never_layer_points() {
+    let names = |list: Vec<crate::api::effect::BridgeEffectInfo>| -> Vec<String> {
+        list.into_iter().map(|e| e.name).collect()
+    };
+    let console = names(crate::api::effect::list_graph_nodes());
+    assert!(
+        console.contains(&"time_offset".to_owned()),
+        "Time offset is Compositing, and a graph is where it lives"
+    );
+    assert!(
+        !console.contains(&"layer_points".to_owned()),
+        "a graph has no layers to tap, so the box could only hand out nothing"
+    );
+
+    let menu = names(list_effects());
+    for compositing in ["time_offset", "merge", "switch", "node_graph"] {
+        assert!(
+            !menu.contains(&compositing.to_owned()),
+            "{compositing} has no place on a layer stack"
+        );
+    }
+    assert!(
+        menu.contains(&"blur".to_owned()),
+        "and the rest of the catalogue is where it was"
+    );
 }

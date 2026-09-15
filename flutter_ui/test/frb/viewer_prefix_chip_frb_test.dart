@@ -284,6 +284,60 @@ void main() {
           reason: 'the Source keeps nothing of the stack');
     });
 
+    /// **A node graph's box is the third surface** (docs/impl/node-graph-comp.md
+    /// §4.5): picking one that makes a picture offers the same chip, named by
+    /// the box. The Output is the picture the Viewer already shows, so it
+    /// offers none.
+    testWidgets('names a picked box in a node graph, and not the Output',
+        (tester) async {
+      final p = freshProject();
+      final graph = p.state.project!.newNodeGraph(name: 'Wires');
+      final made = graph.newGraphInstance(name: 'blur');
+      // Read before committing: the handle goes to the engine with the write.
+      final box = made.id();
+      graph.setNodeGraph(
+        instances: [...graph.getNodeGraphInstances(), made],
+        wiring: graph.getNodeGraph().wiring,
+      );
+      p.uiState.setSelectedComp(graph);
+      p.uiState.model.refresh();
+
+      const size = Size(900, 600);
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(hostPanel(
+        state: p.state,
+        uiState: p.uiState,
+        size: size,
+        child: Stack(children: [
+          const GraphPanelFrb(),
+          ViewerPrefixChip(uiState: p.uiState),
+        ]),
+      ));
+      await tester.pump();
+
+      await tester.tapAt(tester.getCenter(
+          find.byKey(ValueKey<String>('graph-node-node:$box'))));
+      await tester.pump();
+
+      expect(chip(), findsOneWidget);
+      expect(find.text('at ${effectLabelOf('blur')}'), findsOneWidget);
+
+      await tester.tap(chip());
+      await tester.pump();
+      expect(p.uiState.viewerPrefix?.graph?.node, box,
+          reason: 'the point names the comp and the box, not a layer');
+
+      // The Output makes the picture the Viewer is already showing.
+      final out = graph.getNodeGraph().wiring.output;
+      await tester.tapAt(tester
+          .getCenter(find.byKey(ValueKey<String>('graph-node-node:$out'))));
+      await tester.pump();
+      expect(chip(), findsNothing);
+      expect(p.uiState.viewerPrefix, isNull);
+    });
+
     /// **N4 — each box keeps the answer it was left at.** The chip used to be
     /// one flag for the whole application, so anything that could not name a
     /// point turned it off for good; coming back to the box you were looking at

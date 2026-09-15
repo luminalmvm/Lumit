@@ -36,6 +36,7 @@ import 'package:lumit_flutter/src/rust/api/beats.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
+import 'package:uuid/uuid.dart' show UuidValue;
 
 import '../icons/icon_style.dart';
 import '../icons/lumit_icon.dart' as glyph;
@@ -606,6 +607,11 @@ class LumitMenuBarFrb extends StatelessWidget {
             run: () => newCompositionFrb(context, app),
           ),
           PaletteCommand(
+            label: l10n.newNodeGraph,
+            category: l10n.menuComposition,
+            run: () => app.newNodeGraph(context),
+          ),
+          PaletteCommand(
             label: l10n.menuUndo,
             category: l10n.menuEdit,
             shortcut: 'Ctrl+Z',
@@ -718,6 +724,41 @@ class LumitMenuBarFrb extends StatelessWidget {
       app.notifyDocumentChanged();
     }
 
+    // A node graph applies to a layer as the Node graph effect
+    // (docs/impl/node-graph-comp.md §4.4), so every one in the project is a row
+    // here. Which comps are graphs is asked once as the console opens, off the
+    // cached comp list, because opening it is a gesture.
+    final graphIds = <UuidValue>{};
+    final graphs = <(CompositionReference, String)>[];
+    for (final (each, name) in app.comps()) {
+      try {
+        if (!each.getModel().isNodeGraph) continue;
+      } catch (_) {
+        // The comp has gone since the list was cached; it simply is not
+        // offered.
+        continue;
+      }
+      graphIds.add(each.internalid);
+      // Never the fronted comp: the selected layers live in it, and a comp
+      // applied to a layer of its own is the loop the engine refuses.
+      if (comp != null && each.internalid == comp.internalid) continue;
+      graphs.add((each, name));
+    }
+
+    void applyGraph(CompositionReference graph) {
+      final layers = ui.selectedLayers.value;
+      if (layers.isEmpty) return;
+      for (final target in layers) {
+        try {
+          target.addNodeGraphEffect(graph: graph);
+        } catch (_) {
+          // Refused for this layer, whose own comp is the graph. The rest of
+          // the batch stands.
+        }
+      }
+      app.notifyDocumentChanged();
+    }
+
     await showFxConsoleFrb(
       context: context,
       // The popover opens on the mouse: the shell records where the pointer
@@ -745,13 +786,24 @@ class LumitMenuBarFrb extends StatelessWidget {
               group: l10n.fxConsolePresets,
               run: () => applyPreset(preset),
             ),
-          // Then the comps.
-          for (final (each, name) in app.comps())
+          // The node graphs, which apply as effects rather than front.
+          for (final (each, name) in graphs)
             FxConsoleEntry(
               label: name,
-              kind: FxConsoleKind.composition,
-              run: () => ui.setSelectedComp(each),
+              kind: FxConsoleKind.effect,
+              group: l10n.fxConsoleNodeGraphs,
+              run: () => applyGraph(each),
             ),
+          // Then the comps. A node graph is offered above instead, applied
+          // rather than fronted, for the reason the canvas's console offers
+          // one as a nested box rather than a Read: one word, one answer.
+          for (final (each, name) in app.comps())
+            if (!graphIds.contains(each.internalid))
+              FxConsoleEntry(
+                label: name,
+                kind: FxConsoleKind.composition,
+                run: () => ui.setSelectedComp(each),
+              ),
         ],
       ),
     );
@@ -961,6 +1013,12 @@ List<MenuSection> lumitMenus(
             MenuEntry(l10n.newComposition,
                 project == null ? null : () => newCompositionFrb(context, app),
                 action: 'comp.new'),
+            // Beside it, because the two make the same kind of thing by the
+            // same dialogue and differ only in what is inside
+            // (docs/impl/node-graph-comp.md §4.4). No chord: the keymap has
+            // none to teach.
+            MenuEntry(l10n.newNodeGraph,
+                project == null ? null : () => app.newNodeGraph(context)),
             MenuEntry.divider(),
             MenuEntry(l10n.compositionSettingsEllipsis,
                 comp == null ? null : () => _compSettings(context, app),

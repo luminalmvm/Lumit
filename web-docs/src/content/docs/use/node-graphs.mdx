@@ -1,0 +1,188 @@
+---
+title: Node graph compositions
+description: A composition whose picture is made by boxes and wires instead of a layer stack.
+sidebar:
+  order: 9.6
+---
+
+import Shot from "../../../components/Shot.astro";
+
+A **node graph** is a composition whose picture is made by boxes and wires instead of a
+layer stack. It has a size, a frame rate and a duration like any composition, and sits in
+the Project panel like one.
+
+<Shot file="node-graph-comp.png" caption="A node graph composition: one Read forked through two effects, merged, and wired to the Output." eager/>
+
+## Make one
+
+Choose **Composition ▸ New node graph**, or pick it from the command palette or a Project
+panel row's menu. The composition settings dialogue opens with the name filled in.
+
+A composition is a layer stack or a node graph, never both. A node graph refuses every
+layer command, and a composition made with layers never becomes one.
+
+Open a node graph as you open any composition and it draws in the
+[Node graph](/use/nodes/) panel rather than the Timeline.
+
+## The boxes
+
+| Box | What it does |
+| --- | --- |
+| **Read** | Brings a project item in: footage, a solid or a composition. It carries the item's own name. |
+| **Input** | Stands for a value or a picture handed in from outside the graph. Picture, Number, Angle or Colour. |
+| **Effect** | Any effect or driver from the catalogue, with the parameter rows it has on a layer. |
+| **Merge** | Lays picture A over picture B with a blend mode and an opacity. |
+| **Switch** | Shows one of its pictures, chosen by an **Index**. |
+| **Node graph** | Another node graph, nested. Its Inputs are the box's sockets. |
+| **Time offset** | Shows its input at another time. One row, **Offset** in seconds. |
+| **Output** | The one box whose picture the composition shows. Every node graph has exactly one, and `Delete` leaves it alone. |
+
+A Read box places its item centred at its natural size, as a fresh layer would.
+
+Double-click a Read of a composition, or a Node graph box, to open what it names.
+
+## What an Input reads
+
+| The graph is | A picture Input reads | A value Input reads |
+| --- | --- | --- |
+| viewed on its own, or placed as a Precomp layer | its preview item, or transparent | its default |
+| applied as the **Node graph** effect | the first: the layer's picture at that point in the stack. The others: the effect's own layer rows | the effect's own rows |
+| nested as a **Node graph** box | the first: the box's input socket. The others: their own sockets | their own sockets, or the row's value where nothing is wired |
+
+A picture Input takes a **preview item** on its form in the Node panel: footage or a
+composition standing in for the picture while the graph is viewed on its own or placed as
+a layer. It is not read when the graph is applied or nested.
+
+## Wires
+
+| Gesture | What it does |
+| --- | --- |
+| Drag from a socket | Pulls out a wire; drop it on a socket that takes the same kind of value. |
+| Pick a wire up by its far end | Moves it to another socket. |
+| Drop a wire on empty canvas | Opens the console, filtered to what that wire can join. |
+| Drop a box on a wire | Splices it in at that point. |
+| Drag a box's body | Moves it. A drag that starts inside the selection moves the whole selection. |
+| `Delete` | Removes the picked boxes. |
+
+Two switches sit in the panel's toolbar. **Auto-wire** joins a dropped box to the wire in
+hand as it lands. **Heal** reconnects the neighbours of a deleted box.
+
+Each box carries a tick and a twirl. The tick bypasses the box, which then hands on the
+picture it was given; the twirl opens every socket.
+
+A wire's colour is the type of value it carries:
+
+- **image · matte**
+- **number**
+- **colour**
+- **shape · points**
+- **audio**
+
+An image wire is the image colour whether it feeds an input, a background or a matte.
+
+Each input socket takes one wire; an output feeds any number. An unwired image socket reads
+transparent. A wire dropped on a socket of another kind is refused, and so is a wire that
+would make a loop.
+
+A **Matte** socket takes an image wire as well as a matte wire. A row that picks a layer on
+a layer's stack is an image socket here: Light wrap's **Background**, Texturize's
+**Texture** and Set matte's source all arrive on a wire.
+
+The points family has a socket of its own, and a wire from it feeds another box's points
+input.
+
+## The console
+
+`Ctrl+Space` over the canvas opens the [effects console](/use/fx-console/). Over a node
+graph it lists, in order: the project's items as Read boxes, the four Input kinds, the
+effects, Merge, Switch and Time offset under **Compositing**, and the drivers.
+
+Dragging footage or a composition from the Project panel onto the canvas makes a Read box
+where it lands.
+
+## Place a graph as a layer
+
+Drag a node graph into another composition and it lands as a **Precomp layer**.
+
+- Its Inputs are a section of their own in [Effect controls](/panels/effect-controls/),
+  headed by the graph's name, with an **Open** action. The Timeline folds the same rows
+  under the layer.
+- **[Retime](/use/retime/)** on the layer retimes the graph, all of it together.
+- **Collapse** is forced off, and the switch draws dimmed.
+
+## Apply a graph to a layer
+
+The **Node graph** effect applies a graph to a layer. Add it from the layer's console,
+where every node graph in the project is listed under **Node graphs**.
+
+Its card is headed by the graph's name and carries an **Open** action, then the graph's
+Input rows, then **Mix** and the **Matte** row. The layer's picture at that point in the
+stack is the graph's first picture Input, and the graph's Output is what the effect hands
+on.
+
+A **Node graph** box does the same inside another graph. A **Read** box of a node graph
+brings its finished picture in instead, with nothing handed to it.
+
+## Time inside a graph
+
+When a box reads another time, what it reads is the picture its input makes there.
+[Echo](/effects/temporal/echo/) reads its input box at earlier frames,
+[Motion blur](/effects/temporal/motion-blur/) and
+[Datamosh](/effects/distortion/datamosh/) measure it against itself a frame away,
+[Posterize time](/effects/temporal/posterize-time/) holds it at the grid time,
+[accumulation motion blur](/effects/temporal/accumulation-motion-blur/) averages it over
+the shutter, and a **Time offset** box shows it at another time. On a layer those same
+effects read the source frames.
+
+A shift always applies, so a Time offset ahead of an Echo moves every echo with it. A
+window never nests: an Echo inside another Echo's neighbour holds a still.
+
+## Seeing the picture at a box
+
+Select one box and a chip appears over the Viewer's picture saying *at* its name. Turn it
+on and the Viewer renders the composition with the Output wired to that box. A driver, a
+value Input and the Output itself offer no chip.
+
+## Keyframes
+
+On a node graph the [Timeline](/panels/timeline/) draws the ruler and one row per effect
+box, with a lane per parameter once the box is twirled open. A box has no span, so there is
+no bar. The keys drag, ease and delete as a layer's do, and the graph editor plots them.
+
+Turn a row's stopwatch on in the Node panel to start keyframing it.
+
+## Saved groups
+
+**Save group** writes the picked boxes, the wires among them and their layout to a
+`.lumngrp` file. The Output is never saved. Saved groups have a block of their own in the
+console, and inserting one drops its boxes where the pointer is. A Read whose item the
+project lacks arrives wearing the missing mark.
+
+## Sound
+
+A Read of footage contributes sound like a footage layer, and a Read of a composition like
+a Precomp layer. Only the Reads the Output reaches are heard, and the composition's own
+master volume applies. Placed as a Precomp layer, a graph's sound carries with the layer's
+Volume and Pan.
+
+A retimed layer is silent, footage and Precomp alike.
+
+## Expressions
+
+An [expression](/use/expressions/) inside a graph reads a value Input with
+`input("Name")`: the value handed in from outside, or the Input's own default where
+nothing hands one in.
+
+:::note[What a node graph does not do]
+[Layer points](/effects/drivers/layer-points/) is not offered inside a graph; the wire is
+the tap. A Read box has no in and out points. The composition's motion blur smears a placed
+graph's transform and not the picture inside it.
+:::
+
+## Related
+
+- [The node graph](/use/nodes/)
+- [Compositions](/use/compositions/)
+- [Effects](/use/effects/)
+- [Retiming and speed](/use/retime/)
+- [Working with the node graph](/tutorials/node-graph/)

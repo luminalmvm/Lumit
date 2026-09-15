@@ -165,11 +165,11 @@ Add elements to existing footage.
 | [Drop shadow](/effects/stylise/drop-shadow/) | Casts a copy of the layer's own shape behind it. |
 | [Roughen edges](/effects/stylise/roughen-edges/) | Chews the outline of a shape with fractal noise. |
 | [Median](/effects/stylise/median/) | Replaces every pixel with the median value of its neighbours. |
-| [Mood lighting](/effects/stylise/mood-lighting/) | Lays pools of coloured light over the picture and lifts the contrast under them. |
 | [Mosaic](/effects/stylise/mosaic/) | Cuts the frame into rectangles and paints each a single colour. |
 | [Find edges](/effects/stylise/find-edges/) | Draws the picture as a line drawing of its edges. |
 | [Emboss](/effects/stylise/emboss/) | Treats the picture as a surface with height, and lights from one side. |
 | [Texturize](/effects/stylise/texturize/) | Use another layer as relief. |
+| [Mood lighting](/effects/stylise/mood-lighting/) | Lays pools of coloured light over the picture and lifts the contrast under them. |
 | [Pixel sort](/effects/stylise/pixel-sort/) | Puts runs of pixels in order along their own row or column. |
 
 {/* END GENERATED */}
@@ -222,6 +222,23 @@ Useful tools for specific tasks.
 | [Planar track](/effects/utility/planar-track/) | Follows a surface, or one or two points, and moves another layer with it. |
 | [Roto brush](/effects/utility/roto-brush/) | Cuts a subject out of a shot from a few strokes, carried frame to frame. |
 | [Custom shader](/effects/utility/custom-shader/) | An effect you write yourself, as WGSL text or a graph of boxes. |
+| [Node graph](/effects/utility/node-graph/) | Applies a node graph composition to the layer, with the graph's Inputs as its rows. |
+
+{/* END GENERATED */}
+
+
+### Compositing
+
+The boxes only a node graph composition can hold: they join, pick between, or shift
+pictures that arrive on wires. See [node graph compositions](/use/node-graphs/).
+
+{/* GENERATED:list:compositing - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Effect | What it does |
+| --- | --- |
+| [Merge](/effects/compositing/merge/) | Lays one picture over another with a blend mode and an opacity. |
+| [Switch](/effects/compositing/switch/) | Shows one of its input pictures, picked by Index. |
+| [Time offset](/effects/compositing/time-offset/) | Shows its input at another time. |
 
 {/* END GENERATED */}
 
@@ -249,7 +266,8 @@ A driver makes a number, a colour or a stream of points instead of a picture. Ru
 from its socket into another effect's parameter and that parameter follows the wire
 instead of its own keyframes; bypass the driver and the keyframes come back.
 
-See [The node graph](/use/nodes/) for how a driver is added and wired.
+A driver is wired on a layer's own graph, see [The node graph](/use/nodes/), or inside a
+[node graph composition](/use/node-graphs/).
 
 {/* GENERATED:list:drivers - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 

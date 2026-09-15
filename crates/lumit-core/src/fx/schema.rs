@@ -680,6 +680,16 @@ pub enum FxCategory {
     /// Lumit wrote itself. Every effect here declares no matte and
     /// `is_image_op() -> false`.
     Audio,
+    /// The **node graph's own**: Merge and Switch (docs/impl/
+    /// node-graph-comp.md §1.3). Each joins or picks between pictures a graph's
+    /// wires bring it, which is a question a layer stack cannot ask - a stack
+    /// joins pictures by stacking layers.
+    ///
+    /// Its members are `is_image_op() == false`, exactly as the Controls family
+    /// is, so a resolve of a layer stack never makes an op of one. The category
+    /// is the filter key: the Add-effect menu leaves it out, as it once left
+    /// the drivers out, and the node graph's console asks for it beside them.
+    Compositing,
     /// The effects that hold a **value** rather than change a picture:
     /// Slider control, Angle control, Checkbox control, Colour control, Point
     /// control. Each is one row an expression reads and the timeline keyframes,
@@ -713,6 +723,7 @@ impl FxCategory {
             FxCategory::Transition => "Transition",
             FxCategory::Utility => "Utility",
             FxCategory::Audio => "Audio",
+            FxCategory::Compositing => "Compositing",
             FxCategory::Controls => "Controls",
             FxCategory::Drivers => "Drivers",
         }
@@ -736,7 +747,7 @@ impl FxCategory {
     }
 
     /// Every category, in menu order.
-    pub const ALL: [FxCategory; 11] = [
+    pub const ALL: [FxCategory; 12] = [
         FxCategory::BlurSharpen,
         FxCategory::Colour,
         FxCategory::Distortion,
@@ -748,6 +759,10 @@ impl FxCategory {
         // After the picture's own families, because a menu opened to add a
         // blur is opened to add a blur, and the sound is a different errand.
         FxCategory::Audio,
+        // The node graph's own two, before the Controls family: they are added
+        // from the graph's console rather than the Add-effect menu, and the
+        // menu never offers them at all.
+        FxCategory::Compositing,
         // Last, as it is in the Add-effect menu: the menu groups by first
         // appearance in the catalogue, and the Controls family is appended at
         // the end of it.

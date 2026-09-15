@@ -333,6 +333,12 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   /// answer it - and it can only change when the document does.
   final Map<String, String> _names = {};
 
+  /// Which comps are node graphs, for the row's glyph and the card's type word
+  /// (docs/impl/node-graph-comp.md §4.4). Cached beside the names for the same
+  /// reason: it is a document fact, so only a document change can alter it, and
+  /// the rows are rebuilt on every hover.
+  final Map<String, bool> _nodeGraphs = {};
+
   /// A rebuild is already booked for the end of this frame.
   ///
   /// The three probes this panel fires - the poster frame, the container's
@@ -633,6 +639,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
           audio: audio,
           label: label,
           inherited: inherited,
+          nodeGraph: _nodeGraphs[id] ??= _isNodeGraph(item),
           inUse: _used[id] ??= _isUsed(item),
           proxy: _proxies.putIfAbsent(
               id,
@@ -801,6 +808,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
       t,
       item: item,
       name: item == null ? '' : (_names[id!] ??= _nameOf(item)),
+      nodeGraph: item != null && (_nodeGraphs[id!] ??= _isNodeGraph(item)),
       missing: item is ItemReference_Footage && (_missing[id] ?? false),
       thumb: scrubbed ?? (id == null ? null : _thumbs[id]),
       info: info,
@@ -1042,6 +1050,19 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     }
   }
 
+  /// Whether this item is a node graph composition. False for every other
+  /// kind, and for a comp that has gone from under the panel.
+  bool _isNodeGraph(ItemReference item) {
+    if (item case ItemReference_Composition(:final field0)) {
+      try {
+        return field0.getModel().isNodeGraph;
+      } catch (_) {
+        return false;
+      }
+    }
+    return false;
+  }
+
   /// What a row menu's command acts on: the whole selection when the row is
   /// part of it, and that row alone when it is not. The menu is about what is
   /// picked, and a right-click on an unpicked row is about that row.
@@ -1162,6 +1183,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
       _used.clear();
       _labels.clear();
       _names.clear();
+      _nodeGraphs.clear();
       _proxies.clear();
       _useProxies = null;
       _dropThumbs();

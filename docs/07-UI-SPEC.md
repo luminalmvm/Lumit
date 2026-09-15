@@ -71,7 +71,8 @@ the pending layout SHOULD be previewed as an outline before release.
 
 A **workspace** is a named, saveable arrangement of panels (glossary §7).
 
-- Lumit MUST ship four workspace presets: **Edit**, **Effects**, **Colour**, **Audio**
+- Lumit MUST ship six workspace presets: **Edit**, **Effects**, **Colour**, **Audio**,
+  **Retiming**, **Nodes**
   (§1.6). Preset workspaces MUST be restorable to their factory layout at any time
   (*Reset workspace*), individually, without touching user workspaces.
 - Layout changes MUST persist automatically to the active workspace across sessions.
@@ -182,7 +183,8 @@ keep their taller bands, which is the point of those two.
   shares 0.76/0.24 across, the graph column 0.68 Graph to 0.32 Timeline, the right column
   0.3169 Viewer to 0.6831 Node — the parameter rows being what this workspace is for.
   These supersede the drawing's own proportions. It carries no Project panel, which is the drawing's own
-  inventory — wiring a layer is work you arrive at with the layer already chosen.
+  inventory — wiring a layer is work you arrive at with the layer already chosen, or with a
+  node graph composition open.
 
 ### 1.7 The toolbar
 
@@ -621,7 +623,9 @@ opening a second viewport. Clicking it again goes back.
 - **Both selection surfaces offer it, because there is one selection.** An effect picked
   in the Effect controls stack and a box picked on the node graph are the same pick,
   so the chip is the same chip. Picking a *driver* offers nothing: a driver
-  makes a number, not a picture.
+  makes a number, not a picture. In a node graph composition the chip stops the picture at
+  the picked box instead, the comp rendered as though its Output were wired there
+  ([impl/node-graph-comp.md](impl/node-graph-comp.md) §4.5).
 - **It is the Viewer, not a preview of one.** The cut picture arrives down the ordinary
   frame transport at the Viewer's own quality and magnification, and every way of looking
   — the exposure, the channel, the transparency board, the scopes reading it — applies to
@@ -1135,7 +1139,7 @@ rather than doing nothing. The view an item lands in becomes active.
 
 ## 3. Project panel
 
-The library of assets: footage items, audio items, comps, folders.
+The library of assets: footage items, audio items, comps, node graphs, folders.
 
 ### 3.1 Structure
 
@@ -1217,6 +1221,11 @@ selecting a whole folder does) adds nothing further: the item that is already th
 answer. A numbered still with no numbered neighbours stays a single still, and a folder of
 numbered `.mp4`s stays a folder of clips. **Shipped**, apart from the rate control: a
 sequence plays at 25 until §3.2's dialogue exists to change it.
+
+**A node graph is a composition row** ([impl/node-graph-comp.md](impl/node-graph-comp.md)),
+drawn with the nodes glyph and the type word "node graph". **New node graph** is offered on
+the Composition menu, in the command palette and on this panel's context menu beside New
+composition, and the bottom bar keeps its three words.
 
 ### 3.2 Interpretation dialogue
 
@@ -2882,7 +2891,9 @@ raised, and the scrim under it, are gone by the owner's ruling: the console is *
 popover**, and it is the graph's one add surface too. Opened with the Graph panel focused — or
 summoned by a wire let go over empty canvas — the same popover wears the canvas's own
 list: effects (which join the stack, and so the chain), drivers, saved groups; inside a
-Custom shader's inner graph, the shader vocabulary, Parameter box included. The graph's
+Custom shader's inner graph, the shader vocabulary, Parameter box included; over a node
+graph composition, the project's items as Read nodes, then Input, then effects, then Merge
+and Switch under Compositing, then drivers. The graph's
 own `Tab` door is gone: one surface, one key.
 
 **Where it opens.** The popover MUST open **on the pointer** — its search row under the
@@ -2986,6 +2997,9 @@ small image over each choice, remain the destination (polish tracked in TODO).
 - **Comp with no layers**: the Timeline shows one line of hint text (drag footage here, or
   press the new-Sequence-layer / new-Solid shortcuts). Hints disappear at first content
   and never return unprompted.
+- **Node graph composition**: the Timeline shows the ruler and one line saying the
+  composition is a node graph and that its boxes are in the Node graph panel. It is not the
+  empty-comp hint and does not clear: a node graph never gains a layer.
 - **Tooltips policy**: every icon control has a tooltip with its name and current shortcut,
   on a ~500 ms hover delay. **A tooltip is a name, not an explanation: one or two words,
   never more** (tightening this rule's original "under five words"). *Add keyframe*,

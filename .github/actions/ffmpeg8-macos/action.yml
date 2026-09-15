@@ -53,6 +53,30 @@ inputs:
       not need this; the load check below catches that on its own.
     required: false
     default: "1"
+  formula-sha256:
+    description: >
+      The SHA-256 of the ffmpeg@8.1.2 formula this action expects `brew extract`
+      to produce.
+
+      In plain terms: the step below lifts a Ruby file out of homebrew-core's
+      git history and then RUNS it, with --build-from-source, on a runner that
+      goes on to build and sign Lumit. That is build-time code execution from a
+      source pinned by version and by nothing else. `brew extract` reads the
+      formula out of whatever homebrew-core is on the machine, and the formula
+      carries the FFmpeg source URL and its own checksum, so the file decides
+      what gets downloaded, compiled and linked into the release.
+
+      Pinning its digest makes that reproducible and tamper-evident. Leave this
+      empty and the build still runs, prints the digest it saw, and warns; set
+      it and a formula that is not byte-for-byte the reviewed one fails the job
+      instead of being built.
+
+      To pin it: run the workflow once, read the digest out of the "Extracted
+      formula" step's log, paste it here, and read the formula on that same run
+      before you do. Re-pinning is needed only if homebrew-core's 8.1.2 formula
+      is ever amended, which is exactly the event this is here to notice.
+    required: false
+    default: ""
 
 outputs:
   prefix:
@@ -184,6 +208,29 @@ runs:
           exit 1
         fi
         echo "Extracted $formula"
+
+        # What is about to be executed, by digest.
+        #
+        # `brew install --build-from-source` runs this Ruby. The formula names
+        # the FFmpeg source URL and its checksum, so it decides what is
+        # downloaded, compiled and linked into a release — on the same runner
+        # that signs it. Version-pinning alone does not cover that: `brew
+        # extract` reads whatever homebrew-core has, and a formula amended in
+        # place keeps its version.
+        digest="$(shasum -a 256 "$formula" | cut -d' ' -f1)"
+        echo "Formula SHA-256: $digest"
+        expected="${{ inputs.formula-sha256 }}"
+        if [ -n "$expected" ]; then
+          if [ "$digest" != "$expected" ]; then
+            echo "::error::The extracted ffmpeg@8.1.2 formula is $digest, not the pinned $expected."
+            echo "::error::homebrew-core's 8.1.2 formula has changed since it was reviewed. Read the diff before re-pinning — this file is executed on the release runner."
+            exit 1
+          fi
+          echo "Matches the pinned digest."
+        else
+          echo "::warning::No formula digest is pinned, so this build executed Ruby out of homebrew-core's history without checking it. Pin it: set the ffmpeg8-macos action's formula-sha256 input to $digest (and read the formula on this run first)."
+        fi
+
         brew install --build-from-source --formula "$tap/ffmpeg@8.1.2"
 
     # Only a keg built in this run is saved, under this run's key, so the next

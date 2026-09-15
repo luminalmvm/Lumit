@@ -77,9 +77,42 @@ pub struct BridgeEffectInfo {
 /// it on the layer's graph rather than its stack — `LayerReference::add_effect`
 /// decides that, so no caller has to. [`list_drivers`] still answers the
 /// canvas's narrower question: which entries may be *dropped on the graph*.
+/// **The Compositing family is left out**, as the drivers once were: a Merge
+/// and a Switch join pictures a node graph's wires bring them, and a layer
+/// stack has neither the wires nor the second picture, so offering one here
+/// would be offering a control that could never do anything. **The Node graph
+/// effect is left out too**, for the opposite reason: it goes on a stack, but
+/// only ever bound to a comp, so it is added through the door that names one
+/// (`LayerReference::add_node_graph_effect`) rather than by a name with no
+/// graph behind it.
 #[frb(sync)]
 pub fn list_effects() -> Vec<BridgeEffectInfo> {
-    catalogue(|_| true)
+    catalogue(|category| category != lumit_core::fx::FxCategory::Compositing)
+        .into_iter()
+        .filter(|entry| entry.name != lumit_core::comp_graph::NODE_GRAPH)
+        .collect()
+}
+
+/// The node graph console's catalogue: the Drivers and the Compositing
+/// families, in schema order.
+///
+/// The two vocabularies that only a graph can hold, answered in one call
+/// because the console lists them together. The panel adds the Read boxes, the
+/// Input boxes and the nested graphs itself, from the project's own items:
+/// those name documents rather than catalogue entries, so no listing here
+/// could carry them.
+///
+/// **Layer points is left out** (docs/impl/node-graph-comp.md §5.1), through
+/// the engine's own [`lumit_core::comp_graph::offered_in_graph`]: it taps
+/// another layer's first producer, and a graph has no layers, so the box could
+/// only ever hand out the empty stream. Inside a graph the wire is the tap.
+#[frb(sync)]
+pub fn list_graph_nodes() -> Vec<BridgeEffectInfo> {
+    use lumit_core::fx::FxCategory;
+    catalogue(|category| matches!(category, FxCategory::Drivers | FxCategory::Compositing))
+        .into_iter()
+        .filter(|entry| lumit_core::comp_graph::offered_in_graph(&entry.name))
+        .collect()
 }
 
 /// **All nine layer styles** (docs/impl/layer-styles.md §1), in §2's
@@ -463,6 +496,20 @@ pub fn list_node_groups() -> Vec<BridgePresetInfo> {
         .unwrap_or_default()
 }
 
+/// Every `.lumngrp` **graph group** in the same library folder, sorted by
+/// name, which is what the node graph canvas's console offers
+/// (docs/impl/node-graph-comp.md §5.8).
+///
+/// Its own extension rather than the driver groups', so neither listing can
+/// offer the other's file: the two canvases hold different kinds of box, and a
+/// group of one means nothing to the other.
+#[frb(sync)]
+pub fn list_graph_groups() -> Vec<BridgePresetInfo> {
+    lumit_project::presets_dir()
+        .map(|dir| presets_in(&dir, lumit_core::preset::COMP_GROUP_EXTENSION))
+        .unwrap_or_default()
+}
+
 /// Where the preset library lives, created on first ask — the save dialogue's
 /// default folder, so a saved preset appears in the listing without the user
 /// navigating anywhere. `None` only when the platform has no home directory.
@@ -626,6 +673,7 @@ pub fn sample_scalar_with_context(
                         .unwrap_or(Rational::ZERO)
                         .to_f64(),
                     current_depth: 0,
+                    inputs: None,
                 })),
             )
         }
@@ -677,6 +725,7 @@ pub fn sample_scalar_range_with_context(
                     layer: Some(layer.layer_id),
                     comp_time: 0.0, // this time will be overwritten internally,
                     current_depth: 0,
+                    inputs: None,
                 }),
                 start,
                 end,
@@ -1008,6 +1057,25 @@ pub(crate) fn bridge_unit(unit: lumit_core::fx::Unit) -> BridgeUnit {
         // See [`BridgeUnit`]: neither can reach a shipped parameter, and
         // "no rider" is what a panel should draw if one ever did.
         U::Raw | U::Unset | U::PctDiag => BridgeUnit::Raw,
+    }
+}
+
+/// The engine unit a [`BridgeUnit`] names, for the one thing that crosses back
+/// the other way: a node graph's Input box, whose unit the Node panel's form
+/// writes ([`crate::api::comp_graph::BridgeGraphInput`]).
+///
+/// Exact over the four an Input may take, `Raw`, `Px`, `Degrees` and
+/// `Percent`, so a declaration read out and written back is the one it was.
+#[frb(ignore)]
+pub(crate) fn core_unit(unit: BridgeUnit) -> lumit_core::fx::Unit {
+    use lumit_core::fx::Unit as U;
+    match unit {
+        BridgeUnit::Raw => U::Raw,
+        BridgeUnit::Percent => U::Percent,
+        BridgeUnit::Px => U::Px,
+        BridgeUnit::Degrees => U::Degrees,
+        BridgeUnit::Seconds => U::Seconds,
+        BridgeUnit::Frames => U::Frames,
     }
 }
 
@@ -1771,6 +1839,14 @@ pub struct BridgeEffectInstanceInfo {
     /// every built-in. Here for the same reason as the rest: the panel draws
     /// on every rebuild and may not call.
     pub hidden_rows: Vec<String>,
+    /// The node graph this instance applies (docs/impl/node-graph-comp.md
+    /// §4.4), and `None` for every other effect.
+    ///
+    /// Beside [`Self::derived_params`] because it is the same class of fact: the
+    /// card draws the graph's name in its heading on every rebuild, and asking
+    /// the instance for its binding per card is the call in a build the budget
+    /// test forbids.
+    pub node_graph_comp: Option<Uuid>,
 }
 
 /// Every value [`BridgeEffectInstanceInfo::badge_reason`] can take.
@@ -2131,6 +2207,25 @@ fn derived_params_of(effect: &EffectInstance) -> Vec<BridgeParamInfo> {
         .unwrap_or_default()
 }
 
+/// `effect` with a **Node graph** instance's Inputs copy brought up to the
+/// graph it names (docs/impl/node-graph-comp.md §1.5).
+///
+/// Offered, never adopted: the refresh reaches only the copies the bridge hands
+/// out, so a row added inside the graph appears the next time the stack is read
+/// and lands in the document with the user's next edit. Borrowed rather than
+/// cloned for every other effect, this being on the comp read model's path.
+#[frb(ignore)]
+pub(crate) fn with_live_inputs<'a>(
+    effect: &'a EffectInstance,
+    doc: &lumit_core::Document,
+) -> std::borrow::Cow<'a, EffectInstance> {
+    let mut refreshed = std::borrow::Cow::Borrowed(effect);
+    if lumit_core::fx::effects::node_graph::comp_of(effect).is_some() {
+        lumit_core::fx::effects::node_graph::refresh(refreshed.to_mut(), doc);
+    }
+    refreshed
+}
+
 /// Build one instance's [`BridgeEffectInstanceInfo`] — the shared body of
 /// [`BridgeEffectInstance::get_info`] and the comp read model.
 #[frb(ignore)]
@@ -2170,6 +2265,7 @@ pub(crate) fn read_instance_info(
         badge_detail,
         derived_params: derived_params_of(effect),
         hidden_rows: hidden_rows_of(effect),
+        node_graph_comp: lumit_core::fx::effects::node_graph::comp_of(effect),
     }
 }
 
@@ -2468,6 +2564,17 @@ impl BridgeEffectInstance {
             block.insert("source".to_owned(), json!(text));
         }
         block.remove("graph");
+    }
+
+    /// The node graph composition this instance applies, for a **Node graph**
+    /// effect, and `None` for every other effect and for one nobody has bound.
+    ///
+    /// What the Effect controls card draws in its header and what its Open
+    /// action fronts. An id rather than a reference, because the card already
+    /// holds the project it is looking at.
+    #[frb(sync)]
+    pub fn node_graph_comp_id(&self) -> Option<Uuid> {
+        lumit_core::fx::effects::node_graph::comp_of(&self.effect)
     }
 
     #[frb(ignore)]

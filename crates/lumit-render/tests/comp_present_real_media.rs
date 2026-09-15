@@ -65,6 +65,7 @@ fn doc_with_clip(path: &str, w: u32, h: u32, fps: (u32, u32)) -> (std::sync::Arc
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,
+        graph_inputs: None,
         blend: Default::default(),
         masks: Vec::new(),
         paint: Vec::new(),
@@ -75,6 +76,7 @@ fn doc_with_clip(path: &str, w: u32, h: u32, fps: (u32, u32)) -> (std::sync::Arc
         extra: serde_json::Map::new(),
     };
     doc.items.push(ProjectItem::Composition(Composition {
+        graph: None,
         master_volume_db: 0.0,
         sound_mix: false,
         groups: Vec::new(),

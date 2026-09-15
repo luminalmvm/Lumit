@@ -95,6 +95,7 @@ fn project(layer_id: Uuid, effects: Vec<EffectInstance>) -> (Arc<Document>, Uuid
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,
+        graph_inputs: None,
         blend: Default::default(),
         masks: Vec::new(),
         paint: Vec::new(),
@@ -105,6 +106,7 @@ fn project(layer_id: Uuid, effects: Vec<EffectInstance>) -> (Arc<Document>, Uuid
         extra: serde_json::Map::new(),
     };
     let comp = Composition {
+        graph: None,
         master_volume_db: 0.0,
         sound_mix: false,
         groups: Vec::new(),

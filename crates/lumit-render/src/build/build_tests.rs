@@ -42,6 +42,7 @@ fn footage_geometry_uses_native_size_not_decoded_size() {
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,
+        graph_inputs: None,
         blend: Default::default(),
         masks: Vec::new(),
         paint: Vec::new(),
@@ -52,6 +53,7 @@ fn footage_geometry_uses_native_size_not_decoded_size() {
         extra: serde_json::Map::new(),
     };
     let comp = Composition {
+        graph: None,
         master_volume_db: 0.0,
         sound_mix: false,
         groups: Vec::new(),
@@ -143,6 +145,7 @@ fn collapsed_precomp_splices_inner_draws_with_parent_placement() {
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,
+        graph_inputs: None,
         blend: Default::default(),
         masks: Vec::new(),
         paint: Vec::new(),
@@ -153,6 +156,7 @@ fn collapsed_precomp_splices_inner_draws_with_parent_placement() {
         extra: serde_json::Map::new(),
     };
     let nested = Composition {
+        graph: None,
         master_volume_db: 0.0,
         sound_mix: false,
         groups: Vec::new(),
@@ -180,6 +184,7 @@ fn collapsed_precomp_splices_inner_draws_with_parent_placement() {
     pre_layer.transform.position_x = lumit_core::anim::Property::fixed(100.0);
     pre_layer.transform.scale_x = lumit_core::anim::Property::fixed(200.0);
     let parent = Composition {
+        graph: None,
         master_volume_db: 0.0,
         sound_mix: false,
         groups: Vec::new(),
@@ -323,6 +328,7 @@ fn patch_layer_prop_overrides_the_previewed_value() {
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,
+        graph_inputs: None,
         blend: Default::default(),
         masks: Vec::new(),
         paint: Vec::new(),
@@ -333,6 +339,7 @@ fn patch_layer_prop_overrides_the_previewed_value() {
         extra: serde_json::Map::new(),
     };
     let comp = Composition {
+        graph: None,
         master_volume_db: 0.0,
         sound_mix: false,
         groups: Vec::new(),
@@ -412,6 +419,7 @@ fn a_live_adjustment_layer_emits_a_staging_draw() {
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,
+        graph_inputs: None,
         blend: Default::default(),
         masks: Vec::new(),
         paint: Vec::new(),
@@ -441,6 +449,7 @@ fn a_live_adjustment_layer_emits_a_staging_draw() {
         },
     ));
     let comp = Composition {
+        graph: None,
         master_volume_db: 0.0,
         sound_mix: false,
         groups: Vec::new(),
@@ -531,6 +540,7 @@ fn the_adjustment_flag_builds_the_same_draw_as_the_adjustment_kind() {
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,
+        graph_inputs: None,
         blend: Default::default(),
         masks: Vec::new(),
         paint: Vec::new(),
@@ -569,6 +579,7 @@ fn the_adjustment_flag_builds_the_same_draw_as_the_adjustment_kind() {
     by_flag.adjustment = true;
 
     let comp_of = |top: Layer| Composition {
+        graph: None,
         master_volume_db: 0.0,
         sound_mix: false,
         groups: Vec::new(),
@@ -658,6 +669,7 @@ fn a_flare_matte_pointed_at_its_own_layer_reads_this_layers_input() {
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,
+        graph_inputs: None,
         blend: Default::default(),
         masks: Vec::new(),
         paint: Vec::new(),
@@ -695,6 +707,7 @@ fn a_flare_matte_pointed_at_its_own_layer_reads_this_layers_input() {
     };
 
     let comp_of = |layers: Vec<Layer>| Composition {
+        graph: None,
         master_volume_db: 0.0,
         sound_mix: false,
         groups: Vec::new(),
@@ -808,6 +821,7 @@ fn a_paint_stroke_reaches_the_layers_pixels() {
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,
+        graph_inputs: None,
         blend: Default::default(),
         masks: Vec::new(),
         paint: Vec::new(),
@@ -823,6 +837,7 @@ fn a_paint_stroke_reaches_the_layers_pixels() {
     layer.paint.push(stroke);
 
     let painted = Composition {
+        graph: None,
         master_volume_db: 0.0,
         sound_mix: false,
         groups: Vec::new(),
@@ -909,6 +924,7 @@ fn a_puppet_pin_carries_the_layers_pixels() {
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,
+        graph_inputs: None,
         blend: Default::default(),
         masks: Vec::new(),
         paint: Vec::new(),
@@ -944,6 +960,7 @@ fn a_puppet_pin_carries_the_layers_pixels() {
     layer.puppet = Some(block);
 
     let comp = Composition {
+        graph: None,
         master_volume_db: 0.0,
         sound_mix: false,
         groups: Vec::new(),
@@ -1064,6 +1081,7 @@ fn the_matte_list_is_one_slot_per_resolved_op() {
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,
+        graph_inputs: None,
         blend: Default::default(),
         masks: Vec::new(),
         paint: Vec::new(),
@@ -1095,6 +1113,7 @@ fn the_matte_list_is_one_slot_per_resolved_op() {
     ];
 
     let comp = Composition {
+        graph: None,
         master_volume_db: 0.0,
         sound_mix: false,
         groups: Vec::new(),
@@ -1201,6 +1220,7 @@ fn the_mask_path_list_is_one_to_one_with_the_ops_that_declare_a_path() {
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,
+        graph_inputs: None,
         blend: Default::default(),
         // Two masks, so "First mask" has something to be first of and a
         // second shape exists to be picked wrongly.
@@ -1230,6 +1250,7 @@ fn the_mask_path_list_is_one_to_one_with_the_ops_that_declare_a_path() {
     }
 
     let comp = Composition {
+        graph: None,
         master_volume_db: 0.0,
         sound_mix: false,
         groups: Vec::new(),
@@ -1325,6 +1346,7 @@ fn a_text_layer_on_a_path_draws_into_the_paths_own_box() {
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,
+        graph_inputs: None,
         blend: Default::default(),
         // The mask is geometry only, so it gates nothing and only lends its
         // curve — which is exactly the mask somebody draws to run type along.
@@ -1341,6 +1363,7 @@ fn a_text_layer_on_a_path_draws_into_the_paths_own_box() {
     };
     let sizes = |path: Option<Uuid>| {
         let comp = Composition {
+            graph: None,
             master_volume_db: 0.0,
             sound_mix: false,
             groups: Vec::new(),
@@ -1424,6 +1447,7 @@ fn a_matte_from_tagged_footage_carries_its_own_colour_space() {
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,
+        graph_inputs: None,
         blend: Default::default(),
         masks: Vec::new(),
         paint: Vec::new(),
@@ -1443,6 +1467,7 @@ fn a_matte_from_tagged_footage_carries_its_own_colour_space() {
     });
 
     let comp = Composition {
+        graph: None,
         master_volume_db: 0.0,
         sound_mix: false,
         groups: Vec::new(),
@@ -1551,6 +1576,7 @@ fn grouped_scene(
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,
+        graph_inputs: None,
         blend: Default::default(),
         masks: Vec::new(),
         paint: Vec::new(),
@@ -1572,6 +1598,7 @@ fn grouped_scene(
         effects,
     };
     let comp = Composition {
+        graph: None,
         master_volume_db: 0.0,
         sound_mix: false,
         groups: vec![group],
@@ -1755,6 +1782,7 @@ fn float_layer_comp(
     let item = Uuid::now_v7();
     let mut layer = Layer {
         graph: Default::default(),
+        graph_inputs: None,
         markers: Vec::new(),
         id: Uuid::now_v7(),
         name: "plate".into(),
@@ -1784,6 +1812,7 @@ fn float_layer_comp(
     };
     layer.name = "plate".into();
     let comp = Composition {
+        graph: None,
         master_volume_db: 0.0,
         sound_mix: false,
         groups: Vec::new(),
@@ -1824,98 +1853,308 @@ fn float_layer_comp(
     (comp, layer.id, lp)
 }
 
-/// The colour-table list (docs/impl/effect-registry.md §2.5a): one slot per
-/// `lut` or OCIO op, in stack order, on the predicate `run_ops` counts by; an
-/// OCIO effect with nothing to do fills its slot with `None`.
+// A Read box is placed like a fresh layer: the picture's own centre on the
+// comp's centre. The document holds no size for footage, so the anchor has to
+// come from the pixels that arrived, or a clip smaller than the comp would
+// land off centre.
 #[test]
-fn colour_tables_fill_one_slot_per_table_effect_in_stack_order() {
-    use crate::colour::{Edge, OcioRequest, TableRequest};
-    use lumit_core::model::{EffectValue, FileParam};
-    let set = |e: &mut lumit_core::model::EffectInstance, id: &str, v: EffectValue| {
-        if let Some(p) = e.params.iter_mut().find(|p| p.id == id) {
-            p.value = v;
-        }
+fn a_footage_read_box_is_centred_by_its_own_size() {
+    use lumit_core::comp_graph::{CompGraph, GraphEdge, GraphNode};
+    use lumit_core::model::{FootageItem, MediaRef, ProjectItem};
+
+    let item = Uuid::now_v7();
+    let mut doc = Document::new();
+    doc.items.push(ProjectItem::Footage(FootageItem {
+        sequence: None,
+        id: item,
+        name: "clip".into(),
+        media: MediaRef {
+            relative_path: "clip.mp4".into(),
+            absolute_path: "/clip.mp4".into(),
+            fingerprint: None,
+            extra: serde_json::Map::new(),
+        },
+        extra: serde_json::Map::new(),
+        colour_space: None,
+    }));
+    let read = Uuid::now_v7();
+    let out = Uuid::now_v7();
+    let comp = Composition {
+        graph: Some(CompGraph {
+            nodes: vec![
+                GraphNode::Read {
+                    id: read,
+                    item,
+                    custom_name: None,
+                },
+                GraphNode::Output { id: out },
+            ],
+            edges: vec![GraphEdge {
+                from: read,
+                from_port: "output".into(),
+                to: out,
+                to_port: "input".into(),
+            }],
+            layout: Vec::new(),
+            exposed: Vec::new(),
+            groups: Vec::new(),
+        }),
+        master_volume_db: 0.0,
+        sound_mix: false,
+        groups: Vec::new(),
+        beat_grid: None,
+        id: Uuid::now_v7(),
+        name: "Graph".into(),
+        width: 64,
+        height: 64,
+        frame_rate: FrameRate::new(60, 1).unwrap(),
+        duration: Duration(Rational::new(10, 1).unwrap()),
+        background: LinearColour::BLACK,
+        work_area: None,
+        layers: Vec::new(),
+        markers: Vec::new(),
+        motion_blur: Default::default(),
+        extra: serde_json::Map::new(),
     };
-    let text = |s: &str| EffectValue::Text(s.into());
+    // A 20 by 10 clip, decoded at full size, keyed by the box's id.
+    let lp = CompLayerPixels {
+        layer: read,
+        width: 20,
+        height: 10,
+        rgba: vec![0u8; 20 * 10 * 4].into(),
+        format: lumit_media::PixelFormat::Srgb8,
+        natural_w: 20,
+        natural_h: 10,
+        temporal: Vec::new(),
+        flow_fields: Vec::new(),
+        shutter: Vec::new(),
+        source_key: 0,
+        source_frame: 0,
+    };
+    let mut map: HashMap<Uuid, &CompLayerPixels> = HashMap::new();
+    map.insert(read, &lp);
+    let mut visited = vec![comp.id];
+    let draws = build_comp_draws(&std::sync::Arc::new(doc), &comp, 0.0, &map, &mut visited);
 
-    let sat = lumit_core::fx::instantiate("saturation").unwrap();
-    let mut display = lumit_core::fx::instantiate("ocio_display").unwrap();
-    set(&mut display, "display", text("sRGB"));
-    set(&mut display, "view", text("Standard"));
-    set(&mut display, "inverse", EffectValue::Bool(true));
-    let unset_display = lumit_core::fx::instantiate("ocio_display").unwrap();
-    let mut lut = lumit_core::fx::instantiate("lut").unwrap();
-    set(
-        &mut lut,
-        "file",
-        EffectValue::File(FileParam::single("grade.cube")),
-    );
-    let mut off = lumit_core::fx::instantiate("ocio_look").unwrap();
-    set(&mut off, "look", text("warm"));
-    off.enabled = false;
-    let mut convert = lumit_core::fx::instantiate("ocio_colour_space").unwrap();
-    set(&mut convert, "output_colour_space", text("ACEScg"));
-    let mut file = lumit_core::fx::instantiate("ocio_file").unwrap();
-    set(
-        &mut file,
-        "file",
-        EffectValue::File(FileParam::single("grade.cc")),
-    );
-
-    let effects = vec![sat, display, unset_display, lut, off, convert, file];
+    assert_eq!(draws.len(), 1, "a node graph is one draw");
+    let DrawSource::Graph(plan) = &draws[0].source else {
+        panic!("a node graph draws through the graph source");
+    };
+    let read_draw = plan
+        .steps
+        .iter()
+        .find_map(|s| match s {
+            crate::draw::GraphStep::Read(d) => Some(d),
+            _ => None,
+        })
+        .expect("the Read box is a step");
+    assert_eq!(read_draw.natural_size, (20.0, 10.0));
     assert_eq!(
-        crate::build::colour_tables(&effects, 0.0),
-        vec![
-            Some(TableRequest::Ocio(OcioRequest::Config(Edge::Display {
-                input: String::new(),
-                display: "sRGB".into(),
-                view: "Standard".into(),
-                inverse: true,
-            }))),
-            None,
-            Some(TableRequest::Cube("grade.cube".into())),
-            Some(TableRequest::Ocio(OcioRequest::Config(Edge::Convert {
-                from: String::new(),
-                to: "ACEScg".into(),
-            }))),
-            Some(TableRequest::Ocio(OcioRequest::File {
-                path: "grade.cc".into(),
-                inverse: false,
-            })),
-        ]
+        read_draw.anchor,
+        (10.0, 5.0),
+        "the anchor is the picture's own centre"
+    );
+    assert_eq!(read_draw.position, (32.0, 32.0), "on the comp's centre");
+}
+
+/// The Stops the Node graph effect's own Exposure box resolves to, on a clip
+/// dragged a second along the timeline whose graph ramps Stops with its own
+/// clock: which moment of the graph the layer lands on, read as one number.
+///
+/// `extra` is what sits on the host's stack ahead of the Node graph effect. The
+/// two tests below ask this one scene their two questions.
+fn graph_effect_stops(extra: Vec<lumit_core::model::EffectInstance>) -> f32 {
+    use lumit_core::anim::{Animation, Keyframe, Property, SideInterp};
+    use lumit_core::comp_graph::{CompGraph, GraphEdge, GraphInput, GraphNode, InputKind};
+    use lumit_core::model::{EffectValue, ProjectItem};
+
+    let comp_of = |name: &str, layers: Vec<Layer>, graph: Option<CompGraph>| Composition {
+        graph,
+        master_volume_db: 0.0,
+        sound_mix: false,
+        groups: Vec::new(),
+        beat_grid: None,
+        id: Uuid::now_v7(),
+        name: name.into(),
+        width: 64,
+        height: 64,
+        frame_rate: FrameRate::new(60, 1).unwrap(),
+        duration: Duration(Rational::new(10, 1).unwrap()),
+        background: LinearColour::BLACK,
+        work_area: None,
+        layers,
+        markers: Vec::new(),
+        motion_blur: Default::default(),
+        extra: serde_json::Map::new(),
+    };
+    // Stops ramps 0 to 4 over the graph's first four seconds, so which second
+    // the graph is read at is visible in one number.
+    let kf = |t: i64, v: f64| Keyframe {
+        time: Rational::new(t, 1).unwrap(),
+        value: v,
+        interp_in: SideInterp::Linear,
+        interp_out: SideInterp::Linear,
+    };
+    let mut fx = lumit_core::fx::instantiate("exposure").expect("a builtin");
+    for p in &mut fx.params {
+        if p.id == "stops" {
+            p.value = EffectValue::Float(Property {
+                animation: Animation::Keyframed(vec![kf(0, 0.0), kf(4, 4.0)]),
+                extra: serde_json::Map::new(),
+            });
+        }
+    }
+    let fx_id = fx.id;
+    let (src, out) = (Uuid::now_v7(), Uuid::now_v7());
+    let wire = |from: Uuid, from_port: &str, to: Uuid, to_port: &str| GraphEdge {
+        from,
+        from_port: from_port.to_owned(),
+        to,
+        to_port: to_port.to_owned(),
+    };
+    let graph = CompGraph {
+        nodes: vec![
+            GraphNode::Input {
+                id: src,
+                input: GraphInput {
+                    id: "src".into(),
+                    label: "Src".into(),
+                    kind: InputKind::Picture,
+                    default: [0.0; 4],
+                    min: 0.0,
+                    max: 1.0,
+                    unit: lumit_core::fx::Unit::Raw,
+                    preview: None,
+                },
+            },
+            GraphNode::Fx(fx),
+            GraphNode::Output { id: out },
+        ],
+        edges: vec![
+            wire(src, "output", fx_id, "input"),
+            wire(fx_id, "output", out, "input"),
+        ],
+        layout: Vec::new(),
+        exposed: Vec::new(),
+        groups: Vec::new(),
+    };
+    let graph_comp = comp_of("graph", Vec::new(), Some(graph.clone()));
+    let mut inst = lumit_core::fx::instantiate("node_graph").expect("a builtin");
+    lumit_core::fx::effects::node_graph::bind(&mut inst, graph_comp.id, &graph);
+
+    // The host: a clip dragged a second along the timeline, so at comp time
+    // 1.5 its own clock reads 0.5.
+    let item = Uuid::now_v7();
+    let mut host = Layer {
+        graph: Default::default(),
+        markers: Vec::new(),
+        id: Uuid::now_v7(),
+        name: "host".into(),
+        kind: LayerKind::Footage { item },
+        in_point: CompTime(Rational::ZERO),
+        out_point: CompTime(Rational::new(10, 1).unwrap()),
+        start_offset: CompTime(Rational::new(1, 1).unwrap()),
+        transform: TransformGroup::default(),
+        matte: None,
+        parent: None,
+        label: 0,
+        volume_db: lumit_core::anim::Property::zero(),
+        pan: lumit_core::anim::Property::zero(),
+        audio_only: false,
+        adjustment: false,
+        retime: None,
+        interpolation: Default::default(),
+        parked_flow: None,
+        graph_inputs: None,
+        blend: Default::default(),
+        masks: Vec::new(),
+        paint: Vec::new(),
+        puppet: None,
+        effects: {
+            let mut stack = extra;
+            stack.push(inst);
+            stack
+        },
+        styles: Vec::new(),
+        switches: Switches::default(),
+        extra: serde_json::Map::new(),
+    };
+    host.transform.opacity = lumit_core::anim::Property::fixed(100.0);
+    let host_id = host.id;
+    let parent = comp_of("parent", vec![host], None);
+    let mut doc = Document::new();
+    doc.items.push(ProjectItem::Composition(graph_comp));
+
+    let lp = CompLayerPixels {
+        layer: host_id,
+        width: 64,
+        height: 64,
+        rgba: vec![0u8; 64 * 64 * 4].into(),
+        format: lumit_media::PixelFormat::Srgb8,
+        natural_w: 64,
+        natural_h: 64,
+        temporal: Vec::new(),
+        flow_fields: Vec::new(),
+        shutter: Vec::new(),
+        source_key: 0,
+        source_frame: 0,
+    };
+    let mut map: HashMap<Uuid, &CompLayerPixels> = HashMap::new();
+    map.insert(host_id, &lp);
+    let mut visited = vec![parent.id];
+    let draws = build_comp_draws(&std::sync::Arc::new(doc), &parent, 1.5, &map, &mut visited);
+
+    assert_eq!(draws.len(), 1, "one layer, one draw");
+    let plan = draws[0]
+        .graph_fx
+        .first()
+        .expect("the effect lowered a plan");
+    let ops = plan
+        .steps
+        .iter()
+        .find_map(|s| match s {
+            crate::draw::GraphStep::Fx { ops, .. } => Some(ops),
+            _ => None,
+        })
+        .expect("the Exposure box is a step");
+    ops.get(0)
+        .expect("one op")
+        .params
+        .float(lumit_core::fx::ParamId::new("stops"), -1.0)
+}
+
+// A Node graph effect runs on the **host layer's clock** (docs/impl/
+// node-graph-comp.md §2.4). The decode plan and the frame key both read the
+// named comp at the layer time, so the lowering has to as well: a layer with a
+// start offset would otherwise take its picture from one clock and its frame's
+// name from another.
+#[test]
+fn a_graph_effect_lowers_at_the_layer_time() {
+    let stops = graph_effect_stops(Vec::new());
+    assert!(
+        (stops - 0.5).abs() < 1e-4,
+        "the graph resolves on the layer's clock, not the comp's: {stops}"
     );
 }
 
-/// The picture an ordinary footage layer draws is the decode's own allocation,
-/// not a copy of it: at 8K a copy is 133 MB a layer a frame, and it was the
-/// whole of the build stage. Accumulation motion blur on the layer is the one
-/// case that averages the clip's own moments, so that one owns its buffer.
+// **A Posterize time on this layer holds the graph the layer applies**
+// (docs/impl/node-graph-comp.md §5.2). The layer's own ops already resolve at
+// the held time, and a graph that carried on reading the live clock would step
+// against them: the picture would move on frames the rest of the stack held.
+// One second of hold, on a layer a second along the timeline, puts the graph
+// back at its own zero.
 #[test]
-fn a_plain_footage_draw_shares_the_decoded_bytes() {
-    let (mut comp, layer_id, mut lp) = float_layer_comp(Vec::new(), Vec::new());
-    lp.format = lumit_media::PixelFormat::Srgb8;
-    lp.rgba = vec![128u8; 4 * 4 * 4].into();
-    let mut map: HashMap<Uuid, &CompLayerPixels> = HashMap::new();
-    map.insert(layer_id, &lp);
-    let doc = std::sync::Arc::new(Document::new());
-    let drawn = |comp: &Composition| {
-        let mut visited = vec![comp.id];
-        let draws = build_comp_draws(&doc, comp, 0.0, &map, &mut visited);
-        assert_eq!(draws.len(), 1);
-        match &draws[0].source {
-            DrawSource::Pixels { rgba, .. } => rgba.as_ptr(),
-            _ => panic!("a footage layer draws pixels"),
+fn a_this_layer_posterize_holds_the_graph_the_layer_applies() {
+    use lumit_core::model::EffectValue;
+    let mut hold = lumit_core::fx::instantiate("posterize_time").expect("a builtin");
+    for p in &mut hold.params {
+        if p.id == "rate" {
+            p.value = EffectValue::Float(lumit_core::anim::Property::fixed(1.0));
         }
-    };
-
+    }
+    let stops = graph_effect_stops(vec![hold]);
     assert!(
-        std::ptr::eq(drawn(&comp), lp.rgba.as_ptr()),
-        "a layer with nothing stamped into it draws the decoded bytes themselves"
-    );
-
-    comp.layers[0].effects = vec![lumit_core::fx::instantiate("accumulation_mb").unwrap()];
-    assert!(
-        !std::ptr::eq(drawn(&comp), lp.rgba.as_ptr()),
-        "the average of the shutter moments is a buffer of its own"
+        stops.abs() < 1e-4,
+        "a held stack must hold the graph with it: {stops}"
     );
 }

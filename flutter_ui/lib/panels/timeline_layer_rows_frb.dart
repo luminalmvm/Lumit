@@ -83,6 +83,24 @@ class EmptyTimelineDrop extends StatelessWidget {
   }
 }
 
+/// The Timeline with a **node graph** fronted: the same placeholder shape the
+/// empty panel wears, saying where the work is (docs/impl/node-graph-comp.md
+/// §4.4).
+///
+/// Not a drop target. A node graph has no layers, so the engine refuses one,
+/// and the canvas is what footage is dropped on.
+class NodeGraphTimeline extends StatelessWidget {
+  const NodeGraphTimeline({super.key});
+
+  @override
+  Widget build(BuildContext context) => PlaceholderPanel(
+        key: const ValueKey('timeline-node-graph'),
+        icon: LumitIcon.nodes,
+        title: l10n.panelTimeline,
+        hint: l10n.timelineNodeGraph,
+      );
+}
+
 /// One row of a layer's fold-out, in the outline.
 ///
 /// A heading draws its own twirl; a property row draws the same controls the

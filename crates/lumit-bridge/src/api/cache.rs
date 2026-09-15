@@ -164,6 +164,85 @@ pub fn memory_report() -> BridgeMemoryReport {
     }
 }
 
+/// One tier of the resource governor's ledger (docs/13 §3), for the status
+/// readout.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BridgeTierBudget {
+    /// What is reserved right now.
+    pub used_bytes: u64,
+    /// The ceiling it is reserved against: 70% of the card for video memory,
+    /// 60% of physical for host memory, or whatever Preferences has set.
+    pub budget_bytes: u64,
+    /// The most that was ever reserved at once this session.
+    pub peak_bytes: u64,
+    /// Reservations refused since the session began.
+    ///
+    /// **The field to read when something is slow.** A tier sitting under its
+    /// budget with this climbing is a tier turning work away, which is a
+    /// different fault from one that is merely full and is invisible in every
+    /// other number here.
+    pub denials: u64,
+    /// How close to the ceiling, as the degradation ladder reads it: `0` easy,
+    /// `1` tight, `2` severe, `3` full. At `2` and above the renderer has begun
+    /// stepping down — it stops filling the intermediate cache, then gives the
+    /// cold half of it back.
+    pub pressure: u64,
+}
+
+/// **What the resource governor is holding, and whether it is refusing
+/// anything.**
+///
+/// Every byte-budgeted store in the process — the frame cache, the card's
+/// frames, decoded source frames, measured flow fields, the per-effect
+/// intermediates — is registered against this one account, so this is the
+/// question "is the machine short?" asked once rather than five times with five
+/// answers that cannot be added up.
+///
+/// It exists because a ladder nobody can see stepping is a bug in itself
+/// (docs/13 §4: "silent degradation is a bug"). A user reporting that Lumit
+/// "went slow" and a user reporting that it "ran out of memory" are describing
+/// the same reading, and this is where that reading is.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BridgeGovernorReport {
+    /// Memory on the graphics card.
+    pub vram: BridgeTierBudget,
+    /// Ordinary memory.
+    pub ram: BridgeTierBudget,
+    /// Bytes the last frame drawn asked the card for and did not get.
+    ///
+    /// Nought on every ordinary frame. Anything else means a frame outgrew what
+    /// was reserved for it — which is a fact about the composition rather than
+    /// a failure, since a texture cannot be refused half way through a pass, but
+    /// it is the fact that explains why the next frame is reserved for more
+    /// tightly.
+    pub vram_overdrawn_bytes: u64,
+}
+
+/// The governor's live numbers. Cheap: eleven relaxed atomic loads and no lock
+/// at all, so this may be polled on the interface's own cadence.
+#[frb(sync)]
+#[must_use]
+pub fn governor_report() -> BridgeGovernorReport {
+    let (vram, ram, overdrawn) = crate::framecache::governor::stats();
+    let tier =
+        |(used, budget, peak, denials, pressure): crate::framecache::governor::TierNumbers| {
+            BridgeTierBudget {
+                used_bytes: used,
+                budget_bytes: budget,
+                peak_bytes: peak,
+                denials,
+                pressure,
+            }
+        };
+    BridgeGovernorReport {
+        vram: tier(vram),
+        ram: tier(ram),
+        vram_overdrawn_bytes: overdrawn,
+    }
+}
+
 /// Resize the cache, returning what it holds afterwards.
 ///
 /// Shrinking evicts oldest-first straight away rather than waiting for the next

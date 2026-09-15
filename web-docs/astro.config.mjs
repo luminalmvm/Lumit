@@ -142,6 +142,7 @@ r.addEventListener("input",set);set()})})`,
                       items: [
                         "use/effects",
                         "use/nodes",
+                        "use/node-graphs",
                         "use/fx-console",
                         "use/presets",
                         "use/plugins",

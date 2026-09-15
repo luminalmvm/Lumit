@@ -560,3 +560,49 @@ fn the_starter_shader_compiles_and_changes_nothing() {
         "the pure schema default is still empty - presets and tests keep it"
     );
 }
+
+/// The shader draws as you type, so every settle of the keyboard asks for a new
+/// distinct source. Without a ceiling that is a slow leak with a person on the
+/// other end of it, since the cache cannot let anything go while its entries are
+/// `&'static` (see `program_for`).
+///
+/// Driven against a cache of this test's own, with a ceiling of three: the
+/// shipped one is process-wide and holds four thousand, so a test that filled it
+/// would leave every test scheduled after it unable to read a shader. The lines
+/// under test are the same ones.
+#[test]
+fn a_session_may_not_read_shaders_without_end() {
+    use crate::fx::shader::{program_in, ProgramCache, ShaderRefusal};
+
+    let cache = ProgramCache::default();
+    // One valid shader per iteration, each distinct by a comment nobody reads.
+    let source = |n: usize| {
+        format!(
+            "// {n}\nfn shade(uv: vec2<f32>) -> vec4<f32> {{ return vec4<f32>(uv, 0.0, 1.0); }}\n"
+        )
+    };
+
+    for n in 0..3 {
+        assert!(
+            program_in(&cache, &source(n), 3).is_ok(),
+            "an ordinary shader was refused below the ceiling"
+        );
+    }
+
+    // The fourth distinct source meets it, by name and with the number in it.
+    let refused = program_in(&cache, &source(3), 3);
+    assert!(
+        matches!(refused, Err(ShaderRefusal::TooManyPrograms { limit: 3 })),
+        "{refused:?}"
+    );
+    let words = ShaderRefusal::TooManyPrograms { limit: 3 }.to_string();
+    assert!(words.contains('3'), "{words}");
+
+    // A source already read is still served: a project whose shaders are all in
+    // the cache keeps drawing rather than going dark because somebody once
+    // typed too much.
+    assert!(
+        program_in(&cache, &source(0), 3).is_ok(),
+        "a source already read must still be served after the ceiling"
+    );
+}

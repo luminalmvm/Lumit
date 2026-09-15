@@ -238,8 +238,16 @@ pub struct CachedTex(pub Tex);
 
 impl lumit_cache::ByteSized for CachedTex {
     fn byte_size(&self) -> usize {
-        (self.0.width() as usize) * (self.0.height() as usize) * 8
+        intermediate_bytes(self.0.width(), self.0.height())
     }
+}
+
+/// What one intermediate holds on the card. The store's own measure reads it
+/// and so does the walk's holding bound ([`run_ops_with_roto`]), so the two
+/// cannot drift into disagreeing about what a picture costs.
+#[must_use]
+fn intermediate_bytes(w: u32, h: u32) -> usize {
+    (w as usize) * (h as usize) * 8
 }
 
 /// How much video memory the per-effect cache holds by default: a few dozen
@@ -305,6 +313,18 @@ impl FxCache {
         }
     }
 
+    /// Account this store's contents against the governor's ledger from now on
+    /// (docs/13 §3). Called once, as the renderer builds it, with the ledger
+    /// its [`GpuContext`] carries.
+    ///
+    /// **Video memory**, not host memory: what is held here is a texture on the
+    /// card. It is the one store in the renderer whose bytes are the card's,
+    /// which is exactly why it is worth saying so — a frame's own textures die
+    /// with the frame, and these are kept so a *later* frame can read them.
+    pub fn account_against(&mut self, ledger: std::sync::Arc<lumit_budget::Ledger>) {
+        self.lru.account_against(ledger, lumit_budget::Tier::Vram);
+    }
+
     /// The finished texture of a nested comp's frame, by the name the realiser
     /// files it under, or `None` when it must be realised. Counted.
     pub fn nested(&mut self, key: u128) -> Option<Tex> {
@@ -358,6 +378,30 @@ impl FxCache {
     pub fn clear(&mut self) {
         self.lru.clear();
         self.pins.clear();
+    }
+
+    /// **The second rung of the ladder** (docs/13 §4), for the card this store
+    /// sits on: give the cold half of the intermediates back when the governor
+    /// says the card is under pressure, and answer whether anything went.
+    ///
+    /// Cold rather than all: an intermediate around the playhead is what makes
+    /// the next edit feel instant, and throwing the lot away to buy one frame
+    /// of headroom trades a lasting cost for a moment's. The store's own
+    /// eviction order decides which — the same cost-aware score that runs when
+    /// the budget is exceeded (docs/06 §5.3), reached by asking it to fit a
+    /// smaller budget for a moment.
+    ///
+    /// A pin is never dropped: the decode planner skipped work on the strength
+    /// of one, and the frame being rendered needs it to still be here.
+    pub fn trim_under_pressure(&mut self) -> bool {
+        if !self
+            .lru
+            .pressure()
+            .is_some_and(lumit_budget::Pressure::should_trim)
+        {
+            return false;
+        }
+        self.lru.evict_cold_half()
     }
 
     /// `(used_bytes, budget_bytes, entries)`.
@@ -538,6 +582,18 @@ pub fn render_layer_input(
 /// nested comp, a text or shape layer) walks the stack exactly as before. With
 /// both, the walk starts after the longest run of ops whose outputs are held,
 /// and files each output it makes when the cache is taking them.
+/// `roto_mattes` is the parallel **roto carriage** (docs/impl/roto.md §5): one
+/// slot per `roto_brush` op, in stack order, holding the matte its propagation
+/// filed for this layer's source frame - or `None`, which is the effect's
+/// passthrough, and what a frame outside the propagated span gets.
+///
+/// `graphs` is the parallel **node graph carriage** (docs/impl/
+/// node-graph-comp.md §2.4): one closure per enabled `node_graph` op, in stack
+/// order. That effect has no kernel - what it does is another walk of the
+/// engine, which only the realiser can reach - so the op calls its closure
+/// where a dispatch would have been and then takes the same road any op takes,
+/// the Mix seam and the matte dissolve included. An op with no closure in the
+/// list passes its picture through, exactly as a missing LUT does.
 #[allow(clippy::too_many_arguments)]
 pub fn run_ops(
     fx: &FxEngine,
@@ -554,59 +610,8 @@ pub fn run_ops(
     mattes: &[LayerInput],
     mask_paths: &[lumit_core::mask::MaskPolyline],
     points_schedules: &[lumit_core::fx::points::PointsSchedule],
-    timings: Option<&mut Vec<f32>>,
-    cache: Option<(&std::cell::RefCell<FxCache>, u128)>,
-) -> Tex {
-    run_ops_with_roto(
-        fx,
-        ctx,
-        tex,
-        w,
-        h,
-        ops,
-        neighbours,
-        flow_fields,
-        tables,
-        layer_inputs,
-        flare_lens,
-        mattes,
-        mask_paths,
-        points_schedules,
-        &[],
-        timings,
-        cache,
-    )
-}
-
-/// [`run_ops`] with the **roto carriage** threaded through: one slot per
-/// `roto_brush` op, in stack order, holding the matte its propagation filed for
-/// this layer's source frame — or `None`, which is the effect's passthrough.
-///
-/// A separate entry point rather than a seventeenth parameter on the one every
-/// test calls: the roto matte is the only side list whose *absence* is the
-/// overwhelmingly normal case, and `run_ops` forwarding an empty slice says so
-/// in one line instead of at twenty call sites.
-///
-/// ponytail: two entry points for one walk; fold them back into one parameter
-/// list the moment a *second* side list wants the same treatment, since three
-/// forwarding wrappers would cost more than the twenty edits do.
-#[allow(clippy::too_many_arguments)]
-pub fn run_ops_with_roto(
-    fx: &FxEngine,
-    ctx: &GpuContext,
-    tex: Tex,
-    w: u32,
-    h: u32,
-    ops: &lumit_core::fx::ResolvedStack,
-    neighbours: &[(i32, Tex)],
-    flow_fields: &[(i32, Tex)],
-    tables: &[Option<ColourTable>],
-    layer_inputs: &[LayerInput],
-    flare_lens: &[Option<(u64, String)>],
-    mattes: &[LayerInput],
-    mask_paths: &[lumit_core::mask::MaskPolyline],
-    points_schedules: &[lumit_core::fx::points::PointsSchedule],
     roto_mattes: &[Option<Tex>],
+    graphs: &[&dyn Fn(Tex, u32, u32) -> Tex],
     mut timings: Option<&mut Vec<f32>>,
     cache: Option<(&std::cell::RefCell<FxCache>, u128)>,
 ) -> Tex {
@@ -671,13 +676,39 @@ pub fn run_ops_with_roto(
     // is filed is read again on a later frame, so it is never handed back to
     // the frame's texture pool; one that is not is dead the moment the op after
     // it has read it.
-    let filing = cache.is_some_and(|(store, _)| store.borrow().keep);
+    //
+    // **Under pressure it is nobody's**: the first rung of the degradation
+    // ladder (docs/13 §4) is "pause background cache fill", and an
+    // intermediate is kept for the seconds between two edits of the same
+    // stack — worth having, never worth the last of the card. Lookups are
+    // untouched, because what is already held is free to read. The picture
+    // that comes out is the same either way, which is what lets this be
+    // decided on the memory the machine happens to have: a cache is invisible
+    // by construction, and steps that are *not* (the resolution tier, the flow
+    // swap) stay off this path and out of export entirely.
+    let filing =
+        cache.is_some_and(|(store, _)| store.borrow().keep) && !ctx.vram_pressure().should_trim();
     // The picture the op before this one made, once nothing can read it again.
     let mut spent: Option<Tex> = None;
     // Outputs made this walk, filed at the end rather than as they are made:
     // a flare bake queued *during* the walk means a picture of the previous
     // lens, which must not be filed under the name of the new one.
+    //
+    // Bounded by what the store could actually take, and holding the *last*
+    // outputs rather than the first (issue #132 finding 15). A queue longer
+    // than the budget is a queue of pictures the store will evict on arrival,
+    // and each one costs a frame-sized texture held to the end of the walk —
+    // one per effect, which is precisely the thing the work-texture pool
+    // exists to stop (`GpuContext::pool`). The last are kept because a longer
+    // held prefix saves more of the next walk, and because it is what the
+    // store's own eviction would have arrived at.
     let mut made: Vec<(u128, Tex)> = Vec::new();
+    let room = if filing {
+        cache.map_or(0, |(store, _)| store.borrow().lru.budget_bytes())
+    } else {
+        0
+    };
+    let mut queued = 0usize;
     // The k-th `lut` op consumes the k-th `tables` slot (the whole threading
     // contract — see `build.rs`'s `lut_files` and CompLayerDraw's lut_files); a
     // slot is present only when its `.cube` file loaded. The k-th
@@ -719,6 +750,10 @@ pub fn run_ops_with_roto(
     // path's reason: almost no op is a Roto brush, and one shared index would
     // hand a matte to whichever effect happened to sit above.
     let mut roto_i = 0usize;
+    // The node graph carriage's own counter, on its own predicate again: one
+    // closure per `node_graph` op, which is the enumeration `build.rs`'s
+    // `graph_fx_for` fills by.
+    let mut graph_i = 0usize;
     for (i, resolved) in ops.iter().enumerate() {
         let role = resolved.def.schema().matte;
         let paths_n = resolved.def.schema().mask_path_count();
@@ -760,6 +795,13 @@ pub fn run_ops_with_roto(
         } else {
             None
         };
+        let graph = if resolved.def.schema().match_name == lumit_core::comp_graph::NODE_GRAPH {
+            let slot = graphs.get(graph_i).copied();
+            graph_i += 1;
+            slot
+        } else {
+            None
+        };
         let gpu = crate::gpufx::gpu_effect(resolved.def.schema().match_name);
         // An op whose output is already held: its counters still advance (the
         // lists are 1:1 with the ops, held or not; the matte, mask-path and
@@ -772,8 +814,8 @@ pub fn run_ops_with_roto(
                 Some(AuxKind::LensFile) => flare_i += 1,
                 _ => {}
             }
-            // `roto_i` was advanced above with the other per-op slot reads, so
-            // nothing more is owed here.
+            // `roto_i` and `graph_i` were advanced above with the other per-op
+            // slot reads, so nothing more is owed here.
             if let Some(into) = timings.as_mut() {
                 into.push(0.0);
             }
@@ -923,6 +965,31 @@ pub fn run_ops_with_roto(
             }
         }
 
+        // **The Node graph effect** (docs/impl/node-graph-comp.md §2.4). It has
+        // no kernel either: what it does is another walk of the engine, which
+        // this function cannot reach, so the realiser hands one closure per
+        // enabled instance and the op calls it here, in the place a dispatch
+        // would have been.
+        //
+        // The Mix and the injected Blend are applied here rather than inside a
+        // kernel, for the plain reason that there is no kernel to apply them
+        // in. `blend_mix` at Normal is the straight lerp every kernel's own Mix
+        // is, so Mix 100 at Normal - the overwhelming case - runs no pass at
+        // all and the picture is the graph's own, to the bit. The matte
+        // dissolve below then runs as it runs after any kernel.
+        if let Some(run) = graph {
+            let mode = resolved.params.choice(lumit_core::fx::BLEND_ID, 0);
+            let mix =
+                (resolved.params.float(lumit_core::fx::MIX_ID, 100.0) / 100.0).clamp(0.0, 1.0);
+            let seam = mode != 0 || mix < 1.0;
+            let input = seam.then(|| tex.clone());
+            let out = run(tex, w, h);
+            tex = match input {
+                Some(input) => fx.blend_mix(ctx, &input, &out, w, h, mode, mix),
+                None => out,
+            };
+        }
+
         // **The Roto brush** (docs/impl/roto.md §5). It has no entry in
         // the GPU table — there is no kernel to write — because what it does is
         // Set matte's arithmetic over a picture nobody picked: multiply this
@@ -994,8 +1061,45 @@ pub fn run_ops_with_roto(
         }
 
         let named = keys.get(i).copied().flatten();
-        if let Some(key) = named {
-            made.push((key, tex.clone()));
+        // Queued for the store, while the store has room for it. An output
+        // bigger than the whole budget is never queued at all — the store
+        // refuses it on arrival, so holding it would buy a certain eviction.
+        let mut queueing = false;
+        // Only a picture this op *made* is queued — `tex != given`, the same
+        // test the recycling below runs on. An op that passed its input
+        // through produced nothing to file: what it holds is the store's own
+        // held prefix, the layer's source, or the entry queued one op ago.
+        // Queuing it anyway would put a texture the walk does not own into
+        // `made`, where dropping it from the front records a clear over a
+        // picture something else is still reading, and handing it to the
+        // store charges the frame for bytes it never paid. Not filing it
+        // costs nothing either: the next walk hits one op earlier and re-runs
+        // a pass that draws nothing.
+        if let (Some(key), true, true) = (named, filing, tex != given) {
+            let bytes = intermediate_bytes(tex.width(), tex.height());
+            if bytes <= room {
+                // Make room the way the store would, from the front: this
+                // output is worth more than the ones before it, so they are
+                // the ones that go. Each is handed back to the frame's pool
+                // on the way out, which is the whole point of dropping it.
+                while queued.saturating_add(bytes) > room && !made.is_empty() {
+                    let (_, dropped) = made.remove(0);
+                    queued = queued
+                        .saturating_sub(intermediate_bytes(dropped.width(), dropped.height()));
+                    // Safe to hand back: every entry in `made` is a picture
+                    // this walk made (the guard above), held nowhere else in
+                    // the queue (each op's output is queued once), and read
+                    // only by the op after it, which has run. The one thing
+                    // left to check is that it is not the picture the chain
+                    // holds right now.
+                    if dropped != tex {
+                        ctx.recycle(dropped);
+                    }
+                }
+                queued = queued.saturating_add(bytes);
+                made.push((key, tex.clone()));
+                queueing = true;
+            }
         }
 
         // The picture the op before this one made has now been read, so hand it
@@ -1003,7 +1107,7 @@ pub fn run_ops_with_roto(
         // is ever offered: never the layer's source, never one the cache gave us
         // or is about to take, and never one an op passed straight through.
         let done_with = spent.take();
-        if !(filing && named.is_some()) && tex != given {
+        if !queueing && tex != given {
             spent = Some(tex.clone());
         }
         if let Some(done_with) = done_with {
@@ -1020,6 +1124,24 @@ pub fn run_ops_with_roto(
             ctx.flush();
             ctx.device.poll(wgpu::Maintain::Wait);
             into.push(started.elapsed().as_secs_f32() * 1000.0);
+        } else if ctx.vram_pressure() == lumit_budget::Pressure::Full {
+            // **Submission lifetime** (issue #132 finding 15). Handing a
+            // texture back to the frame's pool is an engine-side promise; the
+            // driver only stops holding what a recorded command still refers to
+            // once that command has actually been submitted. A forty-effect
+            // stack recorded into one batch therefore keeps every transient in
+            // the driver until the frame closes, which on a card that is
+            // already full is the difference between finishing and not.
+            //
+            // So a frame at the ceiling gives its batching up, effect by
+            // effect — the same trade a measured frame makes above, and the
+            // same one the lens flare makes between its own batches. It costs
+            // round trips, which is a cost paid in time; it bounds what the
+            // driver holds, which is the thing that has run out. **The picture
+            // is identical either way**: submission order is the recording
+            // order, so this changes when the work is handed over and nothing
+            // about what it computes.
+            ctx.flush();
         }
     }
     if let Some((store, _)) = cache {
@@ -1027,7 +1149,16 @@ pub fn run_ops_with_roto(
         store.runs += ops.len().saturating_sub(start) as u64;
         if store.keep && fx.flare_substitutions() == subs_before {
             for (key, out) in made {
-                store.lru.insert(key, CachedTex(out));
+                // The picture leaves the frame that made it and joins the
+                // store, and its charge goes with it: the frame puts it down,
+                // the store takes it up. Counted once at every moment, which is
+                // the whole of docs/13 §3's "the ledger MUST equal reality" —
+                // and only when the store actually took it, since a refused
+                // output dies here with the rest of the frame's textures.
+                let bytes = intermediate_bytes(out.width(), out.height()) as u64;
+                if store.lru.insert(key, CachedTex(out)) {
+                    ctx.hand_off_vram(bytes);
+                }
             }
         }
     }
@@ -1136,6 +1267,14 @@ fn op_keys(
                     broken = true;
                 }
                 dof_i += 1;
+            }
+            // A node graph's picture is not in this op's bag at all: it is a
+            // whole other comp, with its own boxes and its own footage. It
+            // breaks the chain for the same reason a bound plate does - an
+            // output that depends on a picture nobody named must not be filed
+            // under a name that omits it.
+            if schema.match_name == lumit_core::comp_graph::NODE_GRAPH {
+                broken = true;
             }
             match crate::gpufx::gpu_effect(schema.match_name).map(|g| g.aux()) {
                 Some(AuxKind::Lut) => {
@@ -1394,6 +1533,8 @@ mod tests {
             &[],
             &[],
             &[],
+            &[],
+            &[],
             None,
             Some((cache, key)),
         );
@@ -1404,6 +1545,332 @@ mod tests {
         let mut c = FxCache::default();
         c.keep_outputs(true);
         std::cell::RefCell::new(c)
+    }
+
+    /// [`run`] inside a frame batch — the shape the realiser renders in, where
+    /// the work-texture pool is live and an intermediate handed back is given
+    /// to the next pass instead of a fresh one being made. Answers how many
+    /// work textures the walk had to create, which is how many it was holding
+    /// at once.
+    fn textures_made_by(
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        ops: &lumit_core::fx::ResolvedStack,
+        cache: &std::cell::RefCell<FxCache>,
+        key: u128,
+    ) -> u64 {
+        let src = source(ctx);
+        let before = ctx.work_textures_made();
+        ctx.begin_frame();
+        let _out = run_ops(
+            fx,
+            ctx,
+            src,
+            W,
+            H,
+            ops,
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            None,
+            Some((cache, key)),
+        );
+        ctx.end_frame();
+        ctx.work_textures_made() - before
+    }
+
+    /// A stack of `n` Exposure ops, each at its own value so each output has a
+    /// name of its own.
+    fn long_stack(n: usize) -> lumit_core::fx::ResolvedStack {
+        let spec: Vec<_> = (0..n)
+            .map(|i| ("exposure", "stops", 0.05 * (i + 1) as f32))
+            .collect();
+        stack(&spec)
+    }
+
+    /// **The holding bound** (docs/13 §3, issue #132 finding 15). A walk that
+    /// is filing its outputs must not hold one frame-sized texture per effect
+    /// for the length of the stack — that is exactly what the work-texture
+    /// pool exists to stop (`GpuContext::pool`), and a store with room for one
+    /// picture was going to evict all but one of them anyway. It holds what the
+    /// store can take, and hands the rest back as it goes.
+    #[test]
+    fn a_filing_walk_holds_no_more_than_the_store_can_take() {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
+            lumit_gpu::no_adapter();
+            return;
+        };
+        let fx = ctx.fx();
+        let ops = long_stack(6);
+
+        // The control: the same six ops with nothing being filed. Every
+        // intermediate is dead the moment the op after it has read it, so the
+        // walk ping-pongs between a couple of textures however long the stack.
+        let cold = std::cell::RefCell::new(FxCache::new((W * H * 8) as usize));
+        let loose = textures_made_by(fx, &ctx, &ops, &cold, 7);
+
+        // The same six ops, filing, into a store with room for exactly one
+        // output. Five of the six are destined for eviction the moment they
+        // are filed; holding them until the walk ends buys nothing at all.
+        let mut c = FxCache::new((W * H * 8) as usize);
+        c.keep_outputs(true);
+        let warm = std::cell::RefCell::new(c);
+        let held = textures_made_by(fx, &ctx, &ops, &warm, 7);
+
+        assert_eq!(
+            warm.borrow().stats().2,
+            1,
+            "the store took the one output it had room for"
+        );
+        assert!(
+            held <= loose + 1,
+            "a filing walk made {held} work textures where the same stack made \
+             {loose} without filing: it was holding an intermediate per effect"
+        );
+    }
+
+    /// **The ledger equals reality across the frame boundary** (docs/13 §3).
+    /// An intermediate is the one frame-sized allocation meant to outlive the
+    /// frame that made it, so its charge moves with it: the frame puts it down
+    /// as the store takes it up, and the card is never told it holds the same
+    /// texture twice.
+    #[test]
+    fn a_filed_intermediate_is_charged_to_the_store_and_not_the_frame_as_well() {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
+            lumit_gpu::no_adapter();
+            return;
+        };
+        let fx = ctx.fx();
+        let mut c = FxCache::default();
+        c.keep_outputs(true);
+        c.account_against(std::sync::Arc::clone(ctx.ledger()));
+        let warm = std::cell::RefCell::new(c);
+
+        let made = textures_made_by(fx, &ctx, &long_stack(3), &warm, 7);
+        assert!(made > 0, "the walk drew something");
+
+        // The frame is over, so every texture that belonged to it is gone and
+        // its charge with them. What is left on the ledger is what the store
+        // holds — to the byte, because there is nothing else left to hold.
+        let (held, _, entries) = warm.borrow().stats();
+        assert!(entries > 0, "the store took the walk's outputs");
+        assert_eq!(
+            ctx.ledger().used(lumit_budget::Tier::Vram),
+            held as u64,
+            "the ledger reads exactly what the store is sitting on"
+        );
+
+        // And giving them up gives the card back.
+        warm.borrow_mut().clear();
+        assert_eq!(ctx.ledger().used(lumit_budget::Tier::Vram), 0);
+    }
+
+    /// **The second rung of the ladder** (docs/13 §4): under pressure the cold
+    /// half of the intermediates goes, and the ledger hears about it.
+    #[test]
+    fn a_card_under_pressure_gives_back_the_cold_intermediates() {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
+            lumit_gpu::no_adapter();
+            return;
+        };
+        let fx = ctx.fx();
+        let mut c = FxCache::default();
+        c.keep_outputs(true);
+        c.account_against(std::sync::Arc::clone(ctx.ledger()));
+        let warm = std::cell::RefCell::new(c);
+        textures_made_by(fx, &ctx, &long_stack(6), &warm, 7);
+        let before = warm.borrow().stats().0;
+        assert!(before > 0, "the store took the walk's outputs");
+
+        assert!(
+            !warm.borrow_mut().trim_under_pressure(),
+            "a card with room keeps every intermediate it has"
+        );
+
+        let used = ctx.ledger().used(lumit_budget::Tier::Vram);
+        ctx.ledger().set_budget(lumit_budget::Tier::Vram, used);
+        assert!(
+            warm.borrow_mut().trim_under_pressure(),
+            "a full card gives the cold ones back"
+        );
+        let after = warm.borrow().stats().0;
+        assert!(
+            after < before,
+            "{after} bytes held where there were {before}"
+        );
+        assert_eq!(
+            ctx.ledger().used(lumit_budget::Tier::Vram),
+            after as u64,
+            "and the ledger followed them out"
+        );
+    }
+
+    /// **Pressure never moves a pixel.** Everything the renderer does on a
+    /// memory reading — stop filing, give the cold intermediates back, hand the
+    /// batch over effect by effect instead of once at the end — is invisible in
+    /// the output by construction, which is the whole reason those are the
+    /// steps it is allowed to take without being told (docs/13 §4; the rungs
+    /// that *do* change what is drawn belong to the caller, and export takes
+    /// none of them).
+    ///
+    /// This is the test that makes that claim falsifiable: the same stack, run
+    /// on an empty card and on a full one, byte for byte.
+    #[test]
+    fn a_card_under_pressure_draws_the_same_picture() {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
+            lumit_gpu::no_adapter();
+            return;
+        };
+        let fx = ctx.fx();
+        let ops = long_stack(5);
+
+        let easy = run(fx, &ctx, &ops, &warm_cache(), 7);
+        assert_eq!(ctx.vram_pressure(), lumit_budget::Pressure::Easy);
+
+        let used = ctx.ledger().used(lumit_budget::Tier::Vram);
+        assert!(used > 0, "the first walk put textures on the card");
+        ctx.ledger().set_budget(lumit_budget::Tier::Vram, used);
+        assert_eq!(ctx.vram_pressure(), lumit_budget::Pressure::Full);
+
+        let full = run(fx, &ctx, &ops, &warm_cache(), 7);
+        assert_eq!(
+            easy, full,
+            "a full card renders what an empty one renders, to the bit"
+        );
+    }
+
+    /// **A passthrough op must never put a picture the walk did not make into
+    /// the queue.** Such an op hands its input on unchanged (`tex == given`),
+    /// and that input is one of three things the walk does not own: the
+    /// layer's source, the store's held prefix, or the entry queued one op
+    /// earlier. Queued anyway, the first drop to make room records a clear
+    /// over it and offers it to the pool, and the next pass draws its output
+    /// *into* it.
+    ///
+    /// The source is the case a test can see directly: a Roto brush with no
+    /// matte first, two ops after it, room in the store for one. Without the
+    /// guard the walk clears the picture it was handed and draws op two over
+    /// the top of it — visible to whoever else holds that texture, which in a
+    /// real frame is the realiser. Caught by review, not by a test, which is
+    /// why this one exists.
+    #[test]
+    fn a_passthrough_op_does_not_hand_the_layers_source_back_to_the_pool() {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
+            lumit_gpu::no_adapter();
+            return;
+        };
+        let fx = ctx.fx();
+        let src = source(&ctx);
+        let before = lumit_gpu::fx::readback_linear_f32(&ctx, &src, W, H).expect("readback");
+
+        // Room for exactly one output, so making room is forced on the
+        // second op.
+        let mut c = FxCache::new((W * H * 8) as usize);
+        c.keep_outputs(true);
+        let warm = std::cell::RefCell::new(c);
+
+        let inst = |name: &str, stops: f32| {
+            let mut i = lumit_core::fx::instantiate(name).expect("a built-in");
+            for p in &mut i.params {
+                if p.id == "stops" {
+                    p.value = lumit_core::model::EffectValue::Float(
+                        lumit_core::anim::Property::fixed(f64::from(stops)),
+                    );
+                }
+            }
+            i
+        };
+        let insts = vec![
+            inst(lumit_core::roto::ROTO_BRUSH, 0.0),
+            inst("exposure", 0.05),
+            inst("exposure", 0.10),
+        ];
+        let ops = lumit_core::fx::resolve_stack(
+            &insts,
+            0.0,
+            1000.0,
+            1.0,
+            &lumit_core::fx::MarkerContext::NONE,
+            std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
+        );
+
+        // Inside a frame, so the pool is live and a dropped entry is really
+        // recycled — the shape the realiser runs in.
+        ctx.begin_frame();
+        let out = run_ops(
+            fx,
+            &ctx,
+            src.clone(),
+            W,
+            H,
+            &ops,
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            None,
+            Some((&warm, 7)),
+        );
+        ctx.end_frame();
+
+        assert_ne!(out, src, "the walk made a new picture for its output");
+        let after = lumit_gpu::fx::readback_linear_f32(&ctx, &src, W, H).expect("readback");
+        assert_eq!(
+            before, after,
+            "the layer's source was handed to the pool and drawn over"
+        );
+    }
+
+    /// **The first rung of the ladder** (docs/13 §4): a card under pressure
+    /// pauses the cache fill. What is already held is still read — the picture
+    /// that comes out is the same either way, so the only thing that changes is
+    /// how much of the card is spent on a later edit's convenience.
+    #[test]
+    fn a_card_under_pressure_stops_filing_and_still_reads() {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
+            lumit_gpu::no_adapter();
+            return;
+        };
+        let fx = ctx.fx();
+        let warm = warm_cache();
+        run(fx, &ctx, &long_stack(3), &warm, 7);
+        let filed = warm.borrow().stats().2;
+        assert!(filed > 0, "a card with room takes the walk's outputs");
+
+        // The card is now as full as the ledger says it is — a budget that
+        // stops exactly where this process has already reserved to. What
+        // filled it (another comp's textures, a decode buffer) the walk below
+        // neither knows nor needs to: it reads one number.
+        let used = ctx.ledger().used(lumit_budget::Tier::Vram);
+        assert!(used > 0, "the first walk put textures on the card");
+        ctx.ledger().set_budget(lumit_budget::Tier::Vram, used);
+        assert_eq!(ctx.vram_pressure(), lumit_budget::Pressure::Full);
+
+        // The same three ops with a fourth appended: ops 0..2 keep their names,
+        // so the held prefix still answers for them, and only the new op runs.
+        run(fx, &ctx, &long_stack(4), &warm, 7);
+        assert_eq!(
+            warm.borrow().stats().2,
+            filed,
+            "nothing new was filed while the card was full"
+        );
+        assert!(
+            warm.borrow().counts().1 >= filed as u64,
+            "and the prefix that was already held was still read"
+        );
     }
 
     /// One custom-shader instance holding `source`, resolved as the walk
@@ -1632,6 +2099,8 @@ mod tests {
             &[],
             &[],
             &[],
+            &[],
+            &[],
             None,
             None,
         );
@@ -1693,6 +2162,8 @@ mod tests {
                 &[LayerInput::Texture(source(&ctx)), LayerInput::Absent],
                 &[],
                 &[],
+                &[],
+                &[],
                 None,
                 Some((&cache, 7)),
             );
@@ -1722,6 +2193,8 @@ mod tests {
                 &[LayerInput::Absent, LayerInput::Texture(source(&ctx))],
                 &[],
                 &[],
+                &[],
+                &[],
                 None,
                 Some((&cache, 7)),
             );
@@ -1744,6 +2217,8 @@ mod tests {
                 H,
                 &ops,
                 &[(-1, source(&ctx))],
+                &[],
+                &[],
                 &[],
                 &[],
                 &[],
@@ -1792,6 +2267,8 @@ mod tests {
                 &[],
                 &[],
                 &[lut(mtime)],
+                &[],
+                &[],
                 &[],
                 &[],
                 &[],
@@ -2003,6 +2480,8 @@ mod tests {
             W,
             H,
             ops,
+            &[],
+            &[],
             &[],
             &[],
             &[],

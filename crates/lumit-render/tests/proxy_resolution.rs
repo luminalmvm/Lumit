@@ -83,6 +83,7 @@ fn scene() -> (Arc<Document>, Uuid, Uuid) {
         retime: None,
         interpolation: lumit_core::retime::Interpolation::default(),
         parked_flow: None,
+        graph_inputs: None,
         blend: lumit_core::model::BlendMode::default(),
         masks: Vec::new(),
         paint: Vec::new(),
@@ -93,6 +94,7 @@ fn scene() -> (Arc<Document>, Uuid, Uuid) {
         extra: serde_json::Map::new(),
     };
     let comp = Composition {
+        graph: None,
         master_volume_db: 0.0,
         sound_mix: false,
         groups: Vec::new(),

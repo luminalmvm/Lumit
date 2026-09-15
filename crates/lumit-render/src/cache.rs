@@ -198,6 +198,26 @@ pub fn frame_key_at(
 /// decode is narrower than the settled name would claim.
 pub trait NestedKeyer {
     fn nested_key(&self, nested: &Composition, lt: f64) -> Option<u128>;
+
+    /// The same name, with a placed node graph's own Input values folded in
+    /// (docs/impl/node-graph-comp.md §5.3): a graph placed twice with two sets
+    /// of values is two pictures, so it must be two names.
+    ///
+    /// The default answers `nested_key` when the layer carries no instance and
+    /// `None` when it does, which is the safe direction: a keyer that cannot
+    /// fold the instance says the frame is unnameable rather than naming two
+    /// pictures alike.
+    fn nested_key_with(
+        &self,
+        nested: &Composition,
+        lt: f64,
+        inputs: Option<&lumit_core::model::EffectInstance>,
+    ) -> Option<u128> {
+        match inputs {
+            None => self.nested_key(nested, lt),
+            Some(_) => None,
+        }
+    }
 }
 
 /// The renderer's [`NestedKeyer`]: the document, the probes a render already
@@ -214,6 +234,39 @@ impl NestedKeyer for NestedKeys<'_> {
             return None;
         }
         frame_key_at(self.doc, nested, lt, self.quality, self.probes)
+    }
+
+    fn nested_key_with(
+        &self,
+        nested: &Composition,
+        lt: f64,
+        inputs: Option<&lumit_core::model::EffectInstance>,
+    ) -> Option<u128> {
+        let base = self.nested_key(nested, lt)?;
+        let Some(inst) = inputs else {
+            return Some(base);
+        };
+        let stamper = Stamper::new(self.doc, self.probes, self.quality);
+        let extra = lumit_eval::instance_key(
+            self.doc,
+            nested,
+            inst,
+            lt,
+            lumit_eval::Quality {
+                divisor: self.quality.tag(),
+            },
+            &stamper,
+        )?;
+        // Both halves through the same hash the names themselves are made
+        // with, so the pair cannot collide the way a mix of two 128-bit
+        // numbers can.
+        let mut h = blake3::Hasher::new();
+        h.update(b"placed-graph/");
+        h.update(&base.to_le_bytes());
+        h.update(&extra.to_le_bytes());
+        let mut k = [0u8; 16];
+        k.copy_from_slice(&h.finalize().as_bytes()[..16]);
+        Some(u128::from_le_bytes(k))
     }
 }
 
@@ -315,6 +368,7 @@ mod tests {
                 colour_space: None,
             }));
         let comp = Composition {
+            graph: None,
             master_volume_db: 0.0,
             sound_mix: false,
             groups: Vec::new(),
@@ -347,6 +401,7 @@ mod tests {
                 retime: None,
                 interpolation: Default::default(),
                 parked_flow: None,
+                graph_inputs: None,
                 blend: Default::default(),
                 masks: Vec::new(),
                 paint: Vec::new(),
@@ -713,6 +768,26 @@ mod tests {
             tan_in: (0.0, 0.0),
             tan_out: (0.0, 0.0),
         }
+    }
+
+    /// **A keyer that cannot fold a placed graph's values names no frame**
+    /// (docs/impl/node-graph-comp.md §5.3). A layer that hands nothing over
+    /// keeps the name it always had, which is what leaves every key ever made
+    /// where it was; a layer that hands values over and a keyer that cannot
+    /// read them answer `None`, so the frame renders live and banks nothing
+    /// rather than naming two pictures alike.
+    #[test]
+    fn the_default_keyer_holds_a_placed_graphs_values_unnameable() {
+        struct Flat;
+        impl NestedKeyer for Flat {
+            fn nested_key(&self, _: &Composition, _: f64) -> Option<u128> {
+                Some(7)
+            }
+        }
+        let (_doc, comp, _item) = footage_comp();
+        assert_eq!(Flat.nested_key_with(&comp, 0.0, None), Some(7));
+        let inst = lumit_core::fx::instantiate("node_graph").expect("a builtin");
+        assert_eq!(Flat.nested_key_with(&comp, 0.0, Some(&inst)), None);
     }
 
     /// frames, with the end always after the start.

@@ -604,6 +604,10 @@ Widget projectPreviewCard(
 
   /// Whether that button is showing sound already running.
   bool soundPlaying = false,
+  /// Whether a picked composition is a node graph, which is the one thing the
+  /// card's type word cannot read off the item itself. From the panel's cache,
+  /// for the reason the name is.
+  bool nodeGraph = false,
 }) =>
     Container(
       key: const ValueKey('project-preview-card'),
@@ -614,7 +618,7 @@ Widget projectPreviewCard(
       padding: const EdgeInsets.all(_previewPad),
       child: item == null
           ? const SizedBox.expand()
-          : _previewContent(t, item, name, missing, thumb, info,
+          : _previewContent(t, item, name, missing, thumb, info, nodeGraph,
               onScrub: onScrub,
               onPlaySound: onPlaySound,
               soundPlaying: soundPlaying),
@@ -626,7 +630,8 @@ Widget _previewContent(
   String name,
   bool missing,
   ui.Image? image,
-  BridgeMediaInfo? info, {
+  BridgeMediaInfo? info,
+  bool nodeGraph, {
   ValueChanged<int?>? onScrub,
   VoidCallback? onPlaySound,
   bool soundPlaying = false,
@@ -634,7 +639,9 @@ Widget _previewContent(
   final type = switch (item) {
     ItemReference_Footage() => l10n.projectTypeFootage,
     ItemReference_Folder() => l10n.projectTypeFolder,
-    ItemReference_Composition() => l10n.projectTypeComposition,
+    ItemReference_Composition() => nodeGraph
+        ? l10n.projectTypeNodeGraph
+        : l10n.projectTypeComposition,
     ItemReference_Solid() => l10n.projectTypeSolid,
   };
 

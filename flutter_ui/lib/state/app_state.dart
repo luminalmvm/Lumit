@@ -421,6 +421,30 @@ class LumitState extends ChangeNotifier {
     return comp;
   }
 
+  /// Make a node graph composition and front it, asking for its settings first
+  /// (docs/impl/node-graph-comp.md §4.4).
+  ///
+  /// The Composition menu, the command palette and the Project panel's context
+  /// menu all come through here, so there is one answer to what "New node
+  /// graph" does. It fronts what it made, because a graph is worked on in the
+  /// Node graph panel and the panel draws the comp in front.
+  ///
+  /// Null when the project is closed or the dialogue was cancelled.
+  Future<CompositionReference?> newNodeGraph(BuildContext context) async {
+    final project = this.project;
+    if (project == null) return null;
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    final comp = await showNewCompositionFrb(
+      context: context,
+      project: project,
+      nodeGraph: true,
+    );
+    if (comp == null) return null;
+    ui.setSelectedComp(comp);
+    notifyDocumentChanged();
+    return comp;
+  }
+
   void handleChange(ScopedChange event) {
     // The item tree changed shape: the cached comp list is stale.
     //

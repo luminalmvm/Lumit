@@ -237,7 +237,10 @@ pub struct BridgePrefixPoint {
     /// The layer whose stack is cut, and — through its `comp_id` — the
     /// composition the cut belongs to. A point naming another composition's
     /// layer cuts nothing, so a stale chip is harmless rather than wrong.
-    pub layer: crate::api::layer::LayerReference,
+    ///
+    /// `None` on a node graph's point, which names a comp and a box in
+    /// [`Self::graph`] instead: a node graph has no layers to cut.
+    pub layer: Option<crate::api::layer::LayerReference>,
     /// The effect instance the stack stops **after**. An effect the layer no
     /// longer carries cuts nothing, for the same reason.
     ///
@@ -248,6 +251,26 @@ pub struct BridgePrefixPoint {
     /// `NodeRef::Source` as "keep nought"); there was simply no way to say it
     /// here.
     pub effect: Option<Uuid>,
+    /// The **node graph's** own point: the box the picture is read at
+    /// (docs/impl/node-graph-comp.md §4.5). `None` for the layer's chip and
+    /// for no chip at all.
+    ///
+    /// A field beside the other two rather than a shape of its own, so the
+    /// point stays one small copyable record and a caller that names a layer
+    /// writes exactly what it wrote before.
+    pub graph: Option<BridgeGraphPoint>,
+}
+
+/// Which box of which node graph the Viewer is reading the picture at.
+///
+/// The comp is named as well as the box because a stale chip must be harmless:
+/// a point naming another composition's box cuts nothing, exactly as a layer
+/// point naming another composition's layer does.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BridgeGraphPoint {
+    pub comp: Uuid,
+    pub node: Uuid,
 }
 
 /// How far the frame the user is waiting for has got (docs/13 §7.1).
@@ -567,6 +590,10 @@ pub(crate) fn op_scope(op: &lumit_core::Op) -> (Option<Uuid>, Option<Uuid>, bool
         // on, so the comp is the honest scope, as for the adjustment
         // switch below.
         | Op::SetGroupEffects { comp, .. }
+        // A node graph's whole graph, beside the group header's stack: a
+        // comp-wide change with no layer in it, so the comp model refreshes and
+        // no layer builder does.
+        | Op::SetCompGraph { comp, .. }
         // A layer that becomes an adjustment starts acting on everything
         // beneath it, and one that stops leaves those layers alone again — so
         // the comp is the honest scope, not the one row that changed.
@@ -583,6 +610,7 @@ pub(crate) fn op_scope(op: &lumit_core::Op) -> (Option<Uuid>, Option<Uuid>, bool
         | Op::SetShapeContents { comp, layer, .. }
         | Op::SetLayerEffects { comp, layer, .. }
         | Op::SetLayerStyles { comp, layer, .. }
+        | Op::SetLayerGraphInputs { comp, layer, .. }
         | Op::SetLayerGraph { comp, layer, .. }
         | Op::SetLayerFx { comp, layer, .. }
         | Op::SetLayerThreeD { comp, layer, .. }

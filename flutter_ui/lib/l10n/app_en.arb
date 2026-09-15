@@ -5748,6 +5748,64 @@
   "@settingsGroupMemory": {
     "description": "Settings window: heading over a group of rows."
   },
+  "settingsGroupResourceGovernor": "Resource governor",
+  "@settingsGroupResourceGovernor": {
+    "description": "Settings window: heading over a group of rows."
+  },
+  "settingsGovernorGraphicsMemory": "Graphics memory",
+  "@settingsGovernorGraphicsMemory": {
+    "description": "Settings, resource governor: the name of the row reporting memory reserved on the graphics card."
+  },
+  "settingsGovernorOrdinaryMemory": "Ordinary memory",
+  "@settingsGovernorOrdinaryMemory": {
+    "description": "Settings, resource governor: the name of the row reporting memory reserved in ordinary (system) RAM."
+  },
+  "settingsGovernorUsedOfBudget": "{used} of {budget}",
+  "@settingsGovernorUsedOfBudget": {
+    "description": "Settings, resource governor: what a tier holds against its ceiling. Both placeholders are amounts such as 1.5 GB.",
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "budget": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsGovernorPeak": "Most at once: {peak}",
+  "@settingsGovernorPeak": {
+    "description": "Settings, resource governor: the largest amount a tier held at any one moment this session. The placeholder is an amount such as 1.5 GB.",
+    "placeholders": {
+      "peak": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsGovernorEasy": "Room to spare",
+  "@settingsGovernorEasy": {
+    "description": "Settings, resource governor: the state of a memory tier that is comfortably under its ceiling."
+  },
+  "settingsGovernorTight": "Getting tight",
+  "@settingsGovernorTight": {
+    "description": "Settings, resource governor: the state of a memory tier that is approaching its ceiling."
+  },
+  "settingsGovernorSevere": "Nearly full — pausing cache fill",
+  "@settingsGovernorSevere": {
+    "description": "Settings, resource governor: the state of a memory tier close enough to its ceiling that the renderer has stopped adding to its caches."
+  },
+  "settingsGovernorFull": "Full — giving back cold frames",
+  "@settingsGovernorFull": {
+    "description": "Settings, resource governor: the state of a memory tier at its ceiling, where the renderer is evicting cached frames to make room."
+  },
+  "settingsGovernorTurnedAway": "{count, plural, =1{1 request turned away} other{{count} requests turned away}}",
+  "@settingsGovernorTurnedAway": {
+    "description": "Settings, resource governor: how many memory reservations were refused this session. Shown only when there has been at least one.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "settingsGroupPanels": "Panels",
   "@settingsGroupPanels": {
     "description": "Settings window: heading over a group of rows."
@@ -7902,6 +7960,18 @@
   "@updateChecksumMismatch": {
     "description": "Why an update was rejected: the file is not the one that was published."
   },
+  "updateNotSigned": "This update is not signed, so Lumit will not install it",
+  "@updateNotSigned": {
+    "description": "Why an update was rejected: the release carries no signed manifest, or Lumit could not fetch it. Shown only on builds that carry a release signing key."
+  },
+  "updateSignatureMismatch": "This update was not signed by Lumit, so it will not be installed",
+  "@updateSignatureMismatch": {
+    "description": "Why an update was rejected: the release manifest's signature is not the one this build's pinned key makes. Calm, not alarming - the ordinary cause is a mirror or a proxy, not an attack."
+  },
+  "updateNotInManifest": "This update is not the file Lumit published, so it will not be installed",
+  "@updateNotInManifest": {
+    "description": "Why an update was rejected: the signature held up, but the signed list of files does not name this download, or names it at a different size or checksum."
+  },
   "updateClickToUpdate": "Click to update - v{version}",
   "@updateClickToUpdate": {
     "description": "Help menu row when a new version is waiting.",
@@ -8808,6 +8878,34 @@
   "fxControls": "Controls",
   "@fxControls": {
     "description": "Add effect menu category — the effects that hold a value for an expression to read rather than changing the picture."
+  },
+  "fxCompositing": "Compositing",
+  "@fxCompositing": {
+    "description": "Add effect menu category - the two entries only a node graph can hold, which join or pick between the pictures its wires bring them."
+  },
+  "fxTimeOffset": "Time offset",
+  "@fxTimeOffset": {
+    "description": "Node graph box name - shows its input picture at another time, shifted by its Offset in seconds."
+  },
+  "fxMerge": "Merge",
+  "@fxMerge": {
+    "description": "Node graph box name - lays one picture over another with a blend mode and an opacity."
+  },
+  "fxSwitch": "Switch",
+  "@fxSwitch": {
+    "description": "Node graph box name - shows one of its pictures, chosen by an index."
+  },
+  "fxIndex": "Index",
+  "@fxIndex": {
+    "description": "Node graph controls - a control on Switch: which of its pictures is shown, counting from zero."
+  },
+  "fxNodeGraph": "Node graph",
+  "@fxNodeGraph": {
+    "description": "Effect name in the Add effect menu - applies a node graph composition to this layer, with the graph's inputs as its rows."
+  },
+  "fxOpenGraph": "Open graph",
+  "@fxOpenGraph": {
+    "description": "Effect controls - the button on Node graph that fronts the composition the effect applies."
   },
   "fxSliderControl": "Slider control",
   "@fxSliderControl": {
@@ -11250,6 +11348,15 @@
       }
     }
   },
+  "ocioTooLarge": "this config would take more memory or nesting to read than Lumit allows ({reason})",
+  "@ocioTooLarge": {
+    "description": "Project settings, Colour group. Why the colour config is not in force, lower case. Shown when the file is within the grammar but past a resource ceiling — a very large file, an enormous number of nodes, or nesting far deeper than any real config. Reason is the engine's own short English phrase naming which ceiling was met and its number.",
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
   "ocioProblemInSpace": "{problem} (the colour space {space})",
   "@ocioProblemInSpace": {
     "description": "Project settings, Colour group. Wraps any of the ocio* reasons above when the trouble surfaced while working out one particular colour space, so the reader knows where to look. The space name comes out of the user's own config file and stays as it is.",
@@ -12032,6 +12139,14 @@
   "@histEditDrivers": {
     "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
   },
+  "histEditNodeGraphInputs": "Edit node graph inputs",
+  "@histEditNodeGraphInputs": {
+    "description": "A row of the Edit > History window: the name of one edit that was made, here a change to the Input values of a node graph placed as a precomp layer. Sent by the engine as English and looked up here."
+  },
+  "histEditNodeGraph": "Edit node graph",
+  "@histEditNodeGraph": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
   "histFxSwitch": "Fx switch",
   "@histFxSwitch": {
     "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
@@ -12797,6 +12912,82 @@
   "fxWet": "Wet",
   "@fxWet": {
     "description": "Effect controls: how much of the treated sound is heard, on every audio effect that keeps some of the untreated sound beside it."
+  },
+  "graphInput": "Input",
+  "@graphInput": {
+    "description": "Heading over the four Input rows in the Node graph panel's Ctrl+Space console: a box standing for a value or picture handed in from outside the graph."
+  },
+  "graphInputPicture": "Picture",
+  "@graphInputPicture": {
+    "description": "One of the four kinds an Input box can carry in a node graph: a picture handed in from outside. Shown in the console list, under a box as its kicker, and in the Node panel's Kind picker."
+  },
+  "graphInputNumber": "Number",
+  "@graphInputNumber": {
+    "description": "One of the four kinds an Input box can carry in a node graph: a plain number. Shown in the console list, under a box as its kicker, and in the Node panel's Kind picker."
+  },
+  "graphInputAngle": "Angle",
+  "@graphInputAngle": {
+    "description": "One of the four kinds an Input box can carry in a node graph: a number in degrees. Shown in the console list, under a box as its kicker, and in the Node panel's Kind picker."
+  },
+  "graphInputColour": "Colour",
+  "@graphInputColour": {
+    "description": "One of the four kinds an Input box can carry in a node graph: a colour with four channels. Shown in the console list, under a box as its kicker, and in the Node panel's Kind picker."
+  },
+  "graphInputKind": "Kind",
+  "@graphInputKind": {
+    "description": "Row name in the Node panel's form for an Input box of a node graph: which of the four kinds the Input carries."
+  },
+  "graphInputName": "Label",
+  "@graphInputName": {
+    "description": "Row name in the Node panel's form for an Input box of a node graph: the word its parameter row is drawn under outside the graph."
+  },
+  "graphInputDefault": "Default",
+  "@graphInputDefault": {
+    "description": "Row name in the Node panel's form for an Input box of a node graph: the value it reads when nothing outside the graph supplies one."
+  },
+  "graphInputMin": "Minimum",
+  "@graphInputMin": {
+    "description": "Row name in the Node panel's form for an Input box of a node graph: the low end of the range its row is dragged in."
+  },
+  "graphInputMax": "Maximum",
+  "@graphInputMax": {
+    "description": "Row name in the Node panel's form for an Input box of a node graph: the high end of the range its row is dragged in."
+  },
+  "graphInputUnit": "Unit",
+  "@graphInputUnit": {
+    "description": "Row name in the Node panel's form for an Input box of a node graph: what its number is measured in, chosen from raw, pixels, degrees and per cent."
+  },
+  "unitRaw": "raw",
+  "@unitRaw": {
+    "description": "A unit meaning a plain number with nothing after it, offered in the Node panel's Unit picker beside pixels, degrees and per cent. Lower case, matching the other unit words."
+  },
+  "graphOpen": "Open",
+  "@graphOpen": {
+    "description": "Button in the Node panel for a Read box of a composition in a node graph: fronts that composition."
+  },
+  "graphNoComp": "Open a node graph composition.",
+  "@graphNoComp": {
+    "description": "The Node graph panel's empty state when the composition it was drawing has gone. One line under the panel's name."
+  },
+  "nodeNoRows": "This box has nothing to set.",
+  "@nodeNoRows": {
+    "description": "The Node panel's empty state when the picked box carries no values at all, which is the Output box of a node graph. One line under the panel's name."
+  },
+  "projectTypeNodeGraph": "node graph",
+  "@projectTypeNodeGraph": {
+    "description": "The word beside a selected item's name in the Project panel saying what kind of item it is: a composition whose picture is made by boxes and wires rather than a layer stack. Lower case on purpose, like the other type words."
+  },
+  "newNodeGraph": "New node graph",
+  "@newNodeGraph": {
+    "description": "Menu item, command palette row and Project panel context menu row: create a node graph composition. It opens the same settings dialogue New composition does."
+  },
+  "timelineNodeGraph": "This composition is a node graph. Its boxes are in the Node graph panel.",
+  "@timelineNodeGraph": {
+    "description": "What the Timeline says when the fronted composition is a node graph, which has boxes and wires instead of layers. Two short sentences under the panel's name."
+  },
+  "fxConsoleNodeGraphs": "Node graphs",
+  "@fxConsoleNodeGraphs": {
+    "description": "The FX console popover: the category kicker worn by the project's node graph compositions, each of which applies to the selected layers as an effect."
   },
   "timelineTickReadout": "1 tick = {frames} f",
   "@timelineTickReadout": {

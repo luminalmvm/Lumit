@@ -457,6 +457,7 @@ mod tests {
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
+            graph_inputs: None,
             blend: Default::default(),
             masks: Vec::new(),
             paint: Vec::new(),
@@ -470,6 +471,7 @@ mod tests {
         let layer_ids = layers.iter().map(|l| l.id).collect();
         let comp_id = Uuid::now_v7();
         doc.items.push(ProjectItem::Composition(Composition {
+            graph: None,
             master_volume_db: 0.0,
             sound_mix: false,
             groups: Vec::new(),

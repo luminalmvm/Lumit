@@ -1,0 +1,41 @@
+---
+title: Merge
+description: "Lays one picture over another with a blend mode and an opacity."
+---
+
+Merge is a **Compositing** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Merge lays the picture on its **A** socket over the picture on its **B** socket. It is a
+box in a [node graph composition](/use/node-graphs/) and is not offered on a layer's
+stack. An unwired A gives B; an unwired B gives A over nothing.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Mode** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Opacity** | Slider | 0 to 100 | 100 | Per cent |
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Mode**: the blend mode A is laid on with.
+- **Opacity**: how much of A is laid on.
+
+## Related
+
+- [Switch](/effects/compositing/switch/)
+- [Node graph compositions](/use/node-graphs/)
+- [Compositing](/effects/#compositing)
+- [Effects](/use/effects/)

@@ -1,0 +1,40 @@
+---
+title: Switch
+description: "Shows one of its input pictures, picked by Index."
+---
+
+Switch is a **Compositing** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Switch shows the picture on the socket its **Index** names, counting from **in0**. It is a
+box in a [node graph composition](/use/node-graphs/) and is not offered on a layer's
+stack. There is always one spare socket beyond the last one wired. An unwired socket, or
+an index past the last socket, shows nothing.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Index** | Slider, whole numbers | 0 to 8; higher | 0 | - |
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Index**: which socket is shown. Keyframe or drive it to change picture over time.
+
+## Related
+
+- [Merge](/effects/compositing/merge/)
+- [Node graph compositions](/use/node-graphs/)
+- [Compositing](/effects/#compositing)
+- [Effects](/use/effects/)

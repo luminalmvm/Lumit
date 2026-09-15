@@ -76,6 +76,7 @@ fn layer(name: &str, kind: LayerKind) -> Layer {
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,
+        graph_inputs: None,
         blend: Default::default(),
         masks: Vec::new(),
         paint: Vec::new(),
@@ -89,6 +90,7 @@ fn layer(name: &str, kind: LayerKind) -> Layer {
 
 fn comp_of(name: &str, layers: Vec<Layer>) -> Composition {
     Composition {
+        graph: None,
         master_volume_db: 0.0,
         sound_mix: false,
         groups: Vec::new(),
@@ -416,6 +418,8 @@ fn cpu_and_gpu_agree_on_every_shipped_style() {
             w,
             h,
             &ops,
+            &[],
+            &[],
             &[],
             &[],
             &[],

@@ -36,6 +36,17 @@ use super::{work_texture, FxEngine};
 /// actually build.
 const CACHE_ENTRIES: usize = 32;
 
+/// How many "last pipeline that compiled" fallbacks are kept, one per effect
+/// instance.
+///
+/// The fallback is what lets a shader keep drawing under a badge while the user
+/// is halfway through typing a change into it (§3.2). It only has to cover the
+/// instance being edited and its neighbours, so this is generous rather than
+/// exact — and it has to exist at all, because an entry pins a whole compiled
+/// pipeline and one per instance ever seen is a session-long growth with no
+/// ceiling.
+const LAST_GOOD_ENTRIES: usize = 32;
+
 /// The compute entry point the assembled module declares (the epilogue's).
 const ENTRY_POINT: &str = "lumit_shade";
 
@@ -51,6 +62,10 @@ pub struct CustomShaderPipelines {
     cache: Mutex<Vec<(u64, Arc<wgpu::ComputePipeline>)>>,
     /// The last pipeline that compiled, per effect instance — what an
     /// interactive render falls back to while the source will not compile.
+    ///
+    /// Most recently used last, capped at [`LAST_GOOD_ENTRIES`]: each entry
+    /// pins a compiled pipeline, and one per instance ever seen would keep
+    /// alive exactly what the `cache` LRU above had decided to drop.
     last_good: Mutex<Vec<(u128, Arc<wgpu::ComputePipeline>)>>,
     /// Whether that fallback is allowed at all. **False by default**, which is
     /// the export and headless answer; the interactive realiser turns it on.
@@ -234,9 +249,35 @@ impl FxEngine {
 
     fn remember_good(&self, instance: u128, pipeline: &Arc<wgpu::ComputePipeline>) {
         if let Ok(mut last) = self.custom_shader.last_good.lock() {
-            match last.iter_mut().find(|(id, _)| *id == instance) {
-                Some(slot) => slot.1 = pipeline.clone(),
-                None => last.push((instance, pipeline.clone())),
+            match last.iter().position(|(id, _)| *id == instance) {
+                // Move it to the end as well as updating it: the end is the
+                // most recently used, which is what makes the eviction below an
+                // LRU rather than a coin toss.
+                Some(at) => {
+                    let mut slot = last.remove(at);
+                    slot.1 = pipeline.clone();
+                    last.push(slot);
+                }
+                None => {
+                    // Bounded, and it was not.
+                    //
+                    // One entry per effect instance that has ever compiled,
+                    // each pinning a whole compiled pipeline alive — so a long
+                    // session, or a project with many Custom shader layers,
+                    // grew this without limit and kept every pipeline the
+                    // `cache` LRU beside it had already decided to let go of.
+                    // The fallback only has to cover the instance a user is
+                    // typing into, and its neighbours; a session with more than
+                    // [`LAST_GOOD_ENTRIES`] of them has nobody looking at the
+                    // oldest.
+                    //
+                    // An eviction costs a recompile if that instance's source
+                    // goes back to being broken, never a wrong picture.
+                    if last.len() >= LAST_GOOD_ENTRIES {
+                        last.remove(0);
+                    }
+                    last.push((instance, pipeline.clone()));
+                }
             }
         }
     }

@@ -382,6 +382,7 @@ fn an_empty_style_list_leaves_the_file_exactly_as_it_was() {
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,
+        graph_inputs: None,
         blend: Default::default(),
         masks: Vec::new(),
         paint: Vec::new(),

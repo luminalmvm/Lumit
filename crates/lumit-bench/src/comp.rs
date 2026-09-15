@@ -160,6 +160,7 @@ pub fn build(media: &RefMedia) -> Result<(Document, Uuid), String> {
 
     let comp_id = id("Reference");
     doc.items.push(ProjectItem::Composition(Composition {
+        graph: None,
         master_volume_db: 0.0,
         sound_mix: false,
         groups: Vec::new(),
@@ -259,6 +260,7 @@ fn layer(name: &str, kind: LayerKind, span: Rational) -> Layer {
         retime: None,
         interpolation: Interpolation::default(),
         parked_flow: None,
+        graph_inputs: None,
         blend: Default::default(),
         masks: Vec::new(),
         paint: Vec::new(),

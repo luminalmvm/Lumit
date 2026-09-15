@@ -1,0 +1,42 @@
+---
+title: Time offset
+description: "Shows its input at another time."
+---
+
+Time offset is a **Compositing** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Time offset shows the picture on its input socket at the current time plus **Offset**. It
+is a box in a [node graph composition](/use/node-graphs/) and is not offered on a layer's
+stack. Everything upstream of it is read at the shifted time, a Read of footage or of a
+composition included. A layer's own retime is [Retime](/use/retime/); this shifts one
+branch of a graph.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Offset** | Slider | -5 to 5; any value by typing | 0 | Seconds |
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Offset**: how far in time the input is shifted, in seconds. Negative looks back.
+
+## Related
+
+- [Retime](/use/retime/)
+- [Echo](/effects/temporal/echo/)
+- [Node graph compositions](/use/node-graphs/)
+- [Compositing](/effects/#compositing)
+- [Effects](/use/effects/)

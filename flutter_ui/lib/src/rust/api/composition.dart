@@ -8,10 +8,12 @@ import '../frb_generated.dart';
 import '../lib.dart';
 import 'assets.dart';
 import 'beats.dart';
+import 'comp_graph.dart';
 import 'effect.dart';
 import 'export.dart';
 import 'folder.dart';
 import 'footage.dart';
+import 'graph.dart';
 import 'layer.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:uuid/uuid.dart';
@@ -20,7 +22,7 @@ import 'solid.dart';
 import 'state.dart';
 import 'wireframes.dart';
 
-// These functions are ignored because they are not marked as `pub`: `add_at`, `bridge_marker`, `colour_view_pair`, `commit_slide`, `commit`, `composition`, `core_marker`, `core_markers`, `dispatch`, `document`, `footage_span_and_size`, `has_picture`, `insert_row`, `layer_switch_op`, `place_footage`, `project`, `read_groups`, `runs_as_video`, `to_engine`
+// These functions are ignored because they are not marked as `pub`: `add_at`, `bridge_marker`, `colour_view_pair`, `commit_slide`, `commit`, `composition`, `core_marker`, `core_markers`, `dispatch`, `document`, `footage_span_and_size`, `graph_of`, `has_picture`, `insert_row`, `layer_switch_op`, `place_footage`, `project`, `read_groups`, `runs_as_video`, `to_engine`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `id`, `new`, `project_id`
 
@@ -84,6 +86,24 @@ class BridgeCompModel {
   /// arriving frame reads the held copy rather than asking the engine per
   /// rebuild; writes still go through `set_background`.
   final F32Array4 background;
+
+  /// Whether this composition is a **node graph**: boxes and wires in place
+  /// of a layer stack (docs/impl/node-graph-comp.md §4.1).
+  ///
+  /// It rides the model rather than being asked for, so the Timeline, the
+  /// Graph panel and the project row read the one fact off an answer they
+  /// already hold. `layers` is empty on one, and every layer op is refused.
+  final bool isNodeGraph;
+
+  /// A node graph's **Fx boxes**, in document order, with every parameter's
+  /// value: what the Timeline draws a row and a lane per
+  /// (docs/impl/node-graph-comp.md §5.7). Empty on a layer comp.
+  ///
+  /// At offset zero, a graph's clock being the comp's own, and with each
+  /// box's Inputs copy refreshed from the live graph as every clone's is.
+  /// It rides the model for the reason the layers' effects do: the rows are
+  /// drawn from the held answer and ask the engine nothing.
+  final List<BridgeEffectInstanceInfo> graphBoxes;
   final List<BridgeLayerEntry> layers;
 
   /// The comp's layer groups, in document order and already resolved
@@ -98,6 +118,8 @@ class BridgeCompModel {
     required this.fpsDen,
     required this.motionBlurEnabled,
     required this.background,
+    required this.isNodeGraph,
+    required this.graphBoxes,
     required this.layers,
     required this.groups,
   });
@@ -110,6 +132,8 @@ class BridgeCompModel {
       fpsDen.hashCode ^
       motionBlurEnabled.hashCode ^
       background.hashCode ^
+      isNodeGraph.hashCode ^
+      graphBoxes.hashCode ^
       layers.hashCode ^
       groups.hashCode;
 
@@ -124,6 +148,8 @@ class BridgeCompModel {
           fpsDen == other.fpsDen &&
           motionBlurEnabled == other.motionBlurEnabled &&
           background == other.background &&
+          isNodeGraph == other.isNodeGraph &&
+          graphBoxes == other.graphBoxes &&
           layers == other.layers &&
           groups == other.groups;
 }
@@ -846,6 +872,36 @@ class CompositionReference {
         that: this,
       );
 
+  /// This composition's **node graph**, whole, in one crossing
+  /// (docs/impl/node-graph-comp.md §4.1): every box the canvas draws with its
+  /// sockets, plus the wiring the user edits.
+  ///
+  /// One call, not one per box, exactly as `LayerReference::get_graph` is:
+  /// fetched when the selection or the document changes and held in Dart,
+  /// never asked from a rebuild. The boxes are derived from the graph and the
+  /// project each time, so there is nothing stale to invalidate and nothing
+  /// there to write back.
+  ///
+  /// Refused on a composition that is not a node graph: it has layers
+  /// instead, and the Timeline is where they are read.
+  BridgeCompGraph getNodeGraph() => BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceGetNodeGraph(
+        that: this,
+      );
+
+  /// This graph's **Fx boxes** as staged copies, exactly as
+  /// [`Self::get_group_effects`] hands out a header's.
+  ///
+  /// Offset zero, a graph's clock being the comp's own, as a group header's
+  /// is. A box's parameters ride the ordinary property path from here:
+  /// `get_value` / `set_value` stage a change and [`Self::set_node_graph`] is
+  /// the commit, so keyframing, the stopwatch and every existing control work
+  /// on a box's row unchanged.
+  List<BridgeEffectInstance> getNodeGraphInstances() => BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceGetNodeGraphInstances(
+        that: this,
+      );
+
   /// Everything the Composition settings dialog shows.
   ///
   /// The frame rate crosses as an exact `{num, den}` pair and the duration as
@@ -888,6 +944,20 @@ class CompositionReference {
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceGroupLayers(
           that: this, layerIds: layerIds, name: name);
 
+  /// Insert a saved graph group at canvas point `(x, y)`: **one commit**, so
+  /// one undo step however many boxes and wires it carries.
+  ///
+  /// Every node id is minted here, so dropping one group twice never makes
+  /// two boxes share an id. The Output is left exactly as it was: a group
+  /// carries none, and a hand-written file that does carry one is refused
+  /// whole by [`lumit_core::Op::SetCompGraph`] with its own calm sentence,
+  /// which is the treatment every other bad graph gets.
+  void insertGraphGroup(
+          {required String text, required double x, required double y}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceInsertGraphGroup(
+              that: this, text: text, x: x, y: y);
+
   /// This comp's **master fader**, in dB (docs/09 §3.1). 0 is unity;
   /// −100 and below is exact silence, the same −∞ knee a layer's Volume has.
   double masterVolumeDb() => BridgeLib.instance.api
@@ -908,6 +978,24 @@ class CompositionReference {
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceNearestFrameAtTime(
               that: this, time: time);
+
+  /// A new box of the built-in named `name`, **uncommitted**.
+  ///
+  /// `LayerReference::new_driver`'s mirror for this canvas, and split from
+  /// the commit for the same reason: the panel drops the box, auto-wires it,
+  /// places it, and commits all of that as one [`Self::set_node_graph`], one
+  /// op and one undo step.
+  ///
+  /// A Compositing entry and a driver are both fine here: **this is the
+  /// graph's own door**, and they are what a graph is made of. `graph` names
+  /// the composition a Node graph box applies, and is required for that one
+  /// entry: a Node graph box with nothing bound would draw no sockets and
+  /// render nothing.
+  BridgeEffectInstance newGraphInstance(
+          {required String name, CompositionReference? graph}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceNewGraphInstance(
+              that: this, name: name, graph: graph);
 
   /// Paste a layer copied by [`crate::api::layer::LayerReference::copy_layer`]
   /// into this composition, at the top of the stack.
@@ -1163,6 +1251,23 @@ class CompositionReference {
               layer: layer,
               drivers: drivers);
 
+  /// Ask for `frame` with this **node graph's** Fx boxes replaced by
+  /// `instances`: the live drag on a box's number, which never touches the
+  /// document.
+  ///
+  /// The driver preview's twin, one function up, on the other canvas and for
+  /// the same reason: a box's value is one op per drag and not one per tick,
+  /// so the picture is kept in step by previewing rather than by writing.
+  /// Only the boxes are substituted: the wires, the layout and the badges are
+  /// the document's, and a drag on a number changes none of them.
+  void renderFrameWithGraphPreview(
+          {required BigInt frame,
+          required double scale,
+          required List<BridgeEffectInstance> instances}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceRenderFrameWithGraphPreview(
+              that: this, frame: frame, scale: scale, instances: instances);
+
   /// Ask for `frame` with `layer`'s masks replaced by `masks` — the mask's
   /// half of the two calls above.
   void renderFrameWithMaskPreview(
@@ -1358,6 +1463,24 @@ class CompositionReference {
               layer: layer,
               view: view);
 
+  /// The JSON text of a **graph group** gathered from `nodes`, the node
+  /// graph canvas's twin of `LayerReference::save_node_group`
+  /// (docs/impl/node-graph-comp.md §5.8).
+  ///
+  /// The engine hands back the text and Dart chooses where it goes, exactly
+  /// as an effect preset does: the engine never opens a file dialogue. What
+  /// is saved is the boxes, the wires with both ends inside the set, and
+  /// where they sat relative to one another. **The Output is never saved**:
+  /// every graph has exactly one and it cannot be deleted, so a second one
+  /// arriving with a group would be a graph the validator refuses.
+  String saveGraphGroup(
+          {required String name,
+          required int colour,
+          required List<UuidValue> nodes}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceSaveGraphGroup(
+              that: this, name: name, colour: colour, nodes: nodes);
+
   /// Set this composition's background colour — one op, one undo step. A
   /// document edit that reaches the export, unlike the Viewer's preview-only
   /// grid.
@@ -1433,6 +1556,26 @@ class CompositionReference {
   void setMotionBlurEnabled({required bool on_}) => BridgeLib.instance.api
       .crateApiCompositionCompositionReferenceSetMotionBlurEnabled(
           that: this, on_: on_);
+
+  /// Commit a whole graph: the staged Fx boxes and the edited wiring, as one
+  /// [`lumit_core::Op::SetCompGraph`].
+  ///
+  /// The whole-graph shape is `LayerReference::set_graph`'s and is deliberate.
+  /// Add a box, remove one, wire, unwire, drag one, twirl one, name a group:
+  /// each is one write and therefore one undo step, and a delete takes its
+  /// wires with it inside the same commit rather than leaving a dangling one.
+  ///
+  /// A graph that breaks one of the model's rules is **refused**, not
+  /// degraded: a wire to a missing box or socket, a mistyped wire, a second
+  /// wire on one socket, a loop, no Output box or two. Each arrives as
+  /// `OpError::InvalidGraph` carrying the engine's own calm sentence, and a
+  /// refused write leaves the document exactly as it was.
+  void setNodeGraph(
+          {required List<BridgeEffectInstance> instances,
+          required BridgeCompWiring wiring}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceSetNodeGraph(
+              that: this, instances: instances, wiring: wiring);
 
   /// Apply the Composition settings dialog, as one undo step.
   ///

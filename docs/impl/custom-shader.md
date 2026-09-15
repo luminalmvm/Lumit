@@ -566,7 +566,10 @@ is shared is the drawing: the dot grid, the node card with its shared header (a 
 name — the same one an Effect controls heading wears), type-coloured wires and sockets, the
 Ctrl+Space console as the add surface, frame-all, the selected border.
 Sharing the widget and not the document type is what keeps §1.1's honesty guarantee from
-being quietly weakened by a second meaning for `Edge`.
+being quietly weakened by a second meaning for `Edge`. There are now three kinds of graph on
+this one canvas: a layer's, a shader's inner one, and the node graph composition
+([node-graph-comp.md](node-graph-comp.md)), each with its own document type and the same
+drawing.
 
 ### 4.3 Node vocabulary v1
 

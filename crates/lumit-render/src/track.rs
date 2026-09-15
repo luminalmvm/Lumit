@@ -2288,6 +2288,7 @@ mod tests {
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
+            graph_inputs: None,
             blend: BlendMode::Normal,
             masks: Vec::new(),
             paint: Vec::new(),
@@ -2333,6 +2334,7 @@ mod tests {
             *correction_base = base.map(Box::new);
         }
         let comp = Composition {
+            graph: None,
             master_volume_db: 0.0,
             sound_mix: false,
             groups: Vec::new(),
@@ -3243,6 +3245,7 @@ mod tests {
             .push(lumit_core::fx::instantiate("fractal_noise").expect("the effect is registered"));
 
         doc.items.push(ProjectItem::Composition(Composition {
+            graph: None,
             master_volume_db: 0.0,
             sound_mix: false,
             groups: Vec::new(),
@@ -3684,6 +3687,7 @@ mod tests {
         let target = layer("screen", LayerKind::Null, span);
         let (tracked_id, target_id) = (shot.id, target.id);
         let comp = Composition {
+            graph: None,
             master_volume_db: 0.0,
             sound_mix: false,
             groups: Vec::new(),

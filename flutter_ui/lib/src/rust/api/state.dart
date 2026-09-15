@@ -19,7 +19,7 @@ import 'solid.dart';
 part 'state.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `adopt`, `forget_streams_except`, `handle_change_callback`, `journal_for`, `op_scope`, `phase_fraction`, `report_phase`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<LumitBridgeState>>
 abstract class LumitBridgeState implements RustOpaqueInterface {
@@ -172,6 +172,32 @@ class BridgeFrameProfile {
           view == other.view;
 }
 
+/// Which box of which node graph the Viewer is reading the picture at.
+///
+/// The comp is named as well as the box because a stale chip must be harmless:
+/// a point naming another composition's box cuts nothing, exactly as a layer
+/// point naming another composition's layer does.
+class BridgeGraphPoint {
+  final UuidValue comp;
+  final UuidValue node;
+
+  const BridgeGraphPoint({
+    required this.comp,
+    required this.node,
+  });
+
+  @override
+  int get hashCode => comp.hashCode ^ node.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeGraphPoint &&
+          runtimeType == other.runtimeType &&
+          comp == other.comp &&
+          node == other.node;
+}
+
 /// One layer's measured cost for the frame just made.
 class BridgeLayerTiming {
   final String layer;
@@ -218,7 +244,10 @@ class BridgePrefixPoint {
   /// The layer whose stack is cut, and — through its `comp_id` — the
   /// composition the cut belongs to. A point naming another composition's
   /// layer cuts nothing, so a stale chip is harmless rather than wrong.
-  final LayerReference layer;
+  ///
+  /// `None` on a node graph's point, which names a comp and a box in
+  /// [`Self::graph`] instead: a node graph has no layers to cut.
+  final LayerReference? layer;
 
   /// The effect instance the stack stops **after**. An effect the layer no
   /// longer carries cuts nothing, for the same reason.
@@ -231,13 +260,23 @@ class BridgePrefixPoint {
   /// here.
   final UuidValue? effect;
 
+  /// The **node graph's** own point: the box the picture is read at
+  /// (docs/impl/node-graph-comp.md §4.5). `None` for the layer's chip and
+  /// for no chip at all.
+  ///
+  /// A field beside the other two rather than a shape of its own, so the
+  /// point stays one small copyable record and a caller that names a layer
+  /// writes exactly what it wrote before.
+  final BridgeGraphPoint? graph;
+
   const BridgePrefixPoint({
-    required this.layer,
+    this.layer,
     this.effect,
+    this.graph,
   });
 
   @override
-  int get hashCode => layer.hashCode ^ effect.hashCode;
+  int get hashCode => layer.hashCode ^ effect.hashCode ^ graph.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -245,7 +284,8 @@ class BridgePrefixPoint {
       other is BridgePrefixPoint &&
           runtimeType == other.runtimeType &&
           layer == other.layer &&
-          effect == other.effect;
+          effect == other.effect &&
+          graph == other.graph;
 }
 
 /// How far the frame the user is waiting for has got (docs/13 §7.1).

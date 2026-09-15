@@ -380,6 +380,132 @@ pub fn stack_temporal_window(effects: &[EffectInstance], fx_on: bool, frame: f64
     offsets
 }
 
+/// The times **one box** asks its input at when it is asked at `t`, its own
+/// time first (docs/impl/node-graph-comp.md §5.2). `dt` is one frame in the
+/// clock `t` is measured in.
+///
+/// **In plain terms.** In a node graph a wire means "the picture this box
+/// makes", so a box that reads other frames reads its input box at those
+/// frames: Echo, Motion blur and Datamosh over their declared window, Posterize
+/// time at the held grid time alone, accumulation motion blur across its
+/// shutter, and a Time offset at its shifted second. Every other box, and every
+/// bypassed one, asks at `t` and nowhere else.
+///
+/// It is the one table [`crate::comp_graph::CompGraph::time_demands`] walks, so
+/// the lowering, the planner and the frame key cannot disagree about which
+/// frames a graph is made from.
+pub fn input_times(inst: &EffectInstance, t: f64, dt: f64) -> Vec<f64> {
+    if !inst.enabled || !is_catalogued(inst) {
+        return vec![t];
+    }
+    // The stack helpers answer for a slice of one, so the rate, phase and
+    // shutter are resolved by the very code the layer path resolves them with.
+    let one = std::slice::from_ref(inst);
+    if let Some(p) = stack_posterize(one, true, t) {
+        return vec![posterize_held_time(t, p.rate, p.phase)];
+    }
+    if let Some(p) = stack_accumulation_mb(one, true, t) {
+        let mut out = vec![t];
+        out.extend(p.sample_offsets().into_iter().map(|off| t + off * dt));
+        return out;
+    }
+    let Some(def) = super::BUILTIN_DEFS.get(&inst.effect.match_name) else {
+        return vec![t];
+    };
+    if inst.effect.match_name == TIME_OFFSET {
+        return vec![t + inst.float_at("offset", t).unwrap_or(0.0)];
+    }
+    let window = match def.frames_needed(inst, t) {
+        Some(own) => own,
+        None => def.schema().traits.temporal.to_vec(),
+    };
+    let mut out = vec![t];
+    out.extend(
+        window
+            .iter()
+            .filter(|&&o| o != 0)
+            .map(|&o| t + f64::from(o) * dt),
+    );
+    out
+}
+
+/// The match name of the Time offset box (§5.2).
+const TIME_OFFSET: &str = "time_offset";
+
+/// The source-relative frame offsets a **layer** needs at layer time `lt`, the
+/// stack's own window unioned with what any node graph applied to it demands of
+/// the picture it is handed (§5.2). `dt` is one frame of the comp the layer
+/// sits in.
+///
+/// **In plain terms.** A graph applied as an effect can hold an Echo on its
+/// first picture Input, and that Input is the layer's own picture: the layer
+/// therefore has to be rendered at the frames the Echo asks for, exactly as it
+/// would for an Echo sitting in the stack. This is where the two lists become
+/// one, and the planner and the frame key both read it, so they agree.
+///
+/// A demand at a fraction of a frame is dropped: a layer's neighbours are whole
+/// frames, and there is no in-between one to fetch.
+pub fn layer_temporal_window(
+    doc: &crate::model::Document,
+    layer: &Layer,
+    lt: f64,
+    dt: f64,
+) -> Vec<i32> {
+    let mut offsets = stack_temporal_window(&layer.effects, layer.switches.fx, lt);
+    if layer.switches.fx && dt > 0.0 {
+        for inst in layer
+            .effects
+            .iter()
+            .filter(|e| e.enabled && e.effect.match_name == crate::comp_graph::NODE_GRAPH)
+        {
+            offsets.extend(graph_demands_on_provided(doc, inst, lt, dt));
+        }
+    }
+    offsets.sort_unstable();
+    offsets.dedup();
+    offsets
+}
+
+/// The whole-frame offsets one Node graph instance demands of the picture it is
+/// handed: the times its graph asks its **first picture Input** at, other than
+/// the graph's own.
+fn graph_demands_on_provided(
+    doc: &crate::model::Document,
+    inst: &EffectInstance,
+    lt: f64,
+    dt: f64,
+) -> Vec<i32> {
+    use crate::comp_graph::{GraphNode, InputKind};
+    let Some(graph) = super::effects::node_graph::comp_of(inst)
+        .and_then(|comp| doc.comp(comp))
+        .and_then(|comp| comp.graph.as_ref())
+    else {
+        return Vec::new();
+    };
+    let (Some(output), Some(provided)) = (
+        graph.output_id(),
+        graph.nodes.iter().find_map(|n| match n {
+            GraphNode::Input { id, input } if input.kind == InputKind::Picture => Some(*id),
+            _ => None,
+        }),
+    ) else {
+        return Vec::new();
+    };
+    graph
+        .time_demands(output, lt, &|box_inst, at| input_times(box_inst, at, dt))
+        .into_iter()
+        .filter(|(node, at)| *node == provided && at.to_bits() != lt.to_bits())
+        .filter_map(|(_, at)| {
+            let frames = (at - lt) / dt;
+            let whole = frames.round();
+            // A fraction of a frame has no neighbour to fetch, and a demand
+            // beyond what an offset can hold is not one either.
+            ((frames - whole).abs() < 1e-6 && whole.abs() <= f64::from(i32::MAX))
+                .then_some(whole as i32)
+        })
+        .collect()
+}
+
 /// True when any live effect in the stack reads frames other than the
 /// current one — the cheap gate the render/cache paths check before doing
 /// any neighbour-frame work.

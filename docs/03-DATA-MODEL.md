@@ -107,6 +107,9 @@ An image sequence was to be a `SequenceItem` of its own; it is a flag on
 `FootageItem` instead (§3.1). A separate kind would have meant every
 `match` on `ProjectItem` growing an arm that said "treat it as footage".
 
+A node graph is a `Composition` with a `graph` field (§4) rather than an item kind of its
+own, on that same reasoning.
+
 ### 3. Media references and interpretation
 
 ```rust
@@ -218,11 +221,16 @@ struct Composition {
     markers: Vec<Marker>,
     layers: Vec<Layer>,                 // index 0 = top of the stack
     sound_mix: bool,                    // set once the comp has been shown in the Audio timeline; the Sound mix row stands on it
+    graph: Option<CompGraph>,           // a node graph's contents; absent on a layer comp
 }
 // Future: `pixel_aspect` (v1 is square-pixel only), and working depth. Bit depth
 // is a project-wide switch rather than a per-comp `CompDepth`, and v1 renders
 // fp16 only regardless. The 16384² dimension cap is intended but not yet enforced.
 ```
+
+A comp is a layer stack or a node graph and never both;
+[impl/node-graph-comp.md](impl/node-graph-comp.md) is the authority on what `graph` holds,
+how it is edited and how it renders.
 
 Comp frame rate is presentational (it defines frame boundaries for snapping and export);
 evaluation is defined at arbitrary rational times so nested comps of differing rates stay exact.
@@ -269,6 +277,11 @@ struct Layer {
     retime: Option<Property>,          // Retime as an ordinary keyframable property —
                                        // layer-local time → source time, in seconds. None = not
                                        // retimed (no row, no map). Ctrl+Alt+T installs the identity.
+    graph_inputs: Option<EffectInstance>, // a `node_graph` instance bound to this layer's own
+                                       // comp, holding a placed node graph's Input values.
+                                       // Meaningful only on a Precomp layer whose comp is a
+                                       // node graph; serde as `retime`
+                                       // (impl/node-graph-comp.md §5.3).
     markers: Vec<Marker>,              // §11: the layer's OWN cues, drawn on its bar.
                                        // Times are layer-local. A comp dropped into another
                                        // brings a copy of its markers here; the two lists are
@@ -344,7 +357,7 @@ Invariants:
 |---|---|---|---|
 | `Footage { item: Uuid, retime: Option<Retime> }` | yes | One footage item | The AE-style default. `None` = source rate. Retime per [04-RETIMING.md](04-RETIMING.md). |
 | `Sequence { clips: Vec<Clip> }` | yes | Its clips | §5.3. |
-| `Precomp { comp: Uuid }` | yes | Another composition | `collapse` switch defers rasterisation. Cycles invalid. **Precomp-level retime is future** — the `retime` field is not on the kind yet; nest through a Sequence clip to retime a comp for now. |
+| `Precomp { comp: Uuid }` | yes | Another composition | `collapse` switch defers rasterisation. Cycles invalid. The layer's own `retime` map maps layer time into the nested comp's clock and the whole nested comp retimes with it, clamped to the nested span under a map ([04-RETIMING.md](04-RETIMING.md) §11.3). `Layer.graph_inputs` holds the Input values of a placed node graph. |
 | `Solid { def: Uuid }` | yes | A SolidDef | |
 | `Text { document: TextDocument }` | yes | §9.1 | v1: one run. |
 | `Camera { zoom: Property, options: Box<CameraOptions>, solve_link: Option<Uuid>, correction_base: Option<Box<CameraPose>> }` | yes | [impl/camera.md](impl/camera.md) | AE camera: the layer position is the eye and `zoom` is the focal distance in comp pixels, so the plane `zoom` in front of the eye maps 1:1. `options` holds the node type, the point of interest a two-node camera aims at, depth of field (focus distance, aperture, blur level), lock to zoom and the film size. Only affects 3D-switch layers; the topmost visible camera is active. `solve_link` is §5.6's solve link; `None` - the usual case - is a camera the user drives by hand. `correction_base` is §5.6's correction lane's nought, present only while a link is. |
@@ -1119,7 +1132,7 @@ Effects and masks), the same three-way source a matte carries in §5.1.
 
 ### 8.1 Wiring — the layer's driver graph
 
-`effects` remains the only authority for the image chain: the Graph panel derives its
+`effects` remains the only authority for a layer's image chain: the Graph panel derives its
 image-path nodes from the list, and every image-wire gesture lowers to `SetLayerEffects`.
 Beside it, each layer carries an additive `LayerGraph`:
 
@@ -1138,10 +1151,14 @@ properties on the path `<layer>/graph/<node>/<param>`. Edges never cross layers 
 cross-layer tap (Audio level reading another layer's sound) is a layer-reference
 parameter (§8, above), drawn as a derived source node. An effect's Input port is by
 construction the previous stack entry, so every graph state has an honest stack
-rendering. One op, `SetLayerGraph`, is the whole-graph commit, mirroring
+rendering for a layer. One op, `SetLayerGraph`, is the whole-graph commit, mirroring
 `SetLayerEffects`; a cycle, type mismatch or doubled input is refused at apply, and a
 dangling layer reference degrades as a matte does. [impl/node-graph.md](impl/node-graph.md)
 is the authority on all of it, port types and the points stream included.
+
+The other kind of graph is the node graph composition (§4's `graph` field), which branches
+and merges pictures and has no stack to be honest to;
+[impl/node-graph-comp.md](impl/node-graph-comp.md) is its authority.
 
 ## 9. Rich layer payloads
 

@@ -165,7 +165,9 @@ hand-written `BUILTINS` literal are all deleted, and with them the migration-onl
 
 - **Dynamic parameters** - derived from a custom shader's uniforms or a node graph's exposed
     inputs; then **spare parameters**, the user's own sliders for expressions to read. The
-    rules are settled (§4 of the note); the panel affordances are not built.
+    rules are settled (§4 of the note). The Node graph effect's derived rows are the first of
+    these, built with NG1; the panel affordances for adopting a row and removing one are
+    what remains.
 - **Bridge and panel**: `list_parameters` and the Effect Controls read the schema, so they
     follow for free - except for dynamic parameters, which are per *instance* rather than per
     effect and need a bridge call that takes an instance id.
@@ -649,6 +651,21 @@ does not gate the four. Delete each phase here when it lands, as with everything
     windows, and last the satellite tear-off panels - which is where the old
     pop-out-panel-windows rebuild item is folded in.
 
+## Now - the node graph composition (docs/impl/node-graph-comp.md)
+
+Proposed 2026-09-06 against issue #106: a composition whose picture is made by nodes and
+wires, with Merge and Switch, Read and Input boxes, and the Node graph effect that applies
+one to a layer. The layer's own graph is untouched.
+
+- **NG1 to NG6**, ordered in the note's §8: the model, evaluation, the bridge, the canvas,
+    the shell, the docs. NG2 and NG3 both stand on NG1, NG4 on NG3, NG5 on NG4.
+- ~~The eleven boundaries v1 named~~ - **round two landed 2026-09-08**, every one of them
+    lifted: points wires in a graph, time inside a graph under one rule with a **Time
+    offset** box, a placed graph's Inputs on the layer, a per-box cache, an expression
+    reading an Input, Precomp retime end to end, a box's keys in the Timeline, saved
+    groups as `.lumngrp`, a forced collapse, sound through a graph's Reads, and a picture
+    Input's preview item (the note's §5).
+
 ## Next - colour management: OCIO (docs/impl/ocio.md)
 
 The owner has ruled OCIO support in scope; the design step has landed
@@ -938,8 +955,9 @@ are the reference for behaviour, not wiring targets):
     line; compensating Alt-drag; copy/paste a retime between clips;
     outward-trim-extends-map; the retime keyboard shortcuts (§12); Blend
     interpolation toggle; Flow-params UI and the source-rate advisory badge.
-- Precomp retiming - Precomp layers carry no Retime today; decide the intended
-    scope before building.
+- ~~Precomp retiming~~ - **landed 2026-09-08**: a Precomp layer's Retime map reaches
+    the comp inside it at every site that evaluates a nested comp, and overrun under a
+    map holds the boundary frame ([04-RETIMING.md](04-RETIMING.md) §11.3).
 - The Time-lens **vertical (source-position) boundary drag** has no bridge op -
     `Retime::from_source_keyframes` (`lumit-core/src/retime.rs`) is unexposed, and
     the `SetLayerRetime` op this entry used to name alongside it no longer exists

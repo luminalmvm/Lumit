@@ -140,6 +140,12 @@ class ProjectRowFrb extends StatefulWidget {
   /// overrides what it inherits.
   final int inherited;
 
+  /// Whether this composition is a **node graph**: boxes and wires in place of
+  /// a layer stack (docs/impl/node-graph-comp.md §4.4). It changes the glyph
+  /// and nothing else: a node graph opens, drags and nests as any comp does.
+  /// Handed in from the panel's cache, for the reason the name is.
+  final bool nodeGraph;
+
   /// Whether any composition places this item — the `in use` badge.
   final bool inUse;
 
@@ -213,6 +219,7 @@ class ProjectRowFrb extends StatefulWidget {
     required this.audio,
     required this.label,
     required this.inherited,
+    this.nodeGraph = false,
     required this.inUse,
     required this.proxy,
     required this.selected,
@@ -721,7 +728,12 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
           t.labelColour(fallback),
         ),
       ItemReference_Folder() => (LumitIcon.folder, t.textMuted),
-      ItemReference_Composition() => (LumitIcon.comp, t.textMuted),
+      // A node graph wears the boxes-and-wires glyph, muted as a comp's is:
+      // it is a comp, and what differs is what is inside it.
+      ItemReference_Composition() => (
+          widget.nodeGraph ? LumitIcon.nodes : LumitIcon.comp,
+          t.textMuted,
+        ),
       ItemReference_Solid() => (LumitIcon.solid, t.labelColour(fallback)),
     };
   }

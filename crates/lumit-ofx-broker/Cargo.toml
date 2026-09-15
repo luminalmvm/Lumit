@@ -17,6 +17,8 @@ path = "src/main.rs"
 # the host crate's own code. The broker is that code with a pipe in front of it.
 lumit-ofx = { path = "../lumit-ofx" }
 lumit-eval = { path = "../lumit-eval" }
+# The handshake that proves the process on the other end of the pipe is Lumit.
+lumit-peer = { path = "../lumit-peer" }
 
 [dev-dependencies]
 # The plugin the broker is tested against, and the bundle staging the tests do.

@@ -8,6 +8,8 @@ extern crate self as lumit_core;
 
 pub mod anim;
 pub mod camera;
+/// The node graph composition: what a comp holds instead of a layer stack.
+pub mod comp_graph;
 pub mod expression;
 pub mod fx;
 /// The layer driver graph: the additive wiring beside the effect stack.

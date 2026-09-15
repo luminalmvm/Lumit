@@ -355,6 +355,26 @@ struct PipelineSet {
     seed: wgpu::RenderPipeline,
 }
 
+/// A running weighted sum of textures, in fp32, fed one at a time.
+///
+/// Made by [`Compositor::accumulator`], fed by [`Compositor::add_into`], read
+/// once by [`Compositor::resolve`]. Two targets rather than one because each
+/// pass reads the sum so far and writes the next: a render pass cannot read the
+/// attachment it is writing.
+///
+/// It holds two full-frame `Rgba32Float` textures and nothing else, so its cost
+/// is fixed — which is the whole reason it exists. A caller that used to hold N
+/// finished composites to hand them all to [`Compositor::accumulate`] now holds
+/// this and one sample, for any N.
+pub struct Accumulator {
+    a: wgpu::Texture,
+    b: wgpu::Texture,
+    /// Which of the two holds the sum so far. Flips on every add.
+    sum_is_a: bool,
+    width: u32,
+    height: u32,
+}
+
 pub struct Compositor {
     /// Built per multisample count on demand and kept — see [`PipelineSet`].
     /// The lock is held only long enough to look one up or insert it, never
@@ -1636,6 +1656,267 @@ impl Compositor {
     /// An empty `layers` returns a transparent frame (a defensive no-op, never a
     /// panic — the caller only invokes this with a non-empty set).
     pub fn accumulate(
+        &self,
+        ctx: &GpuContext,
+        width: u32,
+        height: u32,
+        layers: &[(&wgpu::Texture, f32)],
+    ) -> wgpu::Texture {
+        let mut running = self.accumulator(ctx, width, height);
+        for (texture, weight) in layers {
+            self.add_into(ctx, &mut running, texture, *weight);
+        }
+        self.resolve(ctx, &running)
+    }
+
+    /// A running weighted sum, fed one texture at a time.
+    ///
+    /// # In plain terms
+    ///
+    /// [`Self::accumulate`] takes every texture at once, which means the caller
+    /// has to be holding every texture at once. For motion blur that is the
+    /// whole point of the cost: a thirty-two-sample shutter at 4K is
+    /// thirty-two finished composites alive together — two gigabytes of them —
+    /// waiting for a pass that reads each one exactly once and never looks at
+    /// it again.
+    ///
+    /// This is the same sum with the samples arriving one at a time. The caller
+    /// renders a sample, adds it, and lets it go; peak memory becomes the two
+    /// fp32 targets plus whichever sample is in hand, whatever N is.
+    ///
+    /// **The arithmetic is identical**, which is the part that matters. The sum
+    /// still runs entirely in fp32 across the same two ping-ponged targets, in
+    /// the same left-to-right order, and only [`Self::resolve`] rounds to the
+    /// working format — so a still scene still averages back to itself
+    /// bit-for-bit. Accumulating through the working format instead would have
+    /// been far simpler and would have thrown that away at the first fp16
+    /// intermediate.
+    #[must_use]
+    pub fn accumulator(&self, ctx: &GpuContext, width: u32, height: u32) -> Accumulator {
+        let make_f32 = |label: &str| {
+            ctx.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some(label),
+                size: wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba32Float,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            })
+        };
+        let a = make_f32("accumulate-f32-a");
+        let b = make_f32("accumulate-f32-b");
+
+        // The running sum starts at zero.
+        let mut encoder = ctx.encoder("accumulate-clear");
+        encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("accumulate-clear"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: &a.create_view(&Default::default()),
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            ..Default::default()
+        });
+        drop(encoder);
+
+        Accumulator {
+            a,
+            b,
+            sum_is_a: true,
+            width,
+            height,
+        }
+    }
+
+    /// Add `weight · premul(texture)` into a running sum.
+    ///
+    /// One pass: it reads the target holding the sum and writes the other,
+    /// which is why there are two. The destination is cleared and fully
+    /// rewritten, so nothing depends on what was in it.
+    pub fn add_into(
+        &self,
+        ctx: &GpuContext,
+        running: &mut Accumulator,
+        texture: &wgpu::Texture,
+        weight: f32,
+    ) {
+        let (width, height) = (running.width, running.height);
+        let buffer = self.accum_uniform(ctx, width, height, weight.clamp(0.0, 1.0));
+        let (sum, dst) = if running.sum_is_a {
+            (&running.a, &running.b)
+        } else {
+            (&running.b, &running.a)
+        };
+        let bind = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("accumulate"),
+            layout: &self.accum_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(
+                        &texture.create_view(&Default::default()),
+                    ),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&self.sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 6,
+                    resource: wgpu::BindingResource::TextureView(
+                        &sum.create_view(&Default::default()),
+                    ),
+                },
+            ],
+        });
+        let mut encoder = ctx.encoder("accumulate-f32");
+        {
+            let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("accumulate-f32"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &dst.create_view(&Default::default()),
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                ..Default::default()
+            });
+            rpass.set_pipeline(&self.pipeline_accum_f32);
+            rpass.set_bind_group(0, &bind, &[]);
+            rpass.draw(0..6, 0..1);
+        }
+        drop(encoder);
+        drop(buffer);
+        running.sum_is_a = !running.sum_is_a;
+    }
+
+    /// The finished sum, rounded once into the working format.
+    ///
+    /// The only rounding in the whole accumulation, which is what lets a still
+    /// scene average back to itself exactly.
+    #[must_use]
+    pub fn resolve(&self, ctx: &GpuContext, running: &Accumulator) -> wgpu::Texture {
+        let (width, height) = (running.width, running.height);
+        let target = ctx.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("accumulate"),
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: ctx.working(),
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
+        let sum = if running.sum_is_a {
+            &running.a
+        } else {
+            &running.b
+        };
+        let buffer = self.accum_uniform(ctx, width, height, 1.0);
+        let bind = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("accumulate-copy"),
+            layout: &self.accum_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(
+                        &self.white.create_view(&Default::default()),
+                    ),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&self.sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 6,
+                    resource: wgpu::BindingResource::TextureView(
+                        &sum.create_view(&Default::default()),
+                    ),
+                },
+            ],
+        });
+        let mut encoder = ctx.encoder("accumulate-copy");
+        {
+            let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("accumulate-copy"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &target.create_view(&Default::default()),
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                ..Default::default()
+            });
+            rpass.set_pipeline(&self.pipeline_accum_copy);
+            rpass.set_bind_group(0, &bind, &[]);
+            rpass.draw(0..6, 0..1);
+        }
+        drop(encoder);
+        drop(buffer);
+        target
+    }
+
+    /// The identity full-frame uniform every accumulation pass uses: the matrix
+    /// maps the unit quad across the whole target and the weight rides in
+    /// `params.x`.
+    fn accum_uniform(
+        &self,
+        ctx: &GpuContext,
+        width: u32,
+        height: u32,
+        weight: f32,
+    ) -> wgpu::Buffer {
+        let uniform = LayerUniform {
+            matrix: self.full_frame_matrix(width, height),
+            params: [weight, 0.0, 0.0, 0.0],
+            target: [width as f32, height as f32, -1.0, 0.0],
+        };
+        wgpu::util::DeviceExt::create_buffer_init(
+            &ctx.device,
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("accumulate-uniform"),
+                contents: bytemuck::bytes_of(&uniform),
+                usage: wgpu::BufferUsages::UNIFORM,
+            },
+        )
+    }
+
+    /// The previous implementation, kept as a test oracle only.
+    ///
+    /// [`Self::accumulate`] is now the streaming one, and the two must agree
+    /// byte for byte — the streaming version exists to change *when* memory is
+    /// held, never what comes out. `streaming_accumulation_matches_the_one_shot`
+    /// is that assertion, and this is the thing it asserts against.
+    #[cfg(test)]
+    fn accumulate_all_at_once(
         &self,
         ctx: &GpuContext,
         width: u32,
@@ -3050,6 +3331,66 @@ mod tests {
             single, averaged,
             "a still fractional scene averaged over 4 must equal the single frame bit-for-bit"
         );
+    }
+
+    /// The streaming accumulation and the one that took every texture at once
+    /// must produce **the same bytes**.
+    ///
+    /// The streaming form exists to change when memory is held, not what comes
+    /// out: a motion-blurred frame that shifted by a least significant bit
+    /// because the samples arrived one at a time would break the promise that
+    /// export and preview agree, and would break it invisibly. So the previous
+    /// implementation is kept as an oracle and this asserts against it.
+    ///
+    /// The weights are deliberately awkward — non-power-of-two, not summing to
+    /// one — because an equal-weight test over a still scene would pass even if
+    /// the accumulator had silently dropped to the working format.
+    #[test]
+    fn streaming_accumulation_matches_the_one_shot() {
+        let Some(ctx) = crate::test_support::lease() else {
+            crate::no_adapter();
+            return;
+        };
+        let colour = ctx.colour();
+        let compositor = ctx.compositor();
+
+        // Four genuinely different frames, so an accumulation that lost or
+        // reordered one would show.
+        let frames: Vec<wgpu::Texture> = [
+            [255, 0, 0, 255],
+            [0, 255, 0, 200],
+            [0, 0, 255, 120],
+            [255, 255, 0, 90],
+        ]
+        .into_iter()
+        .map(|rgba| solid_linear(&ctx, colour, rgba, 8, 8))
+        .collect();
+
+        let weights = [0.37_f32, 0.11, 0.29, 0.23];
+        let layers: Vec<(&wgpu::Texture, f32)> = frames.iter().zip(weights).collect();
+
+        let one_shot = compositor.accumulate_all_at_once(&ctx, 8, 8, &layers);
+        let expected = crate::fx::readback_linear_f32(&ctx, &one_shot, 8, 8).unwrap();
+
+        // The streaming path, the way a shutter would drive it: one frame in
+        // hand at a time.
+        let mut running = compositor.accumulator(&ctx, 8, 8);
+        for (frame, weight) in frames.iter().zip(weights) {
+            compositor.add_into(&ctx, &mut running, frame, weight);
+        }
+        let streamed = compositor.resolve(&ctx, &running);
+        let got = crate::fx::readback_linear_f32(&ctx, &streamed, 8, 8).unwrap();
+
+        assert_eq!(
+            expected, got,
+            "streaming the samples in changed the picture"
+        );
+
+        // And the public entry point, which is now the streaming one, agrees
+        // with the oracle too.
+        let through_public = compositor.accumulate(&ctx, 8, 8, &layers);
+        let public = crate::fx::readback_linear_f32(&ctx, &through_public, 8, 8).unwrap();
+        assert_eq!(expected, public);
     }
 
     /// A quarter-size quad placed at the centre covers exactly the centre

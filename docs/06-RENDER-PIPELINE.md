@@ -17,7 +17,8 @@ evaluated directly. A compiler lowers each comp into an immutable **evaluation g
 typed nodes (source, retime, mask, effect, transform, blend, matte-apply, comp-output).
 Recompilation is incremental per comp, runs on every edit, and publishes a new immutable graph
 snapshot; renders in flight keep the old snapshot. Users never see this compiled graph — the
-Graph panel draws the document's own stack and wiring, never these nodes.
+Graph panel draws the document's own stack and wiring, or a composition's own node graph,
+never these nodes.
 
 Evaluation is demand-driven pull in two strictly separated phases:
 
@@ -128,6 +129,21 @@ z-sorted and rendered through the active camera; a 2D layer breaks the run). Whi
 camera carries depth of field, each 3D layer is blurred by its circle of confusion before it
 is placed, one radius per layer read at its anchor ([impl/camera.md](impl/camera.md) §5); the
 pose the frame key hashes carries the depth-of-field numbers, so the key changes with them.
+z-sorted and rendered through the active camera; a 2D layer breaks the run). A node graph
+composition has no stack to walk: it is walked from its Output node back, and it is one
+draw source ([impl/node-graph-comp.md](impl/node-graph-comp.md) §2.3).
+
+**Steps are keyed by box and time, and each carries its own cache key.** A temporal box asks
+its input at times other than the frame's, so the lowering keys a step by the pair (node,
+time) rather than by the node: two demands of one Read at one time share a step and a decode
+job, and a demand at another time is a step of its own. What names a step for the per-effect
+cache is its **input cone** at the times that cone is asked for, hashed the way the frame key
+hashes the graph itself, so a box hits its cache when a sibling branch changes and misses
+when anything upstream of it does. Because that key names the bound matte and picture
+textures too, the chain break `op_keys` takes on a bound side texture is lifted for a graph
+step alone. `collapse_state` answers `Forced` for a Precomp layer whose comp is a node graph
+(§1.4): the walk needs its intermediate for the clipping a collapse would skip, and the
+switch draws dimmed. [impl/node-graph-comp.md](impl/node-graph-comp.md) §5.2 and §5.4.
 
 ### 1.3 Sequence layer evaluation
 
@@ -181,7 +197,9 @@ transparency; an inner layer consuming a matte (splicing a comp-space matte acro
 later refinement); a live adjustment layer inside the nested comp (its stack applies
 within its own comp, which splicing cannot honour; After Effects instead lets it bleed into
 the parent's stack, and Lumit deliberately does not). The Viewer MUST indicate when a
-collapsed layer has been forced to an intermediate (a dimmed collapse switch). Text and shape layers behave as permanently collapsed
+collapsed layer has been forced to an intermediate (a dimmed collapse switch). Collapse is
+inert on a Precomp layer whose comp is a node graph, there being no inner layers to splice,
+and the switch draws dimmed as it does for any forced intermediate. Text and shape layers behave as permanently collapsed
 vector sources: rasterisation happens after the full transform chain every frame.
 
 ### 1.5 Adjustment layers
@@ -191,7 +209,8 @@ to the composite of everything below it in the same comp. Its masks and opacity 
 coverage map: the effected composite is mixed back over the uneffected composite by that
 coverage. Its transform moves the coverage map, not the picture. The adjustment node's input
 ROI is the effect stack's expanded ROI intersected with the coverage DoD — an adjustment layer
-masked to a small region costs a small region.
+masked to a small region costs a small region. A node graph composition holds no layers, so no
+adjustment layer arises inside one.
 
 A **layer group whose header carries effects** (docs/impl/group-effects.md) is *not*
 a third staging point beside this one and the Precomp node: its drawn run renders as one

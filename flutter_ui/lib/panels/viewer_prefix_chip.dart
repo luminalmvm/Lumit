@@ -39,6 +39,10 @@ import 'viewer_panel_frb.dart' show viewerTagLeft, viewerTagTop;
 /// Read from [LumitUiState.model], which is the frontend's own held copy of the
 /// document, so this is a map lookup and never a call across the bridge.
 String? prefixChipName(LumitUiState ui) {
+  // A node graph's box names itself (docs/impl/node-graph-comp.md §4.5). The
+  // label rode in with the pick, so this is a field read; a driver, a value
+  // Input and the Output make no picture and name no point.
+  if (ui.viewerGraphPoint != null) return ui.compGraphNode.value?.label;
   final point = ui.viewerPrefixPoint;
   if (point == null) return null;
   final info = ui.model.byId(point.$1.internallayerId)?.info;
@@ -75,6 +79,9 @@ class ViewerPrefixChip extends StatelessWidget {
         // The Source box is picked on the canvas alone (N4), so the effect
         // selection is not what moves the chip onto it.
         uiState.graphNode,
+        // And a node graph's box is picked on its own canvas, which is a third
+        // surface with a notifier of its own.
+        uiState.compGraphNode,
         uiState.model,
       ]),
       builder: (context, _) {

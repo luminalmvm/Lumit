@@ -28,11 +28,38 @@ finish-args:
   - --device=dri
   # Covers PipeWire as well as PulseAudio.
   - --socket=pulseaudio
-  # A video editor reads footage from wherever the user keeps it — external
-  # drives included — so the narrower --filesystem=home would break ordinary
-  # projects. Revisit if Lumit is ever submitted to Flathub, where host access
-  # needs justifying to reviewers.
-  - --filesystem=host
+  # Where footage may be read from.
+  #
+  # In plain terms: a video editor reads footage from wherever the user keeps
+  # it, and external drives are where most people keep it, so plain
+  # --filesystem=home is not enough on its own. This used to be
+  # --filesystem=host, which is everything the host has outside flatpak's own
+  # deny-list — and that includes every *other* user's home directory, /opt,
+  # /srv and any top-level directory at all. A compositor that parses untrusted
+  # project files, imports arbitrary media and hosts third-party native plugins
+  # is not a program that should be able to read another account's documents.
+  #
+  # So: this user's home, and the three places removable and mounted volumes
+  # actually appear. That covers the case host was granted for without granting
+  # the rest of the machine with it.
+  #
+  # A user whose footage lives somewhere else — a dedicated array at /data, say,
+  # which is a normal thing for this kind of work — grants exactly that one
+  # path, once:
+  #
+  #     flatpak override --user --filesystem=/data io.github.luminalmvm.Lumit
+  #
+  # That is a better arrangement than granting it to everybody by default, and
+  # it is the answer Flathub reviewers ask for.
+  #
+  # The narrower still — no filesystem access at all, everything through the
+  # document portal — is real work rather than a manifest change: the engine
+  # stores absolute media paths and reopens them across sessions, so it would
+  # need to hold portal document handles instead. Tracked, not pretended at.
+  - --filesystem=home
+  - --filesystem=/media
+  - --filesystem=/run/media
+  - --filesystem=/mnt
 
 modules:
   - name: lumit

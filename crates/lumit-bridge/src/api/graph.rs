@@ -53,7 +53,7 @@ pub enum BridgePortType {
 
 impl BridgePortType {
     #[frb(ignore)]
-    fn of(ty: lumit_core::fx::PortType) -> BridgePortType {
+    pub(crate) fn of(ty: lumit_core::fx::PortType) -> BridgePortType {
         use lumit_core::fx::PortType;
         match ty {
             PortType::Image => BridgePortType::Image,

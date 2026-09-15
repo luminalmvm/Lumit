@@ -182,6 +182,27 @@ void main() {
           uiState: p.uiState);
     });
 
+    /// The Graph panel's third subject: the same panel drawing a node graph
+    /// composition rather than a layer's own graph.
+    testWidgets('Graph (node graph)', (tester) async {
+      final p = populated();
+      final graph = p.state.project!.newNodeGraph(name: 'Graph');
+      // Committed, so the sweep runs over a canvas with a real box on it: a
+      // new instance on its own is never in the document.
+      final made = graph.newGraphInstance(name: 'blur');
+      graph.setNodeGraph(
+        instances: [...graph.getNodeGraphInstances(), made],
+        wiring: graph.getNodeGraph().wiring,
+      );
+      p.uiState.setSelectedComp(graph);
+      p.uiState.model.refresh();
+      await sweepWidths(tester,
+          panel: Panel.graph,
+          build: () => const GraphPanelFrb(),
+          state: p.state,
+          uiState: p.uiState);
+    });
+
     testWidgets('Node', (tester) async {
       final p = populated();
       await sweepWidths(tester,

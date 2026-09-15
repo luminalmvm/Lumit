@@ -154,6 +154,47 @@ pub fn comp_frame_key(
     comp_key_visited(doc, comp, t, quality, stamper, &mut Vec::new())
 }
 
+/// The content name of **one effect instance** placed on `comp` at time `lt`
+/// (docs/impl/node-graph-comp.md §5.3): the bytes an effect stack of exactly
+/// that instance folds, with no layer of its own, as a group header's stack
+/// does.
+///
+/// What a placed node graph's Input values are named by, so the renderer can
+/// fold them into the nested comp's own name without learning how a stack is
+/// hashed. `None` for the reason [`comp_frame_key`] answers `None`: something
+/// the instance names is not yet identifiable, so the frame cannot be banked.
+#[must_use]
+pub fn instance_key(
+    doc: &Arc<Document>,
+    comp: &Composition,
+    inst: &lumit_core::model::EffectInstance,
+    lt: f64,
+    quality: Quality,
+    stamper: &dyn SourceStamper,
+) -> Option<u128> {
+    let mut h = blake3::Hasher::new();
+    h.update(b"instance/");
+    feed_effect_stack(
+        &mut h,
+        true,
+        std::slice::from_ref(inst),
+        None,
+        comp,
+        doc,
+        lt,
+        lt,
+        quality,
+        stamper,
+        // `comp` is already on the chain: the instance is bound to the very
+        // comp being named, and that comp's own key is folded beside this one.
+        &mut vec![comp.id],
+        true,
+    )?;
+    let mut k = [0u8; 16];
+    k.copy_from_slice(&h.finalize().as_bytes()[..16]);
+    Some(u128::from_le_bytes(k))
+}
+
 /// [`comp_frame_key`] with the ancestor chain threaded through, so a nested
 /// comp's own key is made with a fresh hasher — the name it has on its
 /// own, the one `lumit-render` files its finished texture under — while a comp
@@ -169,19 +210,49 @@ fn comp_key_visited(
     stamper: &dyn SourceStamper,
     visited: &mut Vec<Uuid>,
 ) -> Option<FrameKey> {
+    comp_key_viewed(
+        doc,
+        comp,
+        t,
+        lumit_core::comp_graph::GraphView::DEFAULTS,
+        quality,
+        stamper,
+        visited,
+    )
+}
+
+/// [`comp_key_visited`] for a comp somebody is **looking at through a host**
+/// (docs/impl/node-graph-comp.md §5.3, §5.11): a node graph applied as an
+/// effect or nested as a box, whose picture Inputs arrive on sockets. Every
+/// other caller looks at the comp on its own, which is `GraphView::DEFAULTS`
+/// and the bytes every key ever made already carries.
+#[allow(clippy::too_many_arguments)]
+fn comp_key_viewed(
+    doc: &Arc<Document>,
+    comp: &Composition,
+    t: f64,
+    view: lumit_core::comp_graph::GraphView<'_>,
+    quality: Quality,
+    stamper: &dyn SourceStamper,
+    visited: &mut Vec<Uuid>,
+) -> Option<FrameKey> {
     let mut h = blake3::Hasher::new();
-    feed_comp(&mut h, doc, comp, t, quality, stamper, visited)?;
+    feed_comp(&mut h, doc, comp, t, view, quality, stamper, visited)?;
     let bytes = h.finalize();
     let mut k = [0u8; 16];
     k.copy_from_slice(&bytes.as_bytes()[..16]);
     Some(FrameKey(u128::from_le_bytes(k)))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn feed_comp(
     h: &mut blake3::Hasher,
     doc: &Arc<Document>,
     comp: &Composition,
     t: f64,
+    // How the comp is being looked at; read only by the node graph fork
+    // below, since a layer comp has no Inputs to hand values to.
+    view: lumit_core::comp_graph::GraphView<'_>,
     quality: Quality,
     stamper: &dyn SourceStamper,
     visited: &mut Vec<Uuid>,
@@ -276,6 +347,14 @@ fn feed_comp(
             }
         }
     }
+    // **A node graph composition** (docs/impl/node-graph-comp.md §2.5). The
+    // walk forks here, so every byte a layer comp feeds is unchanged and no
+    // key ever made moves: a comp with no graph never reaches this line, and a
+    // comp with one has no layers, no groups and no lights to feed.
+    if let Some(graph) = &comp.graph {
+        feed_comp_graph(h, doc, comp, graph, t, view, quality, stamper, visited)?;
+        return Some(());
+    }
     // Draw order is content: iterate the stack as rendered. Layers outside
     // their span, hidden, or muted by someone else's solo contribute
     // nothing — presence is gated, never hashed, so trimming a bar without
@@ -339,6 +418,142 @@ fn feed_comp(
         feed_effect_stack(
             h, true, &g.effects, None, comp, doc, t, t, quality, stamper, visited, true,
         )?;
+    }
+    Some(())
+}
+
+/// Fold a **node graph composition** into the frame key (docs/impl/
+/// node-graph-comp.md §2.5).
+///
+/// In document order: each box's kind tag and its content, then every wire as
+/// its four parts, length-prefixed. Box **ids** are fed only where the layer
+/// graph feeds them - in the wires, because a wire has no position and the id
+/// is the only thing that says which of two identical boxes feeds the socket -
+/// so two graphs of the same content in two comps name the same frame.
+///
+/// Layout, exposure and groups feed nothing: moving a box, twirling one or
+/// naming a wash changes no pixel.
+#[allow(clippy::too_many_arguments)]
+fn feed_comp_graph(
+    h: &mut blake3::Hasher,
+    doc: &Arc<Document>,
+    comp: &Composition,
+    graph: &lumit_core::comp_graph::CompGraph,
+    t: f64,
+    view: lumit_core::comp_graph::GraphView<'_>,
+    quality: Quality,
+    stamper: &dyn SourceStamper,
+    visited: &mut Vec<Uuid>,
+) -> Option<()> {
+    use lumit_core::comp_graph::GraphNode;
+    let name = |h: &mut blake3::Hasher, s: &str| {
+        h.update(&(s.len() as u64).to_le_bytes());
+        h.update(s.as_bytes());
+    };
+    h.update(b"graph-comp/");
+    for node in &graph.nodes {
+        match node {
+            // A Read box is the layer it behaves like (§2.1), so its picture
+            // is named by the very arm a layer's source is named by.
+            GraphNode::Read { id, item, .. } => {
+                h.update(b"read/");
+                match doc
+                    .item(*item)
+                    .and_then(|i| lumit_core::comp_graph::read_layer(*id, i, comp))
+                {
+                    Some(layer) => {
+                        feed_source(h, doc, comp, &layer, t, t, quality, stamper, visited)?;
+                    }
+                    // An item somebody deleted draws transparent, and says so.
+                    None => {
+                        h.update(b"noitem");
+                    }
+                }
+            }
+            // The Input's five facts and its default, as the declaration they
+            // are - the whole record rather than a parse of it, exactly as a
+            // Light layer's own properties are fed.
+            GraphNode::Input { id, input } => {
+                h.update(b"input/");
+                // The declaration without its preview item, which is not a
+                // fact about the Input so much as about how it is being looked
+                // at: it stands in for the picture only where nothing feeds it
+                // (§5.11), so it is fed below, in that view alone.
+                let mut declared = input.clone();
+                declared.preview = None;
+                if let Ok(json) = serde_json::to_vec(&declared) {
+                    h.update(&json);
+                }
+                if let Some(item) = input.preview.filter(|_| !view.pictures_fed) {
+                    h.update(b"preview/");
+                    match doc
+                        .item(item)
+                        .and_then(|i| lumit_core::comp_graph::read_layer(*id, i, comp))
+                    {
+                        Some(layer) => {
+                            feed_source(h, doc, comp, &layer, t, t, quality, stamper, visited)?;
+                        }
+                        None => {
+                            h.update(b"noitem");
+                        }
+                    }
+                }
+            }
+            // An Fx box is an ordinary instance, fed by the group header's own
+            // call shape: no layer, so no driver graph of its own and the
+            // comp's unshifted marker context.
+            GraphNode::Fx(inst) => {
+                h.update(b"fx/");
+                // The bypass tick changes the picture - a bypassed box hands
+                // on what it was given - and `feed_effect_stack` says nothing
+                // at all about an instance that is off, so it is said here.
+                h.update(&[u8::from(inst.enabled)]);
+                feed_effect_stack(
+                    h,
+                    true,
+                    std::slice::from_ref(inst),
+                    None,
+                    comp,
+                    doc,
+                    t,
+                    t,
+                    quality,
+                    stamper,
+                    visited,
+                    true,
+                )?;
+            }
+            GraphNode::Output { id } => {
+                h.update(b"output/");
+                h.update(id.as_bytes());
+            }
+        }
+    }
+    for edge in &graph.edges {
+        h.update(b"wire/");
+        h.update(edge.from.as_bytes());
+        name(h, &edge.from_port);
+        h.update(edge.to.as_bytes());
+        name(h, &edge.to_port);
+    }
+    // **The graph's own clock, where a driver turns it.** A driver's output
+    // moves with time even when every stored number holds still - a Wiggle
+    // into a Switch's Index cuts between two pictures on a graph whose
+    // parameters are all static - so without this two such frames would share
+    // a name and the second would be served the first. The layer graph's own
+    // fold says the same thing for the same reason.
+    //
+    // The time and nothing else: it already gives every frame of a driven
+    // graph its own name, which is the safe direction, and each driver's own
+    // parameters are hashed by the box loop above.
+    let driven = graph.edges.iter().any(|e| {
+        matches!(graph.node(e.from), Some(lumit_core::comp_graph::GraphNode::Fx(inst))
+            if lumit_core::fx::def(&inst.effect.match_name)
+                .is_some_and(|d| d.schema().category == lumit_core::fx::FxCategory::Drivers))
+    });
+    if driven {
+        h.update(b"graph-drivers/");
+        feed_f64(h, t);
     }
     Some(())
 }
@@ -485,6 +700,7 @@ fn feed_effect_stack(
                     layer: Some(l.id),
                     comp_time: t,
                     current_depth: 0,
+                    inputs: None,
                 }),
             ),
         );
@@ -497,6 +713,17 @@ fn feed_effect_stack(
     // it) by the same shared constructor resolution uses, so the key
     // hashes exactly the beat times resolution sees.
     let mut mctx: Option<lumit_core::fx::MarkerContext> = None;
+    // **A Posterize time on this layer holds the graph it applies**
+    // (docs/impl/node-graph-comp.md §5.2): the builder and the planner both
+    // lower a Node graph effect at the time this stack's own ops resolve at,
+    // so the name has to be read there too. Equal to `lt` for every stack that
+    // carries no Posterize, which is every key ever made.
+    let graph_lt = lumit_core::fx::this_layer_effect_time(
+        effects,
+        fx_on,
+        lt,
+        marker_layer.map_or(lumit_core::time::Rational::ZERO, |l| l.start_offset.0),
+    );
     for e in effects.iter().chain(drivers).filter(|e| e.enabled) {
         h.update(&[match e.effect.namespace {
             lumit_core::model::EffectNamespace::Builtin => 0,
@@ -565,6 +792,59 @@ fn feed_effect_stack(
                 h.update(name.as_bytes());
                 h.update(&(text.len() as u64).to_le_bytes());
                 h.update(text.as_bytes());
+            }
+        }
+        // **The Node graph effect's own graph** (docs/impl/node-graph-comp.md
+        // §2.5), for the Custom shader's reason above: the loop below hashes
+        // every stored parameter, which covers the graph's Inputs for free,
+        // and what it does not cover is the graph itself. Without this line an
+        // edit inside the graph would change the picture and not its name.
+        //
+        // The named comp's own key at this layer time, under the guard a
+        // Precomp layer takes - so the graph is named once, the same whichever
+        // stack applies it.
+        if e.effect.match_name == lumit_core::comp_graph::NODE_GRAPH {
+            h.update(b"node-graph/");
+            match lumit_core::fx::effects::node_graph::comp_of(e) {
+                Some(id) if visited.contains(&id) => {
+                    h.update(b"cycle"); // renders as a passthrough, as the walk does
+                }
+                Some(id) => match doc.comp(id) {
+                    Some(named) => {
+                        // The values this host hands the graph's Inputs, and
+                        // the fact that its pictures arrive on sockets so no
+                        // preview item stands in (§5.3, §5.11). The driver
+                        // wires are left out of `overrides_of` here: a
+                        // substituted number never reaches this key, but the
+                        // wire, the driver and the layer's clock are folded by
+                        // the graph block above, which is what gives each
+                        // frame of a driven stack its own name.
+                        let values = named.graph.as_ref().map_or_else(Vec::new, |g| {
+                            lumit_core::fx::effects::node_graph::overrides_of(e, g, None)
+                        });
+                        visited.push(id);
+                        let r = comp_key_viewed(
+                            doc,
+                            named,
+                            graph_lt,
+                            lumit_core::comp_graph::GraphView {
+                                values: &values,
+                                pictures_fed: true,
+                            },
+                            quality,
+                            stamper,
+                            visited,
+                        );
+                        visited.pop();
+                        h.update(&r?.0.to_le_bytes());
+                    }
+                    None => {
+                        h.update(b"nocomp");
+                    }
+                },
+                None => {
+                    h.update(b"nocomp");
+                }
             }
         }
         for p in &e.params {
@@ -874,6 +1154,7 @@ fn feed_layer(
         layer: Some(layer.id),
         comp_time: t,
         current_depth: 0,
+        inputs: None,
     });
 
     // Evaluated transform at the layer's local time — never keyframe data.
@@ -1376,6 +1657,7 @@ fn feed_source(
                 layer: Some(layer.id),
                 comp_time,
                 current_depth: 0,
+                inputs: None,
             };
             let line = document.resolved_text(Arc::new(context));
             h.update(line.as_bytes());
@@ -1432,10 +1714,44 @@ fn feed_source(
             // has a key of its own, the one the renderer caches its texture
             // under, and that key is the same whichever parent asks for it.
             h.update(b"precomp/");
+            // The Retime map (docs/impl/node-graph-comp.md §5.6): the moment
+            // of the nested comp this layer shows, which is the moment the
+            // render evaluates. The map itself feeds no byte of its own - two
+            // layer times that land on one source time are one picture and
+            // share one name - and an un-retimed Precomp keeps the name it had.
+            let st = lumit_core::model::nested_source_time(layer, nested, lt);
             visited.push(*comp);
-            let r = comp_key_visited(doc, nested, lt, quality, stamper, visited);
+            let r = comp_key_visited(doc, nested, st, quality, stamper, visited);
             visited.pop();
             h.update(&r?.0.to_le_bytes());
+            // **A placed node graph's own Input values** (§5.3). The comp's
+            // key above is the graph on its own defaults; what this layer
+            // hands it is content beside it. Fed with the layer, so its driver
+            // wires and their clock are folded too and a driven value cannot
+            // hold the frame's name still.
+            if let Some(inputs) = &layer.graph_inputs {
+                h.update(b"graph-inputs/");
+                // With the comp it names on the chain, so the fold does not
+                // walk that comp's key a second time: it is the sixteen bytes
+                // just written.
+                visited.push(*comp);
+                let fed = feed_effect_stack(
+                    h,
+                    true,
+                    std::slice::from_ref(inputs),
+                    Some(layer),
+                    owner,
+                    doc,
+                    comp_time,
+                    lt,
+                    quality,
+                    stamper,
+                    visited,
+                    true,
+                );
+                visited.pop();
+                fed?;
+            }
         }
         LayerKind::Camera { .. } => {
             h.update(b"camera"); // draws nothing; pose is hashed at comp level
@@ -1507,7 +1823,16 @@ fn feed_source(
                     };
                     h.update(b"seq-comp/");
                     visited.push(comp);
-                    let r = feed_comp(h, doc, nested, st, quality, stamper, visited);
+                    let r = feed_comp(
+                        h,
+                        doc,
+                        nested,
+                        st,
+                        lumit_core::comp_graph::GraphView::DEFAULTS,
+                        quality,
+                        stamper,
+                        visited,
+                    );
                     visited.pop();
                     r?;
                 }
@@ -1784,6 +2109,7 @@ mod tests {
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
+            graph_inputs: None,
             blend: Default::default(),
             masks: Vec::new(),
             paint: Vec::new(),
@@ -1797,6 +2123,7 @@ mod tests {
 
     fn comp_with(layers: Vec<Layer>) -> Composition {
         Composition {
+            graph: None,
             master_volume_db: 0.0,
             sound_mix: false,
             groups: Vec::new(),
@@ -2329,6 +2656,15 @@ mod tests {
         assert_eq!(key(&doc, &a, 1.0), key(&doc, &b, 1.0));
         // And deterministic across calls.
         assert_eq!(key(&doc, &a, 1.0), key(&doc, &a, 1.0));
+
+        // Two node graphs of the same content, in two comps of different ids
+        // and different names, name one frame (docs/impl/node-graph-comp.md
+        // §2.5) - a duplicated comp shares its original's cache.
+        let (gdoc, one, ..) = node_graph_doc();
+        let mut two = one.clone();
+        two.id = Uuid::now_v7();
+        two.name = "a copy under another name".into();
+        assert_eq!(key(&gdoc, &one, 1.0), key(&gdoc, &two, 1.0));
     }
 
     /// Solo changes which layers render, so it must change the key —
@@ -2481,6 +2817,27 @@ mod tests {
             before,
             key(&doc, &comp, 1.0),
             "label, volume, audio and the Timeline switches change no pixel"
+        );
+
+        // And a node graph's canvas is presentation too (docs/impl/
+        // node-graph-comp.md §2.5): moving a box, twirling one open and
+        // naming a wash draw nothing at all.
+        let (gdoc, graphed, read, ..) = node_graph_doc();
+        let base = key(&gdoc, &graphed, 1.0);
+        let mut arranged = graphed.clone();
+        if let Some(g) = arranged.graph.as_mut() {
+            g.layout.push((read, [640.0, 480.0]));
+            g.exposed.push(read);
+            g.groups.push(lumit_core::comp_graph::GraphGroup {
+                name: "the wash".into(),
+                colour: 3,
+                members: vec![read],
+            });
+        }
+        assert_eq!(
+            base,
+            key(&gdoc, &arranged, 1.0),
+            "layout, exposure and groups are the canvas, not the picture"
         );
     }
 
@@ -4147,5 +4504,678 @@ mod tests {
         // Different clips → different keys; the gap differs from both.
         assert_ne!(k(1.0), k(4.0));
         assert_ne!(k(1.0), k(2.5));
+    }
+
+    // ---------------------------------------------------------------
+    // The node graph composition (docs/impl/node-graph-comp.md §2.5, §7 item 8)
+    // ---------------------------------------------------------------
+
+    /// One wire, spelled the way the panel spells it.
+    fn wire(
+        from: Uuid,
+        from_port: &str,
+        to: Uuid,
+        to_port: &str,
+    ) -> lumit_core::comp_graph::GraphEdge {
+        lumit_core::comp_graph::GraphEdge {
+            from,
+            from_port: from_port.to_owned(),
+            to,
+            to_port: to_port.to_owned(),
+        }
+    }
+
+    /// A grey solid and a node graph that reads it through an Exposure box
+    /// into the Output, with a value Input driving the Exposure's Stops - the
+    /// smallest graph carrying one of every kind of box.
+    ///
+    /// Answers the document, the comp, and the ids of the Read, the Exposure
+    /// and the Input, so a test can edit exactly one thing.
+    fn node_graph_doc() -> (Document, Composition, Uuid, Uuid, Uuid) {
+        use lumit_core::comp_graph::{CompGraph, GraphInput, GraphNode, InputKind};
+        let mut doc = Document::new();
+        let solid = Uuid::now_v7();
+        doc.items.push(ProjectItem::Solid(SolidDef {
+            id: solid,
+            name: "grey".into(),
+            colour: LinearColour([0.5, 0.5, 0.5, 1.0]),
+            width: 32,
+            height: 32,
+            extra: serde_json::Map::new(),
+        }));
+        let (read, input, out) = (Uuid::now_v7(), Uuid::now_v7(), Uuid::now_v7());
+        let fx = lumit_core::fx::instantiate("exposure").unwrap();
+        let fx_id = fx.id;
+        let mut comp = comp_with(Vec::new());
+        comp.graph = Some(CompGraph {
+            nodes: vec![
+                GraphNode::Read {
+                    id: read,
+                    item: solid,
+                    custom_name: None,
+                },
+                GraphNode::Input {
+                    id: input,
+                    input: GraphInput {
+                        id: "amount".into(),
+                        label: "Amount".into(),
+                        kind: InputKind::Number,
+                        default: [1.0, 0.0, 0.0, 0.0],
+                        min: -8.0,
+                        max: 8.0,
+                        unit: lumit_core::fx::Unit::Raw,
+                        preview: None,
+                    },
+                },
+                GraphNode::Fx(fx),
+                GraphNode::Output { id: out },
+            ],
+            edges: vec![
+                wire(read, "output", fx_id, "input"),
+                wire(input, "value", fx_id, "stops"),
+                wire(fx_id, "output", out, "input"),
+            ],
+            layout: Vec::new(),
+            exposed: Vec::new(),
+            groups: Vec::new(),
+        });
+        (doc, comp, read, fx_id, input)
+    }
+
+    /// **A node graph names a frame**, and names it the same way twice.
+    ///
+    /// A layer comp never reaches the fork at all - it has no graph - so every
+    /// key ever made holds, which is why `ALGO_VERSION` did not move; the rest
+    /// of this module is that assertion, made a hundred times over.
+    #[test]
+    fn a_node_graph_names_a_frame() {
+        let (doc, comp, ..) = node_graph_doc();
+        assert_eq!(key(&doc, &comp, 1.0), key(&doc, &comp, 1.0));
+        // And it is a different picture from the empty comp it would be
+        // without its boxes.
+        let mut bare = comp.clone();
+        bare.graph = None;
+        assert_ne!(key(&doc, &comp, 1.0), key(&doc, &bare, 1.0));
+    }
+
+    /// **Every content edit inside a graph renames the frame**: a parameter, a
+    /// wire, an Input's default, and a Read pointed at another item. Each is a
+    /// different picture, so each must retire the frames it drew.
+    #[test]
+    fn content_edits_inside_a_node_graph_rename_the_frame() {
+        use lumit_core::comp_graph::GraphNode;
+        use lumit_core::model::EffectValue;
+        let (doc, comp, read, fx_id, _) = node_graph_doc();
+        let base = key(&doc, &comp, 1.0);
+
+        // A parameter on a box.
+        let mut edited = comp.clone();
+        if let Some(GraphNode::Fx(inst)) = edited
+            .graph
+            .as_mut()
+            .and_then(|g| g.nodes.iter_mut().find(|n| n.id() == fx_id))
+        {
+            for p in &mut inst.params {
+                if p.id == "stops" {
+                    p.value = EffectValue::Float(Property::fixed(2.0));
+                }
+            }
+        }
+        assert_ne!(base, key(&doc, &edited, 1.0), "a parameter is content");
+
+        // A wire: the Read taken off the Exposure leaves it grading nothing.
+        let mut rewired = comp.clone();
+        if let Some(g) = rewired.graph.as_mut() {
+            g.edges.retain(|e| e.from != read);
+        }
+        assert_ne!(base, key(&doc, &rewired, 1.0), "a wire is content");
+
+        // An Input's default, which is what a parameter it feeds bakes.
+        let mut moved_default = comp.clone();
+        if let Some(GraphNode::Input { input, .. }) = moved_default.graph.as_mut().and_then(|g| {
+            g.nodes
+                .iter_mut()
+                .find(|n| matches!(n, GraphNode::Input { .. }))
+        }) {
+            input.default = [3.0, 0.0, 0.0, 0.0];
+        }
+        assert_ne!(
+            base,
+            key(&doc, &moved_default, 1.0),
+            "an Input's default is the value it bakes"
+        );
+
+        // A Read pointed at another item.
+        let mut swapped_doc = doc.clone();
+        let other = Uuid::now_v7();
+        swapped_doc.items.push(ProjectItem::Solid(SolidDef {
+            id: other,
+            name: "red".into(),
+            colour: LinearColour([1.0, 0.0, 0.0, 1.0]),
+            width: 32,
+            height: 32,
+            extra: serde_json::Map::new(),
+        }));
+        let mut swapped = comp.clone();
+        if let Some(GraphNode::Read { item, .. }) = swapped
+            .graph
+            .as_mut()
+            .and_then(|g| g.nodes.iter_mut().find(|n| n.id() == read))
+        {
+            *item = other;
+        }
+        assert_ne!(
+            base,
+            key(&swapped_doc, &swapped, 1.0),
+            "a Read swapped to another item is another picture"
+        );
+    }
+
+    /// **A driver inside a graph turns its clock** (§2.5). A Wiggle into a
+    /// parameter moves the picture while every stored number holds still, so
+    /// two frames of such a graph must not share a name - and a graph with no
+    /// wire out of a driver keeps the one name it had across its whole span.
+    #[test]
+    fn a_driver_inside_a_node_graph_names_every_frame_of_it() {
+        use lumit_core::comp_graph::GraphNode;
+        let (doc, comp, _, fx_id, _) = node_graph_doc();
+        assert_eq!(
+            key(&doc, &comp, 1.0),
+            key(&doc, &comp, 2.0),
+            "a graph of static numbers holds one name across its span"
+        );
+
+        let mut driven = comp.clone();
+        if let Some(g) = driven.graph.as_mut() {
+            let w = lumit_core::fx::instantiate("wiggle").unwrap();
+            let w_id = w.id;
+            g.nodes.push(GraphNode::Fx(w));
+            g.edges.push(wire(w_id, "value", fx_id, "stops"));
+        }
+        assert_ne!(
+            key(&doc, &driven, 1.0),
+            key(&doc, &driven, 2.0),
+            "a wire that wobbles must name every frame it wobbles through"
+        );
+    }
+
+    /// **A host layer's frame follows the graph its effect applies** (§2.5):
+    /// editing inside the graph renames every frame that shows it, and moving
+    /// a box in it renames none.
+    #[test]
+    fn a_host_layers_frame_follows_the_graph_its_effect_applies() {
+        use lumit_core::comp_graph::GraphNode;
+        use lumit_core::model::EffectValue;
+        let (mut doc, graph_comp, _, fx_id, _) = node_graph_doc();
+        let graph_id = graph_comp.id;
+        let graph = graph_comp.graph.clone().unwrap();
+        doc.items.push(ProjectItem::Composition(graph_comp));
+
+        let mut inst = lumit_core::fx::instantiate("node_graph").unwrap();
+        lumit_core::fx::effects::node_graph::bind(&mut inst, graph_id, &graph);
+        let mut host = text_layer("host", 0.0, 5.0, 0.0);
+        host.effects = vec![inst];
+        let comp = comp_with(vec![host]);
+        let base = key(&doc, &comp, 1.0);
+
+        // A canvas position moves no pixel, in the graph or on a layer.
+        let mut moved = doc.clone();
+        if let Some(g) = moved.comp_mut(graph_id).and_then(|c| c.graph.as_mut()) {
+            g.layout.push((fx_id, [640.0, 480.0]));
+        }
+        assert_eq!(
+            base,
+            key(&moved, &comp, 1.0),
+            "a box's position is presentation, not content"
+        );
+
+        // A parameter inside the graph is the host layer's picture.
+        let mut edited = doc.clone();
+        if let Some(GraphNode::Fx(inst)) = edited
+            .comp_mut(graph_id)
+            .and_then(|c| c.graph.as_mut())
+            .and_then(|g| g.nodes.iter_mut().find(|n| n.id() == fx_id))
+        {
+            for p in &mut inst.params {
+                if p.id == "stops" {
+                    p.value = EffectValue::Float(Property::fixed(2.0));
+                }
+            }
+        }
+        assert_ne!(
+            base,
+            key(&edited, &comp, 1.0),
+            "editing the graph must rename every frame that applies it"
+        );
+
+        // A graph nobody can find is a passthrough, and says so.
+        let mut gone = doc.clone();
+        gone.items
+            .retain(|i| !matches!(i, ProjectItem::Composition(c) if c.id == graph_id));
+        assert_ne!(
+            base,
+            key(&gone, &comp, 1.0),
+            "a dangling graph is a different picture"
+        );
+    }
+
+    /// **And it reads the graph on the host layer's clock** (§2.5). The same
+    /// graph on a layer dragged a second along the timeline is the same frame a
+    /// second later, which is what keeps a frame's name, its decodes and its
+    /// picture on one clock.
+    #[test]
+    fn a_graph_effects_frame_is_named_at_the_layer_time() {
+        use lumit_core::comp_graph::GraphNode;
+        use lumit_core::model::EffectValue;
+        let (mut doc, mut graph_comp, _, fx_id, _) = node_graph_doc();
+        // A keyframed row inside the graph, so the graph's content differs
+        // from moment to moment and a clock that slipped shows.
+        if let Some(GraphNode::Fx(inst)) = graph_comp
+            .graph
+            .as_mut()
+            .and_then(|g| g.nodes.iter_mut().find(|n| n.id() == fx_id))
+        {
+            for p in &mut inst.params {
+                if p.id == "stops" {
+                    p.value = EffectValue::Float(Property {
+                        extra: serde_json::Map::new(),
+                        animation: Animation::Keyframed(vec![
+                            Keyframe {
+                                time: Rational::ZERO,
+                                value: 0.0,
+                                interp_in: SideInterp::Linear,
+                                interp_out: SideInterp::Linear,
+                            },
+                            Keyframe {
+                                time: Rational::new(4, 1).unwrap(),
+                                value: 4.0,
+                                interp_in: SideInterp::Linear,
+                                interp_out: SideInterp::Linear,
+                            },
+                        ]),
+                    });
+                }
+            }
+        }
+        let graph_id = graph_comp.id;
+        let graph = graph_comp.graph.clone().unwrap();
+        doc.items.push(ProjectItem::Composition(graph_comp));
+
+        let hosted = |offset: f64| {
+            let mut inst = lumit_core::fx::instantiate("node_graph").unwrap();
+            lumit_core::fx::effects::node_graph::bind(&mut inst, graph_id, &graph);
+            let mut host = text_layer("host", 0.0, 5.0, offset);
+            host.effects = vec![inst];
+            comp_with(vec![host])
+        };
+
+        assert_eq!(
+            key(&doc, &hosted(0.0), 0.5),
+            key(&doc, &hosted(1.0), 1.5),
+            "a layer dragged a second along shows the graph a second later"
+        );
+        assert_ne!(
+            key(&doc, &hosted(0.0), 1.5),
+            key(&doc, &hosted(1.0), 1.5),
+            "and the graph's own keys are what move it"
+        );
+    }
+
+    /// **An unprobed Read makes the frame unkeyable**, exactly as an unprobed
+    /// footage layer does: the frame is rendered live and never banked.
+    #[test]
+    fn an_unprobed_read_makes_a_node_graphs_frame_unkeyable() {
+        use lumit_core::comp_graph::GraphNode;
+        use lumit_core::model::{FootageItem, MediaRef};
+        let (mut doc, mut comp, read, ..) = node_graph_doc();
+        let item = Uuid::now_v7();
+        doc.items.push(ProjectItem::Footage(FootageItem {
+            id: item,
+            name: "clip".into(),
+            media: MediaRef {
+                relative_path: "clip.mp4".into(),
+                absolute_path: "/clip.mp4".into(),
+                fingerprint: None,
+                extra: serde_json::Map::new(),
+            },
+            colour_space: None,
+            sequence: None,
+            extra: serde_json::Map::new(),
+        }));
+        if let Some(GraphNode::Read { item: named, .. }) = comp
+            .graph
+            .as_mut()
+            .and_then(|g| g.nodes.iter_mut().find(|n| n.id() == read))
+        {
+            *named = item;
+        }
+        let named = |stamper: &dyn SourceStamper| {
+            comp_frame_key(
+                &Arc::new(doc.clone()),
+                &comp,
+                1.0,
+                Quality::default(),
+                stamper,
+            )
+        };
+        assert!(
+            named(&UnknownStamper).is_none(),
+            "an unprobed Read cannot be named"
+        );
+        assert!(named(&StubStamper).is_some(), "and a probed one can");
+    }
+    // Round two: Precomp retime, a placed graph's Inputs, the preview item
+    // (docs/impl/node-graph-comp.md §5.3, §5.6, §5.11, test 20)
+    // ---------------------------------------------------------------
+
+    /// A Precomp layer over `nested`, spanning the whole comp.
+    fn precomp_layer(nested: Uuid) -> Layer {
+        let mut l = text_layer("", 0.0, 10.0, 0.0);
+        l.kind = LayerKind::Precomp { comp: nested };
+        l
+    }
+
+    /// **A retimed Precomp's key follows `source_time_at`** (§5.6). The frame
+    /// on screen is the nested comp's frame at the mapped moment, so the name
+    /// has to be read there: without the map, half speed would name the frame
+    /// after the moment it shows and hand the wrong picture back.
+    ///
+    /// And the other half of the same rule: **two layer times that land on one
+    /// source time are one picture**, so they share one name. A freeze is that
+    /// case at its plainest.
+    #[test]
+    fn a_retimed_precomps_key_follows_its_map() {
+        let mut doc = Document::new();
+        // Something inside that moves, so two moments of the nested comp are
+        // two names rather than the same still twice.
+        let mut mover = text_layer("inner", 0.0, 10.0, 0.0);
+        mover.transform.position_x = Property {
+            animation: Animation::Keyframed(vec![
+                Keyframe {
+                    time: Rational::ZERO,
+                    value: 0.0,
+                    interp_in: SideInterp::Linear,
+                    interp_out: SideInterp::Linear,
+                },
+                Keyframe {
+                    time: Rational::new(10, 1).unwrap(),
+                    value: 1000.0,
+                    interp_in: SideInterp::Linear,
+                    interp_out: SideInterp::Linear,
+                },
+            ]),
+            extra: serde_json::Map::new(),
+        };
+        let nested = comp_with(vec![mover]);
+        let nested_id = nested.id;
+        doc.items.push(ProjectItem::Composition(nested));
+
+        let plain = comp_with(vec![precomp_layer(nested_id)]);
+        // Half speed: layer time 4 shows the nested comp at 2.
+        let mut halved = precomp_layer(nested_id);
+        halved.retime = Some(linear_retime(&[(0.0, 0.0), (10.0, 5.0)]));
+        let slow = comp_with(vec![halved]);
+        assert_ne!(
+            key(&doc, &slow, 4.0),
+            key(&doc, &plain, 4.0),
+            "a retimed Precomp shows another moment, so it names another frame"
+        );
+        assert_eq!(
+            key(&doc, &slow, 4.0),
+            key(&doc, &plain, 2.0),
+            "and the moment it shows is the one the map points at"
+        );
+
+        // A freeze: every layer time maps to one source time, so every frame
+        // of it is one picture with one name.
+        let mut frozen = precomp_layer(nested_id);
+        frozen.retime = Some(linear_retime(&[(0.0, 2.0), (10.0, 2.0)]));
+        let held = comp_with(vec![frozen]);
+        assert_eq!(
+            key(&doc, &held, 1.0),
+            key(&doc, &held, 6.0),
+            "two layer times on one source time are one frame"
+        );
+    }
+
+    /// **A placed graph's Input value renames the parent frame** (§5.3), and a
+    /// layer that hands nothing over keeps the name it always had - so every
+    /// project written before the field existed is untouched.
+    #[test]
+    fn a_placed_graphs_input_value_renames_the_parent() {
+        use lumit_core::model::{EffectParam, EffectValue};
+        let (mut doc, graph_comp, ..) = node_graph_doc();
+        let graph_id = graph_comp.id;
+        let graph = graph_comp.graph.clone().unwrap();
+        doc.items.push(ProjectItem::Composition(graph_comp));
+
+        let placed = |value: Option<f64>| {
+            let mut l = precomp_layer(graph_id);
+            l.graph_inputs = value.map(|v| {
+                let mut inst = lumit_core::fx::instantiate("node_graph").unwrap();
+                lumit_core::fx::effects::node_graph::bind(&mut inst, graph_id, &graph);
+                inst.params.push(EffectParam {
+                    id: "amount".into(),
+                    value: EffectValue::Float(Property::fixed(v)),
+                    extra: serde_json::Map::new(),
+                });
+                inst
+            });
+            comp_with(vec![l])
+        };
+        let bare = key(&doc, &placed(None), 1.0);
+        let two = key(&doc, &placed(Some(2.0)), 1.0);
+        let three = key(&doc, &placed(Some(3.0)), 1.0);
+        assert_ne!(bare, two, "handing a value over is a different picture");
+        assert_ne!(two, three, "and so is handing a different one over");
+        assert_eq!(
+            bare,
+            key(&doc, &placed(None), 1.0),
+            "a layer with no instance names what it always named"
+        );
+    }
+
+    /// **A placed graph names itself by its values** (§5.3). The nested comp's
+    /// own name is the graph on its defaults, so the instance is named beside
+    /// it: this is the half [`instance_key`] answers, and what
+    /// `NestedKeyer::nested_key_with` folds into the texture's name.
+    #[test]
+    fn a_placed_graphs_values_name_the_nested_frame() {
+        use lumit_core::model::{EffectParam, EffectValue};
+        let (mut doc, graph_comp, ..) = node_graph_doc();
+        let graph_id = graph_comp.id;
+        let graph = graph_comp.graph.clone().unwrap();
+        doc.items.push(ProjectItem::Composition(graph_comp.clone()));
+        let doc = Arc::new(doc);
+
+        let instance = |v: f64| {
+            let mut inst = lumit_core::fx::instantiate("node_graph").unwrap();
+            lumit_core::fx::effects::node_graph::bind(&mut inst, graph_id, &graph);
+            inst.params.push(EffectParam {
+                id: "amount".into(),
+                value: EffectValue::Float(Property::fixed(v)),
+                extra: serde_json::Map::new(),
+            });
+            inst
+        };
+        let named = |v: f64| {
+            instance_key(
+                &doc,
+                &graph_comp,
+                &instance(v),
+                1.0,
+                Quality::default(),
+                &StubStamper,
+            )
+            .unwrap()
+        };
+        assert_eq!(named(2.0), named(2.0), "the same values name one picture");
+        assert_ne!(named(2.0), named(3.0), "and two values name two");
+    }
+
+    /// **An `input()` expression reads the same value in the key's walk as in
+    /// the render's** (§5.5). Both build the graph's context from the very
+    /// list `overrides_of` answers, so the number an expression sees cannot
+    /// depend on which of the two asked.
+    #[test]
+    fn an_input_expression_reads_alike_in_the_key_and_the_render() {
+        use lumit_core::expression::ExpressionContext;
+        use lumit_core::model::EffectValue;
+        let (mut doc, graph_comp, ..) = node_graph_doc();
+        let comp_id = graph_comp.id;
+        doc.items.push(ProjectItem::Composition(graph_comp));
+        let doc = Arc::new(doc);
+
+        let values: Vec<(String, EffectValue)> =
+            vec![("amount".into(), EffectValue::Float(Property::fixed(4.0)))];
+        let context = |values: Option<&[(String, EffectValue)]>| {
+            Arc::new(ExpressionContext {
+                document: doc.clone(),
+                comp: Some(comp_id),
+                layer: None,
+                comp_time: 1.0,
+                current_depth: 0,
+                inputs: values.map(Into::into),
+            })
+        };
+        let read = |ctx| lumit_core::expression::evaluate("input(\"amount\")", Some(ctx));
+        assert_eq!(read(context(Some(&values))), read(context(Some(&values))));
+        assert_eq!(
+            read(context(Some(&values))),
+            4.0,
+            "the host's value, not the Input's own default"
+        );
+        assert_eq!(
+            read(context(None)),
+            1.0,
+            "and the declared default where nobody handed one over"
+        );
+    }
+
+    /// **A preview item renames a graph viewed on its own, and not the same
+    /// graph applied** (§5.11). It stands in for a picture nobody is feeding,
+    /// so where the pictures arrive on sockets it changes no pixel and must
+    /// change no name.
+    #[test]
+    fn a_preview_item_renames_only_the_view_that_shows_it() {
+        use lumit_core::comp_graph::{GraphNode, InputKind};
+        let (mut doc, comp, ..) = node_graph_doc();
+        let solid = Uuid::now_v7();
+        doc.items.push(ProjectItem::Solid(SolidDef {
+            id: solid,
+            name: "stand-in".into(),
+            colour: LinearColour([1.0, 1.0, 1.0, 1.0]),
+            width: 32,
+            height: 32,
+            extra: serde_json::Map::new(),
+        }));
+        // The same graph with a picture Input, with and without a stand-in.
+        let with_picture = |preview: Option<Uuid>| {
+            let mut c = comp.clone();
+            if let Some(g) = c.graph.as_mut() {
+                g.nodes.push(GraphNode::Input {
+                    id: Uuid::now_v7(),
+                    input: lumit_core::comp_graph::GraphInput {
+                        id: "plate".into(),
+                        label: "Plate".into(),
+                        kind: InputKind::Picture,
+                        default: [0.0; 4],
+                        min: 0.0,
+                        max: 1.0,
+                        unit: lumit_core::fx::Unit::Raw,
+                        preview,
+                    },
+                });
+            }
+            c
+        };
+        let bare = with_picture(None);
+        let shown = with_picture(Some(solid));
+        assert_ne!(
+            key(&doc, &bare, 1.0),
+            key(&doc, &shown, 1.0),
+            "viewed on its own, the stand-in is the picture"
+        );
+
+        // Applied as an effect, every picture Input is fed from the host, so
+        // the two graphs are one picture and must be one name.
+        let applied = |graph: &Composition| {
+            let mut host = doc.clone();
+            host.items.push(ProjectItem::Composition(graph.clone()));
+            let mut inst = lumit_core::fx::instantiate("node_graph").unwrap();
+            lumit_core::fx::effects::node_graph::bind(
+                &mut inst,
+                graph.id,
+                graph.graph.as_ref().unwrap(),
+            );
+            let mut l = text_layer("host", 0.0, 10.0, 0.0);
+            l.effects = vec![inst];
+            let parent = comp_with(vec![l]);
+            comp_frame_key(
+                &Arc::new(host),
+                &parent,
+                1.0,
+                Quality::default(),
+                &StubStamper,
+            )
+            .unwrap()
+        };
+        assert_eq!(
+            applied(&bare),
+            applied(&shown),
+            "applied, the stand-in draws nothing and names nothing"
+        );
+    }
+
+    /// **A Posterize time on the host holds the graph it applies** (§5.2). The
+    /// builder and the planner lower the effect at the held time, so the key
+    /// reads it there too - otherwise a held frame would carry the live
+    /// graph's name.
+    #[test]
+    fn a_posterize_on_the_host_holds_the_graphs_name() {
+        use lumit_core::comp_graph::GraphNode;
+        use lumit_core::model::EffectValue;
+        let (mut doc, graph_comp, _, fx_id, _) = node_graph_doc();
+        let graph_id = graph_comp.id;
+        // A Wiggle into the Exposure, so the graph's own name moves with the
+        // clock and a hold is visible in it.
+        let mut graph = graph_comp.graph.clone().unwrap();
+        let wiggle = lumit_core::fx::instantiate("wiggle").unwrap();
+        let wiggle_id = wiggle.id;
+        graph.nodes.push(GraphNode::Fx(wiggle));
+        graph.edges.push(wire(wiggle_id, "value", fx_id, "stops"));
+        let mut graph_comp = graph_comp;
+        graph_comp.graph = Some(graph.clone());
+        doc.items.push(ProjectItem::Composition(graph_comp));
+
+        let host = |posterize: bool| {
+            let mut inst = lumit_core::fx::instantiate("node_graph").unwrap();
+            lumit_core::fx::effects::node_graph::bind(&mut inst, graph_id, &graph);
+            let mut effects = vec![inst];
+            if posterize {
+                let mut p = lumit_core::fx::instantiate("posterize_time").unwrap();
+                for row in &mut p.params {
+                    if row.id == "rate" {
+                        row.value = EffectValue::Float(Property::fixed(1.0));
+                    }
+                }
+                effects.insert(0, p);
+            }
+            let mut l = text_layer("host", 0.0, 10.0, 0.0);
+            l.effects = effects;
+            comp_with(vec![l])
+        };
+        let live = host(false);
+        assert_ne!(
+            key(&doc, &live, 1.2),
+            key(&doc, &live, 1.8),
+            "a driven graph names every frame of itself"
+        );
+        let held = host(true);
+        assert_eq!(
+            key(&doc, &held, 1.2),
+            key(&doc, &held, 1.8),
+            "and a one-per-second hold names one frame across the second"
+        );
     }
 }

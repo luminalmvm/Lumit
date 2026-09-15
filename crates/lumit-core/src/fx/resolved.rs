@@ -385,6 +385,49 @@ pub fn resolve_stack_temporal_named(
     (ids, out)
 }
 
+/// One instance's rows resolved on their own, whether or not it makes a
+/// picture.
+///
+/// [`resolve_stack_temporal_named`] skips an entry that answers
+/// `is_image_op() == false`, which is right for a layer stack and wrong for a
+/// node graph's Merge and Switch (docs/impl/node-graph-comp.md §2.3): the walk
+/// realises those two with the compositor rather than a kernel, and their Mode,
+/// Opacity and Index still keyframe, express and take a driver wire like any
+/// row. This is the walk that reads them - the same one, entered at the
+/// instance rather than at the stack, so there is no second set of rules for a
+/// node graph's numbers.
+///
+/// An empty stack for a name this build does not know, which renders as the
+/// row's default.
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+pub fn resolve_instance(
+    e: &EffectInstance,
+    drivers: &ResolvedDrivers,
+    lt: f64,
+    diag_px: f32,
+    px_scale: f32,
+    markers: &MarkerContext,
+    context: Arc<ExpressionContext>,
+) -> ResolvedStack {
+    let mut out = ResolvedStack::new();
+    if let Some(def) = super::def(&e.effect.match_name) {
+        resolve_into_arena(
+            def,
+            e,
+            NodeRef::Effect(e.id),
+            lt,
+            diag_px,
+            px_scale,
+            markers,
+            &mut out,
+            context,
+            drivers,
+        );
+    }
+    out
+}
+
 /// A parameter's **hard** range in schema space — the bounds docs/08 §1.2 says
 /// typing may not exceed, either side `None` where the parameter is one-sided
 /// or unbounded.

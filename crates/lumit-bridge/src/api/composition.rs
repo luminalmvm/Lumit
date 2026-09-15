@@ -259,6 +259,22 @@ pub struct BridgeCompModel {
     /// arriving frame reads the held copy rather than asking the engine per
     /// rebuild; writes still go through `set_background`.
     pub background: [f32; 4],
+    /// Whether this composition is a **node graph**: boxes and wires in place
+    /// of a layer stack (docs/impl/node-graph-comp.md §4.1).
+    ///
+    /// It rides the model rather than being asked for, so the Timeline, the
+    /// Graph panel and the project row read the one fact off an answer they
+    /// already hold. `layers` is empty on one, and every layer op is refused.
+    pub is_node_graph: bool,
+    /// A node graph's **Fx boxes**, in document order, with every parameter's
+    /// value: what the Timeline draws a row and a lane per
+    /// (docs/impl/node-graph-comp.md §5.7). Empty on a layer comp.
+    ///
+    /// At offset zero, a graph's clock being the comp's own, and with each
+    /// box's Inputs copy refreshed from the live graph as every clone's is.
+    /// It rides the model for the reason the layers' effects do: the rows are
+    /// drawn from the held answer and ask the engine nothing.
+    pub graph_boxes: Vec<crate::api::effect::BridgeEffectInstanceInfo>,
     pub layers: Vec<BridgeLayerEntry>,
     /// The comp's layer groups, in document order and already resolved
     /// to the run each one draws over. Empty for a comp nobody has grouped,
@@ -522,6 +538,22 @@ impl CompositionReference {
             fps_den: comp.frame_rate.den(),
             motion_blur_enabled: comp.motion_blur.enabled,
             background: comp.background.0,
+            is_node_graph: comp.graph.is_some(),
+            graph_boxes: comp
+                .graph
+                .iter()
+                .flat_map(|graph| graph.nodes.iter())
+                .filter_map(|node| match node {
+                    lumit_core::comp_graph::GraphNode::Fx(instance) => Some(instance),
+                    _ => None,
+                })
+                .map(|instance| {
+                    crate::api::effect::read_instance_info(
+                        &crate::api::effect::with_live_inputs(instance, &doc),
+                        lumit_core::time::Rational::ZERO,
+                    )
+                })
+                .collect(),
             layers: comp
                 .layers
                 .iter()
@@ -850,6 +882,7 @@ impl CompositionReference {
         let new_comp =
             |name: String, layers: Vec<Layer>, markers: Vec<lumit_core::markers::Marker>| {
                 Composition {
+                    graph: None,
                     master_volume_db: 0.0,
                     sound_mix: false,
                     groups: Vec::new(),
@@ -1117,6 +1150,11 @@ impl CompositionReference {
                 ..m.clone()
             })
             .collect();
+        // Placing a node graph places its Inputs with it
+        // (docs/impl/node-graph-comp.md §5.3), so the layer's rows are there
+        // to be edited from the moment it lands.
+        let doc = self.document()?;
+        layer.graph_inputs = crate::api::layer::graph_inputs_for(&doc, inner.id);
         self.add_at(layer, row)
     }
 
@@ -1293,6 +1331,7 @@ impl CompositionReference {
         }
 
         let inner = Composition {
+            graph: None,
             master_volume_db: 0.0,
             sound_mix: false,
             groups: Vec::new(),
@@ -2433,7 +2472,8 @@ impl CompositionReference {
             comp: self.clone(),
             frame,
             scale,
-            layer,
+            layer: Some(layer),
+            graph_instances: None,
             effects: Some(effects.iter().map(|i| i.get_effects()).collect()),
             drivers: None,
             transform: None,
@@ -2467,9 +2507,46 @@ impl CompositionReference {
             comp: self.clone(),
             frame,
             scale,
-            layer,
+            layer: Some(layer),
+            graph_instances: None,
             effects: None,
             drivers: Some(drivers.iter().map(|i| i.get_effects()).collect()),
+            transform: None,
+            text: None,
+            paint: None,
+            contents: None,
+            masks: None,
+            clip_retime: None,
+            retime: None,
+        }))
+    }
+
+    /// Ask for `frame` with this **node graph's** Fx boxes replaced by
+    /// `instances`: the live drag on a box's number, which never touches the
+    /// document.
+    ///
+    /// The driver preview's twin, one function up, on the other canvas and for
+    /// the same reason: a box's value is one op per drag and not one per tick,
+    /// so the picture is kept in step by previewing rather than by writing.
+    /// Only the boxes are substituted: the wires, the layout and the badges are
+    /// the document's, and a drag on a number changes none of them.
+    #[frb(sync)]
+    pub fn render_frame_with_graph_preview(
+        &self,
+        frame: u64,
+        scale: f32,
+        instances: Vec<BridgeEffectInstance>,
+    ) -> Result<(), BridgeError> {
+        self.dispatch(RenderCompWithPreview(RenderCompRequestWithPreview {
+            comp: self.clone(),
+            frame,
+            scale,
+            // No layer: a node graph has none, and this is the one preview
+            // that is about the comp itself.
+            layer: None,
+            graph_instances: Some(instances.iter().map(|i| i.get_effects()).collect()),
+            effects: None,
+            drivers: None,
             transform: None,
             text: None,
             paint: None,
@@ -2501,7 +2578,8 @@ impl CompositionReference {
             comp: self.clone(),
             frame,
             scale,
-            layer,
+            layer: Some(layer),
+            graph_instances: None,
             effects: None,
             drivers: None,
             transform: None,
@@ -2538,7 +2616,8 @@ impl CompositionReference {
             comp: self.clone(),
             frame,
             scale,
-            layer,
+            layer: Some(layer),
+            graph_instances: None,
             effects: None,
             drivers: None,
             transform: None,
@@ -2804,7 +2883,8 @@ impl CompositionReference {
             comp: self.clone(),
             frame,
             scale,
-            layer,
+            layer: Some(layer),
+            graph_instances: None,
             effects: None,
             drivers: None,
             transform: Some(transform),
@@ -2836,7 +2916,8 @@ impl CompositionReference {
             comp: self.clone(),
             frame,
             scale,
-            layer,
+            layer: Some(layer),
+            graph_instances: None,
             effects: None,
             drivers: None,
             transform: None,
@@ -2871,7 +2952,8 @@ impl CompositionReference {
             comp: self.clone(),
             frame,
             scale,
-            layer,
+            layer: Some(layer),
+            graph_instances: None,
             effects: None,
             drivers: None,
             transform: None,
@@ -2904,7 +2986,8 @@ impl CompositionReference {
             comp: self.clone(),
             frame,
             scale,
-            layer,
+            layer: Some(layer),
+            graph_instances: None,
             effects: None,
             drivers: None,
             transform,
@@ -2931,7 +3014,8 @@ impl CompositionReference {
             comp: self.clone(),
             frame,
             scale,
-            layer,
+            layer: Some(layer),
+            graph_instances: None,
             effects: None,
             drivers: None,
             transform: None,
@@ -3049,6 +3133,197 @@ impl CompositionReference {
                 )
             })
             .collect())
+    }
+
+    /// This composition's **node graph**, whole, in one crossing
+    /// (docs/impl/node-graph-comp.md §4.1): every box the canvas draws with its
+    /// sockets, plus the wiring the user edits.
+    ///
+    /// One call, not one per box, exactly as `LayerReference::get_graph` is:
+    /// fetched when the selection or the document changes and held in Dart,
+    /// never asked from a rebuild. The boxes are derived from the graph and the
+    /// project each time, so there is nothing stale to invalidate and nothing
+    /// there to write back.
+    ///
+    /// Refused on a composition that is not a node graph: it has layers
+    /// instead, and the Timeline is where they are read.
+    #[frb(sync)]
+    pub fn get_node_graph(&self) -> Result<crate::api::comp_graph::BridgeCompGraph, BridgeError> {
+        let doc = self.document()?;
+        Ok(crate::api::comp_graph::read_comp_graph(
+            self.project,
+            &doc,
+            self.graph_of(&doc)?,
+        ))
+    }
+
+    /// This graph's **Fx boxes** as staged copies, exactly as
+    /// [`Self::get_group_effects`] hands out a header's.
+    ///
+    /// Offset zero, a graph's clock being the comp's own, as a group header's
+    /// is. A box's parameters ride the ordinary property path from here:
+    /// `get_value` / `set_value` stage a change and [`Self::set_node_graph`] is
+    /// the commit, so keyframing, the stopwatch and every existing control work
+    /// on a box's row unchanged.
+    #[frb(sync)]
+    pub fn get_node_graph_instances(&self) -> Result<Vec<BridgeEffectInstance>, BridgeError> {
+        let doc = self.document()?;
+        Ok(self
+            .graph_of(&doc)?
+            .nodes
+            .iter()
+            .filter_map(|node| match node {
+                lumit_core::comp_graph::GraphNode::Fx(instance) => Some(instance),
+                _ => None,
+            })
+            .map(|instance| {
+                // A nested graph's own rows are offered here, off the live
+                // graph rather than off the copy the instance was made with
+                // (§1.5), so a row added inside it appears the next time this
+                // graph is read.
+                BridgeEffectInstance::new(
+                    crate::api::effect::with_live_inputs(instance, &doc).into_owned(),
+                    lumit_core::time::Rational::ZERO,
+                )
+            })
+            .collect())
+    }
+
+    /// A new box of the built-in named `name`, **uncommitted**.
+    ///
+    /// `LayerReference::new_driver`'s mirror for this canvas, and split from
+    /// the commit for the same reason: the panel drops the box, auto-wires it,
+    /// places it, and commits all of that as one [`Self::set_node_graph`], one
+    /// op and one undo step.
+    ///
+    /// A Compositing entry and a driver are both fine here: **this is the
+    /// graph's own door**, and they are what a graph is made of. `graph` names
+    /// the composition a Node graph box applies, and is required for that one
+    /// entry: a Node graph box with nothing bound would draw no sockets and
+    /// render nothing.
+    #[frb(sync)]
+    pub fn new_graph_instance(
+        &self,
+        name: String,
+        graph: Option<CompositionReference>,
+    ) -> Result<BridgeEffectInstance, BridgeError> {
+        let comp = self.composition()?;
+        if comp.graph.is_none() {
+            return Err(BridgeError::InvalidComp);
+        }
+        // Seeded at the graph's own size, because a few defaults are positions
+        // and a fresh box should look like identity rather than dragging the
+        // picture to a corner.
+        let mut instance = lumit_core::fx::instantiate_for_raster(
+            &name,
+            f64::from(comp.width),
+            f64::from(comp.height),
+        )
+        .ok_or(BridgeError::UnknownEffectName)?;
+        if name == lumit_core::comp_graph::NODE_GRAPH {
+            let inner = graph.ok_or(BridgeError::InvalidComp)?;
+            // The graph's own project, not this one's: a reference carries
+            // which project it names, and the two need not be the same.
+            let doc = inner.document()?;
+            let bound = inner.graph_of(&doc)?;
+            lumit_core::fx::effects::node_graph::bind(&mut instance, inner.id, bound);
+        }
+        Ok(BridgeEffectInstance::new(
+            instance,
+            lumit_core::time::Rational::ZERO,
+        ))
+    }
+
+    /// Commit a whole graph: the staged Fx boxes and the edited wiring, as one
+    /// [`lumit_core::Op::SetCompGraph`].
+    ///
+    /// The whole-graph shape is `LayerReference::set_graph`'s and is deliberate.
+    /// Add a box, remove one, wire, unwire, drag one, twirl one, name a group:
+    /// each is one write and therefore one undo step, and a delete takes its
+    /// wires with it inside the same commit rather than leaving a dangling one.
+    ///
+    /// A graph that breaks one of the model's rules is **refused**, not
+    /// degraded: a wire to a missing box or socket, a mistyped wire, a second
+    /// wire on one socket, a loop, no Output box or two. Each arrives as
+    /// `OpError::InvalidGraph` carrying the engine's own calm sentence, and a
+    /// refused write leaves the document exactly as it was.
+    #[frb(sync)]
+    pub fn set_node_graph(
+        &self,
+        instances: Vec<BridgeEffectInstance>,
+        wiring: crate::api::comp_graph::BridgeCompWiring,
+    ) -> Result<(), BridgeError> {
+        let nodes: Vec<lumit_core::model::EffectInstance> = instances
+            .iter()
+            .map(BridgeEffectInstance::get_effects)
+            .collect();
+        let graph = crate::api::comp_graph::wiring_into(wiring, nodes);
+        self.commit(lumit_core::Op::SetCompGraph {
+            comp: self.id,
+            graph: Box::new(graph),
+        })
+    }
+
+    /// The JSON text of a **graph group** gathered from `nodes`, the node
+    /// graph canvas's twin of `LayerReference::save_node_group`
+    /// (docs/impl/node-graph-comp.md §5.8).
+    ///
+    /// The engine hands back the text and Dart chooses where it goes, exactly
+    /// as an effect preset does: the engine never opens a file dialogue. What
+    /// is saved is the boxes, the wires with both ends inside the set, and
+    /// where they sat relative to one another. **The Output is never saved**:
+    /// every graph has exactly one and it cannot be deleted, so a second one
+    /// arriving with a group would be a graph the validator refuses.
+    #[frb(sync)]
+    pub fn save_graph_group(
+        &self,
+        name: String,
+        colour: u32,
+        nodes: Vec<Uuid>,
+    ) -> Result<String, BridgeError> {
+        let doc = self.document()?;
+        let preset =
+            lumit_core::preset::comp_group_from_graph(self.graph_of(&doc)?, &name, colour, &nodes);
+        lumit_core::preset::comp_group_to_json(&preset).map_err(|_| BridgeError::InvalidEffect)
+    }
+
+    /// Insert a saved graph group at canvas point `(x, y)`: **one commit**, so
+    /// one undo step however many boxes and wires it carries.
+    ///
+    /// Every node id is minted here, so dropping one group twice never makes
+    /// two boxes share an id. The Output is left exactly as it was: a group
+    /// carries none, and a hand-written file that does carry one is refused
+    /// whole by [`lumit_core::Op::SetCompGraph`] with its own calm sentence,
+    /// which is the treatment every other bad graph gets.
+    #[frb(sync)]
+    pub fn insert_graph_group(&self, text: String, x: f64, y: f64) -> Result<(), BridgeError> {
+        let preset = lumit_core::preset::comp_group_from_json(&text)
+            .map_err(|_| BridgeError::InvalidEffect)?;
+        let added = lumit_core::preset::comp_group_instantiated(&preset, [x, y]);
+
+        let doc = self.document()?;
+        let mut graph = self.graph_of(&doc)?.clone();
+        graph.nodes.extend(added.nodes);
+        graph.edges.extend(added.edges);
+        graph.layout.extend(added.layout);
+        graph.groups.push(added.group);
+
+        self.commit(lumit_core::Op::SetCompGraph {
+            comp: self.id,
+            graph: Box::new(graph),
+        })
+    }
+
+    /// This composition's graph, or [`BridgeError::InvalidComp`] for a comp
+    /// that is a layer stack: there is no graph on one to read or write.
+    #[frb(ignore)]
+    fn graph_of<'a>(
+        &self,
+        doc: &'a lumit_core::Document,
+    ) -> Result<&'a lumit_core::comp_graph::CompGraph, BridgeError> {
+        doc.comp(self.id)
+            .and_then(|comp| comp.graph.as_ref())
+            .ok_or(BridgeError::InvalidComp)
     }
 
     /// Append the built-in effect named `name` to a group header's stack — the

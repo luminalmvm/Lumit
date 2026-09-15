@@ -14,6 +14,8 @@ publish = false
 # built-in declares. The edge runs one way only: nothing in the engine depends
 # on the plugin host.
 lumit-core = { path = "../lumit-core" }
+# The handshake that proves the process on the other end of the pipe is Lumit.
+lumit-peer = { path = "../lumit-peer" }
 # The CLAP C declarations, MIT/Apache-2.0. A hand-written binding would be a
 # second copy of somebody else's headers, and the headers move (1.2.2 today).
 clap-sys = "0.5"

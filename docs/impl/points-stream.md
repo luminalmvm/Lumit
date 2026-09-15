@@ -66,9 +66,9 @@ No new `InputRef` arm.
 
 ### 1.2 The rules, and why the chain invariant holds
 
-**A points wire is a data edge, never an image edge.** It does not reorder, branch, or
-skip the image chain; `Layer::effects` remains the only authority for the picture's
-path, and every image gesture still lowers to `SetLayerEffects`. The node-graph.md §1.1
+**A points wire in a layer's graph is a data edge, never an image edge.** It does not
+reorder, branch, or skip the image chain; `Layer::effects` remains the only authority for
+the picture's path, and every image gesture still lowers to `SetLayerEffects`. The node-graph.md §1.1
 invariant — every graph state has an honest stack rendering — survives because a points
 wire renders in the stack view the same way a driven parameter does: the consumer's row
 says what feeds it, by name. No carve-out is needed; the carve-out that *is* recorded is
@@ -78,8 +78,8 @@ Validation (`LayerGraph::validate`, same refusals, same calm messages):
 
 - **Type match**: the source port's declared type must equal the destination's —
   `Points` into `Points`, through the existing `PortTypeMismatch` refusal.
-- **Same layer only**: edges never cross layers. A cross-layer points tap, if
-  ever wanted, is a layer-reference parameter drawn as a derived source node — exactly
+- **Same layer only**: in a layer's graph, edges never cross layers. A cross-layer points
+  tap, if ever wanted, is a layer-reference parameter drawn as a derived source node — exactly
   Audio level's shape — and is deferred with the family.
 - **One wire per input**: the existing rule, unchanged.
 - **Downstream only, for stack consumers**: when the family's stack effects gain Points
@@ -102,6 +102,16 @@ Validation (`LayerGraph::validate`, same refusals, same calm messages):
   `EffectData` edge contributes (Effect → destination driver), and a driver-into-effect-
   parameter edge contributes (driver → Effect). Kahn's walk over drivers *and* effects;
   anything left is a `Cycle`, refused at commit like every other loop.
+
+**Both rules above hold in a node graph composition too**, where they were scoped to a
+layer's graph only because a node graph did not exist when they were written. A points wire
+in a graph is a data edge like any other: the projection turns it into the same
+`OutputRef::EffectData` edge a layer stores, so `Eval::points_input` finds it unchanged, and
+`CompGraph::check_acyclic` already walks it. The positional rule has no meaning over boxes
+that are not a list and is not applied. **Layer points is not offered inside a graph**
+(`list_graph_nodes` leaves it out): a graph has no layers to tap, and the wire is the tap. A
+hand-edited one reads the empty stream. See
+[node-graph-comp.md](node-graph-comp.md) §5.1.
 
 `prune_to` gains the source arm: its current comment — "a wire's *source* is a driver or
 the layer's own alpha, neither of which the stack can remove" — becomes false the moment

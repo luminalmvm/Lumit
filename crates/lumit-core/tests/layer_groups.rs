@@ -43,6 +43,7 @@ fn layer(name: &str) -> Layer {
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,
+        graph_inputs: None,
         blend: BlendMode::Normal,
         masks: Vec::new(),
         paint: Vec::new(),
@@ -60,6 +61,7 @@ fn doc_with_four() -> (Document, Uuid, Vec<Uuid>) {
     let layers: Vec<Layer> = ["a", "b", "c", "d"].iter().map(|n| layer(n)).collect();
     let ids: Vec<Uuid> = layers.iter().map(|l| l.id).collect();
     let comp = Composition {
+        graph: None,
         id: Uuid::now_v7(),
         name: "Comp 1".into(),
         width: 1920,

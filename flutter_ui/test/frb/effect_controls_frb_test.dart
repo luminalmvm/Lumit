@@ -31,6 +31,7 @@ import 'package:lumit_flutter/icons/lumit_icon.dart';
 import 'package:lumit_flutter/theme/theme.dart';
 import 'package:lumit_flutter/widgets/angle_dial.dart';
 import 'package:lumit_flutter/widgets/dashed_outline.dart';
+import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/colour.dart';
 import 'package:lumit_flutter/src/rust/api/graph.dart';
@@ -2898,6 +2899,65 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
             .having((v) => v.field0, 'name', 'srgb_texture'),
         reason: 'the pick reached the document as the config spells it',
       );
+    });
+
+    /// **The Node graph card's Open graph row** (docs/impl/node-graph-comp.md
+    /// §4.4): it fronts the composition the effect applies, the way the Custom
+    /// shader's Edit enters its inner graph. Fronting a comp is not an event
+    /// the engine could answer, so the panel takes this row itself.
+    testWidgets('a Node graph effect opens the graph it applies',
+        (tester) async {
+      final p = withLayer();
+      final graph = p.state.project!.newNodeGraph(name: 'Wires');
+      p.layer.addNodeGraphEffect(graph: graph);
+      p.uiState.model.refresh();
+      await mount(tester, p);
+
+      final id = p.layer.getEffects().single.id();
+      await tester.tap(find.byKey(ValueKey<String>('fx-action-$id-open')));
+      await tester.pumpAndSettle();
+
+      expect(p.uiState.selectedComp?.internalid, graph.internalid,
+          reason: 'the row fronted the bound graph');
+    });
+
+    /// **The card wears the graph's own name** (docs/impl/node-graph-comp.md
+    /// §4.4), so a stack carrying three graphs reads as three different things
+    /// rather than three rows called Node graph. The binding rides the read
+    /// model and the name comes off the cached comp list, so the heading
+    /// follows a rename on the next refresh and no rebuild asks for either.
+    testWidgets('a Node graph card is headed by the graph it applies',
+        (tester) async {
+      final p = withLayer();
+      final graph = p.state.project!.newNodeGraph(name: 'Wires');
+      p.layer.addNodeGraphEffect(graph: graph);
+      p.uiState.model.refresh();
+      await mount(tester, p);
+
+      expect(heading('Wires'), findsOneWidget);
+      expect(heading('Node graph'), findsNothing,
+          reason: 'the label is what a card with no graph falls back to');
+
+      // Rename the graph: the heading is the comp's name, so it moves with it.
+      final was = graph.getSettings();
+      graph.setSettings(
+        settings: BridgeCompSettings(
+          name: 'Rings',
+          width: was.width,
+          height: was.height,
+          fpsNum: was.fpsNum,
+          fpsDen: was.fpsDen,
+          duration: was.duration,
+          background: was.background,
+          shutterAngle: was.shutterAngle,
+          motionBlurSamples: was.motionBlurSamples,
+        ),
+      );
+      p.uiState.model.refresh();
+      await settleFrb(tester, minRounds: 4, maxRounds: 8);
+
+      expect(heading('Rings'), findsOneWidget);
+      expect(heading('Wires'), findsNothing);
     });
 
     // Without the built library there is nothing to test against; the harness

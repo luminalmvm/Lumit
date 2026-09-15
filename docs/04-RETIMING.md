@@ -66,6 +66,9 @@ A Retime is a function *f* from **local time** to **source time**:
   item (after interpretation, e.g. frame-rate override).
 - On a **Precomp layer**: local time is layer time; source time is the nested comp's comp
   time. Precomp Retime follows this spec identically (required for AE import fidelity, §13.1).
+  A **node graph** placed as a Precomp layer is a comp like any other and retimes the same
+  way; the Time offset box inside a graph shifts one branch and is not a Retime
+  ([impl/node-graph-comp.md](impl/node-graph-comp.md) §5.2, §5.6).
 
 *f* MUST be defined over the entire local domain [0, D], where D is the clip duration or
 layer duration. Speed is d*f*/dt: 1.0 = normal, 0 = freeze, negative = reverse. The UI shows
@@ -629,8 +632,10 @@ entry (§12.1) is its road ([03-DATA-MODEL.md](03-DATA-MODEL.md)).
 
 Retiming a Precomp layer (or a clip sourcing a comp) maps into the nested comp's time: the
 entire nested comp — all its animation — retimes together, as in AE. Overrun beyond the
-nested comp's duration holds the boundary frame of the nested comp's render. Nested comps'
-own Retimes compose by function composition, resolved outer-first in the evaluation graph.
+nested comp's duration holds the boundary frame of the nested comp's render **under a
+Retime map**; an un-retimed Precomp has no map to clamp and draws nothing past the nested
+duration, which is what it has always done. Nested comps' own Retimes compose by function
+composition, resolved outer-first in the evaluation graph.
 
 ### 11.4 Motion blur
 
@@ -641,11 +646,23 @@ a freeze produces zero retime-induced blur. When the interpolation policy is Flo
 vectors computed for frame synthesis SHOULD be reused for flow-based motion blur
 ([08-EFFECTS.md](08-EFFECTS.md), RSMB-class) rather than re-estimated.
 
+**A Precomp layer is the exception, retimed or not.** Comp motion blur samples the shutter
+window through the layer's own transform chain, so what it smears is the Precomp's
+placement in the parent, never the motion of the picture inside it: the nested comp is
+evaluated once per shutter moment at the source time the map gives, and a still nested
+picture stays still however fast the map runs. The picture's own motion is the business of
+the **Motion blur** effect ([08-EFFECTS.md](08-EFFECTS.md) §3.2), which measures the
+rebuilt nested picture against itself, or of **accumulation motion blur** (§3.26), which
+re-renders it at sub-frame moments.
+
 ### 11.5 Audio
 
 v1 Retime is video-only. Audio layers have no Retime; a retimed clip or layer
 contributes no speed-matched audio, and Lumit MUST NOT attempt naive resampled audio under
-a ramp. Pitch-preserving audio retime is a Composer-era feature
+a ramp. **A retimed Precomp layer is silent on the same rule**: the nested comp's sound is
+dropped exactly as a retimed Footage layer's own sound is, from one guard above the kind
+match in the audio walk. The row keeps its mute cell either way, drawn dimmed with the tip
+*Retimed layers are silent* ([09-AUDIO.md](09-AUDIO.md) §7). Pitch-preserving audio retime is a Composer-era feature
 ([09-AUDIO.md](09-AUDIO.md)). Montage practice — game audio muted, music driving the edit —
 makes this the right v1 cut.
 

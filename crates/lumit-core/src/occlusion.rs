@@ -237,6 +237,7 @@ mod tests {
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
+            graph_inputs: None,
             blend: Default::default(),
             masks: Vec::new(),
             paint: Vec::new(),
@@ -266,6 +267,7 @@ mod tests {
         let top = layer(LayerKind::Solid { def: solid(64, 64) }, 64, 64);
         let under = layer(LayerKind::Solid { def: solid(16, 16) }, 16, 16);
         let comp = Composition {
+            graph: None,
             master_volume_db: 0.0,
             sound_mix: false,
             groups: Vec::new(),

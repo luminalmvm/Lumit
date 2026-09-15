@@ -111,10 +111,12 @@ use super::effects::{
     lut::{Lut, LutDef},
     matte_key::{MatteKey, MatteKeyDef},
     median::{Median, MedianDef},
+    merge::{Merge, MergeDef},
     mirror::{Mirror, MirrorDef},
     mood_lighting::{MoodLighting, MoodLightingDef},
     mosaic::{Mosaic, MosaicDef},
     motion_blur::{MotionBlur, MotionBlurDef},
+    node_graph::{NodeGraph, NodeGraphDef},
     noise::{Noise, NoiseDef},
     ocio::{
         OcioColourSpace, OcioColourSpaceDef, OcioDisplay, OcioDisplayDef, OcioFile, OcioFileDef,
@@ -150,10 +152,12 @@ use super::effects::{
     spherize::{Spherize, SpherizeDef},
     sprite_flare::{SpriteFlare, SpriteFlareDef},
     stroke::{Stroke, StrokeDef},
+    switch::{Switch, SwitchDef},
     temperature::{Temperature, TemperatureDef},
     texturize::{Texturize, TexturizeDef},
     threshold::{Threshold, ThresholdDef},
     tile::{Tile, TileDef},
+    time_offset::{TimeOffset, TimeOffsetDef},
     tint::{Tint, TintDef},
     trail::{Trail, TrailDef},
     transform::{Transform, TransformDef},
@@ -359,6 +363,20 @@ crate::catalogue![
     AudioTremoloDef => AudioTremolo,
     AudioVibratoDef => AudioVibrato,
     AudioWahDef => AudioWah,
+    // The other effect whose arithmetic came from somewhere else: a whole node
+    // graph composition applied to this layer, with the graph's Inputs as its
+    // rows (docs/impl/node-graph-comp.md §1.3). Beside the Custom shader,
+    // because that is the shape of the thing.
+    NodeGraphDef => NodeGraph,
+    // The Compositing family: the entries only a node graph can hold. They
+    // sit before the Controls family for the reason the drivers sit after it -
+    // the Add-effect menu groups by first appearance here, and this family is
+    // never in that menu at all.
+    MergeDef => Merge,
+    SwitchDef => Switch,
+    // The per-node clock (node-graph-comp.md §5.2): what joins the two
+    // pictures is a wire, and what moves one of them in time is this.
+    TimeOffsetDef => TimeOffset,
     // The Controls family, last in the catalogue and so last in the
     // Add-effect menu, which groups by first appearance here. The order
     // inside it is After Effects' own Expression Controls order, which is what

@@ -26,7 +26,7 @@ use crate::api::{
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod style_tests;
 
-/// Which list an instance id lives on - the four homes
+/// Which list an instance lives on: the five homes
 /// `LayerReference::with_instances` can commit to. Internal to the shared
 /// lookup: no panel ever sees it, which is the point.
 #[frb(ignore)]
@@ -38,6 +38,64 @@ pub(crate) enum InstanceHome {
     /// One clip's own stack on this Sequence layer - the rack on the clip
     /// (docs/impl/audio-timeline.md §4), named by the clip's id.
     Clip(Uuid),
+    /// A placed node graph's Inputs (docs/impl/node-graph-comp.md §5.3): one
+    /// instance rather than a list, held in `Layer::graph_inputs`.
+    GraphInputs,
+}
+
+/// The node graph `layer` places, when it places one.
+///
+/// A Precomp layer of a composition that holds a graph rather than a stack.
+/// That is the one layer kind a graph's Inputs mean anything on.
+#[frb(ignore)]
+pub(crate) fn placed_graph_of(doc: &lumit_core::Document, layer: &Layer) -> Option<Uuid> {
+    let lumit_core::model::LayerKind::Precomp { comp } = layer.kind else {
+        return None;
+    };
+    doc.comp(comp)?.graph.as_ref().map(|_| comp)
+}
+
+/// A fresh `node_graph` instance bound to the node graph `comp`, the Inputs a
+/// Precomp layer of it carries (docs/impl/node-graph-comp.md §5.3).
+///
+/// Seeded at the **graph's own** frame size rather than the placing comp's: the
+/// picture the Inputs feed is made in the graph's frame, which is where a
+/// positional default belongs. `None` when `comp` is not a node graph.
+#[frb(ignore)]
+pub(crate) fn graph_inputs_for(doc: &lumit_core::Document, comp: Uuid) -> Option<EffectInstance> {
+    let placed = doc.comp(comp)?;
+    let graph = placed.graph.as_ref()?;
+    let mut instance = lumit_core::fx::instantiate_for_raster(
+        lumit_core::comp_graph::NODE_GRAPH,
+        f64::from(placed.width),
+        f64::from(placed.height),
+    )?;
+    lumit_core::fx::effects::node_graph::bind(&mut instance, comp, graph);
+    Some(instance)
+}
+
+/// Whether `instance` is `layer`'s node graph **Inputs**
+/// (docs/impl/node-graph-comp.md §5.3).
+///
+/// By id once the layer carries them. A layer that has none is *offered* a
+/// fresh instance instead, so the first commit arrives with an id no list
+/// holds, and what names it is what it is bound to: a `node_graph` instance
+/// naming the comp this Precomp layer places.
+///
+/// The one rule, called by both the commit lookup and the preview request, so
+/// a drag and its mouse-up cannot disagree about what they were handed.
+#[frb(ignore)]
+pub(crate) fn is_graph_inputs(
+    doc: &lumit_core::Document,
+    layer: &Layer,
+    instance: &EffectInstance,
+) -> bool {
+    match &layer.graph_inputs {
+        Some(current) => current.id == instance.id,
+        None => placed_graph_of(doc, layer).is_some_and(|comp| {
+            lumit_core::fx::effects::node_graph::comp_of(instance) == Some(comp)
+        }),
+    }
 }
 
 /// A layer's on/off switches, read as a group because the Timeline draws them
@@ -1537,6 +1595,23 @@ pub struct BridgeLayerInfo {
     /// paste would land. Empty on nearly every layer, which is what makes
     /// carrying it here free.
     pub styles: Vec<crate::api::effect::BridgeEffectInstanceInfo>,
+    /// A placed node graph's **Inputs** (docs/impl/node-graph-comp.md §5.3):
+    /// the `node_graph` instance bound to the comp this Precomp layer places,
+    /// with its Inputs copy refreshed from the live graph as every clone's is.
+    ///
+    /// `None` on every layer that is not a Precomp of a node graph, and on one
+    /// that has not been given its Inputs yet, which is a layer from an older
+    /// file or an import. `LayerReference::get_graph_inputs` offers such a layer a
+    /// fresh one, which the user's next edit adopts.
+    pub graph_inputs: Option<crate::api::effect::BridgeEffectInstanceInfo>,
+    /// Whether collapse is set on this layer but something forces an
+    /// intermediate anyway (docs/06 §1.4, docs/impl/node-graph-comp.md §5.9),
+    /// which is what the Timeline's collapse cell draws dimmed.
+    ///
+    /// Read at the layer's own in point, the model carrying no playhead. Every
+    /// term of the rule but one is time-free, so the answer only ever drifts
+    /// where the layer's opacity is keyframed across 100%.
+    pub collapse_forced: bool,
     /// The label colour index into the theme's palette, drawn as the outline's
     /// swatch. Out-of-range values wrap rather than fault.
     pub label: u8,
@@ -1704,13 +1779,35 @@ pub(crate) fn read_layer_info(
         effects: layer
             .effects
             .iter()
-            .map(|e| crate::api::effect::read_instance_info(e, layer.start_offset.0))
+            .map(|e| {
+                crate::api::effect::read_instance_info(
+                    &crate::api::effect::with_live_inputs(e, doc),
+                    layer.start_offset.0,
+                )
+            })
             .collect(),
         styles: layer
             .styles
             .iter()
-            .map(|s| crate::api::effect::read_instance_info(s, layer.start_offset.0))
+            .map(|s| {
+                crate::api::effect::read_instance_info(
+                    &crate::api::effect::with_live_inputs(s, doc),
+                    layer.start_offset.0,
+                )
+            })
             .collect(),
+        graph_inputs: layer.graph_inputs.as_ref().map(|inputs| {
+            crate::api::effect::read_instance_info(
+                &crate::api::effect::with_live_inputs(inputs, doc),
+                layer.start_offset.0,
+            )
+        }),
+        collapse_forced: lumit_core::model::collapse_state(
+            doc,
+            comp,
+            layer,
+            lumit_core::time::layer_time(layer.in_point.0.to_f64(), layer.start_offset.0),
+        ) == lumit_core::model::CollapseState::Forced,
         label: layer.label,
         matte: layer.matte.as_ref().map(|m| BridgeMatte {
             layer: m.layer,
@@ -2454,6 +2551,15 @@ impl LayerReference {
             lumit_core::model::ProjectItem::Composition(composition) => Ok(composition.clone()),
             _ => Err(BridgeError::InvalidItem),
         }
+    }
+
+    /// The whole project as it stands, for the reads that need more than this
+    /// layer: a Node graph effect's rows are the graph it names.
+    #[frb(ignore)]
+    pub(crate) fn document(&self) -> Result<std::sync::Arc<lumit_core::Document>, BridgeError> {
+        let proj = self.project()?;
+        let proj = proj.read().map_err(|_| BridgeError::ReadFailed)?;
+        Ok(proj.store.snapshot())
     }
 
     #[frb(ignore)]
@@ -6226,14 +6332,26 @@ impl LayerReference {
         self.commit(op)
     }
 
+    /// This layer's effect stack as staged copies.
+    ///
+    /// A **Node graph** effect's Inputs copy is brought up to the graph it
+    /// names on the way out (docs/impl/node-graph-comp.md §1.5), so a row added
+    /// inside that graph is offered here and lands in the document with the
+    /// user's next edit, never behind anybody's back.
     #[frb(sync)]
     pub fn get_effects(&self) -> Result<Vec<BridgeEffectInstance>, BridgeError> {
         let layer = self.item()?;
+        let doc = self.document()?;
 
         Ok(layer
             .effects
             .iter()
-            .map(|f| BridgeEffectInstance::new(f.clone(), layer.start_offset.0))
+            .map(|f| {
+                BridgeEffectInstance::new(
+                    crate::api::effect::with_live_inputs(f, &doc).into_owned(),
+                    layer.start_offset.0,
+                )
+            })
             .collect())
     }
 
@@ -6322,6 +6440,19 @@ impl LayerReference {
                 edit(&mut clips[index].effects)?;
                 return self.commit_clips(clips);
             }
+            // One instance, carried as a list of at most one so the edit
+            // closure is the same closure the other three homes take. An edit
+            // that empties the list clears the Inputs, which is what removing
+            // them means.
+            InstanceHome::GraphInputs => {
+                let mut list: Vec<EffectInstance> = self.item()?.graph_inputs.into_iter().collect();
+                edit(&mut list)?;
+                lumit_core::Op::SetLayerGraphInputs {
+                    comp: self.comp_id,
+                    layer: self.layer_id,
+                    inputs: list.into_iter().next().map(Box::new),
+                }
+            }
         };
         let proj = self.project()?;
         let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
@@ -6330,22 +6461,28 @@ impl LayerReference {
     }
 
     /// **The one find-instance lookup** (docs/impl/layer-styles.md §5,
-    /// docs/impl/group-effects.md §6): which list `id` lives on.
+    /// docs/impl/group-effects.md §6): which list `instance` lives on.
     ///
     /// The effect stack is searched first, then the style list, then this
-    /// layer's clips, then the comp's group headers - ids are unique across
-    /// all four, so the order is only a statement about which is the common
-    /// case. `Effects` for an id on none of them, which leaves the caller's
-    /// own "no such instance" error to be the one the user sees rather than
-    /// inventing a second one here.
+    /// layer's clips, then its own graph Inputs, then the comp's group headers.
+    /// Ids are unique across all five, so the order is only a statement about
+    /// which is the common case. `Effects` for an instance on none of them,
+    /// which leaves the caller's own "no such instance" error to be the one
+    /// the user sees rather than inventing a second one here.
+    ///
+    /// The one exception to searching by id is a placed graph's Inputs
+    /// (docs/impl/node-graph-comp.md §5.3): a layer that has none is *offered*
+    /// a fresh instance, so the first commit carries an id no list holds yet
+    /// and [`is_graph_inputs`] recognises it by what it is bound to.
     ///
     /// Every param command — set a value, move a key, bypass, remove — routes
     /// through this rather than asking whether its caller was a styles panel
     /// or a group header's. That is the whole of what makes a style row's and
     /// a header row's stopwatch, drag and expression the *same* code as an
-    /// effect row's (the shared route, grown its third arm).
+    /// effect row's (the shared route, grown its fourth arm).
     #[frb(ignore)]
-    fn instance_home(&self, id: Uuid) -> Result<InstanceHome, BridgeError> {
+    fn instance_home(&self, instance: &EffectInstance) -> Result<InstanceHome, BridgeError> {
+        let id = instance.id;
         let layer = self.item()?;
         if layer.effects.iter().any(|e| e.id == id) {
             return Ok(InstanceHome::Effects);
@@ -6357,6 +6494,10 @@ impl LayerReference {
             if let Some(clip) = clips.iter().find(|c| c.effects.iter().any(|e| e.id == id)) {
                 return Ok(InstanceHome::Clip(clip.id));
             }
+        }
+        let doc = self.document()?;
+        if is_graph_inputs(&doc, &layer, instance) {
+            return Ok(InstanceHome::GraphInputs);
         }
         let comp = self.composition()?;
         Ok(comp
@@ -6383,6 +6524,17 @@ impl LayerReference {
     /// with no layout entry). One op either way, so one undo step either way.
     #[frb(sync)]
     pub fn add_effect(&self, name: String) -> Result<(), BridgeError> {
+        // A Merge and a Switch join pictures a graph's wires bring them, and
+        // the bare Node graph effect names no graph, so none of the three can
+        // do anything on a stack. Refused here rather than left out of the
+        // menus alone, so every route in gets the same calm sentence
+        // ([`Self::add_node_graph_effect`] is the Node graph's own door).
+        if lumit_core::fx::def(&name)
+            .is_some_and(|def| def.schema().category == lumit_core::fx::FxCategory::Compositing)
+            || name == lumit_core::comp_graph::NODE_GRAPH
+        {
+            return Err(BridgeError::NotAStackEffect);
+        }
         let comp = self.composition()?;
         let mut instance = lumit_core::fx::instantiate_for_raster(
             &name,
@@ -6497,6 +6649,45 @@ impl LayerReference {
         })
     }
 
+    /// Apply a **node graph** to this layer: the Node graph effect, bound to
+    /// `graph` (docs/impl/node-graph-comp.md §2.4).
+    ///
+    /// The effect's own door, because it is the one effect that cannot be added
+    /// by name: what it does is the graph it names, and an unbound one would
+    /// draw no rows and change no picture. The layer's picture becomes the
+    /// graph's first picture Input, the graph's other Inputs become this
+    /// effect's rows, and the Output is what it hands on.
+    ///
+    /// Refused when `graph` is not a node graph, and when it is this layer's
+    /// own composition: a comp that applied itself would be a loop, and the
+    /// nearest place to say so is here, before it is written.
+    #[frb(sync)]
+    pub fn add_node_graph_effect(
+        &self,
+        graph: &crate::api::composition::CompositionReference,
+    ) -> Result<(), BridgeError> {
+        if graph.id() == self.comp_id {
+            return Err(BridgeError::InvalidComp);
+        }
+        let comp = self.composition()?;
+        let doc = self.document()?;
+        let bound = doc
+            .comp(graph.id())
+            .and_then(|c| c.graph.as_ref())
+            .ok_or(BridgeError::InvalidComp)?;
+        let mut instance = lumit_core::fx::instantiate_for_raster(
+            lumit_core::comp_graph::NODE_GRAPH,
+            f64::from(comp.width),
+            f64::from(comp.height),
+        )
+        .ok_or(BridgeError::UnknownEffectName)?;
+        lumit_core::fx::effects::node_graph::bind(&mut instance, graph.id(), bound);
+        self.with_effects(move |effects| {
+            effects.push(instance);
+            Ok(())
+        })
+    }
+
     /// Without the decoder there is no file to read a channel list off, so an
     /// Extract channels lands with four None dropdowns. The same picture the
     /// effect shows on a layer that is not an OpenEXR.
@@ -6517,7 +6708,7 @@ impl LayerReference {
     #[frb(sync)]
     pub fn remove_effect(&self, effect: &BridgeEffectInstance) -> Result<(), BridgeError> {
         let id = effect.id();
-        self.with_instances(self.instance_home(id)?, move |effects| {
+        self.with_instances(self.instance_home(&effect.get_effects())?, move |effects| {
             let before = effects.len();
             effects.retain(|e| e.id != id);
             if effects.len() == before {
@@ -6542,7 +6733,7 @@ impl LayerReference {
         let id = effect.id();
         // A style keeps its order lock: routing a style id to the effect list
         // finds nothing and refuses, exactly as before the group arm existed.
-        let home = match self.instance_home(id)? {
+        let home = match self.instance_home(&effect.get_effects())? {
             InstanceHome::Styles => InstanceHome::Effects,
             home => home,
         };
@@ -6570,7 +6761,7 @@ impl LayerReference {
         enabled: bool,
     ) -> Result<(), BridgeError> {
         let id = effect.id();
-        self.with_instances(self.instance_home(id)?, move |effects| {
+        self.with_instances(self.instance_home(&effect.get_effects())?, move |effects| {
             let instance = effects
                 .iter_mut()
                 .find(|e| e.id == id)
@@ -6620,13 +6811,19 @@ impl LayerReference {
         // list is `remove_effect`'s job rather than a silent consequence of a
         // stale panel.
         let home = match (staged.first(), clip) {
-            (Some(first), _) => self.instance_home(first.id)?,
+            (Some(first), _) => self.instance_home(first)?,
             (None, Some(clip)) => InstanceHome::Clip(clip),
             (None, None) => InstanceHome::Effects,
         };
         self.with_instances(home, move |current| {
-            let same_stack = current.len() == staged.len()
-                && current.iter().zip(&staged).all(|(a, b)| a.id == b.id);
+            // A placed graph's Inputs are offered before they are adopted
+            // (docs/impl/node-graph-comp.md §5.3), so the first commit lands
+            // one instance where the document had none. Everywhere else a
+            // staged list must still name what the document names.
+            let adopting = home == InstanceHome::GraphInputs && current.is_empty();
+            let same_stack = adopting
+                || (current.len() == staged.len()
+                    && current.iter().zip(&staged).all(|(a, b)| a.id == b.id));
             if !same_stack {
                 return Err(BridgeError::StaleEffectStack);
             }
@@ -6691,11 +6888,46 @@ impl LayerReference {
     #[frb(sync)]
     pub fn get_styles(&self) -> Result<Vec<BridgeEffectInstance>, BridgeError> {
         let layer = self.item()?;
+        let doc = self.document()?;
         Ok(layer
             .styles
             .iter()
-            .map(|s| BridgeEffectInstance::new(s.clone(), layer.start_offset.0))
+            .map(|s| {
+                BridgeEffectInstance::new(
+                    crate::api::effect::with_live_inputs(s, &doc).into_owned(),
+                    layer.start_offset.0,
+                )
+            })
             .collect())
+    }
+
+    /// This layer's **node graph Inputs** as a staged copy
+    /// (docs/impl/node-graph-comp.md §5.3), or `None` on a layer that places
+    /// no node graph.
+    ///
+    /// The same handle [`Self::get_effects`] hands out, so the rows are read,
+    /// dragged, keyed and expression-driven through the path every other
+    /// parameter takes, and [`Self::set_effects`] is the commit.
+    ///
+    /// **Offered, never adopted.** A layer that places a graph but carries no
+    /// Inputs, one from a file written before they existed or an import, is
+    /// handed a fresh instance bound to that graph. Nothing is written for it:
+    /// the document only gains the Inputs when the user edits a row.
+    #[frb(sync)]
+    pub fn get_graph_inputs(&self) -> Result<Option<BridgeEffectInstance>, BridgeError> {
+        let layer = self.item()?;
+        let doc = self.document()?;
+        if let Some(inputs) = &layer.graph_inputs {
+            return Ok(Some(BridgeEffectInstance::new(
+                crate::api::effect::with_live_inputs(inputs, &doc).into_owned(),
+                layer.start_offset.0,
+            )));
+        }
+        let Some(graph_comp) = placed_graph_of(&doc, &layer) else {
+            return Ok(None);
+        };
+        Ok(graph_inputs_for(&doc, graph_comp)
+            .map(|instance| BridgeEffectInstance::new(instance, layer.start_offset.0)))
     }
 
     /// Add the layer style named `name` — one of the nine

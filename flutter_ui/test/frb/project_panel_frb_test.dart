@@ -27,6 +27,9 @@ import 'package:lumit_flutter/src/rust/api/state.dart' show ScopedChange;
 import 'package:lumit_flutter/state/dock.dart';
 import 'package:lumit_flutter/state/drag_payloads.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:lumit_flutter/icons/lumit_icon.dart' as glyph;
+import 'package:lumit_flutter/icons/lumit_icons.dart';
+import 'package:lumit_flutter/l10n/strings.dart';
 import 'package:lumit_flutter/theme/theme.dart';
 import 'package:lumit_flutter/widgets/controls.dart' show LumitTooltip;
 
@@ -336,6 +339,78 @@ void main() {
       expect(rowText('Shots'), findsOneWidget);
       expect(find.text('Compositions'), findsNothing,
           reason: 'the rename reached the document, not just the field');
+    });
+
+    /// **A node graph is a comp with boxes in it** (docs/impl/node-graph-comp.md
+    /// §4.4), and the row says so twice: the glyph, and the type word on the
+    /// card. An ordinary comp is untouched by either.
+    testWidgets('a node graph row wears the nodes glyph and its own type word',
+        (tester) async {
+      final p = freshProject();
+      final scene = p.state.project!.newComposition(name: 'Scene');
+      final graph = p.state.project!.newNodeGraph(name: 'Wires');
+
+      await tester.pumpWidget(hostPanel(
+        child: const ProjectPanelFrb(),
+        state: p.state,
+        uiState: p.uiState,
+      ));
+      await tester.pump();
+
+      String glyphOf(String id) => tester
+          .widget<glyph.LumitIcon>(find.descendant(
+            of: find.byKey(ValueKey<String>('project-glyph-$id')),
+            matching: find.byType(glyph.LumitIcon),
+          ))
+          .glyph;
+
+      expect(glyphOf('${graph.internalid}'), LumitIcons.nodes);
+      expect(glyphOf('${scene.internalid}'), LumitIcons.composition,
+          reason: 'an ordinary comp draws what it always drew');
+
+      await tester.tap(rowText('Wires'));
+      await tester.pumpAndSettle();
+      expect(find.text(l10n.projectTypeNodeGraph), findsOneWidget);
+
+      await tester.tap(rowText('Scene'));
+      await tester.pumpAndSettle();
+      expect(find.text(l10n.projectTypeComposition), findsOneWidget);
+      expect(find.text(l10n.projectTypeNodeGraph), findsNothing);
+    });
+
+    /// **New node graph on the panel's own menu** (§4.4). It goes through the
+    /// same settings dialogue New composition does, and fronts what it made.
+    testWidgets('New node graph from the row menu makes one and fronts it',
+        (tester) async {
+      final p = freshProject();
+      p.state.project!.newComposition(name: 'Scene');
+
+      await tester.pumpWidget(hostPanel(
+        child: const ProjectPanelFrb(),
+        state: p.state,
+        uiState: p.uiState,
+      ));
+      await tester.pump();
+
+      await tester.tapAt(
+        tester.getCenter(rowText('Scene')),
+        buttons: kSecondaryButton,
+      );
+      await tester.pumpAndSettle();
+      await tester
+          .tap(find.byKey(const ValueKey('project-menu-new-node-graph')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('comp-apply')));
+      await tester.pumpAndSettle();
+
+      final made = p.uiState.selectedComp;
+      expect(made, isNotNull, reason: 'a graph you just made is fronted');
+      expect(made!.getModel().isNodeGraph, isTrue);
+      // Blank through the dialogue, so the engine names it and counts the
+      // node graphs apart from the comps.
+      expect(made.getSettings().name, 'Node graph 1');
+      expect(rowText('Node graph 1'), findsOneWidget,
+          reason: 'the panel re-read after its own edit');
     });
 
     /// **Add audio only:** the sound of a clip, as its own layer in the

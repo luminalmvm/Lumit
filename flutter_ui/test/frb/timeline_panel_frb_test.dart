@@ -21,6 +21,7 @@ import 'package:lumit_flutter/state/clipboard.dart';
 import 'package:lumit_flutter/theme/theme.dart';
 import 'package:uuid/uuid.dart';
 import 'package:lumit_flutter/state/comp_time.dart';
+import 'package:lumit_flutter/l10n/strings.dart';
 import 'package:lumit_flutter/panels/project_panel_frb.dart';
 import 'package:lumit_flutter/panels/graph_editor_frb.dart';
 import 'package:lumit_flutter/panels/layer_fold_frb.dart';
@@ -5020,6 +5021,76 @@ void main() {
       expect(p.comp.getLayers(), hasLength(1),
           reason: 'the drop reached the document');
       expect(p.comp.getLayers().single.getName(), contains('shot'));
+    });
+
+    /// A node graph nests as a Precomp layer like any other composition
+    /// (docs/impl/node-graph-comp.md §4.4): it is a comp, so the row drags the
+    /// same payload and the Timeline takes it without knowing what is inside.
+    testWidgets('a node graph dragged from the Project panel nests as a layer',
+        (tester) async {
+      final p = withComp();
+      final graph = p.state.project!.newNodeGraph(name: 'Wires');
+
+      await tester.pumpWidget(hostPanel(
+        child: const Row(
+          children: [
+            SizedBox(width: 300, child: ProjectPanelFrb()),
+            Expanded(child: TimelinePanelFrb()),
+          ],
+        ),
+        state: p.state,
+        uiState: p.uiState,
+        size: const Size(1400, 700),
+      ));
+      await tester.pump();
+
+      final row =
+          find.byKey(ValueKey<String>('project-row-${graph.internalid}'));
+      expect(row, findsOneWidget, reason: 'the node graph row is there to drag');
+
+      final gesture = await tester.startGesture(tester.getCenter(row));
+      await tester.pump(const Duration(milliseconds: 200));
+      for (var i = 0; i < 10; i++) {
+        await gesture.moveBy(const Offset(40, 0));
+        await tester.pump();
+      }
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      expect(p.comp.getLayers(), hasLength(1),
+          reason: 'the drop reached the document');
+      expect(p.comp.getLayers().single.getKind(), BridgeLayerKind.precomp);
+    });
+
+    /// **The Timeline on a node graph** (docs/impl/node-graph-comp.md §4.4):
+    /// there are no layers to draw, so it says where the boxes are. It is not
+    /// a drop target either, because the engine refuses a layer here and the
+    /// canvas is what footage is dropped on.
+    testWidgets('a node graph shows the hint instead of the layer rows',
+        (tester) async {
+      final p = withComp();
+      final graph = p.state.project!.newNodeGraph(name: 'Wires');
+      p.uiState.setSelectedComp(graph);
+      p.uiState.model.refresh();
+      await mount(tester, p);
+
+      expect(find.byKey(const ValueKey('timeline-node-graph')), findsOneWidget);
+      expect(find.text(l10n.timelineNodeGraph), findsOneWidget);
+      expect(find.byType(TimelineRuler), findsNothing,
+          reason: 'nothing of the layer table is drawn');
+      // The tabs stay: they are the way back out of a node graph, and the
+      // Export button belongs to the comp rather than to the layer table.
+      expect(find.byKey(ValueKey<String>('tl-tab-${graph.internalid}')),
+          findsOneWidget);
+      expect(find.byKey(const ValueKey('tl-export')), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('timeline-node-graph')),
+          matching: find.byWidgetPredicate((w) => w is DragTarget<Object>),
+        ),
+        findsNothing,
+        reason: 'a node graph takes no drop: the engine refuses a layer here',
+      );
     });
 
     /// **A drop used to ignore where it was aimed.** Footage always went on at

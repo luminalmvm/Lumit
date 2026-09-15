@@ -19,7 +19,7 @@ import 'shell.dart';
 import 'solid.dart';
 import 'state.dart';
 
-// These functions are ignored because they are not marked as `pub`: `next_comp_name_in`, `of`, `to_model`
+// These functions are ignored because they are not marked as `pub`: `new_comp_with`, `next_comp_name_in`, `of`, `to_model`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `clone`, `clone`, `eq`, `eq`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `new`, `state`
 
@@ -374,12 +374,37 @@ class ProjectReference {
       BridgeLib.instance.api.crateApiProjectProjectReferenceNewFolder(
           that: this, name: name, parent: parent);
 
+  /// Add a **node graph** composition, filed and undone exactly as
+  /// [`Self::new_composition`] is, with its graph seeded: one Output box,
+  /// auto-placed (docs/impl/node-graph-comp.md §4.1).
+  ///
+  /// A comp is a layer stack or a node graph and is born one or the other,
+  /// which is why this is a door of its own rather than a switch on the
+  /// other: nothing turns one into the other afterwards.
+  ///
+  /// A blank name gets the next "Node graph N", counted over the node graphs
+  /// alone, as a comp's own name is counted over the comps.
+  CompositionReference newNodeGraph(
+          {required String name, BridgeCompSettings? settings}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceNewNodeGraph(
+          that: this, name: name, settings: settings);
+
   /// The name a comp made right now would get, if nobody typed one — "Comp 3"
   /// when the project holds two. What the New composition dialog puts in its
   /// Name field before the user touches it, so the field shows the same name
   /// the engine would have chosen rather than a guess made in Dart.
   String nextCompName() =>
       BridgeLib.instance.api.crateApiProjectProjectReferenceNextCompName(
+        that: this,
+      );
+
+  /// The name a node graph made right now would get, if nobody typed one.
+  /// The twin of [`Self::next_comp_name`], for the same reason: the New node
+  /// graph dialogue shows the name the engine would have chosen rather than
+  /// a guess made in Dart. Both go through the one counter below, so the
+  /// field and the making cannot disagree.
+  String nextNodeGraphName() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceNextNodeGraphName(
         that: this,
       );
 

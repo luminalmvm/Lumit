@@ -12,7 +12,8 @@ zero third-party plugins to achieve the core genre look.
 
 ### 1.1 Anatomy of an effect
 
-An **effect** is one image operation instance in a layer's effect stack. Every built-in
+An **effect** is one image operation instance in a layer's effect stack, or a node in a node
+graph composition ([impl/node-graph-comp.md](impl/node-graph-comp.md)). Every built-in
 effect consists of exactly four parts, and an effect is not mergeable until all four exist:
 
 1. **A typed parameter set.** Every parameter MUST be animatable (keyframes and expressions,
@@ -23,7 +24,11 @@ effect consists of exactly four parts, and an effect is not mergeable until all 
    with a clamped cubic through them), seed (integer), file reference, layer reference, **mask-path
    reference** (one of the owning layer's masks, whose *geometry* the effect walks),
    marker-trigger (§1.4), and **action** (a button, the one row that is not
-   animatable, because it carries no value to animate; see §1.2).
+   animatable, because it carries no value to animate; see §1.2). Inside a node graph
+   composition an expression on any box's parameter may also call `input("Name")`, which
+   reads the graph's Input of that id or label: the value handed in from outside, or the
+   Input's own default where nothing hands one in
+   ([impl/node-graph-comp.md](impl/node-graph-comp.md) §5.5).
 2. **A WGSL compute implementation** — the production path, running on wgpu.
    Implementations MUST be pure functions of (inputs, parameters, time): no global state,
    no reading outside declared inputs.
@@ -306,12 +311,25 @@ frames; the host resolves them through Retime so a slowed clip requests the corr
 frames. Temporal effects MUST define behaviour at layer/clip boundaries (typical: clamp to
 the boundary frame, matching Overrun semantics in [04-RETIMING.md](04-RETIMING.md)).
 
+**Inside a node graph composition the other-time picture is the input box, not the source
+frames.** On a layer a temporal effect reads the layer's own source at the offsets it
+declares, and the ops above it are not re-run; in a graph a wire means the picture the box
+on the far end of it makes, so Echo reads its input box at the earlier frames, Motion blur
+and Datamosh measure that box against itself a frame away, Posterize time holds it at the
+grid time, accumulation motion blur averages it over the shutter, and a Time offset box
+(§3.100) shows it at another time. Two rules bound the work, and they are the layer path's
+own: **a window never nests**, so at any time other than the graph's own only the box's
+first demanded time is taken and an Echo inside a neighbour render holds a still; **a shift
+always applies**, so a Time offset or a Posterize time ahead of an Echo moves every
+neighbour with it. [impl/node-graph-comp.md](impl/node-graph-comp.md) §5.2 carries the
+worklist, the plan and the frame key that agree on it.
+
 ### 2.6 Every effect can be driven by a matte
 
 Every built-in effect has a **Matte** input: a layer whose brightness says *how much of the
 effect* each pixel gets. It is one row, in the same place, on all of them — the layer
 picker with an **Invert** checkbox beside it and a **Channel** choice, labelled
-"Matte" / "Invert" / "Channel". **Two effects carry none.** The Matte key: a
+"Matte" / "Invert" / "Channel". **Five effects carry none.** The Matte key: a
 keyer's subject is the picture it keys, and a strength matte over a key is a garbage
 matte, which is a mask's job. And **Set matte**: every Matte row answers "how much
 of me happens here", and Set matte has no answer to give — what it takes from another
@@ -319,7 +337,9 @@ layer is the coverage itself, so the row it shows is its own source picker, ridi
 ordinary auxiliary-layer carriage beside Light wrap's Background rather than the universal
 one. Both keep their stored ids, so a project saved before either drop loads exactly as it
 did (the forward-migration walk only appends what a schema has *grown*, and
-carries a row nobody declares any more along untouched).
+carries a row nobody declares any more along untouched). **Merge**, **Switch** and **Time
+offset** are the other three: Compositing entries only a node graph holds (§3.97, §3.98,
+§3.100), where a picture arrives on a wire and there is no layer to pick.
 
 **The Channel choice says which channel of the matte layer drives the effect**: Luminance
 (the default — the premultiplied Rec. 709 luma every kernel has always read), Red, Green,
@@ -515,12 +535,14 @@ the invariant the campaign is held to, and it has its own regression test at eac
 The in-box replacements for the scene's paid stack. Two shape rules: an effect
 does **one thing** (multi-purpose designs split; an all-in-one grading suite may exist
 later as a deliberate exception), and every schema declares a **category** — Blur &
-sharpen, Colour, Distortion, Generate, Stylise, Temporal, Transition, Utility, Controls —
-which is how
+sharpen, Colour, Distortion, Generate, Stylise, Temporal, Transition, Utility, Controls,
+Compositing — which is how
 the Add-effect menu groups (**Generate** added for the effects that *make* pixels
 rather than change them; **Transition** for the effects that *remove* the picture
 progressively so a cut can be made out of them; **Controls** for the effects that
-change no pixel at all — see §3.80). The flow engine is **not** in this list: it is a per-layer option,
+change no pixel at all — see §3.80; **Compositing** for the entries only a node graph
+composition holds, which the Add-effect menu never offers, §3.97, §3.98 and §3.100).
+The flow engine is **not** in this list: it is a per-layer option,
 specified in §3.1's original text but surfaced as layer UI, not an effect. Summary:
 
 | # | Effect | Replaces | Cost | Temporal window |
@@ -1439,7 +1461,8 @@ light trail (see Open questions). Pre-release, mode indices were renumbered with
 It reads the layer's
 **source** frames, not the upstream stack's output at those times (full temporal stacking is
 later), and echoes footage layers only — Sequence-clip and adjustment-layer temporal effects
-are deferred. Marker-triggerable intensity spikes come with the §1.4 wiring already in place.
+are deferred. Inside a node graph composition it reads its **input box** at those times
+instead, which is §2.5's rule. Marker-triggerable intensity spikes come with the §1.4 wiring already in place.
 
 **The Matte scales Decay (§2.6):** the trail dies away sooner where the matte is
 dark and reaches its full length where it is white, so the ghosts are genuinely shorter
@@ -6508,6 +6531,49 @@ tolerance would hide the only failure that matters, which is two pixels having s
 line rather than a rearrangement of pixels that already exist, so it would want a filtering
 decision, a gap policy and an overlap policy that none of the prior art has; it lands when
 a real project asks.
+
+### 3.100 Merge
+
+**Parameters:** **Mode** (the blend-mode names, default Normal), **Opacity** (0 to 100 %,
+default 100).
+
+A **Compositing** effect: it lays picture A over picture B with the mode and the opacity. Its
+two pictures arrive on wires rather than rows, an unwired A gives B and an unwired B gives A
+over nothing. It carries no Matte row, and only a node graph composition can hold it, a
+layer's stack refusing it. [impl/node-graph-comp.md](impl/node-graph-comp.md) §1.3 has the
+sockets and the walk that realises them.
+
+### 3.101 Switch
+
+**Parameters:** **Index** (whole number, 0 and up, default 0).
+
+A **Compositing** effect, held by a node graph composition only, as Merge is. It shows the
+picture on the socket its Index names, and is transparent where that socket is unwired or the
+index is out of range; the sockets are `in0` upwards, one spare beyond the last one wired.
+Index is an ordinary parameter, so a driver moves the picture frame by frame. It carries no
+Matte row. [impl/node-graph-comp.md](impl/node-graph-comp.md) §1.3.
+
+### 3.102 Node graph
+
+**Parameters:** the named graph's Input nodes as derived rows, plus **Mix** and the injected
+Blend and Matte rows.
+
+A **Utility** effect: it applies a node graph composition to the layer. The layer's picture at
+that point in the stack is the graph's first picture Input, the graph's other Inputs are the
+effect's own rows, and the graph's Output is what the effect hands on. It is also how one node
+graph nests inside another. The derived rows are offered, never adopted, as the Custom
+shader's are (§3.95). [impl/node-graph-comp.md](impl/node-graph-comp.md) §1.3.
+
+### 3.103 Time offset
+
+**Parameters:** **Offset** (seconds, keyframeable, default 0).
+
+A **Compositing** effect, held by a node graph composition only, as Merge and Switch are. It
+shows its input at `t + Offset`, which is the per-node time a graph otherwise has none of:
+its sockets are `input`, `offset` and `output`, it declares `is_image_op() == false`, and
+the graph walk realises it by asking its input cone at the shifted time rather than by
+running a kernel, so a Time offset lowers to no step of its own. A layer's stack refuses it,
+as it refuses Merge. [impl/node-graph-comp.md](impl/node-graph-comp.md) §5.2.
 
 ## 4. Tier 2 — AE parity direction (post-v1)
 

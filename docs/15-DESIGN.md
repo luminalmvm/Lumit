@@ -1761,9 +1761,11 @@ still a Viewer somebody is watching.
 
 ### 12A.7 The node graph surfaces
 
-The approved **NodeGraph** and **Nodes-workspace** drawings govern the Graph panel, the
-Nodes workspace and the Node preview panel; [impl/node-graph.md](impl/node-graph.md)
-carries the model and the work packages. Binding rules beyond the drawings themselves:
+The approved **NodeGraph** and **Nodes-workspace** drawings govern the Graph panel and the
+Nodes workspace; [impl/node-graph.md](impl/node-graph.md)
+carries the model and the work packages. There is no Node preview panel: seeing the picture
+at one box is the Viewer's own chip ([07-UI-SPEC.md](07-UI-SPEC.md) §2.2.1), which replaced
+it. Binding rules beyond the drawings themselves:
 
 - **Wire and socket colour is the data type** — five `port.*` tokens (§4.1) for seven
   types, grouped image·matte / number / colour / shape·points / audio, with the legend
@@ -1796,6 +1798,11 @@ carries the model and the work packages. Binding rules beyond the drawings thems
   suffixes are kickers.
 - The Nodes workspace keeps the **whole viewer bar on the small viewer** and the ordinary
   Timeline, shorter, beneath the graph — shared widgets, never forks.
+- **A node graph composition draws on the same canvas**, under these same drawings and
+  rules ([impl/node-graph-comp.md](impl/node-graph-comp.md) §4.2). A Read node draws under
+  its item's own name, with the item's kind as its kicker, and the wire legend is unchanged:
+  an image wire is the image colour whichever socket it feeds. **Heal** on a node graph
+  joins what fed a deleted box's input to everything its output fed.
 
 ## 13. New-panel checklist
 

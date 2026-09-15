@@ -415,7 +415,7 @@ void main() {
   group('New composition metrics (frb)', () {
     setUpAll(initEngineForTests);
 
-    Future<void> open(WidgetTester tester) async {
+    Future<void> open(WidgetTester tester, {bool nodeGraph = false}) async {
       tester.view.physicalSize = const Size(1000, 800);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
@@ -426,7 +426,9 @@ void main() {
             key: const ValueKey('open'),
             behavior: HitTestBehavior.opaque,
             onTap: () => showNewCompositionFrb(
-                context: context, project: p.state.project!),
+                context: context,
+                project: p.state.project!,
+                nodeGraph: nodeGraph),
             child: const SizedBox(width: 200, height: 40),
           ),
         ),
@@ -454,6 +456,22 @@ void main() {
           reason: '10 above a 24px button and 10 below it, over a hairline');
       expect(find.text('NEW COMPOSITION'), findsOneWidget,
           reason: 'the title is a kicker — mono capitals');
+
+      await tester.tap(find.byKey(const ValueKey('comp-cancel')));
+      await tester.pumpAndSettle();
+    });
+
+    /// **The node graph door prefills its own count** (docs/impl/
+    /// node-graph-comp.md §4.4): the field shows the name the engine would
+    /// have chosen, asked once as the dialogue opens, rather than opening
+    /// blank and leaving the name a surprise.
+    testWidgets('the New node graph dialogue is prefilled with its name',
+        (tester) async {
+      await open(tester, nodeGraph: true);
+
+      expect(find.text('NEW NODE GRAPH'), findsOneWidget);
+      expect(find.text('Node graph 1'), findsOneWidget,
+          reason: 'a fresh project holds no graph, so the next one is the first');
 
       await tester.tap(find.byKey(const ValueKey('comp-cancel')));
       await tester.pumpAndSettle();

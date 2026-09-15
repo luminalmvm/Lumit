@@ -537,6 +537,8 @@ pub mod particulate {
                 &[],
                 &[],
                 std::slice::from_ref(&carriage),
+                &[],
+                &[],
                 None,
                 None,
             )

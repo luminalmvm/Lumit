@@ -156,6 +156,7 @@ Map<String, String> get _table => {
       "Combine": l10n.fxCombine,
       "Composite on original": l10n.fxCompositeOnOriginal,
       "Compressor": l10n.fxCompressor,
+      "Compositing": l10n.fxCompositing,
       "Conductivity state": l10n.fxConductivityState,
       "Connect points": l10n.fxConnectPoints,
       "Connections": l10n.fxConnections,
@@ -598,6 +599,7 @@ Map<String, String> get _table => {
       "Hue shift": l10n.fxHueShift,
       "Image": l10n.fxImage,
       "In front": l10n.fxInFront,
+      "Index": l10n.fxIndex,
       "Inflate": l10n.fxInflate,
       "Input": l10n.fxInput,
       "Input black": l10n.fxInputBlack,
@@ -679,6 +681,8 @@ Map<String, String> get _table => {
       "Max ghosts": l10n.fxMaxGhosts,
       "Maximum signal": l10n.fxMaximumSignal,
       "Median": l10n.fxMedian,
+      "Merge": l10n.fxMerge,
+      "Time offset": l10n.fxTimeOffset,
       "Midtone contrast": l10n.fxMidtoneContrast,
       "Midtones": l10n.fxMidtones,
       "Mirror": l10n.fxMirror,
@@ -693,6 +697,7 @@ Map<String, String> get _table => {
       "Multiply": l10n.fxMultiply,
       "Near blur": l10n.fxNearBlur,
       "Nearest distance": l10n.fxNearestDistance,
+      "Node graph": l10n.fxNodeGraph,
       "Noise": l10n.fxNoise,
       "Noise type": l10n.fxNoiseType,
       "None": l10n.fxNone,
@@ -703,6 +708,7 @@ Map<String, String> get _table => {
       "Offset y": l10n.fxOffsetY,
       "Opacity": l10n.fxOpacity,
       "Opacity %": l10n.fxOpacityPct,
+      "Open graph": l10n.fxOpenGraph,
       "Operate on alpha": l10n.fxOperateOnAlpha,
       "Orange": l10n.fxOrange,
       "Orientation": l10n.fxOrientation,
@@ -860,6 +866,7 @@ Map<String, String> get _table => {
       "Sub settings": l10n.fxSubSettings,
       "Subtract": l10n.fxSubtract,
       "Surface": l10n.fxSurface,
+      "Switch": l10n.fxSwitch,
       "Symmetric": l10n.fxSymmetric,
       "Taper": l10n.fxTaper,
       "Temperature": l10n.fxTemperature,
@@ -1112,6 +1119,8 @@ Map<String, String> get _table => {
       "Edit effects": l10n.histEditEffects,
       "Edit layer styles": l10n.histEditLayerStyles,
       "Edit drivers": l10n.histEditDrivers,
+      "Edit node graph": l10n.histEditNodeGraph,
+      "Edit node graph inputs": l10n.histEditNodeGraphInputs,
       "Fx switch": l10n.histFxSwitch,
       "3D switch": l10n.hist3dSwitch,
       "Edit clips": l10n.histEditClips,
@@ -1414,6 +1423,8 @@ String? _colourRefusal(String key, String Function(String) a) {
       return l10n.ocioParse(a('what'), a('reason'));
     case 'table_too_large':
       return l10n.ocioTableTooLarge(a('what'), a('size'), a('limit'));
+    case 'too_large':
+      return l10n.ocioTooLarge(a('reason'));
 
     default:
       return null;

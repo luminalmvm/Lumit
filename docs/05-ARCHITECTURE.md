@@ -26,7 +26,10 @@ The crates that exist today (v1), then the ones the doc reserves for later:
 | `lumit-flow` | Optical flow (**DIS**) — a CPU oracle plus WGSL twin — for Retime flow interpolation and flow motion blur. |
 | `lumit-media` | rsmpeg demux/decode/encode and the frame index. |
 | `lumit-audio` | **Pulsar**: cpal output, the audio clock everything syncs to, multi-source mixing, live waveform, spectral-flux beat detection. |
-| `lumit-cache` | **Nebula**: the frame cache — RAM + disk tiers, content-hash keys, byte-budget eviction. |
+| `lumit-cache` | **Nebula**: the frame cache — RAM + disk tiers, content-hash keys, byte-budget eviction. Each store registers with the resource governor, so the tiers' private budgets add up somewhere ([13-PERFORMANCE-RULES.md](13-PERFORMANCE-RULES.md) §3). |
+| `lumit-budget` | The **resource governor's ledger**: two tiers (video and host memory), grant-or-deny reservations that give their bytes back when they drop, and the pressure reading the degradation ladder steps on. Arithmetic only — it counts, it does not allocate, and it is handed the machine's figures rather than asking for them. Spec: [13-PERFORMANCE-RULES.md](13-PERFORMANCE-RULES.md) §3–§4. |
+| `lumit-ingress` | Bounded reading of structured and untrusted input: byte, item and depth budgets, checked size arithmetic, capped readers. The one place the limits every parser needs are written down, so a new parser inherits them rather than restating them. |
+| `lumit-peer` | Authenticated handshakes for the out-of-process plugin brokers: capability tokens, session secrets, nonces, and domain-separated proofs, so a broker pipe proves who is on the other end of it. |
 | `lumit-text` | Text rasterisation (v1: single run, embedded Inter). |
 | `lumit-project` | Serialisation: `.lum` container read/write, the operation journal, autosave. Spec: [10-FILE-FORMAT.md](10-FILE-FORMAT.md). |
 | `lumit-import` | After Effects import: reads a Lumit Bridge bundle's AE-shaped capture, maps it to a `Document` (keyframes, mattes, retime, the effect table, placeholders), and produces the import report. Spec: [11-AE-IMPORT.md](11-AE-IMPORT.md); how: [impl/ae-import.md](impl/ae-import.md). |
@@ -49,7 +52,7 @@ Reserved for later (no crate exists yet):
 | `lumit-time` | The rational time types — **v1 keeps these inside `lumit-core`**, not a separate crate. |
 | `lumit-gpu` (extras) | Texture pool, device-lost recovery, optional CUDA interop — future additions to the existing crate. |
 | `lumit-media` (extras) | Persistent decoder instances, hardware decode and image sequences (`sequence.rs`) are built; proxy generation is future. |
-| `lumit-cache` (extras) | The VRAM tier, `index.db`, and the resource governor — future. |
+| `lumit-cache` (extras) | The VRAM tier and `index.db` — future. The resource governor is built and lives in `lumit-budget`. |
 | *(no crate)* | Expressions live in `lumit-core` (`src/expression/`), not a crate of their own: a driven property is resolved by the same code that resolves a keyframed one, so splitting them would put the seam through the middle of `Property`. The expression engine is Rhai. |
 | `lumit-ofx` | OFX host: out-of-process plugin server, C ABI, shared-memory frame transport. |
 | `lumit-lfx` | LFX host. Shares the sandbox/IPC substrate with `lumit-ofx`. |

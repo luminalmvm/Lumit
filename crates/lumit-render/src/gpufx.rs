@@ -6486,6 +6486,8 @@ mod tests {
             &[],
             &[],
             std::slice::from_ref(&carriage),
+            &[],
+            &[],
             None,
             None,
         );
@@ -6593,7 +6595,14 @@ mod tests {
             // another effect's kernel, and the table would then name two ways of
             // multiplying an alpha. Anything else that wants to opt out is
             // argued for here, in these words, before it may.
-            if def.is_image_op() && name != lumit_core::roto::ROTO_BRUSH {
+            // **The Node graph effect is the second.** It draws pixels, so it
+            // is an image op; it has no entry here because what it runs is a
+            // whole graph of other effects, reached through the closure list
+            // `run_ops` carries beside its kernels (docs/impl/
+            // node-graph-comp.md §2.4). A `GpuEffect` of its own would be a
+            // kernel wrapper round every other kernel there is.
+            let walked = name == lumit_core::comp_graph::NODE_GRAPH;
+            if def.is_image_op() && name != lumit_core::roto::ROTO_BRUSH && !walked {
                 assert!(
                     gpu_effect(name).is_some(),
                     "{name} is migrated and draws pixels, but has no GPU pass"
@@ -6789,6 +6798,8 @@ mod tests {
             &[],
             &[],
             &[],
+            &[],
+            &[],
             None,
             None,
         );
@@ -6944,6 +6955,8 @@ mod tests {
             &[],
             &[],
             &[],
+            &[],
+            &[],
             None,
             None,
         );
@@ -6998,6 +7011,8 @@ mod tests {
             w,
             h,
             &ops,
+            &[],
+            &[],
             &[],
             &[],
             &[],
@@ -7106,6 +7121,8 @@ mod tests {
             &[],
             &[],
             &[],
+            &[],
+            &[],
             None,
             None,
         );
@@ -7179,6 +7196,8 @@ mod tests {
                 w,
                 h,
                 ops,
+                &[],
+                &[],
                 &[],
                 &[],
                 &[],
@@ -7287,6 +7306,8 @@ mod tests {
             &[],
             &[],
             &[],
+            &[],
+            &[],
             None,
             None,
         );
@@ -7390,6 +7411,8 @@ mod tests {
             ],
             &[],
             &[],
+            &[],
+            &[],
             None,
             None,
         );
@@ -7455,6 +7478,8 @@ mod tests {
             h,
             &ops,
             &neighbours,
+            &[],
+            &[],
             &[],
             &[],
             &[],
@@ -7559,6 +7584,8 @@ mod tests {
                 mattes,
                 &[],
                 &[],
+                &[],
+                &[],
                 None,
                 None,
             );
@@ -7653,6 +7680,8 @@ mod tests {
                 layers,
                 &[],
                 mattes,
+                &[],
+                &[],
                 &[],
                 &[],
                 None,
@@ -7763,6 +7792,8 @@ mod tests {
                 mattes,
                 &[],
                 &[],
+                &[],
+                &[],
                 None,
                 None,
             );
@@ -7856,6 +7887,8 @@ mod tests {
                 &[],
                 &[],
                 layers,
+                &[],
+                &[],
                 &[],
                 &[],
                 &[],
@@ -7974,6 +8007,8 @@ mod tests {
                 &[],
                 &[],
                 &[],
+                &[],
+                &[],
                 None,
                 None,
             );
@@ -8070,6 +8105,8 @@ mod tests {
                 &[],
                 &[],
                 &[crate::fxops::LayerInput::Texture(matte_tex.clone())],
+                &[],
+                &[],
                 &[],
                 &[],
                 None,
@@ -8172,6 +8209,8 @@ mod tests {
             // Slot 0 absent (the first exposure applies in full), slot 1 black
             // (the second is switched off).
             &[crate::fxops::LayerInput::Absent, off],
+            &[],
+            &[],
             &[],
             &[],
             None,

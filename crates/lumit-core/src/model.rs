@@ -341,6 +341,20 @@ pub struct Composition {
     // re-saves byte-identical (the round-trip test pins it).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub beat_grid: Option<BeatGrid>,
+    /// The **boxes and wires** this composition makes its picture with, in
+    /// place of [`Self::layers`] (docs/impl/node-graph-comp.md §1.1).
+    ///
+    /// `Some` on a node graph and `None` on every other composition, which is
+    /// every composition written before node graphs existed - and it is left
+    /// out of the saved file then, so those projects open and save back the
+    /// same bytes.
+    ///
+    /// A comp is one thing or the other and never both: every op that adds,
+    /// removes, reorders or edits a layer is refused on a comp that has one of
+    /// these, and writing one onto a comp that has layers is refused the same
+    /// way ([`crate::OpError::CompIsNodeGraph`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub graph: Option<crate::comp_graph::CompGraph>,
     /// Unknown fields from newer Lumit versions, preserved on load/save
     /// (docs/10-FILE-FORMAT.md §1.1 — mandatory forward compatibility).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
@@ -1578,6 +1592,27 @@ impl Default for Switches {
     }
 }
 
+/// Which moment of `nested` a Precomp `layer` shows at layer-local time `lt`
+/// (docs/impl/node-graph-comp.md §5.6, docs/04-RETIMING.md §11).
+///
+/// The one place a nested comp's clock is mapped, so the draw builder, the
+/// decode planner and the frame key can never disagree about which frame of a
+/// retimed Precomp is on screen.
+///
+/// **Overrun holds the boundary frame.** A map that runs past the nested comp
+/// is clamped to that comp's last frame rather than to its duration, which is
+/// the moment after the last frame and draws nothing. An **un-retimed** layer
+/// reads `lt` straight through and is not clamped at all, so it still draws
+/// nothing past the nested duration.
+#[must_use]
+pub fn nested_source_time(layer: &Layer, nested: &Composition, lt: f64) -> f64 {
+    if layer.retime.is_none() {
+        return lt;
+    }
+    let last = (nested.duration.0.to_f64() - 1.0 / nested.frame_rate.fps().max(1.0)).max(0.0);
+    layer.source_time_at(lt).clamp(0.0, last)
+}
+
 /// What the collapse switch actually does for a layer at local time `lt`
 /// (docs/06-RENDER-PIPELINE.md §1.4).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1609,11 +1644,17 @@ pub fn collapse_state(doc: &Document, comp: &Composition, layer: &Layer, lt: f64
         return CollapseState::Off;
     }
     let inner_forces = doc.comp(*nested_id).is_some_and(|nested| {
-        nested.layers.iter().any(|l| {
-            l.switches.visible
-                && (l.matte.is_some()
-                    || (l.is_adjustment() && l.switches.fx && l.effects.iter().any(|e| e.enabled)))
-        })
+        // A node graph draw needs its own intermediate for the clipping a
+        // collapse would skip, so a placed graph never splices
+        // (docs/impl/node-graph-comp.md §5.9).
+        nested.graph.is_some()
+            || nested.layers.iter().any(|l| {
+                l.switches.visible
+                    && (l.matte.is_some()
+                        || (l.is_adjustment()
+                            && l.switches.fx
+                            && l.effects.iter().any(|e| e.enabled)))
+            })
     });
     let forced = !layer.masks.is_empty()
         // Paint is stamped into the layer's own raster, which splicing
@@ -2338,6 +2379,17 @@ pub struct Layer {
     /// visible and gives the row something to key.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub retime: Option<Property>,
+    /// The values this layer hands the node graph it places
+    /// (docs/impl/node-graph-comp.md §5.3): a `node_graph` instance bound to
+    /// the layer's own comp, meaningful only on a Precomp layer of a graph.
+    ///
+    /// An instance rather than a bare list, so the graph's Inputs keyframe,
+    /// take expressions and take driver wires exactly as the same graph's rows
+    /// do when it is applied as an effect - and so one edit path serves both.
+    /// `None` is a layer nobody has typed a value on, which reads the graph's
+    /// own defaults and saves nothing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub graph_inputs: Option<EffectInstance>,
     /// How a fractional source moment becomes pixels: nearest, blend, or
     /// optical flow (docs/04-RETIMING.md §10).
     ///
@@ -2548,7 +2600,7 @@ pub fn parenting_would_cycle(comp: &Composition, layer: Uuid, new_parent: Uuid) 
 /// Every footage item composition `comp` can put on screen: its own Footage
 /// layers, the footage its Sequence layers' clips name, and — transitively —
 /// everything the compositions it nests can show, whether they are reached
-/// through a Precomp layer or through a comp-sourced clip.
+/// through a Precomp layer, a comp-sourced clip or a Node graph effect.
 ///
 /// # In plain terms
 ///
@@ -2581,6 +2633,39 @@ fn collect_comp_footage(
     found: &mut Vec<Uuid>,
     walked: &mut Vec<Uuid>,
 ) {
+    // A node graph's Read boxes bring items in exactly as layers do, and a Read
+    // of a comp descends as a Precomp layer does, under the same guard.
+    if let Some(graph) = &comp.graph {
+        for node in &graph.nodes {
+            match node {
+                crate::comp_graph::GraphNode::Read { item, .. } => match doc.item(*item) {
+                    Some(ProjectItem::Footage(_)) => {
+                        if !found.contains(item) {
+                            found.push(*item);
+                        }
+                    }
+                    Some(ProjectItem::Composition(_)) => {
+                        descend_into_comp(doc, *item, found, walked);
+                    }
+                    // A solid is a colour and a folder is not a source: neither
+                    // opens a file, exactly as the layer walk below has it.
+                    _ => {}
+                },
+                // A Node graph box shows a whole graph inside this one, so it
+                // descends as a Read of a comp does.
+                crate::comp_graph::GraphNode::Fx(inst) => {
+                    collect_graph_effect_footage(doc, std::slice::from_ref(inst), found, walked);
+                }
+                _ => {}
+            }
+        }
+    }
+    // A live group's header runs its stack on the members' composite
+    // (docs/impl/group-effects.md §2), so a Node graph effect there opens
+    // files no layer of this comp names.
+    for group in &comp.groups {
+        collect_graph_effect_footage(doc, &group.effects, found, walked);
+    }
     for layer in &comp.layers {
         // An Audio layer's file is opened by the mixer, never by the picture:
         // naming it here would have the renderer probe and index the
@@ -2588,6 +2673,10 @@ fn collect_comp_footage(
         if layer.audio_only {
             continue;
         }
+        // The graphs this layer's stack applies, whatever its kind: a Node
+        // graph effect puts the graph's own Read boxes on screen through this
+        // layer, and an adjustment layer with one has footage to open too.
+        collect_graph_effect_footage(doc, &layer.effects, found, walked);
         match &layer.kind {
             LayerKind::Footage { item } => {
                 if !found.contains(item) {
@@ -2622,6 +2711,43 @@ fn collect_comp_footage(
             | LayerKind::Light { .. }
             | LayerKind::Adjustment
             | LayerKind::Null => {}
+        }
+    }
+}
+
+/// The comps an effect stack's enabled Node graph effects name, walked as a
+/// Precomp layer's comp is (docs/impl/node-graph-comp.md §2.4). A graph brings
+/// its own Read boxes' footage in through whatever holds it, so the walk that
+/// answers "which files might this comp want" has to follow it.
+///
+/// Layer stacks and group headers alike, which is what the decode planner
+/// covers: a header's graph is planned there too, so the files named here are
+/// files the plan does fetch.
+/// Whether `inst` is a Node graph effect bound to the comp `id`. Bypassed or
+/// not: a switched-off effect still places the graph, as a hidden layer still
+/// places its footage.
+fn applies_graph(inst: &EffectInstance, id: Uuid) -> bool {
+    inst.effect.match_name == crate::comp_graph::NODE_GRAPH
+        && crate::fx::effects::node_graph::comp_of(inst) == Some(id)
+}
+
+/// Whether any effect in `effects` applies the node graph `id`.
+fn effects_apply_graph(effects: &[EffectInstance], id: Uuid) -> bool {
+    effects.iter().any(|e| applies_graph(e, id))
+}
+
+fn collect_graph_effect_footage(
+    doc: &Document,
+    effects: &[EffectInstance],
+    found: &mut Vec<Uuid>,
+    walked: &mut Vec<Uuid>,
+) {
+    for inst in effects.iter().filter(|e| e.enabled) {
+        if inst.effect.match_name != crate::comp_graph::NODE_GRAPH {
+            continue;
+        }
+        if let Some(named) = crate::fx::effects::node_graph::comp_of(inst) {
+            descend_into_comp(doc, named, found, walked);
         }
     }
 }
@@ -3244,7 +3370,23 @@ impl Document {
     #[must_use]
     pub fn item_is_used(&self, id: Uuid) -> bool {
         self.items.iter().any(|item| match item {
-            ProjectItem::Composition(c) => c.layers.iter().any(|l| layer_names_item(l, id)),
+            // A node graph places its items in Read boxes rather than layers,
+            // and a node graph is placed by the effect that applies it as
+            // much as by a layer, so the badge asks every list and a graph
+            // cannot under-report.
+            ProjectItem::Composition(c) => {
+                c.layers
+                    .iter()
+                    .any(|l| layer_names_item(l, id) || effects_apply_graph(&l.effects, id))
+                    || c.groups.iter().any(|g| effects_apply_graph(&g.effects, id))
+                    || c.graph.as_ref().is_some_and(|g| {
+                        g.read_names_item(id)
+                            || g.nodes.iter().any(|n| {
+                                matches!(n, crate::comp_graph::GraphNode::Fx(inst)
+                                    if applies_graph(inst, id))
+                            })
+                    })
+            }
             _ => false,
         })
     }
@@ -3356,6 +3498,7 @@ mod tests {
             retime: Some(map),
             interpolation: Default::default(),
             parked_flow: None,
+            graph_inputs: None,
             blend: BlendMode::Normal,
             masks: Vec::new(),
             paint: Vec::new(),
@@ -3740,6 +3883,32 @@ mod tests {
         assert_eq!(serde_json::from_str::<Layer>(&old).unwrap(), layer);
     }
 
+    /// The values a Precomp layer hands the graph it places are document state
+    /// (docs/impl/node-graph-comp.md §5.3): they survive a save and a load, and
+    /// a project saved before the field existed loads with none.
+    #[test]
+    fn graph_inputs_round_trip_and_older_files_open_without_them() {
+        let mut layer = comp_with_cameras().layers.remove(0);
+
+        // Nothing typed: no key at all, which is what every project written
+        // before the field wrote.
+        let old = serde_json::to_string(&layer).unwrap();
+        assert!(
+            !old.contains("graph_inputs"),
+            "nothing typed, nothing saved"
+        );
+        let back: Layer = serde_json::from_str(&old).unwrap();
+        assert_eq!(back, layer);
+        assert!(back.graph_inputs.is_none());
+
+        let inst = crate::fx::instantiate("node_graph").expect("the catalogue knows it");
+        layer.graph_inputs = Some(inst.clone());
+        let json = serde_json::to_string(&layer).unwrap();
+        let back: Layer = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.graph_inputs.as_ref(), Some(&inst));
+        assert_eq!(back, layer);
+    }
+
     /// **A line on a path round-trips, and a straight one writes what it always
     /// wrote**. The two new fields are absent from the file
     /// until they are used, so every `.lum` ever saved opens here unchanged —
@@ -3878,6 +4047,7 @@ mod tests {
 
     fn comp_with_cameras() -> Composition {
         let mut comp = Composition {
+            graph: None,
             master_volume_db: 0.0,
             sound_mix: false,
             groups: Vec::new(),
@@ -3923,6 +4093,7 @@ mod tests {
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
+            graph_inputs: None,
             blend: BlendMode::Normal,
             masks: Vec::new(),
             paint: Vec::new(),
@@ -4063,6 +4234,42 @@ mod tests {
         assert_eq!(
             collapse_state(&doc2, &comp, &pre2, 1.0),
             CollapseState::Forced
+        );
+    }
+
+    /// A placed **node graph** forces the intermediate (docs/impl/
+    /// node-graph-comp.md §5.9): a graph draw needs its own raster for the
+    /// clipping a collapse would skip.
+    #[test]
+    fn a_placed_node_graph_forces_the_intermediate() {
+        let mut inner = comp_with_cameras();
+        inner.layers.clear();
+        inner.graph = Some(crate::comp_graph::CompGraph::new_with_output());
+        let nested_id = inner.id;
+        let mut doc = Document::new();
+        doc.items.push(ProjectItem::Composition(inner.clone()));
+
+        let comp = comp_with_cameras();
+        let mut pre = comp.layers[0].clone();
+        pre.id = Uuid::now_v7();
+        pre.kind = LayerKind::Precomp { comp: nested_id };
+        pre.switches.visible = true;
+        pre.switches.collapse = true;
+        pre.blend = BlendMode::Normal;
+        pre.masks.clear();
+        pre.transform = TransformGroup::default();
+        assert_eq!(
+            collapse_state(&doc, &comp, &pre, 1.0),
+            CollapseState::Forced
+        );
+
+        // The same comp with layers instead of a graph collapses as ever.
+        let mut layers = Document::new();
+        inner.graph = None;
+        layers.items.push(ProjectItem::Composition(inner));
+        assert_eq!(
+            collapse_state(&layers, &comp, &pre, 1.0),
+            CollapseState::Active
         );
     }
 
@@ -4322,6 +4529,7 @@ mod tests {
     /// An empty composition of the given size, for the footage-reference walk.
     fn bare_comp(name: &str) -> Composition {
         Composition {
+            graph: None,
             master_volume_db: 0.0,
             sound_mix: false,
             groups: Vec::new(),
@@ -4363,6 +4571,7 @@ mod tests {
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
+            graph_inputs: None,
             blend: BlendMode::Normal,
             masks: Vec::new(),
             paint: Vec::new(),
@@ -4508,6 +4717,88 @@ mod tests {
         assert_eq!(
             comp_footage_items(&doc, doc.comp(two_id).unwrap()),
             vec![item]
+        );
+    }
+
+    /// **A Node graph effect opens files through whatever holds it**
+    /// (docs/impl/node-graph-comp.md §2.1): a layer's stack and a live group's
+    /// header alike, since the header's stack runs on the members' composite
+    /// and the graph's Read boxes are on screen through it.
+    #[test]
+    fn the_footage_walk_follows_a_node_graph_effect_on_a_layer_and_a_header() {
+        let item = Uuid::now_v7();
+        let mut doc = Document::new();
+        // A Read box asks the document what its item is, so this one is here
+        // rather than being an id on its own.
+        doc.items.push(ProjectItem::Footage(FootageItem {
+            sequence: None,
+            id: item,
+            name: "plate.mp4".into(),
+            media: MediaRef {
+                relative_path: "plate.mp4".into(),
+                absolute_path: String::new(),
+                fingerprint: None,
+                extra: serde_json::Map::new(),
+            },
+            extra: serde_json::Map::new(),
+            colour_space: None,
+        }));
+
+        let mut graph = bare_comp("graph");
+        let graph_id = graph.id;
+        graph.graph = Some(crate::comp_graph::CompGraph {
+            nodes: vec![
+                crate::comp_graph::GraphNode::Read {
+                    id: Uuid::now_v7(),
+                    item,
+                    custom_name: None,
+                },
+                crate::comp_graph::GraphNode::Output { id: Uuid::now_v7() },
+            ],
+            edges: Vec::new(),
+            layout: Vec::new(),
+            exposed: Vec::new(),
+            groups: Vec::new(),
+        });
+        let mut inst = crate::fx::instantiate("node_graph").expect("the effect exists");
+        crate::fx::effects::node_graph::bind(
+            &mut inst,
+            graph_id,
+            graph.graph.as_ref().expect("a node graph"),
+        );
+
+        let mut host = bare_comp("host");
+        let mut hosted = bare_layer(LayerKind::Null);
+        hosted.effects = vec![inst.clone()];
+        host.layers.push(hosted);
+        let host_id = host.id;
+
+        let mut grouped = bare_comp("grouped");
+        let member = bare_layer(LayerKind::Null);
+        let member_id = member.id;
+        grouped.layers.push(member);
+        grouped.groups = vec![crate::group::LayerGroup {
+            id: Uuid::now_v7(),
+            name: "band".into(),
+            label: 0,
+            members: vec![member_id],
+            effects: vec![inst],
+        }];
+        let grouped_id = grouped.id;
+
+        for comp in [graph, host, grouped] {
+            doc.items.push(ProjectItem::Composition(comp));
+        }
+
+        assert_eq!(
+            comp_footage_items(&doc, doc.comp(host_id).unwrap()),
+            vec![item],
+            "a graph on a layer's stack names the files its Read boxes read"
+        );
+        assert_eq!(
+            comp_footage_items(&doc, doc.comp(grouped_id).unwrap()),
+            vec![item],
+            "and so does one on a group's header"
         );
     }
 

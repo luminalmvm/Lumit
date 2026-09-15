@@ -244,6 +244,15 @@ pub enum GraphError {
     InputAlreadyWired,
     #[error("the wire would close a loop")]
     Cycle,
+    /// A **node graph** with nothing to show
+    /// ([`crate::comp_graph`]). Here rather than in its own error type so
+    /// [`crate::OpError::InvalidGraph`] carries both graph kinds' sentences.
+    #[error("a node graph needs an Output box")]
+    NoOutput,
+    /// A **node graph** with two Output boxes: the comp would have two
+    /// pictures and no way to say which it shows.
+    #[error("a node graph has one Output box")]
+    SecondOutput,
 }
 
 /// How many of `effects` lie at or above `node` in the image chain — the

@@ -295,6 +295,7 @@ impl LayerReference {
                     layer: Some(self.layer_id),
                     comp_time: t.0.to_f64(),
                     current_depth: 0,
+                    inputs: None,
                 },
             ))
             .into_owned();

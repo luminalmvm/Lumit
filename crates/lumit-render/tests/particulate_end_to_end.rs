@@ -65,6 +65,7 @@ fn solid_layer(def: Uuid) -> Layer {
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,
+        graph_inputs: None,
         blend: Default::default(),
         masks: Vec::new(),
         paint: Vec::new(),
@@ -98,6 +99,7 @@ fn project(effects: Vec<lumit_core::model::EffectInstance>) -> (Arc<Document>, U
     layer.effects = effects;
 
     let comp = Composition {
+        graph: None,
         master_volume_db: 0.0,
         sound_mix: false,
         groups: Vec::new(),

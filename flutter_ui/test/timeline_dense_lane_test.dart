@@ -47,6 +47,7 @@ BridgeLayerEntry _entry({BridgeTransform? transform}) {
       internallayerId: id,
     ),
     info: BridgeLayerInfo(
+      collapseForced: false,
       volumeDb: const BridgeScalar.static_(0),
       pan: const BridgeScalar.static_(0),
       wired: false,

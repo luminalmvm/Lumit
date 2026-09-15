@@ -382,6 +382,7 @@ fn layer(name: &str, kind: LayerKind, span: Rational) -> Layer {
         retime: None,
         interpolation: Interpolation::default(),
         parked_flow: None,
+        graph_inputs: None,
         blend: Default::default(),
         masks: Vec::new(),
         paint: Vec::new(),
@@ -534,9 +535,21 @@ fn unillustrable(match_name: &str) -> Option<&'static str> {
         // points for something else to use, and reaches whatever it drives
         // through a wire in the node graph. There is no picture of one.
         "wiggle" | "smooth" | "math" | "remap" | "audio_level" | "colour_cycle"
-        | "points_sample" | "layer_points" => {
+        | "points_sample" | "layer_points" | "split" | "combine" => {
             Some("a driver: it answers with a value, not a picture")
         }
+        // The Compositing family. Merge lays one picture over another, Switch
+        // picks between several and Time offset shows its input at another
+        // moment: each is realised by the node graph's own walk rather than by
+        // a kernel, and only a node graph can hold one. This harness stages one
+        // effect on one layer, so there is no graph here to hold it and nothing
+        // to wire a second picture from.
+        "merge" | "switch" | "time_offset" => {
+            Some("only a node graph holds one, and there is no graph here")
+        }
+        // And the effect that applies a graph: it shows whatever graph it is
+        // bound to, and this harness has no node graph composition to bind.
+        "node_graph" => Some("applies a node graph, and there is none in this project"),
         // The points effects that *consume* a stream. Their points arrive on a
         // wire-only input (points-stream.md §4.1), which exists in the node
         // graph and nowhere else, and this harness stages one effect on one
@@ -729,6 +742,7 @@ fn example_doc(
 
     let comp_id = id("Example");
     doc.items.push(ProjectItem::Composition(Composition {
+        graph: None,
         master_volume_db: 0.0,
         sound_mix: false,
         groups: Vec::new(),
@@ -819,6 +833,37 @@ LUT_3D_SIZE 17
 
 fn env_path(key: &str) -> Option<PathBuf> {
     std::env::var_os(key).map(PathBuf::from)
+}
+
+/// **The six entries no picture can be made of** (docs/impl/node-graph-comp.md
+/// test 24). The run above wants a GPU, a clip and an output directory, so it
+/// is ignored by default and would never say whether these arms are there; this
+/// one asks the function directly, which is the whole of what the arms do.
+///
+/// Every other name must stay illustrable: an entry that quietly grew a skip
+/// would drop its picture from the manual with nothing said.
+#[test]
+fn the_graph_only_entries_and_the_two_drivers_are_unillustrable() {
+    for name in [
+        "merge",
+        "switch",
+        "time_offset",
+        "node_graph",
+        "split",
+        "combine",
+    ] {
+        assert!(
+            unillustrable(name).is_some(),
+            "{name} cannot be illustrated by this harness and must say so"
+        );
+    }
+    for name in ["exposure", "blur", "levels"] {
+        assert_eq!(
+            unillustrable(name),
+            None,
+            "{name} draws a picture and must not be skipped"
+        );
+    }
 }
 
 #[test]

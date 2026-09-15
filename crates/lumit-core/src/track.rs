@@ -1061,6 +1061,7 @@ mod tests {
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
+            graph_inputs: None,
             blend: BlendMode::Normal,
             masks: Vec::new(),
             paint: Vec::new(),
@@ -1095,6 +1096,7 @@ mod tests {
 
     fn comp(name: &str, layers: Vec<Layer>) -> Composition {
         Composition {
+            graph: None,
             master_volume_db: 0.0,
             sound_mix: false,
             groups: Vec::new(),

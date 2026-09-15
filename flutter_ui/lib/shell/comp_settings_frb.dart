@@ -155,6 +155,12 @@ Future<CompositionReference?> showNewCompositionFrb({
   /// rather than read from the workspace here, because this file is a dialog
   /// and knows nothing about where settings live.
   bool asSequence = false,
+
+  /// Make a **node graph** rather than a layer stack
+  /// (docs/impl/node-graph-comp.md §4.4). The same dialogue, the same fields:
+  /// a node graph is sized and timed like any comp, and only the door it goes
+  /// through differs, because a comp is born one or the other.
+  bool nodeGraph = false,
 }) async {
   // Probed before the dialog opens rather than inside it: `mediaInfo` reads the
   // container with FFmpeg, and a dialog that popped up and then rearranged itself
@@ -181,12 +187,16 @@ Future<CompositionReference?> showNewCompositionFrb({
   }
   if (!context.mounted) return null;
 
-  final name = project.nextCompName();
+  // Asked once, here, rather than in a build: both doors show the name the
+  // engine would have chosen, counted over their own kind. A field cleared by
+  // hand falls back to it, which is the same name either way.
+  final name =
+      nodeGraph ? project.nextNodeGraphName() : project.nextCompName();
   return showLumitModal<CompositionReference>(
     context: context,
     id: 'new-comp',
     builder: (close) => _CompSettingsBody(
-      title: l10n.newComposition,
+      title: nodeGraph ? l10n.newNodeGraph : l10n.newComposition,
       confirm: l10n.create,
       initial: BridgeCompSettings(
         name: name,
@@ -200,8 +210,10 @@ Future<CompositionReference?> showNewCompositionFrb({
         motionBlurSamples: initial.motionBlurSamples,
       ),
       onConfirm: (settings) {
-        final comp =
-            project.newComposition(name: settings.name, settings: settings);
+        final comp = nodeGraph
+            ? project.newNodeGraph(name: settings.name, settings: settings)
+            : project.newComposition(name: settings.name, settings: settings);
+        // A node graph has no layers, so nothing is dropped on this door.
         for (final item in footage) {
           comp.addFootageLayer(footage: item, asSequence: asSequence);
         }

@@ -238,13 +238,31 @@ impl Ring {
             slot_bytes,
         };
         let mut options = OpenOptions::new();
-        options.read(true).write(true).create(true).truncate(true);
+        // `create_new`, not `create` + `truncate`.
+        //
+        // In plain terms: the ring is a real file in the temporary directory,
+        // and the old code would open whatever was already at that path and
+        // truncate it. With the old predictable names — the host's process id
+        // and a counter — another program could work the path out and put
+        // something there first, including a symbolic link, and the truncate
+        // would land wherever the link pointed. Refusing a path that already
+        // exists costs nothing (the name is 128 random bits, so it never does)
+        // and turns that into an error instead.
+        options.read(true).write(true).create_new(true);
         // FILE_FLAG_DELETE_ON_CLOSE. The broker still opens the file by name
         // while this handle is open; std's default share mode allows that.
         #[cfg(windows)]
         {
             use std::os::windows::fs::OpenOptionsExt;
             options.custom_flags(0x0400_0000);
+        }
+        // Readable and writable by this user alone. The temporary directory is
+        // usually world-writable, and a ring holds the frames of whatever the
+        // user is editing.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
         }
         let file = options.open(path)?;
         file.set_len(slot_bytes.saturating_mul(u64::from(slots)))?;
@@ -255,6 +273,39 @@ impl Ring {
             owned: Some(path.to_path_buf()),
             file: Some(file),
         })
+    }
+
+    /// Take the ring's file out of the directory, now that the broker has it
+    /// mapped. Unix only, and a no-op everywhere else.
+    ///
+    /// # In plain terms
+    ///
+    /// A Unix mapping is of the *file*, not of its name: once both processes
+    /// have called `mmap`, the name in `/tmp` is doing nothing but letting
+    /// other programs find it. Removing it at that point leaves the ring
+    /// working perfectly in both processes, makes it impossible for a third to
+    /// open it by name, and — this is the part that matters most in practice —
+    /// has the kernel reclaim the space the moment the last of the two exits.
+    /// Half a gigabyte per broker used to survive a crash, a `kill -9`, or a
+    /// power cut, because the only thing that removed it was a destructor.
+    ///
+    /// Windows is the other way round: a mapped file cannot be unlinked at all,
+    /// which is why the handle carries `FILE_FLAG_DELETE_ON_CLOSE` instead and
+    /// the operating system does the same job on process exit.
+    ///
+    /// Called by the host when the broker says [`RingOpened`] — never before,
+    /// or the broker would be opening a name that has gone.
+    ///
+    /// [`RingOpened`]: crate::ipc::proto::BrokerMessage::RingOpened
+    pub fn unlink_now_it_is_shared(&mut self) {
+        if cfg!(windows) {
+            return;
+        }
+        let Some(path) = self.owned.take() else {
+            return;
+        };
+        // The handle stays open and the mapping stays live; only the name goes.
+        let _ = std::fs::remove_file(path);
     }
 
     /// Map a ring somebody else made. Called once, in the broker.

@@ -19,7 +19,8 @@ someone arriving from those tools, but the Lumit term is the only one used in Lu
 | **Footage item** | An asset referencing a media file on disk (video, image, image sequence). Lumit never modifies the file; the project stores a reference plus interpretation settings (frame rate override, alpha interpretation, colour space tag). |
 | **Audio item** | An asset referencing an audio file. |
 | **Folder** | A grouping node in the Project panel. (AE calls this a folder too; Premiere calls it a bin — *bin* is not a Lumit term.) |
-| **Composition (comp)** | A timeline with fixed resolution, frame rate, duration, and background colour, containing an ordered stack of layers. Comps can be nested via Precomp layers. |
+| **Composition (comp)** | A timeline with fixed resolution, frame rate, duration, and background colour, containing an ordered stack of layers, or a node graph (below). Comps can be nested via Precomp layers. |
+| **Node graph** (composition) | A composition whose picture is made by nodes and wires instead of a layer stack. Sized, timed and filed like any comp, so it is placed as a Precomp layer, read by another node graph, or applied to a layer as the Node graph effect. |
 
 ## 2. Layers
 
@@ -129,8 +130,15 @@ These three words are **not interchangeable**.
 | **Matte** | Using another layer's alpha or luma to gate this layer. Any layer can be chosen as a matte from a dropdown (AE 2023-style); one matte layer can serve many layers. *Track matte* is the AE name; Lumit says **matte**. |
 | **Roto brush** | The tool and effect that build a per-frame **matte** from painted foreground/background strokes, propagated frame to frame by optical flow. **Refine edge** is its boundary band, where a matting filter recovers soft edges. Lumit never says *rotobrush* or *magic mask*. |
 | **Blend mode** | Per-layer composite operator (Normal, Add, Screen, Multiply, Overlay, …). Full list in [06-RENDER-PIPELINE.md](06-RENDER-PIPELINE.md). |
-| **Effect** | One image (or audio) operation instance in a layer's **effect stack**, ordered top-to-bottom. Built-in effects, OFX plugins, and LFX plugins are all "effects" to the user. |
-| **Driver** | A node in a layer's graph that makes a *value* rather than a picture (Wiggle, Audio level, Math, …) and drives a parameter through a wire. A driven parameter overrides its keyframes and says so in Effect controls. |
+| **Effect** | One image (or audio) operation instance in a layer's **effect stack**, ordered top-to-bottom, or one box of a node graph composition. Built-in effects, OFX plugins, and LFX plugins are all "effects" to the user. |
+| **Driver** | A node in a layer's graph, or in a node graph composition, that makes a *value* rather than a picture (Wiggle, Audio level, Math, …) and drives a parameter through a wire. A driven parameter overrides its keyframes and says so in Effect controls. |
+| **Read node** | A box that brings a project item into a node graph: footage, a solid or a composition. Drawn under the item's own name, with the item's kind as its kicker. |
+| **Input node** | A box standing for a value or picture handed in from outside the graph. Applied as an effect or nested, an Input is a parameter row or a socket on the outer box. Viewed on its own, it is its default (a value) or transparent (a picture). |
+| **Output node** | The one box whose picture the node graph shows. Every node graph has exactly one and it cannot be deleted. |
+| **Merge** | The node that lays picture A over picture B with a blend mode and an opacity. A node graph's own; a layer stack joins pictures with layers and blend modes. |
+| **Switch** (node) | The node that shows one of its pictures, chosen by an index. Not a layer's switches, which stay the per-layer toggles they were. |
+| **Time offset** (node) | The node that shows its input at another time, by an Offset in seconds. A node graph's own, and the only per-node time there is. |
+| **Node graph effect** | The effect that applies a node graph to a layer. The layer's picture is the graph's first picture Input, the graph's other Inputs are the effect's rows, and the Output is what the effect hands on. |
 | **Wire** / **port** | A connection on the Graph panel's canvas, and the typed socket it plugs into. Wire and socket colour is the data type. |
 | **Points stream** | The typed, evaluated data a points-emitting effect produces (Particulate first) — per-frame particle attributes, never stored in the project, like an image. |
 | **Working space** | The engine's internal pixel format: scene-linear, premultiplied alpha, fp16 (fp32 opt-in per comp). |
@@ -142,8 +150,7 @@ These three words are **not interchangeable**.
 |---|---|
 | **Panel** | A dockable UI unit (Timeline, Viewer, Project, Effect Controls, Scopes, …). Full inventory in [07-UI-SPEC.md](07-UI-SPEC.md). |
 | **Workspace** | A named, saveable arrangement of panels. Ships with presets (Edit, Effects, Colour, Audio, Retiming, Nodes); fully user-rearrangeable. |
-| **Graph panel** | The panel drawing a layer's effect stack as nodes and wires — a second view of the same document that can also wire drivers into parameters. Not the evaluation graph, which stays internal. |
-| **Node preview panel** | Its own panel: a locked, read-only second viewport showing one node's output without soloing. |
+| **Graph panel** | The panel drawing a layer's effect stack as nodes and wires — a second view of the same document that can also wire drivers into parameters. It draws three things: a layer's graph, a Custom shader's inner graph, and a node graph composition. Not the evaluation graph, which stays internal. Seeing the picture at one box is the Viewer's own "at effect" chip ([07-UI-SPEC.md](07-UI-SPEC.md) §2.2.1), not a panel. |
 | **Viewer** | The panel that displays a comp (or footage/layer) with its toolbar: preview resolution, magnification, channel view, transparency grid, guides, and wireframe toggles. A workspace MAY hold several. |
 | **View** | One picture surface inside a Viewer panel. A Viewer holds one, two or four in a layout; each is bound to its own item, can be locked, and carries its own magnification, channel and exposure. Not the OCIO *view*, which always keeps its qualifier (colour view, display and view). |
 | **Timeline** | The panel showing a comp's layer stack against time, with expandable property lanes, keyframes, and cache bars. |
@@ -194,3 +201,6 @@ the source files that draw it, where an identifier or a comment may say track be
 the row on screen is one. Every op, every bridge name, every file outside that panel
 and every document sentence still says layer, and what that panel calls a track is a
 Sequence layer with `audio_only` set. No other panel takes the word.
+**Switch** carries two senses and both stay: the **Switch** node in a node graph is the
+box that shows one of its pictures, and a layer's **switches** are the per-layer toggles
+they have always been.

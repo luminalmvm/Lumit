@@ -412,6 +412,7 @@ fn footage(report: &mut ImportReport, item: &Item, id: Uuid, name: &str) -> Foot
 fn empty_comp(id: Uuid, name: &str, ae_id: i64) -> Composition {
     let tb = TimeBase::fallback();
     Composition {
+        graph: None,
         master_volume_db: 0.0,
         sound_mix: false,
         groups: Vec::new(),
@@ -534,6 +535,7 @@ fn composition(
     let markers = layers::markers(&mut conv, &ae.markers);
 
     Composition {
+        graph: None,
         master_volume_db: 0.0,
         sound_mix: false,
         groups: Vec::new(),

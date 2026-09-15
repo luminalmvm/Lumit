@@ -41,6 +41,11 @@ pub enum OpError {
     /// entity, so each one is an edit to decline.
     #[error("{0}")]
     InvalidGraph(#[from] crate::graph::GraphError),
+    /// A layer edit on a composition that is a node graph, or a node graph
+    /// written onto a composition that has layers (docs/impl/
+    /// node-graph-comp.md §1.1). A comp is one thing or the other.
+    #[error("a node graph has no layers")]
+    CompIsNodeGraph,
     /// [`Op::SetLayerKind`] was pointed at a kind it does not convert. Only
     /// Solid ⇄ Adjustment flips: those two differ by whether the layer
     /// has a picture of its own, and nothing else.
@@ -201,6 +206,19 @@ pub enum Op {
         comp: Uuid,
         layer: Uuid,
         styles: Vec<crate::model::EffectInstance>,
+    },
+    /// Replace the values a Precomp layer hands the node graph it places
+    /// (docs/impl/node-graph-comp.md §5.3).
+    ///
+    /// `SetLayerStyles`' shape for the third instance a layer can carry, and
+    /// coarse and exactly invertible for the same reason: typing a value,
+    /// keying one, binding the instance and clearing it are all "the instance
+    /// is now this". `None` is a layer with nothing typed, which reads the
+    /// graph's own defaults.
+    SetLayerGraphInputs {
+        comp: Uuid,
+        layer: Uuid,
+        inputs: Option<Box<crate::model::EffectInstance>>,
     },
     /// Replace a layer's whole **driver graph**: its drivers, its wires and
     /// its canvas positions.
@@ -389,6 +407,23 @@ pub enum Op {
         comp: Uuid,
         group: Uuid,
         effects: Vec<crate::model::EffectInstance>,
+    },
+    /// Replace a **node graph composition's** whole graph: its boxes, its
+    /// wires, where they sit, which are twirled open and how they are grouped
+    /// (docs/impl/node-graph-comp.md §3).
+    ///
+    /// The whole-graph commit, shaped exactly like [`Op::SetLayerGraph`] is the
+    /// layer's. Add a box, remove one, wire, unwire, move, expose, name a
+    /// group, rename a box, bypass one: each gesture is one of these and one
+    /// undo step, and a parameter edit rides the staged instance in through the
+    /// same op.
+    ///
+    /// **Refused, not degraded**, when the graph breaks a rule
+    /// ([`crate::comp_graph::CompGraph::validate`]) and when the composition
+    /// has layers - a comp is a layer stack or a node graph, never both.
+    SetCompGraph {
+        comp: Uuid,
+        graph: Box<crate::comp_graph::CompGraph>,
     },
     /// Set a composition's motion-blur shutter: the master enable plus
     /// the shutter angle/phase and sample count.
@@ -774,6 +809,7 @@ impl Op {
             Op::SetShapeContents { .. } => "Edit shape",
             Op::SetLayerEffects { .. } => "Edit effects",
             Op::SetLayerStyles { .. } => "Edit layer styles",
+            Op::SetLayerGraphInputs { .. } => "Edit node graph inputs",
             Op::SetLayerGraph { .. } => "Edit drivers",
             Op::SetLayerFx { .. } => "Fx switch",
             Op::SetLayerThreeD { .. } => "3D switch",
@@ -797,6 +833,7 @@ impl Op {
             // edited is an effect stack either way, and one string is one
             // translation.
             Op::SetGroupEffects { .. } => "Edit effects",
+            Op::SetCompGraph { .. } => "Edit node graph",
             Op::SetLayerCollapse { .. } => "Collapse switch",
             Op::SetCompMotionBlur { .. } => "Composition motion blur",
             Op::SetCompBackground { .. } => "Composition background",
@@ -875,6 +912,7 @@ fn lock_guards(op: &Op) -> Option<(Uuid, Uuid)> {
         | Op::SetShapeContents { comp, layer, .. }
         | Op::SetLayerEffects { comp, layer, .. }
         | Op::SetLayerStyles { comp, layer, .. }
+        | Op::SetLayerGraphInputs { comp, layer, .. }
         | Op::SetLayerGraph { comp, layer, .. }
         | Op::SetLayerFx { comp, layer, .. }
         | Op::SetLayerThreeD { comp, layer, .. }
@@ -910,6 +948,77 @@ fn lock_guards(op: &Op) -> Option<(Uuid, Uuid)> {
     }
 }
 
+/// The composition an op edits **the layers of**, or `None` when the op has
+/// nothing to do with a layer stack.
+///
+/// **A node graph has no layers, and the engine says so** (docs/impl/
+/// node-graph-comp.md §1.1). One guard beside the lock's covers every op that
+/// adds, removes, reorders or edits a layer or a group of them, so a present or
+/// future layer op cannot forget to check, and a `Batch` is covered through its
+/// members.
+///
+/// The comp-wide settings are deliberately not here: size, rate, duration, the
+/// work area, a trim, a crop, markers, motion blur and the master fader are all
+/// legal on a node graph, because a node graph is a composition.
+#[must_use]
+fn comp_guards(op: &Op) -> Option<Uuid> {
+    match op {
+        Op::AddLayer { comp, .. }
+        | Op::RemoveLayer { comp, .. }
+        | Op::ReorderLayer { comp, .. }
+        | Op::SetLayerSpan { comp, .. }
+        | Op::RenameLayer { comp, .. }
+        | Op::SetLayerMasks { comp, .. }
+        | Op::SetLayerPaint { comp, .. }
+        | Op::SetLayerPuppet { comp, .. }
+        | Op::SetShapeContents { comp, .. }
+        | Op::SetLayerEffects { comp, .. }
+        | Op::SetLayerStyles { comp, .. }
+        | Op::SetLayerGraphInputs { comp, .. }
+        | Op::SetLayerGraph { comp, .. }
+        | Op::SetLayerFx { comp, .. }
+        | Op::SetLayerThreeD { comp, .. }
+        | Op::SetSequenceClips { comp, .. }
+        | Op::SetLayerKind { comp, .. }
+        | Op::SetLayerAdjustment { comp, .. }
+        | Op::SetLayerAudible { comp, .. }
+        | Op::SetLayerVisible { comp, .. }
+        | Op::SetLayerSolo { comp, .. }
+        | Op::SetLayerMotionBlur { comp, .. }
+        | Op::SetLayerAcceptsLights { comp, .. }
+        | Op::SetLayerShy { comp, .. }
+        | Op::SetLayerGuide { comp, .. }
+        | Op::SetLayerLocked { comp, .. }
+        | Op::SetLayerLabel { comp, .. }
+        | Op::SetLayerCollapse { comp, .. }
+        | Op::SetTextDocument { comp, .. }
+        | Op::SetLayerMarkers { comp, .. }
+        | Op::SetLayerBlend { comp, .. }
+        | Op::SetLayerMatte { comp, .. }
+        | Op::SetLayerParent { comp, .. }
+        | Op::SetTransformProperty { comp, .. }
+        | Op::SetTransformAxisMode { comp, .. }
+        | Op::SetCameraZoom { comp, .. }
+        | Op::SetCameraSolveLink { comp, .. }
+        | Op::SetLayerVolume { comp, .. }
+        | Op::SetLayerPan { comp, .. }
+        | Op::SetRetimeProperty { comp, .. }
+        | Op::SetLayerInterpolation { comp, .. }
+        | Op::GroupLayers { comp, .. }
+        | Op::UngroupLayers { comp, .. }
+        | Op::SetGroupName { comp, .. }
+        | Op::SetGroupLabel { comp, .. }
+        | Op::SetGroupEffects { comp, .. } => Some(*comp),
+        _ => None,
+    }
+}
+
+/// Whether `comp` is a node graph, and so holds boxes instead of layers.
+#[must_use]
+fn is_node_graph(doc: &Document, comp: Uuid) -> bool {
+    doc.comp(comp).is_some_and(|c| c.graph.is_some())
+}
+
 /// Whether `layer` in `comp` is locked. An unknown comp or layer is not locked:
 /// the op's own arm reports what is actually missing, which is a better error
 /// than "locked".
@@ -935,6 +1044,14 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
     if let Some((comp, layer)) = lock_guards(op) {
         if is_locked(doc, comp, layer) {
             return Err(OpError::LayerLocked);
+        }
+    }
+    // And a node graph has no layers to edit, by the same road and for the
+    // same reason: one guard here covers every layer op there is and every one
+    // there will be.
+    if let Some(comp) = comp_guards(op) {
+        if is_node_graph(doc, comp) {
+            return Err(OpError::CompIsNodeGraph);
         }
     }
     // A linked camera's transform and zoom **used** to be refused here.
@@ -1248,6 +1365,27 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 comp: *comp,
                 layer: *layer,
                 styles: previous,
+            })
+        }
+        Op::SetLayerGraphInputs {
+            comp,
+            layer,
+            inputs,
+        } => {
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let l = c
+                .layers
+                .iter_mut()
+                .find(|l| l.id == *layer)
+                .ok_or(OpError::UnknownLayer)?;
+            // No graph pruning twin, for `SetLayerStyles`' reason: this
+            // instance is not a box on the layer's canvas, so replacing it can
+            // leave no dangling wire behind.
+            let previous = std::mem::replace(&mut l.graph_inputs, inputs.as_deref().cloned());
+            Ok(Op::SetLayerGraphInputs {
+                comp: *comp,
+                layer: *layer,
+                inputs: previous.map(Box::new),
             })
         }
         Op::SetLayerGraph { comp, layer, graph } => {
@@ -1582,6 +1720,32 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 comp: *comp,
                 group: *group,
                 effects: previous,
+            })
+        }
+        Op::SetCompGraph { comp, graph } => {
+            // Checked before anything is swapped, exactly as the layer graph's
+            // commit is: a refused graph must leave the document as it was, or
+            // an undo would restore a state that was never on screen. The
+            // document is passed whole because a Node graph box's sockets are
+            // the Inputs of the comp it names.
+            graph.validate(Some(doc))?;
+            let c = doc.comp(*comp).ok_or(OpError::UnknownComp)?;
+            // §1.1's rule, in both directions: a comp is a layer stack or a
+            // node graph. A comp with layers never becomes one, and a comp
+            // that is not one has no graph for this op to replace - which is
+            // also what keeps the inverse exact, since it carries the graph
+            // that was there. A node graph is made by being born one.
+            if !c.layers.is_empty() || c.graph.is_none() {
+                return Err(OpError::CompIsNodeGraph);
+            }
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let previous = c
+                .graph
+                .replace((**graph).clone())
+                .ok_or(OpError::CompIsNodeGraph)?;
+            Ok(Op::SetCompGraph {
+                comp: *comp,
+                graph: Box::new(previous),
             })
         }
         Op::SetLayerMotionBlur {

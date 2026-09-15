@@ -12,6 +12,7 @@ pub mod audio;
 pub mod beats;
 pub mod cache;
 pub mod colour;
+pub mod comp_graph;
 pub mod composition;
 pub mod effect;
 pub mod export;
@@ -65,6 +66,11 @@ pub enum BridgeError {
     InvalidEffect,
     /// No built-in effect goes by that match name.
     UnknownEffectName,
+    /// The effect named lives only in a node graph, so a layer's stack cannot
+    /// hold it (docs/impl/node-graph-comp.md §1.3): a Merge or a Switch, which
+    /// joins pictures a stack has no wires to bring it, and the bare Node graph
+    /// effect, which is added through the door that names a graph.
+    NotAStackEffect,
     /// The value written to a parameter is of a different kind from the
     /// parameter. A parameter's kind is the effect's schema to declare, not the
     /// panel's to change, so this is refused rather than applied.
@@ -211,6 +217,9 @@ impl fmt::Display for BridgeError {
             BridgeError::InvalidParam => write!(f, "No such effect parameter"),
             BridgeError::InvalidEffect => write!(f, "No such effect on this layer"),
             BridgeError::UnknownEffectName => write!(f, "No built-in effect by that name"),
+            BridgeError::NotAStackEffect => {
+                write!(f, "This effect only lives in a node graph")
+            }
             BridgeError::ParamKindMismatch => {
                 write!(f, "That value is the wrong kind for this effect parameter")
             }

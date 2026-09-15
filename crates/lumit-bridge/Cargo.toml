@@ -52,6 +52,9 @@ shared-texture-macos = ["lumit-render/shared-texture-macos"]
 
 [dependencies]
 lumit-core = { path = "../lumit-core" }
+# The resource governor's ledger (docs/13 §3). Read only: the bridge publishes
+# what the render worker's governor says and never reserves anything itself.
+lumit-budget = { path = "../lumit-budget" }
 # Glyph outlines, for Text to shapes. The layout lives with the
 # rasteriser so the copy lands exactly where the ink was.
 lumit-text = { path = "../lumit-text" }

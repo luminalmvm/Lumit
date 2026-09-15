@@ -158,7 +158,13 @@ impl Quality {
 
 /// The nested-frame question a plan asks ([`PlanContext::held`]):
 /// "is this comp's frame at this layer time already a finished texture?"
-pub type HeldNested<'a> = &'a dyn Fn(&Composition, f64) -> bool;
+///
+/// The instance is a placed node graph's own Input values
+/// (docs/impl/node-graph-comp.md §5.3), which are part of the frame's name, so
+/// what the builder names and what the planner skips agree. `None` everywhere
+/// else, which is every layer over a layer comp.
+pub type HeldNested<'a> =
+    &'a dyn Fn(&Composition, f64, Option<&lumit_core::model::EffectInstance>) -> bool;
 
 /// The inputs a plan walk carries down the Precomp recursion, unchanged at
 /// every depth: what the media is and how coarsely to decode. Bundled so the
@@ -228,6 +234,15 @@ pub fn collect_comp_jobs(
         probes,
         held,
     } = *ctx;
+    // **A node graph composition** (docs/impl/node-graph-comp.md §2.1). It has
+    // no layers, so the walk below would find nothing: what it has is Read
+    // boxes, each the layer it behaves like, and each planned by that layer.
+    if let Some(graph) = &comp.graph {
+        // Viewed on its own or placed as a Precomp layer, so a picture Input's
+        // preview item is drawn and has to be decoded (§5.11).
+        collect_graph_jobs(ctx, comp, graph, t, jobs, visited, false);
+        return;
+    }
     let in_span =
         |l: &lumit_core::model::Layer| t >= l.in_point.0.to_f64() && t < l.out_point.0.to_f64();
     // Occlusion cull (docs/06 §1.1): the layers under a full-frame
@@ -287,7 +302,37 @@ pub fn collect_comp_jobs(
                         }
                     }
                 }
+                // **A Node graph effect** (docs/impl/node-graph-comp.md §2.4)
+                // brings a whole comp's footage in through this layer's stack,
+                // so the graph it names is planned under the guard a Precomp
+                // layer's comp is planned under. Here rather than in the walk
+                // below because an adjustment layer never reaches that walk -
+                // its own frames are deliberately not decoded - and a graph on
+                // one still has footage to decode.
+                //
+                // At the time this layer's own ops resolve at, so a Posterize
+                // time on the layer holds the graph's decodes with them (§5.2).
+                let lt = lumit_core::fx::this_layer_effect_time(
+                    &l.effects,
+                    l.switches.fx,
+                    lumit_core::time::layer_time(t, l.start_offset.0),
+                    l.start_offset.0,
+                );
+                nested_graph_jobs(ctx, e, lt, jobs, visited);
             }
+        }
+    }
+    // **And the same effect on a live group's header** (docs/impl/
+    // group-effects.md §2): the header's stack runs on the members' composite,
+    // so a graph on it reads footage the layer walk above never sees. The
+    // group's clock is the comp's, since a header carries no start offset.
+    for group in comp
+        .groups
+        .iter()
+        .filter(|g| lumit_core::group::header_live(g))
+    {
+        for e in &group.effects {
+            nested_graph_jobs(ctx, e, t, jobs, visited);
         }
     }
     // Posterize Time (docs/08 §3.25, FX-1): a layer covered by a live
@@ -389,6 +434,11 @@ pub fn collect_comp_jobs(
                     continue; // cycle guard
                 }
                 if let Some(nested) = doc.comp(*nested_id) {
+                    // The Retime map (docs/impl/node-graph-comp.md §5.6): the
+                    // moment of the nested comp this layer shows, which is the
+                    // moment the builder evaluates and names. Equal to `lt`
+                    // for a layer with no map.
+                    let st = lumit_core::model::nested_source_time(layer, nested, lt);
                     // A held nested frame wants no decodes. Asked only
                     // where the builder will ask by the same name: at the live
                     // time (a Posterize-held layer is built at another time,
@@ -399,11 +449,14 @@ pub fn collect_comp_jobs(
                         lumit_core::model::collapse_state(doc, comp, layer, lt),
                         lumit_core::model::CollapseState::Active
                     );
-                    if live && !collapsed && held.is_some_and(|held| held(nested, lt)) {
+                    if live
+                        && !collapsed
+                        && held.is_some_and(|held| held(nested, st, layer.graph_inputs.as_ref()))
+                    {
                         continue;
                     }
                     visited.push(*nested_id);
-                    collect_comp_jobs(ctx, nested, lt, jobs, visited, collapsed);
+                    collect_comp_jobs(ctx, nested, st, jobs, visited, collapsed);
                     visited.pop();
                 }
             }
@@ -575,6 +628,178 @@ pub fn collect_comp_jobs(
             }
         }
     }
+}
+
+/// The decode jobs a **node graph's** Read boxes need (docs/impl/
+/// node-graph-comp.md §2.1): one per Read of footage, keyed by the box's own
+/// id - which is what the draw builder looks its pixels up by - and a
+/// recursion into a Read of a comp under the guard a Precomp layer takes.
+///
+/// A Read box is a layer at default placement with no Retime, no effects and
+/// no interpolation of its own, so everything the layer walk does beyond the
+/// frame pick is inert here: no Posterize hold, no accumulation shutter, no
+/// temporal neighbours, no flow. What is left is the proxy resolution, the
+/// slate and the frame pick, and those are the walk's own three.
+///
+/// A picture Input's **preview item** is planned by the same road, since it
+/// draws as a Read of that item - unless `pictures_fed` says a host is feeding
+/// the pictures, where no preview stands in and nothing of it is decoded
+/// (§5.11).
+fn collect_graph_jobs(
+    ctx: &PlanContext<'_>,
+    comp: &Composition,
+    graph: &lumit_core::comp_graph::CompGraph,
+    t: f64,
+    jobs: &mut Vec<CompJob>,
+    visited: &mut Vec<Uuid>,
+    pictures_fed: bool,
+) {
+    let PlanContext {
+        doc,
+        quality,
+        probes,
+        held,
+    } = *ctx;
+    for node in &graph.nodes {
+        // A nested Node graph box lowers the graph it names into this plan
+        // (§2.3), so the inner Read boxes' footage is planned here too.
+        if let lumit_core::comp_graph::GraphNode::Fx(inst) = node {
+            nested_graph_jobs(ctx, inst, t, jobs, visited);
+            continue;
+        }
+        let (id, item) = match node {
+            lumit_core::comp_graph::GraphNode::Read { id, item, .. } => (id, item),
+            lumit_core::comp_graph::GraphNode::Input { id, input } => {
+                match input.preview.as_ref().filter(|_| !pictures_fed) {
+                    Some(item) => (id, item),
+                    None => continue,
+                }
+            }
+            _ => continue,
+        };
+        // An item somebody deleted, or a folder: the box draws transparent and
+        // has nothing to decode.
+        let Some(project_item) = doc.item(*item) else {
+            continue;
+        };
+        let Some(layer) = lumit_core::comp_graph::read_layer(*id, project_item, comp) else {
+            continue;
+        };
+        match &layer.kind {
+            LayerKind::Precomp { comp: nested_id } => {
+                if visited.contains(nested_id) {
+                    continue; // cycle guard
+                }
+                let Some(nested) = doc.comp(*nested_id) else {
+                    continue;
+                };
+                // A held nested frame wants no decodes: the realiser will
+                // serve the texture and never look at the pixels.
+                if held.is_some_and(|held| held(nested, t, None)) {
+                    continue;
+                }
+                visited.push(*nested_id);
+                collect_comp_jobs(ctx, nested, t, jobs, visited, false);
+                visited.pop();
+            }
+            LayerKind::Footage { item } => {
+                // The one proxy resolution point, as the layer walk asks it.
+                let Some((media, probe)) = crate::source::effective_media(doc, probes, *item)
+                else {
+                    continue;
+                };
+                // Missing media still draws (docs/07 §3.3): a slate at comp
+                // size, because a file we cannot open has no size to report.
+                if probe.slates() {
+                    jobs.push(CompJob {
+                        channels: None,
+                        layer: *id,
+                        item: *item,
+                        source: media_source(doc, *item, media),
+                        source_frame: 0,
+                        target_width: None,
+                        natural_w: comp.width,
+                        natural_h: comp.height,
+                        blend: None,
+                        flow: None,
+                        temporal: Vec::new(),
+                        flow_neighbours: Vec::new(),
+                        slate: true,
+                        shutter: Vec::new(),
+                        shutter_flow: None,
+                    });
+                    continue;
+                }
+                // Not probed yet, or audio-only: no picture. Retried once the
+                // probe lands.
+                let Some((fps, nat_w, nat_h, src_frames)) = probe.video() else {
+                    continue;
+                };
+                let (source_frame, blend) =
+                    lumit_core::pixels::frame_pick(t, fps, src_frames, false, None);
+                jobs.push(CompJob {
+                    channels: None,
+                    layer: *id,
+                    item: *item,
+                    source: media_source(doc, *item, media),
+                    source_frame,
+                    target_width: quality.target_width(nat_w),
+                    natural_w: nat_w,
+                    natural_h: nat_h,
+                    blend,
+                    flow: None,
+                    temporal: Vec::new(),
+                    flow_neighbours: Vec::new(),
+                    slate: false,
+                    shutter: Vec::new(),
+                    shutter_flow: None,
+                });
+            }
+            // A solid rasterises where it is drawn, and no other kind of item
+            // can be read into a graph.
+            _ => {}
+        }
+    }
+}
+
+/// The jobs one **Node graph effect** needs: the graph it names, planned under
+/// the guard a Precomp layer takes. The three places one can sit all come
+/// through here - a layer's stack, a live group's header, and a box nested
+/// inside another graph - so none of them can drift apart. The builder lowers
+/// that graph's Read boxes into this plan, and a Read whose pixels nobody
+/// decoded draws transparent.
+///
+/// A box that is bypassed, unbound, cyclic or naming a comp that is gone has
+/// nothing to plan, which is the passthrough the walk renders.
+fn nested_graph_jobs(
+    ctx: &PlanContext<'_>,
+    inst: &lumit_core::model::EffectInstance,
+    t: f64,
+    jobs: &mut Vec<CompJob>,
+    visited: &mut Vec<Uuid>,
+) {
+    if !inst.enabled || inst.effect.match_name != lumit_core::comp_graph::NODE_GRAPH {
+        return;
+    }
+    let Some(named) = lumit_core::fx::effects::node_graph::comp_of(inst) else {
+        return;
+    };
+    if visited.contains(&named) {
+        return;
+    }
+    let Some(nested) = ctx.doc.comp(named) else {
+        return;
+    };
+    visited.push(named);
+    match nested.graph.as_ref() {
+        // Applied or nested, so every picture Input arrives on a socket and no
+        // preview item is drawn or decoded (§5.11).
+        Some(graph) => collect_graph_jobs(ctx, nested, graph, t, jobs, visited, true),
+        // A comp with layers: the dangling reference the walk renders as a
+        // passthrough, planned as the Precomp it looks like.
+        None => collect_comp_jobs(ctx, nested, t, jobs, visited, false),
+    }
+    visited.pop();
 }
 
 /// The decode plan for one comp frame: the convenience wrapper around
@@ -984,6 +1209,7 @@ mod tests {
             retime: None,
             interpolation: lumit_core::retime::Interpolation::default(),
             parked_flow: None,
+            graph_inputs: None,
             blend: lumit_core::model::BlendMode::default(),
             masks: Vec::new(),
             paint: Vec::new(),
@@ -994,6 +1220,7 @@ mod tests {
             extra: serde_json::Map::new(),
         };
         let comp = |layers: Vec<Layer>| Composition {
+            graph: None,
             master_volume_db: 0.0,
             sound_mix: false,
             groups: Vec::new(),
@@ -1154,6 +1381,7 @@ mod tests {
             retime: None,
             interpolation: lumit_core::retime::Interpolation::default(),
             parked_flow: None,
+            graph_inputs: None,
             blend: lumit_core::model::BlendMode::default(),
             masks: Vec::new(),
             paint: Vec::new(),
@@ -1164,6 +1392,7 @@ mod tests {
             extra: serde_json::Map::new(),
         };
         let comp = |layers: Vec<Layer>| Composition {
+            graph: None,
             master_volume_db: 0.0,
             sound_mix: false,
             groups: Vec::new(),
@@ -1282,6 +1511,7 @@ mod tests {
             retime: None,
             interpolation: lumit_core::retime::Interpolation::default(),
             parked_flow: None,
+            graph_inputs: None,
             blend: lumit_core::model::BlendMode::default(),
             masks: Vec::new(),
             paint: Vec::new(),
@@ -1329,6 +1559,7 @@ mod tests {
                 });
             }
             let comp = Composition {
+                graph: None,
                 master_volume_db: 0.0,
                 sound_mix: false,
                 groups: Vec::new(),
@@ -1404,6 +1635,7 @@ mod tests {
             retime: None,
             interpolation: lumit_core::retime::Interpolation::default(),
             parked_flow: None,
+            graph_inputs: None,
             blend: lumit_core::model::BlendMode::default(),
             masks: Vec::new(),
             paint: Vec::new(),
@@ -1414,6 +1646,7 @@ mod tests {
             extra: serde_json::Map::new(),
         };
         let comp = |layers: Vec<Layer>| Composition {
+            graph: None,
             master_volume_db: 0.0,
             sound_mix: false,
             groups: Vec::new(),
@@ -1465,12 +1698,14 @@ mod tests {
         .into_iter()
         .collect();
         let asked = std::cell::Cell::new(0usize);
-        let held = |nested: &Composition, lt: f64| {
-            asked.set(asked.get() + 1);
-            assert_eq!(nested.id, inner_id);
-            assert_eq!(lt, 0.0);
-            true
-        };
+        let held =
+            |nested: &Composition, lt: f64, inputs: Option<&lumit_core::model::EffectInstance>| {
+                asked.set(asked.get() + 1);
+                assert_eq!(nested.id, inner_id);
+                assert_eq!(lt, 0.0);
+                assert!(inputs.is_none(), "a layer comp hands no Input values over");
+                true
+            };
         let plan = |doc: &Document, held: Option<HeldNested<'_>>| {
             plan_comp_frame_held(
                 doc,
@@ -1499,6 +1734,146 @@ mod tests {
             "a collapsed precomp is never named, so it always decodes"
         );
         assert_eq!(asked.get(), 1, "and is never asked about");
+    }
+
+    /// **A retimed Precomp is planned and held by the moment it shows**
+    /// (docs/impl/node-graph-comp.md §5.6). The builder evaluates the nested
+    /// comp at `source_time_at`, so the planner has to decode there and ask
+    /// the held question there: planning at layer time would fetch the frame
+    /// after the one on screen, and asking at layer time would hold a texture
+    /// the realiser never looks for.
+    #[test]
+    fn a_retimed_precomp_plans_and_holds_by_its_mapped_time() {
+        use lumit_core::anim::{Animation, Keyframe, Property, SideInterp};
+        use lumit_core::model::{
+            Composition, Document, FootageItem, Layer, LayerKind, LinearColour, MediaRef, Switches,
+            TransformGroup,
+        };
+        use lumit_core::time::{CompTime, Duration, FrameRate, Rational};
+        use std::collections::HashMap;
+
+        let layer = |kind: LayerKind| Layer {
+            graph: Default::default(),
+            markers: Vec::new(),
+            id: Uuid::now_v7(),
+            name: "l".into(),
+            kind,
+            in_point: CompTime(Rational::ZERO),
+            out_point: CompTime(Rational::new(10, 1).unwrap()),
+            start_offset: CompTime(Rational::ZERO),
+            transform: TransformGroup::default(),
+            matte: None,
+            parent: None,
+            label: 0,
+            volume_db: Property::zero(),
+            pan: Property::zero(),
+            audio_only: false,
+            adjustment: false,
+            retime: None,
+            interpolation: lumit_core::retime::Interpolation::default(),
+            parked_flow: None,
+            graph_inputs: None,
+            blend: lumit_core::model::BlendMode::default(),
+            masks: Vec::new(),
+            paint: Vec::new(),
+            puppet: None,
+            effects: Vec::new(),
+            styles: Vec::new(),
+            switches: Switches::default(),
+            extra: serde_json::Map::new(),
+        };
+        let comp = |layers: Vec<Layer>| Composition {
+            graph: None,
+            master_volume_db: 0.0,
+            sound_mix: false,
+            groups: Vec::new(),
+            beat_grid: None,
+            id: Uuid::now_v7(),
+            name: "c".into(),
+            width: 64,
+            height: 64,
+            frame_rate: FrameRate::new(60, 1).unwrap(),
+            duration: Duration(Rational::new(10, 1).unwrap()),
+            background: LinearColour::BLACK,
+            work_area: None,
+            layers,
+            markers: Vec::new(),
+            motion_blur: lumit_core::model::MotionBlur::default(),
+            extra: serde_json::Map::new(),
+        };
+        let mut doc = Document::new();
+        let item = Uuid::now_v7();
+        doc.items.push(ProjectItem::Footage(FootageItem {
+            sequence: None,
+            id: item,
+            name: "f".into(),
+            media: MediaRef {
+                relative_path: "f.mp4".into(),
+                absolute_path: "/f.mp4".into(),
+                fingerprint: None,
+                extra: serde_json::Map::new(),
+            },
+            extra: serde_json::Map::new(),
+            colour_space: None,
+        }));
+        let inner = comp(vec![layer(LayerKind::Footage { item })]);
+        let inner_id = inner.id;
+        doc.items.push(ProjectItem::Composition(inner));
+        // Half speed: at outer time four the nested comp is at two.
+        let mut placed = layer(LayerKind::Precomp { comp: inner_id });
+        placed.retime = Some(Property {
+            animation: Animation::Keyframed(vec![
+                Keyframe {
+                    time: Rational::ZERO,
+                    value: 0.0,
+                    interp_in: SideInterp::Linear,
+                    interp_out: SideInterp::Linear,
+                },
+                Keyframe {
+                    time: Rational::new(10, 1).unwrap(),
+                    value: 5.0,
+                    interp_in: SideInterp::Linear,
+                    interp_out: SideInterp::Linear,
+                },
+            ]),
+            extra: serde_json::Map::new(),
+        });
+        let outer = comp(vec![placed]);
+        let outer_id = outer.id;
+        doc.items.push(ProjectItem::Composition(outer));
+        let probes: HashMap<Uuid, crate::SourceProbe> = [(
+            item,
+            crate::SourceProbe::Video {
+                fps: 60.0,
+                width: 64,
+                height: 64,
+                frames: 600,
+                audio: false,
+            },
+        )]
+        .into_iter()
+        .collect();
+
+        let asked = std::cell::Cell::new(f64::NAN);
+        let held = |_: &Composition, lt: f64, _: Option<&lumit_core::model::EffectInstance>| {
+            asked.set(lt);
+            false
+        };
+        let held: HeldNested<'_> = &held;
+        let jobs = plan_comp_frame_held(
+            &doc,
+            doc.comp(outer_id).unwrap(),
+            4.0,
+            Quality::default(),
+            &probes,
+            Some(held),
+        );
+        assert_eq!(asked.get(), 2.0, "the held question is asked at the map");
+        assert_eq!(jobs.len(), 1);
+        assert_eq!(
+            jobs[0].source_frame, 120,
+            "and the decode is the frame the map points at, not frame 240"
+        );
     }
 
     /// **A soloed row is the only row decoded**. The draw
@@ -1571,6 +1946,7 @@ mod tests {
                 retime: None,
                 interpolation: lumit_core::retime::Interpolation::default(),
                 parked_flow: None,
+                graph_inputs: None,
                 blend: lumit_core::model::BlendMode::default(),
                 masks: Vec::new(),
                 paint: Vec::new(),
@@ -1586,6 +1962,7 @@ mod tests {
         let c = footage_layer(&mut doc, &mut probes);
         let comp_id = Uuid::now_v7();
         doc.items.push(ProjectItem::Composition(Composition {
+            graph: None,
             master_volume_db: 0.0,
             sound_mix: false,
             groups: Vec::new(),
@@ -1673,6 +2050,7 @@ mod tests {
             retime: None,
             interpolation: lumit_core::retime::Interpolation::default(),
             parked_flow: None,
+            graph_inputs: None,
             blend: lumit_core::model::BlendMode::default(),
             masks: Vec::new(),
             paint: Vec::new(),
@@ -1721,6 +2099,7 @@ mod tests {
         // A 30 fps comp over 60 fps clips: a quarter of a comp frame is half a
         // source frame, so every moment lands between two frames.
         let mut comp = Composition {
+            graph: None,
             master_volume_db: 0.0,
             sound_mix: false,
             groups: Vec::new(),
@@ -1809,5 +2188,252 @@ mod tests {
             Some(flow),
             "a Flow clip makes its in-betweens with its own flow settings"
         );
+    }
+
+    /// **The decode plan sees a node graph** (docs/impl/node-graph-comp.md §7
+    /// item 10).
+    ///
+    /// Five claims, each a different road into the same walk: a Read of footage
+    /// plans one job under the box's own id, which is what the draw builder
+    /// looks its pixels up by; a Read of a comp plans that comp's jobs; a Node
+    /// graph effect on a layer plans the graph's footage, because the graph is
+    /// part of that layer's picture; a further picture Input's layer row is
+    /// planned already, by the wanted-set pass that walks Layer parameters; and
+    /// a Node graph box inside a graph plans the inner graph's footage, because
+    /// the builder lowers those Read boxes into the same plan.
+    #[test]
+    fn a_node_graph_plans_the_footage_its_boxes_read() {
+        use lumit_core::anim::Property;
+        use lumit_core::comp_graph::{CompGraph, GraphEdge, GraphNode};
+        use lumit_core::model::{
+            Composition, Document, EffectParam, EffectValue, FootageItem, Layer, LayerKind,
+            LinearColour, MediaRef, Switches, TransformGroup,
+        };
+        use lumit_core::time::{CompTime, Duration, FrameRate, Rational};
+        use std::collections::HashMap;
+
+        let layer = |kind: LayerKind| Layer {
+            graph: Default::default(),
+            markers: Vec::new(),
+            id: Uuid::now_v7(),
+            name: "l".into(),
+            kind,
+            in_point: CompTime(Rational::ZERO),
+            out_point: CompTime(Rational::new(10, 1).unwrap()),
+            start_offset: CompTime(Rational::ZERO),
+            transform: TransformGroup::default(),
+            matte: None,
+            parent: None,
+            label: 0,
+            volume_db: Property::zero(),
+            pan: Property::zero(),
+            audio_only: false,
+            adjustment: false,
+            retime: None,
+            interpolation: lumit_core::retime::Interpolation::default(),
+            parked_flow: None,
+            graph_inputs: None,
+            blend: lumit_core::model::BlendMode::default(),
+            masks: Vec::new(),
+            paint: Vec::new(),
+            puppet: None,
+            effects: Vec::new(),
+            styles: Vec::new(),
+            switches: Switches::default(),
+            extra: serde_json::Map::new(),
+        };
+        let comp_of = |layers: Vec<Layer>, graph: Option<CompGraph>| Composition {
+            graph,
+            master_volume_db: 0.0,
+            sound_mix: false,
+            groups: Vec::new(),
+            beat_grid: None,
+            id: Uuid::now_v7(),
+            name: "c".into(),
+            width: 64,
+            height: 64,
+            frame_rate: FrameRate::new(60, 1).unwrap(),
+            duration: Duration(Rational::new(10, 1).unwrap()),
+            background: LinearColour::BLACK,
+            work_area: None,
+            layers,
+            markers: Vec::new(),
+            motion_blur: lumit_core::model::MotionBlur::default(),
+            extra: serde_json::Map::new(),
+        };
+        let wire = |from: Uuid, from_port: &str, to: Uuid, to_port: &str| GraphEdge {
+            from,
+            from_port: from_port.to_owned(),
+            to,
+            to_port: to_port.to_owned(),
+        };
+
+        let mut doc = Document::new();
+        let item = Uuid::now_v7();
+        doc.items.push(ProjectItem::Footage(FootageItem {
+            sequence: None,
+            id: item,
+            name: "f".into(),
+            media: MediaRef {
+                relative_path: "f.mp4".into(),
+                absolute_path: "/f.mp4".into(),
+                fingerprint: None,
+                extra: serde_json::Map::new(),
+            },
+            extra: serde_json::Map::new(),
+            colour_space: None,
+        }));
+        let probes: HashMap<Uuid, crate::SourceProbe> = [(
+            item,
+            crate::SourceProbe::Video {
+                fps: 60.0,
+                width: 64,
+                height: 64,
+                frames: 600,
+                audio: false,
+            },
+        )]
+        .into_iter()
+        .collect();
+
+        // A Read of footage, keyed by the box's own id.
+        let (read, out) = (Uuid::now_v7(), Uuid::now_v7());
+        let graph = comp_of(
+            Vec::new(),
+            Some(CompGraph {
+                nodes: vec![
+                    GraphNode::Read {
+                        id: read,
+                        item,
+                        custom_name: None,
+                    },
+                    GraphNode::Output { id: out },
+                ],
+                edges: vec![wire(read, "output", out, "input")],
+                layout: Vec::new(),
+                exposed: Vec::new(),
+                groups: Vec::new(),
+            }),
+        );
+        let graph_id = graph.id;
+        doc.items.push(ProjectItem::Composition(graph.clone()));
+        let jobs = plan_comp_frame(&doc, &graph, 0.0, Quality::default(), &probes);
+        assert_eq!(jobs.len(), 1, "a Read of footage plans one job");
+        assert_eq!(
+            jobs[0].layer, read,
+            "and it is keyed by the box's own id, which is what the builder looks up by"
+        );
+        assert_eq!(jobs[0].item, item);
+
+        // A Read of a comp plans that comp's jobs.
+        let inner_layer = layer(LayerKind::Footage { item });
+        let inner_id = inner_layer.id;
+        let inner = comp_of(vec![inner_layer], None);
+        let inner_comp_id = inner.id;
+        doc.items.push(ProjectItem::Composition(inner));
+        let (read_comp, out2) = (Uuid::now_v7(), Uuid::now_v7());
+        let reader = comp_of(
+            Vec::new(),
+            Some(CompGraph {
+                nodes: vec![
+                    GraphNode::Read {
+                        id: read_comp,
+                        item: inner_comp_id,
+                        custom_name: None,
+                    },
+                    GraphNode::Output { id: out2 },
+                ],
+                edges: vec![wire(read_comp, "output", out2, "input")],
+                layout: Vec::new(),
+                exposed: Vec::new(),
+                groups: Vec::new(),
+            }),
+        );
+        let jobs = plan_comp_frame(&doc, &reader, 0.0, Quality::default(), &probes);
+        assert_eq!(jobs.len(), 1, "a Read of a comp plans that comp's decodes");
+        assert_eq!(
+            jobs[0].layer, inner_id,
+            "keyed by the nested comp's own layer, not by the box"
+        );
+
+        // A Node graph effect on a layer plans the graph's footage, and the
+        // further picture row it names is planned by the pass that already
+        // walks Layer parameters.
+        let mut inst = lumit_core::fx::instantiate("node_graph").expect("the effect exists");
+        lumit_core::fx::effects::node_graph::bind(
+            &mut inst,
+            graph_id,
+            graph.graph.as_ref().expect("a node graph"),
+        );
+        let mut hidden = layer(LayerKind::Footage { item });
+        hidden.switches.visible = false;
+        inst.params.push(EffectParam {
+            id: "plate".into(),
+            value: EffectValue::Layer(Some(hidden.id)),
+            extra: serde_json::Map::new(),
+        });
+        let mut host = layer(LayerKind::Null);
+        let host_id = host.id;
+        host.effects = vec![inst];
+        let parent = comp_of(vec![host, hidden], None);
+        let jobs = plan_comp_frame(&doc, &parent, 0.0, Quality::default(), &probes);
+        assert!(
+            jobs.iter().any(|j| j.layer == read),
+            "the graph the effect applies must plan its own Read"
+        );
+        assert!(
+            jobs.iter().any(|j| j.layer != read && j.layer != host_id),
+            "and the layer a further picture row names is planned as any layer input is"
+        );
+        assert_eq!(jobs.len(), 2, "those two, and nothing else");
+
+        // A Node graph box inside another graph: the same descent, planned by
+        // the box rather than by a layer.
+        let mut nested_box = lumit_core::fx::instantiate("node_graph").expect("the effect exists");
+        lumit_core::fx::effects::node_graph::bind(
+            &mut nested_box,
+            graph_id,
+            graph.graph.as_ref().expect("a node graph"),
+        );
+        let out3 = Uuid::now_v7();
+        let box_id = nested_box.id;
+        let outer = comp_of(
+            Vec::new(),
+            Some(CompGraph {
+                nodes: vec![GraphNode::Fx(nested_box), GraphNode::Output { id: out3 }],
+                edges: vec![wire(box_id, "output", out3, "input")],
+                layout: Vec::new(),
+                exposed: Vec::new(),
+                groups: Vec::new(),
+            }),
+        );
+        let jobs = plan_comp_frame(&doc, &outer, 0.0, Quality::default(), &probes);
+        assert_eq!(jobs.len(), 1, "a nested graph plans the inner Read");
+        assert_eq!(
+            jobs[0].layer, read,
+            "keyed by the inner Read's own id, which is what the lowering looks up by"
+        );
+
+        // And on a live group's header, whose stack runs on the members'
+        // composite: the walk above never sees it, so it is planned here.
+        let mut header = lumit_core::fx::instantiate("node_graph").expect("the effect exists");
+        lumit_core::fx::effects::node_graph::bind(
+            &mut header,
+            graph_id,
+            graph.graph.as_ref().expect("a node graph"),
+        );
+        let member = layer(LayerKind::Null);
+        let member_id = member.id;
+        let mut grouped = comp_of(vec![member], None);
+        grouped.groups = vec![lumit_core::group::LayerGroup {
+            id: Uuid::now_v7(),
+            name: "band".into(),
+            label: 0,
+            members: vec![member_id],
+            effects: vec![header],
+        }];
+        let jobs = plan_comp_frame(&doc, &grouped, 0.0, Quality::default(), &probes);
+        assert_eq!(jobs.len(), 1, "a graph on a header plans its own Read");
+        assert_eq!(jobs[0].layer, read);
     }
 }

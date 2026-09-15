@@ -674,6 +674,12 @@ fn work_texture(ctx: &GpuContext, w: u32, h: u32, label: &str) -> wgpu::Texture 
 /// were recorded first, and a queue write would jump every one of them.
 fn new_work_texture(ctx: &GpuContext, w: u32, h: u32, label: &str) -> wgpu::Texture {
     ctx.work_made.set(ctx.work_made.get().saturating_add(1));
+    // Charged to the governor's ledger before the driver is asked, so that what
+    // the ledger says is held is what is held (docs/13 §3: "the ledger MUST
+    // equal reality"). A texture taken back out of the pool is not charged
+    // again — it is the same memory, handed round, which is the pool's whole
+    // purpose.
+    ctx.charge_vram(crate::texture_bytes(ctx.working(), w, h));
     ctx.device.create_texture(&wgpu::TextureDescriptor {
         label: Some(label),
         size: wgpu::Extent3d {

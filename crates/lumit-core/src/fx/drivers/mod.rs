@@ -51,6 +51,7 @@ use super::resolved::resolve_into_arena;
 use super::ResolvedStack;
 use crate::expression::ExpressionContext;
 use crate::graph::{InputRef, LayerGraph, NodeRef, OutputRef};
+use crate::model::EffectInstance;
 
 pub mod audio_level;
 pub mod colour_cycle;
@@ -144,7 +145,26 @@ pub fn resolve_drivers(
     context: Arc<ExpressionContext>,
     audio: Option<&dyn AudioTap>,
 ) -> ResolvedDrivers {
-    resolve_drivers_projected(graph, lt, context, audio, points::Projection::FLAT)
+    resolve_drivers_in(graph, lt, context, audio, None)
+}
+
+/// [`resolve_drivers`] over a **node graph's** boxes rather than a layer's
+/// (node-graph-comp.md §5.1).
+///
+/// `stack` is where a wire out of a picture effect finds its producer: a graph
+/// has no layer, so the walk cannot look one up in the document. The instances
+/// are read as they are - effects on, no masks - because a graph's boxes have
+/// no fx switch and no mask list to be gated by. `None` is a layer, which reads
+/// the producer through the context as it always did.
+#[must_use]
+pub fn resolve_drivers_in(
+    graph: &LayerGraph,
+    lt: f64,
+    context: Arc<ExpressionContext>,
+    audio: Option<&dyn AudioTap>,
+    stack: Option<&[EffectInstance]>,
+) -> ResolvedDrivers {
+    resolved(graph, lt, context, audio, points::Projection::FLAT, stack)
 }
 
 /// [`resolve_drivers`], told where the composition's camera puts a particle
@@ -168,6 +188,19 @@ pub fn resolve_drivers_projected(
     audio: Option<&dyn AudioTap>,
     projection: points::Projection,
 ) -> ResolvedDrivers {
+    resolved(graph, lt, context, audio, projection, None)
+}
+
+/// The one body behind [`resolve_drivers`] and its two twins.
+#[must_use]
+fn resolved(
+    graph: &LayerGraph,
+    lt: f64,
+    context: Arc<ExpressionContext>,
+    audio: Option<&dyn AudioTap>,
+    projection: points::Projection,
+    stack: Option<&[EffectInstance]>,
+) -> ResolvedDrivers {
     if graph.edges.is_empty() {
         return ResolvedDrivers::default();
     }
@@ -180,6 +213,7 @@ pub fn resolve_drivers_projected(
         streams: RefCell::new(Vec::new()),
         arenas: RefCell::new(ArenaPool::default()),
         cross: true,
+        stack,
     };
     let mut out = ResolvedDrivers::default();
     // Document order in, sorted order out: the wires a layer carries are a
@@ -251,6 +285,7 @@ pub fn driven_volume_db(
         streams: RefCell::new(Vec::new()),
         arenas: RefCell::new(ArenaPool::default()),
         cross: true,
+        stack: None,
     };
     match ev.output(*node, port, lt, 0)? {
         // The Volume property's own hard range (docs/09 §6: −∞ knee at −100,
@@ -288,6 +323,21 @@ pub fn effect_stream(
     audio: Option<&dyn AudioTap>,
     projection: points::Projection,
 ) -> Option<PointsStream> {
+    effect_stream_in(graph, effect, t, context, audio, projection, None)
+}
+
+/// [`effect_stream`] over a **node graph's** boxes: the producer is found in
+/// `stack` rather than through the context's layer (§5.1).
+#[must_use]
+pub fn effect_stream_in(
+    graph: &LayerGraph,
+    effect: Uuid,
+    t: f64,
+    context: Arc<ExpressionContext>,
+    audio: Option<&dyn AudioTap>,
+    projection: points::Projection,
+    stack: Option<&[EffectInstance]>,
+) -> Option<PointsStream> {
     // The `Eval` is dropped before the stream is unwrapped, so its own memo is
     // not a second owner and the common case moves rather than copies eight
     // vectors of up to the cap.
@@ -301,6 +351,7 @@ pub fn effect_stream(
             streams: RefCell::new(Vec::new()),
             arenas: RefCell::new(ArenaPool::default()),
             cross: true,
+            stack,
         };
         ev.stream(effect, t, 0)
     }?;
@@ -331,6 +382,23 @@ pub fn driver_stream(
     audio: Option<&dyn AudioTap>,
     projection: points::Projection,
 ) -> Option<PointsStream> {
+    driver_stream_in(graph, node, t, context, audio, projection, None)
+}
+
+/// [`driver_stream`] over a **node graph's** boxes. A graph has no layers to
+/// tap, so a Layer points box hand-edited into one reads the empty stream; the
+/// slice is carried all the same, because the wires the tap's own parameters
+/// take are resolved through the same walk.
+#[must_use]
+pub fn driver_stream_in(
+    graph: &LayerGraph,
+    node: Uuid,
+    t: f64,
+    context: Arc<ExpressionContext>,
+    audio: Option<&dyn AudioTap>,
+    projection: points::Projection,
+    stack: Option<&[EffectInstance]>,
+) -> Option<PointsStream> {
     // The `Eval` is dropped before the stream is unwrapped, as `effect_stream`
     // does and for the same reason: the common case moves rather than copies
     // eight vectors of up to the cap.
@@ -344,6 +412,7 @@ pub fn driver_stream(
             streams: RefCell::new(Vec::new()),
             arenas: RefCell::new(ArenaPool::default()),
             cross: true,
+            stack,
         };
         ev.tap_stream(node, t, 0)
     }?;
@@ -450,6 +519,13 @@ struct Eval<'a> {
     /// set, no cycle to detect, and a bound that does not depend on the budget
     /// noticing.
     cross: bool,
+    /// **A node graph's boxes**, when this walk is a graph's rather than a
+    /// layer's (node-graph-comp.md §5.1). A wire out of a picture effect names
+    /// one of these, and the walk reads it here instead of looking the producer
+    /// up through the context's layer, which a graph has none of. The
+    /// instances are taken as they are: a box has no fx switch and no mask
+    /// list to gate it.
+    stack: Option<&'a [EffectInstance]>,
 }
 
 impl Eval<'_> {
@@ -673,6 +749,8 @@ impl Eval<'_> {
             streams: RefCell::new(Vec::new()),
             arenas: RefCell::new(ArenaPool::default()),
             cross: false,
+            // The far side is a layer, whatever this side is.
+            stack: None,
         };
         let stream = far.stream(producer.id, t, 0);
         self.budget.set(far.budget.get());
@@ -707,15 +785,25 @@ impl Eval<'_> {
 
         // The producer, its layer and its comp, read off the context every
         // resolve already carries — which is why nothing in the render's four
-        // call sites had to grow an argument to make this work.
+        // call sites had to grow an argument to make this work. A node graph's
+        // walk carries the boxes instead: there is no layer to look through,
+        // and no fx switch or mask list to gate them.
         let doc = &self.context.document;
         let comp = doc.comp(self.context.comp?)?;
-        let layer_id = self.context.layer?;
-        let layer = comp.layers.iter().find(|l| l.id == layer_id)?;
-        let inst = layer.effects.iter().find(|e| e.id == effect)?;
+        let (inst, masks): (&EffectInstance, &[crate::mask::Mask]) = match self.stack {
+            Some(boxes) => (boxes.iter().find(|e| e.id == effect)?, &[]),
+            None => {
+                let layer_id = self.context.layer?;
+                let layer = comp.layers.iter().find(|l| l.id == layer_id)?;
+                if !layer.switches.fx {
+                    return None;
+                }
+                (layer.effects.iter().find(|e| e.id == effect)?, &layer.masks)
+            }
+        };
         // A bypassed producer draws nothing, so it hands out nothing: the
         // stream and the picture agree about an off switch too.
-        if !inst.enabled || !layer.switches.fx {
+        if !inst.enabled {
             return None;
         }
         let def = super::BUILTIN_DEFS.get(&inst.effect.match_name)?;
@@ -832,7 +920,7 @@ impl Eval<'_> {
             Some((param, self_default))
                 if super::param_visible(inst, param) && super::param_enabled(inst, param) =>
             {
-                crate::mask::mask_path_at(&layer.masks, inst.mask_ref(param), self_default, t)
+                crate::mask::mask_path_at(masks, inst.mask_ref(param), self_default, t)
             }
             _ => crate::mask::MaskPolyline::default(),
         };
@@ -1867,6 +1955,7 @@ mod tests {
             switches: Switches::default(),
             interpolation: Default::default(),
             parked_flow: None,
+            graph_inputs: None,
             markers: Vec::new(),
             paint: Default::default(),
             puppet: None,
@@ -1874,6 +1963,7 @@ mod tests {
         };
         let layer_id = layer.id;
         let comp = Composition {
+            graph: None,
             master_volume_db: 0.0,
             sound_mix: false,
             groups: Vec::new(),
@@ -1900,6 +1990,7 @@ mod tests {
             layer: Some(layer_id),
             comp_time: 0.0,
             current_depth: 0,
+            inputs: None,
         })
     }
 
@@ -2105,6 +2196,124 @@ mod tests {
         // The sampler's default Position is the comp's centre, and an odd
         // lattice has a cell sat exactly on it.
         assert_eq!(read("mix"), 0.0, "the centre cell is where the query is");
+    }
+
+    /// **A node graph's boxes** (node-graph-comp.md §5.1): the producer is
+    /// found in the slice handed to the walk, with no layer in the context at
+    /// all, and it is evaluated once however many wires read it.
+    #[test]
+    fn a_stream_in_a_graph_is_found_in_the_stack_and_evaluated_once() {
+        let mut producer = inst("grid");
+        set(&mut producer, "columns", 5.0);
+        set(&mut producer, "rows", 3.0);
+        set(&mut producer, "spacing_x", 100.0);
+        set(&mut producer, "spacing_y", 100.0);
+
+        let sampler = inst("points_sample");
+        let second = inst("points_sample");
+        let target = inst("blur");
+        let wired = LayerGraph {
+            nodes: vec![sampler.clone(), second.clone()],
+            edges: vec![
+                stream_edge(&producer, &sampler),
+                stream_edge(&producer, &second),
+                edge(
+                    &sampler,
+                    points_sample::COUNT_PORT,
+                    NodeRef::Effect(target.id),
+                    "radius",
+                ),
+                edge(
+                    &second,
+                    points_sample::COUNT_PORT,
+                    NodeRef::Effect(target.id),
+                    "mix",
+                ),
+            ],
+            ..LayerGraph::default()
+        };
+        // A graph's context names its comp and no layer, which is the state
+        // the walk could not read a producer out of before.
+        let context = Arc::new(ExpressionContext {
+            layer: None,
+            ..(*staged(Vec::new(), LayerGraph::default())).clone()
+        });
+        let stack = vec![producer.clone(), target.clone()];
+
+        let resolved = resolve_drivers_in(&wired, 1.0, context.clone(), None, Some(&stack));
+        let read = |id: &str| {
+            resolved
+                .param(NodeRef::Effect(target.id), ParamId::new(id))
+                .expect("the wire carries something")
+                .as_f32()
+        };
+        assert_eq!(read("radius"), 15.0, "five columns of three rows");
+        assert_eq!(read("mix"), 15.0, "the second wire reads the same lattice");
+
+        // One evaluation per producer per frame: the second ask is the memo.
+        let ev = Eval {
+            graph: &wired,
+            context,
+            audio: None,
+            projection: points::Projection::FLAT,
+            budget: Cell::new(EVAL_BUDGET),
+            streams: RefCell::new(Vec::new()),
+            arenas: RefCell::new(ArenaPool::default()),
+            cross: true,
+            stack: Some(&stack),
+        };
+        assert!(ev.stream(producer.id, 1.0, 0).is_some());
+        let spent = EVAL_BUDGET - ev.budget.get();
+        assert!(ev.stream(producer.id, 1.0, 0).is_some());
+        assert_eq!(ev.streams.borrow().len(), 1, "one memo entry");
+        assert_eq!(
+            EVAL_BUDGET - ev.budget.get(),
+            spent,
+            "the second ask costs nothing"
+        );
+    }
+
+    /// The refusals travel with the walk: a picture-dependent producer hands
+    /// out nothing in a graph as it hands out nothing on a layer, and a
+    /// bypassed box hands out nothing either.
+    #[test]
+    fn a_graphs_scatter_and_a_bypassed_producer_hand_out_no_stream() {
+        let sampler = inst("points_sample");
+        let target = inst("blur");
+        let wire_up = |producer: &EffectInstance| LayerGraph {
+            nodes: vec![sampler.clone()],
+            edges: vec![
+                stream_edge(producer, &sampler),
+                edge(
+                    &sampler,
+                    points_sample::COUNT_PORT,
+                    NodeRef::Effect(target.id),
+                    "radius",
+                ),
+            ],
+            ..LayerGraph::default()
+        };
+        let context = Arc::new(ExpressionContext {
+            layer: None,
+            ..(*staged(Vec::new(), LayerGraph::default())).clone()
+        });
+        let count = |producer: EffectInstance| {
+            let wired = wire_up(&producer);
+            let stack = vec![producer, target.clone()];
+            resolve_drivers_in(&wired, 1.0, context.clone(), None, Some(&stack))
+                .param(NodeRef::Effect(target.id), ParamId::new("radius"))
+                .expect("the wire carries something")
+                .as_f32()
+        };
+
+        assert_eq!(
+            count(inst("scatter")),
+            0.0,
+            "a stream that depends on a picture is not sampled at resolve time"
+        );
+        let mut off = inst("grid");
+        off.enabled = false;
+        assert_eq!(count(off), 0.0, "a bypassed producer draws nothing");
     }
 
     /// **Scatter's stream cannot be sampled by a driver**, which is the
@@ -2322,6 +2531,7 @@ mod tests {
             streams: RefCell::new(Vec::new()),
             arenas: RefCell::new(ArenaPool::default()),
             cross: true,
+            stack: None,
         };
         assert!(ev.output(a.id, points_sample::COUNT_PORT, 1.0, 0).is_some());
         assert!(ev
@@ -2361,6 +2571,7 @@ mod tests {
             streams: RefCell::new(Vec::new()),
             arenas: RefCell::new(ArenaPool::default()),
             cross: true,
+            stack: None,
         };
         for _ in 0..64 {
             assert!(ev.output(remap.id, "value", 0.0, 0).is_some());
@@ -2389,6 +2600,7 @@ mod tests {
             streams: RefCell::new(Vec::new()),
             arenas: RefCell::new(ArenaPool::default()),
             cross: true,
+            stack: None,
         };
         for _ in 0..64 {
             assert!(ev.stream(grid.id, 0.0, 0).is_some());
@@ -2415,6 +2627,7 @@ mod tests {
             streams: RefCell::new(Vec::new()),
             arenas: RefCell::new(ArenaPool::default()),
             cross: true,
+            stack: None,
         };
         ev.with_arena(|outer| {
             outer.begin(
@@ -2486,6 +2699,7 @@ mod tests {
             streams: RefCell::new(Vec::new()),
             arenas: RefCell::new(ArenaPool::default()),
             cross: true,
+            stack: None,
         };
         let _ = ev.output(sampler.id, points_sample::COUNT_PORT, 1.0, 0);
         assert!(
@@ -2764,6 +2978,7 @@ mod tests {
                 switches: Switches::default(),
                 interpolation: Default::default(),
                 parked_flow: None,
+                graph_inputs: None,
                 markers: Vec::new(),
                 paint: Default::default(),
                 puppet: None,
@@ -2774,6 +2989,7 @@ mod tests {
         let reader = layer("reader", Vec::new(), reader_graph(source_id));
         let reader_id = reader.id;
         let comp = Composition {
+            graph: None,
             master_volume_db: 0.0,
             sound_mix: false,
             groups: Vec::new(),
@@ -2801,6 +3017,7 @@ mod tests {
                 layer: Some(reader_id),
                 comp_time: 0.0,
                 current_depth: 0,
+                inputs: None,
             }),
             source_id,
         )

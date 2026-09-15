@@ -17,6 +17,9 @@ use crate::api::state::LumitBridgeState;
 /// effect stack.
 #[test]
 fn a_style_is_added_ordered_refused_twice_and_edited_through_the_shared_lookup() {
+    // `close` empties the process-wide solve store, so this waits for the
+    // planar tests rather than emptying one mid-read.
+    let _solves = crate::api::tests::track_store_test();
     let project = LumitBridgeState::new_project(None).expect("a project");
     let comp = project.new_composition("Scene".into(), None).expect("comp");
     let layer = comp.add_solid_layer(None).expect("a solid");

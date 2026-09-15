@@ -19,6 +19,7 @@ lumit-core = { path = "../lumit-core" }
 # the number a plugin sizes its scratch from is the number the host really
 # spends. The edge runs one way: `lumit-eval` knows nothing about plugins.
 lumit-eval = { path = "../lumit-eval" }
+lumit-peer = { path = "../lumit-peer" }
 # Lumit's working frames are half floats; the boundary widens them to fp32,
 # which is the only depth this host advertises (docs/12 §2.1).
 half = "2"

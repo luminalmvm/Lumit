@@ -686,17 +686,27 @@ impl HeadlessRenderer {
         fx: lumit_gpu::fx::FxEngine,
         scope: lumit_gpu::scope::ScopeEngine,
     ) -> Self {
+        // The intermediate store holds frame-sized textures across frames, so
+        // it is registered with the governor rather than spending the card
+        // behind its back (docs/13 §3). Every other cache on this renderer is
+        // host memory; this one is the card's.
+        let mut fx_cache = crate::fxops::FxCache::default();
+        fx_cache.account_against(std::sync::Arc::clone(gpu.ledger()));
         let parts = Parts {
             colour,
             compositor,
             fx: std::collections::HashMap::from([(gpu.working(), fx)]),
             lut_cache: std::cell::RefCell::new(crate::fxops::LutCache::default()),
-            fx_cache: std::cell::RefCell::new(crate::fxops::FxCache::default()),
+            fx_cache: std::cell::RefCell::new(fx_cache),
             flow: std::cell::RefCell::new(crate::realise::CompositeFlow::default()),
         };
         // Flow runs on this same device rather than opening one of its own.
         // The handles are reference-counted, so this shares it.
         let pool = DecodePool::with_gpu(&gpu);
+        // One ledger for the whole renderer, taken before the device moves into
+        // the struct: every store below that holds frame-sized memory registers
+        // against this one account (docs/13 §3).
+        let ledger = std::sync::Arc::clone(gpu.ledger());
         Self {
             gpu,
             parts: Some(parts),
@@ -712,6 +722,9 @@ impl HeadlessRenderer {
                 // Evictions have to be visible, or the tiers below never hear
                 // that a frame exists and the ladder is a drop (docs/06 §5.3).
                 lru.collect_evictions();
+                // Finished frames held on the card, kept across frames like the
+                // intermediates and counted in the same account (docs/13 §3).
+                lru.account_against(ledger, lumit_budget::Tier::Vram);
                 lru
             },
             demotions: Vec::new(),
@@ -1283,11 +1296,19 @@ impl HeadlessRenderer {
             quality,
         };
         let jobs = {
-            let held = |nested: &Composition, lt: f64| -> bool {
+            let held = |nested: &Composition,
+                        lt: f64,
+                        inputs: Option<&lumit_core::model::EffectInstance>|
+             -> bool {
                 let Some(parts) = self.parts.as_ref() else {
                     return false;
                 };
-                let Some(key) = crate::cache::NestedKeyer::nested_key(&keys, nested, lt) else {
+                // The very name the builder gives that frame, a placed graph's
+                // own Input values included, or the planner would skip decodes
+                // for a texture the realiser never finds.
+                let Some(key) =
+                    crate::cache::NestedKeyer::nested_key_with(&keys, nested, lt, inputs)
+                else {
                     return false;
                 };
                 let scale = composite_scale(quality);
@@ -1688,6 +1709,47 @@ impl HeadlessRenderer {
     #[must_use]
     pub fn decode_memory(&self) -> (usize, usize) {
         self.pool.memory()
+    }
+
+    /// What the resource governor is holding, across both tiers
+    /// (docs/13 §3) — every store on this renderer that has registered with it,
+    /// plus whatever frame is in flight.
+    ///
+    /// The readout the degradation ladder owes the user: "silent degradation is
+    /// a bug" (docs/13 §4), and a ladder nobody can see stepping is exactly
+    /// that. Read in one go so the numbers shown together were true together.
+    #[must_use]
+    pub fn governor(&self) -> lumit_budget::Snapshot {
+        self.gpu.ledger().snapshot()
+    }
+
+    /// Set the governor's two ceilings (docs/13 §3), from the figures the
+    /// frontend read off the machine.
+    ///
+    /// The renderer sized the card's tier from its own adapter as it opened,
+    /// which is all a graphics context can honestly answer for. This is where
+    /// the rest arrives: what the machine has in ordinary memory, and — on a
+    /// card that draws from that same memory — the share of it the card may
+    /// have, which needed both figures to work out and so could not be decided
+    /// either side alone.
+    ///
+    /// Changing a ceiling frees nothing and takes nothing away: the
+    /// reservations that exist are memory that exists. What it changes is what
+    /// is granted from here on, and where the degradation ladder starts
+    /// stepping.
+    pub fn set_memory_budgets(&self, vram: u64, ram: u64) {
+        self.gpu.ledger().set_budget(lumit_budget::Tier::Vram, vram);
+        self.gpu.ledger().set_budget(lumit_budget::Tier::Ram, ram);
+    }
+
+    /// Bytes the last frame drawn asked the card for and did not get — see
+    /// [`lumit_gpu::GpuContext::last_frame_overdrawn`]. Nought on every
+    /// ordinary frame; anything else is a frame that outgrew what was reserved
+    /// for it. The *latched* figure, because this is read between frames,
+    /// where the live one has always just been reset.
+    #[must_use]
+    pub fn vram_overdrawn(&self) -> u64 {
+        self.gpu.last_frame_overdrawn()
     }
 
     /// What the graphics driver holds for this renderer's device — see
@@ -2923,90 +2985,152 @@ impl AudioJobsBuilder {
         visited: &mut Vec<Uuid>,
         jobs: &mut Vec<AudioJob>,
     ) {
+        // **A node graph sounds through its Read boxes** (docs/impl/
+        // node-graph-comp.md §5.10). It has no layers, so the walk below would
+        // find nothing; what it has is the Reads the Output's cone reaches,
+        // each mixed as the layer it behaves like, at unity. A Read outside
+        // the cone draws nothing, so it is silent too. The graph's own master
+        // volume rides down from the Precomp arm, as any comp's does.
+        if let Some(graph) = &comp.graph {
+            let Some(output) = graph.output_id() else {
+                return;
+            };
+            for node in graph.cone_of(output) {
+                let Some(lumit_core::comp_graph::GraphNode::Read { id, item, .. }) =
+                    graph.node(node)
+                else {
+                    continue;
+                };
+                let Some(read) = doc
+                    .item(*item)
+                    .and_then(|i| lumit_core::comp_graph::read_layer(*id, i, comp))
+                else {
+                    continue;
+                };
+                self.walk_layer(
+                    doc, comp, &read, false, base_s, window, carriers, strip, visited, jobs,
+                );
+            }
+            return;
+        }
         let any_solo = lumit_core::model::any_solo(comp);
         for layer in &comp.layers {
-            // A layer asked for by name is heard whatever its own switches or a
-            // solo elsewhere say (`layer_audio_jobs`). Ids are unique to
-            // a document, so this can only ever match the row that was named.
-            let named = self.heard == Some(layer.id);
-            if !named && (!layer.switches.audible || (any_solo && !layer.switches.solo)) {
-                continue;
-            }
-            let in_s = (layer.in_point.0.to_f64() + base_s).max(window.0);
-            let out_s = (layer.out_point.0.to_f64() + base_s).min(window.1);
-            if out_s <= in_s {
-                continue;
-            }
-            let offset_s = layer.start_offset.0.to_f64() + base_s;
-            let strip = strip.unwrap_or(layer.id);
-            match &layer.kind {
-                LayerKind::Footage { item, .. } => {
-                    let Some(ProjectItem::Footage(f)) = doc.item(*item) else {
-                        continue;
-                    };
-                    if !self.item_has_audio(*item, &footage_path(f)) {
-                        continue;
-                    }
-                    jobs.push(AudioJob {
-                        item: *item,
-                        layer: strip,
-                        clip: None,
-                        path: footage_path(f),
-                        in_s,
-                        out_s,
-                        offset_s,
-                        volume: layer.volume_db.clone(),
-                        pan: layer.pan.clone(),
-                        carriers: carriers.to_vec(),
-                        fade: None,
-                        driven: driven_volume_of(doc, comp, layer, offset_s, base_s),
-                        chain: audio_chain_of(doc, comp, layer, offset_s, base_s),
-                        clip_chain: None,
-                    });
+            self.walk_layer(
+                doc, comp, layer, any_solo, base_s, window, carriers, strip, visited, jobs,
+            );
+        }
+    }
+
+    /// One row's contribution to the mix: the switches, the span, and then
+    /// whichever of the two sounding kinds it is.
+    ///
+    /// Its own function because a node graph has no layers and a Read box is
+    /// the layer it behaves like ([`Self::walk`]), so the two roads meet here
+    /// rather than each spelling the gate out.
+    #[allow(clippy::too_many_arguments)]
+    fn walk_layer(
+        &mut self,
+        doc: &Arc<Document>,
+        comp: &Composition,
+        layer: &lumit_core::model::Layer,
+        any_solo: bool,
+        base_s: f64,
+        window: (f64, f64),
+        carriers: &[crate::export::Carrier],
+        strip: Option<Uuid>,
+        visited: &mut Vec<Uuid>,
+        jobs: &mut Vec<AudioJob>,
+    ) {
+        // A layer asked for by name is heard whatever its own switches or a
+        // solo elsewhere say (`layer_audio_jobs`). Ids are unique to
+        // a document, so this can only ever match the row that was named.
+        let named = self.heard == Some(layer.id);
+        if !named && (!layer.switches.audible || (any_solo && !layer.switches.solo)) {
+            return;
+        }
+        // **A retimed layer is silent** (docs/04 §11.5, docs/09 §7),
+        // footage and Precomp alike: a map that stretches, freezes or runs
+        // a picture backwards has no honest reading for sound, and the
+        // rule is the one a Sequence clip's own map already follows. The
+        // row keeps its mute switch, since `kind_has_audio` is blind to
+        // this and a switch that vanished could never be pressed back.
+        if layer.retime.is_some() {
+            return;
+        }
+        let in_s = (layer.in_point.0.to_f64() + base_s).max(window.0);
+        let out_s = (layer.out_point.0.to_f64() + base_s).min(window.1);
+        if out_s <= in_s {
+            return;
+        }
+        let offset_s = layer.start_offset.0.to_f64() + base_s;
+        let strip = strip.unwrap_or(layer.id);
+        match &layer.kind {
+            LayerKind::Footage { item, .. } => {
+                let Some(ProjectItem::Footage(f)) = doc.item(*item) else {
+                    return;
+                };
+                if !self.item_has_audio(*item, &footage_path(f)) {
+                    return;
                 }
-                LayerKind::Precomp { comp: nested_id } => {
-                    if visited.contains(nested_id) {
-                        continue;
-                    }
-                    let Some(nested) = doc.comp(*nested_id) else {
-                        continue;
-                    };
-                    let mut inner = carriers.to_vec();
+                jobs.push(AudioJob {
+                    item: *item,
+                    layer: strip,
+                    clip: None,
+                    path: footage_path(f),
+                    in_s,
+                    out_s,
+                    offset_s,
+                    volume: layer.volume_db.clone(),
+                    pan: layer.pan.clone(),
+                    carriers: carriers.to_vec(),
+                    fade: None,
+                    driven: driven_volume_of(doc, comp, layer, offset_s, base_s),
+                    chain: audio_chain_of(doc, comp, layer, offset_s, base_s),
+                    clip_chain: None,
+                });
+            }
+            LayerKind::Precomp { comp: nested_id } => {
+                if visited.contains(nested_id) {
+                    return;
+                }
+                let Some(nested) = doc.comp(*nested_id) else {
+                    return;
+                };
+                let mut inner = carriers.to_vec();
+                inner.push(crate::export::Carrier {
+                    volume: layer.volume_db.clone(),
+                    pan: layer.pan.clone(),
+                    offset_s,
+                });
+                // The nested comp's own **master fader** rides down with
+                // the Precomp layer's Volume. A master is a stage
+                // only for the comp being mixed; one comp deep it is just
+                // another gain on what that comp contributes, which is
+                // exactly what a carrier is.
+                if nested.master_volume_db != 0.0 {
                     inner.push(crate::export::Carrier {
-                        volume: layer.volume_db.clone(),
-                        pan: layer.pan.clone(),
+                        volume: lumit_core::anim::Property::fixed(nested.master_volume_db),
+                        pan: lumit_core::anim::Property::zero(),
                         offset_s,
                     });
-                    // The nested comp's own **master fader** rides down with
-                    // the Precomp layer's Volume. A master is a stage
-                    // only for the comp being mixed; one comp deep it is just
-                    // another gain on what that comp contributes, which is
-                    // exactly what a carrier is.
-                    if nested.master_volume_db != 0.0 {
-                        inner.push(crate::export::Carrier {
-                            volume: lumit_core::anim::Property::fixed(nested.master_volume_db),
-                            pan: lumit_core::anim::Property::zero(),
-                            offset_s,
-                        });
-                    }
-                    visited.push(*nested_id);
-                    self.walk(
-                        doc,
-                        nested,
-                        offset_s,
-                        (in_s, out_s),
-                        &inner,
-                        Some(strip),
-                        visited,
-                        jobs,
-                    );
-                    visited.pop();
                 }
-                LayerKind::Sequence { clips } => self.sequence_jobs(
-                    doc, comp, base_s, layer, clips, strip, in_s, out_s, offset_s, carriers, jobs,
-                ),
-                _ => {}
+                visited.push(*nested_id);
+                self.walk(
+                    doc,
+                    nested,
+                    offset_s,
+                    (in_s, out_s),
+                    &inner,
+                    Some(strip),
+                    visited,
+                    jobs,
+                );
+                visited.pop();
             }
+            LayerKind::Sequence { clips } => self.sequence_jobs(
+                doc, comp, base_s, layer, clips, strip, in_s, out_s, offset_s, carriers, jobs,
+            ),
+            _ => {}
         }
     }
 
@@ -3222,6 +3346,24 @@ impl AudioJobsBuilder {
                     if self.kind_has_audio(doc, &l.kind, visited) {
                         has = true;
                         break;
+                    }
+                }
+                // A node graph has no layers, so what could sound is its Read
+                // boxes (docs/impl/node-graph-comp.md §5.10) - every one of
+                // them, not only the Output's cone, because rewiring the graph
+                // must not make the row's switch appear and vanish.
+                if let Some(graph) = &nested.graph {
+                    for node in &graph.nodes {
+                        let lumit_core::comp_graph::GraphNode::Read { id, item, .. } = node else {
+                            continue;
+                        };
+                        let read = doc
+                            .item(*item)
+                            .and_then(|i| lumit_core::comp_graph::read_layer(*id, i, nested));
+                        if read.is_some_and(|l| self.kind_has_audio(doc, &l.kind, visited)) {
+                            has = true;
+                            break;
+                        }
                     }
                 }
                 visited.pop();
@@ -3770,6 +3912,7 @@ mod tests {
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
+            graph_inputs: None,
             blend: Default::default(),
             masks: Vec::new(),
             paint: Vec::new(),
@@ -3780,6 +3923,7 @@ mod tests {
             extra: serde_json::Map::new(),
         };
         doc.items.push(ProjectItem::Composition(Composition {
+            graph: None,
             master_volume_db: 0.0,
             sound_mix: false,
             groups: Vec::new(),
@@ -3892,6 +4036,7 @@ mod tests {
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
+            graph_inputs: None,
             blend: Default::default(),
             masks: Vec::new(),
             paint: Vec::new(),
@@ -3910,6 +4055,7 @@ mod tests {
     fn push_comp(doc: &mut Document, name: &str, w: u32, h: u32) -> Uuid {
         let id = Uuid::now_v7();
         doc.items.push(ProjectItem::Composition(Composition {
+            graph: None,
             master_volume_db: 0.0,
             sound_mix: false,
             groups: Vec::new(),
@@ -3999,6 +4145,7 @@ mod tests {
                 retime: None,
                 interpolation: Default::default(),
                 parked_flow: None,
+                graph_inputs: None,
                 blend: Default::default(),
                 masks: Vec::new(),
                 paint: Vec::new(),
@@ -4009,6 +4156,7 @@ mod tests {
                 extra: serde_json::Map::new(),
             };
             doc.items.push(ProjectItem::Composition(Composition {
+                graph: None,
                 master_volume_db: 0.0,
                 sound_mix: false,
                 groups: Vec::new(),
@@ -4619,6 +4767,7 @@ mod tests {
                 retime: None,
                 interpolation: Default::default(),
                 parked_flow: None,
+                graph_inputs: None,
                 blend: Default::default(),
                 masks: Vec::new(),
                 paint: Vec::new(),
@@ -5311,6 +5460,168 @@ mod tests {
         let mut null = a.layers[0].clone();
         null.kind = LayerKind::Null;
         assert!(!builder.layer_has_audio(&doc, &null));
+    }
+
+    /// A node graph reading `item` through the Output, filed in `doc`. `idle`
+    /// adds a second Read that nothing is wired to, which is the branch the
+    /// walk must leave silent.
+    fn push_read_graph_comp(doc: &mut Document, item: Uuid, idle: Option<Uuid>) -> Uuid {
+        use lumit_core::comp_graph::{CompGraph, GraphEdge, GraphNode};
+        let id = push_comp(doc, "graph", 32, 32);
+        let (read, out) = (Uuid::now_v7(), Uuid::now_v7());
+        let mut nodes = vec![
+            GraphNode::Read {
+                id: read,
+                item,
+                custom_name: None,
+            },
+            GraphNode::Output { id: out },
+        ];
+        if let Some(spare) = idle {
+            nodes.push(GraphNode::Read {
+                id: Uuid::now_v7(),
+                item: spare,
+                custom_name: None,
+            });
+        }
+        if let Some(ProjectItem::Composition(c)) = doc.item_mut(id) {
+            c.graph = Some(CompGraph {
+                nodes,
+                edges: vec![GraphEdge {
+                    from: read,
+                    from_port: "output".into(),
+                    to: out,
+                    to_port: "input".into(),
+                }],
+                layout: Vec::new(),
+                exposed: Vec::new(),
+                groups: Vec::new(),
+            });
+        }
+        id
+    }
+
+    /// **A graph's Read of footage mixes as a footage layer does**
+    /// (docs/impl/node-graph-comp.md §5.10). A node graph has no layers, so
+    /// without the graph arm it exported in silence: the song was in the
+    /// picture and not in the file.
+    ///
+    /// Three claims at once: the Read is heard at unity, a Read outside the
+    /// Output's cone is not heard at all, and a Precomp layer of the graph
+    /// carries the sound down at its own Volume, exactly as it carries a layer
+    /// comp's.
+    #[test]
+    fn a_node_graphs_read_of_footage_reaches_the_mix() {
+        let mut doc = Document::new();
+        let song = push_footage_item(&mut doc, "song.wav");
+        let spare = push_footage_item(&mut doc, "unused.wav");
+        let graph = push_read_graph_comp(&mut doc, song, Some(spare));
+        seed_has_audio(song);
+        seed_has_audio(spare);
+
+        let mut builder = AudioJobsBuilder::new();
+        let g = doc.comp(graph).unwrap().clone();
+        let jobs = builder.audio_jobs(&Arc::new(doc.clone()), &g);
+        assert_eq!(
+            jobs.len(),
+            1,
+            "the wired Read sounds and the idle one does not"
+        );
+        assert_eq!(jobs[0].item, song);
+        assert!(
+            jobs[0].carriers.is_empty(),
+            "a Read box has no Volume of its own, so it mixes at unity"
+        );
+        assert!((jobs[0].volume.value_at(0.0) - 0.0).abs() < 1e-9);
+
+        // The same graph placed in a comp, at −6 dB.
+        let outer = push_comp(&mut doc, "edit", 32, 32);
+        push_layer(&mut doc, outer, LayerKind::Precomp { comp: graph });
+        if let Some(ProjectItem::Composition(c)) = doc.item_mut(outer) {
+            c.layers[0].volume_db = lumit_core::anim::Property::fixed(-6.0);
+        }
+        let o = doc.comp(outer).unwrap().clone();
+        let carried = builder.audio_jobs(&Arc::new(doc.clone()), &o);
+        assert_eq!(carried.len(), 1, "the graph's sound reaches the comp above");
+        assert_eq!(carried[0].carriers.len(), 1);
+        assert!((carried[0].carriers[0].volume.value_at(0.0) - -6.0).abs() < 1e-9);
+        assert_eq!(
+            carried[0].layer, o.layers[0].id,
+            "the strip is the row the mixer draws, which is the Precomp layer"
+        );
+        // The Beats panel and the Audio level driver both read this list, so a
+        // non-empty answer is what makes both of them work on a graph.
+        assert!(!builder.audio_jobs(&Arc::new(doc.clone()), &g).is_empty());
+    }
+
+    /// **A Precomp row of a node graph wears a mute switch** (§5.10). The
+    /// question is asked of the nested comp's layers, and a graph has none, so
+    /// the row over a graph holding the music drew no switch at all.
+    #[test]
+    fn a_precomp_row_of_a_node_graph_carries_a_mute_switch() {
+        let mut doc = Document::new();
+        let song = push_footage_item(&mut doc, "song.wav");
+        let graph = push_read_graph_comp(&mut doc, song, None);
+        let silent = push_comp(&mut doc, "quiet", 32, 32);
+        let outer = push_comp(&mut doc, "edit", 32, 32);
+        push_layer(&mut doc, outer, LayerKind::Precomp { comp: graph });
+        push_layer(&mut doc, outer, LayerKind::Precomp { comp: silent });
+        seed_has_audio(song);
+
+        let mut builder = AudioJobsBuilder::new();
+        let c = doc.comp(outer).unwrap().clone();
+        assert!(
+            builder.layer_has_audio(&doc, &c.layers[0]),
+            "the song is a Read box inside the graph, and the switch belongs on the row"
+        );
+        assert!(
+            !builder.layer_has_audio(&doc, &c.layers[1]),
+            "a comp with nothing in it must not claim a switch"
+        );
+    }
+
+    /// **A retimed layer is silent, and keeps its mute switch** (docs/04 §11.5,
+    /// docs/09 §7, node-graph-comp.md §5.6). Footage and Precomp alike: a map
+    /// that stretches, freezes or reverses a picture has no honest reading for
+    /// sound. The switch stays because it says what the row *is*, and one that
+    /// vanished when it was pressed could never be pressed back.
+    #[test]
+    fn a_retimed_layer_contributes_no_audio_but_keeps_its_switch() {
+        let mut doc = Document::new();
+        let song = push_footage_item(&mut doc, "song.wav");
+        let inner = push_comp(&mut doc, "A", 32, 32);
+        push_layer(&mut doc, inner, LayerKind::Footage { item: song });
+        let outer = push_comp(&mut doc, "B", 32, 32);
+        push_layer(&mut doc, outer, LayerKind::Footage { item: song });
+        push_layer(&mut doc, outer, LayerKind::Precomp { comp: inner });
+        seed_has_audio(song);
+
+        let mut builder = AudioJobsBuilder::new();
+        let plain = doc.comp(outer).unwrap().clone();
+        assert_eq!(
+            builder.audio_jobs(&Arc::new(doc.clone()), &plain).len(),
+            2,
+            "unmapped, the clip and the precomp both sound"
+        );
+
+        // A freeze on each row: one map, no sound, either kind.
+        if let Some(ProjectItem::Composition(c)) = doc.item_mut(outer) {
+            for l in &mut c.layers {
+                l.retime = Some(lumit_core::anim::Property::fixed(1.0));
+            }
+        }
+        let mapped = doc.comp(outer).unwrap().clone();
+        assert!(
+            builder
+                .audio_jobs(&Arc::new(doc.clone()), &mapped)
+                .is_empty(),
+            "a retimed footage layer and a retimed Precomp are both silent"
+        );
+        assert!(
+            builder.layer_has_audio(&doc, &mapped.layers[0])
+                && builder.layer_has_audio(&doc, &mapped.layers[1]),
+            "and both rows still wear the switch that says so"
+        );
     }
 
     /// **The export contract for the deferred flare bake.** A fresh
@@ -6623,6 +6934,7 @@ surfaces:
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
+            graph_inputs: None,
             blend: Default::default(),
             masks: Vec::new(),
             paint: Vec::new(),
@@ -6886,6 +7198,67 @@ surfaces:
                 l.effects = effects;
                 l.graph = graph;
                 (doc, comp_id, 7)
+            }),
+            // **A node graph placed as a Precomp layer** (docs/impl/
+            // node-graph-comp.md §2.3). The whole of such a comp's draw list is
+            // one draw at identity placement, so the Precomp arm reaches the
+            // graph walk through the call it already makes - and both paths
+            // must reach it the same way.
+            ("a node graph placed as a layer", |w, h, red, blue| {
+                let (mut doc, comp_id, _) = matrix_base(w, h, red);
+                let graph_id = push_read_graph(&mut doc, w, h, blue);
+                let layer = matrix_layer("Graph", LayerKind::Precomp { comp: graph_id }, w, h);
+                doc.comp_mut(comp_id).unwrap().layers.insert(0, layer);
+                (doc, comp_id, 0)
+            }),
+            // **The Node graph effect on a layer** (§2.4): `run_ops` calls the
+            // realiser's own walk where a kernel would have dispatched, so a
+            // stack is still one walk on both paths.
+            ("a node graph effect on a solid", |w, h, red, blue| {
+                let (mut doc, comp_id, _) = matrix_base(w, h, red);
+                let (_, top) = matrix_top(&mut doc, comp_id, blue);
+                let inst = push_preset_graph(&mut doc, w, h);
+                let comp = doc.comp_mut(comp_id).unwrap();
+                let l = comp.layers.iter_mut().find(|l| l.id == top).unwrap();
+                l.effects = vec![inst];
+                (doc, comp_id, 0)
+            }),
+            // **A placed graph with its own Input values** (§5.3): the layer
+            // carries a `node_graph` instance, and both paths must lower the
+            // graph under it and name the nested frame by it.
+            (
+                "a node graph placed with its own values",
+                |w, h, red, blue| {
+                    let (mut doc, comp_id, _) = matrix_base(w, h, red);
+                    let (graph_id, inst) = push_valued_graph(&mut doc, w, h, blue);
+                    let mut layer =
+                        matrix_layer("Graph", LayerKind::Precomp { comp: graph_id }, w, h);
+                    layer.graph_inputs = Some(inst);
+                    doc.comp_mut(comp_id).unwrap().layers.insert(0, layer);
+                    (doc, comp_id, 0)
+                },
+            ),
+            // **A retimed Precomp** (§5.6): the nested comp is evaluated at
+            // the moment the map points at, on both paths and in the name the
+            // texture is filed under.
+            ("retimed precomp", |w, h, red, blue| {
+                let (mut doc, comp_id, _) = matrix_base(w, h, red);
+                let (mut child_doc, child_id, _) = matrix_base(16, 16, blue);
+                // Something inside that moves, so the map picks a picture
+                // rather than the same still at every frame.
+                if let Some(c) = child_doc.comp_mut(child_id) {
+                    c.layers[0].transform.position_x = ramp(0.0, 12.0, 2);
+                }
+                for item in child_doc.items {
+                    doc.items.push(item);
+                }
+                let mut layer =
+                    matrix_layer("Nested", LayerKind::Precomp { comp: child_id }, 16, 16);
+                // Half speed, so frame eight of the parent is frame four of
+                // the comp inside it: two seconds of the layer over one of it.
+                layer.retime = Some(ramp(0.0, 1.0, 2));
+                doc.comp_mut(comp_id).unwrap().layers.insert(0, layer);
+                (doc, comp_id, 8)
             }),
             ("camera over a 3d layer", |w, h, red, blue| {
                 let (mut doc, comp_id, _) = matrix_base(w, h, red);
@@ -7258,6 +7631,7 @@ surfaces:
             }
             adjust.effects = vec![mb];
             doc.items.push(ProjectItem::Composition(Composition {
+                graph: None,
                 master_volume_db: 0.0,
                 sound_mix: false,
                 groups: Vec::new(),
@@ -7372,6 +7746,7 @@ surfaces:
                 layers.insert(0, adjust);
             }
             doc.items.push(ProjectItem::Composition(Composition {
+                graph: None,
                 master_volume_db: 0.0,
                 sound_mix: false,
                 groups: Vec::new(),
@@ -7514,6 +7889,7 @@ surfaces:
                 layers.push(matrix_layer("Under", LayerKind::Footage { item }, 320, 240));
             }
             doc.items.push(ProjectItem::Composition(Composition {
+                graph: None,
                 master_volume_db: 0.0,
                 sound_mix: false,
                 groups: Vec::new(),
@@ -7586,6 +7962,7 @@ surfaces:
         }));
         let comp_id = Uuid::now_v7();
         doc.items.push(ProjectItem::Composition(Composition {
+            graph: None,
             master_volume_db: 0.0,
             sound_mix: false,
             groups: Vec::new(),
@@ -7604,6 +7981,213 @@ surfaces:
             extra: serde_json::Map::new(),
         }));
         (doc, comp_id, solid)
+    }
+
+    /// A composition holding `graph` instead of layers, sized like the rest of
+    /// the matrix's comps.
+    fn graph_composition(w: u32, h: u32, graph: lumit_core::comp_graph::CompGraph) -> Composition {
+        Composition {
+            graph: Some(graph),
+            master_volume_db: 0.0,
+            sound_mix: false,
+            groups: Vec::new(),
+            beat_grid: None,
+            id: Uuid::now_v7(),
+            name: "Graph".into(),
+            width: w,
+            height: h,
+            frame_rate: FrameRate::new(30, 1).unwrap(),
+            duration: Duration(Rational::new(5, 1).unwrap()),
+            background: LinearColour::BLACK,
+            work_area: None,
+            layers: Vec::new(),
+            markers: Vec::new(),
+            motion_blur: lumit_core::model::MotionBlur::default(),
+            extra: serde_json::Map::new(),
+        }
+    }
+
+    /// One wire, as the panel spells it.
+    fn graph_wire(
+        from: Uuid,
+        from_port: &str,
+        to: Uuid,
+        to_port: &str,
+    ) -> lumit_core::comp_graph::GraphEdge {
+        lumit_core::comp_graph::GraphEdge {
+            from,
+            from_port: from_port.to_owned(),
+            to,
+            to_port: to_port.to_owned(),
+        }
+    }
+
+    /// A node graph composition of `colour`: a Read of a fresh solid, through
+    /// an Exposure, into the Output. Filed in `doc`; answers its id.
+    fn push_read_graph(doc: &mut Document, w: u32, h: u32, colour: LinearColour) -> Uuid {
+        use lumit_core::comp_graph::{CompGraph, GraphNode};
+        let solid = Uuid::now_v7();
+        doc.items.push(ProjectItem::Solid(SolidDef {
+            id: solid,
+            name: "Graph plate".into(),
+            colour,
+            width: w,
+            height: h,
+            extra: serde_json::Map::new(),
+        }));
+        let mut fx = lumit_core::fx::instantiate("exposure").unwrap();
+        for p in &mut fx.params {
+            if p.id == "stops" {
+                p.value = lumit_core::model::EffectValue::Float(Property::fixed(1.0));
+            }
+        }
+        let (fx_id, read, out) = (fx.id, Uuid::now_v7(), Uuid::now_v7());
+        let comp = graph_composition(
+            w,
+            h,
+            CompGraph {
+                nodes: vec![
+                    GraphNode::Read {
+                        id: read,
+                        item: solid,
+                        custom_name: None,
+                    },
+                    GraphNode::Fx(fx),
+                    GraphNode::Output { id: out },
+                ],
+                edges: vec![
+                    graph_wire(read, "output", fx_id, "input"),
+                    graph_wire(fx_id, "output", out, "input"),
+                ],
+                layout: Vec::new(),
+                exposed: Vec::new(),
+                groups: Vec::new(),
+            },
+        );
+        let id = comp.id;
+        doc.items.push(ProjectItem::Composition(comp));
+        id
+    }
+
+    /// A node graph of `colour` whose Exposure takes its Stops from a value
+    /// Input, filed in `doc`. Answers the comp's id and a `node_graph` instance
+    /// bound to it carrying a value of its own - what a Precomp layer of that
+    /// graph holds in `graph_inputs` (docs/impl/node-graph-comp.md §5.3).
+    fn push_valued_graph(
+        doc: &mut Document,
+        w: u32,
+        h: u32,
+        colour: LinearColour,
+    ) -> (Uuid, lumit_core::model::EffectInstance) {
+        use lumit_core::comp_graph::{CompGraph, GraphInput, GraphNode, InputKind};
+        let solid = Uuid::now_v7();
+        doc.items.push(ProjectItem::Solid(SolidDef {
+            id: solid,
+            name: "Graph plate".into(),
+            colour,
+            width: w,
+            height: h,
+            extra: serde_json::Map::new(),
+        }));
+        let fx = lumit_core::fx::instantiate("exposure").unwrap();
+        let (fx_id, read, amount, out) = (fx.id, Uuid::now_v7(), Uuid::now_v7(), Uuid::now_v7());
+        let comp = graph_composition(
+            w,
+            h,
+            CompGraph {
+                nodes: vec![
+                    GraphNode::Read {
+                        id: read,
+                        item: solid,
+                        custom_name: None,
+                    },
+                    GraphNode::Input {
+                        id: amount,
+                        input: GraphInput {
+                            id: "amount".into(),
+                            label: "Amount".into(),
+                            kind: InputKind::Number,
+                            default: [0.0; 4],
+                            min: -8.0,
+                            max: 8.0,
+                            unit: lumit_core::fx::Unit::Raw,
+                            preview: None,
+                        },
+                    },
+                    GraphNode::Fx(fx),
+                    GraphNode::Output { id: out },
+                ],
+                edges: vec![
+                    graph_wire(read, "output", fx_id, "input"),
+                    graph_wire(amount, "value", fx_id, "stops"),
+                    graph_wire(fx_id, "output", out, "input"),
+                ],
+                layout: Vec::new(),
+                exposed: Vec::new(),
+                groups: Vec::new(),
+            },
+        );
+        let mut inst = lumit_core::fx::instantiate("node_graph").unwrap();
+        if let Some(graph) = comp.graph.as_ref() {
+            lumit_core::fx::effects::node_graph::bind(&mut inst, comp.id, graph);
+        }
+        inst.params.push(lumit_core::model::EffectParam {
+            id: "amount".into(),
+            value: lumit_core::model::EffectValue::Float(Property::fixed(1.5)),
+            extra: serde_json::Map::new(),
+        });
+        let id = comp.id;
+        doc.items.push(ProjectItem::Composition(comp));
+        (id, inst)
+    }
+
+    /// A node graph with no Read boxes - a picture in, an Exposure, a picture
+    /// out - filed in `doc`, and a Node graph effect bound to it.
+    fn push_preset_graph(doc: &mut Document, w: u32, h: u32) -> lumit_core::model::EffectInstance {
+        use lumit_core::comp_graph::{CompGraph, GraphInput, GraphNode, InputKind};
+        let mut fx = lumit_core::fx::instantiate("exposure").unwrap();
+        for p in &mut fx.params {
+            if p.id == "stops" {
+                p.value = lumit_core::model::EffectValue::Float(Property::fixed(1.5));
+            }
+        }
+        let (fx_id, src, out) = (fx.id, Uuid::now_v7(), Uuid::now_v7());
+        let comp = graph_composition(
+            w,
+            h,
+            CompGraph {
+                nodes: vec![
+                    GraphNode::Input {
+                        id: src,
+                        input: GraphInput {
+                            id: "src".into(),
+                            label: "Source".into(),
+                            kind: InputKind::Picture,
+                            default: [0.0; 4],
+                            min: 0.0,
+                            max: 1.0,
+                            unit: lumit_core::fx::Unit::Raw,
+                            preview: None,
+                        },
+                    },
+                    GraphNode::Fx(fx),
+                    GraphNode::Output { id: out },
+                ],
+                edges: vec![
+                    graph_wire(src, "output", fx_id, "input"),
+                    graph_wire(fx_id, "output", out, "input"),
+                ],
+                layout: Vec::new(),
+                exposed: Vec::new(),
+                groups: Vec::new(),
+            },
+        );
+        let mut inst = lumit_core::fx::instantiate("node_graph").unwrap();
+        if let Some(graph) = comp.graph.as_ref() {
+            lumit_core::fx::effects::node_graph::bind(&mut inst, comp.id, graph);
+        }
+        doc.items.push(ProjectItem::Composition(comp));
+        inst
     }
 
     /// A stack and a graph whose Exposure is **driven by how far the nearest
@@ -7756,6 +8340,7 @@ surfaces:
                 layer: Some(layer.id),
                 comp_time: 7.0 / 30.0,
                 current_depth: 0,
+                inputs: None,
             });
             let lift_id = layer.effects[1].id;
             let stops = lumit_core::fx::resolve_drivers(&layer.graph, 7.0 / 30.0, context, None)
@@ -8728,6 +9313,7 @@ surfaces:
         });
         let comp_id = Uuid::now_v7();
         doc.items.push(ProjectItem::Composition(Composition {
+            graph: None,
             master_volume_db: 0.0,
             sound_mix: false,
             groups: Vec::new(),

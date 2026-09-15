@@ -74,7 +74,10 @@ impl ParamId {
 /// view — and it was already wrong, because it keyed on the parameter's id alone
 /// while `centre_x` means % of comp width on Radial blur and px@comp on four
 /// other effects.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+// Serialised because a node graph's Input node carries one
+// ([`crate::comp_graph::GraphInput`]), and an Input is document data. The
+// variant names are the wire form; entries are added, never renamed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Unit {
     /// **Nobody has decided yet.** The derive's default for a numeric
     /// parameter whose declaration says nothing, and a defect rather than a

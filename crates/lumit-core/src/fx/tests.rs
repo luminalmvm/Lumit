@@ -424,6 +424,7 @@ fn posterize_sample_times_snap_covered_layers_to_the_grid() {
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,
+        graph_inputs: None,
         blend: Default::default(),
         masks: Vec::new(),
         paint: Vec::new(),
@@ -513,6 +514,7 @@ fn accumulation_shutter_offsets_cover_the_layers_beneath() {
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,
+        graph_inputs: None,
         blend: Default::default(),
         masks: Vec::new(),
         paint: Vec::new(),
@@ -1023,6 +1025,125 @@ fn datamosh_window_reaches_the_prior_frame_and_wants_flow() {
     );
     assert!(stack_flow_neighbours(std::slice::from_ref(&off), true).is_empty());
     assert!(stack_flow_neighbours(one, false).is_empty());
+}
+
+/// The times **one box** asks its input at (node-graph-comp.md §5.2), one
+/// family at a time. `dt` is half a second here, so a frame offset and a
+/// second are never the same number by accident.
+#[test]
+fn input_times_are_the_boxs_own_time_and_the_frames_it_reads() {
+    let dt = 0.5;
+    let times = |match_name: &str| input_times(&instantiate(match_name).unwrap(), 4.0, dt);
+
+    // A plain effect reads the frame in hand and nothing else.
+    assert_eq!(times("blur"), vec![4.0]);
+
+    // Echo reaches back over its declared window, its own time first.
+    let echo = times("echo");
+    assert_eq!(echo[0], 4.0);
+    assert_eq!(echo.len(), 17, "the frame itself and sixteen behind it");
+    assert_eq!(echo[1], 3.5);
+    assert_eq!(echo[16], 4.0 - 16.0 * dt);
+
+    // Motion blur measures against the frame after, Datamosh against the one
+    // before.
+    assert_eq!(times("motion_blur"), vec![4.0, 4.5]);
+    assert_eq!(times("datamosh"), vec![4.0, 3.5]);
+
+    // Posterize time holds: the grid time alone, and no second entry, because
+    // what it shows is that frame and not a blend of two.
+    let mut post = instantiate("posterize_time").unwrap();
+    set_float(&mut post, "rate", 2.0);
+    assert_eq!(input_times(&post, 4.3, dt), vec![4.0]);
+
+    // Accumulation motion blur takes its own time and every shutter moment.
+    let acc = instantiate("accumulation_mb").unwrap();
+    let want = crate::fx::stack_accumulation_mb(std::slice::from_ref(&acc), true, 4.0)
+        .expect("the effect resolves")
+        .sample_offsets();
+    let got = input_times(&acc, 4.0, dt);
+    assert_eq!(got.len(), want.len() + 1);
+    assert_eq!(got[0], 4.0);
+    assert_eq!(got[1], 4.0 + want[0] * dt);
+
+    // A Time offset shows another second, and that second alone.
+    let mut shift = instantiate("time_offset").unwrap();
+    set_float(&mut shift, "offset", -1.25);
+    assert_eq!(input_times(&shift, 4.0, dt), vec![2.75]);
+
+    // A bypassed box asks for the frame in hand, whatever it is.
+    let mut off = instantiate("echo").unwrap();
+    off.enabled = false;
+    assert_eq!(input_times(&off, 4.0, dt), vec![4.0]);
+}
+
+/// A Node graph effect's demands on the picture it is handed join the stack's
+/// own window, so the layer is rendered at the frames the graph reads (§5.2).
+#[test]
+fn a_node_graph_effects_demands_join_the_layers_window() {
+    use crate::comp_graph::{CompGraph, GraphEdge, GraphInput, GraphNode, InputKind};
+    use crate::graph::{INPUT_PORT, OUTPUT_PORT};
+    use crate::model::{Document, ProjectItem};
+
+    let (mut comp, mut layer) = marker_rig((25, 1), Vec::new(), (0, 1));
+    let provided = GraphNode::Input {
+        id: uuid::Uuid::now_v7(),
+        input: GraphInput {
+            id: "plate".into(),
+            label: "Plate".into(),
+            kind: InputKind::Picture,
+            default: [0.0; 4],
+            min: 0.0,
+            max: 1.0,
+            unit: Unit::Raw,
+            preview: None,
+        },
+    };
+    // An Echo box on the graph's own picture Input: the host layer has to be
+    // rendered at every frame it reads.
+    let echo = GraphNode::Fx(instantiate("echo").unwrap());
+    let out = GraphNode::Output {
+        id: uuid::Uuid::now_v7(),
+    };
+    let wire = |from: &GraphNode, from_port: &str, to: &GraphNode, to_port: &str| GraphEdge {
+        from: from.id(),
+        from_port: from_port.to_owned(),
+        to: to.id(),
+        to_port: to_port.to_owned(),
+    };
+    let graph = CompGraph {
+        edges: vec![
+            wire(&provided, OUTPUT_PORT.id, &echo, INPUT_PORT.id),
+            wire(&echo, OUTPUT_PORT.id, &out, INPUT_PORT.id),
+        ],
+        nodes: vec![provided, echo, out],
+        layout: Vec::new(),
+        exposed: Vec::new(),
+        groups: Vec::new(),
+    };
+    let graph_comp_id = uuid::Uuid::now_v7();
+    let mut graph_comp = comp.clone();
+    graph_comp.id = graph_comp_id;
+    graph_comp.graph = Some(graph.clone());
+    comp.id = uuid::Uuid::now_v7();
+    let mut doc = Document::new();
+    doc.items.push(ProjectItem::Composition(graph_comp));
+
+    let mut inst = instantiate("node_graph").unwrap();
+    crate::fx::effects::node_graph::bind(&mut inst, graph_comp_id, &graph);
+    layer.effects = vec![inst];
+
+    let dt = 0.04;
+    let window = layer_temporal_window(&doc, &layer, 1.0, dt);
+    assert_eq!(
+        window,
+        (-16..=0).collect::<Vec<i32>>(),
+        "the graph's Echo reads the layer's own sixteen frames back"
+    );
+
+    // A layer whose graph reads nothing else keeps the window it had.
+    layer.effects = vec![instantiate("blur").unwrap()];
+    assert_eq!(layer_temporal_window(&doc, &layer, 1.0, dt), vec![0]);
 }
 
 #[test]
@@ -5168,6 +5289,7 @@ fn marker_rig(
     use crate::time::{CompTime, Duration, FrameRate, Rational};
     let secs = |n, d| CompTime(Rational::new(n, d).unwrap());
     let comp = Composition {
+        graph: None,
         master_volume_db: 0.0,
         sound_mix: false,
         groups: Vec::new(),
@@ -5205,6 +5327,7 @@ fn marker_rig(
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,
+        graph_inputs: None,
         blend: Default::default(),
         masks: Vec::new(),
         paint: Vec::new(),
@@ -9121,6 +9244,7 @@ fn lens_flare_light_layers_resolve_with_their_extent() {
     use crate::time::{CompTime, Duration, FrameRate, Rational};
 
     let mut comp = Composition {
+        graph: None,
         master_volume_db: 0.0,
         sound_mix: false,
         groups: Vec::new(),
@@ -9170,6 +9294,7 @@ fn lens_flare_light_layers_resolve_with_their_extent() {
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
+            graph_inputs: None,
             blend: Default::default(),
             masks: Vec::new(),
             paint: Vec::new(),
@@ -10019,6 +10144,14 @@ fn the_default_aperture_is_the_historical_disc_bit_for_bit() {
         let mut other = img.clone();
         cpu::dof(&mut other, Some(&depth), w, h, &changed);
         assert_ne!(other, want, "a shaped aperture must change the picture");
+    }
+}
+
+fn set_float(e: &mut EffectInstance, id: &str, v: f64) {
+    for p in &mut e.params {
+        if p.id == id {
+            p.value = EffectValue::Float(Property::fixed(v));
+        }
     }
 }
 
@@ -12136,10 +12269,15 @@ fn every_effect_carries_a_matte_row() {
         // Audio is the family, not a list of names, because every effect in it
         // processes sound and draws nothing. There is no such thing as an
         // audio effect that wants a matte, and one added tomorrow needs no
-        // entry here (docs/impl/audio-effects.md §2).
+        // entry here (docs/impl/audio-effects.md §2). Compositing is the
+        // same shape: a Merge and a Switch join pictures the graph walk hands
+        // them rather than drawing one.
         if matches!(
             s.category,
-            FxCategory::Controls | FxCategory::Drivers | FxCategory::Audio
+            FxCategory::Controls
+                | FxCategory::Drivers
+                | FxCategory::Audio
+                | FxCategory::Compositing
         ) || matches!(s.match_name, "camera_track" | "planar_track")
         {
             assert_eq!(
@@ -14242,6 +14380,98 @@ fn particulate_scrubs_in_any_order() {
 
 /// **The birth schedule** (§9 item 3), three ways: a constant rate against the
 /// closed-form count, a keyframed ramp against a hand-computed table, and a
+/// A layer's time comes from a retime curve, and a retime curve is a project
+/// file's numbers. "At frame 10 this layer is at ten million seconds" is a thing
+/// a keyframe can say, and the scan used to answer it by stepping one frame at a
+/// time from the in point — six hundred million steps, each one asking the Emit
+/// rate what it is through keyframes, expressions and driver wires, on the
+/// render thread.
+///
+/// Not slow: stopped. The ceiling is what keeps a project file from hanging the
+/// application, and the flag is what keeps the clamp from being silent
+/// (docs/14 §8).
+#[test]
+fn a_layer_carried_absurdly_far_forward_does_not_hang_the_scan() {
+    let dt = 1.0 / 60.0;
+    // Every frame the walk visits calls this, so it counts the walk.
+    let calls = std::cell::Cell::new(0u64);
+    let rate = |_: f64| {
+        calls.set(calls.get() + 1);
+        150.0
+    };
+
+    // Ten million seconds in, which is a retime keyframe away.
+    let absurd = 600_000_000i64;
+    let s = Schedule::scan(dt, absurd, 60, &rate);
+
+    assert!(
+        calls.get() <= points::MAX_SCAN_FRAMES as u64 + 1,
+        "the walk visited {} frames, past the ceiling of {}",
+        calls.get(),
+        points::MAX_SCAN_FRAMES
+    );
+    assert!(
+        !s.is_exact(),
+        "a clamped walk must say so rather than pass for a complete one"
+    );
+    // And it is still a usable schedule: the window it records is the window
+    // the frame can see, so the particles that are drawn are drawn properly.
+    assert_eq!(s.counts().len(), 60);
+
+    // An ordinary layer is untouched — no clamp, no flag, the same answer as
+    // ever.
+    let ordinary = Schedule::scan(dt, 599, 60, &|_| 150.0);
+    assert!(ordinary.is_exact());
+    assert_eq!(
+        ordinary.total(),
+        Schedule::scan(dt, 599, 60, &|_| 150.0).total()
+    );
+}
+
+/// Trimming used to sum the whole `counts` vector to ask whether it was under
+/// the ceiling yet, and then `Vec::remove(0)` — both linear, inside a loop that
+/// runs once per dropped frame. At the hundred thousand frames the window
+/// permits that is 10^10 operations for one trim, from a Life somebody typed.
+///
+/// This asserts the answer is unchanged; that it now arrives in one pass is what
+/// makes it finish.
+#[test]
+fn trimming_to_the_newest_drops_the_right_frames_in_one_pass() {
+    let dt = 1.0 / 60.0;
+    // Ten births a frame, a thousand frames: ten thousand candidates.
+    let mut s = Schedule::scan(dt, 999, 1000, &|_| 600.0);
+    let before = s.candidates();
+    assert!(before > 5_000, "the fixture needs enough to trim: {before}");
+
+    let first_frame = s.first_frame();
+    let first_birth = s.first_birth();
+    s.trim_to_newest(500);
+
+    assert!(
+        s.candidates() <= 500 || s.counts().len() == 1,
+        "trimmed to {} candidates over a ceiling of 500",
+        s.candidates()
+    );
+    // The newest are what survive, so the window moved forward and the first
+    // birth index moved with it by exactly what was dropped.
+    assert!(s.first_frame() > first_frame);
+    assert_eq!(
+        s.first_birth() - first_birth,
+        before - s.candidates(),
+        "the births dropped and the index moved by different amounts"
+    );
+    // Trimming again to the same ceiling is a no-op rather than a walk.
+    let settled = (s.first_frame(), s.first_birth(), s.candidates());
+    s.trim_to_newest(500);
+    assert_eq!((s.first_frame(), s.first_birth(), s.candidates()), settled);
+
+    // A ceiling nothing reaches leaves it alone.
+    let mut untouched = Schedule::scan(dt, 59, 60, &|_| 60.0);
+    let was = (untouched.first_frame(), untouched.candidates());
+    untouched.trim_to_newest(u64::MAX);
+    assert_eq!((untouched.first_frame(), untouched.candidates()), was);
+}
+
 /// cache hit against the cold scan.
 #[test]
 fn the_birth_schedule_is_the_rate_curves_integral() {

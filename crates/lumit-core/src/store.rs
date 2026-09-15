@@ -1150,6 +1150,7 @@ mod tests {
 
     fn test_comp() -> Composition {
         Composition {
+            graph: None,
             master_volume_db: 0.0,
             sound_mix: false,
             groups: Vec::new(),
@@ -1190,6 +1191,7 @@ mod tests {
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
+            graph_inputs: None,
             blend: Default::default(),
             masks: Vec::new(),
             paint: Vec::new(),
@@ -1802,6 +1804,7 @@ mod tests {
                     retime: None,
                     interpolation: Default::default(),
                     parked_flow: None,
+                    graph_inputs: None,
                     blend: Default::default(),
                     masks: Vec::new(),
                     paint: Vec::new(),
@@ -2152,6 +2155,7 @@ mod tests {
                     retime: None,
                     interpolation: Default::default(),
                     parked_flow: None,
+                    graph_inputs: None,
                     blend: Default::default(),
                     masks: Vec::new(),
                     paint: Vec::new(),
@@ -3893,5 +3897,279 @@ mod tests {
 
         store.undo().unwrap();
         assert_eq!(json(&store.snapshot()), before, "one undo puts it all back");
+    }
+
+    // -- The node graph composition (docs/impl/node-graph-comp.md §1.1, §3) ---
+
+    /// A comp with one Output box in it, filed and ready to be edited.
+    fn doc_with_node_graph() -> (DocumentStore, Uuid, crate::comp_graph::CompGraph) {
+        let seed = crate::comp_graph::CompGraph::new_with_output();
+        let mut comp = test_comp();
+        let comp_id = comp.id;
+        comp.graph = Some(seed.clone());
+        let store = DocumentStore::new(Document::new());
+        store
+            .commit(Op::AddItem {
+                index: 0,
+                item: Box::new(ProjectItem::Composition(comp)),
+            })
+            .expect("the node graph goes in");
+        (store, comp_id, seed)
+    }
+
+    fn graph_of(store: &DocumentStore, comp: Uuid) -> crate::comp_graph::CompGraph {
+        store
+            .snapshot()
+            .comp(comp)
+            .and_then(|c| c.graph.clone())
+            .expect("the comp is a node graph")
+    }
+
+    /// **A node graph has no layers, and the engine says so** (§1.1). The guard
+    /// sits beside the lock's, so a `Batch` is refused through its members and
+    /// the document is left exactly as it was.
+    #[test]
+    fn a_layer_op_on_a_node_graph_is_refused_and_so_is_a_graph_on_a_layer_comp() {
+        use crate::comp_graph::{CompGraph, GraphNode};
+
+        let (store, comp_id, seed) = doc_with_node_graph();
+        let before = json(&store.snapshot());
+
+        let add = || Op::AddLayer {
+            comp: comp_id,
+            index: 0,
+            layer: Box::new(test_layer(Uuid::now_v7())),
+        };
+        assert_eq!(
+            store.commit(add()),
+            Err(crate::ops::OpError::CompIsNodeGraph)
+        );
+        assert_eq!(
+            store.commit(Op::Batch { ops: vec![add()] }),
+            Err(crate::ops::OpError::CompIsNodeGraph),
+            "a batch is guarded through its members"
+        );
+        assert_eq!(json(&store.snapshot()), before, "nothing was swapped");
+
+        // And the other way round: a comp that has layers never becomes one.
+        let (layers, layer_comp, _) = doc_with_layer();
+        let before = json(&layers.snapshot());
+        assert_eq!(
+            layers.commit(Op::SetCompGraph {
+                comp: layer_comp,
+                graph: Box::new(CompGraph::new_with_output()),
+            }),
+            Err(crate::ops::OpError::CompIsNodeGraph)
+        );
+        assert_eq!(json(&layers.snapshot()), before);
+
+        // A comp-wide setting is legal on a node graph: it is a composition.
+        store
+            .commit(Op::SetCompBackground {
+                comp: comp_id,
+                background: LinearColour([0.5, 0.5, 0.5, 1.0]),
+            })
+            .expect("a background is not a layer");
+        assert_eq!(graph_of(&store, comp_id), seed);
+        let _ = GraphNode::Output { id: Uuid::now_v7() };
+    }
+
+    /// The values a Precomp layer hands the graph it places (§5.3): one op,
+    /// one undo step, and refused on a node graph by the guard every layer op
+    /// meets.
+    #[test]
+    fn setting_a_layers_graph_inputs_undoes_and_is_refused_on_a_node_graph() {
+        let (store, comp_id, layer_id) = doc_with_layer();
+        let inputs = crate::fx::instantiate("node_graph").expect("the catalogue knows it");
+        let inputs_of = |store: &DocumentStore| {
+            store
+                .snapshot()
+                .comp(comp_id)
+                .and_then(|c| c.layers.iter().find(|l| l.id == layer_id).cloned())
+                .expect("the layer")
+                .graph_inputs
+        };
+        assert_eq!(inputs_of(&store), None, "nothing typed yet");
+
+        store
+            .commit(Op::SetLayerGraphInputs {
+                comp: comp_id,
+                layer: layer_id,
+                inputs: Some(Box::new(inputs.clone())),
+            })
+            .expect("the instance goes on");
+        assert_eq!(inputs_of(&store), Some(inputs));
+
+        store.undo().expect("one step back");
+        assert_eq!(inputs_of(&store), None, "undo restores what was there");
+
+        let (graph_store, graph_comp, _) = doc_with_node_graph();
+        assert_eq!(
+            graph_store.commit(Op::SetLayerGraphInputs {
+                comp: graph_comp,
+                layer: Uuid::now_v7(),
+                inputs: None,
+            }),
+            Err(crate::ops::OpError::CompIsNodeGraph),
+            "a node graph has no layers to hand values to"
+        );
+    }
+
+    /// The whole-graph commit: one op, one undo step, and a refused graph
+    /// leaves the document untouched.
+    #[test]
+    fn setting_a_comp_graph_is_one_undo_step_and_a_bad_one_is_refused() {
+        use crate::comp_graph::{CompGraph, GraphEdge, GraphGroup, GraphNode};
+        use crate::graph::{GraphError, INPUT_PORT, OUTPUT_PORT};
+
+        let (store, comp_id, seed) = doc_with_node_graph();
+        let out_id = seed.output_id().expect("the seeded Output");
+
+        let blur = crate::fx::instantiate("blur").expect("the catalogue knows it");
+        let blur_id = blur.id;
+        let wired = CompGraph {
+            nodes: vec![GraphNode::Fx(blur), GraphNode::Output { id: out_id }],
+            edges: vec![GraphEdge {
+                from: blur_id,
+                from_port: OUTPUT_PORT.id.to_owned(),
+                to: out_id,
+                to_port: INPUT_PORT.id.to_owned(),
+            }],
+            layout: vec![(blur_id, [40.0, 12.0])],
+            exposed: vec![blur_id],
+            groups: vec![GraphGroup {
+                name: "The blur".into(),
+                colour: 1,
+                members: vec![blur_id],
+            }],
+        };
+        store
+            .commit(Op::SetCompGraph {
+                comp: comp_id,
+                graph: Box::new(wired.clone()),
+            })
+            .expect("a well-formed graph is accepted");
+        assert_eq!(graph_of(&store, comp_id), wired);
+        assert_eq!(
+            store.history().last().map(|e| e.name),
+            Some("Edit node graph")
+        );
+
+        assert!(store.undo().expect("undo applies").is_some());
+        assert_eq!(
+            graph_of(&store, comp_id),
+            seed,
+            "one gesture, one undo step"
+        );
+        assert!(store.redo().expect("redo applies").is_some());
+        assert_eq!(
+            graph_of(&store, comp_id),
+            wired,
+            "and the redo brings it back"
+        );
+
+        // A wire to a socket that is not there is refused before anything is
+        // swapped, and its own sentence crosses as `InvalidGraph`.
+        let mut broken = wired.clone();
+        broken.edges[0].to_port = "no_such_socket".into();
+        let before = json(&store.snapshot());
+        assert_eq!(
+            store.commit(Op::SetCompGraph {
+                comp: comp_id,
+                graph: Box::new(broken),
+            }),
+            Err(crate::ops::OpError::InvalidGraph(GraphError::UnknownPort))
+        );
+        assert_eq!(json(&store.snapshot()), before, "nothing was swapped");
+    }
+
+    /// **Undo symmetry over a scripted run of graph edits** (§7 test 12): every
+    /// step walked back leaves the document byte for byte as it started.
+    ///
+    /// A tiny deterministic sequence rather than a random one, so a failure is
+    /// the same failure on every machine.
+    #[test]
+    fn a_run_of_graph_edits_undoes_back_to_where_it_started() {
+        use crate::comp_graph::{CompGraph, GraphEdge, GraphNode};
+        use crate::graph::{INPUT_PORT, OUTPUT_PORT};
+
+        let (store, comp_id, seed) = doc_with_node_graph();
+        let out_id = seed.output_id().expect("the seeded Output");
+        let start = json(&store.snapshot());
+
+        // A small linear congruential generator: the same run every time, on
+        // every machine, with no crate for it.
+        let mut state: u32 = 0x1234_5678;
+        let mut next = || {
+            state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            state >> 16
+        };
+
+        let names = ["blur", "invert", "wiggle", "merge", "exposure"];
+        let mut graph = seed.clone();
+        let mut steps = 0;
+        for _ in 0..12 {
+            let roll = next() as usize;
+            let mut candidate = graph.clone();
+            match roll % 3 {
+                // Add a box, and wire it into the Output when it makes a
+                // picture and the Output is free.
+                0 => {
+                    let name = names[roll % names.len()];
+                    let inst = crate::fx::instantiate(name).expect("the catalogue knows it");
+                    let id = inst.id;
+                    candidate.nodes.insert(0, GraphNode::Fx(inst));
+                    candidate.layout.push((id, [roll as f64 % 500.0, 20.0]));
+                    if name != "wiggle" && candidate.wire_into(out_id, INPUT_PORT.id).is_none() {
+                        candidate.edges.push(GraphEdge {
+                            from: id,
+                            from_port: OUTPUT_PORT.id.to_owned(),
+                            to: out_id,
+                            to_port: INPUT_PORT.id.to_owned(),
+                        });
+                    }
+                }
+                // Move a box.
+                1 => {
+                    if let Some(place) = candidate.layout.first_mut() {
+                        place.1[0] += 10.0;
+                    }
+                }
+                // Twirl one open, or shut again.
+                _ => {
+                    let id = candidate.nodes.first().map(GraphNode::id);
+                    if let Some(id) = id {
+                        if candidate.exposed.contains(&id) {
+                            candidate.exposed.retain(|held| *held != id);
+                        } else {
+                            candidate.exposed.push(id);
+                        }
+                    }
+                }
+            }
+            if candidate.validate(Some(&store.snapshot())).is_err() {
+                continue;
+            }
+            store
+                .commit(Op::SetCompGraph {
+                    comp: comp_id,
+                    graph: Box::new(candidate.clone()),
+                })
+                .expect("a validated graph is accepted");
+            graph = candidate;
+            steps += 1;
+        }
+        assert!(steps > 4, "the run has to actually edit something");
+        assert_ne!(graph_of(&store, comp_id), seed, "and change the graph");
+
+        for _ in 0..steps {
+            store.undo().expect("undo applies");
+        }
+        assert_eq!(
+            json(&store.snapshot()),
+            start,
+            "every step walked back leaves the document as it began"
+        );
+        let _: CompGraph = graph;
     }
 }

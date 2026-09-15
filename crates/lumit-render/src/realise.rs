@@ -14,7 +14,14 @@
 //! Because every caller drives this one walk, a comp looks the same in the
 //! viewport, in Flutter, and in the exported file.
 
-use crate::draw::{AccumulationBelow, CompLayerDraw, DrawSource, LayerInputDraw};
+use crate::draw::{
+    AccumulationBelow, CompLayerDraw, DrawSource, GraphDraw, GraphStep, LayerInputDraw,
+};
+
+/// One `node_graph` op's own walk, as [`crate::fxops::run_ops`] calls it: the
+/// picture in, its raster, and the picture out. Borrowed for as long as the
+/// draw the plan came from.
+type GraphClosure<'a> = Box<dyn Fn(wgpu::Texture, u32, u32) -> wgpu::Texture + 'a>;
 
 /// The GPU primitives that turn a comp draw list into a linear texture,
 /// borrowed from whichever owner is compositing — a frontend's viewer, the
@@ -328,6 +335,8 @@ impl Realiser<'_> {
                         // boundary, and an unscheduled op passes its picture
                         // through.
                         &[],
+                        &[],
+                        &[],
                         // A matte's own stack is part of the effect that reads
                         // it, not a row of its own: its cost is inside that
                         // layer's span already.
@@ -401,6 +410,282 @@ impl Realiser<'_> {
         let made = self.realise(camera, width, height, background, layers);
         self.fx_cache.borrow_mut().put_nested(key, made.clone());
         made
+    }
+
+    /// The closures [`crate::fxops::run_ops`] calls in place of a `node_graph`
+    /// op's kernel: one per plan the draw carries, in the same stack order
+    /// (docs/impl/node-graph-comp.md §2.4).
+    ///
+    /// The graph is walked at the raster the host stack is running on, and its
+    /// own boxes are rescaled by the very factor the host's px parameters were:
+    /// `fx_ref_width` where the builder resolved against a wider raster (a
+    /// Precomp layer's, an adjustment's), and the layer's own natural width
+    /// otherwise, which is the scale its decode already applied.
+    ///
+    /// Empty on every layer that applies no graph, which allocates nothing.
+    fn graph_closures<'b>(&'b self, l: &'b CompLayerDraw, w: u32) -> Vec<GraphClosure<'b>> {
+        let ref_w = l.fx_ref_width.unwrap_or(l.natural_size.0);
+        let px = if ref_w > 0.0 { w as f32 / ref_w } else { 1.0 };
+        l.graph_fx
+            .iter()
+            .map(|plan| {
+                Box::new(move |tex: wgpu::Texture, gw: u32, gh: u32| {
+                    self.realise_graph(plan, Some(&tex), gw, gh, px)
+                }) as GraphClosure<'b>
+            })
+            .collect()
+    }
+
+    /// A transparent picture at `w` × `h` - what an unwired socket reads, and
+    /// what a graph with nothing in it shows.
+    ///
+    /// The compositor with no layers, which is a clear to the background and
+    /// nothing else, so the size is exactly the one asked for.
+    fn transparent(&self, w: u32, h: u32) -> wgpu::Texture {
+        self.compositor
+            .composite_with_camera(&self.ctx, w, h, [0.0, 0.0, 0.0, 0.0], &[], None)
+    }
+
+    /// **A node graph's picture** (docs/impl/node-graph-comp.md §2.3): the
+    /// plan's steps walked in order, one texture kept per step, and the one
+    /// the Output names handed back.
+    ///
+    /// `w` and `h` are the raster every step is made at. `scale` is how many of
+    /// those raster pixels one of the graph's own frame pixels is, which is the
+    /// render scale when the graph **is** the comp and the host stack's own
+    /// px_scale when it is applied as an effect. One number for both, because
+    /// both ask the same question: a Read box is placed in the graph's pixels,
+    /// and a box's px parameters were resolved in them.
+    ///
+    /// `provided` is the picture handed in from outside - the layer's own at
+    /// that point in the stack. `None` is the comp viewed on its own, where
+    /// the first picture Input reads transparent (§1.5).
+    ///
+    /// **What the walk does not carry in v1** (§2.3), each the same boundary a
+    /// group header takes: neighbour frames, flow fields, the below-stack,
+    /// paint, lighting, mask paths and roto mattes. Each is a carriage a step
+    /// would grow, and none blocks the compositing the graph is for.
+    pub fn realise_graph(
+        &self,
+        plan: &GraphDraw,
+        provided: Option<&wgpu::Texture>,
+        w: u32,
+        h: u32,
+        scale: f32,
+    ) -> wgpu::Texture {
+        use crate::fxops::LayerInput;
+        // One texture per step, `None` where the step reads transparent - an
+        // unwired socket, a Read of an item somebody deleted, a Switch pointed
+        // past its last picture. Nothing is allocated for one until a consumer
+        // actually needs a picture to work on.
+        let mut made: Vec<Option<wgpu::Texture>> = Vec::with_capacity(plan.steps.len());
+        let held = |made: &[Option<wgpu::Texture>],
+                    step: &Option<usize>|
+         -> Option<wgpu::Texture> { made.get((*step)?).cloned().flatten() };
+        for step in &plan.steps {
+            let tex = match step {
+                // The picture handed in, or nothing at all.
+                GraphStep::Provided => provided.cloned(),
+                // A further picture Input: a layer rendered alone, on the
+                // depth pass's own road.
+                GraphStep::Picture(input) => {
+                    match self
+                        .render_layer_inputs(std::slice::from_ref(input), w, h)
+                        .into_iter()
+                        .next()
+                    {
+                        Some(LayerInput::Texture(t)) => Some(t),
+                        // `ThisLayer` cannot reach here: a graph has no layer
+                        // for a reference to name.
+                        _ => None,
+                    }
+                }
+                // A project item at default placement, realised alone - the
+                // matte path's "render alone at comp size", in the graph's
+                // frame.
+                GraphStep::Read(draw) => {
+                    let linear = match &draw.source {
+                        DrawSource::Pixels {
+                            rgba,
+                            tex_w,
+                            tex_h,
+                            format,
+                            colour_space,
+                        } => self.upload_source(rgba, *tex_w, *tex_h, *format, colour_space),
+                        DrawSource::Nested {
+                            width,
+                            height,
+                            background,
+                            draws,
+                            camera,
+                            key,
+                            ..
+                        } => {
+                            self.realise_nested(*key, *camera, *width, *height, *background, draws)
+                        }
+                        // A Read box makes no other kind of source; a
+                        // transparent texel keeps the no-panic rule if that
+                        // ever regresses.
+                        DrawSource::Adjust | DrawSource::Graph(_) => self.transparent(1, 1),
+                    };
+                    Some(self.compositor.composite_with_camera(
+                        &self.ctx,
+                        w,
+                        h,
+                        [0.0, 0.0, 0.0, 0.0],
+                        &[lumit_gpu::CompositeLayer {
+                            texture: &linear,
+                            // The placement is in the graph's own pixels, so
+                            // it is carried into the raster by the one factor
+                            // everything else in this walk is.
+                            size: (draw.natural_size.0 * scale, draw.natural_size.1 * scale),
+                            position: (draw.position.0 * scale, draw.position.1 * scale),
+                            anchor: (draw.anchor.0 * scale, draw.anchor.1 * scale),
+                            scale: draw.scale,
+                            rotation_deg: draw.rotation_deg,
+                            opacity: draw.opacity,
+                            matte: None,
+                            blend: lumit_gpu::Blend::Normal,
+                            z: 0.0,
+                            rotation_x_deg: 0.0,
+                            rotation_y_deg: 0.0,
+                            three_d: false,
+                            layer_mask: None,
+                            pre: None,
+                        }],
+                        None,
+                    ))
+                }
+                GraphStep::Fx {
+                    input,
+                    ops,
+                    matte,
+                    picture,
+                    colour_tables,
+                    flare_lens_files,
+                    ..
+                } => {
+                    let tex = held(&made, input).unwrap_or_else(|| self.transparent(w, h));
+                    // The box's px parameters were resolved in the graph's own
+                    // frame; this is the raster they run on.
+                    let mut ops = ops.clone();
+                    ops.rescale_spatial(scale);
+                    let luts = self.load_tables(colour_tables);
+                    let flare_lens = self.load_flare_lens(flare_lens_files);
+                    let bind = |step: &Option<usize>| match held(&made, step) {
+                        Some(t) => LayerInput::Texture(t),
+                        None => LayerInput::Absent,
+                    };
+                    let out = crate::fxops::run_ops(
+                        self.fx,
+                        &self.ctx,
+                        tex,
+                        w,
+                        h,
+                        &ops,
+                        &[],
+                        &[],
+                        &luts,
+                        &[bind(picture)],
+                        &flare_lens,
+                        &[bind(matte)],
+                        // A graph has no masks, no birth schedules, no
+                        // propagated mattes and no graph of its own to run
+                        // here: a nested graph was lowered into these very
+                        // steps rather than left as an op.
+                        &[],
+                        &[],
+                        &[],
+                        &[],
+                        None,
+                        // Nothing names a box's picture in v1, so every step
+                        // runs uncached; the comp above it is cached by its
+                        // frame key as any comp is.
+                        None,
+                    );
+                    // Every box's picture is the graph's frame, so an op that
+                    // grew its raster is cropped back to it. `fit_centred`
+                    // returns its argument when the size already matches.
+                    Some(lumit_gpu::fx::fit_centred(&self.ctx, out, w, h))
+                }
+                // A over B, both full-frame at identity on a transparent
+                // ground: B first at Normal and full opacity, then A with the
+                // mode and the opacity. An unwired A gives B; an unwired B
+                // gives A over nothing.
+                GraphStep::Merge {
+                    a,
+                    b,
+                    mode,
+                    opacity,
+                } => {
+                    let (a, b) = (held(&made, a), held(&made, b));
+                    if a.is_none() && b.is_none() {
+                        None
+                    } else {
+                        fn full(
+                            texture: &wgpu::Texture,
+                            (w, h): (u32, u32),
+                            blend: lumit_gpu::Blend,
+                            opacity: f32,
+                        ) -> lumit_gpu::CompositeLayer<'_> {
+                            lumit_gpu::CompositeLayer {
+                                texture,
+                                size: (w as f32, h as f32),
+                                position: (0.0, 0.0),
+                                anchor: (0.0, 0.0),
+                                scale: (100.0, 100.0),
+                                rotation_deg: 0.0,
+                                opacity,
+                                matte: None,
+                                blend,
+                                z: 0.0,
+                                rotation_x_deg: 0.0,
+                                rotation_y_deg: 0.0,
+                                three_d: false,
+                                layer_mask: None,
+                                pre: None,
+                            }
+                        }
+                        let mut layers = Vec::with_capacity(2);
+                        if let Some(b) = &b {
+                            layers.push(full(b, (w, h), lumit_gpu::Blend::Normal, 100.0));
+                        }
+                        if let Some(a) = &a {
+                            let mode = lumit_core::model::BlendMode::ALL
+                                .get(*mode as usize)
+                                .copied()
+                                .unwrap_or(lumit_core::model::BlendMode::Normal);
+                            layers.push(full(a, (w, h), crate::build::blend_of(mode), *opacity));
+                        }
+                        Some(self.compositor.composite_with_camera(
+                            &self.ctx,
+                            w,
+                            h,
+                            [0.0, 0.0, 0.0, 0.0],
+                            &layers,
+                            None,
+                        ))
+                    }
+                }
+                // The picture the Index names, and transparent when that
+                // socket is unwired or the index is out of range.
+                GraphStep::Switch { inputs, index } => usize::try_from(*index)
+                    .ok()
+                    .and_then(|i| inputs.get(i))
+                    .and_then(|step| held(&made, step)),
+            };
+            made.push(tex);
+        }
+        match plan.output {
+            Some(step) => made
+                .get(step)
+                .cloned()
+                .flatten()
+                .unwrap_or_else(|| self.transparent(w, h)),
+            // Nothing wired to the Output, and the passthrough a dangling
+            // Node graph effect degrades to.
+            None => provided.cloned().unwrap_or_else(|| self.transparent(w, h)),
+        }
     }
 
     /// Stamp a Precomp layer's paint strokes into its realised picture.
@@ -483,13 +768,78 @@ impl Realiser<'_> {
         // outermost `end_frame`, so a frame costs one round trip rather than one
         // per layer and per effect. `begin_frame` nests, which is what lets this
         // sit on the recursive entry point rather than being threaded by hand.
-        self.ctx.begin_frame();
+        //
+        // It is also the one place a frame's video memory can still be refused
+        // (docs/13 §3): a texture cannot be denied half way through a pass, so
+        // the whole frame is reserved for before a single one of them records.
+        let (tw, th) = lumit_gpu::scaled_size(width, height, self.render_scale);
+        self.open_frame(tw, th, layers);
         let out = self.realise_at_depth(camera, width, height, background, layers, region);
         self.ctx.end_frame();
         if let Some(p) = self.profiler {
             p.leave_comp();
         }
         out
+    }
+
+    /// Reserve this frame's video memory and open its command batch, stepping
+    /// down the degradation ladder (docs/13 §4) if the governor says no.
+    ///
+    /// # In plain terms
+    ///
+    /// The two rungs the renderer owns are here, in order and cheapest first:
+    /// stop filling the intermediate cache, then give the cold half of it back.
+    /// Both are invisible — the picture that comes out is identical, only made
+    /// again rather than read back — which is exactly why they are the rungs
+    /// that may be taken on a memory reading. The rungs that *are* visible (the
+    /// preview resolution tier, tiling, the flow swap, the calm banner) change
+    /// what is drawn, so they belong to the caller, which reads the denial
+    /// count and steps down deliberately; export never takes them at all.
+    ///
+    /// A frame that is still refused after both is **rendered anyway**. There
+    /// is nothing honest to return instead — a texture cannot be refused half
+    /// way through a pass, and a black frame is a worse answer than a slow one
+    /// — so what the refusal buys is a truthful readout and a governor that
+    /// says no earlier next time, not an abort. Nested frames take this path
+    /// too and reserve nothing: they are already inside their parent's
+    /// reservation, and counting them again would refuse a frame that fits.
+    fn open_frame(&self, tw: u32, th: u32, layers: &[CompLayerDraw]) {
+        let estimate = self.frame_estimate(tw, th, layers);
+        if self.ctx.try_begin_frame(estimate).is_ok() {
+            return;
+        }
+        // Rung one is already taken and takes itself back: the effect walk
+        // reads the same pressure and stops filing while it lasts
+        // ([`crate::fxops::run_ops`]), so there is no flag here to set and
+        // later remember to clear. Rung two is this.
+        self.fx_cache.borrow_mut().trim_under_pressure();
+        if self.ctx.try_begin_frame(estimate).is_err() {
+            self.ctx.begin_frame();
+        }
+    }
+
+    /// What this frame is expected to hold on the card at its **peak** — not
+    /// its total, which is a far larger and far less useful number.
+    ///
+    /// Layers are composited one at a time into one accumulator and the effect
+    /// walk ping-pongs through the frame's texture pool, so a hundred-layer
+    /// comp peaks at a handful of pictures rather than a hundred. What does
+    /// grow with the project is the layers that stage through a comp-sized
+    /// intermediate of their own — an adjustment layer, which needs everything
+    /// below it composited first, and a motion-blurred one, which holds an
+    /// accumulator across its shutter. They are the same two the region
+    /// window steps aside for ([`region_is_safe`]), and for the same reason.
+    fn frame_estimate(&self, tw: u32, th: u32, layers: &[CompLayerDraw]) -> u64 {
+        /// The accumulator, the layer being drawn, the two the effect walk
+        /// passes between, and headroom for the matte or plate an effect reads
+        /// beside them.
+        const FRAME_PEAK_TEXTURES: u64 = 6;
+        let staged = layers
+            .iter()
+            .filter(|l| matches!(l.source, DrawSource::Adjust) || !l.mb.is_empty())
+            .count() as u64;
+        lumit_gpu::texture_bytes(self.ctx.working(), tw, th)
+            .saturating_mul(FRAME_PEAK_TEXTURES.saturating_add(staged))
     }
 
     fn realise_at_depth(
@@ -574,6 +924,13 @@ impl Realiser<'_> {
             // Empty unless one of those effects is live.
             let (flow_neighbours, flow) =
                 self.measure_below_flow(l, &fx_input, width, height, background);
+            // A Node graph effect on an adjustment layer applies to the
+            // composite below, which is the picture it is handed - so the
+            // closures are built here exactly as they are for a layer's own
+            // stack.
+            let plans = self.graph_closures(l, tw);
+            let graphs: Vec<&dyn Fn(wgpu::Texture, u32, u32) -> wgpu::Texture> =
+                plans.iter().map(|f| &**f).collect();
             // The adjustment's own stack, coverage and blend all run on the
             // ACTUAL raster: `adjust_blend` reads its three inputs texel by
             // texel, so they must agree on their size.
@@ -592,6 +949,11 @@ impl Realiser<'_> {
                 &mattes,
                 &l.mask_paths,
                 &l.points_schedules,
+                // An adjustment layer has no source frames, so nothing was
+                // ever propagated through it: a Roto brush there passes
+                // through.
+                &[],
+                &graphs,
                 fx_ms.as_mut(),
                 // The composite below carries no name in v1.
                 None,
@@ -643,28 +1005,7 @@ impl Realiser<'_> {
         ab: &AccumulationBelow,
         below: &wgpu::Texture,
     ) -> wgpu::Texture {
-        let frames: Vec<wgpu::Texture> = ab
-            .samples
-            .iter()
-            .map(|(draws, camera)| {
-                let frame = self.realise(*camera, width, height, background, draws);
-                // Hand this sample's work to the card and wait for it before
-                // starting the next. A frame is one batch, and nothing a
-                // batch allocates comes back until it has run: with the N
-                // samples inside it, every sample's intermediates stayed
-                // alive together. Eight samples over one 1080p layer held
-                // 2.1 GB against 200 MB for the frame alone, which is enough
-                // to take a card down. Waiting per sample keeps one sample's
-                // scratch alive at a time; the finished sample textures are
-                // all that accumulate. The wait costs the overlap between
-                // encoding a sample and drawing the last, small beside N
-                // full renders.
-                self.ctx.flush();
-                self.ctx.settle();
-                frame
-            })
-            .collect();
-        if frames.is_empty() {
+        if ab.samples.is_empty() {
             // No samples (N < 2) degrades to the plain below — never a panic.
             return below.clone();
         }
@@ -682,6 +1023,42 @@ impl Realiser<'_> {
             .into_iter()
             .next()
             .and_then(|slot| slot.texture(below).cloned());
+        // Each sample is rendered, folded into the running average, and let go
+        // of before the next one starts.
+        //
+        // **This is the whole shape of the thing.** The samples used to be
+        // collected into a `Vec` and handed to the combine in one go, which
+        // meant N finished composites alive together: a thirty-two-sample
+        // shutter at 4K is two gigabytes of them, waiting for a pass that reads
+        // each exactly once and never looks at it again. Both combines were
+        // already one-sample-at-a-time internally; all that was needed was to
+        // let the samples arrive that way.
+        //
+        // Peak memory is now flat in N — the accumulator plus whichever sample
+        // is in hand — and the arithmetic is unchanged, which is the part that
+        // had to be got right rather than merely made smaller. The equal-weight
+        // path still sums in fp32 across the same two ping-ponged targets, in
+        // the same order, resolving once at the end;
+        // `streaming_accumulation_matches_the_one_shot` in `lumit-gpu` holds
+        // that byte for byte against the previous implementation.
+        let n = ab.samples.len();
+        let sample_at = |k: usize| -> Option<wgpu::Texture> {
+            let (draws, camera) = ab.samples.get(k)?;
+            let frame = self.realise(*camera, width, height, background, draws);
+            // Hand this sample's work to the card and wait for it before
+            // starting the next. A frame is one batch, and nothing a batch
+            // allocates comes back until it has run: with the N samples inside
+            // it, every sample's intermediates stayed alive together. Eight
+            // samples over one 1080p layer held 2.1 GB against 200 MB for the
+            // frame alone, which is enough to take a card down. Waiting per
+            // sample keeps one sample's scratch alive at a time. The wait costs
+            // the overlap between encoding a sample and drawing the last, small
+            // beside N full renders.
+            self.ctx.flush();
+            self.ctx.settle();
+            Some(frame)
+        };
+
         let average = if let Some(matte) = matte {
             // Channel and Invert, once, before anything reads it. The
             // dispatch seam does this for every other effect; this one has no
@@ -699,14 +1076,38 @@ impl Realiser<'_> {
                 } else {
                     matte
                 };
-            self.fx
-                .accumulate_with_shutter(&self.ctx, &frames, &matte, tw, th, ab.anchor)
+            let mut acc: Option<wgpu::Texture> = None;
+            for k in 0..n {
+                let Some(frame) = sample_at(k) else { continue };
+                acc = Some(self.fx.accumulate_shutter_step(
+                    &self.ctx,
+                    acc.as_ref(),
+                    &frame,
+                    &matte,
+                    tw,
+                    th,
+                    ab.anchor,
+                    n as f32,
+                    k,
+                ));
+            }
+            // `n` is not zero — the empty case returned above — so the loop ran
+            // at least once unless every sample failed to render, which is the
+            // plain below rather than a panic.
+            match acc {
+                Some(acc) => acc,
+                None => return below.clone(),
+            }
         } else {
             // Equal weights 1/N sum to 1: the premultiplied arithmetic mean.
-            let weight = 1.0 / frames.len() as f32;
-            let avg_layers: Vec<(&wgpu::Texture, f32)> =
-                frames.iter().map(|f| (f, weight)).collect();
-            self.compositor.accumulate(&self.ctx, tw, th, &avg_layers)
+            let weight = 1.0 / n as f32;
+            let mut running = self.compositor.accumulator(&self.ctx, tw, th);
+            for k in 0..n {
+                let Some(frame) = sample_at(k) else { continue };
+                self.compositor
+                    .add_into(&self.ctx, &mut running, &frame, weight);
+            }
+            self.compositor.resolve(&self.ctx, &running)
         };
         if ab.mix >= 1.0 {
             average
@@ -871,6 +1272,8 @@ impl Realiser<'_> {
                 &[],
                 // As above: a referenced layer's own stack walks no
                 // mask path, and carries no birth schedule, in v1.
+                &[],
+                &[],
                 &[],
                 &[],
                 // A matte's own stack is part of the layer it
@@ -1051,6 +1454,16 @@ impl Realiser<'_> {
                         *paint_time,
                     )
                 }
+                // **A node graph composition** (docs/impl/node-graph-comp.md
+                // §2.3). Its frame is allocated at the render scale like every
+                // comp's, and the walk places its Read boxes in the graph's
+                // own pixels, so the scale applies once and a graph renders at
+                // half preview what a layer comp of the same picture does.
+                DrawSource::Graph(plan) => {
+                    let (gw, gh) =
+                        lumit_gpu::scaled_size(plan.width, plan.height, self.render_scale);
+                    self.realise_graph(plan, None, gw, gh, self.render_scale)
+                }
                 DrawSource::Adjust => {
                     // realise splits segments at every Adjust draw, so none
                     // reaches here; a transparent texel keeps the no-panic
@@ -1148,7 +1561,15 @@ impl Realiser<'_> {
                     .iter()
                     .map(|slot| slot.as_ref().map(|m| upload_roto_matte(&self.ctx, m)))
                     .collect();
-                crate::fxops::run_ops_with_roto(
+                // The graphs this layer's Node graph effects apply
+                // (docs/impl/node-graph-comp.md §2.4): `run_ops` cannot reach
+                // the realiser, so it is handed one closure per enabled
+                // instance and calls the k-th where the k-th such op would
+                // have dispatched a kernel.
+                let plans = self.graph_closures(l, w);
+                let graphs: Vec<&dyn Fn(wgpu::Texture, u32, u32) -> wgpu::Texture> =
+                    plans.iter().map(|f| &**f).collect();
+                crate::fxops::run_ops(
                     self.fx,
                     &self.ctx,
                     tex,
@@ -1164,6 +1585,7 @@ impl Realiser<'_> {
                     &l.mask_paths,
                     &l.points_schedules,
                     &roto_mattes,
+                    &graphs,
                     fx_ms.as_mut(),
                     // The per-effect cache, for a source the builder
                     // could name; a nested comp, text or shape runs as before.
@@ -1613,6 +2035,7 @@ mod tests {
             pre: None,
             fx: lumit_core::fx::ResolvedStack::new(),
             fx_ids: Vec::new(),
+            graph_fx: Vec::new(),
             neighbours: Vec::new(),
             flow_fields: Vec::new(),
             colour_tables: Vec::new(),

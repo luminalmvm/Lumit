@@ -13,6 +13,7 @@ test-fixtures = []
 
 [dependencies]
 bincode = "1"
+lumit-ingress = { path = "../lumit-ingress" }
 blake3 = "1"
 # OpenEXR's own reader, for the one thing ffmpeg cannot do: say which channels
 # a file holds, and hand back one named channel rather than the RGB it guesses
