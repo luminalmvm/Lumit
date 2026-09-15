@@ -3415,10 +3415,13 @@ class LayerReference {
   /// the graph editor commits when a handle is dragged, and what a lane drag
   /// of several keys at once needs.
   ///
-  /// `keys` must name every key the mask has, in order; their `value` is
+  /// `keys` names every key the mask has, in order; their `value` is
   /// ignored, because a path key holds a shape rather than a number. Refused
   /// as a whole if the times are not strictly ascending: the evaluator walks
   /// the list assuming they are, and a half-applied reorder is not a mask.
+  ///
+  /// A shorter list is a delete. Each key it names is found by its time, and
+  /// the rest go. Deleting the last key leaves the shape that key held.
   bool setMaskPathKeys(
           {required UuidValue id, required List<BridgeKeyframe> keys}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceSetMaskPathKeys(

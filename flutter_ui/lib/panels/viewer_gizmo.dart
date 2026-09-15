@@ -1357,7 +1357,9 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   void _commitPoints() {
     if (_delta == Offset.zero || _points.isEmpty) return;
     var landed = false;
-    for (final box in _selected) {
+    // The same boxes a point can be grabbed from, so a picked Path row's
+    // layer gets the write even when the layer isn't selected.
+    for (final box in _editablePointBoxes) {
       final d = pointDeltaIn(box, _delta);
       for (final mask in box.masks) {
         final moved = maskWithPointsMoved(box, mask, _points, d);
@@ -1429,7 +1431,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   /// request, so this previews a single layer, exactly as a move does.
   void _previewPoints() {
     final touched = [
-      for (final box in _selected)
+      for (final box in _editablePointBoxes)
         if (pathPointsOf(box).any((p) => _points.contains(p.key))) box,
     ];
     if (touched.length != 1) return;
