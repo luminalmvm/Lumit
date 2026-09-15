@@ -15,14 +15,24 @@ this file is the concrete backlog underneath it.
 
 ## The finishing programme: COMPLETE (2026-08-25..26)
 
-All seven waves landed and their per-wave summaries were pruned as they went; git log
-is the record. What the programme's own runs
-surfaced and deliberately left open, so it is not re-derived:
+All seven waves landed and their per-wave summaries were pruned as they went. The history
+was squashed on 2026-09-01, so git log is no longer the record of them and every commit
+hash older than that is a dead pointer - which is why the entries below carry the fact
+rather than the commit. What the programme's own runs surfaced and deliberately left open,
+so it is not re-derived:
 
-- **The physical Lens flare renders nothing on a headless run** - bit-identical to the
-    plate at defaults AND with a bright area light placed on the frame. The manual's
-    flare page has no figure because of it. Smells adjacent to the MSAA/fp16-additive
-    history; wants its own investigation with a non-empty-output assertion.
+- **The physical Lens flare's headless blank is fixed; the example harness has not caught
+    up.** The defect was the flare's own `blend`, injected under the Blend row's id and then
+    read by an index into the *layer* modes: a fresh flare's Add (index 1) came back as
+    Darken against the untouched input, so every flare on anything darker than itself
+    rendered nothing. `a_default_lens_flare_lights_the_frame` in
+    `crates/lumit-render/src/headless.rs` is the non-empty-output assertion this entry asked
+    for. What is left is `effect_examples.rs`, which still carries the skip written around
+    the defect ("adds nothing to a headless render") and whose own comment says to take the
+    line out the day the additive pass reaches this renderer. Lift it and re-run the harness:
+    the manual's flare page already draws a `<Compare>` over
+    `web-docs/src/assets/effects/stylise/lens-flare.webp`, so what the run settles is whether
+    that figure is a flare or the plate.
 - **Shots sweep 4 crashes natively about one run in three** ("Lost connection to
     device", no Dart exception, different point each run). All its pictures were
     gathered across runs; the sweep is unreliable and the crash is an engine bug in
@@ -30,36 +40,45 @@ surfaced and deliberately left open, so it is not re-derived:
 - **Six screenshots the manual still wants** (pages ship without them, no placeholders):
     camera-track.png, planar-track.png, project-settings-colour.png,
     viewer-colour-menu.png, text-animators.png, shape-combine.png.
-- **Clone to points / Trail / Connect points have no example pictures by nature** -
-    the effect-example harness stages one effect on one layer and their stream arrives
-    on a wire. An example route through a two-effect stage would fix all three.
+- **Clone to points / Trail / Connect points and the Node graph effect have no example
+    pictures** - the effect-example harness stages one effect on one layer, and all four
+    want a graph behind them: a points stream arrives on a wire-only input
+    (points-stream.md §4.1) that exists in a node graph and nowhere else. Now that a
+    composition can *be* a graph, one graph in the example project would fix all four
+    (`unillustrable` in `effect_examples.rs`).
 - **The audio device-change stream** (a device vanishing mid-playback rebuilds on the
     next open, not live) - the remainder recorded when the Audio settings landed.
-- Crowdin at the next push owes: the pre-programme ~360 keys, 53 safe-lane keys, every
-    FP key (listed per commit), 63 changed tooltip values, tipBrushPressure, and the
-    unused settingsHelpChromeLabels to cull.
-- **Syntax highlighting in the shader editor** (Airyz, 2026-09-01: "u can reuse the
-    syntax highlighting logic from the expression editor"). Held back from 0.3.0, and not
-    for the reason it looks like. `ExpressionTextEditingController` is forty lines over the
-    `syntax_highlight` package and takes a language in one string, so pointing it at Rust
-    (the nearest grammar shipped; there is no WGSL one) is three edits. What stops it is
-    what the package paints unconditionally: six hardcoded bracket colours and a
-    `Color(0xFFff0000)` for an unmatched one, with no API to turn them off - hex in the
-    frontend is a defect, and the token colours are VS Code's two default themes,
-    so six of Lumit's eight schemes would get somebody else's palette. The honest road is
-    `Highlighter.addLanguage`, which takes a TextMate grammar as a plain string (no asset,
-    no `pub get` - which matters, since pub-cache writes from this machine land in the MSIX
-    overlay), plus a theme-driven palette. Also required either way: the controller's
-    `buildTextSpan` discards the style it is handed, which would drop the shader well's
-    `height: 1.4` and drift the line numbers out of step with the code.
+    `audio::devices()` still enumerates only when it is asked, and `set_device` still closes
+    the stream and waits for the next prepare.
+- Crowdin at the next push owes everything since the programme: its own batches (the
+    pre-programme ~360 keys, 53 safe-lane keys, every FP key listed per commit, 63 changed
+    tooltip values and tipBrushPressure), and then every key 0.3.x and 0.4.0 added on top -
+    the node graph, the Audio panel and its fifteen effects, the extra Viewers, the
+    governor's readouts, EXR and project colour depth, OCIO. English stands at 2,894 keys;
+    German is 743 short, Kazakh 1,641, Ukrainian 1,436, and both Chinese 680 each, with
+    Spanish and Polish still empty placeholders. `settingsHelpChromeLabels` is still unused
+    in the frontend and still to cull.
+- **The shader editor is highlighted; its palette is not ours.** Airyz took the honest road
+    on 2026-09-08 - a WGSL TextMate grammar as a plain string through
+    `Highlighter.addLanguage` (`flutter_ui/assets/data/grammar/wgsl.json`), no asset
+    package, no `pub get` - and `ExpressionTextEditingController` now takes a language, so
+    the shader well and the expression well share one controller. Two of the three reasons
+    it was held back stand. The token colours are still VS Code's two default themes
+    (`_defaultLightThemeFiles`/`_defaultDarkThemeFiles`), so six of Lumit's eight schemes get
+    somebody else's palette, and the package still paints six hardcoded bracket colours and a
+    `Color(0xFFff0000)` for an unmatched one with no API to turn them off - hex in the
+    frontend is a defect. And `buildTextSpan` still discards the style it is handed, which
+    drops the shader well's `height: 1.4` and can drift the line numbers out of step with
+    the code.
 - **A shader could be a project item** (Airyz, 2026-09-01): "i'd like if i could load a
     file in the project view and reference that instead, as it would give the same options
     for 'find missing footage' and stuff to swap the file to something else. It would also
     follow the same settings for relative/absolute file paths". Today Load from file copies
     the text into the instance (`extra["shader"]["source"]`) and the path is a
     memory rather than a link. Making it an item means a project-item kind that is not
-    footage, the relink road reaching it, and a decision about what a missing shader
-    renders - which is a decision-sized change, not an editor one.
+    footage - `ProjectItem` is still Footage, Folder, Composition, Solid - the relink road
+    reaching it, and a decision about what a missing shader renders, which is a
+    decision-sized change, not an editor one.
 - **The Project panel is not virtualised**, which docs/13-PERFORMANCE-RULES.md §5 names
     it in: `ListView(children: rows)` builds every row of the open tree whatever the
     viewport holds, with no `itemExtent` on a fixed-height list. The click and the probe
@@ -67,32 +86,32 @@ surfaced and deliberately left open, so it is not re-derived:
     cache and the coalesced rebuild, 2026-09-01); this is what is left, and it is the
     scroll half. `LazyBlocks` in timeline_metrics_frb.dart is the machinery to reuse.
     Note `_visibleIds` must keep the whole filtered tree - Ctrl+A reads it.
-- **A click still rebuilds the whole Project panel.** Selection is `setState` on the
-    panel, where the Timeline publishes it as row state instead (f137662f). Two rows
-    change; every row rebuilds. Cheap now that the names are cached, and the next thing
-    to do if the panel still feels heavy on a large project.
+- **A click still rebuilds the whole Project panel.** `_select` is `setState` on the
+    panel, where the Timeline publishes its selection on a notifier the rows read instead.
+    Two rows change; every row rebuilds. Cheap now that the names are cached, and the next
+    thing to do if the panel still feels heavy on a large project.
 - **An undecodable file imports silently.** The dialogue no longer hides formats
     (the filter lists what the engine reads, with All files beside it), so what is left
     is the answer: a file FFmpeg cannot open becomes a footage item with no picture and
-    no reason. `thumbnail` returns `None` for undecodable and missing alike, and only
-    missing wears a badge. Testers reading that as "it would not import" is what raised
-    it. Wants the probe's error carried to the row and said in one line.
+    no reason. `FootageReference::thumbnail` still returns `None` for undecodable and
+    missing alike, and only missing wears a badge. Testers reading that as "it would not
+    import" is what raised it. Wants the probe's error carried to the row and said in one
+    line.
 - **Some languages went backwards when the Crowdin branch merged.** Its five `.arb`s
     lost to the site tool's own output, which is newer and much fuller, but it had keys
     theirs do not: 152 in Kazakh, 134 in Ukrainian, 42 in German, 37 in each Chinese.
     Those keys are simply untranslated again, so the translation page already lists them
     for whoever wants them - nothing to do here. The community's earlier words for them
-    are in c5845a78 if anyone wants to compare.
-- **The flare's raster still draws the cells it culled.** A batch now
-    draws exactly its own cells, but a cell the guards kill is still stored and
-    still submitted as a degenerate off-screen triangle. Compacting to just the
-    live cells would cut the vertex work again; it must be a **prefix-sum**
-    compaction, not an atomic append, because additive blending is float
-    addition and the drawn order has to stay fixed or the frame stops being
-    bit-stable (docs/impl/lens-flare.md §2.4). Measure the live fraction first.
-    Same shape of win in Matte mode from skipping dead light slots with an
-    indirect dispatch: eight slots are always dispatched, however many sources
-    the detection actually found.
+    are no longer reachable: the commit that held them predates the 2026-09-01 squash.
+- **The flare's Matte mode always dispatches every light slot.** The raster half of this
+    entry is gone with the raster: the splat sum moved off the fp16 blender into the
+    fixed-point compute deposit (`fx_lens_flare_deposit.wgsl`), which skips a dead splat
+    outright (`s.live < 0.5`) rather than drawing a degenerate quad, so there is no vertex
+    work left to compact and the prefix-sum question is moot. What stands is the light
+    list: Matte mode runs `MAX_SOURCES` - sixteen, not eight - candidate slots whatever the
+    detection actually found, where an indirect dispatch would run the ones it filled.
+    Measure the live fraction first. (docs/impl/lens-flare.md §4's pass structure still
+    describes the retired quad raster and wants rewriting with it.)
 - **Replace `poll(Maintain::Wait)` with a keyed mutex** - every present waits for
     the card to go idle before handing the texture over (`shared.rs`,
     `shared_linux.rs`, `shared_metal.rs`; find it by the call, not a line number).
@@ -102,10 +121,6 @@ surfaced and deliberately left open, so it is not re-derived:
     Measure first: the 2026-07-30 fixes may have made it moot. Not a revival of
     the deleted read-back transport - the Viewer receives a GPU handle
     and nothing else.
-- **Playback's remaining bridge chatter scales with rows on screen** - one
-    `sample_scalar` per animated row plus one `time_of_frame`. Batch per frame if
-    it ever bites, the way `time_of_frame` already was.
-    (`bridge_call_budget_test.dart` is the gate.)
 
 ---
 
@@ -121,9 +136,16 @@ each one's measured before-and-after. What is still open is the raster half, whi
 not Lumit's:
 
 - **WP-1 - LANDED, then reversed on shipping**: the unmet gap is the
-    Windows embedder's own (4x MSAA whole-window resolve, no partial repaint - ~8
-    ms/megapixel) and WP-7 in the note (§7.2) pursues it - the drafted upstream issue
-    (§7.1, still unfiled), the local-engine MSAA test; the runner meanwhile pins Skia.
+    Windows embedder's own - the whole window re-records every frame, because the
+    `FlutterCompositor` path cannot reach the engine's partial-repaint machinery, at
+    ~8 ms/megapixel. **Not the MSAA resolve**: that hypothesis was built and A/B'd on
+    2026-08-31 and the single-sample path measured ~5 ms *worse*, so §7's own item 1 still
+    reads the old diagnosis and wants correcting against §7.1/§7.2. WP-7 in the note (§7.2)
+    carries what is left: the drafted upstream issue (§7.1, still unfiled - the owner files
+    it), narrowing the ~18 ms live-preview texture term to a repro outside Lumit *if* it
+    reproduces at all (the same session could not), and watching upstream for a Vulkan
+    compositor or damage plumbing. The local-engine partial-repaint prototype is evidence
+    for the issue, not a pull request. The runner meanwhile pins Skia.
 - **Per Flutter upgrade: re-run the §2.4 backend A/B** in the owner's conditions
     (docs/impl/ui-performance.md §2.1/§6, one run each backend) and flip
     `ImpellerSwitch::Disabled` back to `Default` in
@@ -136,30 +158,33 @@ not Lumit's:
 
 ## Now - the effect registry (docs/impl/effect-registry.md §6)
 
-The migration is done. All 35 built-ins declare themselves in
-`lumit-core/src/fx/effects/`, one file each; `catalogue.rs` generates both halves of the
+The migration is done. All 139 catalogue entries declare themselves one file each under
+`lumit-core/src/fx/effects/` and `fx/drivers/`; `catalogue.rs` generates both halves of the
 catalogue from one list; a frame resolves every effect through one generic loop into the
 arena, and `run_ops` and `cpu::apply_stack` dispatch by name with no match over effects
 left in either. `Resolved`, `ResolvedOps`, `resolve_one`, the free `rescale_px` and the
-hand-written `BUILTINS` literal are all deleted, and with them the migration-only
-`the_generated_schema_matches_the_hand_written_one`. What is left is §6 step 5.
+hand-written `BUILTINS` literal are all gone. What is left is §6 step 5.
 
-- **Dynamic parameters** - derived from a custom shader's uniforms or a node graph's exposed
-    inputs; then **spare parameters**, the user's own sliders for expressions to read. The
-    rules are settled (§4 of the note). The Node graph effect's derived rows are the first of
-    these, built with NG1; the panel affordances for adopting a row and removing one are
-    what remains.
-- **Bridge and panel**: `list_parameters` and the Effect Controls read the schema, so they
-    follow for free - except for dynamic parameters, which are per *instance* rather than per
-    effect and need a bridge call that takes an instance id.
+- **Spare parameters and the panel affordances.** Dynamic parameters themselves are
+    built: `EffectDef::derived(&inst)` is implemented by the Custom shader (from its
+    uniforms), the Node graph effect (from the graph's exposed Inputs) and Extract
+    channels, all three through one session-lived cache into a leaked
+    `&'static [ParamSchema]`, and nothing downstream can tell a derived row from a
+    declared one. What remains is the panel's half, where the rules (§4 of the note) put
+    it: a derived row is **offered, never adopted** (docs/08 §3.95), and there is no
+    gesture yet that adopts one or removes a row the graph or the shader no longer has -
+    CS2's `sync_parameters` and `remove_unused_parameters` are unwritten. Then **spare
+    parameters**, the user's own sliders for expressions to read, which need no shader at
+    all and ride the same mechanism.
 
-- **The effect manual is five pages behind the catalogue.** The catalogue stands at 90 and
-    `web-docs/src/content/docs/effects/` holds 85 pages: the Controls category has no
-    index and no five pages, and the four wipes' Completion still prints as `float` where
-    the schema now says `slider`. `npm run docs:effects` from `web-docs/` creates and
-    refreshes all of it inside the `GENERATED` markers; the five new pages then want their
-    protected prose written by hand. Nothing in CI gates the manual, which is exactly why
-    it is written down here.
+- **The effect manual is sixteen pages behind the catalogue.** The catalogue stands at 139
+    and `web-docs/src/content/docs/effects/` holds 123 pages: the whole **Audio** family has
+    none of its fifteen and no section on the index, and Extract channels has no page in
+    Utility. `npm run docs:effects` from `web-docs/` creates and refreshes all of it inside
+    the `GENERATED` markers - it will append the Audio heading and its table at the index's
+    end, so that section's place in the order and its hand-written sentence are owed by
+    hand, as are the sixteen pages' protected prose. Nothing in CI gates the manual, which
+    is exactly why it is written down here.
 
 ---
 
@@ -171,52 +196,51 @@ These are v1-scope surfaces it does not yet match.
 **Timeline outline ([07-UI-SPEC.md](07-UI-SPEC.md) §4.2):**
 - **A switch cell on a locked layer throws.** `lock_guards` refuses every switch
     but the lock, shy and the label (`lumit-core/src/ops.rs`), and the outline's
-    cells call `set_switch` unguarded — so clicking the eye, solo, fx, motion
-    blur, 3D or guide on a locked row raises out of a tap handler instead of
-    saying no. Pre-existing, and it wants one answer for all six cells rather
-    than a guard per cell: either the cells stand down while the row is locked,
-    or the refusal becomes a status-line notice.
+    cells now commit through one `set_switch_on_layers`, whose refusal for the
+    *clicked* row is the whole call's — so clicking the eye, solo, fx, motion
+    blur, 3D or guide on a locked row raises `LayerLocked` out of a tap handler
+    instead of saying no. A locked *sibling* in a multi-selection already drops
+    out of the batch silently, which is the manner the clicked row wants too.
+    Pre-existing, and it wants one answer for all six cells rather than a guard
+    per cell: either the cells stand down while the row is locked, or the
+    refusal becomes a status-line notice.
 
 **Viewer bars ([07-UI-SPEC.md](07-UI-SPEC.md) §2.2):**
 - The wireframe/overlay menu's own *separation* (§2.2 item 5) — the view menu
     now carries the layer-controls switch, which turns wireframes, handles and hover
     highlight on and off as one; separating those from motion paths, mask paths and
-    gizmo visibility, and the full wireframe display mode, is owed.
-- **Rulers, draggable guides and snapping-to-guides** (§2.2 item 6). The menu, the
-    grid and the title/action safe areas are built; these three land as further
-    entries in the same menu, which is why it is a menu.
-- **A comp's overlays are session-only**: the grid and safe-area flags ride
-    `LumitUiState` keyed by comp and are forgotten when Lumit closes. They belong in
-    the per-project session beside the preview resolution and the region of interest.
-- **A zoomed-in snapshot is the panel's worth of detail, not the picture's**
-    (§2.2 item 14). The photograph is capped at the panel's resolution so
-    pressing Take at 400 % cannot ask for a few hundred million pixels; the
-    upgrade is to photograph the *visible region* instead of the whole picture,
-    which keeps full detail and wants the boundary moved rather than a number
-    changed.
+    gizmo visibility, and the full wireframe display mode, is owed. The menu itself
+    has filled out around it — grid, safe areas, rulers, the snapping magnet, the
+    region of interest, the background colour and Clear guides — which is why it is
+    a menu.
 - **Degradation names a tier, not the steps it skipped** (§2.2 item 9). The bar's
     reading says the pixel count a frame was made at, which is the tier; §2.2 also asks
     that the indicator name what was degraded ("glow skipped"), and nothing reports that
     across the bridge yet.
-- **Tone mapping's explanation lives in the colour picker's tooltip** and nowhere
-    else on screen (owner, 2026-08-08). The row itself is a name, because §13.2 keeps
-    a control's label to that; the picker is a readout, which §13.2 does allow a
-    sentence, so that is where "what this does" went. If hints of this kind ever get a
-    home of their own, this is still a candidate to move.
+- **Tone mapping has no explanation anywhere on screen.** The Viewer bar's toggle,
+    the colour menu's row and the Settings switch are all bare names, because §13.2
+    keeps a control's label to that — and the help sentences the Settings rows used
+    to carry went with the drawing that had no room for them
+    (`settingsRow`'s own note). The one-line "what this does" therefore lives only
+    in the translator descriptions in `app_en.arb`, which nobody using Lumit reads.
+    If hints of this kind ever get a home of their own, this is the first candidate
+    to fill it.
 
 **Toolbar tools ([07-UI-SPEC.md](07-UI-SPEC.md) §1.7):** what is armed is a
 *tool*; what each tool then does is the backlog.
-- **Razor** - a Sequence layer's eased ramps refuse a cut (`UncuttableClip`).
 - **Shape layers** ([impl/shape-layers.md](impl/shape-layers.md)) - trim paths,
-    dashed strokes, the repeater, offset paths and gradient fills have landed.
-    Owed: nested groups, the **wiggle** modifier, gradient **stop lists** (there
-    are two stops), joins and caps other than round, and animated paths.
+    dashed strokes, the repeater, offset paths, gradient fills, boolean combines
+    and animated (morphing) paths have landed. Owed: nested groups, the
+    **wiggle** modifier, gradient **stop lists** (a fill and one
+    `gradient_colour`, which is two stops), and joins and caps other than round.
 - **Path editing on the picture** - mask and shape-layer points drag. Still
     owed: a **paint stroke's** points, which are a stored gesture
     rather than a path and so are their own piece of work; no path's bezier
-    **handles** can be dragged, so the `Alt`-drag that re-links a broken tangent
-    pair exists only while a point is being *placed* - and the model has no
-    linked/broken flag, so adding one is a
+    **handles** can be dragged — the gizmo's point drag carries positions only,
+    and the tangents are drawn and never aimed at — so the `Alt`-drag that
+    re-links a broken tangent pair exists only while a point is being *placed*;
+    and the model has no linked/broken flag (`mask::Vertex` is a position and two
+    tangents and nothing else), so adding one is a
     [03-DATA-MODEL.md](03-DATA-MODEL.md) change and a decision, not just a
     gesture; and the Pen's add/delete/convert-vertex siblings and dragging a
     whole path by a segment.
@@ -234,53 +258,74 @@ These are v1-scope surfaces it does not yet match.
     widths after it, and a path whose keys hold different point counts reads its
     widths against the reconciled vertices. AE's own variable feather is
     therefore still not imported ([11-AE-IMPORT.md](11-AE-IMPORT.md)).
-- **Type** - vertical type (needs `lumit-text` to lay a line downwards); true
-    glyph metrics across the bridge (the caret, the anchor and the gizmo all use
-    the same half-an-em estimate, and one measured advance width would replace
-    all three); multiple lines and a character panel (font, tracking, leading,
-    alignment - the document is one styled run, [03-DATA-MODEL.md](03-DATA-MODEL.md)
-    §9.1); per-character and per-word animators.
+- **Type** - vertical type (`ToolMode.typeVertical` is armed and does nothing;
+    it needs `lumit-text` to lay a line downwards); true glyph metrics across the
+    bridge (the caret, the anchor and the gizmo all go through
+    `estimatedTextWidth`'s half-an-em, and one measured advance width would
+    replace all three); multiple lines and a character panel (font, tracking,
+    leading, alignment - the document is one styled run,
+    [03-DATA-MODEL.md](03-DATA-MODEL.md) §9.1).
 - **Paint** (brush/clone stamp/eraser, [impl/paint.md](impl/paint.md)) - owed:
-    **pressure and tilt** from a tablet, **spacing** and **scatter**; a keyed
-    Start/End's **curve in the graph editor** (the Timeline lane draws and drags
-    its diamonds, but `graphChannels` walks transform, effect and mask paths only);
+    **tilt** from a tablet, which wants a brush tip that can *turn* and so a
+    shaped brush with an angle before it — the stylus's tilt fields are read by
+    nothing today; **spacing** and **scatter**; a keyed Start/End's **curve in
+    the graph editor** (the Timeline lane draws and drags its diamonds, but
+    `graphChannels` walks transform, effect, retime, volume and mask rows only);
     painting in **Layer view** rather than on the composite; and **a GPU
     stamping path** (the rasteriser is a CPU loop beside the mask one, and it
     changes the rasteriser, not the stored stroke - it is also what would retire
     the 8-bit read-back a painted Precomp pays).
-- **Camera** - a separate point of interest (AE's two-node camera) is an engine
-    change; the Unified Camera tool; depth-of-field handles on the picture; a
-    keyframed camera cannot be dragged (no single value to add to); a drag
-    spanning several layers is one undo step per layer, because no op carries
-    edits to more than one.
+- **Camera** ([impl/camera.md](impl/camera.md)) - the rebuild landed the eye
+    model, one- and two-node cameras with a Point of interest, the camera
+    settings dialogue, rendered depth of field, the Unified Camera tool and the
+    3D views with their wireframes. Owed: **depth-of-field handles on the
+    picture** (focus distance and aperture are rows and nothing more); the
+    **iris** — shape, rotation, roundness, the diffraction fringe and the
+    highlight controls are not built, so the blur is one gaussian radius read at
+    a layer's anchor; a **keyframed camera cannot be dragged**
+    (`viewer_camera.dart` stands the tools down whenever any of the placement
+    rows is not a still value, because there is no single number to add to); and
+    a **drag spanning several layers is one undo step per layer** — `Op::Batch`
+    exists and the switch cells ride it now, but no bridge call batches a
+    transform write across layers the way `set_switch_on_layers` batches a
+    switch.
 - **Roto propagation speed** - the tools shipped (geodesic solve,
     flow propagation, guided Refine edge, the `roto/` sidecar tier, both tools
     armed), but a propagated 1080p frame measures 895 ms against §7's 60 ms
     target - the WGSL ports [impl/roto.md](impl/roto.md) names are owed.
     Puppet shipped whole; its recorded upgrades (GPU warp,
     sparse factorisation) have fired triggers and wait on the same quiet day.
+
 **Smooth zooming everywhere else.** The shared helper is built
-(`widgets/smooth_zoom.dart`) and the Timeline reads it. Still cutting
-rather than flying: the **graph editor's** zoom and auto-fit — a matter of
-holding a `SmoothZoom` and reading its value, with no design left in it.
+(`widgets/smooth_zoom.dart`) and both the Timeline and the Audio timeline read
+it. Still cutting rather than flying: the **graph editor's** zoom and auto-fit —
+a matter of holding a `SmoothZoom` and reading its value, with no design left in
+it.
 
 **Layer controls in the Viewer ([07-UI-SPEC.md](07-UI-SPEC.md) §2.3):**
 - **Motion paths** (§2.4) - a keyed position draws no path and its keys cannot be
-    dragged there.
+    dragged there. There is no motion-path code in `flutter_ui/lib` at all; the
+    multi-viewer work moved none of it, because there was none to move.
 - **Scale and rotation of a multiple selection** - each layer keeps its own box
     and only a lone selection grows handles; AE scales a set about one shared box.
-- **Snapping** - nothing outside the Timeline's keyframe magnet snaps to
-    anything (§4.5, §1.7).
+- **Snapping reaches for guides and the grid, and nothing else** (§2.2 item 6).
+    `viewer_snap.dart` pulls a drag onto a guide or a grid line, measured in
+    screen pixels, with `Ctrl` suspending it exactly as it does in the Timeline.
+    What it has no targets for is **other layers** — their edges, their centres —
+    which is the half of §4.5 and §1.7 still owed.
 - **Parent-aware and 3D gizmos** - the box is built from the layer's own
-    transform, so a parented layer's ignores its parent and a 3D layer's ignores
-    the camera.
+    transform rows, so a parented layer's ignores its parent, and `ViewerLayerMap`
+    is a 2D map, so a 3D layer's ignores the camera. The 3D views' wireframes are
+    a separate thing the engine gathers (`CompositionReference::wireframes`) and
+    sit under an `IgnorePointer`: drawn, never aimed at.
 - **A keyframed position draws no box**, so an animated layer cannot be picked on
-    the picture. It wants the value *at the playhead*, which the read model does
-    not carry.
+    the picture — `viewer_stage.dart` leaves out any layer whose position is not
+    a still value, on the ground that a box in the wrong place is worse than
+    none. It wants the value *at the playhead*, which the read model does not
+    carry: a `BridgeScalar` is static, keyframed or an expression, and never the
+    number a frame was drawn with.
 
 **Pixel pickers ([07-UI-SPEC.md](07-UI-SPEC.md) §6.1):**
-- The x/y coordinate pick - no Flutter row pairs x and y into one control yet
-    (the magnifier already carries the mode).
 - The on-Viewer crosshair handle for point parameters - a point parameter can be
     picked but not dragged on the picture.
 
@@ -337,7 +382,8 @@ holding a `SmoothZoom` and reading its value, with no design left in it.
     `lumit-core/src/retime.rs`) and the curve view that makes ramps editable;
     `trim_to_source_end`.
 - **The audio mix is rebuilt from scratch** whenever the comp's audio signature
-    changes, rather than patched.
+    changes, rather than patched: `prepare_once` walks the whole comp for jobs,
+    hashes them, and loads the lot again when the hash moves.
 - **The Sound mix row's waveform is strided.** `MixPlan::peaks` reads the loaded plan
     frame by frame and strides past 256 frames a bucket, so a one-frame transient can
     drop out of a comp-wide view. A peak pyramid built on the prepare worker is the
@@ -349,10 +395,11 @@ holding a `SmoothZoom` and reading its value, with no design left in it.
     stored in the .lum and never sent. Either the row becomes an Int, as a built-in's mode
     row is, or the bake carries Bool as well.
 - **A Precomp layer's effect rack is silent to the mixer.** `audio_chain_of` opens a rack
-    on Footage and Sequence layers only, so a rack on a nested comp's layer processes
+    on Footage, Sequence and clip layers only, so a rack on a nested comp's layer processes
     nothing; Convert to precomp copies a track's rack on to each clip layer for that
     reason. A bus chain, the nested comp summed and run through the Precomp layer's rack,
-    is the upgrade, and it needs a bus stage in `MixPlan` first.
+    is the upgrade, and it needs a bus stage in `MixPlan` first — the same stage the Audio
+    timeline's missing buses and sends want.
 
 **Retime follow-up after the property-path move.** **The eased ramp shapes are
 gone from clips** — `Clip::with_ramp` takes two speeds and runs straight between
@@ -360,27 +407,20 @@ them, which is what the envelope authors. Slow/Fast/Smooth/Sharp come back with 
 preset-shelf rework below, rebuilt on the property like everything else the move
 carried.
 
-**Video memory is only read on Windows.** `video_memory_bytes` answers the
-first DXGI adapter's dedicated memory there and 0 everywhere else, so the GPU
-cache ceiling falls back to the frontend's documented figure on macOS and
-Linux. Wants Metal's `recommendedMaxWorkingSetSize` and the Vulkan adapter's
-device-local heap.
-
 **Appearance.** The seven built-in schemes still restate every colour
-individually; only the two Timeline tokens default from the mode. Still owed:
-a swatch strip per row **inside** the picker's menu (it previews the
-selection only), and a place to keep themes other than the workspace file, so an
-imported theme travels with the user rather than the machine's settings.
+individually; only a handful default from the mode — the Timeline's out-of-range
+and selection fills, the marker grey, the waveform palette and the modal scrim.
+Still owed: a swatch strip per row **inside** the picker's menu (the strip built
+beside it previews the selection only), and a place to keep themes other than the
+workspace file, so an imported theme travels with the user rather than the
+machine's settings.
 
 **Shell and onboarding:**
 - **The boot splash says only what `boot_log` says.** It is mounted now
-    (`BootGate` in main.dart) and streams the engine's own boot log, which is
-    all the engine can tell it: there is no notice stream to subscribe to, so a
-    module that took a long time coming up, or came up degraded, cannot say so
-    on the splash. Wants an engine-side boot event stream before it can.
-- **Workspace machinery beyond the presets** ([07-UI-SPEC.md](07-UI-SPEC.md)
-    §1.6) - user workspaces (save-as/rename/export), the chrome switcher strip,
-    and Alt+Shift+1-9.
+    (`BootGate` in `shell/app_shell.dart`) and streams the engine's own boot log,
+    which is all the engine can tell it: there is no notice stream to subscribe
+    to, so a module that took a long time coming up, or came up degraded, cannot
+    say so on the splash. Wants an engine-side boot event stream before it can.
 - **First-run setup screen: the four-card version**
     ([07-UI-SPEC.md](07-UI-SPEC.md) §13.1) - §13.1's four cards, a small image over
     each choice. The plain one-question screen is built
@@ -405,7 +445,7 @@ imported theme travels with the user rather than the machine's settings.
     outline, which must not move (`timeline_alignment_test.dart` says so, and the
     outline has a horizontal scroll of its own for narrow panels). Putting the
     horizontal scrolls underneath instead gives one per row, and `_hLane` asserts
-    the moment a second position attaches to it, which is what `_positionOf`
+    the moment a second position attaches to it, which is what `positionOf`
     exists to survive. The only arrangement that satisfies both is to drop the
     lanes' horizontal *viewport* and offset them by a transform, with `_hLane`
     anchored on the ruler band — and that costs horizontal trackpad panning over
@@ -417,34 +457,13 @@ imported theme travels with the user rather than the machine's settings.
     `LayerRow` (its fold rows, its open Sequence view, its height) and both halves
     read that, so they can differ in what they draw but no longer in what a layer
     is. The scroll mirror and its guard flag stay.
-- **The lane keyframe selection selects and eases, nothing more** - moving or
-    deleting a *whole lane selection* is not built (the graph view has both).
 - **Column widths and the property selection are session-lived** - fold into the
     workspace when per-workspace column layouts land ([07-UI-SPEC.md](07-UI-SPEC.md)
     §4.2).
-- **~4 order-dependent tests in the Flutter suite.** Each passes alone; the suite
-    passes at `--concurrency=1`, which is what CI runs. They contend for the
-    shared engine (audio device, render worker) across test *files*. Give those
-    files a serial marker or make the engine per-file - the serial run is a
-    mitigation, not the fix, and it costs wall-clock. A concrete signature,
-    measured 2026-08-12 *within* `viewer_panel_frb_test.dart` alone on the
-    owner's machine: five frame-arrival tests fail late in the file with
-    "Could not create the renderer … device request failed: Not enough memory
-    left" — the workers the earlier tests spun up exhaust the device, so the
-    failing set shifts run to run and every member passes alone. Whatever fixes
-    the contention should make that message impossible, not rarer.
-    The job itself is healthy again: the `flutter frontend (Linux build + analyze
-    + test)` job could not complete at all mid-PR #97 (every run reached
-    `timeline_panel_frb_test.dart`, logged `vkAllocateMemory failed`, and was
-    killed), and PR #97 merged with it green after two root-cause fixes — a
-    project that stops being shown is closed and its render worker stops with it
-    (`ProjectReference::close()`, so per-test workers and GPU devices no longer
-    pile up), and the frame-name memo is cleared on `SetViewerLook`. So the Dart
-    suite *is* verified on CI; what remains open is the order-dependence itself,
-    for which `flutter test --concurrency=1` (ci.yml) is still the mitigation.
 - **Beat tap has no key left** - [07-UI-SPEC.md](07-UI-SPEC.md) §10 wants `8`
     during playback to tap a beat, and the bare digits went to the numbered
-    markers. Needs its own chord or a modal reading.
+    markers. The Audio panel's Tap button is the only way in. Needs its own chord
+    or a modal reading.
 - **Edge-follow has one manner, not two** - the lanes flip a page when the
     playhead leaves the viewport (TI-9); [07-UI-SPEC.md](07-UI-SPEC.md) §4.6 also
     wants a *smooth* follow and a setting to choose between them. `Shift+=` (zoom
@@ -471,236 +490,96 @@ fix. Also unbuilt: an **export**'s progress still has its own path
 
 ## Now - the redesign programme
 
-The 2026-08-23 redesign lands in four phases, in this order; 15-DESIGN §12A and the
-approved mockups govern the layouts. Phase 1 is Now; each later phase becomes Now when
-the one before it lands. Multi-window is a fifth phase that waits on Flutter and
-does not gate the four. Delete each phase here when it lands, as with everything else.
+**All four phases of the 2026-08-23 redesign have landed** - the theme groundwork, the
+panels and windows, the node graph and the Nodes workspace, and lumitlab.com - and with
+them the points-stream programme and the timeline interaction programme's ten packages.
+15-DESIGN §12A stays the binding description of the resting state, and the per-surface
+metrics tests are what hold the surfaces to it: `export_metrics_test`,
+`settings_metrics_test`, `project_panel_metrics_test`, `viewer_metrics_test`,
+`welcome_metrics_test`, `graph_panel_metrics_test` and `timeline_alignment_test` each read
+the approved drawings' own computed styles, so a value that disagrees with a drawing is a
+defect. Two things outlive the programme:
 
-- **Phase 1 - theme groundwork**: the `animated` token and the
-    three-greys-at-rest audit; Hanken Grotesk and Geist Mono bundled (replacing the
-    old bundle-the-household-fonts item under *Later - Design*); the icon set drawn
-    on its 16 px grammar and embedded as Flutter icons. **The Chrome labels setting is
-    built and consuming**: the three-way setting ships as Icons, is read by the
-    Timeline's column toggles, and carries its word in every tooltip. What is left is
-    converting the rest of the chrome a surface at a time.
-- **Phase 2 - panels and windows**: the effect controls
-    (fixed columns, square stopwatch, reserved keyframe-nav slot, linked vector
-    wells, the crosshair point picker, Mix row with blend mode and matte channel,
-    Matte row with invert), the Timeline (Layers/Graph modes, the Animated filter,
-    full-width composition tabs, the double-height ruler with its end padding, the
-    tier-coloured cache bar, the work-area band, trimmed-extent outlines) and Graph
-    mode's surface (edge-to-edge curves, the fixed value gutter, the Value/Speed strip
-    - the filtered colour-ticked outline is withdrawn: the graph shows the Layers
-    outline), the Project panel, the Viewer bar,
-    Settings, the welcome screen, and **the export dialog plus the export queue**.
-    Every dialog is built **in-window**, as an ordinary `showDialog` overlay - that
-    is the migration prep, not a stopgap: when windowing ships, `showDialog` becomes
-    a real child window with no per-dialog rewrite (docs/impl/multi-window.md §5).
-    This phase owns, rather than tracking separately: the export dialog and queue
-    rework, the easing and graph-surface rework, the switch-column-at-minimum-width
-    polish, the editable-value colour treatment (decided in phase 1, built here),
-    and the rest of the redesign's visual polish list.
-- ~~**The timeline interaction programme**~~ - **landed complete
-    2026-08-25**, all ten packages, and verified sentence by sentence against
-    **docs/impl/timeline-interaction.md**, which stays as the binding spec for the
-    panel's behaviour. What it left deferred is listed above (edge-follow's second
-    manner) and in the note's own §8: the razor's scissors pointer, and the scrub
-    ladder on the clock.
-- **Phase 3 - the node graph and the Nodes workspace**: the Graph panel as a
-    second view of the effect stack that can also wire effects together, auto-wire
-    and heal toggles, type-coloured wires from `viz_*`-family tokens, the Nodes
-    workspace with the small viewer and short timeline, and the picture at a node
-    (folded into the Viewer's own "at effect" chip). The
-    design step has answered the document-model question: the
-    stack stays the spine and each layer gains an additive driver graph -
-    **docs/impl/node-graph.md** holds the model and the six ordered work packages
-    (engine model, bridge, Graph panel, Nodes workspace, the picture at a node,
-    points stream + Particulate design doc). ~~WP6, the Particulate design document~~ —
-    landed as **docs/impl/particulate.md**; the design's decisions have since been
-    confirmed DECIDED by the owner's commission, below.
-    ~~WP1, the engine model and evaluation~~ — **landed 2026-08-24**:
-    `LayerGraph` on the layer (drivers, typed edges, canvas positions) with
-    `SetLayerGraph` and its refusals, the `Signature` split in the registry, the
-    complete `PortType` (Points included), the six v1 drivers, driver resolve as
-    parameter evaluation, `SourceMatte`, and the graph folded into the frame key.
-    Old projects load to an empty graph and re-save byte for byte.
-    ~~WP2, the bridge~~ — **landed 2026-08-24**: `LayerReference::get_graph`
-    (the whole structure in one call), `get_graph_drivers`, `new_driver`,
-    `set_graph` (one `SetLayerGraph`, one undo step), `list_drivers`,
-    `BridgePortType`, the refusals as calm sentences, and the driver property
-    path spelled `<layer>/graph/<node>/<param>` (docs/17).
-    ~~WP3, the Graph panel~~ — **landed 2026-08-24**: the panel to its drawing,
-    the wire colours as the theme's `PortColours`, and the *driven* state on an
-    Effect-controls row. Its three gaps closed 2026-08-24:
-    `Op::SetLayerEffects` prunes the edges, positions and badges naming a
-    removed effect (so deleting a wired box is one op), and
-    `BridgeEffectInfo` carries an entry's declared ports — which folds the
-    auto-wire into the add's own commit and lets the Tab search offer only the
-    entries a dragged wire could land on.
-    ~~WP4, the Nodes workspace~~ — **landed 2026-08-24**: the preset (the Graph
-    panel large with the ordinary Timeline short beneath it, the small Viewer
-    and the new **Node panel** down the right), its tab on the workspace strip,
-    and the graph's pick carried through the shell so the Node panel follows
-    it. Its gap closed 2026-08-24:
-    `render_frame_with_driver_preview` stages the graph's nodes as the stack
-    preview stages the effect list, so a driver's number moves the picture
-    while it is dragged rather than only on release.
-    ~~WP5, the picture at a node~~ — **landed 2026-08-24** as its own panel,
-    **folded into the Viewer 2026-08-25**: selecting an effect
-    on the graph or in the Effect controls stack offers an "at effect" chip over
-    the Viewer's picture, and the panel, its seam and its 256px thumbnail are
-    gone. WP1's named gap is closed:
-    the `AudioTap` is wired (`lumit_render::audio_tap`), so Audio level reads
-    the referenced layer's own footage at a fixed rate, identically in the
-    preview and the export — the parity matrix carries an audio-driven row.
-- **The points-stream programme** (the owner's commission): Particulate and the
-    points stream move from design to implementation.
-    **docs/impl/points-stream.md** is the binding plan — the `EffectData` wire (a
-    points connection is a graph edge, the first stack-sourced data wire), the
-    Points sample driver (Count and Nearest distance driving parameters), the
-    evaluation and carriage contract, the seam, and the ordered work packages:
-    ~~PS1~~ (landed: `fx/points.rs`, the `Signature::Image { extra }` split and
-    Particulate's declaration, closed forms and CPU disc reference),
-    ~~PS2~~ (landed: the four GPU passes — count, scan, place, instanced draw —
-    the three render modes, the schedule's carriage beside the op, docs/08 §3.86,
-    docs/13's B12–B14, the rotation-jitter dial and the stream's real agreement
-    bound; the effect draws),
-    ~~PS3~~ (landed: `OutputRef::EffectData`, the three new refusals, the reorder
-    heal, the seam's half), ~~PS4~~ (landed: the Points sample driver, the walk
-    re-entering itself through the effect stack), ~~PS5~~ (landed with PS3-PS4:
-    the seam crossed with no codegen left owing),
-    ~~PS6~~ (landed: the live teal wire, Points sample's rows, Particulate's
-    surface verified, and the no-stream mark),
-    ~~PS7~~ (landed: `particulate-golden.txt` and its two gates, B12-B14 as
-    `lumit-bench` scenarios with the floor subtracted, the export walk's
-    undegraded field pinned, and a driven value clamped to its parameter's hard
-    range at the effect's socket).
-    **The programme is complete.** docs/impl/particulate.md remains the effect's
-    own design; the family landed whole: Grid, Scatter, Emit from image,
-    Clone to points, Trail, Connect points and the cross-layer tap.
-- ~~**Phase 4 - the website**~~ - **landed 2026-08-24** (the `WebHero` drawing):
-    lumitlab.com carries the application's own tokens -
-    the three greys, the four text tiers, the two hairlines, clay as the only accent -
-    and its two faces, **Hanken Grotesk and Geist Mono**, which won the side-by-side
-    against Geist on the two things that decided it: the site and the application then
-    read as one product, and it ships as one variable latin+ext file where Geist ships
-    static latin-only weights. The wordmark is top-left in the bar and its animation is
-    the hero, a band of half the window (never more than the drawing's 520px) on the
-    drawing's own three washes and grain. The download button names the visitor's
-    platform and links straight at that platform's asset; **no platform is greyed**,
-    because `release.yml` builds the Windows `.exe`, the macOS `.dmg` and the Linux
-    `.flatpak` on every tag and every job gates the release, so all three exist
-    whenever any of them does. Below the hero: the wide screenshot, the two captioned
-    screenshots, and the three hover-play slots, every picture a real capture from the
-    application (`web/public/shots/`, 124 KB the lot).
-    One thing the drawing showed is deliberately **not** built: its closing tab strip
-    (Animate / Composite / Retime / Export) is a control with nothing behind it, so it
-    is omitted rather than shipped dead. The clips are **content debt**:
-    - **Record `workspace.webm`, `retime.webm`, `flare.webm` and `camera.webm`** into
-      `web/public/clips/` (see `web/README.md`). The slots are built and working - real
-      `<video>` elements - and until the files exist each shows its poster, a crop of a
-      real screenshot, and the wide slot drops its "plays on hover" label. Nothing fakes
-      motion. `workspace.webm` is the wide slot under "Composite the way you know",
-      which was a still until the owner asked for a video there; its poster is that
-      same still. The other three are behind the Timeline / Graph / Nodes tabs, one
-      open at a time, and the open one plays. The posters for the flare and the camera
-      slot are stand-ins from the Viewer; a capture of each feature would be better and
-      can replace them in place.
-- **Later, gated - the Flutter multi-window upgrade.** Blocked
-    upstream: windowing is main-channel-only, flagged, and its API promises breaking
-    changes, so Lumit takes no production dependency on it until it reaches the
-    stable channel un-flagged - re-check the status line in
-    **docs/impl/multi-window.md** §1 before planning any of it. The phase opens with
-    that note's cheap spike (§6 step 2): can a second window composite the engine's
-    shared Viewer texture at all? Then the `WindowManager` root on the main window
-    only, the welcome window, the dialogs (mostly free), the settings/theme/queue
-    windows, and last the satellite tear-off panels - which is where the old
-    pop-out-panel-windows rebuild item is folded in.
+- **The Chrome labels setting still has one reader.** The three-way setting ships as
+    Icons and carries its word in every tooltip, but the only chrome that consults it is
+    the Timeline's Switches / Modes / Parent toggles
+    (`panels/timeline_toolbar_frb.dart`); no other button, tab or toggle changes when it
+    does, and **Icons everywhere** - panel titles as glyphs - has no reader at all.
+    Converting the rest of the chrome a surface at a time is what is left of phase 1
+    (15-DESIGN §5.1).
+- **Later, gated - the Flutter multi-window upgrade.** Blocked upstream: windowing is
+    main-channel-only, flagged, and its API promises breaking changes, so Lumit takes no
+    production dependency on it until it reaches the stable channel un-flagged. The status
+    line in **docs/impl/multi-window.md** §1 was re-checked on the 3.47 upgrade and still
+    finds no stable setting for `windowingFeature` at all, so `flutter config
+    --enable-windowing` cannot turn it on here - re-check it again before planning any of
+    this. The phase opens with that note's cheap spike (§6 step 2): can a second window
+    composite the engine's shared Viewer texture at all? Then the `WindowManager` root on
+    the main window only, the welcome window, the dialogs - mostly free, because every one
+    is already an in-window `showDialog` overlay on the one pattern
+    (`shell/dialog_frame.dart`), which was the migration prep and not a stopgap
+    (multi-window.md §5) - the settings/theme/queue windows, and last the satellite
+    tear-off panels, which is where the old pop-out-panel-windows rebuild item is folded
+    in. A Viewer is already that unit: **several Viewers open at once in the one window**
+    and a view id survives a move, so a second monitor is the only thing windowing adds
+    there (docs/impl/multi-viewer.md §6).
 
 ## Now - the node graph composition (docs/impl/node-graph-comp.md)
 
-Proposed 2026-09-06 against issue #106: a composition whose picture is made by nodes and
-wires, with Merge and Switch, Read and Input boxes, and the Node graph effect that applies
-one to a layer. The layer's own graph is untouched.
+**Shipped in 0.4.0** (`78589ef`): a composition whose picture is made by nodes and wires,
+with Merge and Switch, Read and Input boxes, and the Node graph effect that applies one to
+a layer. NG1 to NG6 landed together with round two's engine, bridge and documentation
+halves, so the eleven boundaries v1 named are lifted everywhere but the frontend - each
+subsection of the note's §5 carries a Built paragraph saying which half of it is in. What
+is left is the Dart that the bridge already feeds, and both halves are recorded as known
+gaps in 0.4.0's release note:
 
-- **NG1 to NG6**, ordered in the note's §8: the model, evaluation, the bridge, the canvas,
-    the shell, the docs. NG2 and NG3 both stand on NG1, NG4 on NG3, NG5 on NG4.
-- ~~The eleven boundaries v1 named~~ - **round two landed 2026-09-08**, every one of them
-    lifted: points wires in a graph, time inside a graph under one rule with a **Time
-    offset** box, a placed graph's Inputs on the layer, a per-box cache, an expression
-    reading an Input, Precomp retime end to end, a box's keys in the Timeline, saved
-    groups as `.lumngrp`, a forced collapse, sound through a graph's Reads, and a picture
-    Input's preview item (the note's §5).
+- **P4, the canvas and the Node panel** (§8): Save group and the saved-groups block in the
+    comp canvas's console, the picture Input's preview picker in the Node panel's Input
+    form, and the no-stream word on a box's rows - `_drivenInGraph` in
+    `panels/node_panel.dart` writes `noStream: false` rather than reading the box's inputs.
+    `saveGraphGroup`, `insertGraphGroup`, `listGraphGroups` and `BridgeGraphInput.preview`
+    all cross the seam and nothing calls them.
+- **P5, the Timeline and Effect controls** (§8): a graph's Fx boxes as Timeline rows with
+    their lanes under the `n:<box>` prefix, the placed graph's Inputs as a section in
+    Effect controls and a fold in the Timeline, the dimmed collapse and audio cells, and
+    the Retime clock face. `BridgeCompModel.graph_boxes`, `BridgeLayerInfo.graph_inputs`
+    and `collapse_forced` are filled and read nowhere, and the Timeline still draws only
+    the hint placeholder for a node graph (`NodeGraphTimeline`,
+    `panels/timeline_layer_rows_frb.dart`).
+- **The manual is ahead of both.** `web-docs/.../use/node-graphs.mdx` already describes the
+    Effect controls section and the Timeline's box rows as things the editor draws; it
+    becomes true when P4 and P5 land, and until then it overclaims.
 
 ## Next - colour management: OCIO (docs/impl/ocio.md)
 
-The owner has ruled OCIO support in scope; the design step has landed
-(**docs/impl/ocio.md** holds the model, the maths, the traps and the test plans;
-native-Rust hosting and the v1 scope are decided). Six work packages, in
-order, each sized for one pull request, each landing with its tests; WP6's fixture format is
-WP1's, so fixtures are authored alongside WP1–2 rather than at the end.
+**All six work packages have landed**, and after them the four OCIO effects (`d0aab70` -
+colour space, display, look and file transform, plus the project's choice to composite in
+the config's `scene_linear` role) and the partial-config reading that greys out each name
+a config cannot make with its reason (`147ef31`). docs/impl/ocio.md stays the binding
+description; `crates/lumit-colour`'s suites - the eight CLF documents vendored byte for
+byte, the `aces-1.2` and `aces-cg` reference fixtures, `tests/refusals/` as the taxonomy's
+corpus - and `crates/lumit-render/tests/ocio_parity.rs`'s colour matrix are the record.
+One thing is still owed, and it blocks nothing:
 
-**WP1 and WP2 have landed**: `crates/lumit-colour` holds the op set, the samplers, the
-bake, the `.spi1d`/`.spi3d`/CLF readers, the `config.ocio` grammar, resolution, the
-interchange bridge and the refusal taxonomy, with its own test suite and
-`tests/refusals/` as the taxonomy's corpus. The two things they could not finish —
-the reference-library fixtures and the vendored `BuiltinTransform` bakes — landed with
-WP6 on 2026-08-25, so both shipped ACES configs now resolve end to end.
-
-**WP3 and WP4 have landed too.** `Document::colour` and the per-item tag carry their two
-ops, `lumit-render::colour` loads and bakes with the degrade ladder and the frame-key
-folding behind it, and the seam is open: `ProjectReference::{colour_summary,
-set_colour_config, can_deliver_colour_space}`, `FootageReference::{colour_space,
-set_colour_space}`, the view field on `set_viewer_look`, and
-`CompositionReference::export_spec_check` (which replaced the free-standing one).
-A refusal crosses as an id plus its facts and `colourProblem` in
-`flutter_ui/lib/l10n/engine_labels.dart` writes the sentence.
-
-**WP5 has landed**: the config is chosen in **File ▸ Project settings ▸ Colour** (path
-well, *Choose…*, *Clear*, the state line, the fixed working-space reading), the Viewer's
-colour picker grows a section per display with its views as rows and says calmly when a
-named config is not in force, the export's colour dropdown lists the config's spaces
-under their own heading with per-name enable off `can_deliver_colour_space`, and a
-footage row's **Colour space** submenu assigns one. One thing it left owed, still owed:
-
-- **The working-space reading has one sentence, not two** (note §2.1, §6.4): the Project
-    settings row always says "Linear Rec. 709", because `BridgeColourSummary` carries no
-    flag for a legacy config composing through its `scene_linear` role. It wants a field
-    on the summary and a second sentence behind it.
-
-**WP6 has landed, whole.** The CLF suite is real: eight documents from the Common LUT
-Format specification's own example and implementation-test set, vendored byte for byte in
-`crates/lumit-colour/tests/fixtures/clf/`, each gated against values that are
-published rather than measured — and they found two reader faults the day they
-landed (vendor elements inside an `Info` block read as process nodes; an XML comment
-inside an `Array` gluing the numbers either side of it into one token). The parity
-row is a colour matrix in `crates/lumit-render/tests/ocio_parity.rs`: no config,
-every built-in colour family at export, a config's display/view, a config's space at
-export — plus a plain-gamma view that must render differently, without which the rest
-pass when nothing is bound.
-
-**And both reference fixtures are in**, from one PyOpenColorIO 2.5.2 session:
-`aces-1.2` (128 rows, its five reachable LUTs at 14 MiB of a 444 MiB set) and `aces-cg`
-(784 rows over every role edge and all 37 display/view pairs of
-`cg-config-v4.0.0_aces-v2.0_ocio-v2.5`), with five vendored bakes at 47 MiB. They were
-planned as data drops and turned out to be five reader faults and four new §5.4
-measurements — see `tests/fixtures/README.md`.
-
-What OCIO still owes, all of it recorded and none of it blocking:
-
-- **Exact Rust ports of the five vendored styles** (§4.1 tier two → tier one), one at a
-    time, each landing against the `aces-cg.fixture` rows that gate the bake it replaces.
-    The number they exist to bring down is **0.117 at the Rec.709 blue primary**, which is
-    what a 65-point cube costs on the ACES 2.0 rendering; inside the gamut the
-    same bake is better than 2 × 10⁻³. It also reclaims the 47 MiB of artefact files an
-    installation ships beside the binary.
-- **The working-space reading has one sentence, not two** — see WP5 above.
+- **Exact Rust ports of the eight vendored styles** (§4.1 tier two → tier one), one at a
+    time, each landing against the `aces-cg.fixture` or `builtins.fixture` rows that gate
+    the bake it replaces. The number they exist to bring down is **0.117 at the Rec.709
+    blue primary**, which is what a 65-point cube costs on the ACES 2.0 rendering; inside
+    the gamut the same bake is better than 2 × 10⁻³. It also reclaims the 76 MiB of
+    artefact files an installation ships beside the binary
+    (`crates/lumit-colour/vendored/`, which the packaging scripts copy into
+    `data/colour/`; they are no longer compiled into the executable).
 
 ## Next - engine/bridge follow-ups
 
 **Settings pages still unbuilt (docs/07 §15's remainder):** CUDA on/off and the
-plugins/decoder page. Audio, Autosave and Export defaults all landed; colour
-management lives in Project settings; the preview-mode toggle exists.
+plugins/decoder page - the two the sidebar still has no row for. Audio, Autosave and
+Export defaults all landed; colour management lives in Project settings; the
+preview-mode toggle exists, on the Preview and cache page. Both land wired to the
+engine through the bridge, not as a Dart-side setting nothing reads. (One entry now:
+a second copy of this sat further down the section, listing six pages of which five
+have since been built.)
 
 **The Export drawing's rows are built, both halves** (engine and interface; docs/06
 §7.4–§7.5, docs/15-DESIGN.md §12A.4). Audio-only output (`.m4a`/`.wav`), colour
@@ -709,28 +588,21 @@ container metadata, the named preset store, the auto bitrate, the render setting
 disk cache, effects, solo switches) and the *when done* hook are all on
 `lumit_render::export::ExportSpec`, all across the seam on `BridgeExportSpec`, and all on
 the dialog's one scrolling page, with a per-format capability table refusing what a format
-cannot carry. The picture's two remaining dead rows are backed as well: the resize
-picks its filter (Fast bilinear, High Lanczos-3), and the colour space is a family of five
-built-ins the container is stamped with. What is left:
-
-- ~~The resampler face and the colour-space list do not cross the seam~~ — **landed
-  2026-08-25**, and the dialog's rows came alive the same day: every face the
-  drawing shows is a live control writing into `BridgeExportSpec`, with the capability row
-  deciding which of them the chosen format may honour. The one control still drawn dead is
-  the *Managed by* row — which since the OCIO UI landed reads the project's config path
-  rather than "No OCIO configuration", and stays dead on purpose: colour management is
-  chosen in Project settings, and an export dialog must not edit the project.
+cannot carry. Every face the drawing shows is a live control writing into
+`BridgeExportSpec` — the resampler's filter (Fast bilinear, High Lanczos-3), the
+colour-space family of five built-ins the container is stamped with, the free width and
+height boxes with their aspect lock, and the sound's rate, width and layout — with the
+capability row deciding which of them the chosen format may honour. The one control still
+drawn dead is the *Managed by* row — which since the OCIO UI landed reads the project's
+config path rather than "No OCIO configuration", and stays dead on purpose: colour
+management is chosen in Project settings, and an export dialog must not edit the project.
+What is left:
 
 - **The *Still* output type is withdrawn**: a still is an image sequence of one
   frame, which the span already says, so the fourth chip the drawing offered is gone rather
   than pending. What is genuinely missing is only the *naming* — a one-frame sequence is
   written `shot.00001.png` rather than `shot.png` — and that is a rule in the encoder's
   file naming, not an output type.
-- ~~Reordering the queue~~ (docs/07 §11: "items are reorderable") — **landed 2026-08-25**:
-  `export_queue_move(id, index)`, undo-free like removal because the queue is not
-  in the `.lum`, refusing an item that is running or has already run. The window's drag
-  landed with it: a waiting row is picked up and carried, on Flutter's own reorderable
-  machinery rather than a bare draggable, which loses the gesture to the list it sits in.
 - **A disk-cache policy with something to govern.** The setting exists and defaults to Off,
   which is what happens: the export renderer is a fresh `HeadlessRenderer` with no disk
   tier at all. *Read-only* becomes a real choice the day the export path gains one.
@@ -745,14 +617,17 @@ background transcode that makes one (`name_proxy.mov` beside the original, half 
 Viewer is working at. A proxy that disagrees with the original about frame count or rate is
 refused and falls back. The interface landed too (the seam and the panel: set/clear,
 MAKE-PROXY with its progress, the per-item tick, the project-wide switch, the badge).
-Still open: **nothing says whether the proxy *file* itself is broken** - that wants a
-new query over the renderer.
+Still open: **nothing says whether the proxy *file* itself is broken** - `BridgeProxy`
+carries a path, this item's tick and whether the document reads it, and nothing else. That
+wants a new query over the renderer.
 
-**Two small settings follow-ups** — the "Show shortcut hints" switch exists in the
-drawing but nothing consumes a hints flag yet (the menu bar and tooltips must read it
-before the switch can honestly exist); and the Settings drawing's slider face (2px
-track, primary knob, no fill) disagrees with the Main drawing's zoom slider that
-`HouseSlider` was built from — each surface should wear its own manifest's face.
+**Two small settings follow-ups** — the "Show shortcut hints" switch is specified
+(docs/07 §15's Interface page) and nothing in the frontend either draws it or consumes a
+hints flag (the menu bar and tooltips must read it before the switch can honestly exist);
+and the Settings drawing's slider face (2px track, primary knob, no fill) disagrees with
+the Main drawing's zoom slider that `HouseSlider` was built from — one widget draws both
+surfaces today, at a 4px track with an accent fill and a `text_secondary` knob, and each
+surface should wear its own manifest's face.
 
 **An autosave does not refresh the welcome picture.** Every *save*
 files one, and opening a project that has none draws one, so no row is empty any
@@ -772,14 +647,16 @@ strings. The engine side is a `SetSequenceRate` op and a bridge setter; the mode
 already carries the field (`FootageItem::sequence`).
 
 **Tracking a sequence.** `lumit_render::track` still opens footage
-by bare path, so a camera track over a run of stills analyses its first frame
-alone. It wants the same `MediaSource` the Viewer's decode already takes;
-`crates/lumit-bridge/src/api/track.rs` resolves the path it hands over.
+by bare path — `MediaLuma::open` probes and decodes one file — so a camera track over a
+run of stills analyses its first frame alone. It wants the same `MediaSource` the Viewer's
+decode already takes; `crates/lumit-bridge/src/api/track.rs` resolves the path it hands
+over.
 
 **A relinked run keeps its old name.** The Project panel names a sequence for its
 span — `frame[0001-0050].png` — and relinking rewrites the media reference but not
-the name, so a run that gained or lost frames while it was away shows a stale
-span. It wants the relink to rename a sequence item in the same batch.
+the name (`FootageReference::relink` emits `SetMediaRef` and nothing else), so a run that
+gained or lost frames while it was away shows a stale span. It wants the relink to rename
+a sequence item in the same batch.
 
 **Camera tracking, phase 4 stage 3** (docs/impl/tracking.md §5a–§5b).
 Stage 1 landed the model half — `ParamKind::Action`, the Camera track effect, the
@@ -791,27 +668,23 @@ conversion into `CameraPose`, and the derived camera threaded into the render pa
 and the frame key.
 
 **Stage 3 largely landed** (the effect's Analyse/Cancel and staged status readout,
-the point cloud following the effect and the solve, the analysed-span bar). Still
-owed from its list: **the 2D track exports** (keyframed transform /
-corner-pin from a track group, docs/08 §7's Tracker row).
+the point cloud following the effect and the solve, the analysed-span bar), and the 2D
+track exports came with the planar tracker — **Create corner pin** and **Create transform
+keys** both write ordinary keyframes onto the named Pin layer. Still owed from §5c's own
+list: a **Tracking workspace**; a **picker that links an existing Camera layer**
+(`set_camera_solve_link` is the primitive under it, so this is a panel away); the
+**layer-transform-aware cloud placement** (points come back as the footage's raster centred
+on the comp, which is exact for the ordinary case and wrong by that transform otherwise —
+the fix is a change to `CameraSolveStore`, not arithmetic in the overlay); and the cloud's
+own affordances — a count, a filter, deleting a point, hiding points behind the shot, and
+setting the ground plane and origin from a selection.
 
-Four smaller things stage 2 left, each recorded in docs/impl/tracking.md §5b:
+One thing stage 2 left, recorded in docs/impl/tracking.md §5b:
 
-- **Warm and clear are not wired to a project's life yet.**
-  `lumit_render::track::request` with `analyse: false` reads a cached solve without
-  decoding anything, and `clear()` empties the store; opening a project should do
-  the first for every tracked layer and closing it the second. Until then a link
-  resolves only after Analyse is pressed in the session.
-- **A Camera track on a Precomp layer does not analyse.** The effect is allowed
-  there and the solve link already resolves *through* a precomp to the footage
-  inside; what is missing is analysing a nested comp, which means rendering it
-  frame by frame rather than decoding a file.
-- **Masks are flattened at layer time zero.** The tracker takes one fixed set of
-  exclusion regions for a whole run, so a mask keyframed to follow a moving object
-  — the obvious thing to want — is honoured only in the shape it starts on.
 - **One analysis at a time.** A second `request` while one runs answers `Busy`
-  rather than queueing. Deliberate (two disk-bound jobs halve each other), and a
-  queue is a small change if anyone asks for one.
+    rather than queueing. Deliberate (two disk-bound jobs halve each other), and a
+    queue is a small change if anyone asks for one. The warm pass deliberately does not
+    take the slot, or a project's second tracked clip would never be read back.
 
 **A held re-render cannot see footage move** (the re-render work's remainder). Fast
 motion blur and Datamosh now measure the composite an adjustment layer or a
@@ -835,8 +708,10 @@ was not folded into the re-render work.
 controls have landed. What is left:
 1. **`PreviewEngine::default` still builds its pool without a GPU**, so that
     path measures flow on a headless device of its own; the headless renderer
-    the Flutter frontend drives shares the render device correctly. Pass a
-    context in, or delete the path if nothing drives it.
+    the Flutter frontend drives shares the render device correctly
+    (`DecodePool::with_gpu`). Nothing reads the one that gets built — it is a
+    `WorkerState` field no code touches — so deleting the path is the cheaper of
+    the two answers.
 2. **The remaining CPU work in synthesis is the luma conversion and the frame
     uploads** — about 70 ms of the 79 ms a 1080p interpolation costs, against
     8 ms for the flow itself. Both would go if the decoded frame reached the
@@ -874,22 +749,15 @@ of stored field off an SSD costs more. It would be a cache slower than the thing
 it caches. The RAM tier (`DEFAULT_FLOW_CACHE_BYTES`) is the one that pays.
 
 **Localisation follow-ups.** The seam is built and the strings are out of the
-code (`flutter_ui/lib/l10n/`, `crowdin.yml`); what is left is other people's turn and
-three small gaps:
+code (`flutter_ui/lib/l10n/`); the round trip is the translate page, `scripts/translations.ps1`
+and the `translation-state.json` sidecar that records the English each line was translated
+from, so "stale" is a fact rather than a guess. What is left is other people's turn and one
+gap:
 
-- **Confirm the Crowdin language settings took, on the next pull.** The first
-  pull landed five languages and reddened main twice, both from Crowdin settings, both
-  since corrected there (the `zh`/`zh_Hant` mapping, en-US off) but not yet synced.
-  After the next `crowdin pull translations`, `test/l10n/arb_test.dart` passing is the
-  proof; if `@@locale` comes back hyphenated anyway, the fix moves into CI as a
-  rewrite step on the sync branch.
 - **The two numbered shortcut labels stay English.** `lumit-keymap` builds "Add marker
   {n} at the playhead" and "Go to marker {n}" with `format!`, so they are not literals
   the lookup table can hold (`lib/l10n/engine_labels.dart`). Give the bridge the number
   separately, or the label a stable id, and they join the rest.
-- **No CI check that the source file was pushed.** A string added here is invisible to
-  translators until somebody runs `crowdin push sources` by hand. Worth a release-time
-  step once the project exists.
 
 **Lens flare follow-ups ([impl/lens-flare.md](impl/lens-flare.md))** — the
 shipped core is docs/08 §3.27; its performance items sit in **Now** above. Still owed:
@@ -898,16 +766,17 @@ designer** (`lens_file` has landed, so its output has a place to go); an
 **Occlusion layer** reference; **adaptive grid refinement at vignette folds**, the real
 cure for both known limits (six ablations are already ruled out — do not re-chase
 them with guards). Panel side: the pair row's dropper on
-**Transform's px@comp pairs** (the pick exists); **Radial blur's centre
-migration** to px@comp; one-op writes for a paired keyframe toggle.
+**Transform's px@comp pairs** (the pick exists, on a depth-of-field focal point alone);
+one-op writes for a paired keyframe toggle.
 
 **The stale-fd race on a Linux Viewer resize** (`lumit-render/src/headless.rs`'s
-`shared_dmabuf` re-create, with `lumit-gpu/src/shared_linux.rs`'s `Drop`). The
-exported descriptor is closed when `SharedDmabuf` drops, but the descriptor
-*number* travels to Dart asynchronously, so two quick resizes can have Dart
-register a closed fd - or one the OS has since reissued. Either hold the previous
-`SharedDmabuf` for one generation, or `dup()` at export so the number in flight
-owns itself.
+`shared_dmabuf` pool, with `lumit-gpu/src/shared_linux.rs`'s `Drop`). The pool now
+keeps one target per view and size and evicts by `shared_pool_evictions`, so a resize
+churns fewer handles than it did — but the exported descriptor is still closed when
+`SharedDmabuf` drops, and the descriptor *number* travels to Dart asynchronously, so an
+eviction can have Dart register a closed fd - or one the OS has since reissued. Either
+hold the evicted `SharedDmabuf` for one generation, or `dup()` at export so the number in
+flight owns itself.
 
 **Ramp preset shelf rework** - the Linear/Slow/Fast/Smooth/Sharp buttons need a
 general rethink (owner, 2026-08-02) before they return on the property path; not
@@ -920,76 +789,67 @@ are the reference for behaviour, not wiring targets):
     RATE/MAP type chips; kink badge; graph overrun band + source-out reference
     line; compensating Alt-drag; copy/paste a retime between clips;
     outward-trim-extends-map; the retime keyboard shortcuts (§12); Blend
-    interpolation toggle; Flow-params UI and the source-rate advisory badge.
-- ~~Precomp retiming~~ - **landed 2026-09-08**: a Precomp layer's Retime map reaches
-    the comp inside it at every site that evaluates a nested comp, and overrun under a
-    map holds the boundary frame ([04-RETIMING.md](04-RETIMING.md) §11.3).
+    interpolation toggle; the source-rate advisory badge (§10's "holding each
+    source frame" guidance, when a segment's sampling ratio strays — the
+    Flow-params rows themselves landed, in Effect controls, reading and writing
+    `api::retime`'s Flow group).
 - The Time-lens **vertical (source-position) boundary drag** has no bridge op -
     `Retime::from_source_keyframes` (`lumit-core/src/retime.rs`) is unexposed, and
     the `SetLayerRetime` op this entry used to name alongside it no longer exists
     at all, since Retime moved onto the property path.
 
-**Bridge reads left outside the read model** - the Source card's text/camera
-fields for the selected layer, the Viewer's missing-file probe, and the
-marker/work-area reads on a Timeline rebuild. Fold any into
-`BridgeLayerInfo`/`BridgeCompModel` if they show up in the budget ranking.
+**Bridge reads left outside the read model** - the Source card's text, source-item,
+mask and interpolation reads for the selected layer, the Viewer's missing-file probe, and
+the **composition's** own marker and work-area reads on a Timeline rebuild. A layer's
+markers and a Camera layer's settings both ride `BridgeLayerInfo` now; fold any of the rest
+into `BridgeLayerInfo`/`BridgeCompModel` if they show up in the budget ranking.
 
 **Thin-view debts the 2026-08-10 audit left for engine API** - each is Dart
 doing the engine's job and each wants one bridge call:
-- `viewer_camera.dart` re-derives the renderer's Ry·Rx·Rz basis and picks the
-    active camera itself; wants `comp.activeCameraPose(frame)`.
+- `viewer_camera.dart` still picks the active camera itself, by walking the held
+    layer model, and re-derives the renderer's Ry·Rx·Rz basis in Dart; the *pose*
+    crosses properly now (`layer.cameraPoseAt`, so a two-node camera's aim and a
+    solve link are composed engine-side). Wants `comp.activeCameraPose(frame)`
+    for the half that is left.
 - `viewer_type.dart` mirrors the engine's text-width estimate (caret, anchor,
-    gizmo all share it); wants a `layer.textMetrics` read.
+    gizmo all share `estimatedTextWidth`); wants a `layer.textMetrics` read.
 - `viewer_gizmo.dart`'s `_pathBeingEdited` parses `<layer>/masks/<mask>/path`
     strings in a widget; wants the selection model to expose the pair.
 - The shape tool's Ctrl+Z pops draft points locally (a second undo meaning);
     wants engine-side draft ops so undo stays the document's.
-- `fx_console_context.dart`'s `_keyTransformGroup` builds and sorts keyframe
-    lists in Dart, two bridge calls per comparison; wants a held-keyframe write
-    op on the layer.
 - `FlowRowsFrb.build` (Effect controls) still reads four flow getters in
     build; same class of defect the audit cleared from the Timeline's rows.
 - `theme_tokens.dart`'s `_with` restatement wants `LumitTheme.copyWith` in
-    `theme.dart`, whose four-field shape is documented as deliberate - an
-    owner call, not a mechanical fold.
+    `theme.dart` to cover the tokens, whose five-field shape is documented as
+    deliberate - an owner call, not a mechanical fold.
 - `headless.rs`'s four per-platform present-target-pool bodies share one dance;
     fold them on a machine that compiles the macOS/Linux paths.
 - `ExpressionContext::comp_time` is raw `f64` across an engine boundary
-    (docs/14 typed time); rhai's seam is f64 regardless, so the typed carry is
-    a three-file ripple best taken while `fx/resolved.rs` is quiet.
+    (docs/14 typed time; `lumit-core/src/expression.rs`); rhai's seam is f64
+    regardless, so the typed carry is a three-file ripple best taken while
+    `fx/resolved.rs` is quiet.
 
 **`LumitAppNew` rebuilds the whole app on any `LumitUiState.notifyListeners`** (a
 `ListenableBuilder` above everything), and un-scoped document changes do the same
 via `LumitState`. Reads are nearly free; the widget-tree rebuild is not. Scoping
 the visible tree remains.
 
-**The Windows shared-texture test races, rarely.**
-`lumit-gpu`'s `shared::tests::the_legacy_handle_yields_the_pixels_angle_style`
-failed one CI run with `[0, 0, 0, 0]`. `present` ends with a `CopyResource` and a
-`Flush`, which submits without waiting, and the test's reader opens the shared
-texture on a third device with no keyed mutex to wait on. Fix with a
-`D3D11_QUERY_EVENT` on the reader (test-side only) or by landing the keyed-mutex
-handshake. Wants a Windows machine to write it on.
-
 **Playback scheduler - what remains**
 ([impl/playback-scheduler.md](impl/playback-scheduler.md)): in-render epoch tokens
 (composites are serial on one worker thread, so cancellation latency is one
-frame's render rather than §1's 15 ms), and §6's real-window benches (A/V drift
-over 10 minutes, the underrun ladder). Re-run
-`integration_test/playback_bench_test.dart` to price the stack; it needs a
+frame's render — 200 ms for the reference comp at 32 animated layers — rather than
+§1's 15 ms), and §6's real-window benches (A/V drift over 10 minutes, the underrun
+ladder). Re-run `integration_test/playback_bench_test.dart` to price the stack; it needs a
 1080p60 fixture and a Windows device, so it is run by hand.
 
-**Settings pages not built ([07-UI-SPEC.md](07-UI-SPEC.md) §15):**
-colour-management; preview-mode (Every frame/Adaptive) toggle; CUDA on/off;
-plugins/decoder page; autosave interval/keep; export defaults (preset + filename
-template). Each lands wired to the engine through the bridge, not as a Dart-side
-setting nothing reads.
-
 **Engineering-rules tooling still owed** ([14-ENGINEERING-RULES.md](14-ENGINEERING-RULES.md)):
-fuzz targets for the `.lum` deserialiser and journal replayer (§6); the **edition-2024
-move** (§9 - the toolchain pin landed, the edition did not); the
+fuzz targets for the `.lum` deserialiser and journal replayer (§6 — `lumit-ofx`'s
+`handle_fuzz.rs` is a hand-written test, not a cargo-fuzz target, and there is no fuzz
+directory); the **edition-2024 move** (§9 - the toolchain pin landed at 1.97.1, the
+edition did not: the workspace and every crate still say `edition = "2021"`); the
 `indexing_slicing` / `arithmetic_side_effects` clippy denies after a hot-path sweep (§4);
-`clippy::pedantic` with curated allows (§7); the golden-frame EXR export corpus (§6).
+`clippy::pedantic` with curated allows (§7); the golden-frame EXR export corpus (§6 —
+today's goldens are in-crate oracles).
 
 **Four unmaintained dependencies are deliberately ignored in `deny.toml`.**
 `ttf-parser` (via fontdue, via `lumit-text`) is the one with a real successor: moving
@@ -997,31 +857,22 @@ the rasteriser to `skrifa` is its own piece of work with its own glyph-metric te
 `bincode` 1.x, `paste` and `smartstring` (via rhai, retired 2026-08-11 in favour of
 compact_str/smol_str) leave when the dependencies that pull them update.
 
-**The FFmpeg 8 migration is finished and parked as draft PR #102.** rsmpeg's
-`ffmpeg8` feature, zero source changes, decode proven byte-identical over real
-frames on 7.1 and 8.1 (software and D3D11VA). Blocked on macOS only: Homebrew
-has no `ffmpeg@8` formula and plain `ffmpeg` is already 9.x, which no published
-rsmpeg supports. Unblock: homebrew-core ships `ffmpeg@8`, or someone with a Mac
-proves `brew extract --version=8.x ffmpeg <tap>`; then rebase, flip the
-version gate, one green run, merge. Until then main stays on the immutable
-n7.1.1 dated pin.
-
 **A genuinely FFmpeg-free build is not possible yet.** `lumit_bridge
 --no-default-features` compiles the bridge's own decode paths out, but `lumit-render` and
 `lumit-audio` depend on `lumit-media` unconditionally, so the library is still linked and
 the build still needs it installed. Making those two deps optional — and the render/audio
 paths that use them — is what "builds without FFmpeg" would actually take.
 
-**The three-tier cache's remaining sharp edges.** The disk tier's write queue was
-bounded after it reached 81 GB on an idle Mac; the same shape of question is worth asking of
-the *other* unbounded `mpsc` channels the worker owns (the loaded-frame return, the
-prefetcher's results) — none carries whole frames as freely as the park queue did, but none
-counts its depth either. Also owed from that hunt: nothing reports how deep the park queue
-is running, so a machine whose disk cannot keep up degrades silently (frames simply stop
-reaching disk).
+**The three-tier cache's remaining sharp edge.** The disk tier's write queue was
+bounded after it reached 81 GB on an idle Mac, and its depth is reported now
+(`DiskIo::pending_parks` → `BridgeDiskCacheStats::park_queue_frames` → the Preview and
+cache page); the same shape of question is worth asking of the *other* unbounded `mpsc`
+channels the worker owns (the loaded-frame return, the prefetcher's results) — none
+carries whole frames as freely as the park queue did, but none counts its depth either.
 
 **What the performance harness still cannot measure** (`crates/lumit-bench`
-drives the reference comp headless through B3, B4, B5, B6, B7 and B11, and the job
+drives the reference comp headless through B3, B4, B5, B6, B7 and B11, and adds
+Particulate's B12–B14 and the puppet's B15–B17, which need no comp and no media; the job
 `performance gates (ratio vs baseline)` gates the ratio to a checked-in baseline). Five
 budgets are outside its reach and remain manual release checks, each needing its own
 instrumentation:
@@ -1040,215 +891,152 @@ instrumentation:
 Also owed: **a floor-class runner** (§7.3's Iris Xe-class machine, the standing open
 question), and **the reference-hardware pin** — the absolute budgets are asserted only under
 `LUMIT_REFERENCE_HW=1`, so until a self-hosted runner sets it, nothing in CI checks a
-budget's actual number. A **stress comp** (4K, 20 layers) and the per-effect cost-class
-benchmarks of §7.3 are unbuilt too. The per-node profiler (§7.1) now has its first visible
-piece - the render-time column - and the rest of it (continuous timestamp-query
-collection, the recording mode, the panel) is in the entry above.
+budget's actual number. A **stress comp** (4K, 20 layers) is unbuilt, and §7.3's per-effect
+cost-class benchmarks are begun rather than done: B12–B14 are the first three and ride the
+same baseline file and ratio gate as the rest, and every other built-in effect still wants
+its own per-dispatch time and memory measurement against its declared cost class. The
+per-node profiler (§7.1) now has its first visible piece - the render-time column - and the
+rest of it (continuous timestamp-query collection, the recording mode, the panel) is in the
+**Render-time indicator follow-ups** entry above.
 
 **CI coverage the Flutter port left thin:**
 - **macOS and Windows CI do not require an adapter.** `LUMIT_REQUIRE_GPU` turns
-    a "no adapter" skip into a failure and the Linux job sets it; the
-    other two do not, because nobody has confirmed those runners enumerate one.
-    One run with the variable set says whether they can.
+    a "no adapter" skip into a failure and the Linux job sets it (as does the bench
+    job); the other two do not, because nobody has confirmed those runners
+    enumerate one. One run with the variable set says whether they can.
 - **Nothing in CI proves a Viewer frame arrives.** The Linux job is the only one
     running the Flutter suite and has no GPU, so the six Viewer tests that wait
     for a frame skip there on `LUMIT_NO_ZERO_COPY_VIEWER=1`. They still fail on a
     regression on any machine with a real adapter, so the owner's box is the gate.
     A Linux runner with a GPU, or a Windows job running `flutter test`, closes
     this and verifies the DMA-BUF path at the same time.
-- **The Flutter suite runs at `--concurrency=1`** - the mitigation for the
-    order-dependent tests above, not the fix.
 - **Registering a texture cannot happen in a widget test**, so
     `integration_test/shared_texture_test.dart`, run by hand on a real window, is
     the only coverage of that path.
 
 **Threading / platform:**
-- **Shared-texture producer/consumer fence** - only if a live run shows tearing;
-    verify on the machine first.
-- **Linux packaging** - the Flutter Linux build needs its own packaging when a
-    Linux release matters.
+- **Shared-texture producer/consumer fence on Linux and macOS** - both presents
+    still say "no fence yet" and settle for `device.poll(Maintain::Wait)`; Windows
+    has a real one (a `D3D11_QUERY_EVENT` ended and waited on around the copy).
+    Only if a live run shows tearing; verify on the machine first.
 - **Export options still to build** ([06-RENDER-PIPELINE.md](06-RENDER-PIPELINE.md)
-    §7) - one-click vertical variants (centre-crop reframe), user presets
-    serialised beside the built-ins, export priority and encoder preference order,
-    and free width/height boxes (sizes are preset-driven today). The sound
-    rate, width and layout are engine-real now and wait only on the seam
-    (`BridgeExportSpec` and `BridgeFormatCaps`) and the dialog's three rows.
-- **Export status still speaks the old idiom** - `export.rs` replies in JSON
-    strings (`err_json`) polled on a timer; follow the worker's typed-stream way.
+    §7) - export priority and encoder preference order, and §7.5's **reframe**: the
+    vertical variant ships as a preset (`ExportPreset::Vertical1080p60`, 1080×1920)
+    but only off the 1080p60 landscape preset, and with neither the draggable
+    centre-crop nor the pillar-fit alternative the spec asks for.
+- **Export status still speaks the old idiom** - `crate::export` replies in JSON
+    strings that `api::export::export_poll` re-parses on a timer; follow the
+    worker's typed-stream way.
 
-- **Four shipped chords still have nothing answering them.** The keymap binds
+- **Three shipped chords still have nothing answering them.** The keymap binds
     them and Settings ▸ Keymap lists them, so they can be rebound and still do
     nothing: `,` / `.` (**previous / next keyframe** — it needs a rule for what
     "the keyframes" are when no property row is picked), `Ctrl+,` / `Ctrl+.`
     (**previous / next edit point**, which needs an idea of what counts as an
-    edit point in a comp), `` ` `` (**maximise the panel under the pointer**,
-    dock work), and `K` (**shuttle pause** — the shuttle itself is not built,
-    which is why `J`/`L` step a frame instead). Everything else in docs/07 §15
-    is dispatched.
+    edit point in a comp), and `K` (**shuttle pause** — the shuttle itself is not
+    built, which is why `J`/`L` step a frame instead). Everything else in docs/07
+    §15 is dispatched.
 
 - **The menu bar names its own backlog.** Every row marked
     "(Not implemented)" in File/Edit/Composition/Layer/Animation/View/Help is a
     command with a place waiting for it. What is left, now that the rows whose
     engine call already existed have been wired — History, Trim and Crop comp,
     Layer styles, the Animation menu's three Reveal rows, the View menu's grid,
-    ruler and snap rows, and **Save** and **Apply animation preset** (the same
-    `.lumfx` the Effects & presets panel writes): **Preserve transparency**,
-    **Auto-outline**, the Layer menu's **Camera** family, the Layer menu's
-    **Reveal** row, and **Track motion** — each of which needs an engine or
-    bridge seam that does not exist yet. Two are marked for a
-    reason rather than for want of time: **Add text selector** has nothing to
-    add while a text animator carries exactly one range selector, and
-    **Show wireframe** is wired to the layer-controls switch until the full
-    wireframe display mode (docs/07 §2.2 item 5) gives it something of its own.
-    Delete each mark as the command lands. No chords are suggested for these;
-    the shipped table is docs/07 §15.
+    ruler and snap rows, **Save** and **Apply animation preset** (the same
+    `.lumfx` the Effects & presets panel writes), and the Camera family (Layer ▸
+    Camera settings and Animation ▸ Track camera): **Preserve transparency**,
+    **Auto-outline**, the Layer menu's **Reveal** row, and **Track motion** —
+    each of which needs an engine or bridge seam that does not exist yet. One is
+    marked for a reason rather than for want of time: **Add text selector** has
+    nothing to add while a text animator carries exactly one range selector.
+    **Show wireframe** is not marked at all — it is a live toggle wired to the
+    layer-controls switch, and stays that switch until the full wireframe display
+    mode (docs/07 §2.2 item 5) gives it something of its own. Delete each mark as
+    the command lands. No chords are suggested for these; the shipped table is
+    docs/07 §15.
 
 - **A Flatpak remote, so `flatpak update` has something to update from.**
     Releases ship a single-file `.flatpak` bundle, which installs perfectly well
-    and then never updates: `flatpak update` needs a remote. Export an OSTree
-    repo in `release.yml`, publish it (Cloudflare Pages beside the site)
-    and ship a `.flatpakref`, or submit to Flathub and let it host. Until then
-    Lumit tells Flatpak users the install command rather than offering a button.
+    and then never updates: `flatpak update` needs a remote, and `release.yml`
+    builds its OSTree repo only to bundle out of it and throw it away. Export it,
+    publish it (Cloudflare Pages beside the site) and ship a `.flatpakref`, or
+    submit to Flathub and let it host. Until then Lumit tells Flatpak users the
+    install command rather than offering a button.
 
 ## Later
 
-**AE import, phase 1 (docs/impl/ae-import.md §6) - the walker and the reader
-landed 2026-08-21; three things are still open.** `tools/ae-bridge/` holds the
-ExtendScript walker and the fixture builder, `crates/lumit-import/` holds the bundle
-open and the capture types, tested against the golden bundle and two hand-written
-ones (the schema's readable documentation, and the awkward half one well-formed AE
-project does not contain).
- - **The golden bundle landed 2026-08-20**, from one sitting on a live After Effects
-   26.0: `tools/ae-bridge/fixtures/fixture.lum-bundle/` (two comps, 24 layers, 109
-   unreadables) with `crates/lumit-import/tests/golden.rs` asserting every §5
-   checklist row through the mapped document, the exact report counts, and the
-   unreadables' four known classes. It confirmed the match names and corrected three
-   assumptions (null and adjustment layers are backed by solid *items*; a −100%
-   stretch arrives with its two ends reversed and before comp zero; AE 26 records the
-   modern matte form for both generations). **Two checklist rows are owed against the
-   walker, and each needs one more AE sitting:**
-   - **Roving.** `make-fixture.jsx`'s `setRovingAtKey(2, true)` did not take — the
-     capture records `roving: false` on every Position key, and the walker reads
-     `keyRoving` correctly, so the fixture never contained a roving key to import. The
-     next sitting should set roving on a key whose neighbours are bezier, and report
-     what the builder's step harness caught if it still refuses.
-   - **A 3D layer's Orientation and Material Options.** The capture carries
-     `ADBE Orientation` (`[0, 30, 0]` on the fixture's 3D card) and Casts Shadows;
-     the mapper reads only `ADBE Rotate X/Y/Z`, so both are dropped **without a report
-     row** — the one place the mapping loses something silently, against its own
-     standing rule. Either map orientation onto the three rotation lanes (they are not
-     the same thing: orientation composes before rotation) or raise a row. The camera's
-     Point of Interest, which AE stores under `ADBE Anchor Point`, lands on the
-     anchor-point lanes for the same reason, and its Depth of Field, Aperture and Focus
-     Distance are dropped rowless too.
- - **The structural mapping landed 2026-08-21** (phase 2, first half):
-   `crates/lumit-import/src/map/` turns a capture into a whole new
-   `lumit_core::Document` — the item tree, comps, layers with their kinds, switches,
-   parenting, mattes and masks, the keyframe value copy, blend modes with docs/11 §4's
-   documented fallbacks, both of AE's times as one Retime, markers, and the typed
-   `ImportReport` — with twenty-three tests across two fixtures (`synthetic.lum-bundle`
-   is the ordinary half, `edges.lum-bundle` the awkward one) plus a save-and-reload
-   round trip through `lumit-project`.
- - **The effect table's colour / blur / generate / temporal half landed 2026-08-21**
-   (phase 2, second half): `crates/lumit-import/src/map/fx_colour.rs` claims
-   twenty-seven match names — the Blur & sharpen, Colour, Generate and Temporal rows of
-   docs/11 §5, plus the two rows §5 places at a placeholder on purpose (Remove Grain and
-   Timewarp, each reporting what does the job instead). Per-parameter unit conversion
-   (px@comp), option lists pinned against `tools/ae-audit/
-   ae-audit-report.json`'s defaults, mask references on the mask-path row, and thirty-three
-   conversion tests. Two things are owed:
-   - **The golden-frame tests §5 requires of every mapped conversion** — the golden
-     *bundle* has landed and `tests/golden.rs` checks every converted number against
-     one worked out from the fixture's own inputs, which is not the same thing: these
-     need After Effects *renders* of `fixture.aep` to compare pictures against.
-   - **A keyframed dropdown in this half goes by unremarked.** `fx_colour`'s reader for
-     the controls Lumit does not animate - option lists, switches, seeds - reads the
-     still value only, so an instance whose Fractal type (say) is keyframed imports at
-     Lumit's default with no report row. The distort half reports "the value it starts
-     on" for the same case; both halves should. Rare in real projects and behind no
-     docs/11 clause, but it is the one place either half changes something silently.
-   - **Three undocumented bases are stated choices, not measurements**: Fractal noise's
-     Scale, Advanced Lightning's Turbulence and Add grain's Softness convert on the
-     "AE's default lands on Lumit's default" anchor docs/11 §5 now records. The
-     golden-frame tests replace each with a measurement.
- - **The effect table's distort / stylise / transition / utility half landed 2026-08-21**
-   (phase 2, second half): `crates/lumit-import/src/map/fx_distort.rs` claims twenty-nine
-   match names — the Distortion, Stylise, Transition and Utility rows of docs/11 §5, plus
-   Channel blur and Median, which no other half claims. Per-parameter unit conversion
-   (px@comp, AE's per cent of the layer, and the two bare factors
-   AE reads as decimals), the option collapses and splits §5 names, layer references onto
-   the universal matte row, AE's two clock-reading controls as keyframes, and thirty-eight
-   conversion tests. Three things are owed:
-   - **The golden-frame tests §5 requires of every mapped conversion**, as above.
-   - **The five Controls match names are claimed but unaudited**: `ADBE Slider
-     Control`, `ADBE Angle Control`, `ADBE Checkbox Control`, `ADBE Color Control` and
-     `ADBE Point Control` were added to this half after the 2026-08-20 sitting, so
-     docs/11 §5 marks their rows **pending** and `tools/ae-audit/
-     claimed-matchnames.txt` carries them (60 names to 65). The next sitting confirms
-     the five spellings; a wrong one costs only the placeholder road §6 already
-     specifies.
-   - **Turbulent displace's Pinning maps at one index**: the audit records a dropdown's
-     default but not its option strings, so only AE's own default (every edge) is pinned
-     from evidence and every other index is reported rather than guessed. A second audit
-     pass that enumerates option strings closes it, and would also confirm the orders
-     this half took from Photoshop's published list (Warp's fifteen styles) and from AE's
-     own defaults (Wave warp's eight pinnings, the ten-entry channel picker).
- - **The surface landed 2026-08-20** (phase 3): `LumitBridgeState::import_ae_bundle`
-   in `crates/lumit-bridge/src/api/import.rs`, adopting the mapped document through
-   the `api::state::adopt` road `open_project` now shares, with footage relinked by
-   `resolve_all_media` against the bundle's folder; File ▸ Import ▸ Bridge bundle
-   folder…; and the report window `flutter_ui/lib/shell/ae_report_frb.dart`. Reasons
-   cross as a stable id plus their facts and are written in
-   `l10n/engine_labels.dart`, gated by `engine_labels_test.dart` reading the
-   `Reason` enum. Three things are owed:
-   - **The collected `footage/` copy is still owed.** Of docs/11 §2.5's four relink
-     steps, the absolute path and the search-folder sweep both run (2026-08-24:
-     whatever the first three resolver steps leave lost is looked for by file name
-     under the folder the `.aep` or bundle was picked from, one walk for all of them),
-     so a project copied across with its media beside it now comes up linked. What is
-     left is the collected copy and the hash verification that wants it: write the
-     `footage/` folder, store a genuinely relative path beside it, and the re-rooting
-     and fingerprint steps start paying too.
-   - **A report row does not lead anywhere** (docs/11 §9's navigation): a row names
-     its comp ▸ layer ▸ property and double-clicking it does nothing. It needs the
-     row to carry an id, not just a path, which means the bridge row carrying one.
-   - **The report is not kept** (docs/11 §9's persistence): it lives as long as its
-     window, is not stored in the project's `ae` namespace, is not reopenable from
-     the File menu, and is not written beside the bundle as `import-report.json`.
-     The reason-level filter §9 asks for (disabled expressions as their own list)
-     belongs with that work; the built filter is by outcome.
+**AE import, phase 1 (docs/impl/ae-import.md §6) - the walker, the reader, the
+structural mapping, both halves of the effect table and the surface all landed
+2026-08-20..21.** `tools/ae-bridge/` holds the ExtendScript walker and the fixture
+builder; `crates/lumit-import/` the bundle open, the capture types, `map/` and the typed
+`ImportReport`; `crates/lumit-bridge/src/api/import.rs` the adoption and
+`flutter_ui/lib/shell/ae_report_frb.dart` the report window.
+`crates/lumit-import/tests/golden.rs` holds the lot against the golden bundle from one
+sitting on a live After Effects 26.0 (`tools/ae-bridge/fixtures/fixture.lum-bundle/`, two
+comps, 24 layers, 109 unreadables), beside the two hand-written ones — the schema's
+readable documentation, and the awkward half one well-formed AE project does not contain.
+What that sitting and the two halves left open:
+ - **Roving, and it needs one more AE sitting.** `make-fixture.jsx`'s
+   `setRovingAtKey(2, true)` did not take — the capture records `roving: false` on every
+   Position key, and the walker reads `keyRoving` correctly, so the fixture never
+   contained a roving key to import. The next sitting should set roving on a key whose
+   neighbours are bezier, and report what the builder's step harness caught if it still
+   refuses.
+ - **Material Options' Casts Shadows is dropped without a report row** — the one place
+   the mapping loses something silently, against its own standing rule. Lumit has no
+   field for it, which is the ordinary case for a row; every other such row is raised,
+   and this one is not.
+ - **The golden-frame tests §5 requires of every mapped conversion.** The golden
+   *bundle* has landed and `tests/golden.rs` checks every converted number against one
+   worked out from the fixture's own inputs, which is not the same thing: these need
+   After Effects *renders* of `fixture.aep` to compare pictures against. They also
+   replace **three undocumented bases that are stated choices, not measurements** —
+   Fractal noise's Scale, Advanced Lightning's Turbulence and Add grain's Softness
+   convert on the "AE's default lands on Lumit's default" anchor docs/11 §5 records.
+ - **A keyframed dropdown in the colour half goes by unremarked.** `fx_colour`'s reader
+   for the controls Lumit does not animate — option lists, switches, seeds — reads the
+   still value only, so an instance whose Fractal type (say) is keyframed imports at
+   Lumit's default with no report row. `fx_distort` reports "the value it starts on" for
+   the same case; both halves should. Rare in real projects and behind no docs/11 clause,
+   but it is the one place either half changes something silently.
+ - **Ten match-name rows are claimed but unaudited** (docs/11 §5's `pending_audit`): the
+   five Controls and the five added with the file itself — Invert, Exposure, Apply Color
+   LUT, Sharpen, Unsharp Mask. Their match names are the famous ones, but their property
+   trees were not in the 2026-08-20 captured set, so the parameter numbering is
+   reconstructed rather than read off a live After Effects.
+   `tools/ae-audit/claimed-matchnames.txt` carries all ten (60 names to 70). The next
+   sitting confirms them; a wrong one costs only the placeholder road §6 already
+   specifies.
+ - **Turbulent displace's Pinning maps at one index**: the audit records a dropdown's
+   default but not its option strings, so only AE's own default (every edge) is pinned
+   from evidence and every other index is reported rather than guessed. A second audit
+   pass that enumerates option strings closes it, and would also confirm the orders the
+   distort half took from Photoshop's published list (Warp's fifteen styles) and from
+   AE's own defaults (Wave warp's eight pinnings, the ten-entry channel picker).
+ - **The collected `footage/` copy is still owed.** Of docs/11 §2.5's four relink steps,
+   the absolute path and the search-folder sweep both run, so a project copied across
+   with its media beside it now comes up linked. What is left is the collected copy and
+   the hash verification that wants it: write the `footage/` folder, store a genuinely
+   relative path beside it, and the re-rooting and fingerprint steps start paying too.
+ - **A report row does not lead anywhere** (docs/11 §9's navigation): a row names its
+   comp ▸ layer ▸ property and double-clicking it does nothing. `BridgeImportRow` carries
+   a path string and no id, so the row has nothing to navigate *to*.
+ - **The report is not kept** (docs/11 §9's persistence): it lives as long as its window,
+   is not stored in the project's `ae` namespace, is not reopenable from the File menu,
+   and is not written beside the bundle as `import-report.json`. The reason-level filter
+   §9 asks for (disabled expressions as their own list) belongs with that work; the built
+   filter is by outcome.
 
 **The direct `.aep` parser (docs/impl/ae-import.md §7) - phases A, B and C all
-landed 2026-08-21; what is left is depth, not surface.** `crates/lumit-import/src/aep/` reads an
-After Effects project file itself and fills the same `Capture` the Bridge writes, so
-the mapping, the effect table and the report are shared unchanged: `rifx.rs` is the
-bounds-checked container walk, `enums.rs` the funnel tables, `mod.rs` the structure
-decode and `open_aep`, `props.rs` the property system. `tests/aep_differential.rs`
-parses `fixture.aep` and compares the project block, all 22 items, both comps'
-settings, all 24 layers and every property tree against
-`fixture.lum-bundle/capture.json` - AE's own account of the same file - field for
-field; §7.1 and §7.2 are the proved layout maps.
- - **Recovery, asserted in CI** (§7.2 has the table): 684 static property values
-   exact with none wrong and none invented - the 646 the file stores, plus the 38
-   Position and Anchor Point defaults the parser writes in for the records After
-   Effects leaves out, each asserted against AE's own number - 27 of 27 keyframes with their ease and
-   spatial tangents, 2 expressions, 13 effect instances, 2 masks with their paths,
-   4 markers, 1 separated-dimension property, and the 3 `CUSTOM_VALUE` blobs as raw
-   bytes - which the Bridge cannot get at all. `map_capture` on the parsed capture
-   and on the golden bundle produce documents with identical counts. The 2,734
-   golden leaves the parser does *not* report are the ones the file does not store,
-   because they are at their defaults. A sixty-four-case damage sweep (truncations,
-   flipped bytes, `0xFFFFFFFF` sizes, zeroed runs, fixed seeds) requires an answer
-   from every one and times the lot: no panic, no hang, typed refusals.
- - **Phase C landed** (docs/impl/ae-import.md §7.3): `lumit_import::open_ae` routes by
-   the file's magic — folder → bundle, `RIFX`/`RIFF` → `open_aep`, else the zip reader —
-   so one bridge call takes both front doors and the picker's only job is to offer both.
-   File ▸ Import ▸ After Effects project… is the file picker (`.aep`, `.zip`), Bridge
-   bundle folder… the quieter folder one; skipped chunks arrive as
-   `Reason::ChunkUnreadable` rows on the same summary, raised only for this route so the
-   Bridge's own unreadables are not said twice; an `.aep` this build cannot read posts a
-   calm notice naming the Bridge route, project standing. Proved end to end by
-   `flutter_ui/test/frb/ae_import_frb_test.dart` on the real `fixture.aep`.
+landed 2026-08-21; what is left is depth, not surface.** `crates/lumit-import/src/aep/`
+reads an After Effects project file itself and fills the same `Capture` the Bridge
+writes, so the mapping, the effect table and the report are shared unchanged: `rifx.rs`
+is the bounds-checked container walk, `enums.rs` the funnel tables, `mod.rs` the
+structure decode and `open_aep`, `props.rs` the property system.
+`tests/aep_differential.rs` compares every recovered field against
+`fixture.lum-bundle/capture.json` — AE's own account of the same file — and its
+**exemption list is part of what it asserts**, which is what makes the items below
+readable off the test rather than off this file.
  - **Corpus testing is owed.** One fixture from one After Effects version proves the
    offsets it contains and nothing about the ones it does not. Real community project
    files across several AE versions, run through the parser looking for panics, refusals
@@ -1256,307 +1044,254 @@ field; §7.1 and §7.2 are the proved layout maps.
  - **One doc debt the phases left behind.** An effect **parameter name** now has a CI
    assertion but an effect parameter *value* in DOM units is asserted only through the
    shared value sweep; that is enough today and worth naming if the units table grows.
- - **Two encodings are still owed**: a text document (`btds`) and a gradient
-   (`GCst`). The text document arrives carrying its match name and a note saying the
-   encoding is not decoded, so the report already says so. **The gradient is
-   unmeasured**: `fixture.aep` holds no `GCst` chunk at all - the shape layer's
-   gradient is at its default and the file stores only what is not - so nothing has
-   been proved about it either way, and a fixture with a non-default gradient is owed
-   before anything is claimed. Decoding both is still owed after phase C, alongside
-   **decoding the arbitrary-data blobs** - the sixteen-point Curves target is
-   reachable in principle now that the bytes are in hand, measured rather than
-   promised - and **shape-layer and text depth**, which arrive named and marked
-   rather than drawn.
- - **Property display names are not read, and may never be.** They are After
-   Effects' own localised resources rather than data in the file (a property nobody
-   renamed carries the `-_0_/-` sentinel), so 1,106 of the golden capture's names
-   have no source in the project. The mapper falls back to the match name; effect
-   parameters, effect instances and masks do get their real names - 83 of them, every
-   one asserted equal to AE's own, so a drifted `pard` offset cannot hand a parameter
-   its neighbour's name unnoticed. A name table for the other 1,106 would be a table
-   of Adobe's English strings - a separate decision, not an oversight.
+ - **Two encodings are still owed**: a text document (`btds`) and a gradient (`GCst`).
+   The text document arrives carrying its match name and a note saying the encoding is
+   not decoded, so the report already says so. **The gradient is unmeasured**:
+   `fixture.aep` holds no `GCst` chunk at all — the shape layer's gradient is at its
+   default and the file stores only what is not — so nothing has been proved about it
+   either way, and a fixture with a non-default gradient is owed before anything is
+   claimed. Decoding both is still owed, alongside **decoding the arbitrary-data blobs** —
+   the sixteen-point Curves target is reachable in principle now that the bytes are in
+   hand, measured rather than promised — and **shape-layer and text depth**, which arrive
+   named and marked rather than drawn.
+ - **Property display names are not read, and may never be.** They are After Effects'
+   own localised resources rather than data in the file (a property nobody renamed
+   carries the `-_0_/-` sentinel), so 1,106 of the golden capture's names have no source
+   in the project. The mapper falls back to the match name; effect parameters, effect
+   instances and masks do get their real names — 83 of them, every one asserted equal to
+   AE's own, so a drifted `pard` offset cannot hand a parameter its neighbour's name
+   unnoticed. A name table for the other 1,106 would be a table of Adobe's English
+   strings — a separate decision, not an oversight.
  - **The project-level `LIST EfdG` fallback is not read.** It carries every effect's
-   parameter definitions and is what tells a real parameter from a topic heading
-   when a layer's own `parT` is empty (Gaussian Blur's is). None of the fixture's
-   effects needed it; an effect that does simply reads its slots as the plain
-   numbers they are stored as.
- - **A mask path's linear speed is 1.0 per segment in the DOM**, and one sample
-   cannot say whether that is a constant or a duration-derived number, so the
-   differential exempts it rather than curve-fitting. Nothing downstream reads a
-   linear side's speed. A fixture with an animated path over a different duration
-   settles it.
- - **The rest of footage interpretation is not read, and needs a fixture that has
-   some.** A footage item's **name**, **path**, **placeholder-ness** and
-   **missing-at-save** flag are read - measured against a real production
-   project and against the layouts `forticheprod/py-aep` documents, with synthetic
-   byte fixtures in `aep/mod.rs`'s tests as the regression. Frame rate, alpha, fields,
-   pulldown and loop are still unread: Lumit has no field for any of them, and
-   `fixture.aep` is solids and comps with no file footage in it, so not one of those
-   offsets could be checked against AE. One more sitting with real footage in the
-   project unblocks the group, and the differential test asserts the fixture still has
-   none so the exemption cannot rot.
+   parameter definitions and is what tells a real parameter from a topic heading when a
+   layer's own `parT` is empty (Gaussian Blur's is). None of the fixture's effects needed
+   it; an effect that does simply reads its slots as the plain numbers they are stored as.
+ - **A mask path's linear speed is 1.0 per segment in the DOM**, and one sample cannot
+   say whether that is a constant or a duration-derived number, so the differential
+   exempts it rather than curve-fitting. Nothing downstream reads a linear side's speed.
+   A fixture with an animated path over a different duration settles it.
+ - **The rest of footage interpretation is not read, and needs a fixture that has some.**
+   A footage item's **name**, **path**, **placeholder-ness** and **missing-at-save** flag
+   are read — measured against a real production project and against the layouts
+   `forticheprod/py-aep` documents, with synthetic byte fixtures in `aep/mod.rs`'s tests
+   as the regression. Frame rate, alpha, fields, pulldown and loop are still unread:
+   Lumit has no field for any of them, and `fixture.aep` is solids and comps with no file
+   footage in it, so not one of those offsets could be checked against AE. One more
+   sitting with real footage in the project unblocks the group, and the differential test
+   asserts the fixture still has none so the exemption cannot rot.
  - **An effect on a layer that is not the comp's size is owed.** Both layers carrying
    effects in `fixture.aep` are 640 x 360 in a 640 x 360 comp, so the frame an effect's
-   stored two-dimensional point is a fraction *of* could not be measured: the parser now
-   reads it against the layer (the format's own convention - the anchor point
-   and the mask path are the only other normalised values and both are the layer's),
-   which is what `an_effects_point_is_a_fraction_of_its_layer_not_of_the_composition`
-   in `aep::props` pins. A sitting with a Transform effect on a precomp or solid of a
+   stored two-dimensional point is a fraction *of* could not be measured: the parser
+   reads it against the layer (the format's own convention — the anchor point and the
+   mask path are the only other normalised values and both are the layer's), which is
+   what `an_effects_point_is_a_fraction_of_its_layer_not_of_the_composition` in
+   `aep::props` pins. A sitting with a Transform effect on a precomp or solid of a
    different size than its comp settles it against After Effects itself.
  - **A dragged layer is owed too, and cannot be forged.** Every layer in `fixture.aep`
-   starts at zero, so `ldta`'s start offset - what puts in and out points, keyframe times
-   and a stretch's reach back on the comp's clock - is measured against AE at one value
+   starts at zero, so `ldta`'s start offset — what puts in and out points, keyframe times
+   and a stretch's reach back on the comp's clock — is measured against AE at one value
    only, and the 50 % layer sitting at zero cannot tell stretch-about-the-start from
    stretch-about-the-origin. The fixture is authored *by* After Effects
    (`make-fixture.jsx` inside a running AE), so hand-written bytes would be this parser's
    guess compared against this parser: owed is a sitting with a layer dragged along the
-   timeline and a second both dragged and stretched. Standing in meanwhile:
+   timeline and a second both dragged and stretched. Standing meanwhile:
    `a_layers_in_and_out_are_counted_from_its_own_start` and
    `a_stretched_layer_is_stretched_from_its_start` in `aep::tests`, which prove the parser
    reads the field it was handed and not that the field is where AE puts it. The
    differential test asserts every start is still zero, so the exemption cannot rot.
- - **A reflected layer's ends are one frame loose.** At −100% stretch AE reports its
-   two ends 1/3000 s further out than the file's arithmetic gives, as if it reflects
-   inclusive indices on an internal grid; with one sample the grid cannot be proved,
-   so the differential test compares those two within a frame. A fixture with a second
+ - **A reflected layer's ends are one frame loose.** At −100% stretch AE reports its two
+   ends 1/3000 s further out than the file's arithmetic gives, as if it reflects
+   inclusive indices on an internal grid; with one sample the grid cannot be proved, so
+   the differential test compares those two within a frame. A fixture with a second
    negative-stretch layer at a different frame rate settles it.
  - **Every funnel-table row the fixture does not exercise is `reference`, not proved**
    (marked as such in `enums.rs`): most blend modes, two matte types, `WIREFRAME`
    quality, three light types, two auto-orient modes, and the three non-Classic
    renderers. A fixture that uses them turns each into a measurement.
 
-**AE effect parity, wave 1 (docs/impl/ae-effect-parity.md) - landed in full 2026-08-20.**
-Eighteen Tier-A effects in four family batches: ~~colour (Curves, Levels, Brightness, Hue
-and saturation)~~, ~~generate (Fill, Gradient, Noise, Fractal noise)~~,
-~~distort (Turbulent displace, Tile, Offset, Mirror, Lens distort)~~,
-~~utilities and transitions (Drop shadow, Set matte, Channel blur, Linear wipe, Radial
-wipe)~~. docs/11's seed table is trued for all eighteen.
-
-**AE effect parity, wave 2 (docs/impl/ae-effect-parity.md) - landed in full 2026-08-20.**
-All of Tier B, by owner's ruling, with one standing exclusion (no particle-world port).
-Six batches: ~~Distort I (Corner pin, Displacement map, Polar coordinates, Twirl,
-Spherize)~~, ~~Distort II (Ripple, Wave warp, Bezier warp, Warp, Roughen
-edges)~~, ~~Stylise I (Posterize, Threshold, Tritone, Photo filter, Black and
-white, Shadow highlight)~~, ~~Stylise II (Median, Mosaic, Find edges, Emboss,
-Texturize, Broadcast safe)~~ **landed 2026-08-20, catalogue at 75**,
-~~Transitions (Venetian blinds, Iris wipe, Card wipe)~~ **landed 2026-08-20,
-catalogue at 78**, ~~Draw and grain (Beam, Lightning, Radio waves, Vegas, Add grain)~~
-**landed 2026-08-20, catalogue at 83**. Scribble, Stroke and Vegas' Mask/Path
-half stopped on the mask seam and landed with it the next day - **landed
-2026-08-21, catalogue at 85**. docs/11's seed table is trued for all thirty-two, with no
-substitutes left in it.
+**AE effect parity (docs/impl/ae-effect-parity.md) - waves 1 and 2 both landed in
+full, 2026-08-20..21, with one standing exclusion (no particle-world port).** All
+eighteen Tier-A effects and all of Tier B, by owner's ruling; docs/11's seed table is
+trued for all fifty, with no substitutes left in it. The limits each wave recorded
+against its own effects, so they are not re-derived:
  - **A mask-path row names one mask, and three AE controls want a set** (docs/08
    §3.78-§3.79). Scribble, Stroke and Vegas' Mask/Path source are built and the import's
    substitutes are retired; what is still reported against the seam is AE's **All Masks**
-   and **Stroke Sequentially**, and Scribble's two multi-mask Fill Types. All three want a
-   row naming a *set* of masks - a small extension of `ParamKind::MaskPath` and a list
-   rather than a slot in the carriage. Nobody has asked for it.
+   and **Stroke Sequentially**, and Scribble's two multi-mask Fill Types. All three want
+   a row naming a *set* of masks — a small extension of `ParamKind::MaskPath`, which
+   still carries one optional mask id, and a list rather than a slot in the carriage.
+   Nobody has asked for it.
  - **A path drawing is capped at 512 straight pieces** (docs/08 §3.78). The geometry
-   rides in a uniform, exactly as Lightning's bolt does, and past the cap every consumer
-   coarsens rather than drawing part of a shape: the hatch widens its spacing, the dots
-   space out, the chain straightens. A storage buffer is the answer the day something wants
-   tens of thousands of pieces; nothing does, so none was built.
- - **Lightning ships four of AE's eight types, and no Alpha Obstacle** (docs/08
-   §3.74). Breaking, Bouncey, Anywhere and Vertical map to the nearest of the four and are
-   reported; Alpha Obstacle asks the bolt to route around the layer's own alpha, which is a
-   *search* rather than a formula and would change the effect's cost class. If it is ever
-   wanted it wants a distance field of the alpha and a bolt built against it, both of which
-   the host-side generator could do without touching the kernel.
+   rides in a uniform (`MAX_PIECES` in `fx_pathdraw.wgsl`), exactly as Lightning's bolt
+   does, and past the cap every consumer coarsens rather than drawing part of a shape:
+   the hatch widens its spacing, the dots space out, the chain straightens. A storage
+   buffer is the answer the day something wants tens of thousands of pieces; nothing
+   does, so none was built.
+ - **Lightning ships four of AE's eight types, and no Alpha Obstacle** (docs/08 §3.74).
+   Breaking, Bouncey, Anywhere and Vertical map to the nearest of Direction, Strike, Omni
+   and Two-way strike and are reported; Alpha Obstacle asks the bolt to route around the
+   layer's own alpha, which is a *search* rather than a formula and would change the
+   effect's cost class. If it is ever wanted it wants a distance field of the alpha and a
+   bolt built against it, both of which the host-side generator could do without touching
+   the kernel.
  - **Beam has no 3D perspective** (docs/08 §3.73), for Card wipe's reason: AE's
    foreshortens the beam from a camera of its own, and Lumit keeps cameras on the
    composition (docs/06). The same composition-camera input that would give Card wipe its
-   grid would give Beam this.
- - **Radio waves ships one Stroke width where AE tapers from a start to an end**, and only
-   its Polygon wave type (docs/08 §3.75). A taper needs the *age* to reach the
-   stroke's width, which it already does for the fade — so it is a cheap addition whenever
-   somebody wants it. Image Contours is Vegas, and so is Mask now (its Mask/Path
-   source) - both are reported as suggestions rather than built into Radio waves itself.
+   grid would give Beam this; `ParamKind` still has no camera row.
+ - **Radio waves ships one Stroke width where AE tapers from a start to an end**, and
+   only its Polygon wave type (docs/08 §3.75). A taper needs the *age* to reach the
+   stroke's width, which it already does for the fade — so it is a cheap addition
+   whenever somebody wants it. Image Contours is Vegas, and so is Mask now (its Mask/Path
+   source) — both are reported as suggestions rather than built into Radio waves itself.
  - **Vegas' Segment length is a length, not a count** (docs/08 §3.76). AE traces the
    contour into a path and can therefore count segments *around* it. **On the Mask/Path
-   source this is fixed**: there the dashes are spaced by measured distance round
-   the mask, so they stay even however hard it curves, and the import converts AE's Segments
+   source this is fixed**: there the dashes are spaced by measured distance round the
+   mask, so they stay even however hard it curves, and the import converts AE's Segments
    exactly. It is only the contour half that still drifts in phase on a curve, because it
-   still never traces one - the machinery that would let it is now sitting next door.
- - **Card wipe has no camera, no back layer, and no Card Scale** (docs/08 §3.72).
-   Each card is projected in its own local frame at a fixed viewing distance, because
-   Lumit keeps cameras on the composition (docs/06) and has none on an effect. If effects
-   ever get a composition-camera input, the grid could be projected through it and AE's
-   Camera Position / Corner Pins / Composite Camera would stop being reported. A back
-   layer would need a second layer row, which §3.68's test says a card wipe can justify.
- - **Card wipe's Flip order has no Gradient entry** (docs/08 §3.72). AE reads that
-   order from a gradient *layer*; Lumit's one layer row is the universal Matte, and a card
-   wipe wants to say "only over the sky" as well as "in this order". A Gradient order can
+   still never traces one — the machinery that would let it is now sitting next door.
+ - **Card wipe has no camera, no back layer, and no Card Scale** (docs/08 §3.72). Each
+   card is projected in its own local frame at a fixed viewing distance, because Lumit
+   keeps cameras on the composition (docs/06) and has none on an effect. If effects ever
+   get a composition-camera input, the grid could be projected through it and AE's Camera
+   Position / Corner Pins / Composite Camera would stop being reported. A back layer
+   would need a second layer row, which §3.68's test says a card wipe can justify.
+ - **Card wipe's Flip order has no Gradient entry** (docs/08 §3.72). AE reads that order
+   from a gradient *layer*; Lumit's one layer row is the universal Matte, and a card wipe
+   wants to say "only over the sky" as well as "in this order". A Gradient order can
    arrive later on a row of its own without moving anything. Randomness plus Seed covers
-   the intent meanwhile. The import cannot read the spread - the capture carries the
-   gradient layer's *index*, not its pixels - so an instance using Gradient imports as
+   the intent meanwhile. The import cannot read the spread — the capture carries the
+   gradient layer's *index*, not its pixels — so an instance using Gradient imports as
    Left to right on AE's own Timing Randomness, and both are reported.
- - **Median's Radius is capped at 3 and cannot be typed past** (docs/08 §3.64), the
-   only control in the catalogue for which that is true. The cost is the fourth power of
-   the radius, so a larger window needs a different algorithm - a per-tile histogram, or a
-   separable approximation that is no longer a median - and either is its own programme
+ - **Median's Radius is capped at 3 and cannot be typed past** (docs/08 §3.64), the only
+   control in the catalogue for which that is true. The cost is the fourth power of the
+   radius, so a larger window needs a different algorithm — a per-tile histogram, or a
+   separable approximation that is no longer a median — and either is its own programme
    with its own oracle. The import writes 3 and reports the instance as approximated.
  - **Texturize's Placement cannot honour AE's *native-size* Tile and Centre** (docs/08
-   §3.68). The layer carriage renders a referenced layer at this raster, so the
-   texture arrives frame-shaped and Scale is what says how big one copy is. If a layer
-   input ever carries its source's own dimensions alongside the texture, the three
-   Placements could use them and the import would stop approximating the size.
+   §3.68). The layer carriage renders a referenced layer at this raster, so the texture
+   arrives frame-shaped and Scale is what says how big one copy is. If `ParamKind::Layer`
+   ever carries its source's own dimensions alongside the texture, the three Placements
+   could use them and the import would stop approximating the size.
  - **The Stylise II proof renders on the CPU, and the fixtures are gradients.** Median,
-   Find edges and Emboss are the first effects whose picture cannot be judged on the smooth
-   clips in `C:/tmp/lumit-shots` at all, and the batch was judged on a screenshot instead.
-   A fixture with real high-frequency detail in it - a resolution chart, a page of type -
-   would serve every future edge-detecting or despeckling effect.
- - **Shadow highlight has no Auto amounts, and probably never should** (docs/08
-   §3.63). AE's is a whole-frame histogram reduction smoothed across neighbouring frames,
-   which makes a grade whose answer at a frame depends on the shot around it. If it is
-   ever wanted, it is a *scene analysis* feature with its own cache and its own doc, not a
+   Find edges and Emboss are the first effects whose picture cannot be judged on the
+   smooth clips in `C:/tmp/lumit-shots` at all, and the batch was judged on a screenshot
+   instead. A fixture with real high-frequency detail in it — a resolution chart, a page
+   of type — would serve every future edge-detecting or despeckling effect.
+ - **Shadow highlight has no Auto amounts, and probably never should** (docs/08 §3.63).
+   AE's is a whole-frame histogram reduction smoothed across neighbouring frames, which
+   makes a grade whose answer at a frame depends on the shot around it. If it is ever
+   wanted, it is a *scene analysis* feature with its own cache and its own doc, not a
    checkbox on this effect — and the import already reports it.
  - **Shadow highlight ships one Radius where AE ships two.** The second full-frame
    gaussian is real work for the softness of a mask; if a shot ever needs the shadows'
    mask measured at one scale and the highlights' at another, the kernel takes a second
    bound texture and the uniform grows one float.
  - **The old distort kernels still guard a texture fetch instead of clamping it**:
-   Mirror, Tile, Lens distort, Drop shadow, Transform, Shake and the blur
-   family all carry the early-return form of `tap`, which the compiler may hoist above
-   its own bounds check. A pixel whose four bilinear taps are *all* outside the frame can
-   come back opaque instead of empty. Wave 2's five kernels use the clamp-and-`select`
-   form; the rest want the same one-line change, and an oracle case that drives every tap
-   outside at once so the fix is held.
- - **Bezier warp's twelve points want on-picture handles.** v1 ships them as
-   twenty-four ordinary rows, four corners open and the eight tangents behind their
-   edges' headings (docs/08 §3.55). Dragging a Bezier patch in the Viewer is the same
-   overlay job Corner pin's four points want and should land with them; the stored form
-   is AE's clockwise walk and survives the editor.
- - **Warp has no Warp Axis, and Wave warp no noise wave types.** Both are recorded
-   skips (docs/08 §3.56, §3.54) that the import reports rather than approximates. The
-   axis swap is six lines whenever someone misses it; the noise wave types are §3.37's
-   field wearing a wave's clothes and probably never want building.
- - ~~**The noise core is built but only half used.**~~ **Done 2026-08-20.** Turbulent
-   displace reads the same field. The WGSL half moved to `fx_noise_core.wgsl`, which is
-   prepended to both kernels at pipeline build (WGSL has no `include`), so there is one
-   twin of `lumit-core/src/fx/noise.rs` rather than one per effect.
- - **Fractal noise is missing five AE controls**, all of them one more scalar through
-   the same loop: Sub rotation, Sub offset, Perspective offset, Centre subscale, and
-   the Overflow modes beyond Clip (docs/08 §3.37). None changes what the effect is;
-   they land when a real project asks.
- - roadmap features not yet built
+   `fx_mirror`, `fx_lensdistort`, `fx_dropshadow`, `fx_transform`, `fx_shake_mb` and the
+   blur family (`fx_blur`, `fx_chanblur`, `fx_dirblur`, `fx_radialblur`) all carry the
+   early-return form of `tap`, which the compiler may hoist above its own bounds check. A
+   pixel whose four bilinear taps are *all* outside the frame can come back opaque
+   instead of empty. Wave 2's kernels use the clamp-and-`select` form and Tile clamps
+   outright, its edge policy being wrap; the rest want the same one-line change, and an
+   oracle case that drives every tap outside at once so the fix is held.
+ - **Bezier warp's twelve points want on-picture handles.** v1 ships them as twenty-four
+   ordinary rows, four corners open and the eight tangents behind their edges' headings
+   (docs/08 §3.55). Dragging a Bezier patch in the Viewer is the same overlay job Corner
+   pin's four points want and should land with them; the stored form is AE's clockwise
+   walk and survives the editor.
+ - **Warp has no Warp Axis, and Wave warp no noise wave types.** Both are recorded skips
+   (docs/08 §3.56, §3.54) that the import reports rather than approximates. The axis swap
+   is six lines whenever someone misses it; the noise wave types are §3.37's field
+   wearing a wave's clothes and probably never want building.
+ - **Fractal noise is missing five AE controls**, all of them one more scalar through the
+   same loop: Sub rotation, Sub offset, Perspective offset, Centre subscale, and the
+   Overflow modes beyond Clip (docs/08 §3.37). None changes what the effect is; they land
+   when a real project asks.
 
-Grouped by the phase they belong to in [16-ROADMAP.md](16-ROADMAP.md). A pointer
-list, not a re-statement of the roadmap.
+**Roadmap features not yet built.** Grouped by the phase they belong to in
+[16-ROADMAP.md](16-ROADMAP.md). A pointer list, not a re-statement of the roadmap; a
+line goes the moment its subsystem ships.
 
 - **Media engine ([05-ARCHITECTURE.md](05-ARCHITECTURE.md) §6).** The one-copy
-    D3D11→DX12 interop and VideoToolbox; proxy generation; the resource
-    governor; ProRes/DNxHR intermediate export (v1 is
-    H.264/HEVC only); the 8-/32-bpc working-depth switch (v1 is fp16 only); OCIO
-    v2 colour management and its UI.
-- **Audio** ([07-UI-SPEC.md](07-UI-SPEC.md) §10, [09-AUDIO.md](09-AUDIO.md)): the
-    Audio panel, the Mixer, the meters and the beat-tuning controls all landed with
-    the AudioWorkspace programme, and the **Audio timeline** panel (07 §4.8,
-    [impl/audio-timeline.md](impl/audio-timeline.md)) landed after it: clips on a row,
-    stored fade shapes, overlaps that crossfade, and an effect rack per clip. Still owed: persistent
-    waveform peak files (the multi-zoom summary is built on demand and cached for
-    the session — never written to the project sidecar, so it is rebuilt
-    next time the project opens); the §3.4 scrub-audition grain and its Timeline
-    toggle; and §5's replace-or-merge offer on a re-run (detection replaces).
-- **File format ([10-FILE-FORMAT.md](10-FILE-FORMAT.md)).** Embedded `thumbs/`
-    previews in the `.lum`; the per-project sidecar `proxies/`, `peaks/` and
-    `flow/` directories (only `frames/` and the global media index exist).
-- **Design ([15-DESIGN.md](15-DESIGN.md)).** The font bundling item moved into the
-    redesign programme's phase 2 above (Hanken Grotesk and Geist Mono - the
-    household faces are no longer wanted); still here: the missing type-scale steps
-    in the theme struct, and identity colour tokens for Shape and Null layers
-    (§6.1 reserves the values; both kinds borrow today).
-- **Platform.** The macOS pass - native menu bar, VideoToolbox, ProRes; it also
-    owes `application:openFile:` (a double-clicked `.lum` opening). The document
-    `.icns` files now ship inside the bundle, so the icons themselves are done.
-    The Metal/IOSurface Viewer path is unverified on real hardware.
-    Developer ID signing and notarisation landed but have never run —
-    the first tag after that entry is their first execution, and a pre-release
-    tag is the way to rehearse it. Signing the Windows installer is still
-    blocked on buying a certificate, so the installer ships unsigned and
-    SmartScreen still warns.
-- **Phase 2 - Retime.** Flow interpolation policies; automatic beat snapping
-    across edit/retime points ([04-RETIMING.md](04-RETIMING.md),
-    [09-AUDIO.md](09-AUDIO.md)).
-- **Phase 3 - The look.** Per-layer motion blur polish and the scopes GPU pass
-    ([08-EFFECTS.md](08-EFFECTS.md)); importing a preset file from outside the
-    presets folder is still a manual copy. A **tone mapping effect** belongs here
-    too (owner, 2026-08-06): the grade that actually lands in the export, distinct
-    from the Viewer's preview-only toggle in **Next** above, and it wants
-    [08-EFFECTS.md](08-EFFECTS.md) §3 to gain its entry and a curve chosen once,
-    which both then share.
-    This gate is the v1.0 milestone.
-- **Phase 4 - Extensibility** (whole docs, nothing built -
-    [11-AE-IMPORT.md](11-AE-IMPORT.md), [12-PLUGINS.md](12-PLUGINS.md)). AE
-    import (Bridge panel, `.aep` parser, Lottie, fidelity report); the OFX host;
-    the LFX C ABI + validator; expressions landed on Rhai;
-    the OFX host and the LFX C ABI + validator remain. Placeholder
-    round-tripping already preserves unknown effects/expressions.
-- **Phase 5 - AE parity march.** 2.5D cameras/lights/DOF, tracker/stabiliser,
-    keying, particles, tier-2 effects, shape operators. Rotoscoping and Puppet
-    landed; text animators landed; the Composer audio
-    workspace landed with CLAP/VST3 hosting ([09-AUDIO.md](09-AUDIO.md)).
-- **Phase 6 - Beyond parity.** Node view over the evaluation graph, Blender scene
-    import, Lottie export, OpenTimelineIO interchange, render-farm/CLI export.
+    D3D11→DX12 interop — hardware decode runs on the card's fixed-function unit and
+    then transfers the finished picture back through ordinary memory
+    (`lumit-media/src/decode.rs`) — and VideoToolbox, which lands with the macOS pass;
+    ProRes/DNxHR intermediate export (v1 writes H.264, HEVC and EXR).
+- **Audio** ([07-UI-SPEC.md](07-UI-SPEC.md) §10, [09-AUDIO.md](09-AUDIO.md)): persistent
+    waveform peak files — `lumit-bridge/src/peaks.rs` builds the multi-zoom pyramid on
+    demand and keeps it for the session, never writing it to the project sidecar, so it
+    is rebuilt next time the project opens; §3.4's scrub-audition grain and its Timeline
+    toggle (a scrub moves the audio clock and plays nothing); and §5's replace-or-merge
+    offer on a re-run (detection replaces).
+- **File format ([10-FILE-FORMAT.md](10-FILE-FORMAT.md)).** Embedded `thumbs/` previews
+    in the `.lum`; the per-project sidecar `proxies/`, `peaks/` and `flow/` directories
+    (`frames/`, `track/`, `roto/` and the global media index exist).
+- **Design ([15-DESIGN.md](15-DESIGN.md)).** The missing type-scale steps in the theme
+    struct, and identity colour tokens for Shape and Null layers (§6.1 reserves the
+    values; `LayerColours` carries six kinds and both borrow). Font bundling is done -
+    Hanken Grotesk and Geist Mono ship in `flutter_ui/assets/fonts/`.
+- **Platform.** The macOS pass — native menu bar, VideoToolbox, ProRes; it also owes
+    `application:openFile:` (a double-clicked `.lum` opening). The Metal/IOSurface Viewer
+    path is unverified on real hardware. Developer ID signing and notarisation landed but
+    have never run — the repository carries no tag yet, so the first one is their first
+    execution, and a pre-release tag is the way to rehearse it. Signing the Windows
+    installer is still blocked on buying a certificate, so the installer ships unsigned
+    and SmartScreen still warns.
+- **Phase 2 - Retime.** Automatic beat snapping across edit/retime points
+    ([04-RETIMING.md](04-RETIMING.md) §12's `retime.quantise_boundaries_to_beats`,
+    [09-AUDIO.md](09-AUDIO.md)): `lumit_core::markers::snap_time` is written and tested
+    and nothing calls it, so no drag snaps to a beat yet.
+- **Phase 3 - The look.** Per-layer motion blur polish
+    ([08-EFFECTS.md](08-EFFECTS.md)); importing a preset file from outside the presets
+    folder is still a manual copy (`list_presets` reads `presets_dir()` and nowhere
+    else). A **tone mapping effect** belongs here too (owner, 2026-08-06): the grade that
+    actually lands in the export, distinct from the Viewer's preview-only toggle that
+    ships today, and it wants [08-EFFECTS.md](08-EFFECTS.md) §3 to gain its entry and a
+    curve chosen once, which both then share. This gate is the v1.0 milestone.
+- **Phase 4 - Extensibility** ([12-PLUGINS.md](12-PLUGINS.md)). The LFX C ABI and its
+    validator: there is no `lumit-lfx` crate, only the out-of-process sandbox and IPC
+    substrate `lumit-ofx`/`lumit-ofx-broker` built for OFX that it is meant to share.
+    Lottie import ([11-AE-IMPORT.md](11-AE-IMPORT.md) §8) is the other half of this
+    phase still unbuilt.
+- **Phase 5 - AE parity march.** The **stabiliser** (docs/08 §7's Stabiliser row,
+    flow-engine-backed smoothing of unwanted camera motion, warp-stabiliser class) is the
+    only member of this phase with nothing behind it.
+- **Phase 6 - Beyond parity.** Blender scene import, Lottie export, OpenTimelineIO
+    interchange, render-farm/CLI export.
 
 **Tracking (docs/impl/tracking.md) - all four phases landed
-(2026-08-20, 2026-08-21).** `crates/lumit-track` holds the track substrate -
+(2026-08-20, 2026-08-21).** `crates/lumit-track` holds the track substrate —
 Shi-Tomasi detection on a 16x16 bucket grid, pyramidal affine KLT with
 forward-backward and NCC verification, exclusion masks, re-detection into
-starved buckets - the two-view geometry over it (Hartley-normalised 8-point and
+starved buckets — the two-view geometry over it (Hartley-normalised 8-point and
 7-point fundamentals inside LO-RANSAC, the GRIC gate that calls a pan a pan,
 parallax-driven keyframe selection, epipolar dynamic-track segmentation, the
-zoom cut/ramp detector), and now the global solve: `solve_camera` returns a
-`CameraSolve` with a pose per frame, a focal per segment, the point cloud and
-the per-frame error. Forty-three tests, all synthetic, no assets.
- - **Phase 4 landed** (note §5a-§5c): the Camera track effect, the
-   analysis job on its own thread with the `track/` sidecar, the solve-linked
-   Camera layer, Convert to keyframes, the point cloud with select → Null/Solid,
-   and the cancellation seam inside `solve_camera`. Still open from phase 3's
-   hand-off list:
-   - **A nodal-pan product.** `SolveError::RotationOnly` refuses a shot with no
-     baseline, and that refusal is right for a *camera* solve - but the
-     rotations are recoverable and a Camera layer that only turns is a real
-     deliverable for a locked-off pan. It needs its own output shape and its own
-     decision entry.
-   - **2D track exports** (docs/08 §7's Tracker row): keyframed transform and
-     corner-pin data from a track group, riding the same store.
- - **A zoom inside a moving shot is not detected, and a multi-frame rack can
-   never be a cut** (note's Open questions, measured 2026-08-24 from a real
-   7135-frame train POV that went wrong the moment the shot scoped in).
-   `detect_zoom` merges every adjacent "hot" pair into one run and only calls an
-   **isolated** hot pair a cut, so (a) a lens rack over several frames is always
-   a `Ramp`, and (b) forward camera motion — which grows every patch in the
-   frame every frame — makes the whole clip one run, inside which a genuine
-   1.4x scope-in is one sample in a median of thousands and vanishes. The shot
-   then gets one focal for two lens settings and the camera path is wrong from
-   the rack onwards, with nothing said. Ordered behind the focal-curve item
-   below, because finding the boundary is only half the answer: a multi-frame
-   rack is a ramp whichever way it is detected. The cheap partial answer
-   meanwhile is to **surface `SolveNote`** — `ZoomRamp` is already produced and
-   already right, and nothing carries it across the bridge.
- - **The zoom ramp is one focal, not a curve** (note §4's deviation 7). A
-   segment containing a detected zoom ramp is flagged and reported as
-   `SolveNote::ZoomRamp`, and its focal is a single number over the whole run
-   where the note asks for spline knots. The bundle already treats each
-   segment's focal as an independent column of the reduced camera system, so
-   knots are more columns in the same solve rather than a rewrite - but nothing
-   reads a ramp's shape today, so it waits for phase 4 to have somewhere to show
-   it.
- - **Lens distortion (k1/k2) is not solved.** The note's camera model allows an
-   optional pair per segment; phase 3 fixes the principal point at centre and
-   solves focal alone. Two more columns in the same bundle, and the same
-   `ponytail:` ceiling applies.
- - **The coverage gate owes `lumit-track` its `-p` flag.** CI's
-   `cargo llvm-cov` line in `.github/workflows/ci.yml` names the engine crates
-   one by one and does not yet name this one; measured locally at 95 % lines,
-   well clear of the 80 % floor, so adding it cannot turn CI red. Held back only
-   because the crate landed while other work held that file, and phases 2 and 3
-   landed the same way.
- - **The Shi-Tomasi response map is a whole-frame pass and dominates when
-   re-detection runs** - 24.4 ms/frame against 11.0 with re-detection off, on
-   100 features over 640x360 (the note's measured number). Its box sums are
-   separable; that is the cheap win, and it comes before any WGSL port.
-
+zoom cut/ramp detector), the planar homography tracker, and the global solve:
+`solve_camera` returns a `CameraSolve` with a pose per frame, a focal curve per
+segment, the point cloud and the per-frame error. Sixty-seven tests, all
+synthetic, no assets.
+ - **A nodal-pan product.** `SolveError::RotationOnly` refuses a shot with no baseline,
+   and that refusal is right for a *camera* solve — but the rotations are recoverable and
+   a Camera layer that only turns is a real deliverable for a locked-off pan. It needs
+   its own output shape and its own decision entry.
+ - **Nothing the solve notices crosses the bridge.** `SolveNote` — `ZoomRamp`,
+   `FocalGuessed`, `ColinearBaselines`, `InterpolatedFrames`, `DisconnectedKeyframes` —
+   is produced and correct and is read nowhere outside `lumit-track`, so the panel cannot
+   say "the lens moved during this shot" or "the focal was guessed". The same seam owes
+   the row that lets the operator type a focal: `SolveSettings::focal_px` is the lever
+   and `api/track.rs` has nothing that sets it.
+ - **A multi-frame rack can never be a `Cut`** (the note's Open questions). `detect_zoom`
+   reserves `ZoomKind::Cut` for an isolated hot pair, so a lens rack over several frames
+   is always a `Ramp` — which is the honest answer as long as a ramp's focal is a curve,
+   and it now is. Named so the asymmetry is not rediscovered as a bug.
+ - **Lens distortion (k1/k2) is not solved.** The note's camera model allows an optional
+   pair per segment; the solve fixes the principal point at centre and solves focal
+   alone. Two more columns in the same bundle, and the same `ponytail:` ceiling applies.
+ - **The Shi-Tomasi response map is a whole-frame pass and dominates when re-detection
+   runs** — 24.4 ms/frame against 11.0 with re-detection off, on 100 features over
+   640x360 (the note's measured number). `response_map_into` still sums the gradient
+   normal matrix over a `(2r+1)²` window per pixel; those box sums are separable, that is
+   the cheap win, and it comes before any WGSL port.
 
 **From the Caddis study, parked by the owner (2026-08-25):**
 - **B8 - Choke, Inner glow, Inner shadow** as catalogue effects.
@@ -1565,7 +1300,6 @@ the per-frame error. Forty-three tests, all synthetic, no assets.
   colour space, cache tier). The bottom strip already reads the cache; the unique
   value is per-layer format/colour-space once OCIO debugging is routine - build it
   then, as a section of the existing Source card rather than a new panel.
-- **7.22 hover-scrub thumbnails** on Project rows - only if they cost nothing at rest.
 
 **The Hierarchy panel's graph view** (6.46, 7.24): deferred to the tail on the
 owner's word. The panel has left the default workspaces; the graph view and the
@@ -1583,11 +1317,9 @@ Recorded so they are not re-proposed as gaps:
     whole frame**, or 0.015%, and it is an absolute CPU cost that does not shrink
     on a faster card, so its share only falls on real hardware. Spreading it over
     threads saves nothing at any layer count. The same measurement found the
-    command-buffer item under *Now*, which is where the win actually is. Anyone
-    reaching for the pool again should re-run the stopwatch first: if the
-    processor half has not grown, this entry still stands.
-- **Rotation gizmo affordance** - the previous frontend never offered one; not a
-    regression.
+    command-buffer batching that was the real win, and `lumit-gpu` has carried it
+    since. Anyone reaching for the pool again should re-run the stopwatch first:
+    if the processor half has not grown, this entry still stands.
 - **The workspace strip ticks nothing after a restart.** `Workspace.activePreset`
     is session-only on purpose: what persists is the arrangement, which the user
     is free to drag about, so a ticked preset could claim a layout the panels no
@@ -1609,5 +1341,8 @@ Recorded so they are not re-proposed as gaps:
     rediscovered as the cache-key bug an earlier fix closed.
 - **No progress for the idle cache fill** - it is not a frame anyone is waiting
     for, so the bar stays quiet for it.
-- The two recorded behavioural deviations (export queue-snapshot timing;
-    share-export VBR cap).
+- The two recorded behavioural deviations - export queue-snapshot timing (an
+    export renders the document as it stood when it was queued, so later edits
+    never alter what a queued export writes) and the share-export VBR cap
+    (docs/06 §7.5's preset table, YouTube's own bands). Both are recorded in
+    [archive/flutter-port/06-REMAINING-WORK.md](archive/flutter-port/06-REMAINING-WORK.md).
