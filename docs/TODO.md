@@ -577,9 +577,7 @@ One thing is still owed, and it blocks nothing:
 plugins/decoder page - the two the sidebar still has no row for. Audio, Autosave and
 Export defaults all landed; colour management lives in Project settings; the
 preview-mode toggle exists, on the Preview and cache page. Both land wired to the
-engine through the bridge, not as a Dart-side setting nothing reads. (One entry now:
-a second copy of this sat further down the section, listing six pages of which five
-have since been built.)
+engine through the bridge, not as a Dart-side setting nothing reads.
 
 **The Export drawing's rows are built, both halves** (engine and interface; docs/06
 §7.4–§7.5, docs/15-DESIGN.md §12A.4). Audio-only output (`.m4a`/`.wav`), colour
