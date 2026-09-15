@@ -199,6 +199,7 @@ impl ProjectReference {
 
         let dir = target.parent().unwrap_or_else(|| std::path::Path::new(""));
         let doc = lumit_project::rebase_for_save(&document, dir);
+        lumit_project::media_places::remember(&doc, dir);
 
         lumit_project::autosave(&doc, &target, keep.max(1) as usize)
             .map(|written| written.to_string_lossy().into_owned())

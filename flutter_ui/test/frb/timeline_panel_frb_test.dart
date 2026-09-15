@@ -43,6 +43,7 @@ import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/graph.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/state.dart';
 
 import 'frb_test_support.dart';
 
@@ -6598,6 +6599,36 @@ void main() {
           tester.getTopLeft(find.byKey(ValueKey<String>(key))).dx;
       expect(dx('tl-solo-$audioId'), dx('tl-solo-$solidId'));
       expect(dx('tl-shy-$audioId'), dx('tl-shy-$solidId'));
+    });
+
+    /// A clip that was missing when the panel asked has no speaker, and a
+    /// relink gives it back without reopening the panel.
+    testWidgets('a relinked missing clip gets its audio switch back',
+        (tester) async {
+      final p = withComp();
+      final real = _wavFile('back.wav');
+      final music =
+          p.state.project!.importFootage(path: '$real.missing.wav');
+      p.comp.addFootageLayer(footage: music, asSequence: false);
+      await mount(tester, p);
+      await settleFrb(tester, minRounds: 8);
+
+      final id = p.comp.getLayers().first.internallayerId;
+      expect(find.byKey(ValueKey<String>('tl-audible-$id')), findsNothing,
+          reason: 'the file is missing, so there is nothing to hear');
+
+      music.relink(path: real);
+      p.state.handleChange(
+          ScopedChange(project: p.state.project!, items: true));
+      await settleFrb(tester,
+          minRounds: 8,
+          until: () => find
+              .byKey(ValueKey<String>('tl-audible-$id'))
+              .evaluate()
+              .isNotEmpty);
+
+      expect(find.byKey(ValueKey<String>('tl-audible-$id')), findsOneWidget,
+          reason: 'the relinked file has sound, so the speaker is back');
     });
 
     /// The outline's switches are drawn from Lumit's own icon set (§12A.1)

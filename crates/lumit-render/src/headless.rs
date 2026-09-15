@@ -2816,9 +2816,9 @@ pub struct AudioJobsBuilder {
 /// process rather than once per [`AudioJobsBuilder`] — see
 /// [`AudioJobsBuilder::item_has_audio`], which is the only reader.
 ///
-/// Keyed by the item rather than by its file, so two projects, two tests, and a
-/// relink to a different file are each their own question and cannot answer for
-/// one another.
+/// Keyed by the item rather than by its file, so two projects and two tests are
+/// each their own question and cannot answer for one another. A file that isn't
+/// there is never remembered, so relinking missing media gets its sound back.
 ///
 /// ponytail: an item whose file gains or loses its audio stream **in place**
 /// keeps the answer it first gave until Lumit restarts — a re-encode over the
@@ -3416,13 +3416,15 @@ impl AudioJobsBuilder {
                 return has;
             }
         }
+        if !path.is_file() {
+            return false;
+        }
         // The lock is not held across the probe: FFI, and as slow as opening a
         // file (14-ENGINEERING-RULES §5). Two threads racing one new item probe
         // it twice and agree.
-        let has = path.is_file()
-            && lumit_media::probe::probe(path)
-                .map(|p| p.audio.is_some())
-                .unwrap_or(false);
+        let has = lumit_media::probe::probe(path)
+            .map(|p| p.audio.is_some())
+            .unwrap_or(false);
         if let Ok(mut memo) = HAS_AUDIO.lock() {
             memo.insert(item, has);
         }
@@ -4728,10 +4730,10 @@ mod tests {
     }
 
     /// The audio-jobs builder needs no GPU: a comp holding a solid (no sound)
-    /// and a footage layer whose file is not on disk yields no jobs, calmly,
-    /// and the has-audio probe result is cached so the file is checked once.
+    /// and a footage layer whose file is not on disk yields no jobs, calmly.
+    /// The missing file isn't remembered, so a relink can still find its sound.
     #[test]
-    fn audio_jobs_builder_needs_no_gpu_and_caches_the_probe() {
+    fn audio_jobs_builder_needs_no_gpu_and_forgets_a_missing_file() {
         let (store, comp_id) = doc_with_solid(LinearColour([1.0, 0.0, 0.0, 1.0]), 8, 8);
         let mut doc = (*store.snapshot()).clone();
         // Add a footage item + an audible layer pointing at a missing file.
@@ -4791,13 +4793,9 @@ mod tests {
         assert!(builder.audio_jobs(&Arc::new(doc.clone()), &comp).is_empty());
         assert_eq!(
             HAS_AUDIO.lock().unwrap().get(&item_id),
-            Some(&false),
-            "the probe result is remembered"
+            None,
+            "a missing file is not remembered"
         );
-        // A second build reads the memo, and so does a **second builder** —
-        // which is the point of it being a process-wide memo rather than a
-        // field: the driver reading the comp's mix makes a fresh builder on
-        // every frame it draws, and must not reopen the file for each one.
         assert!(builder.audio_jobs(&Arc::new(doc.clone()), &comp).is_empty());
         assert!(AudioJobsBuilder::new()
             .audio_jobs(&Arc::new(doc.clone()), &comp)

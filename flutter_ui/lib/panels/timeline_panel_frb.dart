@@ -43,6 +43,7 @@ import 'package:lumit_flutter/src/rust/api/keymap.dart';
 import 'package:lumit_flutter/state/keymap.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
+import 'package:lumit_flutter/src/rust/api/state.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
@@ -188,6 +189,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// A layer with no entry is assumed to have one: the visibility switch is
   /// the one nearly every layer uses.
   final Map<String, bool> _hasPicture = {};
+
+  /// Project item changes, which is how a relink reaches this panel.
+  StreamSubscription<ScopedChange>? _itemChanges;
 
   /// Each open lane's peaks and spectrogram, by layer id — the stretch of
   /// source it is currently showing, summarised to one bucket per pixel
@@ -865,6 +869,13 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         });
       });
     }
+  }
+
+  /// A relink can bring a missing clip's sound and picture back, so every
+  /// layer that had no sound is asked again.
+  void _onItemsChanged(ScopedChange event) {
+    if (!event.items || !mounted || !_hasAudio.containsValue(false)) return;
+    setState(() => _hasAudio.removeWhere((_, has) => !has));
   }
 
   String _search = '';
@@ -1820,6 +1831,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // is kept, not looked up again: `dispose` runs after the element is
     // deactivated, where an ancestor lookup is no longer safe.
     _ui = Provider.of<LumitUiState>(context, listen: false);
+    _itemChanges = Provider.of<LumitState>(context, listen: false)
+        .onChange
+        .listen(_onItemsChanged);
     // Chained, not overwritten: Effect controls may hold the claim already.
     _priorDeleteClaim = _ui!.deleteClaim;
     _ui!.deleteClaim = _deleteClaim;
@@ -2966,6 +2980,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   @override
   void dispose() {
     _mixRetry?.cancel();
+    _itemChanges?.cancel();
     laneModes.removeListener(_onLaneMode);
     HardwareKeyboard.instance.removeHandler(_onKey);
     _ui?.workspace.presetApplied.removeListener(_onPresetApplied);

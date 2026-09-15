@@ -2,6 +2,7 @@
 //! docs/10-FILE-FORMAT.md, Phase 0 scope (no thumbnails yet).
 
 pub mod fixtures;
+pub mod media_places;
 pub mod plugins;
 
 pub use plugins::{plugin_prefs_path, PluginPrefs};

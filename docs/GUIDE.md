@@ -372,7 +372,7 @@ One job per crate.
 | Crate | Does |
 |---|---|
 | `lumit-core` | Rational time, the document, operations and undo, the snapshot store, expressions. The root, it depends on nothing above it |
-| `lumit-project` | The `.lum` container, the operation journal, autosave and crash recovery |
+| `lumit-project` | The `.lum` container, the operation journal, autosave, crash recovery and where this machine last saw media on other drives |
 | `lumit-eval` | The evaluator: content-hash frame keys, the graph compiler, epochs, the worker pool, the scheduler core |
 | `lumit-render` | The pixel pass: the decode worker, draw lists, the compositor, effect dispatch, cache tiers, export, the headless renderer |
 | `lumit-gpu` | The one wgpu device, the frame batch and its work-texture pool, the WGSL effect kernels, the compositor, the colour engine, readback |

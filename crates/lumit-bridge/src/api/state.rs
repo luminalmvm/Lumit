@@ -818,6 +818,8 @@ pub(crate) fn adopt(
     let id = Uuid::now_v7();
 
     report_phase(on_progress, OpenPhase::ResolvingMedia);
+    // A file on another drive saves with no path, so look up where this machine last saw it.
+    lumit_project::media_places::recall(&mut doc);
     let (_relinked, missing) = lumit_project::resolve_all_media(&mut doc, media_root, &[]);
     report_phase(on_progress, OpenPhase::PreparingProject);
 

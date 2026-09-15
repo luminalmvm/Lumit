@@ -191,6 +191,7 @@ pub(crate) fn sweep_one(id: Uuid, keep: u32) -> Option<PathBuf> {
     let dir = target.parent().unwrap_or(Path::new(""));
     let document = lumit_project::rebase_for_save(&document, dir);
     let written = lumit_project::autosave(&document, &target, keep.max(1) as usize).ok()?;
+    lumit_project::media_places::remember(&document, dir);
     lock(&LAST).insert(id, revision);
     Some(written)
 }

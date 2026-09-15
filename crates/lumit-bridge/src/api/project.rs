@@ -602,6 +602,7 @@ impl ProjectReference {
         let dir = target.parent().unwrap_or_else(|| std::path::Path::new(""));
         let doc = lumit_project::rebase_for_save(&document, dir);
         lumit_project::save(&doc, &target).map_err(|_| BridgeError::WriteFailed)?;
+        lumit_project::media_places::remember(&doc, dir);
 
         let written = target.to_string_lossy().into_owned();
         let mut state = project.write().map_err(|_| BridgeError::WriteFailed)?;

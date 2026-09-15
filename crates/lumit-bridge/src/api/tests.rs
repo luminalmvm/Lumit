@@ -4282,6 +4282,34 @@ fn precompose_sound_mix_nests_a_comp_per_row_and_clears_the_mark() {
 /// layer all have to land where they landed.
 ///
 /// **Needs the decoder**: there is nothing to mix without one.
+/// Media that was missing when first asked gets its sound and mute switch back once relinked.
+#[cfg(feature = "media")]
+#[test]
+fn relinked_missing_media_has_its_sound_back() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let gone = dir.path().join("gone.wav");
+    let moved = dir.path().join("moved.wav");
+    std::fs::write(&moved, silent_wav()).expect("wrote the fixture");
+    if !lumit_media::probe::probe(moved.as_path()).is_ok_and(|p| p.audio.is_some()) {
+        // No decoder here that reads the fixture, so there is nothing to test.
+        return;
+    }
+
+    let project = LumitBridgeState::new_project(None).expect("a new project");
+    let comp = project.new_composition("Scene".into(), None).expect("comp");
+    let footage = project
+        .import_footage(gone.to_string_lossy().into_owned())
+        .expect("imported");
+    comp.add_audio_layer(&footage).expect("an Audio layer");
+    let layer = comp.get_layers().expect("layers").remove(0);
+    assert!(!layer.has_audio().expect("asked"), "nothing to hear yet");
+
+    footage
+        .relink(moved.to_string_lossy().into_owned())
+        .expect("relinked");
+    assert!(layer.has_audio().expect("asked"));
+}
+
 #[cfg(feature = "media")]
 #[test]
 fn the_packed_mix_plays_the_same_samples() {
