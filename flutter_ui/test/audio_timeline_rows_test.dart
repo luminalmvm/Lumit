@@ -577,6 +577,7 @@ void main() {
             label: 'Mix',
             kind: BridgeParamKind.action(),
             unit: BridgeUnit.raw,
+            derived: false,
           ),
           null,
           depth: 3,

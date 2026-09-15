@@ -465,13 +465,34 @@ the document's business is only which pairs are tied together.
 Every list above is keyed by **match name**, so every one of them answers a fact about the
 *effect*. The Custom shader ([impl/custom-shader.md](impl/custom-shader.md)) is the one entry
 whose controls are a fact about the *instance*: they come from the shader that copy of it
-holds. Four instance-scoped members close that gap, and nothing else on the seam changes —
-a derived row is an ordinary `BridgeParamInfo` and the panel cannot tell it from a declared
-one.
+holds. The instance-scoped members below close that gap, and nothing else on the seam
+changes — a derived row is an ordinary `BridgeParamInfo`, drawn by the same widgets, keyed
+and driven the same way. The one mark it carries is `derived: true`, which is false on
+every row `list_parameters(effect)` answers; the panel does not draw it differently, and
+the flag exists for the one row that sits between the two halves, the Sync affordance
+(custom-shader.md §1.5).
 
 - `BridgeEffectInstance::list_parameters()` — the **owed call**: the effect's declared rows
     followed by this instance's derived ones, in order, in one piece. For every effect but
     the Custom shader it is the same list `list_parameters(effect)` gives.
+- `parameter_sync()` / `sync_parameters()` / `remove_unused_parameters()` — the two rules of
+    effect-registry.md §4 as calls. Nothing is added on a read and nothing is removed on an
+    edit; both are the user's act, staged on the handle and committed by
+    `LayerReference::set_effects`, so each is one `SetLayerEffects` and one undo step.
+    `parameter_sync()` is the read the affordance draws its counts from: `adds` is the
+    derived rows the **document** does not hold yet, in derived order, and `removes` is the
+    stored rows neither the declaration nor the derivation names any more, each with
+    whether it is `keyframed` and whether an `expression` drives it — what removing it will
+    break. (An expression elsewhere that reads the id by name is not walked; it degrades to
+    its own missing-name rule.) `sync_parameters()` adopts `adds` at their defaults and
+    answers the ids it adopted, empty when there was nothing to adopt so a caller can skip a
+    commit that would undo to itself; `remove_unused_parameters()` takes `removes` away,
+    keyframes and all, and answers the ids it removed. The answer is about the document,
+    not the copy: a row the bridge filled onto the handle is still in `adds` until Sync says
+    otherwise, and a source staged by `set_shader_source` on the same handle counts as the
+    instance's state, so the editor can ask what Apply will leave behind. A source staged on
+    a handle also drops the offers made for the source before it, so Apply never writes a
+    row nobody asked for.
 - `BridgeEffectInstanceInfo.derived_params` — the derived tail alone, carried in the **read
     model** and empty for every other effect. That is the panel's road, and it is why the
     rows cost no crossing: the declared half stays memoised Dart-side under the match name
@@ -514,9 +535,9 @@ one.
 **A derived row's value.** The document is not made to carry a row it has never been told
 about: the derived defaults are filled onto the two copies the bridge makes — the one
 `get_info` reads, so the row draws a value rather than a dash, and the staged one a handle
-holds, so `set_value` can write it. A staged copy reaches the document only alongside an edit
-the user actually made, which is what keeps §1.5's "nothing is added automatically" true while
-still leaving every derived control live.
+holds, so `set_value` can write it. The commit leaves a filled row behind unless the user
+wrote to it or pressed Sync — a write to a row is what adopts it — which is what keeps §1.5's
+"nothing is added automatically" true while still leaving every derived control live.
 
 ### The layer graph: derived boxes down one way, stored wiring both
 

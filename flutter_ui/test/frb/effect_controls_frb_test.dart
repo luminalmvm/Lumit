@@ -1803,6 +1803,7 @@ void main() {
         label: 'Path',
         kind: BridgeParamKind.maskPath(),
         unit: BridgeUnit.raw,
+        derived: false,
       );
 
       await tester.pumpWidget(hostPanel(
@@ -1897,6 +1898,7 @@ void main() {
               label: 'Clip',
               kind: BridgeParamKind.clip(),
               unit: BridgeUnit.raw,
+              derived: false,
             ),
             value: const BridgeEffectValue.clip(),
             comp: p.uiState.selectedComp!,
@@ -2009,6 +2011,7 @@ void main() {
                 hardMin: 0,
                 hardMax: 1),
             unit: BridgeUnit.raw,
+            derived: false,
           ),
           value: BridgeEffectValue.float(animated),
           siblings: {
@@ -2074,6 +2077,7 @@ void main() {
                 hardMin: null,
                 hardMax: null),
             unit: BridgeUnit.px,
+            derived: false,
           );
 
       final written = <String, BridgeEffectValue>{};

@@ -6336,8 +6336,8 @@ impl LayerReference {
     ///
     /// A **Node graph** effect's Inputs copy is brought up to the graph it
     /// names on the way out (docs/impl/node-graph-comp.md §1.5), so a row added
-    /// inside that graph is offered here and lands in the document with the
-    /// user's next edit, never behind anybody's back.
+    /// inside that graph is offered here and lands in the document when the
+    /// user writes to it or presses Sync, never behind anybody's back.
     #[frb(sync)]
     pub fn get_effects(&self) -> Result<Vec<BridgeEffectInstance>, BridgeError> {
         let layer = self.item()?;

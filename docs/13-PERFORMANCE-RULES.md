@@ -118,13 +118,14 @@ Notes:
   matrix, pinned gesture by gesture in `rebuild_budget_test.dart`**: idle, select,
   scroll, zoom, playhead drag, work-area drag and edit each carry a rebuild and paint-count
   budget that fails on regression, because the milliseconds the rule is written in are the
-  cost of those counts. The milliseconds themselves stay on the manual list below — a
-  widget test has no compositor — and are read with the note's probe in the owner's
-  conditions.
+  cost of those counts. The milliseconds themselves are measured on a real window by
+  `flutter_ui/integration_test/ui_budget_test.dart` (§7.3): a widget test has no
+  compositor, so the harness runs the app in the real runner and reads every
+  `FrameTiming` the engine reports while it drives the note's gesture list.
 - B9¹ **has a mechanism now, not a number**: loss is noticed, the renderer is rebuilt
   and the picture republished — see §4's "what is built today". The five seconds still cannot
-  be *measured* without a real device to lose, so B9 stays on the manual list below with B1,
-  B2, B8 and B10. What CI does hold is that the recovery path works at all: the device is
+  be *measured* without a real device to lose, so B9 stays on the manual list below with
+  B8 and B10. What CI does hold is that the recovery path works at all: the device is
   destroyed for real and a rebuilt renderer draws the identical frame
   (`crates/lumit-render/tests/device_loss.rs`).
 - B3 is the latest-wins path: epoch bump, degraded-quality request, cache lookup first. A
@@ -495,11 +496,25 @@ application depends on, run by the CI job **`performance gates (ratio vs baselin
   ratio gate is the enforcement an ordinary runner can honestly carry. Setting that
   variable on a pinned machine is the whole of switching this paragraph back to the
   original design.
-- **Five budgets are out of a headless harness's reach** and stay manual or real-window
-  checks ([TODO.md](TODO.md) keeps them): B1 and B2 need the UI thread and a real window —
-  the parked probe of [impl/ui-performance.md](impl/ui-performance.md) §6 is their named
-  manual instrument until a real-window harness exists — B8 needs the encoder, B9 is device
-  loss, B10 is A/V drift.
+- **B1 and B2 are measured on a real window, from a test.**
+  `flutter_ui/integration_test/ui_budget_test.dart` runs the app in the real runner over a
+  200-layer comp, drives [impl/ui-performance.md](impl/ui-performance.md) §2's gesture list
+  (wheel scroll, zoom, select, twirl, scrub) through the probe's own gesture code, and reads
+  the UI-thread build time of every frame whose vsync fell inside each gesture. It prints one
+  table: per gesture the frame count, build p95 and worst, raster median; per press the
+  frames to acknowledgement. **B2 is asserted on every runner** because "the next frame" is
+  a count, not a millisecond, and means the same on a software rasteriser. **B1's 8.3 ms is
+  asserted only under `LUMIT_REFERENCE_HW=1`**, the same switch as the engine budgets; the
+  CI job `UI budgets B1 and B2 (real window, record only)` runs it in a debug build under
+  Xvfb on the Linux runner, publishes the table as an artifact and in the step summary, and
+  says in its own comment that this proves the harness runs and B2 holds, not that B1 does.
+  The table's header names its conditions (build mode, window size, the reference switch)
+  so no run can misreport itself. The number that means something is
+  `flutter drive --profile` on the reference desktop with the window maximised. The probe of
+  the note's §6 stays for the real edit, maximised and with the preview live.
+- **Three budgets are out of any harness's reach** and stay manual release checks
+  ([TODO.md](TODO.md) keeps them): B8 needs the encoder, B9 is device loss, B10 is A/V
+  drift.
 
 **Still owed.** A stress comp (4K, 20 layers, heavy effects) beside the reference one. A
 reference-desktop-class runner, on which the 10%-against-baseline rule replaces the interim

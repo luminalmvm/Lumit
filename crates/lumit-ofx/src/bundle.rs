@@ -173,7 +173,7 @@ impl Bundle {
         // their own process. Nothing here can make that safer; what it can do
         // is keep the library alive for exactly as long as the pointers into
         // it are used, which is what `Bundle` owning it achieves.
-        let library = unsafe { Library::new(&path) }.map_err(|source| BundleError::Open {
+        let library = unsafe { open_library(&path) }.map_err(|source| BundleError::Open {
             path: path.clone(),
             source,
         })?;
@@ -330,6 +330,35 @@ impl Drop for Bundle {
     fn drop(&mut self) {
         self.unload();
     }
+}
+
+/// Load a plugin binary so the DLLs shipped beside it are found.
+///
+/// Some suites keep their own DLLs next to the `.ofx`, and a
+/// plain load only looks beside the program that loads it, so the whole bundle
+/// failed to open.
+///
+/// # Safety
+///
+/// Loading a library runs its initialisers, see [`Bundle::open`].
+#[cfg(target_os = "windows")]
+unsafe fn open_library(path: &Path) -> Result<Library, libloading::Error> {
+    use libloading::os::windows::{Library as WinLibrary, LOAD_WITH_ALTERED_SEARCH_PATH};
+    // The flag only means anything with a full path.
+    let full = std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf());
+    // SAFETY: the caller's contract.
+    unsafe { WinLibrary::load_with_flags(&full, LOAD_WITH_ALTERED_SEARCH_PATH) }.map(Library::from)
+}
+
+/// See above. Only Windows needs the plugin folder added.
+///
+/// # Safety
+///
+/// Loading a library runs its initialisers, see [`Bundle::open`].
+#[cfg(not(target_os = "windows"))]
+unsafe fn open_library(path: &Path) -> Result<Library, libloading::Error> {
+    // SAFETY: the caller's contract.
+    unsafe { Library::new(path) }
 }
 
 /// Copy a C string out of a plugin, or `None` if it is null or not text.
