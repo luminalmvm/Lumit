@@ -292,6 +292,7 @@ Map<String, String> get _table => {
       "Max points": l10n.fxMaxPoints,
       "Maximum": l10n.fxMaximum,
       "Maximum span length": l10n.fxMaximumSpanLength,
+      "Random Offset Scale": l10n.fxRandomOffsetScale,
       "Min": l10n.fxMin,
       "Minimum": l10n.fxMinimum,
       "Mono below": l10n.fxMonoBelow,
