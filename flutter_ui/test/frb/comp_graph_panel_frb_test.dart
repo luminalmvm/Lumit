@@ -815,6 +815,76 @@ void main() {
           reason: 'the button opens the graph the box applies');
     });
 
+    /// Type [source] into the shader editor that [edit] opens, and apply it.
+    Future<void> editShader(
+        WidgetTester tester, Finder edit, String source) async {
+      await tester.tap(edit);
+      await tester.pumpAndSettle();
+      await tester.enterText(
+          find.byKey(const ValueKey<String>('shader-editor-code')), source);
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester
+          .tap(find.byKey(const ValueKey<String>('shader-editor-apply')));
+      await tester.pumpAndSettle();
+    }
+
+    String? shaderOn(CompositionReference graph, UuidValue node) => graph
+        .getNodeGraphInstances()
+        .firstWhere((i) => i.id() == node)
+        .shaderSource();
+
+    const shader = 'fn shade(uv: vec2<f32>) -> vec4<f32> {\n'
+        '    return lumit_sample(uv);\n'
+        '}\n';
+
+    /// A Custom shader box drew Edit shader and did nothing when it was
+    /// pressed. It opens the editor, and Apply is one op on the graph.
+    testWidgets("a Custom shader box's Edit shader applies to the graph",
+        (tester) async {
+      final p = withGraph();
+      final box = seedFx(p.graph, 'custom_shader', const Offset(60, 40));
+      p.uiState.model.refresh();
+      await mount(tester, p);
+      await tester.tap(twirl(box));
+      await tester.pump();
+
+      final was = p.graph.documentRevision();
+      await editShader(
+          tester,
+          find.descendant(
+              of: rowOn(box, 'edit'),
+              matching: find.byKey(ValueKey<String>('fx-action-$box-edit'))),
+          shader);
+      expect(shaderOn(p.graph, box), shader);
+      expect(p.graph.documentRevision(), was + BigInt.one, reason: 'one op');
+    });
+
+    /// The Node panel draws the same box's rows, and its buttons press too.
+    testWidgets("the Node panel's Edit shader applies to the graph",
+        (tester) async {
+      final p = withGraph();
+      final box = seedFx(p.graph, 'custom_shader', const Offset(60, 40));
+      p.uiState.model.refresh();
+      await mount(
+        tester,
+        p,
+        child: const Row(children: [
+          SizedBox(width: 600, child: GraphPanelFrb()),
+          Expanded(child: NodePanelFrb()),
+        ]),
+      );
+      await tester.tapAt(tester.getCenter(card(box)));
+      await tester.pump();
+
+      await editShader(
+          tester,
+          find.descendant(
+              of: find.byType(NodePanelFrb),
+              matching: find.byKey(ValueKey<String>('fx-action-$box-edit'))),
+          shader);
+      expect(shaderOn(p.graph, box), shader);
+    });
+
     /// A driver is open always and is all controls, so it has no socket row to
     /// hang its output on. It shares the first row rather than growing a blank
     /// one under everything it draws.

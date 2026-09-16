@@ -182,7 +182,7 @@ void main() {
       await tester.pumpAndSettle();
       unawaited(showShaderEditor(
         context: tester.element(find.byType(EffectControlsPanelFrb)),
-        layer: p.layer,
+        home: ShaderHome.layer(p.layer),
         effect: p.layer.getEffects().single.id(),
         preview: drawn.add,
       ));

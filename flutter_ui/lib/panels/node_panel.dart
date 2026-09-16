@@ -37,6 +37,7 @@ import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/graph.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
+import 'package:lumit_flutter/src/rust/api/track.dart' show fireEffectAction;
 import 'package:lumit_flutter/src/rust/lib.dart' show F64Array4;
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
@@ -49,8 +50,10 @@ import '../widgets/controls.dart';
 import 'comp_graph_panel.dart'
     show compInputKindWord, compInputKinds, compItemKindWord;
 import 'effect_param_row_frb.dart';
-import 'graph_panel.dart' show graphNodeKey, graphNoStream, graphToolbarHeight;
+import 'graph_panel.dart'
+    show graphCompById, graphNodeKey, graphNoStream, graphToolbarHeight;
 import 'placeholder.dart';
+import 'shader_editor.dart' show ShaderHome, pressShaderButton;
 
 /// The box the panel is drawing: which instance it is, whether it lives in the
 /// graph's driver list rather than in the effect stack, and the read model it
@@ -407,6 +410,57 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
         frame: ui.playheadFrame.value, scale: ui.viewerScale));
   }
 
+  /// A press on one of the picked box's buttons, the same press Effect controls
+  /// makes. A driver has no buttons, and a box in a node graph has no layer to
+  /// send an engine event to, so there only the frontend's own buttons answer.
+  void _press(_Picked picked, UuidValue effect, String param) {
+    final ui = _ui;
+    if (ui == null) return;
+    final comp = ui.selectedComp;
+    final layer = _layer;
+    final frame = BigInt.from(ui.playheadFrame.value);
+    final home = picked.graph
+        ? comp == null
+            ? null
+            : ShaderHome.graph(comp,
+                draw: (staged) => comp.renderFrameWithGraphPreview(
+                    frame: frame, scale: ui.viewerScale, instances: staged))
+        : layer == null
+            ? null
+            : ShaderHome.layer(layer,
+                draw: comp == null
+                    ? null
+                    : (staged) => comp.renderFrameWithPreview(
+                        frame: frame,
+                        scale: ui.viewerScale,
+                        layer: layer,
+                        effects: staged));
+    if (picked.info.name == 'custom_shader' &&
+        home != null &&
+        pressShaderButton(
+          context: context,
+          home: home,
+          effect: effect,
+          param: param,
+          onApplied: ui.model.refresh,
+        )) {
+      return;
+    }
+    if (picked.info.name == 'node_graph' && param == 'open') {
+      final project = Provider.of<LumitState>(context, listen: false).project;
+      final inner = graphCompById(project, picked.info.nodeGraphComp);
+      if (inner != null) ui.setSelectedComp(inner);
+      return;
+    }
+    if (picked.graph || layer == null) return;
+    try {
+      fireEffectAction(
+          layer: layer, effect: effect, param: param, frame: frame);
+    } catch (_) {
+      // Refused; the effect's own status line says why.
+    }
+  }
+
   /// The layer's driver nodes, freshly read, with the drag in progress written
   /// into the one being dragged — what both the preview and the commit send.
   List<BridgeEffectInstance> _driversWith(
@@ -602,6 +656,7 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
         twoColumn: true,
         siblings: values,
         driven: _driven[param.id],
+        onAction: picked.driver ? null : (e, p) => _press(picked, e, p),
       ));
     }
     // A **wire-only** input draws no row at all, and needs no code to say so:

@@ -38,7 +38,6 @@
 // shape exists.
 
 import 'dart:async';
-import 'dart:io' show File;
 
 import 'package:flutter/foundation.dart' show mapEquals;
 import 'package:flutter/services.dart';
@@ -72,7 +71,6 @@ import 'fx_section.dart';
 import 'timeline_extras_frb.dart' show DoubleTap;
 import 'transform_rows_frb.dart';
 import '../state/clipboard.dart';
-import '../state/file_dialogs.dart';
 import '../theme/theme.dart';
 import '../state/drag_payloads.dart';
 import 'placeholder.dart';
@@ -167,30 +165,6 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
   /// click on a heading wait out the recogniser.
   final Map<UuidValue, DoubleTap> _headingTaps = {};
 
-  /// Read a `.wgsl` somebody sent and copy its text onto `effect`
-  /// (docs/impl/custom-shader.md §1.1, §6).
-  ///
-  /// The **text** is copied, not a reference to the file: a project must be one
-  /// file that opens on another machine, so the path is kept only as a memory of
-  /// where it came from and is never read at render. Staged on one handle and
-  /// committed with the stack, which makes loading a shader one
-  /// `SetLayerEffects` and one undo step, the shape every other stack edit has.
-  ///
-  /// A file that will not read leaves the instance exactly as it was: the
-  /// dialogue was the gesture, and half a shader is worse than none.
-  Future<void> _loadShaderInto(LayerReference layer, UuidValue effect) async {
-    final path = await pickShaderToOpen();
-    if (path == null || !mounted) return;
-    final String text;
-    try {
-      text = File(path).readAsStringSync();
-    } catch (_) {
-      return;
-    }
-    applyShaderSource(layer: layer, effect: effect, source: text, origin: path);
-    if (mounted) context.read<LumitUiState>().model.refresh();
-  }
-
   /// Front the composition a **Node graph** effect applies
   /// (docs/impl/node-graph-comp.md §4.4), which is its Open graph row.
   ///
@@ -232,38 +206,26 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     return null;
   }
 
-  /// Open the shader editor on `effect` and refresh on what it applied
-  /// (docs/impl/custom-shader.md §3.2, CS3).
+  /// The layer's stack as a Custom shader's home (docs/impl/custom-shader.md
+  /// §3.2, CS3).
   ///
-  /// The window commits through the same one write `Load from file…` does, so
-  /// either way of getting text onto a shader is one `SetLayerEffects` and one
-  /// undo step.
-  Future<void> _editShaderOn(LayerReference layer, UuidValue effect) async {
-    // The live preview rides the drag path exactly as a parameter does
-    // (`render_frame_with_preview`'s own words: "the live drag
-    // path, which never touches the document"). The editor calls this when
-    // the text it has settled on compiles; nothing here commits.
+  /// The live preview rides the drag path exactly as a parameter does
+  /// (`render_frame_with_preview`'s own words: "the live drag path, which
+  /// never touches the document").
+  ShaderHome _shaderHome(LayerReference layer) {
     final ui = context.read<LumitUiState>();
     final comp = ui.selectedComp;
-    void preview(String source) {
-      if (comp == null) return;
-      final staged = layer.getEffects();
-      for (final instance in staged) {
-        if (instance.id() != effect) continue;
-        instance.setShaderSource(source: source, origin: null);
-        comp.renderFrameWithPreview(
-          frame: BigInt.from(ui.playheadFrame.value),
-          scale: ui.viewerScale,
-          layer: layer,
-          effects: staged,
-        );
-        return;
-      }
-    }
-
-    final applied = await showShaderEditor(
-        context: context, layer: layer, effect: effect, preview: preview);
-    if (applied && mounted) context.read<LumitUiState>().model.refresh();
+    return ShaderHome.layer(
+      layer,
+      draw: comp == null
+          ? null
+          : (staged) => comp.renderFrameWithPreview(
+                frame: BigInt.from(ui.playheadFrame.value),
+                scale: ui.viewerScale,
+                layer: layer,
+                effects: staged,
+              ),
+    );
   }
 
   /// How many Action buttons have been pressed in this panel's life.
@@ -1304,20 +1266,18 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
         curvePlotSize: ui.workspace.curvePlotSize,
         onCurvePlotSize: ui.workspace.setCurvePlotSize,
         onAction: (effect, param) {
-          // The Custom shader's two buttons are the frontend's own
-          // (docs/impl/custom-shader.md §1.1, §3.2): one opens a native file
-          // dialogue, the other the editor window, and neither is an event the
-          // engine could answer. Every other Action row goes back as one, which
-          // is what the kind is.
-          if (fx.name == 'custom_shader') {
-            if (param == 'load_from_file') {
-              _loadShaderInto(layer, effect);
-              return;
-            }
-            if (param == 'edit') {
-              _editShaderOn(layer, effect);
-              return;
-            }
+          // The Custom shader's two buttons are the frontend's own. Every other
+          // Action row goes back to the engine as an event, which is what the
+          // kind is.
+          if (fx.name == 'custom_shader' &&
+              pressShaderButton(
+                context: context,
+                home: _shaderHome(layer),
+                effect: effect,
+                param: param,
+                onApplied: ui.model.refresh,
+              )) {
+            return;
           }
           // The Node graph's Open graph row is the frontend's own the same
           // way: fronting a comp is not an event the engine could answer.

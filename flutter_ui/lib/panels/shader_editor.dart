@@ -19,17 +19,20 @@
 // nothing, and the question is never asked from a rebuild.
 
 import 'dart:async';
+import 'dart:io' show File;
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
 import 'package:lumit_flutter/panels/effect_param_row_frb.dart';
 import 'package:uuid/uuid.dart';
 
+import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 
 import '../l10n/strings.dart';
 import '../shell/dialog_frame.dart';
+import '../state/file_dialogs.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 
@@ -43,28 +46,62 @@ const double shaderEditorWellHeight = 320;
 /// than a measure - the grip changes it and the workspace remembers it.
 const double shaderEditorHeight = 460;
 
-/// Put [source] on one effect of [layer]'s stack and commit the stack.
+/// Where a Custom shader sits: a layer's stack, or the boxes of a node graph.
+/// Both are read as staged instances and committed whole, so a shader edit is
+/// one op and one undo step in either.
+class ShaderHome {
+  final List<BridgeEffectInstance> Function() read;
+
+  /// Commits what [read] handed out. Throws when the document moved under it.
+  final void Function(List<BridgeEffectInstance> instances) commit;
+
+  /// Draws the frame with these instances and commits nothing. Null where
+  /// there is nothing to draw into.
+  final void Function(List<BridgeEffectInstance> instances)? draw;
+
+  const ShaderHome({required this.read, required this.commit, this.draw});
+
+  factory ShaderHome.layer(LayerReference layer,
+          {void Function(List<BridgeEffectInstance> instances)? draw}) =>
+      ShaderHome(
+        read: layer.getEffects,
+        commit: (stack) => layer.setEffects(effects: stack),
+        draw: draw,
+      );
+
+  /// The wiring is read at the commit, so it is the graph as it stands then.
+  factory ShaderHome.graph(CompositionReference graph,
+          {void Function(List<BridgeEffectInstance> instances)? draw}) =>
+      ShaderHome(
+        read: graph.getNodeGraphInstances,
+        commit: (instances) => graph.setNodeGraph(
+            instances: instances, wiring: graph.getNodeGraph().wiring),
+        draw: draw,
+      );
+}
+
+/// Put [source] on one effect in [home] and commit it.
 ///
-/// The one write both ways of getting text onto a Custom shader go through —
-/// the editor's Apply and `Load from file…` — so an edit is one
-/// `SetLayerEffects` and one undo step whichever gesture made it. [origin] is
-/// the file the text was read from, or null for text somebody typed.
+/// The one write both ways of getting text onto a Custom shader go through,
+/// the editor's Apply and `Load from file…`, so an edit is one op and one
+/// undo step whichever gesture made it. [origin] is the file the text was read
+/// from, or null for text somebody typed.
 ///
 /// Answers whether it landed: false when the effect has gone from the stack
 /// under the window, where re-reading is the recovery and half a write would be
 /// worse than none.
 bool applyShaderSource({
-  required LayerReference layer,
+  required ShaderHome home,
   required UuidValue effect,
   required String source,
   String? origin,
 }) {
-  final stack = layer.getEffects();
+  final stack = home.read();
   for (final instance in stack) {
     if (instance.id() != effect) continue;
     instance.setShaderSource(source: source, origin: origin);
     try {
-      layer.setEffects(effects: stack);
+      home.commit(stack);
     } catch (_) {
       // The stack changed under us; re-reading is the recovery.
       return false;
@@ -76,20 +113,71 @@ bool applyShaderSource({
 
 /// What the engine makes of [source] on this effect, without committing it.
 ///
-/// The source is staged on a handle and never handed to `setEffects`, so the
-/// document does not move: this is a question, not an edit. Null when the
-/// effect has gone.
+/// The source is staged on a handle and never committed, so the document does
+/// not move: this is a question, not an edit. Null when the effect has gone.
 BridgeShaderStatus? shaderStatusFor({
-  required LayerReference layer,
+  required ShaderHome home,
   required UuidValue effect,
   required String source,
 }) {
-  for (final instance in layer.getEffects()) {
+  for (final instance in home.read()) {
     if (instance.id() != effect) continue;
     instance.setShaderSource(source: source, origin: null);
     return instance.shaderStatus();
   }
   return null;
+}
+
+/// Press one of a Custom shader's two buttons, wherever the shader sits
+/// (docs/impl/custom-shader.md §1.1, §3.2).
+///
+/// Both belong to the frontend: one opens a file dialogue, the other the
+/// editor window, and the engine could answer neither. Answers whether [param]
+/// was one of them. [onApplied] runs when text landed.
+bool pressShaderButton({
+  required BuildContext context,
+  required ShaderHome home,
+  required UuidValue effect,
+  required String param,
+  required VoidCallback onApplied,
+}) {
+  switch (param) {
+    case 'load_from_file':
+      unawaited(_loadShader(context, home, effect, onApplied));
+    case 'edit':
+      unawaited(() async {
+        if (await showShaderEditor(
+                context: context, home: home, effect: effect) &&
+            context.mounted) {
+          onApplied();
+        }
+      }());
+    default:
+      return false;
+  }
+  return true;
+}
+
+/// Read a `.wgsl` somebody sent and copy its text onto `effect` (§1.1, §6).
+///
+/// The **text** is copied, not a reference to the file: a project must be one
+/// file that opens on another machine, so the path is kept only as a memory of
+/// where it came from and is never read at render.
+///
+/// A file that will not read leaves the instance exactly as it was: the
+/// dialogue was the gesture, and half a shader is worse than none.
+Future<void> _loadShader(BuildContext context, ShaderHome home,
+    UuidValue effect, VoidCallback onApplied) async {
+  final path = await pickShaderToOpen();
+  if (path == null || !context.mounted) return;
+  final String text;
+  try {
+    text = File(path).readAsStringSync();
+  } catch (_) {
+    return;
+  }
+  applyShaderSource(home: home, effect: effect, source: text, origin: path);
+  if (context.mounted) onApplied();
 }
 
 /// Open the editor on one Custom shader instance, and commit what it returns.
@@ -106,18 +194,29 @@ BridgeShaderStatus? shaderStatusFor({
 /// model on the edit and not on a cancel.
 Future<bool> showShaderEditor({
   required BuildContext context,
-  required LayerReference layer,
+  required ShaderHome home,
   required UuidValue effect,
   /// Draw the frame as this text would draw it, without committing
   /// anything - the live preview (Airyz, 2026-09-01: "having to click apply
-  /// is kind of annoying while editing the shader"). Null where the caller
-  /// has no composition to draw into, which is every test that only asks
-  /// what the window does with the text.
+  /// is kind of annoying while editing the shader"). Left out, the text is
+  /// staged on the effect and handed to [ShaderHome.draw].
   void Function(String source)? preview,
 }) async {
+  final draw = home.draw;
+  preview ??= draw == null
+      ? null
+      : (source) {
+          final staged = home.read();
+          for (final instance in staged) {
+            if (instance.id() != effect) continue;
+            instance.setShaderSource(source: source, origin: null);
+            draw(staged);
+            return;
+          }
+        };
   String? held;
   var hasGraph = false;
-  for (final instance in layer.getEffects()) {
+  for (final instance in home.read()) {
     if (instance.id() != effect) continue;
     held = instance.shaderSource() ?? '';
     hasGraph = instance.shaderGraph() != null;
@@ -135,7 +234,7 @@ Future<bool> showShaderEditor({
       ),
     );
     if (agreed != true || !context.mounted) return false;
-    final stack = layer.getEffects();
+    final stack = home.read();
     var found = false;
     for (final instance in stack) {
       if (instance.id() != effect) continue;
@@ -146,7 +245,7 @@ Future<bool> showShaderEditor({
     }
     if (!found) return false;
     try {
-      layer.setEffects(effects: stack);
+      home.commit(stack);
     } catch (_) {
       // The stack changed under the offer; re-reading is the recovery.
       return false;
@@ -168,14 +267,14 @@ Future<bool> showShaderEditor({
     builder: (close) => _ShaderEditor(
       source: source,
       status: (text) =>
-          shaderStatusFor(layer: layer, effect: effect, source: text),
+          shaderStatusFor(home: home, effect: effect, source: text),
       preview: preview,
       onApply: close,
       onCancel: () => close(null),
     ),
   );
   if (applied == null) return false;
-  return applyShaderSource(layer: layer, effect: effect, source: applied);
+  return applyShaderSource(home: home, effect: effect, source: applied);
 }
 
 /// The §4.1 refusal, worn calmly: this shader is its graph's, and the one way

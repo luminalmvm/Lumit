@@ -63,6 +63,7 @@ import 'effect_param_row_frb.dart'
         paramRidersFor;
 import 'graph_panel.dart';
 import 'placeholder.dart';
+import 'shader_editor.dart' show ShaderHome, pressShaderButton;
 import 'timeline_extras_frb.dart' show DoubleTap;
 
 /// This canvas's idea of identity, as [graphNodeKey] is the layer canvas's.
@@ -657,9 +658,32 @@ class _CompGraphPanelState extends State<CompGraphPanel> {
         for (final r in held.riders[param] ?? const <BridgeParamInfo>[])
           (r, valueOf(r.id)),
       ],
-      // The one Action a box carries is the Node graph's Open graph, and the
-      // canvas already knows how to go in.
-      onAction: (_, __) => _enterBox(node),
+      // A Custom shader's two buttons press the way they do in Effect controls.
+      // The only other Action a box carries is the Node graph's Open graph, and
+      // the canvas already knows how to go in.
+      onAction: (effect, param) {
+        if (node.matchName == 'custom_shader' &&
+            pressShaderButton(
+              context: context,
+              home: ShaderHome.graph(
+                widget.comp,
+                draw: (staged) => widget.comp.renderFrameWithGraphPreview(
+                  frame: BigInt.from(ui.playheadFrame.value),
+                  scale: ui.viewerScale,
+                  instances: staged,
+                ),
+              ),
+              effect: effect,
+              param: param,
+              onApplied: () {
+                ui.model.refresh();
+                _reload();
+              },
+            )) {
+          return;
+        }
+        _enterBox(node);
+      },
     );
   }
 

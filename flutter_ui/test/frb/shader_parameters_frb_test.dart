@@ -81,7 +81,9 @@ void main() {
           .value;
 
       // Edit: the editor's own commit writes the text and nothing else.
-      expect(applyShaderSource(layer: p.layer, effect: id, source: _oneRow),
+      expect(
+          applyShaderSource(
+              home: ShaderHome.layer(p.layer), effect: id, source: _oneRow),
           isTrue);
       await refresh();
 
@@ -128,7 +130,9 @@ void main() {
 
       // A rename in the source leaves the keyed row where it is, says what
       // removing it would cost, and offers the new name.
-      expect(applyShaderSource(layer: p.layer, effect: id, source: _renamed),
+      expect(
+          applyShaderSource(
+              home: ShaderHome.layer(p.layer), effect: id, source: _renamed),
           isTrue);
       await refresh();
       expect(sync().adds, ['reach']);
