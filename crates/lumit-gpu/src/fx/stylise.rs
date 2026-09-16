@@ -1263,7 +1263,7 @@ impl FxEngine {
                 seed: op.seed,
                 vertical: u32::from(op.vertical),
                 reverse: u32::from(op.reverse),
-                pad0: 0
+                pad0: 0,
             }),
         );
         out

@@ -9557,7 +9557,7 @@ pub fn pixel_sort_matted(rgba: &mut [f32], w: u32, h: u32, p: &PixelSortParams, 
         #[allow(clippy::cast_possible_wrap, clippy::cast_possible_truncation)]
         let offset = (((lattice_hash(p.seed, 0, line as i32, 0, 0) % stride as u32) as f32)
             * p.offset_scale.clamp(0.0, 1.0)) as i32;
-            
+
         let mut base = -offset;
         while base < len as i32 {
             for i in 0..stride {
