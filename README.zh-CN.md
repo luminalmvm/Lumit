@@ -109,7 +109,7 @@ cargo test --workspace
 | [docs/README.md](docs/README.md) | 索引——从这里开始。十七份带编号的规格说明，从愿景到路线图。 |
 | [docs/GUIDE.md](docs/GUIDE.md) | 贡献者指南：每个 crate 的作用、代码必须遵守的规则，以及如何构建和运行。 |
 | [docs/impl/](docs/impl/) | 实现笔记。 |
-| [docs/TODO.md](docs/TODO.md) | 接下来、稍后以及更远期要做的工作。 |
+| [docs/TODO.md](docs/TODO.md) | 待完成的工作，按重要程度排列。 |
 
 引擎是在 `crates/`下的一个 Cargo 工作区; 界面在
 `flutter_ui/`; 他们在 `crates/lumit-bridge`

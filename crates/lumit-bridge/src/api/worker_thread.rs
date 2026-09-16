@@ -3,7 +3,7 @@ use std::sync::mpsc::Receiver;
 use crate::api::composition::BridgePlaybackMode;
 use flutter_rust_bridge::frb;
 use lumit_core::model::EffectInstance;
-use lumit_render::{HeadlessRenderer, PreviewEngine};
+use lumit_render::HeadlessRenderer;
 
 // The quality policy is v0's, shared rather than copied: two implementations of
 // "what does a scale of 0.5 mean for the decode" would drift, and the two
@@ -35,11 +35,6 @@ use crate::api::{
 
 #[frb(ignore)]
 pub struct WorkerState {
-    /// The realtime preview-tier controller. Held so the worker
-    /// can feed it measured render costs and read the tier back, which is not
-    /// wired yet — see docs/TODO.md, "Bridge".
-    #[allow(dead_code)]
-    pub preview_engine: PreviewEngine,
     /// The session's renderer, owned outright by this thread — no lock, because
     /// nothing else touches it. Every `publish_frame` variant reads it.
     pub renderer: HeadlessRenderer,
@@ -2679,7 +2674,6 @@ fn worker_loop(
     let mut state = WorkerState {
         project,
         renderer,
-        preview_engine: PreviewEngine::default(),
         playback: None,
         prefetcher: crate::prefetch::Prefetcher::default(),
         last_shown: None,
@@ -5515,7 +5509,6 @@ mod tests {
         Some(super::WorkerState {
             project,
             renderer,
-            preview_engine: super::PreviewEngine::default(),
             playback: None,
             prefetcher: crate::prefetch::Prefetcher::default(),
             last_shown: None,

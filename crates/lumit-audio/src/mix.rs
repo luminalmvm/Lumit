@@ -144,6 +144,22 @@ pub fn mix_stereo(sources: &[PlacedAudio], total_frames: usize) -> Vec<f32> {
 /// handed, and only a stage sits where the board draws it: **ahead of** the
 /// limiter, so pulling the master down is what stops the limiter working.
 pub fn mix_stereo_at(sources: &[PlacedAudio], total_frames: usize, master_gain: f32) -> Vec<f32> {
+    let mut out = sum_stereo(sources, total_frames);
+    for s in &mut out {
+        *s = (*s * master_gain).clamp(-MASTER_CEILING, MASTER_CEILING);
+    }
+    out
+}
+
+/// Sum `sources` the same way, with **no fader and no ceiling**: the raw sum a
+/// bus insert is handed (docs/09 §3.1).
+///
+/// A rack on a Precomp layer processes the nested comp's sum, and that sum is
+/// somewhere in the middle of the desk. The limiter is the master's own last
+/// stage, and holding a bus at the master's ceiling on the way past would put
+/// a second one in the middle of the signal path.
+#[must_use]
+pub fn sum_stereo(sources: &[PlacedAudio], total_frames: usize) -> Vec<f32> {
     let mut out = vec![0.0f32; total_frames * 2];
     for src in sources {
         if (src.gain == [0.0, 0.0] && src.envelope.is_none()) || src.samples.is_empty() {
@@ -164,9 +180,6 @@ pub fn mix_stereo_at(sources: &[PlacedAudio], total_frames: usize, master_gain: 
             out[o] += src.samples[src_f * 2] * g[0];
             out[o + 1] += src.samples[src_f * 2 + 1] * g[1];
         }
-    }
-    for s in &mut out {
-        *s = (*s * master_gain).clamp(-MASTER_CEILING, MASTER_CEILING);
     }
     out
 }

@@ -1339,6 +1339,28 @@ class Workspace extends ChangeNotifier {
   void _pruneRecentOpened() =>
       _recentOpened.removeWhere((path, _) => !recentProjects.contains(path));
 
+  /// The command palette entries run most recently, newest first — what
+  /// "recently used entries rank first" (docs/07 §12) is worth once the app has
+  /// been closed and opened again. Labels, because a label is what the palette
+  /// ranks on and what it shows.
+  final List<String> paletteRecents = [];
+
+  /// How many the list keeps. Long enough to hold a day's habits, short enough
+  /// that something tried once last month stops leading an empty palette.
+  static const int maxPaletteRecents = 20;
+
+  /// Remember that the palette ran [label]. Persisted straight away, like a
+  /// project's path, and without notifying: nothing on screen is watching this.
+  void noteCommandRun(String label) {
+    paletteRecents
+      ..remove(label)
+      ..insert(0, label);
+    if (paletteRecents.length > maxPaletteRecents) {
+      paletteRecents.removeRange(maxPaletteRecents, paletteRecents.length);
+    }
+    save();
+  }
+
   /// Remember [session] for the project at [path], persisted immediately so the
   /// next open restores it. A no-op write when the session is unchanged, so the
   /// piggybacked [save] does not churn the store on every identical update.
@@ -1426,6 +1448,7 @@ class Workspace extends ChangeNotifier {
         'last_project_path': lastProjectPath,
         'recent_projects': recentProjects,
         'recent_opened': _recentOpened,
+        'palette_recents': paletteRecents,
         'sessions': {
           for (final e in sessions.entries) e.key: e.value.toJson(),
         },
@@ -1540,6 +1563,14 @@ class Workspace extends ChangeNotifier {
         if (key is String && value is String) _recentOpened[key] = value;
       });
       _pruneRecentOpened();
+    }
+    // Trimmed on the way in as well as on the way out, so a store written by a
+    // build with a longer list does not keep one.
+    paletteRecents.clear();
+    final rawPalette = j['palette_recents'];
+    if (rawPalette is List) {
+      paletteRecents
+          .addAll(rawPalette.whereType<String>().take(maxPaletteRecents));
     }
     sessions.clear();
     final rawSessions = j['sessions'];

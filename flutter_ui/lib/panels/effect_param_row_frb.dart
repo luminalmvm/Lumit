@@ -313,7 +313,6 @@ class EffectParamRowFrb extends StatelessWidget {
                 // over them either way.
                 scalars: scalars,
                 comp: comp,
-                playheadFrame: playheadFrame,
                 onSeek: onSeek,
                 rowKey: '$id-${param.id}',
                 // The panel's fixed columns; the Timeline's fold-out takes
@@ -1815,7 +1814,6 @@ class EffectPointRowFrb extends StatelessWidget {
         : KeyframeControlsFrb(
             scalars: [sx, sy],
             comp: comp,
-            playheadFrame: playheadFrame,
             onSeek: onSeek,
             rowKey: '$id-${xParam.id}-pair',
             fixedColumns: twoColumn,

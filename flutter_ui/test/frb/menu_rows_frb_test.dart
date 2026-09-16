@@ -711,7 +711,7 @@ void main() {
                 'the preset is named after its file, as the panel names it');
       });
 
-      testWidgets('Apply lands the preset on every selected layer',
+      testWidgets('Apply lands the preset on the primary layer only',
           (tester) async {
         final p = withComp();
         final source = p.comp.addSolidLayer();
@@ -731,10 +731,8 @@ void main() {
         await tester.pump();
 
         expect(a.getEffects().length, 1);
-        expect(b.getEffects().length, 1);
-        expect(
-            a.getInfo().effects.first.id, isNot(b.getInfo().effects.first.id),
-            reason: 'each layer gets its own instance');
+        expect(b.getEffects(), isEmpty,
+            reason: 'the primary layer alone, not every selected layer');
       });
 
       testWidgets('both rows grey with nothing selected', (tester) async {

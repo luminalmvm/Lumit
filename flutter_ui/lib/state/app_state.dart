@@ -117,6 +117,14 @@ class LumitState extends ChangeNotifier {
   /// (shell/splash.dart) so the card cannot be left up by a job that failed.
   final ValueNotifier<String?> busy = ValueNotifier(null);
 
+  /// How far that job has got, 0..1, or null for one that cannot say.
+  ///
+  /// Beat detection can: the engine reports the share of the run behind it as
+  /// it mixes the sources down, and closes at one once the markers are in. The
+  /// card keeps whichever bar it opened with, so this is set before the card
+  /// goes up and let go after it comes down.
+  final ValueNotifier<double?> busyProgress = ValueNotifier(null);
+
   /// The Viewer has something to show, or there is nothing for it to show —
   /// either way the shell can come out from behind its progress bar.
   ///

@@ -110,6 +110,14 @@ Future<void> showProjectMenuFrb({
     ItemReference_Footage(:final field0) => field0.colourSpace(),
     _ => null,
   };
+  // The rate a run of stills plays at, null for everything that is not a run —
+  // which is what decides whether the field below is offered at all. Read here
+  // with the colour space, for the same reason: a document read belongs to the
+  // gesture, not to a rebuild.
+  final sequenceRate = switch (item) {
+    ItemReference_Footage(:final field0) => field0.sequenceRate(),
+    _ => null,
+  };
   // Read here rather than inside the popup's builder: the popup is raised in
   // its own route, so it has no ThemeScope of the panel's above it.
   final menuTheme = ThemeScope.of(context).theme;
@@ -149,6 +157,42 @@ Future<void> showProjectMenuFrb({
               onPressed: () => close(_ProjectMenuAction.relink),
               child: Text(l10n.relinkEllipsis),
             ),
+          // **The rate of a run of stills** (docs/07 §3.1). Stills carry no
+          // rate of their own, so an imported run plays at 25 until this
+          // field says otherwise, and it is the one part of a sequence the
+          // project stores. A field on the menu rather than a submenu of
+          // choices: a run corrected from a 3D render is as likely to want
+          // 12 as 24, and typing it is one gesture where hunting a list is
+          // two. It sits beside Relink, because both are about what the item
+          // on disk is.
+          if (item case ItemReference_Footage(:final field0))
+            if (sequenceRate case final rate?)
+              Padding(
+                key: const ValueKey('project-menu-sequence-rate'),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                child: Row(
+                  children: [
+                    // The label takes whatever the well and its unit leave, so
+                    // a longer word in another language shortens rather than
+                    // pushing the field off the menu.
+                    Expanded(
+                      child: Text(l10n.sequenceRate, style: menuTheme.small),
+                    ),
+                    _SequenceRateField(
+                      theme: menuTheme,
+                      rate: rate,
+                      onRate: (fpsNum, fpsDen) {
+                        close(null);
+                        field0.setSequenceRate(fpsNum: fpsNum, fpsDen: fpsDen);
+                        onLocalEdit();
+                      },
+                    ),
+                    const SizedBox(width: 6),
+                    Text(l10n.unitFps, style: menuTheme.small),
+                  ],
+                ),
+              ),
           if (isFootage)
             MenuRow(
               onPressed: () => close(_ProjectMenuAction.findMissing),
@@ -485,4 +529,63 @@ Future<void> showProjectMenuFrb({
       }
       onLocalEdit();
   }
+}
+
+/// The rate field on the Project panel's menu: the speed of one run of stills,
+/// typed rather than picked (docs/07 §3.1).
+///
+/// A widget of its own because it owns a controller, and because the menu is a
+/// function. It writes on Enter alone — a rate half typed is not a rate — and
+/// what it writes is the exact pair [parseRate] reads, so 23.976 goes into the
+/// document as 24000/1001.
+class _SequenceRateField extends StatefulWidget {
+  const _SequenceRateField({
+    required this.theme,
+    required this.rate,
+    required this.onRate,
+  });
+
+  final LumitTheme theme;
+  final BridgeSequenceRate rate;
+  final void Function(int fpsNum, int fpsDen) onRate;
+
+  @override
+  State<_SequenceRateField> createState() => _SequenceRateFieldState();
+}
+
+class _SequenceRateFieldState extends State<_SequenceRateField> {
+  late final TextEditingController _text = TextEditingController(
+      text: formatRate(widget.rate.fpsNum, widget.rate.fpsDen));
+
+  @override
+  void dispose() {
+    _text.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        width: 56,
+        child: LumitTooltip(
+          message: l10n.tipSequenceRate,
+          child: HouseTextField(
+            key: const ValueKey('project-menu-sequence-rate-field'),
+            controller: _text,
+            width: 56,
+            fill: widget.theme.surface0,
+            // The drawings right-align every numeric well, and a rate is one.
+            textAlign: TextAlign.right,
+            onSubmitted: (_) {
+              final rate = parseRate(_text.text);
+              // Nonsense leaves the run at the rate it had, and says so by
+              // putting that rate back in the field.
+              if (rate == null) {
+                _text.text = formatRate(widget.rate.fpsNum, widget.rate.fpsDen);
+                return;
+              }
+              widget.onRate(rate.$1, rate.$2);
+            },
+          ),
+        ),
+      );
 }

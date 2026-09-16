@@ -41,9 +41,12 @@ beneath it, and those are not decoded, uploaded, effected or composited. The dra
 the decode planner ask one predicate (`lumit_core::occlusion::occluder_index`) so they skip
 exactly the same layers, and the cull must be invisible in the picture, so the predicate is
 deliberately narrow. v1 accepts only a Solid layer whose colour has alpha 1, visible and in
-span (soloed if anything is), 2D with zero rotation, Normal blend at 100% opacity, with no
-masks, paint, enabled effects or motion blur, whose axis-aligned placement — its own transform
-and its parent chain, none rotated, 3D, or driven by an expression — covers the comp rectangle.
+span (soloed if anything is), 2D, Normal blend at 100% opacity, with no
+masks, paint, enabled effects or motion blur, whose placement — its own transform
+and its parent chain, none 3D or driven by an expression — covers the comp rectangle.
+Rotation and scale are allowed, at either end of the chain: a placed rectangle is a
+parallelogram, so it covers the frame exactly when it holds the frame's four corners, and a
+placement that squashes the layer to a line covers nothing.
 It refuses whenever the comp has an active camera, a visible Adjustment layer sits above the
 candidate, or any visible layer above it names a layer below as a matte or an effect's layer
 input; and it is off inside a collapsed Precomp's splice (§1.4), whose layers are not clipped

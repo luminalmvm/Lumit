@@ -94,12 +94,9 @@ void main() {
       expect(p.layer.getEffects().single.name(), 'blur');
     });
 
-    testWidgets('double-clicking applies to every selected layer',
+    testWidgets('double-clicking applies to the primary layer only',
         (tester) async {
-      // The Effect menu and the effects console both apply to the whole
-      // selection; this panel reached for the primary layer alone, so
-      // the same effect on the same selection landed on three layers from the
-      // menu and on one from here.
+      // The Effect menu and the effects console do the same.
       final p = freshProject();
       final comp = p.state.project!.newComposition(name: 'Scene');
       final first = comp.addAdjustmentLayer();
@@ -115,8 +112,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(first.getEffects(), hasLength(1));
-      expect(second.getEffects(), hasLength(1),
-          reason: 'the second selected layer must get the effect too');
+      expect(second.getEffects(), isEmpty,
+          reason: 'the second selected layer must not get the effect');
     });
 
     testWidgets('effect rows are draggable, carrying EffectDragData',
@@ -189,10 +186,8 @@ void main() {
     });
 
     /// A **preset** row is added to the same list by the same gesture as an
-    /// effect row, so it lands on the same layers. It reached for the
-    /// primary layer alone while the effect row beside it took the whole
-    /// selection.
-    testWidgets('a library preset applies to every selected layer',
+    /// effect row, so it lands on the primary layer alone.
+    testWidgets('a library preset applies to the primary layer only',
         (tester) async {
       final dir = Directory.systemTemp.createTempSync('lumit-preset-many');
       final path = '${dir.path}/glow.lumfx';
@@ -217,14 +212,13 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(first.getEffects(), hasLength(1));
-      expect(second.getEffects(), hasLength(1),
-          reason: 'the second selected layer must get the preset too');
+      expect(second.getEffects(), isEmpty,
+          reason: 'the primary layer alone, not every selected layer');
     });
 
     /// **Load preset** is the same act reached from the bar rather than the
-    /// list, so it lands on the same layers. Save stays singular: a preset file
-    /// is one stack.
-    testWidgets('loading a preset applies to every selected layer',
+    /// list, so it lands on the primary layer alone too.
+    testWidgets('loading a preset applies to the primary layer only',
         (tester) async {
       final dir = Directory.systemTemp.createTempSync('lumit-preset-load');
       final path = '${dir.path}/look.lumfx';
@@ -244,7 +238,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(first.getEffects(), hasLength(1));
-      expect(second.getEffects(), hasLength(1));
+      expect(second.getEffects(), isEmpty,
+          reason: 'the primary layer alone, not every selected layer');
     });
 
     /// **Every heading twirls.** The category folds its effects away and lets

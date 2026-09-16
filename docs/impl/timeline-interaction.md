@@ -7,15 +7,15 @@ Keys returns, a key's shape says its interpolation, the drawing is authoritative
 block tools, one key size in both modes, the accent's jobs split, property selection and
 letting go, snapping, both halves move. This note is the *how* for **timeline
 interaction quality**: the binding spec for every gesture the Timeline's three modes take,
-the audited gap list against the approved drawings and the Caddis study, and the ordered
-work packages. The drawings (`Caddis study/mockups/Keys.dc.html`, `GraphMode.dc.html`,
+the audited gap list against the approved drawings, and the ordered
+work packages. The drawings (`Keys.dc.html`, `GraphMode.dc.html`,
 `Main.dc.html` and their style manifests) govern geometry; this note governs behaviour.
 
 ## In plain terms
 
 The owner's ruling that commissioned this step: *interaction is everything to the user and
-we want it slick*. Caddis — the editor the redesign studied — is not slicker because it
-has more features; it is slicker because every gesture lands: the thing under the cursor
+we want it slick*. An editor isn't slick because it
+has more features, it's slick because every gesture lands: the thing under the cursor
 always answers, feedback appears only under the hand and vanishes after, a drag can always
 be escaped, and the cursor itself says what a press would do. Lumit's timeline already
 *has* most of the machinery — the marquee, the block box with stretch handles, the Ease
@@ -31,7 +31,7 @@ packages one pull request each.
 
 ## 1. Principles (from the study, binding here)
 
-These are the study's distilled interaction rules (`Caddis study/notes-editor-ux.md` §3,
+These are the study's distilled interaction rules (`notes-editor-ux.md` §3,
 `notes-visual-qs.md` §11–12, PLAN.md §1.5), restated as Lumit law for this panel:
 
 - **P1 — Feedback is transient and local.** Anything a gesture summons (snap line, badge,
@@ -471,7 +471,7 @@ middle of **every** key, same-shape pairs included.
   the drawing puts it and where a key is one point; the speed lens draws a key as two dots
   with a speed each, which is a different readout and not this one.
 - Box-select is additive with `Shift`/`Ctrl` (shipped) and restyles per §4.4.
-- **The selection transform box** (docs/07 §5.3, Caddis §2.1) — **built in TI-7**: two or
+- **The selection transform box** (docs/07 §5.3) — **built in TI-7**: two or
   more selected keys in the value lens draw the same block box the lanes draw, spanning
   the selection in time *and value*; its left/right edges scale time about the opposite
   edge, its top/bottom edges scale value about the opposite edge. Same `text_primary`
@@ -488,7 +488,7 @@ middle of **every** key, same-shape pairs included.
     every other drag in this panel — it suspends the magnet (§4.3, §4.5). `Shift` carries
     the modifier's work instead, which is what the study actually describes: *"Shift locks
     to the dominant drag axis and snaps values to integers with a live readout tooltip"*
-    (`Caddis study/notes-editor-ux.md` §4). The axis lock half of that sentence belongs to
+    (`notes-editor-ux.md` §4). The axis lock half of that sentence belongs to
     the box's **slide** — the key drag, where `Shift` already constrains the axis — and
     the integer snap half belongs to the edge scale, which is where TI-7 put it.
   - **There are no corner grabs**, only the four edges. A box's corners stand exactly on
@@ -514,7 +514,7 @@ middle of **every** key, same-shape pairs included.
 ### 6.3 The tool strip and the frame
 
 - The bottom strip gains **Tangents — Auto / Clamp / Free** between the lens pair and the
-  ease presets (the drawing's strip; Caddis §2.1). Auto recomputes a smooth
+  ease presets (the drawing's strip). Auto recomputes a smooth
   (Catmull-Rom-style) tangent whenever a neighbour moves, Clamp is Auto with the value
   clamped inside the neighbours (no overshoot), Free is today's behaviour. The mode is
   **per key side**, stored with the key; switching Free → Auto → Free keeps the custom
@@ -846,7 +846,7 @@ against the code and the suites (2026-08-25). What it found:
 
 ## Open questions
 
-- Should double-click on empty graph curve also plant a key (Caddis's gesture), or does
+- Should double-click on empty graph curve also plant a key, or does
   `Ctrl`+click stay the only planting gesture (docs/07 §4.3's, shipped)? Leaning: keep
   `Ctrl`+click only, since double-click is being given to numeric entry on a key and two
   double-click meanings a few pixels apart misfire.

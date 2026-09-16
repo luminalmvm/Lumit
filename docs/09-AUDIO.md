@@ -15,9 +15,12 @@ markers, beat snapping, volume keyframes, **pan**, mute/solo, multiple audio lay
 per comp, audio from video footage, audio scrubbing, audio in export, **level meters and a
 master fader**, and **fade in / fade out and clip crossfades**.
 
-Out (explicitly, §7): mixer **buses and sends**, and audio retiming. Hosted audio
+Out (explicitly, §7): mixer **sends**, and audio retiming. Hosted audio
 plugins are in, on a layer and on a clip, and a suite of built-in audio effects sits beside
-them ([impl/audio-effects.md](impl/audio-effects.md)).
+them ([impl/audio-effects.md](impl/audio-effects.md)). A **Precomp layer's own rack is a
+bus** (§3.1, reversing this section's original "buses and sends"): everything arriving
+through the layer is summed and the rack hears the sum. It is the only bus there is, and
+the only one v1 needs, since every other rack is an insert on a layer or on a clip.
 
 The engine layer (`lumit-audio`, `lumit-bridge`) is built, and so are the Flutter **Mixer**
 and **Audio** panels with the Audio workspace preset that hosts them (the approved
@@ -112,6 +115,19 @@ sum of all audible layers →
 user-adjustable — v1 clamps sample peaks to that ceiling,
 `lumit-audio::mix::MASTER_CEILING`; true inter-sample-peak limiting per ITU-R BS.1770 is
 future) → device.
+
+**A Precomp layer's rack is a bus.** Volume and Pan push down onto every source
+arriving through a nested comp, because gain distributes over a sum; a compressor does
+not, so a rack on a Precomp layer is a stage on that comp's sum instead. The mixer sums
+everything the layer carries, each source at its own gains and at the nested comp's own
+master fader, runs the layer's rack over the sum, and places what comes back once, under
+that layer's Volume and Pan: insert then fader, the order a layer's own rack already
+reads. The whole bus meters on the Precomp layer's strip, which is the row the desk draws
+it as, and a bus inside a bus is the same act one level down. A rack on a **Sequence**
+layer still runs per clip rather than on the row's sum, so a reverb does not tail across
+a join. The taps are deliberately deaf to all of it: *Audio level*, a *Duck under* wire
+and beat detection read the mix with no rack in it, insert or bus, so a plugin knob can
+never move a driver.
 
 The fader is a **stage**, not a multiplier folded into each layer's gain. The samples would
 be the same either way — multiplication distributes over a sum — but only a stage puts the
@@ -418,9 +434,11 @@ same decoded ring, so it is warm wherever the cache bar is warm.
 - **Mixing console** — *partly reversed by the Audio workspace board.* A **Mixer** panel of
   layer strips plus a master strip ships (the board's four decisions), and the Audio
   timeline gives each layer and each clip its own rack; what stays out
-  is **buses and sends**, which have nowhere to send to while every rack is an insert. So:
-  per-layer volume and pan, per-layer and per-clip inserts, a master fader, meters, and
-  the limiter, and no bus architecture.
+  is **sends**, which have nowhere to send to while every rack sits in the signal path.
+  The one bus is a **Precomp layer's own rack**, over the comp it holds (§3.1): there are
+  no bus rows to make, because the nested comp is the row. So: per-layer volume and pan,
+  per-layer and per-clip inserts, a rack on a Precomp layer over everything inside it, a
+  master fader, meters, and the limiter.
 - **Audio retiming.** Retime is video-only in v1: a layer carrying a retime map contributes
   no audio, and the mix enforces it from one guard above the kind match in the audio walk,
   a Footage layer and a Precomp layer alike. `kind_has_audio` stays blind to the map, so

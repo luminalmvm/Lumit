@@ -152,20 +152,31 @@ class _OpeningOverlayState extends State<OpeningOverlay>
 ///
 /// A job the interface must not be used during — beat detection is the first —
 /// puts its line into [busy] while it runs and clears it after, and this shows
-/// the same card the rest of the time it shows nothing. The bar sweeps: the
-/// engine reports no fraction for these jobs, and a bar that invented one would
-/// be lying about work it cannot see.
+/// the same card the rest of the time it shows nothing.
+///
+/// [progress] is the fraction the job reports, where it reports one: beat
+/// detection does, and its bar fills and says the percentage exactly as an open
+/// does. A job with nothing to report leaves this out and keeps the sweep,
+/// which claims nothing about work it cannot see.
 class BusyOverlay extends StatelessWidget {
   final ValueListenable<String?> busy;
+  final ValueListenable<double?>? progress;
 
-  const BusyOverlay({super.key, required this.busy});
+  const BusyOverlay({super.key, required this.busy, this.progress});
 
   @override
   Widget build(BuildContext context) => ValueListenableBuilder<String?>(
         valueListenable: busy,
-        builder: (context, label, _) => label == null
-            ? const SizedBox.shrink()
-            : OpeningOverlay(label: label),
+        builder: (context, label, _) {
+          if (label == null) return const SizedBox.shrink();
+          final reported = progress;
+          if (reported == null) return OpeningOverlay(label: label);
+          return ValueListenableBuilder<double?>(
+            valueListenable: reported,
+            builder: (context, fraction, _) =>
+                OpeningOverlay(label: label, fraction: fraction),
+          );
+        },
       );
 }
 

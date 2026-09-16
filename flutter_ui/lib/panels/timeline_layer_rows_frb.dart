@@ -812,7 +812,6 @@ class _FlowRow extends StatelessWidget {
           KeyframeControlsFrb(
             scalars: [row.rate!],
             comp: comp,
-            playheadFrame: playheadFrame,
             onSeek: onSeek,
             rowKey: 'tl-flow-rate',
             onWrite: (next) {
@@ -933,7 +932,6 @@ class _VolumeRowState extends State<_VolumeRow> {
             KeyframeControlsFrb(
               scalars: [scalar],
               comp: widget.comp,
-              playheadFrame: frame,
               onSeek: widget.onSeek,
               rowKey: 'tl-volume',
               onWrite: (next) {

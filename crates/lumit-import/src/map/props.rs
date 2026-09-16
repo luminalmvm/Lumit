@@ -74,6 +74,18 @@ pub(crate) fn axis_of(value: &serde_json::Value, axis: usize) -> Option<f64> {
     }
 }
 
+/// What a keyframed control Lumit does not animate imports as.
+pub(crate) const STARTS_ON: &str = "the value it starts on — Lumit's control is not animated";
+
+/// The number behind a control Lumit does not animate, and whether it was
+/// keyframed. A keyframed one reads its first key.
+pub(crate) fn starting_value(leaf: &Property) -> (Option<f64>, bool) {
+    match leaf.keyframes.as_deref() {
+        Some([first, ..]) => (first.v.as_ref().and_then(|v| axis_of(v, 0)), true),
+        _ => (leaf.value.as_ref().and_then(|v| axis_of(v, 0)), false),
+    }
+}
+
 /// One axis of a property, as the still number it is now. Used for the
 /// switches and sizes Lumit does not animate.
 pub(crate) fn still(props: &[Property], match_name: &str, axis: usize) -> Option<f64> {

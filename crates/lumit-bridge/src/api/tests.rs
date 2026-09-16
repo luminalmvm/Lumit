@@ -453,6 +453,134 @@ fn relinking_a_sequence_by_any_of_its_frames_finds_the_run_and_its_neighbours() 
     );
 }
 
+/// **The rate of an imported run is the user's to correct** (docs/07 §3.1).
+/// Stills carry none of their own, so the item's rate is the only rate there
+/// is: it arrives at 25, takes the exact pair it is given, and one undo puts
+/// the old one back. A file that is not a run has no rate to set, and nor has
+/// nought.
+// Recognising a run is the decoder crate's work: without it the import is one
+// still and there is no rate on it to correct.
+#[cfg(feature = "media")]
+#[test]
+fn an_image_sequence_takes_a_new_rate_and_undo_puts_the_old_one_back() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    for n in 1..=8u32 {
+        std::fs::write(dir.path().join(format!("frame{n:04}.png")), b"f").expect("frame");
+    }
+    std::fs::write(dir.path().join("lone.png"), b"f").expect("still");
+
+    let project = LumitBridgeState::new_project(None).expect("a new project");
+    let run = project
+        .import_footage(
+            dir.path()
+                .join("frame0001.png")
+                .to_string_lossy()
+                .into_owned(),
+        )
+        .expect("the run imports as one item");
+    let rate = |f: &FootageReference| {
+        f.sequence_rate()
+            .expect("readable")
+            .map(|r| (r.fps_num, r.fps_den))
+    };
+    assert_eq!(rate(&run), Some((25, 1)), "what an import starts at");
+
+    run.set_sequence_rate(24000, 1001)
+        .expect("a run takes a rate");
+    assert_eq!(
+        rate(&run),
+        Some((24000, 1001)),
+        "the exact pair crosses, never a rounding of it"
+    );
+
+    project.undo().expect("one gesture, one step");
+    assert_eq!(rate(&run), Some((25, 1)), "undo puts the old rate back");
+
+    assert!(
+        matches!(
+            run.set_sequence_rate(0, 1),
+            Err(BridgeError::InvalidFrameRate)
+        ),
+        "nought is not a rate"
+    );
+    assert_eq!(rate(&run), Some((25, 1)), "and a refusal changes nothing");
+
+    let still = project
+        .import_footage(dir.path().join("lone.png").to_string_lossy().into_owned())
+        .expect("the single still imports");
+    assert_eq!(rate(&still), None, "one file is not a run");
+    assert!(
+        still.set_sequence_rate(30, 1).is_err(),
+        "so there is no rate on it to correct"
+    );
+}
+
+// A relinked run that grew is renamed for its new span in one undo step,
+// and a run the user renamed keeps its name.
+#[cfg(feature = "media")]
+#[test]
+fn relinking_a_sequence_renames_it_for_its_new_span_unless_the_user_renamed_it() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    for n in 1..=60u32 {
+        std::fs::write(dir.path().join(format!("frame{n:04}.png")), b"f").expect("frame");
+    }
+    let picked = dir
+        .path()
+        .join("frame0042.png")
+        .to_string_lossy()
+        .into_owned();
+
+    let project = LumitBridgeState::new_project(None).expect("a new project");
+    let seed = |name: &str| {
+        let item = FootageItem {
+            colour_space: None,
+            sequence: Some(lumit_core::model::SequenceRef::default()),
+            id: Uuid::now_v7(),
+            name: name.into(),
+            media: MediaRef {
+                relative_path: "frame0001.png".into(),
+                absolute_path: "/nowhere/frames/frame0001.png".into(),
+                fingerprint: None,
+                extra: serde_json::Map::new(),
+            },
+            extra: serde_json::Map::new(),
+        };
+        let id = item.id;
+        let state = project.state().expect("state");
+        let state = state.write().expect("write");
+        state
+            .store
+            .commit(Op::AddItem {
+                index: 0,
+                item: Box::new(ProjectItem::Footage(item)),
+            })
+            .expect("seeded");
+        id
+    };
+    let automatic = seed("frame[0001-0050].png");
+    let chosen = seed("Hero plate");
+    let name_of = |id: Uuid| {
+        let state = project.state().expect("state");
+        let state = state.read().expect("read");
+        match state.store.snapshot().item(id) {
+            Some(ProjectItem::Footage(f)) => f.name.clone(),
+            _ => panic!("the footage is still there"),
+        }
+    };
+
+    FootageReference::new(project.id, automatic)
+        .relink(picked.clone())
+        .expect("relinked");
+    assert_eq!(name_of(automatic), "frame[0001-0060].png");
+    project.undo().expect("undone");
+    assert_eq!(name_of(automatic), "frame[0001-0050].png");
+
+    FootageReference::new(project.id, chosen)
+        .relink(picked)
+        .expect("relinked");
+    assert_eq!(name_of(chosen), "Hero plate");
+}
+
 /// A placed clip must land in the composition; the span/size fallbacks are what
 /// let a *missing* file still place, so the user can relink rather than being
 /// unable to add it at all.
@@ -541,6 +669,24 @@ fn a_footage_item_pointing_at_nothing_reports_missing() {
     // for the filesystem, not for the decoder. Before that, a
     // media-less build called this path Ready.
     assert!(matches!(status, LumitMediaStatus::Missing));
+}
+
+// A file on disk that FFmpeg cannot read says so, rather than passing as missing
+// or as ready. The png opens as a picture with no size, the mp4 not at all.
+#[cfg(feature = "media")]
+#[test]
+fn a_footage_file_that_will_not_decode_reports_undecodable() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let project = LumitBridgeState::new_project(None).expect("project");
+    for name in ["broken.png", "broken.mp4"] {
+        let path = dir.path().join(name);
+        std::fs::write(&path, b"not a picture, just some text").expect("written");
+        let footage = project
+            .import_footage(path.to_string_lossy().into_owned())
+            .expect("imported");
+        let status = footage.get_status().expect("status");
+        assert!(matches!(status, LumitMediaStatus::Undecodable), "{name}");
+    }
 }
 
 /// Relink takes a write lock after having taken a read lock earlier in the same
@@ -4238,6 +4384,14 @@ fn precompose_sound_mix_nests_a_comp_per_row_and_clears_the_mark() {
         );
     }
     assert_ne!(music.layers[0].effects[0].id, music.layers[1].effects[0].id);
+    for row_layer in &mix.layers {
+        assert!(
+            row_layer.effects.is_empty(),
+            "the rack rides on the clips alone: left on the row's Precomp \
+             layer it would be a bus over the whole row (docs/09 §3.1) and \
+             would run a second time"
+        );
+    }
 
     // A bare Audio layer is one clip, and it goes in the same way.
     let voice = doc
@@ -8120,7 +8274,7 @@ fn detecting_beats_in_a_silent_composition_says_so() {
     let comp = CompositionReference::new(project.id, layer.comp_id());
 
     assert!(matches!(
-        comp.detect_beats(crate::api::beats::BridgeBeatOptions::standard()),
+        comp.detect_beats(crate::api::beats::BridgeBeatOptions::standard(), None),
         Err(BridgeError::NoAudio)
     ));
 }
@@ -8178,13 +8332,13 @@ fn a_layer_named_as_the_beat_source_is_heard_through_a_solo() {
 
     assert!(
         matches!(
-            comp.detect_beats(listening_to(None)),
+            comp.detect_beats(listening_to(None), None),
             Err(BridgeError::NoAudio)
         ),
         "the comp mix hears only what is audible, and the solo silenced it"
     );
     assert!(
-        comp.detect_beats(listening_to(Some(&music_row)))
+        comp.detect_beats(listening_to(Some(&music_row)), None)
             .expect("the named row is heard")
             .placed
             > 0,
@@ -8196,7 +8350,7 @@ fn a_layer_named_as_the_beat_source_is_heard_through_a_solo() {
         .set_switch(BridgeLayerSwitch::Audible, false)
         .expect("muted");
     assert!(
-        comp.detect_beats(listening_to(Some(&music_row)))
+        comp.detect_beats(listening_to(Some(&music_row)), None)
             .expect("still heard")
             .placed
             > 0,
@@ -8205,9 +8359,60 @@ fn a_layer_named_as_the_beat_source_is_heard_through_a_solo() {
 
     // A row that makes no sound at all still says so, named or not.
     assert!(matches!(
-        comp.detect_beats(listening_to(Some(&solid))),
+        comp.detect_beats(listening_to(Some(&solid)), None),
         Err(BridgeError::NoAudio)
     ));
+}
+
+/// **A detection says how far it has got.** The card over the shell swept, and
+/// a sweep claims nothing on a run that takes seconds. The engine now reports
+/// the share of the work behind it as it goes, and its last word is one: the
+/// markers are in by then, and a bar left short would read as a run that gave
+/// up.
+#[test]
+fn a_detection_reports_how_far_it_has_got() {
+    use crate::api::beats::BridgeBeatOptions;
+
+    let dir = tempfile::tempdir().expect("temp dir");
+    let clicks = dir.path().join("clicks.wav");
+    std::fs::write(&clicks, click_wav()).expect("wrote the fixture");
+
+    let project = LumitBridgeState::new_project(None).expect("project");
+    let comp = add_comp(&project, "Cut");
+    let footage = project
+        .import_footage(clicks.to_string_lossy().into_owned())
+        .expect("imported");
+    comp.add_footage_layer(&footage, false, None)
+        .expect("placed");
+    let music_row = comp.get_layers().expect("layers").remove(0);
+    if !music_row.has_audio().expect("asked") {
+        // No decoder in this build: nothing to hear, so nothing to report on.
+        return;
+    }
+
+    let mut seen: Vec<f64> = Vec::new();
+    comp.detect_beats_reporting(BridgeBeatOptions::standard(), &mut |fraction| {
+        seen.push(fraction)
+    })
+    .expect("detected");
+
+    assert!(
+        seen.len() >= 2,
+        "the bar moves during the run, not only at the end: {seen:?}"
+    );
+    assert!(
+        seen.iter().all(|f| (0.0..=1.0).contains(f)),
+        "every report is a share of the whole: {seen:?}"
+    );
+    assert!(
+        seen.windows(2).all(|pair| pair[1] >= pair[0]),
+        "the fill never goes backwards: {seen:?}"
+    );
+    assert_eq!(
+        seen.last().copied(),
+        Some(1.0),
+        "the markers are in, so the bar is full"
+    );
 }
 
 /// Clearing keeps the markers a person made. Re-running detection at a

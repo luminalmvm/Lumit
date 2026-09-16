@@ -11,11 +11,13 @@ import 'dart:convert';
 import 'dart:io' show Platform;
 import 'dart:ui' show AppExitResponse;
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart' show Ticker;
 import 'package:flutter/services.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:lumit_flutter/panels/easing_curve.dart' show EasingCurve;
+import 'package:lumit_flutter/panels/fx_section.dart' show FxSelection;
 import 'package:lumit_flutter/panels/key_ease_fields.dart' show KeyEaseClaim;
 import 'package:lumit_flutter/panels/layer_fold_frb.dart' show RevealFilter;
 import 'package:lumit_flutter/l10n/strings.dart';
@@ -1364,6 +1366,28 @@ class LumitUiState extends ChangeNotifier {
       ValueNotifier(const []);
   LayerReference? selectedEffectsLayer;
 
+  /// The same two answers as one value, published for the section headings to
+  /// listen to ([FxSelection]). Kept beside the fields rather than replacing
+  /// them because the rules here read and edit them directly; this is the
+  /// snapshot a heading watches, and it is what makes picking an effect
+  /// recolour the headings whose answer changed instead of redrawing the panel
+  /// they sit in.
+  final ValueNotifier<FxSelection> pickedEffects =
+      ValueNotifier(const FxSelection());
+
+  /// Hand the headings the effect selection as it now stands. Silent when it
+  /// says the same thing, so a publish that changes nothing costs no repaint.
+  void _publishPickedEffects() {
+    final layer = selectedEffectsLayer?.internallayerId.toString();
+    final held = pickedEffects.value;
+    if (held.layer == layer &&
+        listEquals(held.effects, selectedEffects.value)) {
+      return;
+    }
+    pickedEffects.value =
+        FxSelection(layer: layer, effects: selectedEffects.value);
+  }
+
   /// Whether the Viewer is showing the picture **at** the selected effect —
   /// that layer's stack stopping there — rather than the finished composition.
   /// The "at effect" chip over the picture is what turns it on.
@@ -1492,6 +1516,7 @@ class LumitUiState extends ChangeNotifier {
     }
     selectedEffectsLayer = layer;
     selectedEffects.value = List.unmodifiable(effects);
+    _publishPickedEffects();
     _followSelectionWithChip();
   }
 
@@ -1542,9 +1567,11 @@ class LumitUiState extends ChangeNotifier {
   /// empty space clicked.
   void clearEffectSelection() {
     selectedEffectsLayer = null;
-    if (selectedEffects.value.isEmpty) return;
-    selectedEffects.value = const [];
-    _followSelectionWithChip();
+    if (selectedEffects.value.isNotEmpty) {
+      selectedEffects.value = const [];
+      _followSelectionWithChip();
+    }
+    _publishPickedEffects();
   }
 
   /// Add [layer] to the selection, or take it out again — Shift-click.

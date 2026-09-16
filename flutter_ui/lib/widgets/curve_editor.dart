@@ -431,8 +431,113 @@ const double _channelButton = 16;
 /// over-life curves, which fold into this editor as well.
 const double _channelPhrase = 84;
 
-/// The gap between the plot and the channel column.
-const double _channelGap = 4;
+/// The gap between a graph and its channel column.
+const double channelColumnGap = 4;
+
+/// Whether every label is one word, which is what decides the column's width.
+bool _letters(List<String> labels) =>
+    labels.every((l) => !l.trim().contains(' '));
+
+/// How wide [ChannelButtons] comes out for these labels, so a caller can lay
+/// its graph out beside the column.
+double channelColumnWidth(List<String> labels) =>
+    _letters(labels) ? _channelButton : _channelPhrase;
+
+/// The column of channel buttons that sits against a graph's edge — Curves'
+/// five, and Levels' four.
+///
+/// **The channels sit beside the graph, not above it** (item 6.32). A strip of
+/// tabs over the plot pushed the graph down the panel and read as five words
+/// competing with the effect's own rows; a column of one-letter kicker buttons
+/// against the plot's edge belongs to the graph it switches.
+///
+/// A channel named by one word is its initial on an icon square — R is red, and
+/// the word rides on the tooltip. Curve parameters that are not channels come
+/// through the same fold, though (Particulate's two over-life curves), and "S"
+/// for "Size over life" would be a riddle: those keep the phrase, on a wider
+/// column.
+class ChannelButtons extends StatelessWidget {
+  final List<String> labels;
+
+  /// Which one the graph is showing.
+  final int channel;
+
+  /// The user picked another.
+  final ValueChanged<int> onChannel;
+
+  /// A stable prefix for the button keys, so a test can point at one.
+  final String keyPrefix;
+
+  /// What each channel draws in while it is the one showing, parallel to
+  /// [labels]. A null entry — or no list at all — leaves it on the theme's own
+  /// colour, which is what Master and Alpha want; Red, Green and Blue pass
+  /// theirs, because a channel graph that is not its own colour is a picture
+  /// you have to read the buttons to understand (owner, desk test).
+  final List<Color?>? colours;
+
+  const ChannelButtons({
+    super.key,
+    required this.labels,
+    required this.channel,
+    required this.onChannel,
+    required this.keyPrefix,
+    this.colours,
+  });
+
+  /// The letter on a button: the label's own initial, so a translated label is
+  /// still its own word's initial rather than an English one. The full label
+  /// rides on the tooltip, so the letter is never the only thing the user has
+  /// to go on.
+  static String _initial(String label) =>
+      label.isEmpty ? '?' : label.characters.first.toUpperCase();
+
+  Color? _colourOf(int i) {
+    final list = colours;
+    if (list == null || i < 0 || i >= list.length) return null;
+    return list[i];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    final letters = _letters(labels);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var i = 0; i < labels.length; i++)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 2),
+            child: LumitTooltip(
+              message: labels[i],
+              child: SizedBox(
+                width: channelColumnWidth(labels),
+                height: _channelButton,
+                child: HouseButton(
+                  key: ValueKey<String>('$keyPrefix-tab-$i'),
+                  frameless: i != channel,
+                  small: true,
+                  padding: EdgeInsets.symmetric(horizontal: letters ? 0 : 3),
+                  onPressed: () => onChannel(i),
+                  child: Center(
+                    child: Text(
+                      letters ? _initial(labels[i]) : labels[i],
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: t.kicker.copyWith(
+                        color: i == channel
+                            ? (_colourOf(i) ?? t.textPrimary)
+                            : t.textMuted,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
 
 /// Several curves behind channel buttons — Curves' five, drawn as one editor
 /// rather than five stacked widgets (docs/08 §3.30).
@@ -531,13 +636,6 @@ class _CurveChannelEditorState extends State<CurveChannelEditor> {
         _ => l10n.curveGraphSizeLarge,
       };
 
-  /// The letter on a channel button: the label's own initial, so Red is R and
-  /// a translated label is still its own word's initial rather than an English
-  /// one. The full label rides on the tooltip, so the letter is never the only
-  /// thing the user has to go on.
-  String _initial(String label) =>
-      label.isEmpty ? '?' : label.characters.first.toUpperCase();
-
   /// The channel's own colour, or null for the ones drawn in the theme's.
   Color? _colourOf(int channel) {
     final colours = widget.channelColours;
@@ -550,53 +648,14 @@ class _CurveChannelEditorState extends State<CurveChannelEditor> {
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     final channel = _channel.clamp(0, widget.curves.length - 1);
-    // **The channels sit beside the graph, not above it** (item 6.32). A strip
-    // of tabs over the plot pushed the graph down the panel and read as five
-    // words competing with the effect's own rows; a column of one-letter kicker
-    // buttons against the plot's edge belongs to the graph it switches.
-    //
-    // A channel named by one word is its initial on an icon square — R is
-    // red, and the word rides on the tooltip. Curve parameters that are not
-    // channels come through this same fold, though (Particulate's two
-    // over-life curves), and "S" for "Size over life" would be a riddle: those
-    // keep the phrase, on a wider column.
-    final letters = widget.labels.every((l) => !l.trim().contains(' '));
-    final columnWidth = letters ? _channelButton : _channelPhrase;
-    final channels = Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        for (var i = 0; i < widget.labels.length; i++)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 2),
-            child: LumitTooltip(
-              message: widget.labels[i],
-              child: SizedBox(
-                width: columnWidth,
-                height: _channelButton,
-                child: HouseButton(
-                  key: ValueKey<String>('${widget.keyPrefix}-tab-$i'),
-                  frameless: i != channel,
-                  small: true,
-                  padding: EdgeInsets.symmetric(horizontal: letters ? 0 : 3),
-                  onPressed: () => setState(() => _channel = i),
-                  child: Center(
-                    child: Text(
-                      letters ? _initial(widget.labels[i]) : widget.labels[i],
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: t.kicker.copyWith(
-                        color: i == channel
-                            ? (_colourOf(i) ?? t.textPrimary)
-                            : t.textMuted,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-      ],
+    final channels = ChannelButtons(
+      labels: widget.labels,
+      channel: channel,
+      onChannel: (i) => setState(() => _channel = i),
+      keyPrefix: widget.keyPrefix,
+      colours: widget.channelColours,
     );
+    final columnWidth = channelColumnWidth(widget.labels);
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -650,7 +709,7 @@ class _CurveChannelEditorState extends State<CurveChannelEditor> {
               // where the panel is wide enough to hold the plot at its chosen
               // size and the buttons beside it, on the left when the plot has
               // to give the column its width back.
-              final beside = columnWidth + _channelGap;
+              final beside = columnWidth + channelColumnGap;
               final room =
                   box.maxWidth.isFinite ? box.maxWidth : _size + beside;
               final onRight = room >= _size + beside;
@@ -667,8 +726,12 @@ class _CurveChannelEditorState extends State<CurveChannelEditor> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: onRight
-                    ? [graph, const SizedBox(width: _channelGap), channels]
-                    : [channels, const SizedBox(width: _channelGap), graph],
+                    ? [graph, const SizedBox(width: channelColumnGap), channels]
+                    : [
+                        channels,
+                        const SizedBox(width: channelColumnGap),
+                        graph
+                      ],
               );
             },
           ),

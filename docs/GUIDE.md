@@ -505,7 +505,7 @@ Around them:
 | Path | What it is |
 |---|---|
 | `docs/impl/` | The authoritative how for each hard topic: the algorithm, the data layout, the traps and the test plan. Read the matching note before implementing what it covers, and implement its test plan with the feature. Where a note and a spec conflict, the spec wins and the note is fixed with it. `docs/impl/README.md` is the table |
-| `docs/TODO.md` | The backlog, in Now, Next and Later. Delete an item when it lands, its regression test is the record |
+| `docs/TODO.md` | The backlog, most important first. Delete an item when it lands, its regression test is the record |
 | `docs/learn/` | The codebase as built, with real excerpts. `00-MAP.md` is the system on one page and where to change what, `01` to `06` the areas of the repo, `07-BUILD-SHIP.md` the build, `08-WEBSITES.md` the two sites, `09-DOING-IT-YOURSELF.md` the runbook with every routine command and how it fails, `10` a feature end to end, and `RUST.md`, `FLUTTER.md`, `WGSL.md` the languages from Lumit's own code. Start at `docs/learn/README.md` |
 | `docs/research/` | The background research the specs came from. Not canonical |
 | `docs/archive/` | Frozen, dated history. Read it, never update it |

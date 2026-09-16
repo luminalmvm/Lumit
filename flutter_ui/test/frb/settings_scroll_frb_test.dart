@@ -9,8 +9,9 @@
 // pulling did not scroll the page: it picked the whole dialog up and carried
 // it across the screen.
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/shell/settings_window_frb.dart';
 import 'package:lumit_flutter/widgets/controls.dart';
@@ -21,12 +22,13 @@ void main() {
   setUpAll(initEngineForTests);
 
   group('Settings scrolling (frb)', () {
-    Future<void> open(WidgetTester tester) async {
+    Future<void> open(WidgetTester tester,
+        {String name = 'appearance', ScrollBehavior? behaviour}) async {
       tester.view.physicalSize = const Size(1200, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
       final p = freshProject();
-      await tester.pumpWidget(hostPanel(
+      final panel = hostPanel(
         child: Builder(
           builder: (context) => HouseButton(
             key: const ValueKey('open-settings'),
@@ -37,21 +39,25 @@ void main() {
         state: p.state,
         uiState: p.uiState,
         size: const Size(1200, 900),
-      ));
+      );
+      await tester.pumpWidget(behaviour == null
+          ? panel
+          : ScrollConfiguration(behavior: behaviour, child: panel));
       await tester.pump();
       await tester.tap(find.byKey(const ValueKey('open-settings')));
       await tester.pumpAndSettle();
       // Appearance is the long page — the one that has somewhere to scroll to.
-      await tester.tap(find.byKey(const ValueKey('settings-page-appearance')));
+      await tester.tap(find.byKey(ValueKey('settings-page-$name')));
       await tester.pumpAndSettle();
     }
 
-    ScrollPosition page(WidgetTester tester) => tester
-        .state<ScrollableState>(find.descendant(
-          of: find.byKey(const ValueKey('settings-body-appearance')),
-          matching: find.byType(Scrollable),
-        ))
-        .position;
+    ScrollPosition page(WidgetTester tester, [String name = 'appearance']) =>
+        tester
+            .state<ScrollableState>(find.descendant(
+              of: find.byKey(ValueKey('settings-body-$name')),
+              matching: find.byType(Scrollable),
+            ))
+            .position;
 
     testWidgets('dragging the gutter scrolls the page and leaves the window',
         (tester) async {
@@ -84,6 +90,38 @@ void main() {
         before,
         reason: 'the dialog stayed exactly where it was',
       );
+    });
+
+    // A lazy list only guesses the height of the rows it has not built, so
+    // the guess, and the thumb drawn from it, moved as the page scrolled.
+    for (final name in ['appearance', 'shortcuts']) {
+      testWidgets('the $name page keeps one length while it scrolls',
+          (tester) async {
+        await open(tester, name: name);
+        final length = page(tester, name).maxScrollExtent;
+        expect(length, greaterThan(0));
+        for (var at = 0.0; at <= length; at += 200) {
+          page(tester, name).jumpTo(at);
+          await tester.pump();
+          expect(page(tester, name).maxScrollExtent, length,
+              reason: 'the thumb is sized from this, so it must not move');
+        }
+      });
+    }
+
+    // The app's scroll behaviour adds a scrollbar of its own on the desktop,
+    // which drew a second thumb beside the gutter's while the page moved.
+    testWidgets('the page draws one thumb on the desktop', (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      try {
+        await open(tester, behaviour: const MaterialScrollBehavior());
+        page(tester).jumpTo(100);
+        await tester.pump();
+        expect(
+            find.byWidgetPredicate((w) => w is RawScrollbar), findsOneWidget);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
     });
 
     testWidgets('a tap on the track still pages, as it always did',

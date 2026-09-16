@@ -321,7 +321,6 @@ void main() {
       Widget controls({required bool fixedColumns}) => KeyframeControlsFrb(
             scalars: [opacityOf(p.layer)],
             comp: p.comp,
-            playheadFrame: 0,
             onSeek: (_) {},
             onWrite: (_) {},
             rowKey: fixedColumns ? 'fixed' : 'loose',

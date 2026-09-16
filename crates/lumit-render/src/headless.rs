@@ -140,9 +140,9 @@ pub struct HeadlessRenderer {
     /// The `ItemInfo` map the renderer reads, rebuilt each call (cheap — it only
     /// reads `probe_cache`) so a missing item's slate matches the current comp.
     items: HashMap<Uuid, ItemInfo>,
-    /// Probe results by footage id, kept beside the path they were read from
-    /// so a relink probes the new file.
-    probe_cache: HashMap<Uuid, (PathBuf, Probe)>,
+    /// Probe results by footage id, kept beside the source they were read
+    /// from, so a relink or a run of stills read at a new rate probes again.
+    probe_cache: HashMap<Uuid, (lumit_media::MediaSource, Probe)>,
     /// The same, for each item's **proxy** file — kept beside its path
     /// rather than under the id alone, so attaching a different proxy (or the
     /// one MAKE-PROXY has just written) re-probes instead of answering from a
@@ -2744,14 +2744,15 @@ impl HeadlessRenderer {
             } else {
                 self.proxy_probes.remove(&f.id);
             }
-            // Checked against the path too, so a relinked item probes its new
-            // file rather than keeping the slate.
-            let path = footage_path(f);
+            // Checked against the source too, path and rate, so a relinked item
+            // or a run of stills read at a new rate probes again rather than
+            // keeping an answer about the old one.
+            let src = footage_source(f);
             match self.probe_cache.get(&f.id) {
-                Some((cached, _)) if *cached == path => {}
+                Some((cached, _)) if *cached == src => {}
                 _ => {
-                    let probe = probe_item(&footage_source(f));
-                    self.probe_cache.insert(f.id, (path, probe));
+                    let probe = probe_item(&src);
+                    self.probe_cache.insert(f.id, (src, probe));
                 }
             }
             let Some((_, probe)) = self.probe_cache.get(&f.id) else {
@@ -2902,6 +2903,32 @@ fn audio_chain_of(
         offset_s,
         base_s,
     }))
+}
+
+/// The Precomp layer's **bus** chain: its rack, where the stack holds
+/// anything that sounds (docs/09 §3.1).
+///
+/// Everything arriving through the layer is summed and run through this, so
+/// the family is asked here rather than left to the chain to answer when it
+/// opens: a picture effect on a Precomp layer is the ordinary case, and it
+/// must not put a whole nested comp through the bus stage for nothing.
+fn bus_chain_of(
+    doc: &Arc<Document>,
+    comp: &Composition,
+    layer: &lumit_core::model::Layer,
+    offset_s: f64,
+    base_s: f64,
+) -> Option<std::sync::Arc<crate::export::AudioChain>> {
+    let sounds = layer.effects.iter().filter(|e| e.enabled).any(|e| {
+        lumit_core::fx::audio_plugin_id(&e.effect.match_name).is_some()
+            || lumit_core::fx::BUILTIN_DEFS
+                .get(&e.effect.match_name)
+                .is_some_and(|def| def.schema().category == lumit_core::fx::FxCategory::Audio)
+    });
+    if !sounds {
+        return None;
+    }
+    audio_chain_of(doc, comp, layer, offset_s, base_s)
 }
 
 /// The **clip's own** rack, or `None` where the clip has no stack or has
@@ -3120,6 +3147,10 @@ impl AudioJobsBuilder {
                     volume: layer.volume_db.clone(),
                     pan: layer.pan.clone(),
                     offset_s,
+                    // The layer's own rack is the **bus**: the mixer sums what
+                    // arrives through this carrier and the rack hears the sum,
+                    // ahead of the Volume and Pan beside it here.
+                    chain: bus_chain_of(doc, comp, layer, offset_s, base_s),
                 });
                 // The nested comp's own **master fader** rides down with
                 // the Precomp layer's Volume. A master is a stage
@@ -3131,6 +3162,11 @@ impl AudioJobsBuilder {
                         volume: lumit_core::anim::Property::fixed(nested.master_volume_db),
                         pan: lumit_core::anim::Property::zero(),
                         offset_s,
+                        // Inside the bus, so the rack hears the comp at the
+                        // level its own master fader sets: a master is a stage
+                        // on that comp's sum, and the parent's insert comes
+                        // after it.
+                        chain: None,
                     });
                 }
                 visited.push(*nested_id);
@@ -3540,7 +3576,7 @@ fn probe_item(src: &lumit_media::MediaSource) -> Probe {
 /// read exactly what `sync_items` already resolved — no second probe, and no
 /// chance of the two disagreeing about what a file is.
 pub(crate) struct ProbeView<'a>(
-    &'a HashMap<Uuid, (PathBuf, Probe)>,
+    &'a HashMap<Uuid, (lumit_media::MediaSource, Probe)>,
     &'a HashMap<Uuid, (PathBuf, Probe)>,
 );
 
@@ -4544,8 +4580,10 @@ mod tests {
 
         let audio_id = push_footage_item(&mut doc, "audio.wav");
         push_layer(&mut doc, sized, LayerKind::Footage { item: audio_id });
-        r.probe_cache
-            .insert(audio_id, ("audio.wav".into(), Probe::NoVideo));
+        r.probe_cache.insert(
+            audio_id,
+            (lumit_media::MediaSource::file("audio.wav"), Probe::NoVideo),
+        );
         let comp = doc.comp(sized).expect("sized comp").clone();
         r.sync_items(&doc, &comp);
         assert!(
@@ -4556,8 +4594,10 @@ mod tests {
         // Contrast: a genuinely missing/unreadable file DOES slate.
         let missing_id = push_footage_item(&mut doc, "gone.mp4");
         push_layer(&mut doc, sized, LayerKind::Footage { item: missing_id });
-        r.probe_cache
-            .insert(missing_id, ("gone.mp4".into(), Probe::Slate));
+        r.probe_cache.insert(
+            missing_id,
+            (lumit_media::MediaSource::file("gone.mp4"), Probe::Slate),
+        );
         let comp = doc.comp(sized).expect("sized comp").clone();
         r.sync_items(&doc, &comp);
         assert_eq!(
@@ -4583,7 +4623,7 @@ mod tests {
         r.probe_cache.insert(
             video_id,
             (
-                "music-video.mp4".into(),
+                lumit_media::MediaSource::file("music-video.mp4"),
                 Probe::Ok {
                     fps: 25.0,
                     frames: 125,
@@ -4597,6 +4637,78 @@ mod tests {
         assert!(
             !r.items.contains_key(&video_id),
             "a video placed for its sound alone contributes no picture"
+        );
+    }
+
+    /// **Correcting a run of stills re-reads the run** (docs/07 §3.1). Stills
+    /// carry no rate, so the item's rate decides which file is showing at every
+    /// moment and how long the run lasts. The probe kept under the item's id
+    /// was taken at the old rate, so it has to go, or the decode plan and the
+    /// frame key go on naming frames at a speed the project no longer says.
+    ///
+    /// No media fixture: the path is not on disk, so the re-probe is a `stat`
+    /// that answers [`Probe::Slate`] — which is the visible proof that the
+    /// stale answer was dropped rather than handed on.
+    #[test]
+    fn a_new_sequence_rate_drops_the_probe_taken_at_the_old_one() {
+        let mut r = match HeadlessRenderer::shared() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let mut doc = Document::new();
+        let run = push_footage_item(&mut doc, "frame[0001-0050].png");
+        if let Some(ProjectItem::Footage(f)) = doc.item_mut(run) {
+            f.sequence = Some(lumit_core::model::SequenceRef::default());
+        }
+        let comp_id = push_comp(&mut doc, "shot", 32, 32);
+        push_layer(&mut doc, comp_id, LayerKind::Footage { item: run });
+
+        // What a probe of the run at 25 would have found, filed the way
+        // `sync_items` files one.
+        let seed = Probe::Ok {
+            fps: 25.0,
+            frames: 50,
+            width: 32,
+            height: 32,
+        };
+        r.probe_cache.insert(
+            run,
+            (
+                lumit_media::MediaSource {
+                    path: PathBuf::from("frame[0001-0050].png"),
+                    sequence_fps: Some((25, 1)),
+                },
+                seed,
+            ),
+        );
+        let comp = doc.comp(comp_id).expect("the comp").clone();
+        r.sync_items(&doc, &comp);
+        assert_eq!(
+            r.items.get(&run).map(|i| i.fps),
+            Some(25.0),
+            "the rate it was probed at still stands while nothing has changed"
+        );
+
+        // The correction the Project panel's menu makes.
+        if let Some(ProjectItem::Footage(f)) = doc.item_mut(run) {
+            f.sequence = Some(lumit_core::model::SequenceRef {
+                frame_rate: FrameRate::new(50, 1).expect("a real rate"),
+                extra: serde_json::Map::new(),
+            });
+        }
+        r.sync_items(&doc, &comp);
+        assert_eq!(
+            r.items.get(&run).map(|i| i.source.sequence_fps),
+            Some(Some((50, 1))),
+            "the decode plan reads the run at the rate the project now says"
+        );
+        assert_eq!(
+            r.items.get(&run).map(|i| i.missing),
+            Some(Some((32, 32))),
+            "and the probe taken at 25 is gone rather than answering for 50"
         );
     }
 
@@ -5465,6 +5577,71 @@ mod tests {
         }
         let (clip_chain, layer_chain, _) = chains(&doc, &mut builder);
         assert!(clip_chain.is_none() && layer_chain.is_none());
+    }
+
+    /// **A Precomp layer's rack rides on the carrier**, which is what makes
+    /// the bus stage possible (docs/09 §3.1): the mixer sums everything
+    /// arriving through the layer and runs the rack over the sum.
+    ///
+    /// Only a stack that sounds is carried. A picture effect on a Precomp
+    /// layer is the ordinary case and must not put a whole nested comp
+    /// through the bus stage for nothing, and the layer's fx switch drops the
+    /// rack here exactly as it drops a layer's own.
+    #[test]
+    fn a_precomp_layers_rack_rides_on_the_carrier() {
+        let mut doc = Document::new();
+        let song = push_footage_item(&mut doc, "song.wav");
+        let inner = push_comp(&mut doc, "A", 32, 32);
+        push_layer(&mut doc, inner, LayerKind::Footage { item: song });
+        let outer = push_comp(&mut doc, "B", 32, 32);
+        push_layer(&mut doc, outer, LayerKind::Precomp { comp: inner });
+
+        let mut builder = AudioJobsBuilder::new();
+        seed_has_audio(song);
+        let carrier_chain = |doc: &Document, builder: &mut AudioJobsBuilder| {
+            let c = doc.comp(outer).expect("comp").clone();
+            let jobs = builder.audio_jobs(&Arc::new(doc.clone()), &c);
+            assert_eq!(jobs.len(), 1);
+            assert_eq!(jobs[0].carriers.len(), 1);
+            jobs[0].carriers[0].chain.clone()
+        };
+        assert!(
+            carrier_chain(&doc, &mut builder).is_none(),
+            "a Precomp layer with no effects carries a gain and nothing more"
+        );
+
+        // A picture effect is not a rack: the nested comp stays a run per
+        // source, as it was.
+        if let Some(ProjectItem::Composition(c)) = doc.item_mut(outer) {
+            c.layers[0].effects = vec![lumit_core::fx::instantiate("blur").expect("blur")];
+        }
+        assert!(
+            carrier_chain(&doc, &mut builder).is_none(),
+            "a blur on a Precomp layer opens no bus"
+        );
+
+        // An audio effect is.
+        if let Some(ProjectItem::Composition(c)) = doc.item_mut(outer) {
+            c.layers[0].effects = vec![
+                lumit_core::fx::instantiate("blur").expect("blur"),
+                lumit_core::fx::instantiate("audio_limiter").expect("a limiter"),
+            ];
+        }
+        let chain = carrier_chain(&doc, &mut builder).expect("the bus chain");
+        assert_eq!(
+            chain.effects.len(),
+            2,
+            "the whole stack goes down, as a layer's own does"
+        );
+
+        // And the fx switch drops it, as it drops a layer's own rack.
+        if let Some(ProjectItem::Composition(c)) = doc.item_mut(outer) {
+            c.layers[0].switches.fx = false;
+        }
+        assert!(
+            carrier_chain(&doc, &mut builder).is_none(),
+            "the fx switch reaches the bus too"
+        );
     }
 
     /// **A Precomp layer over a comp that has sound in it says it has sound.**
@@ -6849,7 +7026,8 @@ surfaces:
     /// and with it refused — a Null on top whose matte names the bottom layer
     /// is a reference to a layer below, which switches the cull off without
     /// adding a pixel — and the two must be byte-identical, for a solid
-    /// underneath and (where ffmpeg can write the fixture) for footage. The
+    /// underneath, for a turned cover scaled up until it clears the frame, and
+    /// (where ffmpeg can write the fixture) for footage. The
     /// draw list proves the cull engaged; the export path stays identical to
     /// the interactive one.
     #[test]
@@ -6876,7 +7054,10 @@ surfaces:
             });
             comp.layers.insert(0, null);
         };
-        let cover = |doc: &mut Document, comp_id: Uuid| {
+        // `turn` is the cover's rotation in degrees; a turned cover is scaled
+        // up until its corners clear the frame, which is the case the
+        // predicate now allows.
+        let cover = |doc: &mut Document, comp_id: Uuid, turn: f64| {
             let solid = Uuid::now_v7();
             doc.items.push(ProjectItem::Solid(SolidDef {
                 id: solid,
@@ -6886,13 +7067,20 @@ surfaces:
                 height: ch,
                 extra: serde_json::Map::new(),
             }));
-            let layer = matrix_layer("Cover", LayerKind::Solid { def: solid }, cw, ch);
+            let mut layer = matrix_layer("Cover", LayerKind::Solid { def: solid }, cw, ch);
+            if turn != 0.0 {
+                layer.transform.rotation = Property::fixed(turn);
+                layer.transform.scale_x = Property::fixed(400.0);
+                layer.transform.scale_y = Property::fixed(400.0);
+            }
             doc.comp_mut(comp_id).expect("comp").layers.insert(0, layer);
         };
 
-        let mut scenes: Vec<(&str, Document, Uuid)> = Vec::new();
+        let mut scenes: Vec<(&str, Document, Uuid, f64)> = Vec::new();
         let (solid_doc, solid_comp, _) = matrix_base(cw, ch, LinearColour([0.8, 0.1, 0.1, 1.0]));
-        scenes.push(("a solid underneath", solid_doc, solid_comp));
+        scenes.push(("a solid underneath", solid_doc, solid_comp, 0.0));
+        let (turned_doc, turned_comp, _) = matrix_base(cw, ch, LinearColour([0.8, 0.1, 0.1, 1.0]));
+        scenes.push(("a turned cover", turned_doc, turned_comp, 30.0));
         let fixture = footage_fixture();
         match &fixture {
             Some((_dir, clip)) => {
@@ -6914,13 +7102,13 @@ surfaces:
                 let comp_id = push_comp(&mut doc, "Scene", cw, ch);
                 let clip_layer = matrix_layer("Clip", LayerKind::Footage { item }, 320, 240);
                 doc.comp_mut(comp_id).expect("comp").layers.push(clip_layer);
-                scenes.push(("footage underneath", doc, comp_id));
+                scenes.push(("footage underneath", doc, comp_id, 0.0));
             }
             None => eprintln!("no ffmpeg CLI: the footage row is skipped"),
         }
 
-        for (name, mut doc, comp_id) in scenes {
-            cover(&mut doc, comp_id);
+        for (name, mut doc, comp_id, turn) in scenes {
+            cover(&mut doc, comp_id, turn);
             let mut refused = doc.clone();
             refuse_cull(&mut refused, comp_id);
             let (culled, refused) = (Arc::new(doc), Arc::new(refused));

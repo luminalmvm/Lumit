@@ -25,12 +25,16 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/panels/effect_controls_panel_frb.dart';
+import 'package:lumit_flutter/panels/effect_param_row_frb.dart'
+    show EffectParamRowFrb;
 import 'package:lumit_flutter/panels/timeline_panel_frb.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:lumit_flutter/src/rust/api/state.dart';
+import 'package:lumit_flutter/state/dock.dart';
 import 'package:lumit_flutter/state/timeline_columns.dart';
+import 'package:lumit_flutter/theme/theme.dart';
 import 'package:uuid/uuid.dart';
 
 import 'frb_test_support.dart';
@@ -396,13 +400,22 @@ void main() {
         0,
         reason: 'the lane bars redrew for one pick:\n${rebuilds.ranking()}',
       );
-      // Measured at 372, against 1169 before: one outline row, one effect
-      // card, and the widgets inside those two. The cap is roughly 2x, in the
-      // house style, so honest growth does not trip it; what must never come
-      // back is the four-figure count of a panel-wide redraw.
+      // Nor does the effect card. The heading's fill is the whole of what a
+      // pick changes in this panel, so the card around it — and every
+      // parameter row inside it — must not be rebuilt to recolour one word.
+      expect(
+        rebuilds.byName['FxSection'] ?? 0,
+        0,
+        reason: 'an effect card redrew for one pick:\n${rebuilds.ranking()}',
+      );
+      // Measured at 150, against 433 before and 1169 before that: the outline
+      // row that lights, the widgets inside it, and the picked heading's own
+      // fill. The cap is roughly 2x, in the house style, so honest growth does
+      // not trip it; what must never come back is the four-figure count of a
+      // panel-wide redraw.
       expect(
         rebuilds.total,
-        lessThan(750),
+        lessThan(320),
         reason: 'picking an effect redrew far too much:\n'
             '${rebuilds.ranking()}',
       );
@@ -432,14 +445,140 @@ void main() {
         reason: 'no outline row redrew, so nothing on screen changed:\n'
             '${rebuilds.ranking()}',
       );
-      // Effect controls: exactly the headings whose answer flipped redrew —
-      // the heading of the effect just picked, and no more than a couple.
+      // Effect controls: the heading of the effect just picked is sitting in
+      // the selection fill, and it was redrawn to take it. The colour is the
+      // half of this a widget cannot pass by going quiet — a heading that had
+      // stopped following the pick would still be on its unpicked grey.
+      final heading = find.ancestor(
+        of: find.byKey(ValueKey<String>('fx-twirl-${picked.effect}')),
+        matching: find.byType(Container),
+      );
       expect(
-        rebuilds.byName['_WhenPicked'] ?? 0,
+        tester.widget<Container>(heading.first).color,
+        LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.studio)
+            .selectionFill,
+        reason: 'the picked heading did not take the selection fill — the '
+            'Effect controls panel stopped following the pick',
+      );
+      expect(
+        rebuilds.byName['_FxPickedFill'] ?? 0,
         greaterThan(0),
         reason: 'no effect heading redrew, so none of them lit:\n'
             '${rebuilds.ranking()}',
       );
+    });
+
+    /// The interaction the pick tests left out: **deleting an effect**.
+    ///
+    /// A delete is a document revision, so both panels rebuild from the read
+    /// model — and this panel handed the framework a freshly built card for
+    /// every effect the layer still wore in order to lose one of them.
+    /// Measured at 2258 widgets for one delete on a four-effect stack, and the
+    /// figure grew with the stack: every heading, every parameter row and
+    /// every button on them, redrawn to take one card away.
+    ///
+    /// The one deleted here is the **top** of the stack, so every card that
+    /// survives it moves down one place. Nothing below is passed by a card
+    /// that merely sits above the change.
+    Future<({dynamic ui, dynamic comp, LayerReference layer, UuidValue gone})>
+        deleteAnEffect(WidgetTester tester) async {
+      final p = await mount(tester);
+      final LayerReference layer = p.ui.selectedLayer.value;
+      // A stack long enough for "every card" and "the card that went" to be
+      // different numbers.
+      for (final name in ['invert', 'vignette', 'levels']) {
+        layer.addEffect(name: name);
+      }
+      p.ui.model.refresh();
+      await settleFrb(tester, minRounds: 4);
+      // Delete is claimed by whichever panel is in front, and this one's claim
+      // is what the shell asks first.
+      p.ui.activePane.value = Panel.effectControls.pane();
+      final gone = layer.getEffects().first.id();
+      p.ui.setEffectSelection(layer, <UuidValue>[gone]);
+      await tester.pump(const Duration(milliseconds: 16));
+
+      rebuilds
+        ..reset()
+        ..counting = true;
+      expect(p.ui.deleteClaim!(), isTrue,
+          reason: 'the panel takes Delete while an effect is picked');
+      await tester.pump(const Duration(milliseconds: 16));
+      rebuilds
+        ..counting = false
+        ..remove();
+      return (ui: p.ui, comp: p.comp, layer: layer, gone: gone);
+    }
+
+    testWidgets('deleting an effect redraws the card that went, not the stack',
+        (tester) async {
+      await deleteAnEffect(tester);
+
+      // ignore: avoid_print
+      print('EFFECT DELETE REBUILDS ${rebuilds.total}\n${rebuilds.ranking()}');
+      // The card is the widget to watch: the stack is one shorter, and not one
+      // of the cards still on it has anything new to say. This is the trap for
+      // the panel-wide redraw coming back.
+      expect(
+        rebuilds.byName['_EffectSection'] ?? 0,
+        0,
+        reason: 'a surviving card redrew for a delete elsewhere in the stack:\n'
+            '${rebuilds.ranking()}',
+      );
+      // Measured at 969, against 2258 before: the panel's own chrome, the
+      // shortened list, and the Timeline reading the new revision. The cap is
+      // roughly 2x, in the house style, so honest growth does not trip it;
+      // what must never come back is the whole stack redrawn to lose one card.
+      expect(
+        rebuilds.total,
+        lessThan(1900),
+        reason: 'deleting an effect redrew far too much:\n'
+            '${rebuilds.ranking()}',
+      );
+    });
+
+    /// The other half of the rule, and the reason the budget above cannot be
+    /// met by a panel that has gone quiet: the stack on screen really is one
+    /// shorter, the cards left still draw their rows, and the card that is now
+    /// **top** of the stack knows it — a position held from the last build
+    /// would still offer it a move up.
+    testWidgets('the deleted card goes and the one under it becomes the top',
+        (tester) async {
+      final p = await deleteAnEffect(tester);
+
+      expect([
+        for (final e in p.layer.getEffects()) e.name()
+      ], [
+        'invert',
+        'vignette',
+        'levels'
+      ], reason: 'the picked effect went and the rest of the stack stayed');
+      expect(find.byKey(ValueKey<String>('fx-card-${p.gone}')), findsNothing,
+          reason: 'the deleted effect still has a card on screen');
+      final top = p.layer.getEffects().first.id();
+      expect(find.byKey(ValueKey<String>('fx-card-$top')), findsOneWidget,
+          reason: 'the card under it is still on screen');
+      expect(
+        find.descendant(
+          of: find.byKey(ValueKey<String>('fx-card-$top')),
+          matching: find.byType(EffectParamRowFrb),
+        ),
+        findsWidgets,
+        reason: 'the card that was kept stopped drawing its rows',
+      );
+
+      // Its heading menu is read from the stack as it is now: the top of a
+      // stack has nowhere to move up to.
+      await tester.tapAt(
+        tester.getCenter(find.byKey(ValueKey<String>('fx-twirl-$top'))) +
+            const Offset(40, 0),
+        buttons: kSecondaryButton,
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(ValueKey<String>('fx-menu-up-$top')), findsNothing,
+          reason: 'the new top card still thinks it has an effect above it');
+      expect(find.byKey(ValueKey<String>('fx-menu-down-$top')), findsOneWidget,
+          reason: 'and it can still be moved down');
     });
 
     /// The same interaction again, made **in the Timeline itself**: clicking a
@@ -551,6 +690,74 @@ void main() {
       expect(picked.ui.selectedProperties.value, contains(picked.path));
     });
 
+    /// The same rule for the route in from the **Viewer**: a mask path it has
+    /// just dragged asks for its row, so the keyframe that moved is the one on
+    /// screen (`requestSelectProperty`).
+    ///
+    /// It was the last `setState` on the whole panel after the three clicks
+    /// stopped needing one, and it lands on the same two rows a click does.
+    testWidgets('the Viewer asking for a row lights it and nothing else',
+        (tester) async {
+      final p = await mount(tester);
+      final layer = p.comp.getLayers().first;
+      final id = layer.internallayerId.toString();
+      // Open the layer and its Transform group, so the row the Viewer asks
+      // for is on screen to be lit. The second layer stays shut, which is what
+      // makes it the layer that must not redraw.
+      await tester.tap(find.byKey(ValueKey<String>('tl-twirl-$id')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Transform'));
+      await tester.pumpAndSettle();
+      final path = tester
+          .widget<FoldRow>(find.ancestor(
+              of: find.text('Opacity'), matching: find.byType(FoldRow)))
+          .path;
+
+      rebuilds
+        ..reset()
+        ..counting = true;
+      p.ui.requestSelectProperty(path);
+      await tester.pump(const Duration(milliseconds: 16));
+      rebuilds
+        ..counting = false
+        ..remove();
+
+      // ignore: avoid_print
+      print('VIEWER ROW REQUEST REBUILDS ${rebuilds.total}\n'
+          '${rebuilds.ranking()}');
+      // The chrome above the rows cannot say which row the Viewer asked for,
+      // so only a panel-wide redraw reaches it.
+      expect(
+        rebuilds.byName['ColumnHeader'] ?? 0,
+        0,
+        reason: 'the whole Timeline redrew for one row request:\n'
+            '${rebuilds.ranking()}',
+      );
+      // Measured at 439, against 1165 before: the open layer's outline block
+      // and that layer's lanes, which is what a click on the same row costs.
+      expect(
+        rebuilds.total,
+        lessThan(900),
+        reason: 'one row request redrew far too much:\n${rebuilds.ranking()}',
+      );
+      // And the row really is lit, which is what the request was for.
+      final rows = tester
+          .widgetList<FoldRow>(find.byType(FoldRow))
+          .where((r) => r.path == path);
+      expect(rows, isNotEmpty, reason: 'the Opacity row is on screen');
+      expect(
+        rows.first.selectedProperties,
+        contains(path),
+        reason: 'the row the Viewer asked for did not draw itself selected',
+      );
+      expect(
+        rebuilds.byName['FoldRow'] ?? 0,
+        greaterThan(0),
+        reason: 'no property row redrew, so nothing on screen changed:\n'
+            '${rebuilds.ranking()}',
+      );
+    });
+
     /// And the fourth selection path: clicking a **layer's** name.
     ///
     /// It was the one left holding the panel-wide `setState` after the other
@@ -656,7 +863,8 @@ void main() {
     /// a group being "far slower than selecting any other layer". The header
     /// click makes one selection write and publishes, exactly as a layer
     /// click does; the trap below is the rebuild coming back.
-    testWidgets('clicking a group header selects the band without redrawing '
+    testWidgets(
+        'clicking a group header selects the band without redrawing '
         'the panel', (tester) async {
       final p = await mount(tester);
       final layers = p.comp.getLayers();
@@ -695,13 +903,12 @@ void main() {
       // ignore: avoid_print
       print('GROUP CLICK REBUILDS ${rebuilds.total}\n${rebuilds.ranking()}');
       // The click reached the shell: the whole band is the selection.
-      expect(
-          {
-            for (final LayerReference l in p.ui.selectedLayers.value)
-              l.internallayerId
-          },
-          {for (final LayerReference l in layers) l.internallayerId},
-          reason: 'choosing the header chooses every member');
+      expect({
+        for (final LayerReference l in p.ui.selectedLayers.value)
+          l.internallayerId
+      }, {
+        for (final LayerReference l in layers) l.internallayerId
+      }, reason: 'choosing the header chooses every member');
       // And none of the Timeline's chrome redrew for it — the trap for the
       // panel-wide `setState` coming back.
       for (final name in [
@@ -1246,7 +1453,8 @@ void main() {
       // what the count catches: the cap is roughly 2x one pass over the window
       // in the house style.
       for (final name in ['OutlineRow', 'Bar']) {
-        expect(rebuilds.byName[name] ?? 0, lessThan(2 * lanesBefore.blocks.length),
+        expect(
+            rebuilds.byName[name] ?? 0, lessThan(2 * lanesBefore.blocks.length),
             reason: 'an edit rebuilt every $name more than once — the '
                 'follow-on is more than one wave:\n${rebuilds.ranking()}');
       }

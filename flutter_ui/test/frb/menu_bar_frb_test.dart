@@ -26,7 +26,9 @@ import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:lumit_flutter/state/external_links.dart';
 import 'package:lumit_flutter/state/viewer_view.dart';
+import 'package:lumit_flutter/state/workspace.dart';
 import 'package:lumit_flutter/theme/theme.dart';
+import 'package:lumit_flutter/widgets/controls.dart';
 import 'package:provider/provider.dart';
 
 import 'frb_test_support.dart';
@@ -358,6 +360,31 @@ void main() {
       expect(applied.name(), 'node_graph');
       expect(applied.nodeGraphCompId(), graph.internalid,
           reason: 'the effect is bound to the graph that was chosen');
+    });
+
+    testWidgets('the layer console applies an effect to the primary layer only',
+        (tester) async {
+      final p = await mount(tester);
+      final comp = p.state.project!.newComposition(name: 'Scene');
+      final a = comp.addSolidLayer();
+      final b = comp.addSolidLayer();
+      p.uiState
+        ..setSelectedComp(comp)
+        ..setSelection([a, b]);
+      await tester.pump();
+
+      p.uiState.requestConsole();
+      await tester.pumpAndSettle();
+      await tester.enterText(
+          find.byKey(const ValueKey('fx-console-query')), 'Gaussian blur');
+      await tester.pump();
+      await tester
+          .tap(find.byKey(const ValueKey('fx-console-item-Gaussian blur')));
+      await tester.pumpAndSettle();
+
+      expect(a.getEffects().single.name(), 'blur');
+      expect(b.getEffects(), isEmpty,
+          reason: 'the primary layer alone, not every selected layer');
     });
 
     testWidgets('Composition settings… is disabled until a comp is fronted',
@@ -710,6 +737,34 @@ void main() {
       expect(p.uiState.selectedComp!.getMarkers(), isEmpty);
     });
 
+    /// **The menu path shows the card the other two do.** Detection takes
+    /// seconds and the Audio panel and the Timeline both cover the shell while
+    /// it runs; the menu ran it in silence, so the interface looked exactly as
+    /// it had before anything was pressed. One runner serves all three now, and
+    /// its bar is determinate from the first frame because the engine reports
+    /// how far the run has got.
+    testWidgets('Composition ▸ Detect beats puts the shared card up',
+        (tester) async {
+      final p = await mount(tester);
+      await makeComp(tester);
+      expect(p.state.busy.value, isNull, reason: 'nothing is running yet');
+
+      await choose(tester, 'Composition', 'Detect beats');
+
+      expect(p.state.busy.value, 'Detecting beats',
+          reason: 'the line the panel and the Timeline put up');
+      expect(p.state.busyProgress.value, 0,
+          reason: 'a filling bar from its first frame, not a sweep that turns '
+              'into one a moment later');
+
+      // The comp has nothing to hear, so this run ends in a refusal — and the
+      // card comes down on that as surely as on a success.
+      await settleFrb(tester, until: () => p.state.busy.value == null);
+      expect(p.state.busy.value, isNull);
+      expect(p.state.busyProgress.value, isNull,
+          reason: 'and the bar goes with it');
+    });
+
     /// The palette's four categories (docs/07 §12): commands, and now every
     /// effect, comp and panel under its own badge; Enter on each does its
     /// kind of thing. The taught shortcut shows only where a real binding
@@ -758,6 +813,82 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('palette-item-Scene beta')));
       await tester.pumpAndSettle();
       expect(p.uiState.selectedComp?.internalid, comp.internalid);
+    });
+
+    /// **The palette's memory died with the process.** The list of what had
+    /// been run lived in a top-level variable in the palette's own file, so
+    /// the order it learned was gone by the next launch. It belongs with the
+    /// rest of the per-user state, in the workspace file, and the palette is
+    /// handed it rather than keeping one.
+    testWidgets('the palette remembers what it ran, and keeps twenty',
+        (tester) async {
+      final p = await mount(tester);
+      final workspace = p.uiState.workspace;
+
+      await choose(tester, 'Window', 'Command palette…');
+      await tester.pump();
+      await tester.enterText(
+          find.byKey(const ValueKey('palette-query')), 'timeline');
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('palette-item-Timeline')));
+      await tester.pumpAndSettle();
+
+      expect(workspace.paletteRecents.first, 'Timeline');
+      expect((Workspace()..load()).paletteRecents.first, 'Timeline',
+          reason: 'and it is on disk for the next launch');
+
+      // What a launch restores is what the ranking reads: seeded the way the
+      // store seeds it, the entry leads an empty palette.
+      workspace.paletteRecents.insert(0, 'Settings…');
+      await choose(tester, 'Window', 'Command palette…');
+      await tester.pump();
+      final top = tester.widget<MenuRow>(
+          find.byKey(const ValueKey('palette-item-Settings…')));
+      expect(top.selected, isTrue, reason: 'the restored recent leads');
+
+      // Capped, so a store read years from now is still twenty labels.
+      for (var i = 0; i < Workspace.maxPaletteRecents + 5; i++) {
+        workspace.noteCommandRun('Command $i');
+      }
+      expect(workspace.paletteRecents.length, Workspace.maxPaletteRecents);
+      expect(workspace.paletteRecents.first,
+          'Command ${Workspace.maxPaletteRecents + 4}');
+      expect(workspace.paletteRecents, isNot(contains('Command 0')));
+    });
+
+    /// **Two commands taught a shortcut and both were spelled out in Dart.**
+    /// The keymap is the engine's, and a row now shows whatever chord it holds
+    /// for that command's action — the same lookup the menu rows do.
+    testWidgets('the palette teaches the shortcuts the keymap holds',
+        (tester) async {
+      final p = await mount(tester);
+      await choose(tester, 'Window', 'Command palette…');
+      await tester.pump();
+      final query = find.byKey(const ValueKey('palette-query'));
+
+      await tester.enterText(query, 'new composition');
+      await tester.pump();
+      expect(find.text('Ctrl+N'), findsOneWidget);
+      expect(p.uiState.keymap.chordFor('comp.new'), 'Ctrl+N',
+          reason: 'and that is the engine keymap talking, not a Dart table');
+
+      await tester.enterText(query, 'save as');
+      await tester.pump();
+      expect(find.text('Ctrl+Shift+S'), findsOneWidget);
+
+      await tester.enterText(query, 'project settings');
+      await tester.pump();
+      expect(find.text('Ctrl+Alt+Shift+K'), findsOneWidget);
+
+      // The View and Resolution rows carry the Viewer's own chords, the ones
+      // their menu rows already teach.
+      await tester.enterText(query, 'zoom in');
+      await tester.pump();
+      expect(find.text('Ctrl+='), findsOneWidget);
+
+      await tester.enterText(query, 'half');
+      await tester.pump();
+      expect(find.text('Ctrl+Shift+J'), findsOneWidget);
     });
 
     /// **`Ctrl+Shift+P` was bound to nothing.** The palette's list of commands
@@ -1153,9 +1284,9 @@ void main() {
     });
 
     /// The Effect menu is the browser as a menu: a submenu per category, each
-    /// effect applying to *every* selected layer, and the whole thing dead with
+    /// effect applying to the primary layer only, and the whole thing dead with
     /// nothing selected.
-    testWidgets('the Effect menu applies to every selected layer',
+    testWidgets('the Effect menu applies to the primary layer only',
         (tester) async {
       final p = await mount(tester);
       await makeComp(tester);
@@ -1174,8 +1305,8 @@ void main() {
       await choose(tester, 'Effect', 'Gaussian blur', under: 'Blur & sharpen');
       await tester.pump();
       expect(a.getEffects().single.name(), 'blur');
-      expect(b.getEffects().single.name(), 'blur',
-          reason: 'every selected layer, not just the primary');
+      expect(b.getEffects(), isEmpty,
+          reason: 'the primary layer alone, not every selected layer');
     });
 
     testWidgets('Open recent lists what the workspace remembers',

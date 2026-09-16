@@ -84,8 +84,7 @@ pub use build::{
 };
 pub use cache::{CacheTier, CachedCompFrame, NestedKeyer, NestedKeys};
 pub use decode::{
-    addon_needs, synthesis_refusal, CompFrame, CompJob, CompLayerPixels, Need, PreviewEngine,
-    PreviewResult, SynthesisRefusal,
+    addon_needs, synthesis_refusal, CompFrame, CompJob, CompLayerPixels, Need, SynthesisRefusal,
 };
 pub use draw::{
     AccumulationBelow, CompLayerDraw, DrawSource, GraphDraw, GraphStep, LayerInputDraw, MatteDraw,

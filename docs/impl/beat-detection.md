@@ -62,6 +62,13 @@ marker ids afterwards, which is what keeps §5.4's determinism claim about the a
 rather than about freshly generated uuids. The fingerprint-keyed sidecar cache above is
 still owed.
 
+**The run says how far it has got.** `detect_beats` takes an optional progress stream and
+reports a fraction of the whole: the mixdown owns 0.85 of the bar, one step per source
+decoded, and the marker commit closes it at 1. The engine decides the share, so the card
+the shell puts up (`BusyOverlay`) fills and shows a percentage instead of sweeping, and
+all three surfaces that offer detection go through one runner
+(`flutter_ui/lib/state/beats_notice.dart`).
+
 ## 5. Test plan
 
 1. Synthetic clicks at 120 BPM ± jitter over noise: recall ≥ 0.98, precision ≥ 0.98,

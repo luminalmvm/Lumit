@@ -25,10 +25,12 @@ use crate::time::layer_time;
 /// anything in the comp could make a skipped layer matter.
 ///
 /// v1 accepts only a Solid layer (a solid colour whose alpha is 1) that is
-/// visible, in span, soloed if anything is, 2D with no rotation, Normal blend
-/// at full opacity, with no masks, paint, enabled effects or motion blur, whose
-/// axis-aligned placement (its own transform and its parent chain, none of
-/// them rotated, 3D or driven by an expression) covers the comp rectangle.
+/// visible, in span, soloed if anything is, 2D, Normal blend at full opacity,
+/// with no masks, paint, enabled effects or motion blur, whose placement (its
+/// own transform and its parent chain, none of them 3D or driven by an
+/// expression) covers the comp rectangle. Rotation and scale are allowed: a
+/// turned or stretched layer is still a parallelogram, so whether it covers
+/// the frame is an exact question.
 /// The comp must have no active camera and no visible Adjustment layer above
 /// the candidate, and no visible layer above it may reference a layer below
 /// it as a matte or as an effect's layer input.
@@ -86,16 +88,62 @@ pub fn occluder_index(doc: &Document, comp: &Composition, t: f64) -> Option<usiz
     Some(idx)
 }
 
-/// An axis-aligned 2D placement: `x' = offset + scale · x`, per axis.
+/// A 2D placement: `p' = m · p + offset`, with `m` held row by row.
 #[derive(Clone, Copy)]
 struct Affine {
-    scale: (f64, f64),
+    m: [[f64; 2]; 2],
     offset: (f64, f64),
 }
 
-/// The layer's own placement at layer time `lt` as an axis-aligned affine, or
-/// `None` when it rotates, leaves the plane, or is driven by an expression.
-fn flat_placement(layer: &Layer, lt: f64) -> Option<Affine> {
+impl Affine {
+    /// Where this placement puts the point `p`.
+    fn apply(self, p: (f64, f64)) -> (f64, f64) {
+        (
+            self.m[0][0] * p.0 + self.m[0][1] * p.1 + self.offset.0,
+            self.m[1][0] * p.0 + self.m[1][1] * p.1 + self.offset.1,
+        )
+    }
+
+    /// This placement wrapped around `inner`: `inner` first, then this one.
+    /// The order the renderer multiplies a parent in front of its child.
+    fn around(self, inner: Affine) -> Affine {
+        let [[a, b], [c, d]] = self.m;
+        let [[e, f], [g, h]] = inner.m;
+        let m = [
+            [a * e + b * g, a * f + b * h],
+            [c * e + d * g, c * f + d * h],
+        ];
+        Affine {
+            m,
+            offset: self.apply(inner.offset),
+        }
+    }
+
+    /// The placement run backwards, or `None` when it squashes the layer to a
+    /// line, which covers nothing.
+    fn invert(self) -> Option<Affine> {
+        let [[a, b], [c, d]] = self.m;
+        let det = a * d - b * c;
+        if !det.is_finite() || det.abs() < 1e-12 {
+            return None;
+        }
+        let m = [[d / det, -b / det], [-c / det, a / det]];
+        let moved = Affine {
+            m,
+            offset: (0.0, 0.0),
+        }
+        .apply(self.offset);
+        Some(Affine {
+            m,
+            offset: (-moved.0, -moved.1),
+        })
+    }
+}
+
+/// The layer's own placement at layer time `lt`, or `None` when it leaves the
+/// plane or is driven by an expression. Position, rotation and scale about the
+/// anchor, in the renderer's own order (`lumit_gpu::place_matrix`).
+fn placement(layer: &Layer, lt: f64) -> Option<Affine> {
     let tr = &layer.transform;
     let props = [
         &tr.anchor_x,
@@ -116,22 +164,31 @@ fn flat_placement(layer: &Layer, lt: f64) -> Option<Affine> {
     {
         return None;
     }
-    let flat = tr.rotation.value_at(lt) == 0.0
-        && tr.rotation_x.value_at(lt) == 0.0
+    let flat = tr.rotation_x.value_at(lt) == 0.0
         && tr.rotation_y.value_at(lt) == 0.0
         && tr.position_z.value_at(lt) == 0.0;
     if !flat {
         return None;
     }
-    let scale = (
+    let (sx, sy) = (
         tr.scale_x.value_at(lt) / 100.0,
         tr.scale_y.value_at(lt) / 100.0,
     );
+    let turn = tr.rotation.value_at(lt).to_radians();
+    let (cos, sin) = (turn.cos(), turn.sin());
+    // An unrotated layer takes the exact numbers it always took: cos 0 is 1
+    // and sin 0 is 0, so the scale-only case is unchanged to the bit.
+    let m = [[cos * sx, -sin * sy], [sin * sx, cos * sy]];
+    let anchor = Affine {
+        m,
+        offset: (0.0, 0.0),
+    }
+    .apply((tr.anchor_x.value_at(lt), tr.anchor_y.value_at(lt)));
     Some(Affine {
-        scale,
+        m,
         offset: (
-            tr.position_x.value_at(lt) - scale.0 * tr.anchor_x.value_at(lt),
-            tr.position_y.value_at(lt) - scale.1 * tr.anchor_y.value_at(lt),
+            tr.position_x.value_at(lt) - anchor.0,
+            tr.position_y.value_at(lt) - anchor.1,
         ),
     })
 }
@@ -158,39 +215,42 @@ fn covers_frame(doc: &Document, comp: &Composition, layer: &Layer, t: f64) -> bo
     if !plain {
         return false;
     }
-    let Some(own) = flat_placement(layer, lt) else {
+    let Some(own) = placement(layer, lt) else {
         return false;
     };
     // The parent chain wraps the layer's own placement, nearest parent first,
     // each sampled at its own layer time — the order `parent_world_placement`
     // composes in the renderer.
-    let mut corners = [
-        (own.offset.0, own.offset.1),
-        (
-            own.offset.0 + own.scale.0 * f64::from(solid.width),
-            own.offset.1 + own.scale.1 * f64::from(solid.height),
-        ),
-    ];
+    let mut world = own;
     for id in crate::model::layer_parent_chain(comp, layer.id) {
         let Some(parent) = comp.layers.iter().find(|l| l.id == id) else {
             continue;
         };
-        let Some(p) = flat_placement(parent, layer_time(t, parent.start_offset.0)) else {
+        let Some(p) = placement(parent, layer_time(t, parent.start_offset.0)) else {
             return false;
         };
-        for c in &mut corners {
-            *c = (p.offset.0 + p.scale.0 * c.0, p.offset.1 + p.scale.1 * c.1);
-        }
+        world = p.around(world);
     }
-    let (x0, x1) = (
-        corners[0].0.min(corners[1].0),
-        corners[0].0.max(corners[1].0),
-    );
-    let (y0, y1) = (
-        corners[0].1.min(corners[1].1),
-        corners[0].1.max(corners[1].1),
-    );
-    x0 <= 0.0 && y0 <= 0.0 && x1 >= f64::from(comp.width) && y1 >= f64::from(comp.height)
+    // The layer's rectangle placed anywhere on the plane is a parallelogram,
+    // which is convex, so it covers the frame exactly when it holds the
+    // frame's four corners. Asked backwards, from each corner to the point of
+    // the layer it lands on: fewer sums, and the answer is the same one.
+    let Some(back) = world.invert() else {
+        return false;
+    };
+    let (w, h) = (f64::from(solid.width), f64::from(solid.height));
+    // Room for the rounding a turn brings, far under a pixel.
+    let slack = 1e-9 * w.max(h).max(1.0);
+    let frame = [
+        (0.0, 0.0),
+        (f64::from(comp.width), 0.0),
+        (0.0, f64::from(comp.height)),
+        (f64::from(comp.width), f64::from(comp.height)),
+    ];
+    frame.into_iter().all(|corner| {
+        let (x, y) = back.apply(corner);
+        x >= -slack && y >= -slack && x <= w + slack && y <= h + slack
+    })
 }
 
 #[cfg(test)]
@@ -336,8 +396,14 @@ mod tests {
     fn anything_that_could_show_the_layers_below_refuses() {
         let disqualify: Vec<(&str, Box<dyn Fn(&mut Composition)>)> = vec![
             (
+                // A turn of one degree pulls a full-frame solid off the
+                // corners of the frame, so it stops covering it.
                 "rotation",
                 Box::new(|c| c.layers[0].transform.rotation = Property::fixed(1.0)),
+            ),
+            (
+                "flattened to a line",
+                Box::new(|c| c.layers[0].transform.scale_x = Property::fixed(0.0)),
             ),
             ("3D", Box::new(|c| c.layers[0].switches.three_d = true)),
             (
@@ -453,6 +519,40 @@ mod tests {
                 "{why} must refuse the cull"
             );
         }
+    }
+
+    #[test]
+    fn a_turned_solid_occludes_once_it_is_big_enough_to_cover_the_frame() {
+        let (doc, mut comp) = scene();
+        comp.layers[0].transform.rotation = Property::fixed(30.0);
+        // The same size as the frame, turned: the corners come off it.
+        assert_eq!(occluder_index(&doc, &comp, 1.0), None);
+        // Half again as wide and tall, turned about the centre of the frame:
+        // the nearest edge is 48 px out and the corners are 45.3 px out.
+        comp.layers[0].transform.scale_x = Property::fixed(150.0);
+        comp.layers[0].transform.scale_y = Property::fixed(150.0);
+        assert_eq!(occluder_index(&doc, &comp, 1.0), Some(0));
+    }
+
+    #[test]
+    fn a_turned_parent_carries_the_cover_with_it() {
+        let (doc, mut comp) = scene();
+        let mut spinner = layer(LayerKind::Null, 64, 64);
+        spinner.transform.rotation = Property::fixed(45.0);
+        comp.layers[0].parent = Some(spinner.id);
+        comp.layers.push(spinner);
+        // Turned on the spot, a frame-sized solid loses the corners.
+        assert_eq!(occluder_index(&doc, &comp, 1.0), None);
+        comp.layers[0].transform.scale_x = Property::fixed(150.0);
+        comp.layers[0].transform.scale_y = Property::fixed(150.0);
+        assert_eq!(occluder_index(&doc, &comp, 1.0), Some(0));
+    }
+
+    #[test]
+    fn a_mirrored_solid_still_covers_the_frame() {
+        let (doc, mut comp) = scene();
+        comp.layers[0].transform.scale_x = Property::fixed(-100.0);
+        assert_eq!(occluder_index(&doc, &comp, 1.0), Some(0));
     }
 
     #[test]

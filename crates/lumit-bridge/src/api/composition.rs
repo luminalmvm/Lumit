@@ -739,9 +739,12 @@ impl CompositionReference {
     /// moves whole, because a retimed clip is silent (docs/09 §7).
     ///
     /// The row's rack is **copied on to each clip layer** with fresh
-    /// instance ids: the mixer opens a rack on Footage and Sequence layers
-    /// only, so a rack left on the Precomp layer would be silent. A bus chain
-    /// there is the upgrade, and docs/TODO.md holds it.
+    /// instance ids, and the row's own Precomp layer is left with none. A
+    /// row's rack runs per clip before the pack, because a Sequence layer's
+    /// chain does, so per clip is what keeps the sound the sound it was; the
+    /// same rack on the Precomp layer is a bus over the whole row (docs/09
+    /// §3.1), which is a different sound, and both together would run it
+    /// twice.
     ///
     /// The layer left in the parent is **audio-only**, because that is what it
     /// is, and it wears solo where any packed row wore it: a solo silenced
@@ -934,9 +937,9 @@ impl CompositionReference {
                         l.audio_only = true;
                         l.label = row.label;
                         l.switches.fx = row.switches.fx;
-                        // The rack rides on the clips: the mixer opens one on a
-                        // Footage or a Sequence layer and never on a Precomp,
-                        // and an id is what finds an instance, so no two
+                        // The rack rides on the clips, and not on the row's
+                        // Precomp layer as well: a rack there is a bus over the
+                        // whole row. An id is what finds an instance, so no two
                         // copies may share one.
                         l.effects = row
                             .effects

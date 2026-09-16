@@ -54,10 +54,9 @@ fn matte_toward(value: f32, neutral: f32, k: f32) -> f32 {
 // touching the frame border casts a shadow that leaves the frame, and repeating
 // the border pixel outward would smear it into a fan.
 fn tap(x: i32, y: i32, size: vec2<i32>) -> vec4<f32> {
-    if (x < 0 || x >= size.x || y < 0 || y >= size.y) {
-        return vec4<f32>(0.0);
-    }
-    return textureLoad(soft, vec2<i32>(x, y), 0);
+    let inside = x >= 0 && x < size.x && y >= 0 && y < size.y;
+    let c = clamp(vec2<i32>(x, y), vec2<i32>(0, 0), size - vec2<i32>(1, 1));
+    return select(vec4<f32>(0.0), textureLoad(soft, c, 0), inside);
 }
 
 fn bilinear_transparent(sx: f32, sy: f32, size: vec2<i32>) -> vec4<f32> {

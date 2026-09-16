@@ -159,7 +159,6 @@ class _RetimeRowState extends State<RetimeRow> {
             KeyframeControlsFrb(
               scalars: [scalar],
               comp: widget.comp,
-              playheadFrame: frame,
               onSeek: widget.onSeek,
               rowKey: 'tl-retime',
               onWrite: (next) {

@@ -487,7 +487,6 @@ class _MaskValueRowState extends State<MaskValueRow> {
             onClear: (time) =>
                 widget.layer.clearMaskPathKeys(id: widget.mask.id, time: time),
             comp: widget.comp,
-            playheadFrame: widget.playheadFrame,
             onSeek: widget.onSeek,
             onChanged: widget.onChanged,
           )
@@ -496,7 +495,6 @@ class _MaskValueRowState extends State<MaskValueRow> {
             scalars: [_scalar],
             onWrite: (s) => _write(s.first),
             comp: widget.comp,
-            playheadFrame: widget.playheadFrame,
             onSeek: widget.onSeek,
             rowKey: _rowKey,
           ),

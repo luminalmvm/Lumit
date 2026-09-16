@@ -1989,7 +1989,7 @@ void main() {
     });
 
     /// The box's left and right edges scale **time** about the opposite edge
-    /// (docs/07 §5.3, Caddis §2.1).
+    /// (docs/07 §5.3).
     testWidgets("the box's right edge scales time about the left edge",
         (tester) async {
       final p = withLayer();
@@ -2047,8 +2047,8 @@ void main() {
       ], frames, reason: 'a value edge moves nothing in time');
     });
 
-    /// `Shift` snaps what the scale lands on to whole numbers — the Caddis
-    /// behaviour, with the readout pill saying live what they are.
+    /// `Shift` snaps what the scale lands on to whole numbers, with the
+    /// readout pill saying live what they are.
     testWidgets('Shift lands a value scale on whole numbers', (tester) async {
       final p = withLayer();
       spreadOpacity(p);

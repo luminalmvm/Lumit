@@ -28,7 +28,6 @@ import 'package:uuid/uuid.dart';
 import '../icons/icons.dart';
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
-import '../shell/splash.dart';
 import '../state/app_state.dart';
 import '../state/beats_notice.dart';
 import '../state/comp_time.dart';
@@ -360,39 +359,20 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
       bpmOverride: _bpmOverride,
       phaseMs: _phaseMs,
     );
-    // The same busy card the toolbar's one-click detection shows: detection
-    // reads whole files and can take seconds, and silence would read as a
-    // command that did not land.
-    //
-    // **A refusal says why.** This used to be `onError: (_) {}`, so a comp
-    // whose mix is silenced — a soloed picture row is the everyday way —
-    // placed no markers, cleared the grid and explained nothing. It is one
-    // sentence per *source* rather than one per reason because a `BridgeError`
-    // reaches Dart as an opaque handle with nothing readable on it: `NoAudio`
-    // is what the engine answers here in every case a person can cause
-    // (docs/09 §5), the rest being a project that closed.
-    //
-    // Which sentence is the source's, not the error's, and the panel is the
-    // one that knows it: a mute or a solo cannot silence a layer picked by
-    // name, so blaming them would send the reader to the wrong switch.
-    // ponytail: two sentences for the whole refusal; split further the day
-    // BridgeError carries a reason id across the bridge.
-    final app = context.read<LumitState>();
-    showBusyWhile(
-      app.busy,
-      l10n.detectingBeats,
-      comp.detectBeats(options: options).then<void>((found) {
+    // The card, the bar and the sentences are the shared runner's
+    // (state/beats_notice.dart) — the same ones the Timeline and the
+    // Composition menu show. Only the refusal for a named layer is the panel's
+    // own: a mute or a solo cannot silence a layer picked by name, so blaming
+    // them would send the reader to the wrong switch.
+    runBeatDetection(
+      app: context.read<LumitState>(),
+      comp: comp,
+      options: options,
+      onFound: (found) {
         if (mounted) setState(() => _lastBpm = found.bpm);
         ui.model.refresh();
-        // A run that placed nothing is a legitimate answer (docs/09 §5) and
-        // used to be an indistinguishable one: no markers, no grid, no word.
-        // A run that placed markers says so too — the board's own status
-        // caption — because the markers land off-screen as easily as on.
-        app.postNotice(
-            found.placed == 0 ? l10n.beatsNoneFound : beatsFoundNotice(found));
       },
-          onError: (_) => app.postNotice(
-              _source.isEmpty ? l10n.beatsNoSound : l10n.beatsLayerNoSound)),
+      noSound: _source.isEmpty ? null : l10n.beatsLayerNoSound,
     );
   }
 
@@ -666,7 +646,6 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
                 KeyframeControlsFrb(
                   scalars: [volume],
                   comp: widget.comp,
-                  playheadFrame: frame,
                   onSeek: ui.scrubTo,
                   rowKey: 'audio-volume',
                   onWrite: (next) {
@@ -702,7 +681,6 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
                 KeyframeControlsFrb(
                   scalars: [pan],
                   comp: widget.comp,
-                  playheadFrame: frame,
                   onSeek: ui.scrubTo,
                   rowKey: 'audio-pan',
                   onWrite: (next) {

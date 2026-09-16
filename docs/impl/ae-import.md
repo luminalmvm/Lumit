@@ -209,8 +209,7 @@ docs/TODO.md rather than papered over: the **roving** key (After Effects did
 not apply `setRovingAtKey`, so the capture records `roving: false` — the walker
 reads `keyRoving` correctly and there is nothing to import), and a 3D layer's
 **Orientation** and Material Options, which the capture carries and the mapper
-has nowhere to put — the one place in the mapping that loses something without
-a report row.
+has nowhere to put. Casts Shadows is reported.
 
 **What the fixture cannot be given without After Effects** (2026-08-24). `fixture.aep`
 is *authored by After Effects*: `make-fixture.jsx` builds the project through the

@@ -101,9 +101,11 @@ fn record_to(file: &std::path::Path, line: &str) {
 ///
 /// The hook that was already installed is called after this one, so nothing that
 /// depended on the default output loses it.
+///
+/// [`arm_on_load`] has already called this as the library loaded, so the render
+/// worker's own call arms nothing and costs nothing.
 pub(crate) fn watch() {
-    static ONCE: Once = Once::new();
-    ONCE.call_once(|| {
+    HOOK.call_once(|| {
         let previous = std::panic::take_hook();
         std::panic::set_hook(Box::new(move |info| {
             let thread = std::thread::current();
@@ -118,13 +120,82 @@ pub(crate) fn watch() {
     });
 }
 
+/// Installed once, whoever asks and however often.
+static HOOK: Once = Once::new();
+
+/// Arm the hook as the library loads, before any of Lumit's own code runs.
+///
+/// The render worker used to be the only one who armed it, and a worker only
+/// exists once a project is open, so a panic on the way up took the process
+/// with it and left the file empty. The platform walks this list of
+/// initialisers when it loads the library, the same way a C++ global is built,
+/// which is the earliest moment there is.
+#[used]
+#[cfg_attr(target_os = "windows", link_section = ".CRT$XCU")]
+#[cfg_attr(target_vendor = "apple", link_section = "__DATA,__mod_init_func")]
+#[cfg_attr(
+    any(target_os = "linux", target_os = "android", target_os = "freebsd"),
+    link_section = ".init_array"
+)]
+static ARM_ON_LOAD: extern "C" fn() = arm_on_load;
+
+extern "C" fn arm_on_load() {
+    watch();
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
-    use super::{path, record, record_to, watch, CAP};
+    use super::{path, record, record_to, watch, CAP, HOOK};
 
     fn contents() -> String {
         std::fs::read_to_string(path()).unwrap_or_default()
+    }
+
+    /// The name of the test below, as the harness filters on it.
+    const NO_WORKER_TEST: &str = "faults::tests::the_hook_is_armed_before_any_worker_exists";
+
+    /// Set on the child run, and holding the marker the child panics with.
+    const CHILD: &str = "LUMIT_FAULTS_NO_WORKER_CHILD";
+
+    /// **The regression a start-up crash needs.** The hook must be armed before
+    /// anything asks for it: the worker arms it too, and a worker only exists
+    /// once a project is open, so a panic on the way up wrote nothing at all.
+    ///
+    /// Proved in a child process running this one test alone. Every other test
+    /// in this binary shares the process and one of them calls `watch`, so
+    /// "nobody has armed it yet" is only true on a run of its own.
+    #[test]
+    fn the_hook_is_armed_before_any_worker_exists() {
+        if let Ok(marker) = std::env::var(CHILD) {
+            assert!(
+                HOOK.is_completed(),
+                "nothing has called watch in this process, so the hook can only \
+                 have been armed as the library loaded"
+            );
+            let handle = std::thread::Builder::new()
+                .name("lumit-faults-no-worker".into())
+                .spawn(move || panic!("{marker}"))
+                .expect("a thread");
+            assert!(handle.join().is_err(), "the thread was meant to panic");
+            return;
+        }
+        let marker = format!("no-worker-{:?}", std::time::Instant::now());
+        let child = std::process::Command::new(std::env::current_exe().expect("this test binary"))
+            .args(["--exact", NO_WORKER_TEST, "--test-threads=1"])
+            .env(CHILD, &marker)
+            .output()
+            .expect("the test binary runs again");
+        let said = String::from_utf8_lossy(&child.stdout).to_string();
+        assert!(
+            said.contains("1 passed"),
+            "the child run did not pass {NO_WORKER_TEST}: {said}"
+        );
+        assert!(
+            contents().contains(&marker),
+            "a panic before any worker existed did not reach {:?}",
+            path()
+        );
     }
 
     /// A recorded line is on disk, with a time in front of it.

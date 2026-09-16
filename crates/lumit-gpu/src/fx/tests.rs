@@ -8123,6 +8123,90 @@ fn wgsl_mirror_matches_the_cpu_oracle() {
     }
 }
 
+/// A pixel whose four taps all fall outside the frame comes back empty, on both
+/// tap shapes: the plain bounds check (Mirror) and the edge-policy one (Transform).
+#[test]
+fn every_tap_outside_the_frame_reads_transparent() {
+    // Not every driver shows the hoisted fetch, so each tap is also held to the
+    // clamp-and-select form in its source.
+    for (name, wgsl) in [
+        ("mirror", include_str!("../fx_mirror.wgsl")),
+        ("lensdistort", include_str!("../fx_lensdistort.wgsl")),
+        ("dropshadow", include_str!("../fx_dropshadow.wgsl")),
+        ("transform", include_str!("../fx_transform.wgsl")),
+        ("shake_mb", include_str!("../fx_shake_mb.wgsl")),
+        ("dirblur", include_str!("../fx_dirblur.wgsl")),
+        ("radialblur", include_str!("../fx_radialblur.wgsl")),
+    ] {
+        let body = wgsl
+            .split("fn tap(")
+            .nth(1)
+            .and_then(|s| s.split("\n}").next());
+        let body = body.unwrap_or_else(|| panic!("{name}: no tap function"));
+        assert!(
+            body.contains("clamp(") && body.contains("select(") && !body.contains("if ("),
+            "{name}: the tap must clamp and select, never return early"
+        );
+    }
+
+    let Some(ctx) = crate::test_support::lease() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = ctx.fx();
+    let (w, h) = (32u32, 24u32);
+    let img = vec![1.0f32; (w * h * 4) as usize];
+    let tex = upload_linear_f32(&ctx, &img, w, h);
+    let empty = vec![0.0f32; img.len()];
+
+    // A mirror line beside the frame reflects every pixel further out, between
+    // texels so the bilinear weights are fractional.
+    for (centre, normal) in [
+        ([-4.25, 12.0], [1.0, 0.0]),
+        ([w as f32 + 4.25, 12.0], [-1.0, 0.0]),
+        ([16.0, h as f32 + 4.25], [0.0, -1.0]),
+    ] {
+        let mut cpu = img.clone();
+        lumit_core::fx::cpu::mirror(&mut cpu, w, h, centre, normal, 1.0);
+        let out = fx.mirror(&ctx, &tex, w, h, centre, normal, 1.0);
+        assert_eq!(
+            cpu, empty,
+            "mirror {centre:?}: the CPU reference must be empty"
+        );
+        let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
+        assert_eq!(gpu, empty, "mirror {centre:?}");
+    }
+
+    for position in [
+        [w as f32 + 2.3, 0.7],
+        [-(w as f32) - 2.3, 0.4],
+        [0.6, -(h as f32) - 2.3],
+        [1000.5, 1000.5],
+    ] {
+        let no_skew = lumit_core::fx::NO_SKEW;
+        let mut cpu = img.clone();
+        lumit_core::fx::cpu::transform(
+            &mut cpu, w, h, [0.0; 2], position, [1.0; 2], 0.0, no_skew, 0, 1.0, 1.0,
+        );
+        let (m, off, opacity) =
+            lumit_core::fx::transform_op([0.0; 2], position, [1.0; 2], 0.0, no_skew, 1.0);
+        let op = TransformOp {
+            m,
+            off,
+            opacity,
+            mix: 1.0,
+            edge: 0,
+        };
+        let out = fx.transform(&ctx, &tex, w, h, None, &op);
+        assert_eq!(
+            cpu, empty,
+            "transform {position:?}: the CPU reference must be empty"
+        );
+        let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
+        assert_eq!(gpu, empty, "transform {position:?}");
+    }
+}
+
 /// The §1.6 oracle for Lens distort (docs/08 §3.42), on the smooth corpus and by
 /// absolute difference — §3.42's fourth note says why: the two transcendentals
 /// are per pixel and cannot be lifted out, so the paths differ by their own

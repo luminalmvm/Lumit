@@ -134,7 +134,7 @@ in [docs/GUIDE.md](docs/GUIDE.md).
 | [docs/README.md](docs/README.md) | The index — start here. Seventeen numbered specs, from the vision to the roadmap. |
 | [docs/GUIDE.md](docs/GUIDE.md) | The contributor guide. What each crate does, the rules code has to follow, and how to build and run it. |
 | [docs/impl/](docs/impl/) | The implementation notes for more difficult area's. |
-| [docs/TODO.md](docs/TODO.md) | What is next to work on now, next and later. |
+| [docs/TODO.md](docs/TODO.md) | What is left to work on, most important first. |
 
 The engine is a Cargo workspace under `crates/`; the interface is
 `flutter_ui/`; they meet at `crates/lumit-bridge`

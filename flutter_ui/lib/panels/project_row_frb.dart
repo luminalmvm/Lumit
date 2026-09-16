@@ -125,6 +125,9 @@ class ProjectRowFrb extends StatefulWidget {
   final int depth;
   final bool missing;
 
+  /// On disk, but the engine cannot decode it.
+  final bool undecodable;
+
   /// Sound with no picture — the media probe's own answer, which is what picks
   /// the speaker glyph over the film one.
   final bool audio;
@@ -160,9 +163,14 @@ class ProjectRowFrb extends StatefulWidget {
   final ProjectColumns columns;
   final ProjectCells cells;
 
-  /// How many rows are selected in all — a second click renames only when this
-  /// row is the whole selection.
-  final int selectionCount;
+  /// Whether this row is the whole selection, which is what decides on a click
+  /// that there is nothing to collapse.
+  ///
+  /// The count of picked rows would say the same thing, and the row would then
+  /// have to be rebuilt every time the count moved anywhere in the panel. This
+  /// is the row's own answer, so a click redraws the two rows whose shading
+  /// changed.
+  final bool loneSelection;
   final ValueChanged<SelectMode> onSelect;
 
   /// The panel's whole footage selection, read when a drag starts so dragging
@@ -216,6 +224,7 @@ class ProjectRowFrb extends StatefulWidget {
     required this.name,
     required this.depth,
     required this.missing,
+    this.undecodable = false,
     required this.audio,
     required this.label,
     required this.inherited,
@@ -226,7 +235,7 @@ class ProjectRowFrb extends StatefulWidget {
     required this.renaming,
     required this.columns,
     required this.cells,
-    required this.selectionCount,
+    required this.loneSelection,
     required this.onSelect,
     required this.selectedFootage,
     required this.onStartRename,
@@ -350,7 +359,7 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
     _primaryDown = false;
     if (_dragged || !_wasSelectedAtDown) return;
     if (_selectModeFromKeyboard() != SelectMode.replace) return;
-    if (widget.selectionCount > 1) widget.onSelect(SelectMode.replace);
+    if (!widget.loneSelection) widget.onSelect(SelectMode.replace);
   }
 
   /// **Opening a row**, and what opening means is the item's own answer: a
@@ -511,10 +520,26 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
                       behavior: HitTestBehavior.opaque,
                       onTap: () =>
                           _doRelink((item as ItemReference_Footage).field0),
+                      // Claims a double-click here too, so the row never opens
+                      // New composition over the badge.
+                      onDoubleTap: () =>
+                          _doRelink((item as ItemReference_Footage).field0),
                       child: ProjectBadge(
                         label: l10n.projectItemMissing,
                         colour: t.warning,
                       ),
+                    ),
+                  ),
+                ],
+                if (widget.undecodable) ...[
+                  const SizedBox(width: projectRowGap),
+                  LumitTooltip(
+                    message: l10n.tipProjectUndecodable,
+                    child: ProjectBadge(
+                      key: ValueKey<String>(
+                          'undecodable-${projectItemId(item)}'),
+                      label: l10n.projectItemUndecodable,
+                      colour: t.warning,
                     ),
                   ),
                 ],

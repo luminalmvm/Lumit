@@ -250,7 +250,6 @@ class KeyframeControlsFrb extends StatelessWidget {
   /// The comp, for turning frames into the exact rational times keys carry.
   final CompositionReference comp;
 
-  final int playheadFrame;
   final ValueChanged<int> onSeek;
 
   /// Distinguishes this row's buttons in a panel full of them.
@@ -272,7 +271,6 @@ class KeyframeControlsFrb extends StatelessWidget {
     required this.scalars,
     required this.onWrite,
     required this.comp,
-    required this.playheadFrame,
     required this.onSeek,
     required this.rowKey,
     this.fixedColumns = false,
@@ -553,7 +551,6 @@ class PathKeyframesFrb extends StatelessWidget {
   final String rowKey;
 
   final CompositionReference comp;
-  final int playheadFrame;
   final ValueChanged<int> onSeek;
   final VoidCallback onChanged;
 
@@ -564,7 +561,6 @@ class PathKeyframesFrb extends StatelessWidget {
     required this.onClear,
     required this.rowKey,
     required this.comp,
-    required this.playheadFrame,
     required this.onSeek,
     required this.onChanged,
   });

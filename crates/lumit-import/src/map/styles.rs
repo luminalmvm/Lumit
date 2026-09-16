@@ -218,7 +218,7 @@ fn drop_shadow(
     fx.float(conv, "dropShadow/distance", "distance", 1.0, 0.0);
     fx.float(conv, "dropShadow/blur", "softness", 1.0, 0.0);
     fx.float(conv, "dropShadow/chokeMatte", "spread", 1.0, 0.0);
-    fx.toggle("dropShadow/layerConceals", "knockout");
+    fx.toggle(conv, "dropShadow/layerConceals", "knockout");
     outer_blend(&mut fx, conv, "dropShadow/mode2");
     noise(&mut fx, conv, "dropShadow/noise");
     fx.done()
@@ -237,7 +237,7 @@ fn inner_shadow(
     fx.float(conv, "innerShadow/distance", "distance", 1.0, 0.0);
     fx.float(conv, "innerShadow/blur", "softness", 1.0, 0.0);
     fx.float(conv, "innerShadow/chokeMatte", "choke", 1.0, 0.0);
-    interior_blend(&mut fx, "innerShadow/mode2");
+    interior_blend(&mut fx, conv, "innerShadow/mode2");
     noise(&mut fx, conv, "innerShadow/noise");
     fx.done()
 }
@@ -266,7 +266,7 @@ fn inner_glow(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<E
         1 => (0, None),
         _ => (1, None),
     });
-    interior_blend(&mut fx, "innerGlow/mode2");
+    interior_blend(&mut fx, conv, "innerGlow/mode2");
     noise(&mut fx, conv, "innerGlow/noise");
     glow_extras(&mut fx, conv, "innerGlow");
     fx.done()
@@ -278,7 +278,7 @@ fn colour_overlay(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Opti
     // An overlay's Opacity **is** its Mix row (§1): the seam takes the blended
     // result and then this much of it, which is what Photoshop means.
     fx.float(conv, "solidFill/opacity", "mix", 1.0, 0.0);
-    interior_blend(&mut fx, "solidFill/mode2");
+    interior_blend(&mut fx, conv, "solidFill/mode2");
     fx.done()
 }
 
@@ -292,7 +292,7 @@ fn gradient_overlay(
     // A direction rather than a light, so the opposition is left out.
     fx.float(conv, "gradientFill/angle", "angle", -1.0, 90.0);
     fx.float(conv, "gradientFill/scale", "scale", 1.0, 0.0);
-    fx.toggle("gradientFill/reverse", "reverse");
+    fx.toggle(conv, "gradientFill/reverse", "reverse");
     fx.choice(conv, "gradientFill/type", "gradient_type", |v| match v {
         1 => (0, None),
         2 => (1, None),
@@ -303,7 +303,7 @@ fn gradient_overlay(
             Some("a linear ramp — Lumit's overlay has Linear and Radial"),
         ),
     });
-    interior_blend(&mut fx, "gradientFill/mode2");
+    interior_blend(&mut fx, conv, "gradientFill/mode2");
     // The ramp itself is one of the four things the DOM refuses outright (the
     // capture counts it as unreadable), so both stops keep their defaults.
     fx.drop_params(
@@ -327,7 +327,7 @@ fn stroke(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<Effec
     fx.choice(conv, "frameFX/style", "position", |v| {
         (u32::try_from(v - 1).unwrap_or(0).min(2), None)
     });
-    interior_blend(&mut fx, "frameFX/mode2");
+    interior_blend(&mut fx, conv, "frameFX/mode2");
     fx.done()
 }
 
@@ -346,8 +346,8 @@ fn satin(
     fx.float(conv, "chromeFX/localLightingAngle", "direction", -1.0, 90.0);
     fx.float(conv, "chromeFX/distance", "distance", 1.0, 0.0);
     fx.float(conv, "chromeFX/blur", "softness", 1.0, 0.0);
-    fx.toggle("chromeFX/invert", "invert");
-    interior_blend(&mut fx, "chromeFX/mode2");
+    fx.toggle(conv, "chromeFX/invert", "invert");
+    interior_blend(&mut fx, conv, "chromeFX/mode2");
     unrendered(&mut fx, conv);
     fx.done()
 }
@@ -419,7 +419,7 @@ fn light(fx: &mut Fx<'_>, conv: &mut Conv<'_>, slot: &str, lumit_id: &str, globa
     let ae_id = format!("{slot}/localLightingAngle");
     fx.float(conv, &ae_id, lumit_id, -1.0, 270.0);
     if fx
-        .still(&format!("{slot}/useGlobalAngle"))
+        .still(conv, &format!("{slot}/useGlobalAngle"))
         .is_some_and(|v| v.abs() > f64::EPSILON)
     {
         fx.approx_named(
@@ -441,7 +441,7 @@ fn light(fx: &mut Fx<'_>, conv: &mut Conv<'_>, slot: &str, lumit_id: &str, globa
 fn glow_colour(fx: &mut Fx<'_>, conv: &mut Conv<'_>, slot: &str, lumit_id: &str) {
     fx.colour(conv, &format!("{slot}/color"), lumit_id);
     if fx
-        .still(&format!("{slot}/AEColorChoice"))
+        .still(conv, &format!("{slot}/AEColorChoice"))
         .is_some_and(|v| (v - 2.0).abs() < f64::EPSILON)
     {
         fx.approx_named(
@@ -458,19 +458,19 @@ fn glow_colour(fx: &mut Fx<'_>, conv: &mut Conv<'_>, slot: &str, lumit_id: &str)
 fn glow_extras(fx: &mut Fx<'_>, conv: &mut Conv<'_>, slot: &str) {
     let mut named = Vec::new();
     if fx
-        .still(&format!("{slot}/glowTechnique"))
+        .still(conv, &format!("{slot}/glowTechnique"))
         .is_some_and(|v| (v - 1.0).abs() > f64::EPSILON)
     {
         named.push("Technique");
     }
     if fx
-        .still(&format!("{slot}/inputRange"))
+        .still(conv, &format!("{slot}/inputRange"))
         .is_some_and(|v| (v - 50.0).abs() > f64::EPSILON)
     {
         named.push("Range");
     }
     if fx
-        .still(&format!("{slot}/shadingNoise"))
+        .still(conv, &format!("{slot}/shadingNoise"))
         .is_some_and(|v| v.abs() > f64::EPSILON)
     {
         named.push("Jitter");
@@ -481,14 +481,20 @@ fn glow_extras(fx: &mut Fx<'_>, conv: &mut Conv<'_>, slot: &str) {
 /// Photoshop's per-style dither. Not modelled, and only worth a row when
 /// somebody actually moved it off zero.
 fn noise(fx: &mut Fx<'_>, conv: &mut Conv<'_>, ae_id: &str) {
-    if fx.still(ae_id).is_some_and(|v| v.abs() > f64::EPSILON) {
+    if fx
+        .still(conv, ae_id)
+        .is_some_and(|v| v.abs() > f64::EPSILON)
+    {
         fx.drop_param(conv, "Noise");
     }
 }
 
 /// An **interior** style's blend mode onto the injected Blend row.
-fn interior_blend(fx: &mut Fx<'_>, ae_id: &str) {
-    if let Some(mode) = fx.still(ae_id).and_then(|v| blend_mode(v.round() as i64)) {
+fn interior_blend(fx: &mut Fx<'_>, conv: &mut Conv<'_>, ae_id: &str) {
+    if let Some(mode) = fx
+        .still(conv, ae_id)
+        .and_then(|v| blend_mode(v.round() as i64))
+    {
         let index = BlendMode::ALL.iter().position(|b| *b == mode).unwrap_or(0);
         fx.set(
             lumit_core::fx::BLEND_PARAM,
@@ -505,7 +511,10 @@ fn interior_blend(fx: &mut Fx<'_>, ae_id: &str) {
 /// glow already do there; anything else is named rather than quietly applied to
 /// the wrong side of the composite.
 fn outer_blend(fx: &mut Fx<'_>, conv: &mut Conv<'_>, ae_id: &str) {
-    let Some(mode) = fx.still(ae_id).and_then(|v| blend_mode(v.round() as i64)) else {
+    let Some(mode) = fx
+        .still(conv, ae_id)
+        .and_then(|v| blend_mode(v.round() as i64))
+    else {
         return;
     };
     if matches!(mode, BlendMode::Normal | BlendMode::Multiply) {

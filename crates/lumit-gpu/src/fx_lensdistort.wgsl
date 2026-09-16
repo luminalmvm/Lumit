@@ -72,10 +72,8 @@ fn edge_idx(i: i32, len: i32) -> i32 {
 fn tap(x: i32, y: i32, size: vec2<i32>) -> vec4<f32> {
     let xi = edge_idx(x, size.x);
     let yi = edge_idx(y, size.y);
-    if (xi < 0 || yi < 0) {
-        return vec4<f32>(0.0);
-    }
-    return textureLoad(src, vec2<i32>(xi, yi), 0);
+    let c = clamp(vec2<i32>(xi, yi), vec2<i32>(0, 0), size - vec2<i32>(1, 1));
+    return select(textureLoad(src, c, 0), vec4<f32>(0.0), xi < 0 || yi < 0);
 }
 
 fn bilinear_edge(sx: f32, sy: f32, size: vec2<i32>) -> vec4<f32> {

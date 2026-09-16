@@ -568,42 +568,52 @@ class LumitMenuBarFrb extends StatelessWidget {
 
   /// The palette's commands are declared here, where the menu items are, so the
   /// two cannot drift apart into different ideas of what "New composition" does.
-  /// Only shortcuts the key handler genuinely serves are taught — a palette
-  /// that teaches a binding that does nothing is worse than one that is shy.
+  /// A row teaches whatever chord the keymap gives its action, the same lookup
+  /// the menus do, so a rebound shortcut is taught rebound and an unbound one
+  /// is not taught at all.
   /// Beyond commands it carries the other three categories docs/07 §12 asks
   /// for: every effect (applies to the selected layer), every comp (fronts
   /// it), and every panel (focuses it) — each under its own badge.
   Future<void> _palette(BuildContext context) async {
     final project = app.project;
     final ui = Provider.of<LumitUiState>(context, listen: false);
+    final keymap = ui.keymap;
+    final workspace = ui.workspace;
     await showCommandPaletteFrb(
       context: context,
+      recent: workspace.paletteRecents,
+      onRun: workspace.noteCommandRun,
       commands: [
         PaletteCommand(
           label: l10n.menuNew,
           category: l10n.menuFile,
+          shortcut: keymap.chordFor('file.new'),
           run: app.newProject,
         ),
         if (project != null) ...[
           PaletteCommand(
             label: l10n.menuSave,
             category: l10n.menuFile,
+            shortcut: keymap.chordFor('file.save'),
             run: () => saveProjectFrb(app, ui, picker: savePicker),
           ),
           PaletteCommand(
             label: l10n.menuSaveAs,
             category: l10n.menuFile,
+            shortcut: keymap.chordFor('file.save.as'),
             run: () =>
                 saveProjectFrb(app, ui, forcePicker: true, picker: savePicker),
           ),
           PaletteCommand(
             label: l10n.menuImportFootage,
             category: l10n.menuFile,
+            shortcut: keymap.chordFor('file.import'),
             run: () => importFootageFrb(app, picker: footagePicker),
           ),
           PaletteCommand(
             label: l10n.newComposition,
             category: l10n.menuComposition,
+            shortcut: keymap.chordFor('comp.new'),
             run: () => newCompositionFrb(context, app),
           ),
           PaletteCommand(
@@ -614,18 +624,19 @@ class LumitMenuBarFrb extends StatelessWidget {
           PaletteCommand(
             label: l10n.menuUndo,
             category: l10n.menuEdit,
-            shortcut: 'Ctrl+Z',
+            shortcut: keymap.chordFor('edit.undo'),
             run: () => undoFrb(app),
           ),
           PaletteCommand(
             label: l10n.menuRedo,
             category: l10n.menuEdit,
-            shortcut: 'Ctrl+Shift+Z',
+            shortcut: keymap.chordFor('edit.redo'),
             run: () => redoFrb(app),
           ),
           PaletteCommand(
             label: l10n.menuExport,
             category: l10n.menuFile,
+            shortcut: keymap.chordFor('file.export'),
             run: () => exportFrb(context),
           ),
           // Every comp, by name: Enter fronts it in the Viewer and Timeline.
@@ -657,6 +668,7 @@ class LumitMenuBarFrb extends StatelessWidget {
           PaletteCommand(
             label: zoom.title,
             category: l10n.menuView,
+            shortcut: keymap.chordFor(zoom.action),
             run: () => ui.requestViewerZoom(zoom),
           ),
         // Under the Resolution badge rather than View's, because "Full" on its
@@ -665,17 +677,22 @@ class LumitMenuBarFrb extends StatelessWidget {
           PaletteCommand(
             label: resolution.title,
             category: l10n.menuResolution,
+            shortcut: resolution.action == null
+                ? null
+                : keymap.chordFor(resolution.action!),
             run: () => ui.setPreviewResolution(resolution),
           ),
         PaletteCommand(
           label: l10n.menuSettings,
           category: l10n.menuEdit,
+          shortcut: keymap.chordFor('app.settings'),
           run: () => showSettingsWindowFrb(context),
         ),
         if (app.project case final project?)
           PaletteCommand(
             label: l10n.menuProjectSettings,
             category: l10n.menuFile,
+            shortcut: keymap.chordFor('project.settings'),
             run: () => showProjectSettingsFrb(context, project),
           ),
       ],
@@ -688,38 +705,28 @@ class LumitMenuBarFrb extends StatelessWidget {
   Future<void> _console(BuildContext context) async {
     final ui = Provider.of<LumitUiState>(context, listen: false);
     // With the graph focused, the console is the graph's own add surface: the
-    // panel opens the same popover wearing the canvas's list — a chosen box
-    // lands on the graph — and this one, which applies to the selected layers,
-    // stands down.
+    // panel opens the same popover wearing the canvas's list, where a chosen
+    // box lands on the graph, and this one, which applies to the selected
+    // layer, stands down.
     if (ui.consoleClaim?.call() ?? false) return;
     final comp = ui.selectedComp;
 
     void applyEffect(String name) {
-      final layers = ui.selectedLayers.value;
-      if (layers.isEmpty) return;
-      // Every selected layer, as the Effect menu does.
-      for (final target in layers) {
-        target.addEffect(name: name);
-      }
+      // The primary layer only, as the Effect menu does.
+      final layer = ui.selectedLayer.value;
+      if (layer == null) return;
+      layer.addEffect(name: name);
       app.notifyDocumentChanged();
     }
 
-    // A saved preset's whole stack, to every selected layer — the Effects &
-    // presets panel's own rules: read once, applied per layer, each layer's
-    // refusal leaving the rest of the batch standing.
+    // A saved preset's whole stack, to the primary layer only.
     void applyPreset(BridgePresetInfo preset) {
-      final layers = ui.selectedLayers.value;
-      if (layers.isEmpty) return;
-      final String text;
+      final layer = ui.selectedLayer.value;
+      if (layer == null) return;
       try {
-        text = File(preset.path).readAsStringSync();
+        layer.loadPreset(text: File(preset.path).readAsStringSync());
       } catch (_) {
         return;
-      }
-      for (final layer in layers) {
-        try {
-          layer.loadPreset(text: text);
-        } catch (_) {}
       }
       app.notifyDocumentChanged();
     }
@@ -746,15 +753,12 @@ class LumitMenuBarFrb extends StatelessWidget {
     }
 
     void applyGraph(CompositionReference graph) {
-      final layers = ui.selectedLayers.value;
-      if (layers.isEmpty) return;
-      for (final target in layers) {
-        try {
-          target.addNodeGraphEffect(graph: graph);
-        } catch (_) {
-          // Refused for this layer, whose own comp is the graph. The rest of
-          // the batch stands.
-        }
+      final layer = ui.selectedLayer.value;
+      if (layer == null) return;
+      try {
+        layer.addNodeGraphEffect(graph: graph);
+      } catch (_) {
+        // Refused for this layer, whose own comp is the graph.
       }
       app.notifyDocumentChanged();
     }
@@ -1054,18 +1058,19 @@ List<MenuSection> lumitMenus(
                 onComp((c) => _markerAtPlayhead(ui, c)),
                 action: 'marker.add'),
             // Beat detection reads the whole comp's audio and can take seconds, so
-            // it runs off-thread; a comp with nothing sounding in it refuses, and
+            // it runs off-thread behind the same card the Audio panel and the
+            // Timeline put up; a comp with nothing sounding in it refuses, and
             // says so on the status line rather than by leaving the Timeline
             // exactly as it was.
             MenuEntry(
                 l10n.menuDetectBeats,
-                onComp((c) => c
-                        .detectBeats(options: BridgeBeatOptions.standard())
-                        .then((found) {
-                      app.postNotice(found.placed == 0
-                          ? l10n.beatsNoneFound
-                          : beatsFoundNotice(found));
-                    }, onError: (_) => app.postNotice(l10n.beatsNoSound)))),
+                onComp((c) => runBeatDetection(
+                    app: app,
+                    comp: c,
+                    options: BridgeBeatOptions.standard(),
+                    // The markers land after the menu's own redraw, so the
+                    // run asks for another when they do.
+                    onFound: (_) => app.notifyDocumentChanged()))),
             MenuEntry(
                 l10n.menuClearBeatMarkers, onComp((c) => c.clearBeatMarkers())),
           ]
@@ -1550,8 +1555,8 @@ List<MenuSection> lumitMenus(
 }
 
 /// The Effect menu: one submenu per effect category, each applying its effect
-/// to every selected layer. Disabled outright with nothing selected — there is
-/// nowhere for an effect to go.
+/// to the primary layer. Disabled outright with nothing selected, since there
+/// is nowhere for an effect to go.
 List<MenuEntry> _effectMenu(LumitState app, List<LayerReference> layers) => [
       for (final group in _effectGroups().entries)
         MenuEntry.submenu(engineLabel(group.key), [
@@ -1561,9 +1566,7 @@ List<MenuEntry> _effectMenu(LumitState app, List<LayerReference> layers) => [
               layers.isEmpty
                   ? null
                   : () {
-                      for (final layer in layers) {
-                        layer.addEffect(name: effect.name);
-                      }
+                      layers.first.addEffect(name: effect.name);
                       app.notifyDocumentChanged();
                     },
             ),

@@ -217,7 +217,6 @@ class _PuppetPinValueRowState extends State<PuppetPinValueRow> {
           scalars: [_scalar],
           onWrite: (s) => _write(s.first),
           comp: widget.comp,
-          playheadFrame: widget.playheadFrame,
           onSeek: widget.onSeek,
           rowKey: _rowKey,
         ),

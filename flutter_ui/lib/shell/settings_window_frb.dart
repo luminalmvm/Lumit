@@ -591,21 +591,28 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         trackRadius: const Radius.circular(3),
         padding: const EdgeInsets.fromLTRB(
             0, _gutterEnds, _gutterInset, _gutterEnds),
-        child: ListView(
-          key: ValueKey<String>('settings-body-${_page.name}'),
-          controller: _scroll,
-          padding: EdgeInsets.zero,
-          children: [
-            ...sections,
-            if (sections.isEmpty)
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Text(l10n.settingsNoMatches,
-                    key: const ValueKey('settings-no-matches'),
-                    style: t.small.copyWith(color: t.textMuted)),
-              ),
-            const SizedBox(height: 8),
-          ],
+        // Built whole, so the thumb is sized from the page's real length rather
+        // than a lazy list's guess, and without the app's own second scrollbar.
+        child: ScrollConfiguration(
+          behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+          child: SingleChildScrollView(
+            key: ValueKey<String>('settings-body-${_page.name}'),
+            controller: _scroll,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                ...sections,
+                if (sections.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Text(l10n.settingsNoMatches,
+                        key: const ValueKey('settings-no-matches'),
+                        style: t.small.copyWith(color: t.textMuted)),
+                  ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
         ),
       ),
       // **6.16: dragging the scrollbar scrolls, it does not carry the window

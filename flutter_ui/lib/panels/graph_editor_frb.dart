@@ -248,7 +248,7 @@ class _BoxDrag {
   /// sideways as well would make the box a move as well as a scale.
   double get travel => time ? rawDx : rawDy;
 
-  /// `Shift` on this box is the Caddis modifier: it **rounds what the scale
+  /// `Shift` on this box **rounds what the scale
   /// lands on** — whole frames in time, whole numbers in value — with the
   /// readout pill saying live what those numbers are. (The axis lock the same
   /// sentence of the study describes belongs to the box's other gesture, the
@@ -1145,7 +1145,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   ///
   /// **About the opposite edge**: the anchor is the edge the hand is *not*
   /// holding, so a key's distance from it is what gets multiplied — which is
-  /// what makes this a scale rather than a slide (docs/07 §5.3, Caddis §2.1).
+  /// what makes this a scale rather than a slide (docs/07 §5.3).
   /// Time is scaled in frames; value is scaled in **pixels**, so that under
   /// Normalise — where every curve has its own range — the whole selection
   /// still scales by the one amount the hand asked for.
@@ -1184,8 +1184,8 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
         own,
         height,
       );
-      // `Shift` snaps what the scale lands on to whole numbers — the Caddis
-      // behaviour the readout pill reports live.
+      // `Shift` snaps what the scale lands on to whole numbers, which the
+      // readout pill reports live.
       if (round) v = v.roundToDouble();
       return (frame, v);
     };

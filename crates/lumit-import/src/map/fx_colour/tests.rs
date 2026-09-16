@@ -473,6 +473,37 @@ fn photo_filter_maps_the_filter_list_by_position() {
     assert!(ran.differs());
 }
 
+/// A keyframed dropdown imports at the value it starts on, and says so.
+#[test]
+fn a_keyframed_dropdown_imports_its_first_key_and_reports_it() {
+    let ran = run(&effect(
+        "ADBE Photo Filter",
+        "Photo Filter",
+        vec![keyed(
+            "ADBE Photo Filter-0001",
+            &[(0.0, 21.0, 0.0), (1.0, 2.0, 0.0)],
+        )],
+    ));
+    assert_eq!(ran.choice("filter"), 20);
+    assert!(ran.approximated("ADBE Photo Filter-0001"));
+}
+
+/// A keyframed Radio Waves lifespan stays animated, so it is not reported as
+/// starting on its first key.
+#[test]
+fn a_keyframed_lifespan_is_not_reported_as_still() {
+    let ran = run(&effect(
+        "APC Radio Waves",
+        "Radio Waves",
+        vec![keyed(
+            "APC Radio Waves-0056",
+            &[(0.0, 4.0, 0.0), (1.0, 8.0, 0.0)],
+        )],
+    ));
+    assert_eq!(ran.keys("lifespan").len(), 2);
+    assert!(!ran.approximated("APC Radio Waves-0056"));
+}
+
 /// **Black & white's six weights carry one for one**, and the tint colour is
 /// reported because the effect divides it through by its own luma.
 #[test]

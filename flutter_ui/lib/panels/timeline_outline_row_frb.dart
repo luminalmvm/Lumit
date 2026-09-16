@@ -641,7 +641,10 @@ class _OutlineRowState extends State<OutlineRow> {
           ModeCell.flow => info.kind == BridgeLayerKind.footage
               ? _switch(context, id, 'flow', LumitIcon.flow, info.flow, null,
                   tip: info.flow ? l10n.tipFlowOn : l10n.tipFlowOff, onTap: () {
-                  layer.setFlowEnabled(on_: !info.flow);
+                  // A locked layer refuses, and quietly.
+                  try {
+                    layer.setFlowEnabled(on_: !info.flow);
+                  } catch (_) {}
                   widget.onChanged();
                 })
               : blank,
@@ -881,17 +884,19 @@ class _OutlineRowState extends State<OutlineRow> {
             // The engine keeps the loop's manners: a locked *sibling* silently
             // refuses its share of the batch, while the clicked row's own
             // refusal is the whole call's — a locked layer refuses every
-            // switch but its own lock and shy, and what that refusal should
-            // look like on screen is still the outline's own open question.
-            widget.comp.setSwitchOnLayers(
-              clicked: layer.internallayerId,
-              layers: [
-                for (final target in _menuTargets())
-                  target.layer.internallayerId,
-              ],
-              switch_: which!,
-              on_: !on,
-            );
+            // switch but its own lock and shy.
+            // That refusal is quiet too: nothing commits and nothing changes.
+            try {
+              widget.comp.setSwitchOnLayers(
+                clicked: layer.internallayerId,
+                layers: [
+                  for (final target in _menuTargets())
+                    target.layer.internallayerId,
+                ],
+                switch_: which!,
+                on_: !on,
+              );
+            } catch (_) {}
             widget.onChanged();
           },
       child: SizedBox(

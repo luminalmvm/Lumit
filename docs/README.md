@@ -56,7 +56,7 @@ Keeping these separate is what stops the set from rotting:
 
 ## Living documents
 
-- [TODO.md](TODO.md) - the work backlog (Now / Next / Later).
+- [TODO.md](TODO.md) - the work backlog, most important first.
 - [GUIDE.md](GUIDE.md) - the contributor guide.
 
 ## Subfolders

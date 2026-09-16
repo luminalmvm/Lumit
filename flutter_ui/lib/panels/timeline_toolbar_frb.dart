@@ -15,7 +15,6 @@ import '../icons/icons.dart';
 import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
-import '../shell/splash.dart';
 import '../state/beats_notice.dart';
 import '../state/comp_model.dart';
 import '../state/settings.dart';
@@ -417,19 +416,11 @@ Future<void> _showMoreMenu(
       // silence is not mistaken for a command that did not land, and it comes
       // down either way — and a comp with nothing sounding in it now says so
       // on the status line rather than by leaving the Timeline unchanged.
-      final app = context.read<LumitState>();
-      showBusyWhile(
-        app.busy,
-        l10n.detectingBeats,
-        comp.detectBeats(options: BridgeBeatOptions.standard()).then<void>(
-          (found) {
-            onChanged();
-            app.postNotice(found.placed == 0
-                ? l10n.beatsNoneFound
-                : beatsFoundNotice(found));
-          },
-          onError: (_) => app.postNotice(l10n.beatsNoSound),
-        ),
+      runBeatDetection(
+        app: context.read<LumitState>(),
+        comp: comp,
+        options: BridgeBeatOptions.standard(),
+        onFound: (_) => onChanged(),
       );
     case _:
       return;

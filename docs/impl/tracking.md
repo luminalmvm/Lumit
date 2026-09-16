@@ -117,12 +117,21 @@ forced by building it:
    translation) and the tail loosely (p90, worst) — a single threshold would
    either be meaningless or would fail on physics.
 
-**Measured, not a gate** (`perf_100_features_over_30_frames_of_640x360`,
-`--ignored`, release): 100 features over thirty 640×360 frames runs at **11.0
-ms/frame** with re-detection off and **24.4 ms/frame** with it on every frame.
-The difference is one whole-frame Shi–Tomasi response pass; its box sums are
-separable and nobody has separated them yet. That is the first place to look if
-the tracker ever needs to be faster, before any of this moves to WGSL.
+**Measured, not a gate** (`perf_100_features_over_30_frames_of_640x360` and
+`perf_response_map_over_640x360`, `--ignored`, release): 100 features over thirty
+640×360 frames ran at **11.0 ms/frame** with re-detection off and **24.4
+ms/frame** with it on every frame, and the difference was one whole-frame
+Shi–Tomasi response pass summing a square window per pixel. Those box sums are
+separable, and since 2026-09-16 they are separated: a running sum down the frame
+that swaps the row that left for the row that arrived, then a running total
+across each row, so the cost no longer depends on the radius. The pass now
+measures **2.5 ms** against the square sum's **8.7 ms** on 640×360 at radius 2,
+the two timed side by side in one test, and the whole tracker measures about
+**20 ms/frame** with re-detection on every frame. The square sum stays in the
+tests as the oracle (`the_separable_response_map_matches_the_square_sum`): the
+sums are added in a different order, so the two maps agree to floating point
+rather than to the bit, and they pick the same features. WGSL is the next lever
+if that is not enough.
 
 ## 3. Phase 2 — geometry (pinned choices)
 
@@ -1565,7 +1574,8 @@ two boxes of different sizes would be a second row for a second thing.
   and profiled before anything moves (13-PERFORMANCE budgets decide). Now
   profiled, and the answer is not the KLT: the whole-frame Shi–Tomasi response
   pass costs more than the tracking does whenever re-detection runs (§2's "As
-  built"). Separable box sums first; WGSL only if that is not enough.
+  built"). The box sums were separated first, on 2026-09-16, and that pass is now
+  a quarter of what it was; WGSL is still open if the tracker needs more.
 - Object rigid-pose solve (track group → 6-DoF against the solved camera) is phase
   4+ and needs its own note section when reached; 2D export ships first.
 - Lens distortion beyond k1/k2 (anamorphic) — revisit against real footage.

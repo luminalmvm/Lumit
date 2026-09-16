@@ -31,7 +31,8 @@ import 'package:lumit_flutter/icons/lumit_icon.dart' as glyph;
 import 'package:lumit_flutter/icons/lumit_icons.dart';
 import 'package:lumit_flutter/l10n/strings.dart';
 import 'package:lumit_flutter/theme/theme.dart';
-import 'package:lumit_flutter/widgets/controls.dart' show LumitTooltip;
+import 'package:lumit_flutter/widgets/controls.dart'
+    show HouseTextField, LumitTooltip;
 
 import 'frb_test_support.dart';
 
@@ -309,6 +310,68 @@ void main() {
           find.byKey(const ValueKey('project-search')), 'Scene');
       await tester.pumpAndSettle();
       expect(rowText('Scene'), findsOneWidget);
+    });
+
+    /// **A run of stills takes its speed from the item menu** (docs/07 §3.1).
+    /// Stills carry no rate of their own, so the field beside Relink is the
+    /// only place the speed of an imported run can be said: it opens on the 25
+    /// the import gave it, writes the exact pair the engine stores, and undoes
+    /// in one step. A file that is not a run is offered no field at all.
+    testWidgets('an image sequence takes a new rate from its menu',
+        (tester) async {
+      final dir = Directory.systemTemp.createTempSync('lumit-sequence-rate');
+      for (var n = 1; n <= 8; n++) {
+        File('${dir.path}/frame${n.toString().padLeft(4, '0')}.png')
+            .writeAsBytesSync(const [0]);
+      }
+      final p = freshProject();
+      final run =
+          p.state.project!.importFootage(path: '${dir.path}/frame0001.png');
+      p.state.project!.importFootage(path: 'C:/clips/shot.mov');
+
+      await tester.pumpWidget(hostPanel(
+        child: const ProjectPanelFrb(),
+        state: p.state,
+        uiState: p.uiState,
+      ));
+      await tester.pump();
+
+      Future<void> openMenu(String name) async {
+        await tester.tapAt(
+          tester.getCenter(rowText(name)),
+          buttons: kSecondaryButton,
+        );
+        await tester.pumpAndSettle();
+      }
+
+      await openMenu('frame[0001-0008].png');
+      const field = ValueKey('project-menu-sequence-rate-field');
+      expect(find.byKey(const ValueKey('project-menu-sequence-rate')),
+          findsOneWidget);
+      expect(
+        tester.widget<HouseTextField>(find.byKey(field)).controller.text,
+        '25',
+        reason: 'the rate the import gave it, in the hand the dialogs write in',
+      );
+
+      await tester.enterText(find.byKey(field), '23.976');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(
+        (run.sequenceRate()!.fpsNum, run.sequenceRate()!.fpsDen),
+        (24000, 1001),
+        reason: 'a decimal in the field, the exact pair in the document',
+      );
+
+      p.state.project!.undo();
+      expect((run.sequenceRate()!.fpsNum, run.sequenceRate()!.fpsDen), (25, 1),
+          reason: 'one gesture, one op, one undo step');
+
+      // One file is not a run, so there is no speed of its own to correct.
+      await openMenu('shot.mov');
+      expect(find.byKey(const ValueKey('project-menu-sequence-rate')),
+          findsNothing);
+      dir.deleteSync(recursive: true);
     });
 
     /// Renaming a folder moved to the row menu with the other two kinds'.
@@ -655,6 +718,44 @@ void main() {
       await _clickRow(tester, 'b.mov');
       expect(dragged(), hasLength(1),
           reason: 'a plain click goes back to just that row');
+    });
+
+    /// A picked row drags the selection **as it now stands**. The rows hear the
+    /// selection on a notifier and each one listens for its own share of it, so
+    /// a row that was already picked, and was already not the only one picked,
+    /// hears nothing when a third row joins. Its drag still has to carry that
+    /// third row.
+    testWidgets('a picked row drags the selection it grew into',
+        (tester) async {
+      final p = freshProject();
+      for (final name in ['a.mov', 'b.mov', 'c.mov', 'd.mov']) {
+        p.state.project!.importFootage(path: 'C:/clips/$name');
+      }
+      await tester.pumpWidget(hostPanel(
+        child: const ProjectPanelFrb(),
+        state: p.state,
+        uiState: p.uiState,
+      ));
+      await tester.pump();
+
+      List<FootageReference> dragged() => tester
+          .widget<Draggable<FootageDragData>>(
+            find.ancestor(
+              of: find.text('a.mov'),
+              matching: find.byType(Draggable<FootageDragData>),
+            ),
+          )
+          .data!
+          .footage;
+
+      await _clickRow(tester, 'a.mov');
+      await _clickRow(tester, 'b.mov', held: LogicalKeyboardKey.controlLeft);
+      await _clickRow(tester, 'c.mov', held: LogicalKeyboardKey.controlLeft);
+      expect(dragged(), hasLength(3),
+          reason: 'the third Ctrl-click joined the selection this row drags');
+
+      await _clickRow(tester, 'd.mov', held: LogicalKeyboardKey.controlLeft);
+      expect(dragged(), hasLength(4), reason: 'and so did the fourth');
     });
 
     /// Dropping footage on New composition opens the same dialogue the button
@@ -1029,6 +1130,63 @@ void main() {
       final status = await tester.runAsync(() => gone.getStatus());
       expect(status, LumitMediaStatus.ready,
           reason: 'the picked path reached the engine, not just the panel');
+    });
+
+    testWidgets('a double-click on the relink badge only relinks',
+        (tester) async {
+      final p = freshProject();
+      final gone = p.state.project!.importFootage(path: 'C:/nowhere/gone.mp4');
+      var asked = 0;
+
+      await tester.pumpWidget(hostPanel(
+        child: ProjectPanelFrb(relinkPicker: () async {
+          asked++;
+          return null;
+        }),
+        state: p.state,
+        uiState: p.uiState,
+      ));
+      final relink = find.byKey(ValueKey<String>('relink-${gone.internalid}'));
+      await settleFrb(tester, until: () => relink.evaluate().isNotEmpty);
+
+      // The mouse hovers first, as on the desk, so the row's hover fill keeps
+      // its layout steady while the first click selects it.
+      final centre = tester.getCenter(relink);
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: centre - const Offset(0, 40));
+      await mouse.moveTo(centre);
+      await tester.pump();
+      await doubleClick(tester, relink);
+      await tester.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
+      await settleFrb(tester);
+      await mouse.removePointer();
+
+      expect(asked, 1, reason: 'the badge opens the relink picker once');
+      expect(find.text('NEW COMPOSITION'), findsNothing,
+          reason: 'the row does not open over its badge');
+    });
+
+    // A file on disk that will not decode says so, and is not called missing.
+    testWidgets('an undecodable file wears the unreadable badge',
+        (tester) async {
+      final p = freshProject();
+      final dir = Directory.systemTemp.createTempSync('lumit-undecodable');
+      final file = File('${dir.path}/broken.png')
+        ..writeAsStringSync('not a picture');
+      final broken = p.state.project!.importFootage(path: file.path);
+
+      await tester.pumpWidget(hostPanel(
+        child: const ProjectPanelFrb(),
+        state: p.state,
+        uiState: p.uiState,
+      ));
+      final badge =
+          find.byKey(ValueKey<String>('undecodable-${broken.internalid}'));
+      await settleFrb(tester, until: () => badge.evaluate().isNotEmpty);
+
+      expect(badge, findsOneWidget);
+      expect(find.text('unreadable'), findsOneWidget);
+      expect(find.text('missing'), findsNothing);
     });
 
     /// The menu offers a different set per item kind, and offering the wrong one
@@ -2357,8 +2515,8 @@ Future<void> _clickRow(
 /// sidestep it entirely.
 ///
 /// *Existing is not the same as resolving.* `get_status` probes the file with
-/// libavformat, so four arbitrary bytes read as missing just like a path that is
-/// not there — the relink would appear to do nothing. This writes a genuinely
+/// libavformat, so four arbitrary bytes do not resolve any more than a path that
+/// is not there, so the relink would appear to do nothing. This writes a genuinely
 /// valid 8-bit mono PCM WAV, which libavformat opens and reports one audio stream
 /// for, so the item really does resolve afterwards. A WAV rather than a video
 /// because it can be built here byte by byte; a real video would need an ffmpeg

@@ -226,12 +226,11 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     if (!mounted) return;
     if (!(_boundUi?.selectAllRequestIsFor(Panel.project) ?? false)) return;
     if (_visibleIds.isEmpty) return;
-    setState(() {
-      _selectedIds
-        ..clear()
-        ..addAll(_visibleIds);
-      _anchorId = _visibleIds.last;
-    });
+    _selectedIds
+      ..clear()
+      ..addAll(_visibleIds);
+    _anchorId = _visibleIds.last;
+    _publishPicks();
     _publishSelection();
   }
 
@@ -243,6 +242,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     _changes?.cancel();
     _searchController.dispose();
     _searchFocus.dispose();
+    _rowPicks.dispose();
     _hScroll.dispose();
     _dropThumbs();
     _dropScrub();
@@ -285,6 +285,15 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   /// selection rules every file list has. Multi-selection is what lets several
   /// clips be dropped on the Timeline, or on New composition, in one gesture.
   final Set<String> _selectedIds = {};
+
+  /// The same set, published for the rows to listen to.
+  ///
+  /// A click used to be a `setState` on this panel, so lighting one row walked
+  /// every item in the project and redrew every row on screen. That was 982
+  /// widgets on a 240-item project, and it grew with the project. Each row
+  /// listens for its own share of this instead ([_PickedRow]), which is the
+  /// Timeline's rule for the same problem.
+  final ValueNotifier<Set<String>> _rowPicks = ValueNotifier(const {});
 
   /// The row a `Shift`-click measures its run from — the last one clicked
   /// without `Shift`.
@@ -412,35 +421,41 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   void _select(String id, SelectMode mode) {
     // The card is about to describe something else, so its sound stops with it.
     if (_soundId != null && _soundId != id) _stopSound();
-    setState(() {
-      switch (mode) {
-        case SelectMode.replace:
-          _selectedIds
-            ..clear()
-            ..add(id);
-          _anchorId = id;
-        case SelectMode.toggle:
-          if (!_selectedIds.remove(id)) _selectedIds.add(id);
-          _anchorId = id;
-        case SelectMode.range:
-          final from = _visibleIds.indexOf(_anchorId ?? id);
-          final to = _visibleIds.indexOf(id);
-          if (from < 0 || to < 0) {
-            _selectedIds.add(id);
-            return;
-          }
-          // The anchor stays put, so widening and narrowing the run with
-          // repeated Shift-clicks both work.
-          _selectedIds
-            ..clear()
-            ..addAll(_visibleIds.sublist(
-              from < to ? from : to,
-              (from < to ? to : from) + 1,
-            ));
-      }
-    });
+    switch (mode) {
+      case SelectMode.replace:
+        _selectedIds
+          ..clear()
+          ..add(id);
+        _anchorId = id;
+      case SelectMode.toggle:
+        if (!_selectedIds.remove(id)) _selectedIds.add(id);
+        _anchorId = id;
+      case SelectMode.range:
+        final from = _visibleIds.indexOf(_anchorId ?? id);
+        final to = _visibleIds.indexOf(id);
+        if (from < 0 || to < 0) {
+          _selectedIds.add(id);
+          break;
+        }
+        // The anchor stays put, so widening and narrowing the run with
+        // repeated Shift-clicks both work.
+        _selectedIds
+          ..clear()
+          ..addAll(_visibleIds.sublist(
+            from < to ? from : to,
+            (from < to ? to : from) + 1,
+          ));
+    }
+    _publishPicks();
     _publishSelection();
   }
+
+  /// Hand the rows the selection as it now stands.
+  ///
+  /// A fresh set each time, because a notifier holding the value it already
+  /// has tells nobody anything.
+  void _publishPicks() =>
+      _rowPicks.value = Set<String>.unmodifiable(_selectedIds);
 
   /// Mirror the anchor item to the shell, where the FX console reads
   /// it. The anchor, not the set: the console acts on one thing, the way the
@@ -486,6 +501,9 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   /// then: a probe of every footage file is far too expensive to repeat because
   /// someone nudged a layer value.
   final Map<String, bool> _missing = {};
+
+  /// Footage the engine found on disk but cannot decode, by id.
+  final Set<String> _undecodable = {};
 
   /// Bumped whenever the document changes, to key the thumbnail futures so a
   /// relink re-decodes rather than showing the stale picture. The frb equivalent
@@ -567,7 +585,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     final missingCount = _missing.values.where((m) => m).length;
     final missingOnly = _missingOnly && missingCount > 0;
 
-    final rows = <Widget>[];
+    final rows = <_TreeRow>[];
     _visibleIds.clear();
     var itemCount = 0;
 
@@ -630,47 +648,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
       if (item is ItemReference_Folder) _childCounts[id] = children.length;
       if (show) {
         _visibleIds.add(id);
-        rows.add(ProjectRowFrb(
-          key: ValueKey<String>('project-row-$id'),
-          item: item,
-          name: name,
-          depth: depth,
-          missing: isMissingFootage,
-          audio: audio,
-          label: label,
-          inherited: inherited,
-          nodeGraph: _nodeGraphs[id] ??= _isNodeGraph(item),
-          inUse: _used[id] ??= _isUsed(item),
-          proxy: _proxies.putIfAbsent(
-              id,
-              () => item is ItemReference_Footage
-                  ? item.field0.getProxy()
-                  : null),
-          selected: _selectedIds.contains(id),
-          renaming: _renamingId == id,
-          selectionCount: _selectedIds.length,
-          columns: cols,
-          cells: _cellsFor(item, id, isMissingFootage),
-          selectedFootage: () => _selectedFootage,
-          onSelect: (modifier) => _select(id, modifier),
-          onStartRename: () => setState(() => _renamingId = id),
-          onEndRename: () => setState(() => _renamingId = null),
-          onFindMissing: () => setState(() => _missingOnly = true),
-          onNewComposition: _newComposition,
-          folderOpen: _filtering || !_closedFolders.contains(id),
-          onToggleFolder: () => setState(() {
-            if (!_closedFolders.remove(id)) _closedFolders.add(id);
-          }),
-          onLocalEdit: _documentChanged,
-          onSetLabel: (picked) => _setLabel(item, picked),
-          onMoveToFolder: (folder) => _fileInto(folder, _targets(item)),
-          menuTargets: () => _targets(item),
-          folderChoices: () => _folderChoices(item),
-          onDropItems: item is ItemReference_Folder
-              ? (dropped) => _fileInto(item, dropped)
-              : null,
-          relinkPicker: widget.relinkPicker,
-        ));
+        rows.add(_TreeRow(item, depth, inherited));
       }
       if (item case ItemReference_Footage(:final field0)) {
         _footageById[id] = field0;
@@ -706,7 +684,14 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (width >= projectWidthForPreview) _previewCard(t),
+        // The card describes whatever is picked, so it is the one thing above
+        // the tree that a click has to change, and it listens for the
+        // selection rather than waiting to be rebuilt with the panel.
+        if (width >= projectWidthForPreview)
+          ValueListenableBuilder<Set<String>>(
+            valueListenable: _rowPicks,
+            builder: (context, _, __) => _previewCard(t),
+          ),
         _searchRow(t),
         projectColumnHeader(t, cols, onResize: _resizeColumn),
         Expanded(
@@ -731,9 +716,18 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
                 hitTestBehavior: HitTestBehavior.deferToChild,
                 child: SizedBox(
                   width: width < projectMinWidth ? projectMinWidth : width,
-                  child: ListView(
+                  // Only the rows in the viewport are built (docs/13 §5). The
+                  // walk above still visits the whole open tree, because a
+                  // Shift-click's range and Ctrl+A both mean "every row the
+                  // filters leave". What it collects is a list of facts, and a
+                  // row becomes a widget when the list reaches it. Every row is
+                  // the same height, so the list never has to measure one it
+                  // has not built.
+                  child: ListView.builder(
                     hitTestBehavior: HitTestBehavior.deferToChild,
-                    children: rows,
+                    itemExtent: projectRowHeight,
+                    itemCount: rows.length,
+                    itemBuilder: (context, i) => _treeRow(rows[i], cols),
                   ),
                 ),
               ),
@@ -747,6 +741,64 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
             width: width,
             project: state.project),
       ],
+    );
+  }
+
+  /// One tree row, built when the list reaches it.
+  ///
+  /// Everything here comes out of the caches the walk filled, so a row costs
+  /// what it draws and nothing at the bridge. The one thing it does not take
+  /// from above is whether it is picked: that arrives through [_rowPicks], so
+  /// a click redraws the rows whose shading moved and leaves the rest alone.
+  Widget _treeRow(_TreeRow row, ProjectColumns cols) {
+    final item = row.item;
+    final id = projectItemId(item);
+    final missing = item is ItemReference_Footage && (_missing[id] ?? false);
+    final audio = _mediaInfo[id] != null && _mediaInfo[id]!.videoCodec == null;
+    return _PickedRow(
+      key: ValueKey<String>('project-row-$id'),
+      picks: _rowPicks,
+      id: id,
+      builder: (context, selected, lone) => ProjectRowFrb(
+        item: item,
+        name: _names[id] ??= _nameOf(item),
+        depth: row.depth,
+        missing: missing,
+        undecodable: _undecodable.contains(id),
+        audio: audio,
+        label: _labels[id] ??= _labelOf(item),
+        inherited: row.inherited,
+        nodeGraph: _nodeGraphs[id] ??= _isNodeGraph(item),
+        inUse: _used[id] ??= _isUsed(item),
+        proxy: _proxies.putIfAbsent(
+            id,
+            () =>
+                item is ItemReference_Footage ? item.field0.getProxy() : null),
+        selected: selected,
+        renaming: _renamingId == id,
+        loneSelection: lone,
+        columns: cols,
+        cells: _cellsFor(item, id, missing),
+        selectedFootage: () => _selectedFootage,
+        onSelect: (modifier) => _select(id, modifier),
+        onStartRename: () => setState(() => _renamingId = id),
+        onEndRename: () => setState(() => _renamingId = null),
+        onFindMissing: () => setState(() => _missingOnly = true),
+        onNewComposition: _newComposition,
+        folderOpen: _filtering || !_closedFolders.contains(id),
+        onToggleFolder: () => setState(() {
+          if (!_closedFolders.remove(id)) _closedFolders.add(id);
+        }),
+        onLocalEdit: _documentChanged,
+        onSetLabel: (picked) => _setLabel(item, picked),
+        onMoveToFolder: (folder) => _fileInto(folder, _targets(item)),
+        menuTargets: () => _targets(item),
+        folderChoices: () => _folderChoices(item),
+        onDropItems: item is ItemReference_Folder
+            ? (dropped) => _fileInto(item, dropped)
+            : null,
+        relinkPicker: widget.relinkPicker,
+      ),
     );
   }
 
@@ -1176,6 +1228,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     setState(() {
       _epoch++;
       _missing.clear();
+      _undecodable.clear();
       _mediaInfo.clear();
       _compCells.clear();
       _childCounts.clear();
@@ -1242,8 +1295,15 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
           item.field0.getStatus().then((status) {
             if (!mounted) return;
             final isMissing = status == LumitMediaStatus.missing;
-            if (_missing[id] != isMissing) {
+            final undecodable = status == LumitMediaStatus.undecodable;
+            if (_missing[id] != isMissing ||
+                _undecodable.contains(id) != undecodable) {
               _missing[id] = isMissing;
+              if (undecodable) {
+                _undecodable.add(id);
+              } else {
+                _undecodable.remove(id);
+              }
               _bookRebuild();
             }
             // A probe can outlive its document: opening a project clears the
@@ -1260,4 +1320,98 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
 
     roots.forEach(walk);
   }
+}
+
+/// One row of the tree as the walk found it, before it is a widget.
+///
+/// The walk has to visit the whole open tree, because a `Shift`-click's range
+/// and `Ctrl+A` both mean "every row the filters leave". Only the rows in the
+/// viewport are worth building, so the walk collects these and the list turns
+/// the ones it reaches into rows.
+class _TreeRow {
+  const _TreeRow(this.item, this.depth, this.inherited);
+
+  final ItemReference item;
+  final int depth;
+
+  /// The colour the containing folders hand down, which only the walk knows:
+  /// everything else about a row can be read off the panel's caches.
+  final int inherited;
+}
+
+/// Rebuilds one row only when that row's own share of the selection changes.
+///
+/// The share is two answers, because they are the only two the row draws or
+/// acts on: whether it is picked, and whether it is the only one picked. A row
+/// that is not picked has the same share whatever else is, so clicking one row
+/// redraws the row that lit and the row that went out.
+class _PickedRow extends StatefulWidget {
+  const _PickedRow({
+    super.key,
+    required this.picks,
+    required this.id,
+    required this.builder,
+  });
+
+  final ValueNotifier<Set<String>> picks;
+  final String id;
+  final Widget Function(BuildContext context, bool selected, bool lone) builder;
+
+  @override
+  State<_PickedRow> createState() => _PickedRowState();
+}
+
+class _PickedRowState extends State<_PickedRow> {
+  late Set<String> _picks = widget.picks.value;
+  late bool _selected = _picks.contains(widget.id);
+  late bool _lone = _selected && _picks.length == 1;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.picks.addListener(_follow);
+  }
+
+  @override
+  void didUpdateWidget(covariant _PickedRow old) {
+    super.didUpdateWidget(old);
+    if (old.picks != widget.picks) {
+      old.picks.removeListener(_follow);
+      widget.picks.addListener(_follow);
+    }
+    // The panel is rebuilding for some other reason, so this is the free
+    // moment to take the share as it stands rather than hold one the notifier
+    // has moved past.
+    _read();
+  }
+
+  @override
+  void dispose() {
+    widget.picks.removeListener(_follow);
+    super.dispose();
+  }
+
+  bool _read() {
+    final picks = widget.picks.value;
+    final selected = picks.contains(widget.id);
+    final lone = selected && picks.length == 1;
+    // A picked row's drag carries the whole selection, so it follows the set
+    // itself; an unpicked row only ever draws its own shading. Without this a
+    // third Ctrl-click left the first row dragging two items.
+    final same = selected == _selected &&
+        lone == _lone &&
+        (!selected || picks == _picks);
+    _picks = picks;
+    _selected = selected;
+    _lone = lone;
+    return !same;
+  }
+
+  void _follow() {
+    if (_read()) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      widget.builder(context, _selected, _lone);
 }

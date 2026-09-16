@@ -28,7 +28,10 @@
 
 use flutter_rust_bridge::frb;
 
-use crate::api::{composition::CompositionReference, BridgeError};
+use crate::{
+    api::{composition::CompositionReference, BridgeError},
+    frb_generated::StreamSink,
+};
 
 /// The Audio panel's Beats section, as one crossing (docs/09 §5, the approved
 /// AudioWorkspace board): what to listen to, how keenly, where, and the grid.
@@ -84,6 +87,11 @@ pub struct BridgeBeatsResult {
     pub bpm: f64,
 }
 
+/// How far a detection has got, 0..=1, for the card the shell puts up while it
+/// runs. The engine decides the share: mixing down the sources is where the
+/// seconds go, so each one decoded moves the bar, and marking closes it at one.
+pub type BeatProgressStream = StreamSink<f64>;
+
 /// The comp's confirmed beat grid (docs/09 §5): what the last
 /// detection ran its grid at, for the Timeline's beat band to number bars
 /// from. Bars are the grid read four beats at a time.
@@ -104,9 +112,31 @@ impl CompositionReference {
     /// as such rather than as a failure. Seconds-long on a long comp, which is
     /// why the analysis itself happens on the beat worker ([`crate::beats`])
     /// and this call waits for it.
+    ///
+    /// `on_progress_stream` is how the card stops sweeping: the run says how
+    /// far it has got as it goes. Optional, because nothing about a detection
+    /// depends on somebody watching it.
     pub fn detect_beats(
         &self,
         options: BridgeBeatOptions,
+        on_progress_stream: Option<BeatProgressStream>,
+    ) -> Result<BridgeBeatsResult, BridgeError> {
+        self.detect_beats_reporting(options, &mut |fraction| {
+            if let Some(sink) = on_progress_stream.as_ref() {
+                // A dropped report costs the bar one step and nothing else, so
+                // it is never worth failing a detection over.
+                let _ = sink.add(fraction);
+            }
+        })
+    }
+
+    /// [`Self::detect_beats`] with the progress reported to a closure — the
+    /// road a test takes, since a stream sink needs a Dart port at the far end.
+    #[frb(ignore)]
+    pub(crate) fn detect_beats_reporting(
+        &self,
+        options: BridgeBeatOptions,
+        on_progress: &mut dyn FnMut(f64),
     ) -> Result<BridgeBeatsResult, BridgeError> {
         let composition = self.composition()?;
         let document = {
@@ -120,8 +150,13 @@ impl CompositionReference {
         // The mixdown and the onset analysis, off this thread — and never with
         // the project lock held, which is why the snapshot above is taken and
         // let go before anything heavy starts (docs/14 §3).
-        let found =
-            crate::beats::detect(document, self.id, composition.duration.0.to_f64(), options)?;
+        let found = crate::beats::detect(
+            document,
+            self.id,
+            composition.duration.0.to_f64(),
+            options,
+            on_progress,
+        )?;
 
         // The markers are minted here, not by the worker: an id is not part of
         // what the analysis found, and keeping it out of the answer is what
@@ -159,6 +194,10 @@ impl CompositionReference {
             })
             .flatten();
         self.commit_markers_and_grid(markers, grid)?;
+        // Full, then done: the markers are in, which is the whole of what a
+        // detection is, and a bar that stopped at eighty-five per cent would
+        // read as a run that gave up.
+        on_progress(1.0);
         Ok(BridgeBeatsResult {
             placed,
             bpm: found.bpm,

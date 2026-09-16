@@ -20,7 +20,7 @@
 use crate::exclude::{excluded, ExclusionMask};
 use crate::pyramid::Plane;
 
-/// The three frame-sized buffers the response pass needs, owned by the
+/// The buffers the response pass needs, owned by the
 /// [`Tracker`](crate::Tracker) and reused for its whole life.
 ///
 /// Re-detection runs on most frames, and allocating a frame's worth of `f32`
@@ -33,6 +33,11 @@ pub(crate) struct Scratch {
     pub(crate) resp: Vec<f32>,
     gx: Vec<f32>,
     gy: Vec<f32>,
+    /// The three normal-matrix terms summed down the window's rows, one triple
+    /// per column, and the running total across the row. A row wide, not a
+    /// frame.
+    cols: Vec<[f64; 3]>,
+    pre: Vec<[f64; 3]>,
 }
 
 /// Resize to `n` zeroes, keeping the capacity already paid for.
@@ -41,12 +46,24 @@ fn fit(v: &mut Vec<f32>, n: usize) {
     v.resize(n, 0.0);
 }
 
+/// Resize to `n` zeroed triples, keeping the capacity already paid for.
+fn fit3(v: &mut Vec<[f64; 3]>, n: usize) {
+    v.clear();
+    v.resize(n, [0.0; 3]);
+}
+
 /// Write the frame's Shi–Tomasi min-eigenvalue response into `s.resp`, one value
 /// per pixel.
 ///
 /// `radius` is the half-width of the window the gradient normal matrix is summed
 /// over. Borders are clamped, so a response exists everywhere and the caller's
 /// margin — not a special case here — decides where features may sit.
+///
+/// A box sum is separable, so the window is never walked as a square. The sum
+/// runs down the frame, swapping the row that left for the row that arrived,
+/// and then across each row as a running total, which takes the radius out of
+/// the cost. Those sums are added in a different order from the square's, so
+/// the responses agree to floating point rather than to the bit.
 pub(crate) fn response_map_into(s: &mut Scratch, p: &Plane, radius: usize) {
     let (w, h) = (p.w, p.h);
     let n = w * h;
@@ -57,9 +74,15 @@ pub(crate) fn response_map_into(s: &mut Scratch, p: &Plane, radius: usize) {
     // Sobel gradients, normalised to intensity-per-pixel — the same ÷8 scaling
     // `lumit-flow` uses, so the two crates' "how much contrast is here" numbers
     // are on one scale.
-    fit(&mut s.gx, n);
-    fit(&mut s.gy, n);
-    let (out, gx, gy) = (&mut s.resp, &mut s.gx, &mut s.gy);
+    let Scratch {
+        resp,
+        gx,
+        gy,
+        cols,
+        pre,
+    } = s;
+    fit(gx, n);
+    fit(gy, n);
     for y in 0..h {
         for x in 0..w {
             let xm = x.saturating_sub(1);
@@ -74,26 +97,53 @@ pub(crate) fn response_map_into(s: &mut Scratch, p: &Plane, radius: usize) {
             gy[y * w + x] = ((bl + 2.0 * b + br) - (tl + 2.0 * t + tr)) / 8.0;
         }
     }
+    fit3(cols, w);
+    fit3(pre, w + 1);
     let r = radius as i64;
+    let row_of = |k: i64| (k.clamp(0, h as i64 - 1) as usize) * w;
+    // The window on the first row. An edge row is counted once for every
+    // offset the clamp folds onto it.
+    for k in -r..=r {
+        let row = row_of(k);
+        for (x, c) in cols.iter_mut().enumerate() {
+            let (a, b) = (f64::from(gx[row + x]), f64::from(gy[row + x]));
+            c[0] += a * a;
+            c[1] += a * b;
+            c[2] += b * b;
+        }
+    }
     for y in 0..h {
+        pre[0] = [0.0; 3];
         for x in 0..w {
-            let (mut sxx, mut sxy, mut syy) = (0.0f64, 0.0f64, 0.0f64);
-            for oy in -r..=r {
-                let qy = (y as i64 + oy).clamp(0, h as i64 - 1) as usize;
-                for ox in -r..=r {
-                    let qx = (x as i64 + ox).clamp(0, w as i64 - 1) as usize;
-                    let q = qy * w + qx;
-                    let (a, b) = (f64::from(gx[q]), f64::from(gy[q]));
-                    sxx += a * a;
-                    sxy += a * b;
-                    syy += b * b;
-                }
-            }
+            let (t, c) = (pre[x], cols[x]);
+            pre[x + 1] = [t[0] + c[0], t[1] + c[1], t[2] + c[2]];
+        }
+        let (first, last) = (cols[0], cols[w - 1]);
+        for x in 0..w {
+            let lo = x.saturating_sub(radius);
+            let hi = (x + radius).min(w - 1);
+            // The edge columns, the same folding as the rows.
+            let left = (radius - (x - lo)) as f64;
+            let right = (radius - (hi - x)) as f64;
+            let (a, b) = (pre[lo], pre[hi + 1]);
+            let sxx = b[0] - a[0] + left * first[0] + right * last[0];
+            let sxy = b[1] - a[1] + left * first[1] + right * last[1];
+            let syy = b[2] - a[2] + left * first[2] + right * last[2];
             // Smaller eigenvalue of [[sxx, sxy], [sxy, syy]].
             let mid = 0.5 * (sxx + syy);
             let half_diff = 0.5 * (sxx - syy);
-            let lo = mid - (half_diff * half_diff + sxy * sxy).sqrt();
-            out[y * w + x] = lo.max(0.0) as f32;
+            let small = mid - (half_diff * half_diff + sxy * sxy).sqrt();
+            resp[y * w + x] = small.max(0.0) as f32;
+        }
+        if y + 1 < h {
+            let (gone, come) = (row_of(y as i64 - r), row_of(y as i64 + 1 + r));
+            for (x, c) in cols.iter_mut().enumerate() {
+                let (ao, bo) = (f64::from(gx[gone + x]), f64::from(gy[gone + x]));
+                let (an, bn) = (f64::from(gx[come + x]), f64::from(gy[come + x]));
+                c[0] += an * an - ao * ao;
+                c[1] += an * bn - ao * bo;
+                c[2] += bn * bn - bo * bo;
+            }
         }
     }
 }

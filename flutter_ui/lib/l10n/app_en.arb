@@ -2360,7 +2360,7 @@
   "@fxConsoleAll": {
     "description": "The FX console popover’s category strip: the first entry, which shows every result rather than one category’s."
   },
-  "fxConsoleApplies": "Enter applies to the selected layers",
+  "fxConsoleApplies": "Enter applies to the selected layer",
   "@fxConsoleApplies": {
     "description": "The sentence at the foot of the Ctrl+Space FX console popover, saying what choosing a result will do."
   },
@@ -5561,6 +5561,14 @@
   "@projectItemMissing": {
     "description": "Warning beside a footage item whose file cannot be found on disk. Lower case on purpose — it sits in a line of facts."
   },
+  "projectItemUndecodable": "unreadable",
+  "@projectItemUndecodable": {
+    "description": "Warning beside a footage item whose file is on disk but cannot be decoded. Lower case, one word, like the other row badges."
+  },
+  "tipProjectUndecodable": "Can't decode",
+  "@tipProjectUndecodable": {
+    "description": "Tooltip on the unreadable badge of a Project panel footage item: the file is on disk but Lumit can't decode it."
+  },
   "projectPreviewPlay": "Play this file",
   "@projectPreviewPlay": {
     "description": "Tooltip on the button that stands in the Project panel preview card where a picture would be, for a sound file. Pressing it plays the file from the start."
@@ -5616,6 +5624,14 @@
   "relink": "Relink",
   "@relink": {
     "description": "Point a missing footage item at the file's new location."
+  },
+  "sequenceRate": "Frame rate",
+  "@sequenceRate": {
+    "description": "Label of the field on a footage item's menu that sets how fast an imported run of numbered stills plays. Sentence case."
+  },
+  "tipSequenceRate": "Frame rate",
+  "@tipSequenceRate": {
+    "description": "Tooltip on the frame rate field of an image sequence's menu. Sentence case."
   },
   "relinkEllipsis": "Relink…",
   "@relinkEllipsis": {
@@ -9443,6 +9459,10 @@
   "@aeOrientationNotCarried": {
     "description": "Import report row reason, lower case. After Effects turns a 3D layer by an orientation and by three rotations; Lumit has the rotations only."
   },
+  "aeCastsShadowsNotCarried": "the layer casts shadows, and Lumit's lights cast none, so it imported without them",
+  "@aeCastsShadowsNotCarried": {
+    "description": "Import report row reason, lower case. After Effects lets a 3D layer cast shadows from a light; Lumit's lights cast none."
+  },
   "aeSpatialTangentsFlattened": "the motion path's spatial tangents are not carried — each axis animates on its own",
   "@aeSpatialTangentsFlattened": {
     "description": "Import report row reason, lower case. After Effects curves a position through space; Lumit animates x and y separately."
@@ -12224,6 +12244,10 @@
   "@histRelinkFootage": {
     "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
   },
+  "histSetSequenceRate": "Set sequence rate",
+  "@histSetSequenceRate": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
   "histSetProxy": "Set proxy",
   "@histSetProxy": {
     "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
@@ -13128,7 +13152,7 @@
   },
   "fxConsoleNodeGraphs": "Node graphs",
   "@fxConsoleNodeGraphs": {
-    "description": "The FX console popover: the category kicker worn by the project's node graph compositions, each of which applies to the selected layers as an effect."
+    "description": "The FX console popover: the category kicker worn by the project's node graph compositions, each of which applies to the selected layer as an effect."
   },
   "settingsPageAddons": "Addons",
   "@settingsPageAddons": {

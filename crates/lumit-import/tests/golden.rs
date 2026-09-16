@@ -880,11 +880,10 @@ fn the_switches_cross_over_and_the_ones_with_no_counterpart_are_reported() {
 /// options group, and the light's kind, colour, intensity and cone.
 /// Two of those convert — AE's intensity is a percentage where 100 is unity,
 /// and its cone angle is the *full* angle where Lumit's is the half.
+/// Material Options' **Casts Shadows** has no Lumit field and is reported.
 ///
 /// **ROWS NOT CARRIED**, all owed in docs/TODO.md and all revealed here:
 ///
-/// - Material Options' **Casts Shadows** has no Lumit field and, unlike
-///   everything else with none, raises no report row;
 /// - the camera's **Point of Interest** lands on the anchor-point lanes,
 ///   because After Effects stores it under `ADBE Anchor Point` — its two-node
 ///   flag survives in the `ae` namespace, and now says so in the report;
@@ -902,6 +901,13 @@ fn the_3d_layer_the_camera_and_the_light_come_across_as_far_as_they_map() {
     assert_eq!(card.transform.rotation_x.value_at(0.0), 0.0);
     assert_eq!(card.transform.rotation_y.value_at(0.0), 30.0);
     assert_eq!(card.transform.rotation.value_at(0.0), 0.0);
+    assert!(
+        report().rows.iter().any(|row| {
+            row.reason == Reason::CastsShadowsNotCarried
+                && row.path.layer.as_deref() == Some("3d card")
+        }),
+        "the card casts shadows, and Lumit's lights cast none"
+    );
 
     let camera = layer(c, "camera");
     let LayerKind::Camera { zoom, .. } = &camera.kind else {
@@ -1146,7 +1152,8 @@ fn the_report_counts_what_it_says_and_names_its_placeholder() {
             // Skew and Skew Axis carry rather than report. One fewer since
             // the camera gained its second node: the fixture's two-node
             // camera and its point of interest cross over whole.
-            adjusted: 57,
+            // One more for the 3D card's Casts Shadows.
+            adjusted: 58,
             placeholders: 1,
             skipped: 1,
         }

@@ -340,7 +340,6 @@ class _StrokeValueRowState extends State<StrokeValueRow> {
           scalars: [_scalar],
           onWrite: (s) => _write(s.first),
           comp: widget.comp,
-          playheadFrame: widget.playheadFrame,
           onSeek: widget.onSeek,
           rowKey: _rowKey,
         ),
@@ -473,7 +472,6 @@ class _AnimatorValueRowState extends State<AnimatorValueRow> {
           scalars: [_scalar],
           onWrite: (s) => _write(s.first),
           comp: widget.comp,
-          playheadFrame: widget.playheadFrame,
           onSeek: widget.onSeek,
           rowKey: _rowKey,
         ),
@@ -675,7 +673,6 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
             onClear: (time) => widget.layer
                 .clearShapePathKeys(id: widget.item.id, time: time),
             comp: widget.comp,
-            playheadFrame: widget.playheadFrame,
             onSeek: widget.onSeek,
             onChanged: widget.onChanged,
           )
@@ -684,7 +681,6 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
             scalars: [_scalar],
             onWrite: (s) => _write(s.first),
             comp: widget.comp,
-            playheadFrame: widget.playheadFrame,
             onSeek: widget.onSeek,
             rowKey: _rowKey,
           ),

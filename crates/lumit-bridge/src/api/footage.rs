@@ -26,6 +26,8 @@ pub struct FootageReference {
 pub enum LumitMediaStatus {
     Missing,
     Ready,
+    /// On disk, but the decoder cannot read a picture or sound out of it.
+    Undecodable,
 }
 
 /// A footage file's own vital statistics, as the container declares them.
@@ -66,6 +68,18 @@ pub struct BridgeMediaInfo {
     /// with no picture is `video_codec: None`, which is a different fact from
     /// a picture that does not move.
     pub is_still: bool,
+}
+
+/// The rate a numbered run of stills plays at, as the exact pair the engine
+/// stores (docs/14 §2: a rate that goes through a float does not come back).
+///
+/// Answered only for an item that **is** a run; one file is `None`, which is
+/// what tells the Project panel's menu whether to offer the field at all.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BridgeSequenceRate {
+    pub fps_num: u32,
+    pub fps_den: u32,
 }
 
 impl FootageReference {
@@ -216,11 +230,14 @@ impl FootageReference {
             // with the sequence everywhere else — it reads as the one file it
             // can name.
             #[cfg(feature = "media")]
+            let mut span_name = None;
+            #[cfg(feature = "media")]
             if matches!(
                 doc.item(self.id),
                 Some(lumit_core::model::ProjectItem::Footage(f)) if f.sequence.is_some()
             ) {
                 if let Some(run) = lumit_media::sequence::detect(&picked) {
+                    span_name = Some(run.display_name());
                     picked = run.first;
                 }
             }
@@ -285,6 +302,34 @@ impl FootageReference {
                     }
                 }
                 media.fingerprint = lumit_project::fingerprint_path(&candidate).ok();
+                // A run still wearing its import name is renamed for its new span.
+                // The old name is matched with any digits, so a name the user chose is kept.
+                #[cfg(feature = "media")]
+                if let Some(name) = span_name.as_ref().filter(|_| is_target) {
+                    let was = Self::stored_path(&p, other).map(|first| {
+                        lumit_media::sequence::Run {
+                            pattern: PathBuf::new(),
+                            start: 0,
+                            count: 1,
+                            first,
+                        }
+                        .display_name()
+                    });
+                    let automatic = was.is_some_and(|was| {
+                        was.len() == other.name.len()
+                            && was.contains('[')
+                            && was
+                                .bytes()
+                                .zip(other.name.bytes())
+                                .all(|(a, b)| a == b || (a.is_ascii_digit() && b.is_ascii_digit()))
+                    });
+                    if automatic && *name != other.name {
+                        ops.push(lumit_core::Op::RenameItem {
+                            id: other.id,
+                            name: name.clone(),
+                        });
+                    }
+                }
                 #[cfg(feature = "media")]
                 repointed.push(lumit_media::MediaSource {
                     path: candidate,
@@ -315,6 +360,76 @@ impl FootageReference {
         // but the rule is the rule (docs/14 §3).
         #[cfg(feature = "media")]
         for src in &repointed {
+            crate::probe::request(src);
+        }
+        Ok(())
+    }
+
+    /// The rate this item's numbered run of stills plays at, or `None` when it
+    /// is one ordinary file.
+    ///
+    /// Stills carry no rate of their own, so this is the item's own statement
+    /// and the only rate there is — the Project panel's menu reads it to fill
+    /// its field, and gets `None` for everything that is not a run.
+    #[frb(sync)]
+    pub fn sequence_rate(&self) -> Result<Option<BridgeSequenceRate>, BridgeError> {
+        let state = self.project()?;
+        let state = state.read().map_err(|_| BridgeError::ReadFailed)?;
+        match state.store.snapshot().item(self.id) {
+            Some(lumit_core::model::ProjectItem::Footage(f)) => Ok(f
+                .sequence_fps()
+                .map(|(fps_num, fps_den)| BridgeSequenceRate { fps_num, fps_den })),
+            _ => Err(BridgeError::InvalidItem),
+        }
+    }
+
+    /// Correct the speed of an imported run of stills (docs/07 §3.1). One
+    /// gesture, one op, one undo step, exactly as a relink is.
+    ///
+    /// The rate crosses as the exact pair, so 23.976 arrives as 24000/1001 and
+    /// stays it. A rate of nought, an item that is one file and an item that is
+    /// not there are all refused rather than rounded into something legal.
+    ///
+    /// Everything that reads the run resolves its timing from the document, so
+    /// the new rate reaches the decode plan and the name of every frame that
+    /// reads this item on the next render; the panel hears about it through the
+    /// op's item scope.
+    #[frb(sync)]
+    pub fn set_sequence_rate(&self, fps_num: u32, fps_den: u32) -> Result<(), BridgeError> {
+        let frame_rate = lumit_core::time::FrameRate::new(fps_num, fps_den)
+            .map_err(|_| BridgeError::InvalidFrameRate)?;
+        let state = self.project()?;
+
+        // The run at its new rate, so the probe worker can be re-reading it
+        // while the menu is still closing: a rate change is a different piece
+        // of footage as far as every probe, index and frame name is concerned.
+        #[cfg(feature = "media")]
+        let repointed = {
+            let proj = state.read().map_err(|_| BridgeError::ReadFailed)?;
+            let doc = proj.store.snapshot();
+            match doc.item(self.id) {
+                Some(lumit_core::model::ProjectItem::Footage(f)) => Self::resolve_path(&proj, f)
+                    .map(|path| lumit_media::MediaSource {
+                        path,
+                        sequence_fps: Some((fps_num, fps_den)),
+                    }),
+                _ => None,
+            }
+        };
+
+        {
+            let proj = state.write().map_err(|_| BridgeError::WriteFailed)?;
+            proj.store
+                .commit(lumit_core::Op::SetSequenceRate {
+                    id: self.id,
+                    frame_rate,
+                })
+                .map_err(BridgeError::OpError)?;
+        }
+
+        // After the commit and outside the lock, as the relink's sweep does.
+        #[cfg(feature = "media")]
+        if let Some(src) = repointed {
             crate::probe::request(src);
         }
         Ok(())
@@ -587,8 +702,7 @@ impl FootageReference {
 
         match item {
             lumit_core::model::ProjectItem::Footage(footage_item) => {
-                // An unresolvable path is missing media, same as one that
-                // resolves but no longer decodes.
+                // An unresolvable path is missing media.
                 let Some(path) = Self::resolve_path(&proj, footage_item) else {
                     return Ok(LumitMediaStatus::Missing);
                 };
@@ -612,14 +726,20 @@ impl FootageReference {
                 // answered from memory.
                 #[cfg(not(feature = "media"))]
                 let probed = true;
+                // A picture with no size is one FFmpeg found but could not read.
                 #[cfg(feature = "media")]
                 let probed = Self::resolve_source(&proj, footage_item)
-                    .is_some_and(|src| crate::probe::ensure_probed(&src).is_some());
+                    .and_then(|src| crate::probe::ensure_probed(&src))
+                    .is_some_and(|info| {
+                        info.video
+                            .as_ref()
+                            .is_none_or(|v| v.width > 0 && v.height > 0)
+                    });
 
                 if probed {
                     Ok(LumitMediaStatus::Ready)
                 } else {
-                    Ok(LumitMediaStatus::Missing)
+                    Ok(LumitMediaStatus::Undecodable)
                 }
             }
             _ => Err(BridgeError::InvalidItem),

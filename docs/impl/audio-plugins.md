@@ -81,7 +81,7 @@ Why pre-fader: Volume keyframes are the montage editor's fades, and a fade must 
 *processed* sound — riding Volume down through a compressor's input would change the
 compression amount mid-fade and audibly pump; post-insert gain keeps a fade a fade. It is
 also every DAW's insert/fader order, the mixer drawn on the board (per-layer strips into
-a Master strip), and canvas decision 2 (layers + master, no buses in v1).
+a Master strip), and canvas decision 2 (layers + master, and no bus rows to make).
 
 **"The stack is the rack"** (canvas decision 1): there is no separate audio-FX list. The
 glossary's Effect already admits audio operations; an audio plugin instance is an entry
@@ -96,12 +96,19 @@ with no sound is inert with the same calm the visibility switch rules use.
 Sequence layers take the chain on the layer's mixed output (after clip retiming), exactly
 where visual effects already sit.
 
-**Two ceilings AP3 leaves standing.** A **Precomp** layer's own chain is not
-applied: Volume and Pan push down onto every contributing source because gain distributes
-over a sum, and a compressor does not, so honouring one means summing the nested comp
-first — a bus, which canvas decision 2 says v1 has none of. And a **Sequence** layer's
-chain runs per clip rather than on the row's mixed output, so a reverb does not tail across
-a join. Both want the same missing thing: a per-layer sum to insert on.
+**One ceiling left standing.** A **Precomp** layer's own chain *is* applied, and it is
+applied to the sum: Volume and Pan push down onto every contributing source because gain
+distributes over a sum, and a compressor does not, so the nested comp is summed first and
+the rack hears that. The chain rides on the carrier (`export::Carrier::chain`, put there by
+the audio walk when the stack holds anything of the Audio family), and `export::bus_runs`
+is the stage, called by the export's `mix_decoded` and by the live `build_plan` alike.
+Inside the bus each source carries its own gains and the nested comp's **master fader**,
+which is a stage on that comp's own sum and therefore ahead of anything the parent inserts;
+outside it, the Precomp layer's Volume and Pan ride on what the rack gives back, so the
+insert is still pre-fader. The bus meters on the Precomp layer's strip, and `jobs_signature`
+hashes a carrier's chain so editing the rack re-plans. What stands is the **Sequence**
+layer's chain, which runs per clip rather than on the row's mixed output, so a reverb does
+not tail across a join: that one still wants a per-row sum to insert on.
 
 ## 3. The block contract, and why the broker never meets the callback
 

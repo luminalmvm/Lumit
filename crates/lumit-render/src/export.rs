@@ -191,13 +191,12 @@ impl PartialEq for DrivenVolume {
 /// when the chain opens ([`lumit_core::fx::EffectDef::open_audio`]). A stack
 /// full of blurs opens nothing and the sound goes through untouched.
 ///
-/// ponytail: a **Precomp** layer's own chain is not applied. Volume and Pan
-/// push down onto every contributing source because gain distributes over a
-/// sum; a compressor does not, so honouring one would mean summing the nested
-/// comp first — which is a bus, and the canvas note says v1 has none. A
-/// **Sequence** layer's chain runs per clip rather than on the row's mixed
-/// output, so a reverb does not tail across a join. Both want the same thing:
-/// a per-layer sum to insert on.
+/// A **Precomp** layer's chain is a chain like any other, and it rides on the
+/// carrier rather than on a job ([`Carrier::chain`]): everything arriving
+/// through that layer is summed first and the rack hears the sum, because gain
+/// distributes over a sum and a compressor does not. A **Sequence** layer's
+/// chain still runs per clip rather than on the row's mixed output, so a reverb
+/// does not tail across a join; that one wants the same sum, a row at a time.
 pub struct AudioChain {
     pub doc: Arc<lumit_core::model::Document>,
     /// The comp the layer sits in — not necessarily the comp being mixed.
@@ -400,7 +399,7 @@ fn bake_values(
     /// may be pushed.
     struct Row<'a> {
         id: ParamId,
-        property: &'a lumit_core::anim::Property,
+        property: std::borrow::Cow<'a, lumit_core::anim::Property>,
         hard: (Option<f64>, Option<f64>),
     }
 
@@ -410,8 +409,13 @@ fn bake_values(
         .iter()
         .filter_map(|row| {
             let held = instance.params.iter().find(|p| p.id == row.id)?;
-            let EffectValue::Float(property) = &held.value else {
-                return None;
+            let property = match &held.value {
+                EffectValue::Float(property) => std::borrow::Cow::Borrowed(property),
+                // A switch goes to a plugin as nought or one.
+                EffectValue::Bool(on) => std::borrow::Cow::Owned(
+                    lumit_core::anim::Property::fixed(f64::from(u8::from(*on))),
+                ),
+                _ => return None,
             };
             Some(Row {
                 id: ParamId::new(row.id),
@@ -541,6 +545,13 @@ pub struct Carrier {
     pub volume: lumit_core::anim::Property,
     pub pan: lumit_core::anim::Property,
     pub offset_s: f64,
+    /// The Precomp layer's own **rack**, where it holds anything that sounds:
+    /// the bus chain (docs/09 §3.1). Everything arriving through this
+    /// carrier is summed first and run through it, and this carrier's Volume
+    /// and Pan then ride on the result, which is the insert-then-fader order
+    /// a layer's own rack already reads. `None` on every carrier that is a
+    /// gain and nothing more, which is nearly all of them.
+    pub chain: Option<std::sync::Arc<AudioChain>>,
 }
 
 /// Bake one job's **Volume and Pan** — its own properties times every
@@ -560,40 +571,63 @@ pub fn volume_bake(
     len: usize,
     rate: u32,
 ) -> ([f32; 2], Option<lumit_audio::mix::GainEnvelope>) {
+    gain_bake(Some(job), &job.carriers, start_frame, len, rate)
+}
+
+/// The gain law itself: `own`'s Volume, Pan and fade where a job's own sound
+/// is being placed, times `carriers`.
+///
+/// The bus stage splits one job's chain of gains in two, the carriers inside
+/// the bus riding into the sum and the ones outside riding on what the rack
+/// gives back, so both halves are asked for here rather than each doing its
+/// own arithmetic. `None` for `own` is a summed bus, whose own Volume and Pan were
+/// spent on the sources inside it.
+fn gain_bake(
+    own: Option<&AudioJob>,
+    carriers: &[Carrier],
+    start_frame: i64,
+    len: usize,
+    rate: u32,
+) -> ([f32; 2], Option<lumit_audio::mix::GainEnvelope>) {
     let gain_at = |t: f64| {
-        // A wired Volume overrides its keyframes, exactly as a wired effect
-        // parameter does; a broken or bypassed chain answers `None`
-        // and the keyframes come back.
-        let volume_db = job
-            .driven
-            .as_ref()
-            .and_then(|d| d.db_at(t))
-            .unwrap_or_else(|| job.volume.value_at(t - job.offset_s));
-        let mut g = lumit_audio::mix::db_to_gain(volume_db);
-        let mut lr = lumit_audio::mix::pan_gains(job.pan.value_at(t - job.offset_s));
-        for c in &job.carriers {
+        let mut g = 1.0;
+        let mut lr = [1.0f32, 1.0];
+        if let Some(job) = own {
+            // A wired Volume overrides its keyframes, exactly as a wired effect
+            // parameter does; a broken or bypassed chain answers `None`
+            // and the keyframes come back.
+            let volume_db = job
+                .driven
+                .as_ref()
+                .and_then(|d| d.db_at(t))
+                .unwrap_or_else(|| job.volume.value_at(t - job.offset_s));
+            g = lumit_audio::mix::db_to_gain(volume_db);
+            lr = lumit_audio::mix::pan_gains(job.pan.value_at(t - job.offset_s));
+            // A clip's own crossfade ramps multiply in too: they are the
+            // join's, not the layer's, and they ride on whatever the Volume is
+            // doing.
+            if let Some(fade) = &job.fade {
+                g *= fade.gain_at(t);
+            }
+        }
+        for c in carriers {
             g *= lumit_audio::mix::db_to_gain(c.volume.value_at(t - c.offset_s));
             let cp = lumit_audio::mix::pan_gains(c.pan.value_at(t - c.offset_s));
             lr[0] *= cp[0];
             lr[1] *= cp[1];
         }
-        // A clip's own crossfade ramps multiply in last: they are the join's,
-        // not the layer's, and they ride on whatever the Volume is doing.
-        if let Some(fade) = &job.fade {
-            g *= fade.gain_at(t);
-        }
         [lr[0] * g, lr[1] * g]
     };
-    let animated = job.volume.is_animated()
-        || job.pan.is_animated()
-        || job.fade.is_some_and(|f| f.is_active())
-        // A driven Volume follows the sound, which moves whether or not any
-        // keyframe does — always an envelope, never a constant.
-        || job.driven.is_some()
-        || job
-            .carriers
-            .iter()
-            .any(|c| c.volume.is_animated() || c.pan.is_animated());
+    let animated = own.is_some_and(|job| {
+        job.volume.is_animated()
+            || job.pan.is_animated()
+            || job.fade.is_some_and(|f| f.is_active())
+            // A driven Volume follows the sound, which moves whether or not any
+            // keyframe does — always an envelope, never a constant.
+            || job.driven.is_some()
+    }) || carriers
+        .iter()
+        .any(|c| c.volume.is_animated() || c.pan.is_animated());
     if !animated {
         return (gain_at(0.0), None);
     }
@@ -609,6 +643,181 @@ pub fn volume_bake(
         [1.0, 1.0],
         Some(lumit_audio::mix::GainEnvelope { stride, points }),
     )
+}
+
+/// One job on its way into the mix, as the bus stage takes it: the run about
+/// to be placed (its clip and layer racks already run) and where it lands.
+pub struct PlacedJob<'a> {
+    pub job: &'a AudioJob,
+    pub start_frame: i64,
+    pub samples: &'a [f32],
+}
+
+/// Whose sound one [`MixRun`] is.
+pub enum RunOf {
+    /// One job's own, at this index of what the stage was handed: the caller
+    /// places the samples it already has.
+    Job(usize),
+    /// A **bus**: everything arriving through one Precomp layer, summed and
+    /// run through that layer's rack.
+    Bus(Vec<f32>),
+}
+
+/// One run for the mixer to place, with the gain still to ride on it.
+pub struct MixRun {
+    /// The mixer strip this run meters onto. A bus meters on the Precomp
+    /// layer's own strip, which is the row the board draws it as.
+    pub layer: Uuid,
+    pub start_frame: i64,
+    pub of: RunOf,
+    pub gain: [f32; 2],
+    pub envelope: Option<lumit_audio::mix::GainEnvelope>,
+}
+
+/// **The bus stage** (docs/09 §3.1): fold every job arriving through a Precomp
+/// layer that carries a rack into one sum, run the rack over it, and hand back
+/// the runs the mixer places. It is the one function the live plan and the
+/// export both call, so a rack on a nested comp sounds the same in both.
+///
+/// A rack cannot be pushed down onto the sources the way Volume and Pan are:
+/// gain distributes over a sum and a compressor does not, so the sum has to
+/// exist before the rack can hear it. Inside the bus a source carries its own
+/// gains and the carriers below the rack, the nested comp's **master fader**
+/// among them, since that is a stage on that comp's own sum and therefore
+/// ahead of anything the parent inserts. Outside it, the Precomp layer's
+/// Volume and Pan and every enclosing carrier ride on what the rack gives
+/// back, which is the insert-then-fader order a layer's own rack reads.
+///
+/// Nested buses are the same act one level down: a bus is summed from the runs
+/// inside it, and one of those may itself be a bus.
+///
+/// A job under no rack at all comes back as [`RunOf::Job`] with exactly the
+/// gain [`volume_bake`] bakes, so a mix with no rack in it is the mix it was.
+#[must_use]
+pub fn bus_runs(placed: &[PlacedJob<'_>], rate: u32, offline: bool) -> Vec<MixRun> {
+    let all: Vec<usize> = (0..placed.len()).collect();
+    runs_at(placed, &all, 0, rate, offline)
+}
+
+/// The first carrier at or past `depth` that holds a rack: where this job's
+/// sound is summed on its way out.
+fn bus_at(job: &AudioJob, depth: usize) -> Option<usize> {
+    job.carriers
+        .iter()
+        .enumerate()
+        .skip(depth)
+        .find_map(|(at, c)| c.chain.is_some().then_some(at))
+}
+
+/// The runs inside one bus: `which` indexes [`bus_runs`]'s input and `depth`
+/// is the first carrier whose gain has not been spent yet.
+fn runs_at(
+    placed: &[PlacedJob<'_>],
+    which: &[usize],
+    depth: usize,
+    rate: u32,
+    offline: bool,
+) -> Vec<MixRun> {
+    let mut out: Vec<MixRun> = Vec::new();
+    // The buses already summed, so the rest of a bus's jobs are passed over
+    // rather than summed again. Two Precomp layers at the same depth are two
+    // buses, which is why the chain itself is the mark and not the depth.
+    let mut summed: Vec<(usize, *const AudioChain)> = Vec::new();
+    for &i in which {
+        let job = placed[i].job;
+        let carriers = &job.carriers[depth.min(job.carriers.len())..];
+        let Some(at) = bus_at(job, depth) else {
+            let (gain, envelope) = gain_bake(
+                Some(job),
+                carriers,
+                placed[i].start_frame,
+                placed[i].samples.len() / 2,
+                rate,
+            );
+            out.push(MixRun {
+                layer: job.layer,
+                start_frame: placed[i].start_frame,
+                of: RunOf::Job(i),
+                gain,
+                envelope,
+            });
+            continue;
+        };
+        let Some(chain) = job.carriers[at].chain.as_ref() else {
+            continue;
+        };
+        if summed.contains(&(at, std::sync::Arc::as_ptr(chain))) {
+            continue;
+        }
+        summed.push((at, std::sync::Arc::as_ptr(chain)));
+        let group: Vec<usize> = which
+            .iter()
+            .copied()
+            .filter(|&j| {
+                bus_at(placed[j].job, depth) == Some(at)
+                    && placed[j].job.carriers[at]
+                        .chain
+                        .as_ref()
+                        .is_some_and(|c| std::sync::Arc::ptr_eq(c, chain))
+            })
+            .collect();
+        let inner = runs_at(placed, &group, at + 1, rate, offline);
+        // The sum spans from the earliest run to the latest, which may reach
+        // before the bus's own span: a rack inside it has already placed its
+        // sound early to answer for its latency.
+        let span = inner.iter().map(|r| {
+            let samples: &[f32] = match &r.of {
+                RunOf::Job(j) => placed[*j].samples,
+                RunOf::Bus(s) => s,
+            };
+            (r.start_frame, r.start_frame + (samples.len() / 2) as i64)
+        });
+        let (Some(first), Some(last)) = (
+            span.clone().map(|(a, _)| a).min(),
+            span.map(|(_, b)| b).max(),
+        ) else {
+            continue;
+        };
+        if last <= first {
+            continue;
+        }
+        let sources: Vec<lumit_audio::mix::PlacedAudio<'_>> = inner
+            .iter()
+            .map(|r| lumit_audio::mix::PlacedAudio {
+                start_frame: r.start_frame - first,
+                samples: match &r.of {
+                    RunOf::Job(j) => placed[*j].samples,
+                    RunOf::Bus(s) => s,
+                },
+                gain: r.gain,
+                envelope: r.envelope.clone(),
+            })
+            .collect();
+        // No master fader and no ceiling on a bus: the limiter is the master's
+        // own last stage and this sum is in the middle of the desk.
+        let sum = lumit_audio::mix::sum_stereo(&sources, (last - first) as usize);
+        let (samples, start_frame) = match chain_bake(chain, &sum, first, rate, offline) {
+            // Placed the rack's latency earlier, exactly as a job's own rack
+            // is, so the processed bus lands where the dry sum did.
+            Some((wet, latency)) => (wet, first - i64::from(latency)),
+            None => (sum, first),
+        };
+        let (gain, envelope) = gain_bake(
+            None,
+            &job.carriers[depth..=at],
+            start_frame,
+            samples.len() / 2,
+            rate,
+        );
+        out.push(MixRun {
+            layer: job.layer,
+            start_frame,
+            of: RunOf::Bus(samples),
+            gain,
+            envelope,
+        });
+    }
+    out
 }
 
 /// Delivery presets (docs/06-RENDER-PIPELINE.md §7.5): frame, codec, and
@@ -2260,12 +2469,31 @@ pub fn mixdown(jobs: &[AudioJob], rate: u32, duration_s: f64) -> Vec<f32> {
 /// detection, whose onsets are relative, and which must not lose its beats
 /// because somebody pulled the master down.
 pub fn mixdown_at(jobs: &[AudioJob], rate: u32, duration_s: f64, master_gain: f32) -> Vec<f32> {
+    mixdown_counting(jobs, rate, duration_s, master_gain, &mut |_| {})
+}
+
+/// As [`mixdown_at`], counting the sources off as each one is decoded.
+///
+/// Decoding is where a mixdown spends its seconds: one whole file per audible
+/// source. `on_decoded` is handed how many of `jobs` are done, which is the
+/// only honest division of the work there is to report, and it is called for a
+/// source that would not decode as well as for one that did.
+pub fn mixdown_counting(
+    jobs: &[AudioJob],
+    rate: u32,
+    duration_s: f64,
+    master_gain: f32,
+    on_decoded: &mut dyn FnMut(usize),
+) -> Vec<f32> {
     let decoded: Vec<(lumit_media::AudioBuffer, &AudioJob)> = jobs
         .iter()
-        .filter_map(|job| {
-            lumit_media::audio::decode_all(&job.path, rate)
+        .enumerate()
+        .filter_map(|(index, job)| {
+            let one = lumit_media::audio::decode_all(&job.path, rate)
                 .ok()
-                .map(|buf| (buf, job))
+                .map(|buf| (buf, job));
+            on_decoded(index + 1);
+            one
         })
         .collect();
     let borrowed: Vec<(&lumit_media::AudioBuffer, &AudioJob)> =
@@ -2301,7 +2529,6 @@ fn mix_decoded(
     /// One job, placed, with the chain already run over it where it had one.
     struct Placed<'a> {
         start_frame: i64,
-        len: usize,
         job: &'a AudioJob,
         dry: &'a [f32],
         wet: Option<Vec<f32>>,
@@ -2328,14 +2555,12 @@ fn mix_decoded(
                 // past the out point.
                 Some((samples, latency)) => Some(Placed {
                     start_frame: start_frame - i64::from(latency),
-                    len: samples.len() / 2,
                     job,
                     dry,
                     wet: Some(samples),
                 }),
                 None => Some(Placed {
                     start_frame,
-                    len,
                     job,
                     dry,
                     wet: None,
@@ -2343,16 +2568,28 @@ fn mix_decoded(
             }
         })
         .collect();
-    let placements: Vec<lumit_audio::mix::PlacedAudio> = placed
+    // Then the bus stage: a Precomp layer carrying a rack sums what arrives
+    // through it and the rack hears the sum, which is the one thing no amount
+    // of per-job arithmetic can do.
+    let staged: Vec<PlacedJob<'_>> = placed
         .iter()
-        .map(|p| {
-            let (gain, envelope) = volume_bake(p.job, p.start_frame, p.len, rate);
-            lumit_audio::mix::PlacedAudio {
-                start_frame: p.start_frame,
-                samples: p.wet.as_deref().unwrap_or(p.dry),
-                gain,
-                envelope,
-            }
+        .map(|p| PlacedJob {
+            job: p.job,
+            start_frame: p.start_frame,
+            samples: p.wet.as_deref().unwrap_or(p.dry),
+        })
+        .collect();
+    let runs = bus_runs(&staged, rate, true);
+    let placements: Vec<lumit_audio::mix::PlacedAudio> = runs
+        .iter()
+        .map(|run| lumit_audio::mix::PlacedAudio {
+            start_frame: run.start_frame,
+            samples: match &run.of {
+                RunOf::Job(i) => staged[*i].samples,
+                RunOf::Bus(samples) => samples,
+            },
+            gain: run.gain,
+            envelope: run.envelope.clone(),
         })
         .collect();
     lumit_audio::mix::mix_stereo_at(&placements, total_frames, master_gain)
@@ -3142,6 +3379,7 @@ mod tests {
             volume: Property::fixed(-6.0),
             pan: Property::zero(),
             offset_s: 0.0,
+            chain: None,
         }];
         let (g, env) = volume_bake(&carried, 0, 48_000, 48_000);
         assert!(env.is_none());
@@ -3155,6 +3393,7 @@ mod tests {
             volume: fade,
             pan: Property::zero(),
             offset_s: 0.0,
+            chain: None,
         }];
         let (_, env) = volume_bake(&fading_carrier, 0, 48_000, 48_000);
         assert!(env.is_some(), "an animated carrier forces the envelope");
@@ -3175,6 +3414,7 @@ mod tests {
             volume: Property::zero(),
             pan: Property::fixed(lumit_audio::mix::PAN_FULL),
             offset_s: 0.0,
+            chain: None,
         }];
         let (g, _) = volume_bake(&opposed, 0, 48_000, 48_000);
         assert!(
@@ -3484,6 +3724,35 @@ mod tests {
         let mix = mixdown(&[], 48_000, 2.0);
         assert_eq!(mix.len(), 96_000 * 2);
         assert!(mix.iter().all(|s| *s == 0.0));
+    }
+
+    /// **Every source is counted off, decoded or not.** Beat detection draws
+    /// its progress bar from this count, and a file the decoder would not read
+    /// still cost the time it took to try: a count that skipped it would leave
+    /// the bar short of the end for the rest of the run.
+    #[test]
+    fn a_counting_mixdown_counts_every_source() {
+        let job = |name: &str| AudioJob {
+            item: uuid::Uuid::nil(),
+            layer: uuid::Uuid::nil(),
+            clip: None,
+            path: PathBuf::from(name),
+            in_s: 0.0,
+            out_s: 1.0,
+            offset_s: 0.0,
+            volume: lumit_core::anim::Property::zero(),
+            pan: lumit_core::anim::Property::zero(),
+            carriers: Vec::new(),
+            fade: None,
+            driven: None,
+            chain: None,
+            clip_chain: None,
+        };
+        let jobs = [job("nothing-here.wav"), job("nor-here.wav")];
+        let mut counted: Vec<usize> = Vec::new();
+        let mix = mixdown_counting(&jobs, 48_000, 1.0, 1.0, &mut |done| counted.push(done));
+        assert_eq!(counted, vec![1, 2], "one report per source, in order");
+        assert_eq!(mix.len(), 48_000 * 2, "and the mix itself is unchanged");
     }
 
     /// The capability table is the one place a format's limits are written
@@ -5214,6 +5483,35 @@ mod tests {
         instance
     }
 
+    /// A switch row bakes as nought or one, so a plugin's stepped nought to one
+    /// parameter reaches it.
+    #[test]
+    fn a_switch_row_bakes_as_nought_or_one() {
+        use lumit_core::model::EffectValue;
+
+        let mut instance =
+            lumit_core::fx::instantiate("extract_channels").expect("a catalogue entry");
+        for param in &mut instance.params {
+            if param.id == "bypass" {
+                param.value = EffectValue::Bool(true);
+            }
+        }
+        let def = lumit_core::fx::BUILTIN_DEFS
+            .get("extract_channels")
+            .expect("a catalogue entry");
+        let chain = rack_of(Vec::new());
+        let baked = bake_values(&chain, &instance, def, 0, 1, 48_000);
+        let bypass = lumit_core::fx::ParamId::new("bypass");
+        assert_eq!(
+            baked
+                .first()
+                .and_then(|block| block.iter().find(|(id, _)| *id == bypass))
+                .map(|(_, value)| *value),
+            Some(1.0),
+            "the switch reaches the values handed to a plugin"
+        );
+    }
+
     /// A rack of them.
     fn rack_of(effects: Vec<lumit_core::model::EffectInstance>) -> Arc<AudioChain> {
         Arc::new(AudioChain {
@@ -5312,6 +5610,84 @@ mod tests {
         assert!(
             job_bake(&racked_job(None, None), &input, 0, rate, true).is_none(),
             "no rack, no bake"
+        );
+    }
+
+    /// **A Precomp layer's rack hears the sum, and the layer's Volume rides
+    /// on what comes back** (docs/09 §3.1, the bus stage).
+    ///
+    /// Two copies of the same half-scale tone arrive through one Precomp
+    /// layer whose rack is a limiter set to −6 dB. Either one alone is already
+    /// under that ceiling, so only the sum can move the limiter: if the rack
+    /// were run per source the two would come out untouched and add to full
+    /// scale. The peak alone therefore says whether the sum existed.
+    ///
+    /// Then the same mix with the Precomp layer at −6 dB. The fader is
+    /// **after** the insert, so it halves the held sum; riding inside the rack
+    /// it would have taken each source under the ceiling and the limiter would
+    /// never have bitten.
+    #[test]
+    fn a_precomp_layers_rack_hears_the_summed_comp() {
+        let rate = 48_000u32;
+        let frames = rate as usize / 4;
+        let ceiling = 10f32.powf(-6.0 / 20.0);
+        let tone = lumit_media::AudioBuffer {
+            rate,
+            samples: (0..frames)
+                .flat_map(|n| {
+                    let phase = std::f64::consts::TAU * 220.0 * n as f64 / f64::from(rate);
+                    [phase.sin() as f32 * 0.5; 2]
+                })
+                .collect(),
+        };
+        let bus = |volume_db: f64| Carrier {
+            volume: lumit_core::anim::Property::fixed(volume_db),
+            pan: lumit_core::anim::Property::zero(),
+            offset_s: 0.0,
+            chain: Some(audio_rack("audio_limiter", &[("ceiling", -6.0)])),
+        };
+        let row = Uuid::now_v7();
+        let through = |carrier: Carrier| {
+            let one = |item: Uuid| {
+                let mut job = racked_job(None, None);
+                job.item = item;
+                job.layer = row;
+                job.out_s = 0.25;
+                job.carriers = vec![carrier.clone()];
+                job
+            };
+            let jobs = [one(Uuid::now_v7()), one(Uuid::now_v7())];
+            let decoded: Vec<(&lumit_media::AudioBuffer, &AudioJob)> =
+                jobs.iter().map(|job| (&tone, job)).collect();
+            mix_decoded(&decoded, rate, 0.25, 1.0)
+        };
+
+        let held = through(bus(0.0));
+        assert!(
+            loudest(&held) < ceiling * 1.05 && loudest(&held) > ceiling * 0.5,
+            "the limiter heard both sources at once: peak {}",
+            loudest(&held)
+        );
+
+        let quieter = through(bus(-6.0));
+        assert!(
+            (loudest(&quieter) - loudest(&held) * ceiling).abs() < 0.02,
+            "the Precomp layer's Volume rides on what the rack gave back: \
+             peak {} against {}",
+            loudest(&quieter),
+            loudest(&held)
+        );
+
+        // And with no rack on the carrier nothing is summed early: the two
+        // sources reach full scale and the master's own ceiling holds them.
+        let mut plain = bus(0.0);
+        plain.chain = None;
+        let open = through(plain);
+        assert!(
+            loudest(&open) > ceiling * 1.5,
+            "a carrier with no rack places its sources as it always did: \
+             peak {}",
+            loudest(&open)
         );
     }
 

@@ -86,7 +86,7 @@ class FxConsoleModel {
   final String? keyHint;
 
   /// One quiet sentence under the list saying what choosing a row will do
-  /// ("Enter applies to the selected layers", "Adds a driver node"). Null
+  /// ("Enter applies to the selected layer", "Adds a driver node"). Null
   /// draws no foot at all.
   final String? footer;
 

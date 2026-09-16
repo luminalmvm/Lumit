@@ -161,11 +161,9 @@ void main() {
           reason: 'a row per declared parameter, labelled from the schema');
     });
 
-    /// **Add lands on every selected layer**, the way the Effect menu
-    /// and the effects console already do. This button reached for the layer
-    /// the panel was showing alone, so the same effect on the same selection
-    /// landed on three layers from the menu and on one from here.
-    testWidgets('Add effect commits to every selected layer', (tester) async {
+    /// Add lands on the shown layer only, the way the Effect menu and the
+    /// effects console do.
+    testWidgets('Add effect commits to the shown layer only', (tester) async {
       final p = freshProject();
       final comp = p.state.project!.newComposition(name: 'Scene');
       final first = comp.addAdjustmentLayer();
@@ -187,8 +185,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(first.getEffects(), hasLength(1));
-      expect(second.getEffects(), hasLength(1),
-          reason: 'the second selected layer must get the effect too');
+      expect(second.getEffects(), isEmpty,
+          reason: 'the second selected layer must not get the effect');
     });
 
     /// **And a stack nobody has selected still takes one.** The panel keeps the
@@ -310,7 +308,8 @@ void main() {
 
       // The floor: below the one card, where nothing is drawn.
       final ground = tester.getRect(find.byKey(const ValueKey('fx-ground')));
-      final card = tester.getRect(find.byKey(const ValueKey('fx-card-0')));
+      final card = tester.getRect(
+          find.byKey(ValueKey<String>('fx-card-${stack.single.id()}')));
       await tester.tapAt(Offset(ground.center.dx, card.bottom + 20));
       await tester.pumpAndSettle();
 
@@ -439,8 +438,7 @@ void main() {
         const Offset(60, 0),
       );
       await tester.pumpAndSettle();
-      expect(p.layer.getEffects().single.getValue(id: 'radius'),
-          isNot(before),
+      expect(p.layer.getEffects().single.getValue(id: 'radius'), isNot(before),
           reason: 'the drag moved the value off its default');
 
       await tester.tap(find.byKey(ValueKey<String>('fx-reset-$id-radius')));
@@ -450,16 +448,14 @@ void main() {
           reason: 'the row\'s own arrow writes the schema default back');
     });
 
-    testWidgets('under lantern the enable switch is a toggle',
-        (tester) async {
+    testWidgets('under lantern the enable switch is a toggle', (tester) async {
       final p = withLayer();
       p.layer.addEffect(name: 'blur');
       await mount(tester, p, shape: ThemeShape.lantern);
 
       final id = p.layer.getEffects().single.id();
       final hit = find.byKey(ValueKey<String>('fx-enabled-hit-$id'));
-      expect(
-          find.descendant(of: hit, matching: find.byType(HouseToggle)),
+      expect(find.descendant(of: hit, matching: find.byType(HouseToggle)),
           findsOneWidget);
       expect(find.descendant(of: hit, matching: find.byType(HouseCheckbox)),
           findsNothing);
@@ -1755,7 +1751,8 @@ void main() {
       /// playhead.
       testWidgets('the stopwatch is muted at rest and animated when keyed',
           (tester) async {
-        final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.studio);
+        final t =
+            LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.studio);
 
         final id = await mountBlur(tester, withLayer(), animated: false);
         expect(glyphIn(tester, 'kf-stopwatch-$id-radius').colour, t.textMuted);
@@ -1770,7 +1767,8 @@ void main() {
       });
 
       testWidgets('a keyed value rests animated in its well', (tester) async {
-        final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.studio);
+        final t =
+            LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.studio);
         final id = await mountBlur(tester, withLayer(), animated: true);
         final number = tester.widget<Text>(find.descendant(
           of: find.byKey(ValueKey<String>('fx-float-$id-radius')),
@@ -1955,7 +1953,8 @@ void main() {
       ));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(ValueKey<String>('fx-clip-${p.effect}-clip')));
+      await tester
+          .tap(find.byKey(ValueKey<String>('fx-clip-${p.effect}-clip')));
       await tester.pumpAndSettle();
       expect(find.text('shot.mov · 0'), findsOneWidget);
       expect(find.text('shot.mov · 40'), findsOneWidget);
@@ -1983,7 +1982,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Choose a layer first'), findsOneWidget);
 
-      await tester.tap(find.byKey(ValueKey<String>('fx-clip-${p.effect}-clip')));
+      await tester
+          .tap(find.byKey(ValueKey<String>('fx-clip-${p.effect}-clip')));
       await tester.pumpAndSettle();
       expect(find.textContaining('shot.mov'), findsNothing,
           reason: 'without a layer there are no clips to name');
@@ -2711,7 +2711,7 @@ void main() {
       /// Whether that card is drawing rows — which is what open means. By
       /// card rather than by label: three effects share parameter names.
       Finder rowsIn(int card) => find.descendant(
-            of: find.byKey(ValueKey<String>('fx-card-$card')),
+            of: find.byKey(ValueKey<String>('fx-card-${stack[card].id()}')),
             matching: find.byType(EffectParamRowFrb),
           );
       expect(rowsIn(0), findsWidgets, reason: 'each arrives open');

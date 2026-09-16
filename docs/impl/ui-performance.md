@@ -555,6 +555,27 @@ next frame, whatever else the click causes. The Effect controls panel keeps its
 listener — it genuinely has a new stack to show — asynchronously, off the lit-row
 frame.
 
+The effect pick joins it as well: `FxSelection` is published on
+`LumitUiState.pickedEffects` and carries the layer along with the instance ids,
+because an id on its own does not say whose stack it sits in, and `FxSection` follows
+that notifier through `FxPick` so a pick recolours the heading's fill without the card
+around it being rebuilt. The Viewer's own route into the property selection
+(`requestSelectProperty`, a dragged mask path asking for its row) publishes on the
+same road instead of calling `setState` on the panel. One pick is 150 widgets against
+433, one row request 439 against 1165 (`rebuild_budget_test`).
+
+**A delete joins it from the other side.** Every edit is a document revision, so both
+panels rebuild from the read model, and Effect controls handed the framework a freshly
+built card for every effect on the layer in order to lose one of them: 2258 widgets to
+take one card off a four-effect stack, and the figure grew with the stack. Each card now
+carries the reading it was built from (`_SameCard`) and is handed back unchanged while
+that reading holds, which `Element.updateChild` short-circuits - §4.3's trick, decided by
+what was read rather than by identity, because the model hands out fresh objects on every
+read. A card outlives the positions around it once it can be skipped, so the stack
+position a command needs is read at the gesture instead of held, and the reorder drag
+carries the effect's id in place of its index. One delete is 969 widgets against 2258
+(`rebuild_budget_test`).
+
 **Two things the click paid for that this section had not seen** (found by
 attributing the surviving frame with a stopwatch per builder, WP-2):
 

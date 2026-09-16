@@ -239,6 +239,24 @@ void main() {
             'step per edit:\n${calls.ranking()}');
   });
 
+  /// A switch cell on a locked track refuses quietly.
+  testWidgets('a locked track refuses its switch cells without throwing',
+      (tester) async {
+    final p = await mount(tester);
+    final layer = p.comp
+        .getLayers()
+        .singleWhere((l) => l.internallayerId.toString() == p.music);
+    layer.setSwitch(switch_: BridgeLayerSwitch.locked, on_: true);
+    p.ui.model.refresh();
+    await settleFrb(tester, minRounds: 3);
+
+    await tester.tap(find.byKey(ValueKey<String>('atl-audible-${p.music}')));
+    await settleFrb(tester, minRounds: 3);
+    expect(tester.takeException(), isNull);
+    expect(layer.getSwitches().audible, isTrue,
+        reason: 'the locked track kept its sound');
+  });
+
   /// The ruler is a write road like the switches and the clips, so it ends
   /// where they end: a work area dragged here is an edit made here, and the
   /// first edit made here is what marks the comp (§2).

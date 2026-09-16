@@ -6,7 +6,7 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `commit_markers_and_grid`
+// These functions are ignored because they are not marked as `pub`: `commit_markers_and_grid`, `detect_beats_reporting`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`
 
 /// The comp's confirmed beat grid (docs/09 §5): what the last

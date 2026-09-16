@@ -288,7 +288,6 @@ class FlowRowsFrb extends StatelessWidget {
           onChanged();
         },
         comp: comp,
-        playheadFrame: playheadFrame,
         onSeek: onSeek,
         rowKey: 'flow-input-rate',
         // This row only ever draws in the Effect controls panel, on its fixed

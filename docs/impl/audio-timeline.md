@@ -104,9 +104,11 @@ not used for a clip: the Project panel already calls its assets items.
   whole. The track's Precomp layer carries the track's name, label, span, start offset,
   volume, pan, switches and markers, so the Audio panel's fades, which are Volume keys, are
   heard at the same moments. The track's effect rack is **copied on to each clip layer**
-  with fresh instance ids: the mixer opens a rack on Footage and Sequence layers only, and
-  a rack on a Precomp layer is silent; a bus chain on a Precomp layer is the named upgrade
-  in TODO. Inner time is outer time less the Precomp layer's start offset and every
+  with fresh instance ids, and the track's own Precomp layer is left with none. A track's
+  rack runs per clip before the pack, because a Sequence layer's chain does, so per clip is
+  what keeps the sound the sound it was; the same rack on the Precomp layer is now a bus
+  over the whole track (09 §3.1), which is a different sound, and carrying both would run
+  it twice. Inner time is outer time less the Precomp layer's start offset and every
   carrier added is unity, so the sound is bit-identical. One undo puts everything back.
   There is no road back from a precomp to a mix.
 - **Overlap is a crossfade on a track and nothing else.** Two clips on an audio track may

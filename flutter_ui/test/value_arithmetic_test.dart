@@ -1,4 +1,4 @@
-// Arithmetic in a value well (Caddis A3).
+// Arithmetic in a value well.
 //
 // Half of what a person types into a size or a position is a sum they did in
 // their head first — half of this, that less the margin, twice the frame. The

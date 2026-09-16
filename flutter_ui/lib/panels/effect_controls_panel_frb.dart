@@ -40,7 +40,7 @@
 import 'dart:async';
 import 'dart:io' show File;
 
-import 'package:flutter/foundation.dart' show ValueListenable, mapEquals;
+import 'package:flutter/foundation.dart' show mapEquals;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
@@ -123,8 +123,17 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
 
   bool _isOpen(String path) => !_shut.contains(path);
   void _toggle(String path) => setState(() {
+        _folds += 1;
         if (!_shut.remove(path)) _shut.add(path);
       });
+
+  /// How many times a twirl has moved in this panel's life.
+  ///
+  /// A card is handed the fold state of its own parameter groups, so it has to
+  /// hear that the sets have changed to draw the change. Counted rather than
+  /// compared, because a twirl is one deliberate act and the panel is redrawn
+  /// for it whatever this says.
+  int _folds = 0;
 
   /// Twirl one effect — and, when it is one of the **picked** run, all of them
   /// together (item 6.3).
@@ -138,6 +147,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     if (!picked.contains(id)) return _toggle('fx-$id');
     final opening = _shut.contains('fx-$id');
     setState(() {
+      _folds += 1;
       for (final other in picked) {
         if (opening) {
           _shut.remove('fx-$other');
@@ -530,6 +540,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
       _groupOpen[path] ?? !collapsedByDefault;
 
   void _toggleGroup(String path, bool collapsedByDefault) => setState(() {
+        _folds += 1;
         _groupOpen[path] = !_isGroupOpen(path, collapsedByDefault);
       });
 
@@ -696,11 +707,8 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
       group: group.id,
       open: _isOpen('fx-${fx.id}'),
       onToggle: () => _toggleEffect(fx.id, ui.selectedEffects.value),
-      selected: false,
       driven: const {},
       stagedValue: _effects.stagedValue,
-      index: index,
-      count: group.effects.length,
       onStackChanged: ui.model.refresh,
       onWrite: (id, param, value) {
         _effects.write(layer, id, param, value);
@@ -771,24 +779,6 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     );
   }
 
-  /// Every layer an add from this panel should land on: the whole
-  /// selection when the layer these rows are for is part of it, and that layer
-  /// alone when it is not.
-  ///
-  /// The second case is the one worth naming. This panel deliberately keeps the
-  /// last stack up after a deselect, so the rows on screen are not always the
-  /// rows of a *selected* layer — and an add made against a stack nobody has
-  /// selected means the stack that is being looked at, not nothing.
-  ///
-  /// Read from the shell in the handler rather than in the build, the way the
-  /// Timeline's row menu reads its own targets.
-  List<LayerReference> _addTargets(LumitUiState ui, LayerReference shown) {
-    final picked = ui.selectedLayers.value;
-    return picked.any((l) => l.internallayerId == shown.internallayerId)
-        ? picked
-        : [shown];
-  }
-
   Widget _rows(
     BuildContext context,
     CompositionReference comp,
@@ -819,18 +809,19 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
       );
     }
     final info = entry.info;
+    // One reading of the comp's other layers for every card on the panel.
+    final layersRead = _layersRead(ui.model.layers);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _Header(
           layerName: info.name,
+          // An add lands on the layer these rows are for, and no other.
           onAdd: (name) {
-            for (final target in _addTargets(ui, layer)) {
-              try {
-                target.addEffect(name: name);
-              } catch (_) {}
-            }
+            try {
+              layer.addEffect(name: name);
+            } catch (_) {}
             ui.model.refresh();
           },
         ),
@@ -841,11 +832,9 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
           // with the Timeline.
           child: DragTarget<EffectDragData>(
             onAcceptWithDetails: (details) {
-              for (final target in _addTargets(ui, layer)) {
-                try {
-                  target.addEffect(name: details.data.name);
-                } catch (_) {}
-              }
+              try {
+                layer.addEffect(name: details.data.name);
+              } catch (_) {}
               ui.model.refresh();
             },
             builder: (context, candidate, _) => Container(
@@ -987,14 +976,16 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                       // within the group a reorder of the chain.
                       for (final index
                           in _stackIndices(info.effects, audio: false))
-                        _effectCard(context, ui, comp, layer, info, index),
+                        _effectCard(context, ui, comp, layer, info, index,
+                            layersRead: layersRead),
                       if (_stackIndices(info.effects, audio: true)
                           case final rack when rack.isNotEmpty) ...[
                         _groupHeading(
                             context, 'audio-group', l10n.workspaceAudio),
                         if (_isOpen('audio-group'))
                           for (final index in rack)
-                            _effectCard(context, ui, comp, layer, info, index),
+                            _effectCard(context, ui, comp, layer, info, index,
+                                layersRead: layersRead),
                       ],
                     ],
                     // Styles under the stack, because that is where they render
@@ -1006,7 +997,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                       if (_isOpen('styles-group'))
                         for (var i = 0; i < info.styles.length; i++)
                           _effectCard(context, ui, comp, layer, info, i,
-                              style: true),
+                              layersRead: layersRead, style: true),
                     ],
                   ],
                 ),
@@ -1170,205 +1161,290 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     LayerReference layer,
     BridgeLayerInfo info,
     int index, {
+    required List<Object?> layersRead,
     bool style = false,
   }) {
     final playhead = ui.playheadFrame.value;
     final fx = style ? info.styles[index] : info.effects[index];
-    return _WhenPicked(
-                          key: ValueKey<String>('fx-pick-${style ? 'style-' : ''}$index'),
-                          picked: ui.selectedEffects,
-                          id: fx.id,
-                          builder: (context, selected) => _EffectSection(
-                          key: ValueKey<String>('fx-card-${style ? 'style-' : ''}$index'),
-                          info: fx,
-                          graphName: _graphNameOf(context, fx),
-                          style: style,
-                          open: _isOpen('fx-${fx.id}'),
-                          onToggle: () =>
-                              _toggleEffect(fx.id, ui.selectedEffects.value),
-                          selected: selected && !style,
-                          driven: _driven,
-                          renaming: _renamingEffect == fx.id,
-                          onRenamed: (name) {
-                            // Stage the name on a fresh handle and commit the
-                            // list — one op, one undo step, the same shape
-                            // every stack edit has.
-                            final stack =
-                                style ? layer.getStyles() : layer.getEffects();
-                            for (final instance in stack) {
-                              if (instance.id() == fx.id) {
-                                instance.setCustomName(name: name);
-                                try {
-                                  layer.setEffects(effects: stack);
-                                } catch (_) {
-                                  // The stack changed under us; re-reading is
-                                  // the recovery.
-                                }
-                                break;
-                              }
-                            }
-                            setState(() => _renamingEffect = null);
-                            ui.model.refresh();
-                          },
-                          // Escape: close the editor, write nothing.
-                          onRenameCancelled: () =>
-                              setState(() => _renamingEffect = null),
-                          onStartRename: () =>
-                              setState(() => _renamingEffect = fx.id),
-                          onSelect: () {
-                            if (style) return;
-                            ui.pickEffect(
-                              layer,
-                              fx.id,
-                              order: [for (final e in info.effects) e.id],
-                            );
-                            // **Double-clicking a Custom shader's heading
-                            // enters its inner graph** — the
-                            // heading and the Graph panel's box are one
-                            // selection, so they are one door. The
-                            // first click still picks, exactly as it did.
-                            if (fx.name == 'custom_shader' &&
-                                _headingTaps
-                                    .putIfAbsent(fx.id, DoubleTap.new)
-                                    .tap()) {
-                              ui.enterShaderGraph(layer, fx.id,
-                                  effectName:
-                                      fx.customName ?? effectLabelOf(fx.name));
-                            }
-                          },
-                          stagedValue: _effects.stagedValue,
-                          trackCorrected: info.trackCorrected,
-                          index: index,
-                          count: style ? info.styles.length : info.effects.length,
-                          onStackChanged: ui.model.refresh,
-                          onWrite: (id, param, value) {
-                            _effects.write(layer, id, param, value);
-                            ui.model.refresh();
-                          },
-                          onWritePair: (id, values) {
-                            _effects.writeAll(layer, id, values);
-                            ui.model.refresh();
-                          },
-                          onLive: (id, param, value) => setState(() {
-                            _effects.live(comp, layer, id, param, value,
-                                frame: ui.playheadFrame.value,
-                                scale: ui.viewerScale);
-                          }),
-                          layer: layer,
-                          allLayers: ui.model.layers,
-                          comp: comp,
-                          playheadFrame: playhead,
-                          onSeek: (frame) => ui.playheadFrame.value = frame,
-                          isGroupOpen: _isGroupOpen,
-                          onToggleGroup: _toggleGroup,
-                          pressed: _actionPressed,
-                          themedGraphs: ui.workspace.themedEffectGraphs,
-                          curvePlotSize: ui.workspace.curvePlotSize,
-                          onCurvePlotSize: ui.workspace.setCurvePlotSize,
-                          onAction: (effect, param) {
-                            // The Custom shader's two buttons are the
-                            // frontend's own (docs/impl/custom-shader.md §1.1,
-                            // §3.2): one opens a native file dialogue, the
-                            // other the editor window, and neither is an event
-                            // the engine could answer. Every other Action row
-                            // goes back as one, which is what the kind is.
-                            if (fx.name == 'custom_shader') {
-                              if (param == 'load_from_file') {
-                                _loadShaderInto(layer, effect);
-                                return;
-                              }
-                              if (param == 'edit') {
-                                _editShaderOn(layer, effect);
-                                return;
-                              }
-                            }
-                            // The Node graph's Open graph row is the frontend's
-                            // own the same way: fronting a comp is not an event
-                            // the engine could answer.
-                            if (fx.name == 'node_graph' && param == 'open') {
-                              _openGraphOn(layer, effect);
-                              return;
-                            }
-                            try {
-                              fireEffectAction(
-                                  layer: layer,
-                                  effect: effect,
-                                  param: param,
-                                  frame: BigInt.from(playhead));
-                            } catch (_) {
-                              // Refused — another analysis is already running,
-                              // or the media cannot be read. The effect's own
-                              // status line says which; a thrown error here
-                              // would be a dialogue over a button press.
-                            }
-                            setState(() => _actionPressed += 1);
-                          },
-                        ));
+    final graphName = _graphNameOf(context, fx);
+    final open = _isOpen('fx-${fx.id}');
+    final renaming = _renamingEffect == fx.id;
+    // Every row this instance draws, which is also what says whether it lists
+    // the comp's layers.
+    final params = [...cachedListParameters(fx.name), ...fx.derivedParams];
+    return _SameCard(
+      key: ValueKey<String>('fx-card-${style ? 'style-' : ''}${fx.id}'),
+      // Everything the card draws from. Read [_SameCard] before adding to the
+      // card below: a fact that is not in here is one the card may not hold.
+      reading: [
+        fx.id,
+        fx.name,
+        fx.customName,
+        fx.enabled,
+        fx.audio,
+        fx.values,
+        fx.linkedPairs,
+        fx.badgeReason,
+        fx.badgeDetail,
+        fx.derivedParams,
+        fx.hiddenRows,
+        fx.nodeGraphComp,
+        info.trackCorrected,
+        graphName,
+        open,
+        renaming,
+        style,
+        playhead,
+        _actionPressed,
+        _folds,
+        _driven,
+        layer.internallayerId,
+        comp.internalid,
+        ui.workspace.themedEffectGraphs,
+        ui.workspace.curvePlotSize,
+        // The language every label on the card is in. It is a global rather
+        // than something inherited, so a card that kept its build would keep
+        // the words it was built with (l10n/strings.dart).
+        l10n.localeName,
+        // What a live drag is holding, which is not in the document yet.
+        [for (final p in params) _effects.stagedValue(fx.id, p.id)],
+        // A row that lists the comp's layers draws names from outside this
+        // card, so a card with one follows every re-read of the model.
+        if (params.any(_listsLayers)) layersRead,
+      ],
+      card: () => _EffectSection(
+        info: fx,
+        graphName: graphName,
+        style: style,
+        open: open,
+        onToggle: () => _toggleEffect(fx.id, ui.selectedEffects.value),
+        // The selection this heading follows, rather than an answer read here
+        // and handed down: a pick recolours the heading and rebuilds nothing
+        // above it. A style takes no part in the effect selection, so its
+        // heading only twirls.
+        pick: style
+            ? null
+            : FxPick(
+                selection: ui.pickedEffects,
+                layer: layer.internallayerId.toString(),
+                effect: fx.id,
+              ),
+        driven: _driven,
+        renaming: renaming,
+        onRenamed: (name) {
+          // Stage the name on a fresh handle and commit the list — one op,
+          // one undo step, the same shape every stack edit has.
+          final stack = style ? layer.getStyles() : layer.getEffects();
+          for (final instance in stack) {
+            if (instance.id() == fx.id) {
+              instance.setCustomName(name: name);
+              try {
+                layer.setEffects(effects: stack);
+              } catch (_) {
+                // The stack changed under us; re-reading is the recovery.
+              }
+              break;
+            }
+          }
+          setState(() => _renamingEffect = null);
+          ui.model.refresh();
+        },
+        // Escape: close the editor, write nothing.
+        onRenameCancelled: () => setState(() => _renamingEffect = null),
+        onStartRename: () => setState(() => _renamingEffect = fx.id),
+        onSelect: () {
+          if (style) return;
+          // The run a Shift-click reaches over is read at the click. A card is
+          // not rebuilt when a neighbour is removed, so an order held from the
+          // last build could name an effect that has gone.
+          final stack = ui.model.byId(layer.internallayerId)?.info.effects ??
+              info.effects;
+          ui.pickEffect(
+            layer,
+            fx.id,
+            order: [for (final e in stack) e.id],
+          );
+          // **Double-clicking a Custom shader's heading enters its inner
+          // graph** — the heading and the Graph panel's box are one
+          // selection, so they are one door. The first click still picks,
+          // exactly as it did.
+          if (fx.name == 'custom_shader' &&
+              _headingTaps.putIfAbsent(fx.id, DoubleTap.new).tap()) {
+            ui.enterShaderGraph(layer, fx.id,
+                effectName: fx.customName ?? effectLabelOf(fx.name));
+          }
+        },
+        stagedValue: _effects.stagedValue,
+        trackCorrected: info.trackCorrected,
+        onStackChanged: ui.model.refresh,
+        onWrite: (id, param, value) {
+          _effects.write(layer, id, param, value);
+          ui.model.refresh();
+        },
+        onWritePair: (id, values) {
+          _effects.writeAll(layer, id, values);
+          ui.model.refresh();
+        },
+        onLive: (id, param, value) => setState(() {
+          _effects.live(comp, layer, id, param, value,
+              frame: ui.playheadFrame.value, scale: ui.viewerScale);
+        }),
+        layer: layer,
+        // The list a layer-valued row picks from. A card that draws one is
+        // rebuilt whenever [_layersRead] moves, so the list it holds says the
+        // same as the comp does.
+        allLayers: ui.model.layers,
+        comp: comp,
+        playheadFrame: playhead,
+        onSeek: (frame) => ui.playheadFrame.value = frame,
+        isGroupOpen: _isGroupOpen,
+        onToggleGroup: _toggleGroup,
+        pressed: _actionPressed,
+        themedGraphs: ui.workspace.themedEffectGraphs,
+        curvePlotSize: ui.workspace.curvePlotSize,
+        onCurvePlotSize: ui.workspace.setCurvePlotSize,
+        onAction: (effect, param) {
+          // The Custom shader's two buttons are the frontend's own
+          // (docs/impl/custom-shader.md §1.1, §3.2): one opens a native file
+          // dialogue, the other the editor window, and neither is an event the
+          // engine could answer. Every other Action row goes back as one, which
+          // is what the kind is.
+          if (fx.name == 'custom_shader') {
+            if (param == 'load_from_file') {
+              _loadShaderInto(layer, effect);
+              return;
+            }
+            if (param == 'edit') {
+              _editShaderOn(layer, effect);
+              return;
+            }
+          }
+          // The Node graph's Open graph row is the frontend's own the same
+          // way: fronting a comp is not an event the engine could answer.
+          if (fx.name == 'node_graph' && param == 'open') {
+            _openGraphOn(layer, effect);
+            return;
+          }
+          try {
+            fireEffectAction(
+                layer: layer,
+                effect: effect,
+                param: param,
+                frame: BigInt.from(ui.playheadFrame.value));
+          } catch (_) {
+            // Refused — another analysis is already running, or the media
+            // cannot be read. The effect's own status line says which; a thrown
+            // error here would be a dialogue over a button press.
+          }
+          setState(() => _actionPressed += 1);
+        },
+      ),
+    );
   }
+
+  /// **What the panel's layer-valued rows can draw from the rest of the
+  /// comp**: the names a picker lists, and the masks and clips inside them.
+  ///
+  /// Read once per rebuild and **held while it reads the same**, so a card
+  /// compares one object instead of walking the comp. Every effect carries a
+  /// matte row, so without this every card would follow every edit made
+  /// anywhere in the comp — which is the whole of what [_SameCard] is for.
+  ///
+  /// Not in here: whether a layer has a picture, which only a bridge call
+  /// answers and which the picker asks for itself when it is opened.
+  List<Object?> _layersRead(List<BridgeLayerEntry> layers) {
+    final read = <Object?>[
+      for (final entry in layers) ...[
+        entry.layer.internallayerId,
+        entry.info.name,
+        for (final mask in entry.info.masks) ...[mask.id, mask.name],
+        for (final clip in entry.info.clips) ...[
+          clip.id,
+          clip.sourceName,
+          clip.startFrame,
+        ],
+      ],
+    ];
+    final held = _layersHeld;
+    if (held != null && _sameReading(held, read)) return held;
+    return _layersHeld = read;
+  }
+
+  List<Object?>? _layersHeld;
+
+  /// Does this row list the comp's **layers**? A Layer, a Mask path and a
+  /// Clip parameter all name something from outside the effect they sit on,
+  /// which is why a card holding one cannot be handed back unchanged when the
+  /// rest of the comp has moved.
+  static bool _listsLayers(BridgeParamInfo param) =>
+      param.kind is BridgeParamKind_Layer ||
+      param.kind is BridgeParamKind_MaskPath ||
+      param.kind is BridgeParamKind_Clip;
 }
 
-/// Whether *this* effect is one of the picked ones — the heading's own
-/// listener, in the same spirit as [_AtPlayhead].
+/// One effect's card and **the reading it was built from**, so a rebuild of
+/// the panel that says nothing new about this effect costs nothing.
 ///
-/// **The panel does not listen to the effect selection either.** It used to,
-/// at its root, so picking a heading rebuilt every card and every parameter row
-/// in the panel to light one word: measured at 306 widgets for a single click
-/// on a three-effect layer, growing with the stack. A heading is the only thing
-/// a pick changes, so a heading is what listens, and this rebuilds only when
-/// **its own** answer flips — a `ValueListenableBuilder` here would still redraw
-/// every card, because the list changes for all of them at once.
-class _WhenPicked extends StatefulWidget {
-  const _WhenPicked({
-    super.key,
-    required this.picked,
-    required this.id,
-    required this.builder,
-  });
+/// Every edit is a document revision, so the panel is rebuilt from the read
+/// model — and it used to hand the framework a freshly built card for every
+/// effect on the layer. Removing one effect from a four-effect stack redrew
+/// 2258 widgets, and the figure grew with the stack. The card here is built
+/// only when [reading] moves; the rest of the time the *same instance* is
+/// handed back, which `Element.updateChild` short-circuits — no rebuild, and
+/// no layout either. It is the trick the Timeline's blocks use for a scroll
+/// (docs/impl/ui-performance.md §4.3), decided by what was read rather than
+/// by identity, because the model hands out fresh objects on every read.
+///
+/// **What that asks of the card.** The card left on screen is the one built
+/// from the *old* reading, closures and all, so nothing inside it may hold a
+/// fact that is missing from [reading]. A position in the stack is the one
+/// that bites — it moves when a neighbour goes — so every command that needs
+/// one reads it at the gesture (`_EffectSection._place`) instead.
+class _SameCard extends StatefulWidget {
+  const _SameCard({super.key, required this.reading, required this.card});
 
-  final ValueListenable<List<UuidValue>> picked;
-  final UuidValue id;
-  final Widget Function(BuildContext context, bool selected) builder;
+  final List<Object?> reading;
+
+  /// The card itself, built on demand: a reading that has not moved never
+  /// calls this.
+  final Widget Function() card;
 
   @override
-  State<_WhenPicked> createState() => _WhenPickedState();
+  State<_SameCard> createState() => _SameCardState();
 }
 
-class _WhenPickedState extends State<_WhenPicked> {
-  late bool _selected = widget.picked.value.contains(widget.id);
+class _SameCardState extends State<_SameCard> {
+  Widget? _card;
 
   @override
-  void initState() {
-    super.initState();
-    widget.picked.addListener(_follow);
-  }
-
-  @override
-  void didUpdateWidget(covariant _WhenPicked old) {
+  void didUpdateWidget(covariant _SameCard old) {
     super.didUpdateWidget(old);
-    if (old.picked != widget.picked) {
-      old.picked.removeListener(_follow);
-      widget.picked.addListener(_follow);
+    if (!_sameReading(widget.reading, old.reading)) _card = null;
+  }
+
+  @override
+  Widget build(BuildContext context) => _card ??= widget.card();
+}
+
+/// Two readings, compared a list deep.
+///
+/// The read model builds a fresh list for every value it holds, so two
+/// readings of an effect nobody touched are equal in content and never the
+/// same object. Everything else is compared with `==` — the generated types
+/// carry it, and the panel's own state (the driven map) is replaced only when
+/// it differs, so identity is the honest answer there.
+bool _sameReading(List<Object?> a, List<Object?> b) {
+  if (a.length != b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    final one = a[i];
+    final other = b[i];
+    if (one is List && other is List) {
+      if (!_sameReading(one, other)) return false;
+    } else if (one != other) {
+      return false;
     }
-    // The card at this place in the stack may be a different effect now — an
-    // undo, a reorder, a delete — so the answer is taken afresh while the
-    // panel is rebuilding anyway.
-    _selected = widget.picked.value.contains(widget.id);
   }
-
-  @override
-  void dispose() {
-    widget.picked.removeListener(_follow);
-    super.dispose();
-  }
-
-  void _follow() {
-    final next = widget.picked.value.contains(widget.id);
-    if (next == _selected) return;
-    setState(() => _selected = next);
-  }
-
-  @override
-  Widget build(BuildContext context) => widget.builder(context, _selected);
+  return true;
 }
 
 /// Rebuild just this much of the panel when the playhead moves.
@@ -1533,7 +1609,11 @@ class _EffectSection extends StatelessWidget {
   /// Picked out of the stack, and the click that picks it. The same
   /// selection the Timeline's fold-out shows, so an effect chosen in one place
   /// is lit in the other — and Copy takes it from either.
-  final bool selected;
+  ///
+  /// The heading follows the selection itself ([FxPick]), so a pick recolours
+  /// it without this card being rebuilt. Null on the cards that take no part
+  /// in the selection: a layer style, a group's header effect.
+  final FxPick? pick;
   final VoidCallback onSelect;
 
   /// Which of this layer's parameters a driver is wired to, by
@@ -1545,8 +1625,6 @@ class _EffectSection extends StatelessWidget {
   /// The drag in flight's staged value for (effect, param), or null — overlaid
   /// on the model's value so the number under the pointer is the staged one.
   final BridgeEffectValue? Function(UuidValue effect, String param) stagedValue;
-  final int index;
-  final int count;
 
   /// This card is a **layer style** rather than a stack entry
   /// (docs/impl/layer-styles.md §6).
@@ -1637,12 +1715,10 @@ class _EffectSection extends StatelessWidget {
     this.graphName,
     required this.open,
     required this.onToggle,
-    required this.selected,
+    this.pick,
     required this.onSelect,
     this.driven = const {},
     required this.stagedValue,
-    required this.index,
-    required this.count,
     this.style = false,
     this.group,
     required this.layer,
@@ -1705,6 +1781,28 @@ class _EffectSection extends StatelessWidget {
         final g? => comp.getGroupEffects(group: g),
         null => style ? layer.getStyles() : layer.getEffects(),
       };
+
+  /// Where this instance sits in the list it is on, and how long that list
+  /// is — read now, never held.
+  ///
+  /// A card is not rebuilt when a neighbour is removed (see [_SameCard]), so a
+  /// position from the last build could name the wrong gap. Null for an
+  /// instance that has gone, which is a command with nothing to act on.
+  (int, int)? _place() {
+    final stack = _instances();
+    final at = stack.indexWhere((e) => e.id() == info.id);
+    return at < 0 ? null : (at, stack.length);
+  }
+
+  /// Whether an effect dragged from [from] lands **below** this heading, which
+  /// it does when it is travelling down the stack. Read as the pointer arrives
+  /// over this heading, for the same reason [_place] is.
+  bool _landsBelow(String from) {
+    final stack = _instances();
+    final it = stack.indexWhere((e) => '${e.id()}' == from);
+    final me = stack.indexWhere((e) => e.id() == info.id);
+    return it >= 0 && me >= 0 && it < me;
+  }
 
   /// Run [op] on each of them, in stack order.
   void _withHandle(BuildContext context, void Function(BridgeEffectInstance) op,
@@ -1812,6 +1910,7 @@ class _EffectSection extends StatelessWidget {
           onChanged: onStackChanged,
           pressed: pressed,
           trackCorrected: trackCorrected,
+          themedGraphs: themedGraphs,
         );
 
     return FxSection(
@@ -1820,7 +1919,7 @@ class _EffectSection extends StatelessWidget {
       title: info.customName ?? graphName ?? effectLabelOf(info.name),
       open: open,
       onToggle: onToggle,
-      selected: selected,
+      pick: pick,
       onSelect: onSelect,
       renaming: renaming,
       onRenamed: onRenamed,
@@ -1867,12 +1966,15 @@ class _EffectSection extends StatelessWidget {
       // owner asked for.
       // A style is not draggable: its place in the list is Photoshop's, not
       // the user's (docs/impl/layer-styles.md §2).
-      dragIndex: style ? null : index,
+      dragKey: style ? null : '$id',
+      landsBelow: _landsBelow,
       onDropped: (from) {
-        final stack = layer.getEffects();
-        if (from < 0 || from >= stack.length) return;
+        final stack = _instances();
+        final it = stack.indexWhere((e) => '${e.id()}' == from);
+        final to = stack.indexWhere((e) => e.id() == id);
+        if (it < 0 || to < 0) return;
         try {
-          layer.reorderEffect(effect: stack[from], newIndex: index);
+          layer.reorderEffect(effect: stack[it], newIndex: to);
         } catch (_) {
           // The stack changed under the drag; re-reading is the recovery.
         }
@@ -2180,6 +2282,14 @@ class _EffectSection extends StatelessWidget {
   }
 
   void _stackMenu(BuildContext context, Offset at) {
+    // Where the moves below start from, read at the press. An instance that
+    // has gone has no menu.
+    if (_place() case (final index, final count)) {
+      _showStackMenu(context, at, index, count);
+    }
+  }
+
+  void _showStackMenu(BuildContext context, Offset at, int index, int count) {
     final id = info.id;
     void move(int to) {
       // **The order several picked effects land in**. Each one is
@@ -2495,6 +2605,7 @@ Widget? customEffectDisplay(
   required VoidCallback onChanged,
   required int pressed,
   bool trackCorrected = false,
+  bool themedGraphs = false,
 }) =>
     switch (matchName) {
       'levels' => LevelsDisplayFrb(
@@ -2505,6 +2616,10 @@ Widget? customEffectDisplay(
           playheadFrame: playheadFrame,
           onWrite: onWrite,
           onLive: onLive,
+          // A Red button draws red, on the same setting the curve tabs read.
+          channelColours: themedGraphs
+              ? null
+              : [for (final c in levelsChannels) curveChannelColour(c)],
         ),
       // Camera track's display is a *status*, not a control: how far
       // an analysis running elsewhere has got, and what its solve came to. It

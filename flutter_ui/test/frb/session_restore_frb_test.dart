@@ -2,11 +2,13 @@
 // on the tab strip, the one that was fronted, the frame the playhead sat on and
 // the layer that was selected.
 //
-// None of that is in the `.lum` (docs/10 §1.1 keeps the document free of one
-// machine's habits) — it lives in the workspace store, keyed by the project's
-// path. So the round trip worth testing is store-out, store-in across a real
-// save and a real open, with the engine handing back a genuinely reloaded
-// document whose references are new objects carrying the old ids.
+// It lives in the workspace store, keyed by the project's path, and a copy of
+// it goes into the `.lum`'s `ui_state` at each save so a project handed to
+// someone else opens the way its author left it (docs/07 §1.5). The local
+// record is the one that answers when there is one. So the round trip worth
+// testing is store-out, store-in across a real save and a real open, with the
+// engine handing back a genuinely reloaded document whose references are new
+// objects carrying the old ids.
 //
 // `openProject` clears the engine's project registry, which is why this file
 // stands alone: every reference an earlier test held would die in it.
@@ -285,6 +287,48 @@ void main() {
         reason: 'the arrangement came out of the file');
     expect(otherUi.selectedComp?.internalid, scene.internalid,
         reason: 'and so did the comp that was open in it');
+  });
+
+  /// **Laying the panels out costs nothing.** Putting an arrangement back is
+  /// furniture, not work: it goes through no op, so a project just opened reads
+  /// as saved and closing it asks nobody to save anything. The blob is read on
+  /// the way in and written only on the way out, at the save that asked for it.
+  testWidgets('opening a project does not dirty it', (tester) async {
+    final dir = Directory.systemTemp.createTempSync('lumit-session-clean');
+    final path = '${dir.path}/clean.lum';
+
+    final author = Workspace();
+    final authorState = LumitState()..newProject();
+    final authorUi = LumitUiState(authorState, workspace: author);
+    final scene = authorState.project!.newComposition(name: 'Scene');
+    authorUi.setSelectedComp(scene);
+    authorUi.playheadFrame.value = 9;
+    author.dock.shares[0] = 0.23;
+
+    var saved = false;
+    saveProjectFrb(authorState, authorUi, picker: () async => path)
+        .then((_) => saved = true);
+    await settleFrb(tester, until: () => saved);
+    expect(authorState.project!.isDirty(), isFalse,
+        reason: 'recording the arrangement is not an edit');
+
+    // A machine that has never seen it, so the arrangement comes out of the
+    // file and every restore step runs.
+    final other = Workspace();
+    final otherState = LumitState()..newProject();
+    final otherUi = LumitUiState(otherState, workspace: other);
+    expect(other.sessionFor(path), isNull, reason: 'never opened here');
+
+    final adopted = otherState.project;
+    otherState.openProject(path);
+    await settleFrb(tester,
+        until: () => !identical(otherState.project, adopted));
+
+    expect(layoutOf(other), jsonEncode(author.dock.toJson()),
+        reason: 'the panels really were laid out from the file');
+    expect(otherUi.selectedComp?.internalid, scene.internalid);
+    expect(otherState.project!.isDirty(), isFalse,
+        reason: 'opening it changed nothing to save');
   });
 
   /// **A progress timer must not outlive the state that started it.**

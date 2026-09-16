@@ -627,6 +627,75 @@ mod tests {
         );
     }
 
+    /// **The rate of a run of stills is the item's own, and setting it is one
+    /// undo step** (docs/07 §3.1). Stills carry no rate, so an imported run
+    /// plays at 25 until somebody says otherwise; undo puts the old rate back
+    /// exactly, and an item that is one file has no rate to set.
+    #[test]
+    fn a_sequence_takes_a_new_rate_and_gives_the_old_one_back() {
+        let mut doc = Document::new();
+        let run = Uuid::now_v7();
+        let still = Uuid::now_v7();
+        let item = |id: Uuid, name: &str, sequence| {
+            crate::model::ProjectItem::Footage(crate::model::FootageItem {
+                id,
+                name: name.into(),
+                media: crate::model::MediaRef {
+                    relative_path: name.into(),
+                    absolute_path: format!("/tmp/{name}"),
+                    fingerprint: None,
+                    extra: serde_json::Map::new(),
+                },
+                colour_space: None,
+                sequence,
+                extra: serde_json::Map::new(),
+            })
+        };
+        doc.items.push(item(
+            run,
+            "frame[0001-0050].png",
+            Some(crate::model::SequenceRef::default()),
+        ));
+        doc.items.push(item(still, "shot.mov", None));
+        let store = DocumentStore::new(doc);
+
+        let rate = |d: &Document| match d.item(run) {
+            Some(crate::model::ProjectItem::Footage(f)) => f.sequence_fps(),
+            _ => None,
+        };
+        assert_eq!(rate(&store.snapshot()), Some((25, 1)), "the import default");
+
+        let ntsc = crate::time::FrameRate::new(24000, 1001).expect("a real rate");
+        store
+            .commit(Op::SetSequenceRate {
+                id: run,
+                frame_rate: ntsc,
+            })
+            .expect("a run takes a rate");
+        assert_eq!(
+            rate(&store.snapshot()),
+            Some((24000, 1001)),
+            "the exact pair, not a rounding of it"
+        );
+
+        store.undo().expect("one step");
+        assert_eq!(rate(&store.snapshot()), Some((25, 1)), "undo puts it back");
+        store.redo().expect("and forward again");
+        assert_eq!(rate(&store.snapshot()), Some((24000, 1001)));
+
+        // One file has no rate of its own to correct, and neither has nothing.
+        for id in [still, Uuid::now_v7()] {
+            let err = store.commit(Op::SetSequenceRate {
+                id,
+                frame_rate: ntsc,
+            });
+            assert!(
+                matches!(err, Err(crate::ops::OpError::UnknownItem)),
+                "{err:?}"
+            );
+        }
+    }
+
     /// **The arrangement is carried, not edited**. Moving a panel is not
     /// work done to the project, so recording it must not put a step on the undo
     /// stack — Ctrl-Z after a save would otherwise rearrange the window — and

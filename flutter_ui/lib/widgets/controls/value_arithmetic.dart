@@ -1,7 +1,7 @@
 // What a value well makes of what was typed into it: a number, or a sum.
 
 /// What a value well makes of what was typed into it: a number, or a sum
-/// (Caddis A3). `(1920-100)*0.5` commits 910.
+/// `(1920-100)*0.5` commits 910.
 ///
 /// **In plain terms.** Half of what a person types into a size or a position
 /// is arithmetic they did in their head first — half of this, that less the

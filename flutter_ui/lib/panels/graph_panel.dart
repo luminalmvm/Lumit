@@ -997,7 +997,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     // mean now the pick is a set.
     ui.selectAllRequest.addListener(_onSelectAllRequested);
     // **Ctrl+Space with this panel focused adds to the graph**. The
-    // shell's console applies to the selected layers; the same key over this
+    // shell's console applies to the selected layer; the same key over this
     // canvas opens the same popover wearing the canvas's own list. Chained the
     // way the Delete claim is, because there is one claim and the inner shader
     // graph wants it too when it is the panel's face.

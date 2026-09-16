@@ -25,7 +25,9 @@ class PaletteCommand {
   /// §12: an effect must never be mistaken for a command).
   final String category;
 
-  /// The keyboard shortcut, taught in the result row where one exists.
+  /// The keyboard shortcut, taught in the result row where one exists. The
+  /// caller reads it from the live keymap, so a rebound chord is the chord the
+  /// palette teaches.
   final String? shortcut;
   final VoidCallback run;
 
@@ -37,27 +39,26 @@ class PaletteCommand {
   });
 }
 
-/// The labels of recently run entries, most recent first — what "recently
-/// used entries rank first" (docs/07 §12) means in practice: for an empty
-/// query they lead outright, and for a typed one they break score ties.
-/// Session-lived on purpose; a palette that remembers across restarts is a
-/// settings file for another day.
-final List<String> _recent = [];
-
-void _noteRun(String label) {
-  _recent.remove(label);
-  _recent.insert(0, label);
-  if (_recent.length > 20) _recent.removeLast();
-}
-
+/// Open the palette over [context].
+///
+/// [recent] is the labels of recently run entries, newest first — what
+/// "recently used entries rank first" (docs/07 §12) means in practice: for an
+/// empty query they lead outright, and for a typed one they break score ties.
+/// [onRun] is told what was run. The list and the remembering are the
+/// workspace's, held with the rest of the per-user settings, so the palette
+/// keeps no state of its own and remembers across restarts.
 Future<void> showCommandPaletteFrb({
   required BuildContext context,
   required List<PaletteCommand> commands,
+  required List<String> recent,
+  required void Function(String label) onRun,
 }) =>
     showLumitModal<void>(
       context: context,
       builder: (close) => _Palette(
         commands: commands,
+        recent: recent,
+        onRun: onRun,
         onClose: () => close(null),
       ),
     );
@@ -85,8 +86,15 @@ int? paletteScore(String needle, String haystack) {
 
 class _Palette extends StatefulWidget {
   final List<PaletteCommand> commands;
+  final List<String> recent;
+  final void Function(String label) onRun;
   final VoidCallback onClose;
-  const _Palette({required this.commands, required this.onClose});
+  const _Palette({
+    required this.commands,
+    required this.recent,
+    required this.onRun,
+    required this.onClose,
+  });
 
   @override
   State<_Palette> createState() => _PaletteState();
@@ -130,8 +138,9 @@ class _PaletteState extends State<_Palette> {
     for (final command in widget.commands) {
       final score = paletteScore(needle, command.label);
       if (score == null) continue;
-      final recency = _recent.indexOf(command.label);
-      scored.add((score, recency < 0 ? _recent.length : recency, command));
+      final recency = widget.recent.indexOf(command.label);
+      scored
+          .add((score, recency < 0 ? widget.recent.length : recency, command));
     }
     // Relevance first, recency breaking ties — which, for the empty query
     // where every score is zero, is exactly "recently used rank first".
@@ -145,7 +154,7 @@ class _PaletteState extends State<_Palette> {
   void _runHighlighted(List<PaletteCommand> matches) {
     if (matches.isEmpty) return;
     final command = matches[_highlighted.clamp(0, matches.length - 1)];
-    _noteRun(command.label);
+    widget.onRun(command.label);
     widget.onClose();
     command.run();
   }
@@ -208,7 +217,7 @@ class _PaletteState extends State<_Palette> {
                             'palette-item-${matches[i].label}'),
                         selected: i == _highlighted,
                         onPressed: () {
-                          _noteRun(matches[i].label);
+                          widget.onRun(matches[i].label);
                           widget.onClose();
                           matches[i].run();
                         },

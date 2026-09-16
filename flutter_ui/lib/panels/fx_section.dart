@@ -21,7 +21,9 @@
 // in the floating-card chrome, so the two shapes differ in chrome and not in
 // layout.
 
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/widgets.dart';
+import 'package:uuid/uuid.dart';
 
 import '../icons/icons.dart';
 import '../theme/theme.dart';
@@ -235,6 +237,58 @@ Widget fxEnableSwitch({
 /// outlines), so a drop indicator is recognisably one.
 const double fxDropLineWidth = 2;
 
+/// What every surface that lights an effect draws its pick from: the layer the
+/// picked effects are on, and the instances themselves in stack order.
+///
+/// Published as one value, the way the Timeline publishes its row selection,
+/// because the layer is half the answer — an instance id on its own says
+/// nothing about whose stack it sits in. The gate used to be each panel's own:
+/// the Effect controls panel showed one layer and asked only about ids, and the
+/// Timeline pasted the layer into every path itself. It is asked here instead,
+/// once, for both of them.
+@immutable
+class FxSelection {
+  const FxSelection({this.layer, this.effects = const []});
+
+  /// The layer the picked effects are on, as its id in string form — what a
+  /// row is keyed by on both sides of the Timeline's table.
+  final String? layer;
+
+  /// The picked instances, in stack order.
+  final List<UuidValue> effects;
+
+  /// Whether [effect] on [layer] is one of the picked ones.
+  bool holds(String layer, UuidValue effect) =>
+      this.layer == layer && effects.contains(effect);
+}
+
+/// Which effect a section is, against the selection it should follow — what a
+/// heading needs to light itself.
+///
+/// The selection travels as a listenable rather than as a flag handed down the
+/// build, because a flag can only be changed by rebuilding the card that hands
+/// it down: picking an effect redrew the whole card, every parameter row in it
+/// and every button on them to recolour one word. Null on the sections that
+/// are not one of several (Source, Transform) and on the ones that take no
+/// part in the selection (a layer style, a group's header effect).
+@immutable
+class FxPick {
+  const FxPick({
+    required this.selection,
+    required this.layer,
+    required this.effect,
+  });
+
+  final ValueListenable<FxSelection> selection;
+
+  /// The layer this section's effect is on, as its id in string form.
+  final String layer;
+  final UuidValue effect;
+
+  /// Whether this section is picked as the selection now stands.
+  bool get picked => selection.value.holds(layer, effect);
+}
+
 /// One twirl-open section: Source, Transform, or one effect.
 class FxSection extends StatelessWidget {
   /// The section's own control, left of the name — an effect's enable switch.
@@ -263,21 +317,34 @@ class FxSection extends StatelessWidget {
 
   /// Drawn picked: the heading takes the selection fill, as a Timeline row
   /// does, so one effect chosen in either place reads the same in both.
-  final bool selected;
+  ///
+  /// The selection is followed here rather than read off a flag, so a pick
+  /// recolours the heading and rebuilds nothing above it.
+  final FxPick? pick;
 
   /// The twirl mark's own key — it is the only thing that folds a selectable
   /// section, so it is worth being able to point at.
   final Key? twirlKey;
 
-  /// This section's place in its list, when the heading may be **dragged** to
-  /// another place in it (docs/07 §6's drag-to-reorder). Null — Source,
-  /// Transform, anything that does not sit in a reorderable stack — leaves the
-  /// heading undraggable and accepting nothing.
-  final int? dragIndex;
+  /// Which thing in its list this section is, when the heading may be
+  /// **dragged** to another place in it (docs/07 §6's drag-to-reorder) — an
+  /// effect's own id. Null — Source, Transform, anything that does not sit in
+  /// a reorderable stack — leaves the heading undraggable and accepting
+  /// nothing.
+  ///
+  /// The thing rather than its position, because a card outlives the
+  /// positions around it: removing an effect above this one moves it down the
+  /// stack without the heading being rebuilt.
+  final String? dragKey;
 
-  /// A heading dropped on this one: the place it came from. Called only when
-  /// [dragIndex] is set and the two differ.
-  final void Function(int from)? onDropped;
+  /// A heading dropped on this one: the [dragKey] it came from. Called only
+  /// when [dragKey] is set and the two differ.
+  final void Function(String from)? onDropped;
+
+  /// Whether the effect dragged from [from] lands below this heading, which is
+  /// which edge the drop line is drawn on. Asked while the pointer is over
+  /// this heading, so the answer is read from the list as it is now.
+  final bool Function(String from)? landsBelow;
 
   /// The rows under the heading, drawn only while [open].
   final List<Widget> rows;
@@ -312,10 +379,11 @@ class FxSection extends StatelessWidget {
     this.trailing,
     this.onContextMenu,
     this.onSelect,
-    this.selected = false,
+    this.pick,
     this.twirlKey,
-    this.dragIndex,
+    this.dragKey,
     this.onDropped,
+    this.landsBelow,
     this.renaming = false,
     this.onRenamed,
     this.onRenameCancelled,
@@ -373,18 +441,18 @@ class FxSection extends StatelessWidget {
   /// stack, over it when it is travelling up — so it reads as the insertion
   /// point rather than as a highlight on the row.
   Widget _draggableHeading(LumitTheme t) {
-    final index = dragIndex;
-    if (index == null || onDropped == null) return _heading(t);
-    return DragTarget<int>(
-      onWillAcceptWithDetails: (d) => d.data != index,
+    final key = dragKey;
+    if (key == null || onDropped == null) return _heading(t);
+    return DragTarget<String>(
+      onWillAcceptWithDetails: (d) => d.data != key,
       onAcceptWithDetails: (d) => onDropped!(d.data),
       builder: (context, candidate, _) {
         // Which side the gap is on: a heading dragged from above this one
         // lands below it, and one from below lands above it.
         final from = candidate.isEmpty ? null : candidate.first;
         final line = BorderSide(color: t.accent, width: fxDropLineWidth);
-        return Draggable<int>(
-          data: index,
+        return Draggable<String>(
+          data: key,
           // The pointer carries the effect's name and nothing else: a
           // full-width card under the cursor hides the stack it is being
           // placed into.
@@ -406,8 +474,9 @@ class FxSection extends StatelessWidget {
                   // rather than being painted under it.
                   position: DecorationPosition.foreground,
                   decoration: BoxDecoration(
-                    border:
-                        from < index ? Border(bottom: line) : Border(top: line),
+                    border: landsBelow?.call(from) ?? false
+                        ? Border(bottom: line)
+                        : Border(top: line),
                   ),
                   child: _heading(t),
                 ),
@@ -416,88 +485,161 @@ class FxSection extends StatelessWidget {
     );
   }
 
-  Widget _heading(LumitTheme t) => GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        // **The name picks the effect; only the twirl folds it**. A
-        // click that both picked and collapsed took the parameters away at the
-        // moment you said which effect you meant, which is the opposite of what
-        // selecting one is for. A section that cannot be picked (Source,
-        // Transform) twirls on its name as it always did.
-        onTap: onSelect ?? onToggle,
-        onSecondaryTapUp: onContextMenu == null
-            ? null
-            : (details) => onContextMenu!(details.globalPosition),
-        child: Container(
-          height: fxHeadingHeight,
-          // Bypassed and unpicked, the heading has no fill at all: the dashed
-          // outline is left standing on the panel's own ground, so the effect
-          // reads as absent rather than as another live row.
-          color: selected
-              ? t.selectionFill
-              : enabled
-                  ? t.surface2
-                  : null,
-          padding: const EdgeInsets.fromLTRB(10, 2, 10, 2),
+  Widget _heading(LumitTheme t) {
+    // Built once, above the fill and passed through it: recolouring a heading
+    // that has just been picked must not rebuild what is inside it.
+    final content = Row(
+      children: [
+        SizedBox(
+          width: fxNameColumnWidth,
           child: Row(
             children: [
-              SizedBox(
-                width: fxNameColumnWidth,
-                child: Row(
-                  children: [
-                    // Enable switch, twirl, name — the order the redesign's
-                    // heading reads in: what the effect *is doing*
-                    // before what the heading does to the list under it. The
-                    // switch sits centred in the stopwatch column so the two
-                    // glyphs share an axis down the panel.
-                    if (leading case final widget?) ...[
-                      SizedBox(
-                        width: fxStopwatchColumn,
-                        child: Center(child: widget),
-                      ),
-                      const SizedBox(width: 4),
-                    ],
-                    GestureDetector(
-                      key: twirlKey,
-                      behavior: HitTestBehavior.opaque,
-                      onTap: onToggle,
-                      child: Padding(
-                        // Room to aim at, now that it is the only way in.
-                        padding: const EdgeInsets.symmetric(horizontal: 2),
-                        child: lumitIcon(
-                          open ? LumitIcon.twirlOpen : LumitIcon.twirlClosed,
-                          size: iconSize,
-                          color: open ? t.textPrimary : t.textMuted,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 2),
-                    Expanded(
-                      // **The section's name is a kicker** (§7.1): every
-                      // container label is, and a properties section header is
-                      // one. The capitals are the style rather than the string,
-                      // so a renamed effect keeps whatever the owner typed.
-                      child: renaming && onRenamed != null
-                          ? _RenameField(
-                              initial: title,
-                              onDone: onRenamed!,
-                              onCancel: onRenameCancelled ?? () {},
-                            )
-                          : Text(t.kickerCase(title),
-                              // Bypassed, the name drops to muted with the fill.
-                              style: enabled ? t.kickerOn : t.kicker,
-                              overflow: TextOverflow.ellipsis),
-                    ),
-                  ],
+              // Enable switch, twirl, name — the order the redesign's heading
+              // reads in: what the effect *is doing* before what the heading
+              // does to the list under it. The switch sits centred in the
+              // stopwatch column so the two glyphs share an axis down the
+              // panel.
+              if (leading case final widget?) ...[
+                SizedBox(
+                  width: fxStopwatchColumn,
+                  child: Center(child: widget),
+                ),
+                const SizedBox(width: 4),
+              ],
+              GestureDetector(
+                key: twirlKey,
+                behavior: HitTestBehavior.opaque,
+                onTap: onToggle,
+                child: Padding(
+                  // Room to aim at, now that it is the only way in.
+                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                  child: lumitIcon(
+                    open ? LumitIcon.twirlOpen : LumitIcon.twirlClosed,
+                    size: iconSize,
+                    color: open ? t.textPrimary : t.textMuted,
+                  ),
                 ),
               ),
+              const SizedBox(width: 2),
               Expanded(
-                child: Row(children: actions),
+                // **The section's name is a kicker** (§7.1): every container
+                // label is, and a properties section header is one. The
+                // capitals are the style rather than the string, so a renamed
+                // effect keeps whatever the owner typed.
+                child: renaming && onRenamed != null
+                    ? _RenameField(
+                        initial: title,
+                        onDone: onRenamed!,
+                        onCancel: onRenameCancelled ?? () {},
+                      )
+                    : Text(t.kickerCase(title),
+                        // Bypassed, the name drops to muted with the fill.
+                        style: enabled ? t.kickerOn : t.kicker,
+                        overflow: TextOverflow.ellipsis),
               ),
-              if (trailing case final widget?) widget,
             ],
           ),
         ),
+        Expanded(
+          child: Row(children: actions),
+        ),
+        if (trailing case final widget?) widget,
+      ],
+    );
+    final picked = pick;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      // **The name picks the effect; only the twirl folds it**. A
+      // click that both picked and collapsed took the parameters away at the
+      // moment you said which effect you meant, which is the opposite of what
+      // selecting one is for. A section that cannot be picked (Source,
+      // Transform) twirls on its name as it always did.
+      onTap: onSelect ?? onToggle,
+      onSecondaryTapUp: onContextMenu == null
+          ? null
+          : (details) => onContextMenu!(details.globalPosition),
+      child: picked == null
+          ? _headingBox(t, false, content)
+          : _FxPickedFill(
+              pick: picked,
+              box: (lit) => _headingBox(t, lit, content),
+            ),
+    );
+  }
+
+  /// The heading's box, around contents built above it: the fill, the fixed
+  /// height and the padding.
+  Widget _headingBox(LumitTheme t, bool lit, Widget content) => Container(
+        height: fxHeadingHeight,
+        // Bypassed and unpicked, the heading has no fill at all: the dashed
+        // outline is left standing on the panel's own ground, so the effect
+        // reads as absent rather than as another live row.
+        color: lit
+            ? t.selectionFill
+            : enabled
+                ? t.surface2
+                : null,
+        padding: const EdgeInsets.fromLTRB(10, 2, 10, 2),
+        child: content,
       );
+}
+
+/// The heading's fill, and the only thing a pick redraws.
+///
+/// It follows the selection itself and asks the shared gate its one question,
+/// so the answer for one heading cannot drag the others along: the selection is
+/// a single list for the whole stack, and a section that read it in its own
+/// build redrew every card in the panel whenever any card was picked. The
+/// heading's contents are built above this and handed through unchanged, so
+/// what a pick rebuilds is the box around them.
+class _FxPickedFill extends StatefulWidget {
+  const _FxPickedFill({required this.pick, required this.box});
+
+  final FxPick pick;
+
+  /// The heading, drawn lit or unlit.
+  final Widget Function(bool lit) box;
+
+  @override
+  State<_FxPickedFill> createState() => _FxPickedFillState();
+}
+
+class _FxPickedFillState extends State<_FxPickedFill> {
+  late bool _lit = widget.pick.picked;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.pick.selection.addListener(_follow);
+  }
+
+  @override
+  void didUpdateWidget(covariant _FxPickedFill old) {
+    super.didUpdateWidget(old);
+    if (old.pick.selection != widget.pick.selection) {
+      old.pick.selection.removeListener(_follow);
+      widget.pick.selection.addListener(_follow);
+    }
+    // The section at this place in the stack may be a different effect now —
+    // an undo, a reorder, a delete — so the answer is taken afresh while the
+    // panel is rebuilding anyway.
+    _lit = widget.pick.picked;
+  }
+
+  @override
+  void dispose() {
+    widget.pick.selection.removeListener(_follow);
+    super.dispose();
+  }
+
+  void _follow() {
+    final next = widget.pick.picked;
+    if (next == _lit) return;
+    setState(() => _lit = next);
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.box(_lit);
 }
 
 /// The heading's inline rename editor: opens with the current name
@@ -570,8 +712,7 @@ Widget fxTwoColumnRow({
               child: keyframeControls == null
                   ? null
                   : Align(
-                      alignment: Alignment.centerLeft,
-                      child: keyframeControls),
+                      alignment: Alignment.centerLeft, child: keyframeControls),
             ),
             const SizedBox(width: 4),
             SizedBox(width: fxLabelWidthFor(constraints.maxWidth), child: name),

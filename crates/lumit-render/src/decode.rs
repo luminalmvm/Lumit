@@ -1,9 +1,6 @@
-//! Latest-wins background frame decoding for the Viewer (slice 5), moved
-//! verbatim from app_state.rs.
+//! Frame decoding: the decode pool, its caches and the comp decode jobs.
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::mpsc::{channel, Receiver, Sender, TryRecvError};
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -246,92 +243,6 @@ fn weigh(layers: &[CompLayerPixels]) -> u64 {
                 .saturating_add(shutter)
         })
         .fold(0u64, u64::saturating_add)
-}
-
-pub enum PreviewResult {
-    Footage(FramePixels),
-    Comp(CompFrame),
-}
-
-pub struct PreviewEngine {
-    tx: Sender<Message>,
-    pub results: Receiver<Result<PreviewResult, String>>,
-    generation: Arc<AtomicU64>,
-}
-
-enum Message {
-    Footage(Request),
-    Comp {
-        generation: u64,
-        comp: Uuid,
-        frame: usize,
-        jobs: Vec<CompJob>,
-        media_epoch: u64,
-    },
-    /// Resize the decoded-frame cache (its slice of the one RAM budget,
-    /// Settings → Performance). Applied immediately, never latest-wins-dropped.
-    SetCacheBudget(usize),
-}
-
-impl Default for PreviewEngine {
-    fn default() -> Self {
-        let (tx, rx) = channel::<Message>();
-        let (result_tx, results) = channel();
-        let generation = Arc::new(AtomicU64::new(0));
-        let live = generation.clone();
-        std::thread::spawn(move || {
-            let mut pool = DecodePool::new();
-            loop {
-                // Block for one request, then drain to the newest (latest
-                // wins). Budget messages apply on the spot — they must never
-                // be dropped by the latest-wins replacement.
-                let mut req = loop {
-                    match rx.recv() {
-                        Ok(Message::SetCacheBudget(bytes)) => pool.set_budget(bytes),
-                        Ok(r) => break r,
-                        Err(_) => return,
-                    }
-                };
-                loop {
-                    match rx.try_recv() {
-                        Ok(Message::SetCacheBudget(bytes)) => pool.set_budget(bytes),
-                        Ok(newer) => req = newer,
-                        Err(TryRecvError::Empty) => break,
-                        Err(TryRecvError::Disconnected) => return,
-                    }
-                }
-                let generation = match &req {
-                    Message::Footage(r) => r.generation,
-                    Message::Comp { generation, .. } => *generation,
-                    Message::SetCacheBudget(_) => continue, // handled above
-                };
-                if generation != live.load(Ordering::Relaxed) {
-                    continue; // superseded while queued
-                }
-                let result = match req {
-                    Message::Footage(r) => pool.decode_footage(&r).map(PreviewResult::Footage),
-                    Message::Comp {
-                        comp,
-                        frame,
-                        jobs,
-                        media_epoch,
-                        ..
-                    } => pool
-                        // Nobody watches a background decode's progress: the
-                        // bar belongs to the frame the Viewer is waiting for.
-                        .decode_comp(comp, frame, &jobs, media_epoch, &|_| {})
-                        .map(PreviewResult::Comp),
-                    Message::SetCacheBudget(_) => continue, // handled above
-                };
-                let _ = result_tx.send(result);
-            }
-        });
-        Self {
-            tx,
-            results,
-            generation,
-        }
-    }
 }
 
 /// What names one decoded source frame: the item, the source frame, the decode
@@ -761,70 +672,6 @@ fn decode(
         frame,
         item: req.item,
     })
-}
-
-impl PreviewEngine {
-    /// Ask for a frame; any not-yet-decoded older request is abandoned.
-    pub fn request(
-        &self,
-        item: Uuid,
-        source: lumit_media::MediaSource,
-        frame: usize,
-        target_width: Option<u32>,
-    ) {
-        self.request_inner(item, source, frame, target_width, None);
-    }
-
-    /// As [`Self::request`], but answers with the missing-footage slate at
-    /// `size` rather than decoding (docs/07 §3.3).
-    pub fn request_slate(&self, item: Uuid, size: (u32, u32)) {
-        self.request_inner(
-            item,
-            lumit_media::MediaSource::default(),
-            0,
-            None,
-            Some(size),
-        );
-    }
-
-    fn request_inner(
-        &self,
-        item: Uuid,
-        source: lumit_media::MediaSource,
-        frame: usize,
-        target_width: Option<u32>,
-        slate: Option<(u32, u32)>,
-    ) {
-        let generation = self.generation.fetch_add(1, Ordering::Relaxed) + 1;
-        let _ = self.tx.send(Message::Footage(Request {
-            generation,
-            item,
-            source,
-            frame,
-            target_width,
-            slate,
-            // The Viewer shows a footage item as itself; the effect that
-            // extracts channels lives on a layer, which is the comp path.
-            channels: None,
-        }));
-    }
-
-    /// Ask for every layer frame of a comp at one comp frame (latest wins).
-    /// Resize the decoded-frame cache (its slice of the RAM budget).
-    pub fn set_cache_budget(&self, bytes: usize) {
-        let _ = self.tx.send(Message::SetCacheBudget(bytes));
-    }
-
-    pub fn request_comp(&self, comp: Uuid, frame: usize, jobs: Vec<CompJob>, media_epoch: u64) {
-        let generation = self.generation.fetch_add(1, Ordering::Relaxed) + 1;
-        let _ = self.tx.send(Message::Comp {
-            generation,
-            comp,
-            frame,
-            media_epoch,
-            jobs,
-        });
-    }
 }
 
 /// Measure the flow between two source frames, or return the pair already

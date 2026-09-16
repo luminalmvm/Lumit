@@ -80,7 +80,8 @@ A **workspace** is a named, saveable arrangement of panels (glossary §7).
   reordered, deleted, exported, and imported.
 - Workspaces are stored per user in the configuration directory as individual
   human-readable files, so they can be shared (the montage scene shares everything).
-  They are never stored in the project.
+  A *named* workspace is never stored in the project; the bare arrangement in force when a
+  project was saved is, and §1.5 says which of the two answers on open.
 - A workspace switcher MUST be visible in the main window chrome (a compact strip of
   workspace names) and in the Window menu; `Alt+Shift+1…9` switches by position.
 - Switching workspaces MUST NOT close, reload, or re-evaluate anything — it only
@@ -112,8 +113,25 @@ composition, and the first view bound to each takes that composition's, so no pr
 looking different from how it was left.
 
 Opening a project MUST restore the project-side state above regardless of which workspace is
-active. A project opened on another machine therefore looks like the same *edit* even though
-the panel arrangement is the local user's own.
+active.
+
+**One amendment: the arrangement travels with the file too.** A project stores the
+arrangement it was last saved with, in the opaque `ui_state` blob
+([10-FILE-FORMAT.md](10-FILE-FORMAT.md) §1.1), and every save updates it. Of the arrangement,
+only panel names, tab indices and fractional shares go in there. No paths, no window
+placements, no pixel sizes, nothing that would read differently on another machine.
+Recording an arrangement is not an edit: it never reaches an op, Ctrl+Z never rearranges
+the window, and a project just opened reads as saved.
+
+**When the two accounts disagree, this machine's wins.** The workspace store keeps its own
+copy per project path, and that copy is the more recent account of what *this* user was
+doing, so it answers on every reopen. The file's copy answers only when there is no local
+one, which is the first time this machine sees the project. Whatever the user drags after
+that is written to their own workspace as it always was, so their preference survives
+opening a project that came with an arrangement of its own.
+
+A project opened on another machine therefore looks like the same *edit*, and on a machine
+that has never seen it, like the same arrangement too.
 
 ### 1.6 Shipped workspace presets
 
@@ -1242,8 +1260,9 @@ numbered ones imports the whole run — named for its span, `frame[0001-0050].pn
 says both that it is a run and where it stops. Picking more of the same run (which is what
 selecting a whole folder does) adds nothing further: the item that is already there is the
 answer. A numbered still with no numbered neighbours stays a single still, and a folder of
-numbered `.mp4`s stays a folder of clips. **Shipped**, apart from the rate control: a
-sequence plays at 25 until §3.2's dialogue exists to change it.
+numbered `.mp4`s stays a folder of clips. The rate the run plays at is the item's own and
+starts at 25; it is corrected from the **Frame rate** field on the item's context menu,
+beside Relink, which writes the exact pair and is one undo step. **Shipped.**
 
 **A node graph is a composition row** ([impl/node-graph-comp.md](impl/node-graph-comp.md)),
 drawn with the nodes glyph and the type word "node graph". **New node graph** is offered on
@@ -1268,6 +1287,8 @@ touching the file:
   carry no rate of their own, so the item's rate is the only rate there is. It defaults to 25
   and is where an imported sequence's speed gets corrected. This is the one part of a
   sequence the project stores; the run's start and length are re-read from the folder.
+  Until this dialogue exists as drawn, the rate is carried by a **Frame rate** field on the
+  item's context menu (§3.1), and that field is replaced when the dialogue lands.
 - **Fields/pulldown**: deliberately out of scope for v1 (gaming footage is progressive);
   the dialogue reserves space for it.
 
@@ -2013,7 +2034,7 @@ two, and `Shift+=`.
 - Layer drag moves in time; vertical drag reorders the stack. `[`/`]` move the selected
   layer's in/out to the playhead; `Alt+[`/`Alt+]` trim in/out at the playhead.
 
-  **The two pairs differ in what happens to the animation** (A8 — the Caddis study's slide
+  **The two pairs differ in what happens to the animation** (A8, slide
   and trim as two gestures). A **move** carries the layer's content with the bar, and a
   keyframe's time is the layer's own: it reaches the composition's clock through the start
   offset, which travels with a move — so `[` and `]` slide every keyframe on the
@@ -2510,7 +2531,9 @@ Shows the **effect stack** of the selected layer (tab per recently viewed layer,
   **Effects with their own display** — Levels' histogram — draw a widget **above**
   their rows, through `customEffectDisplay` in `effect_controls_panel_frb.dart`. Levels shows
   the frame's histogram with its input black, gamma and white handles over it and the output
-  range as a bar beneath, each handle dragging the Master parameter it marks. It is
+  range as a bar beneath, each handle dragging the parameter it marks on the channel
+  chosen by the **button column beside the plot** — the same column Curves puts beside its
+  graph, over Levels' four channel groups (Master, Red, Green, Blue). It is
   presentation: every number still has its own row underneath, the parameters and their ids
   are untouched, and the picture comes from the trace the Scopes panel already reads (§8),
   asked for once per displayed frame and only while the row is on screen.
@@ -2665,7 +2688,7 @@ them, and apply to the plain text fields too.
   focuses search when the panel has focus. **A live search overrides every fold** — matches
   show wherever they sit, because a search that hides what it found is a trap — and clearing
   the field puts the folds back as they were.
-- Apply by: double-click (applies to selected layers), drag onto a layer row in the
+- Apply by: double-click (applies to the primary selected layer), drag onto a layer row in the
   Timeline, or drag onto the Viewer (applies to the topmost hit layer, which highlights
   before release).
   - **v1**: the drag-onto-Timeline-row path ships first, scoped to footage and
@@ -2808,7 +2831,7 @@ The v1 sync toolkit; the Composer workspace is future work specified in
   detection **range** (whole layer or work area), and minimum beat spacing; *Generate*
   writes beat markers to the comp's markers ribbon; *Clear beat markers* removes only
   generated ones. Generated markers are ordinary markers thereafter — movable, deletable,
-  snap targets everywhere (§4.5, §5.3). Manual beat tapping: pressing `8` during playback
+  snap targets everywhere (§4.5, §5.3). Manual beat tapping: pressing `/` during playback
   drops a beat marker at the playhead.
 - **Volume keyframes**: each audio-capable layer has a Volume property (dB) with normal
   keyframe/graph-editor behaviour; the Audio panel's Selected layer section shows the
@@ -2882,7 +2905,7 @@ Export window. Export never blocks editing; the queue runs in the background.
 `Ctrl+Shift+P` opens the command palette from anywhere.
 
 - Fuzzy search over: **commands** (every menu item and every remappable action, with its
-  current shortcut displayed), **effects** (enter applies to the selected layers),
+  current shortcut displayed), **effects** (enter applies to the primary selected layer),
   **comps** (enter opens in the Viewer/Timeline), and **panels** (enter opens/focuses).
 - Arrow keys navigate, `Enter` executes, `Esc` closes; the palette MUST be fully
   keyboard-operable and MUST show category badges so an effect is never mistaken for a
@@ -2894,9 +2917,12 @@ Export window. Export never blocks editing; the queue runs in the background.
 **Shipped (v1):** the palette exists — Ctrl/Cmd+Shift+P or Window → Command palette…,
 fuzzy search (subsequence; a label match outranks a keyword-only one), arrow keys navigate,
 Enter/click runs, Esc closes, drawn as a top-anchored modal. v1 covers the
-**commands** category (save, undo/redo, new composition, add layers, reset workspace, open
-Settings, colour scheme and shape switches, export). The effects/comps/panels categories,
-recent-first ranking, category badges and taught shortcuts fill in later.
+**commands** category (new project, save, save as, import, new composition, new node graph,
+undo/redo, export, magnification, preview resolution, Settings and Project settings), and
+the effects, comps and panels categories with their badges. Recent-first ranking is in: the
+last twenty entries run are kept in the workspace file beside the rest of the per-user
+settings, so the order survives a restart. A row teaches whatever chord the keymap holds
+for its action, so a rebound shortcut is taught rebound.
 
 ## 12.1 Composition hierarchy
 

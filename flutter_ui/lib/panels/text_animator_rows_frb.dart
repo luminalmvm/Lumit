@@ -304,7 +304,6 @@ class TextAnimatorRowsFrb extends StatelessWidget {
         scalars: scalars,
         onWrite: write,
         comp: comp,
-        playheadFrame: at,
         onSeek: onSeek,
         rowKey: keyName,
         // These rows only ever draw in the Effect controls panel, on its fixed

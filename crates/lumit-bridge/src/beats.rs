@@ -73,10 +73,24 @@ pub(crate) struct Detected {
 /// §1: mono/stereo f32 at 48 kHz).
 const RATE: u32 = 48_000;
 
+/// How much of a detection the mixdown is. It decodes every audible source,
+/// which is where the seconds go (docs/impl/beat-detection.md §4); the FFTs
+/// over the mixed samples are the rest. The marking at the end is the caller's
+/// and closes the bar at one.
+const MIX_SHARE: f64 = 0.85;
+
 /// How many analyses may be waiting for the worker. Past this the caller does
 /// its own rather than queueing without bound (docs/14 §5) — the work still
 /// happens, it simply happens where it was asked for.
 const MAX_QUEUED: usize = 8;
+
+/// What the worker sends back: how far it has got, then the answer. Progress
+/// goes over the same channel as the result so the sink stays on the calling
+/// thread, which is the only thread allowed to talk to Dart.
+enum Step {
+    Progress(f64),
+    Done(Result<Detected, BridgeError>),
+}
 
 /// What the worker is asked to do, and where to send the answer.
 struct Job {
@@ -85,7 +99,7 @@ struct Job {
     duration_seconds: f64,
     options: BridgeBeatOptions,
     generation: u64,
-    reply: Sender<Result<Detected, BridgeError>>,
+    reply: Sender<Step>,
 }
 
 /// The generation queued work belongs to. [`clear`] bumps it and the worker
@@ -121,7 +135,16 @@ fn jobs() -> Option<&'static Sender<Job>> {
 fn run(rx: &Receiver<Job>) {
     while let Ok(job) = rx.recv() {
         let answer = if job.generation == generation().load(Ordering::Relaxed) {
-            analyse(&job.document, job.comp, job.duration_seconds, &job.options)
+            let reporter = job.reply.clone();
+            analyse(
+                &job.document,
+                job.comp,
+                job.duration_seconds,
+                &job.options,
+                &mut |fraction| {
+                    let _ = reporter.send(Step::Progress(fraction));
+                },
+            )
         } else {
             // The project this was asked for has closed. Nothing is analysed,
             // and the caller — if one is still waiting — is told why.
@@ -136,7 +159,7 @@ fn run(rx: &Receiver<Job>) {
         }
         // A caller that has gone away drops the receiver; that is not a
         // failure, it is the answer being no longer wanted.
-        let _ = job.reply.send(answer);
+        let _ = job.reply.send(Step::Done(answer));
     }
 }
 
@@ -152,6 +175,7 @@ fn analyse(
     comp: Uuid,
     duration_seconds: f64,
     options: &BridgeBeatOptions,
+    on_progress: &mut dyn FnMut(f64),
 ) -> Result<Detected, BridgeError> {
     let composition = document.comp(comp).ok_or(BridgeError::NoAudio)?;
     let mut builder = lumit_render::headless::AudioJobsBuilder::new();
@@ -173,7 +197,13 @@ fn analyse(
         return Err(BridgeError::NoAudio);
     }
 
-    let samples = lumit_render::export::mixdown(&jobs, RATE, duration_seconds);
+    // The mixdown, counting the sources off: the engine decides the fraction,
+    // and one source decoded out of however many is what it can honestly see.
+    let sources = jobs.len() as f64;
+    let samples =
+        lumit_render::export::mixdown_counting(&jobs, RATE, duration_seconds, 1.0, &mut |done| {
+            on_progress(MIX_SHARE * done as f64 / sources);
+        });
     let delta =
         lumit_audio::beat::delta_from_sensitivity(options.sensitivity_percent.clamp(0, 100) as u8);
     let analysis = lumit_audio::beat::analyse_stereo(&samples, RATE, delta);
@@ -251,10 +281,11 @@ pub(crate) fn detect(
     comp: Uuid,
     duration_seconds: f64,
     options: BridgeBeatOptions,
+    on_progress: &mut dyn FnMut(f64),
 ) -> Result<Detected, BridgeError> {
     let queued = {
         let Ok(mut held) = depth().lock() else {
-            return analyse(&document, comp, duration_seconds, &options);
+            return analyse(&document, comp, duration_seconds, &options, on_progress);
         };
         if *held >= MAX_QUEUED {
             None
@@ -264,7 +295,7 @@ pub(crate) fn detect(
         }
     };
     if queued.is_none() {
-        return analyse(&document, comp, duration_seconds, &options);
+        return analyse(&document, comp, duration_seconds, &options, on_progress);
     }
 
     let (reply, answer) = channel();
@@ -285,14 +316,18 @@ pub(crate) fn detect(
         if let Ok(mut held) = depth().lock() {
             *held = held.saturating_sub(1);
         }
-        return analyse(&document, comp, duration_seconds, &options);
+        return analyse(&document, comp, duration_seconds, &options, on_progress);
     }
 
+    // The worker's commentary, forwarded as it arrives, until the answer comes.
     // A worker that died mid-job drops the sender; the caller then does the
     // work itself rather than reporting a failure it could still avoid.
-    match answer.recv() {
-        Ok(result) => result,
-        Err(_) => analyse(&document, comp, duration_seconds, &options),
+    loop {
+        match answer.recv() {
+            Ok(Step::Progress(fraction)) => on_progress(fraction),
+            Ok(Step::Done(result)) => return result,
+            Err(_) => return analyse(&document, comp, duration_seconds, &options, on_progress),
+        }
     }
 }
 
@@ -329,7 +364,13 @@ mod tests {
     fn a_silent_comp_is_answered_by_the_worker() {
         let _serial = serially();
         let document = Arc::new(lumit_core::Document::new());
-        let answer = detect(document, Uuid::now_v7(), 1.0, BridgeBeatOptions::standard());
+        let answer = detect(
+            document,
+            Uuid::now_v7(),
+            1.0,
+            BridgeBeatOptions::standard(),
+            &mut |_| {},
+        );
         assert!(
             matches!(answer, Err(BridgeError::NoAudio)),
             "a comp with nothing to hear has no beats to find"
@@ -350,8 +391,15 @@ mod tests {
             comp,
             1.0,
             BridgeBeatOptions::standard(),
+            &mut |_| {},
         );
-        let second = detect(document, comp, 1.0, BridgeBeatOptions::standard());
+        let second = detect(
+            document,
+            comp,
+            1.0,
+            BridgeBeatOptions::standard(),
+            &mut |_| {},
+        );
         assert_eq!(
             first.is_ok(),
             second.is_ok(),
@@ -375,8 +423,15 @@ mod tests {
             comp,
             1.0,
             BridgeBeatOptions::standard(),
+            &mut |_| {},
         );
-        let inline = analyse(&document, comp, 1.0, &BridgeBeatOptions::standard());
+        let inline = analyse(
+            &document,
+            comp,
+            1.0,
+            &BridgeBeatOptions::standard(),
+            &mut |_| {},
+        );
         assert_eq!(through_worker.is_ok(), inline.is_ok());
         assert_eq!(
             format!("{through_worker:?}"),
@@ -411,7 +466,7 @@ mod tests {
         assert!(tx.send(job).is_ok());
         assert!(matches!(
             answer.recv(),
-            Ok(Err(BridgeError::InvalidProject))
+            Ok(Step::Done(Err(BridgeError::InvalidProject)))
         ));
         assert_eq!(queue_depth(), 0);
     }

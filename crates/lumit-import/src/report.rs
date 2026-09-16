@@ -191,6 +191,9 @@ pub enum Reason {
     /// the one trio, and two Euler triples do not add, so the rotations are
     /// what arrives and the orientation is named here.
     OrientationNotCarried,
+    /// A 3D layer with Material Options' Casts Shadows on. Lumit's lights cast
+    /// no shadows, so the layer imports without them.
+    CastsShadowsNotCarried,
 
     // --- properties and keyframes ---
     /// The property is spatial in AE (a motion path with tangents); Lumit
@@ -420,6 +423,11 @@ impl std::fmt::Display for Reason {
                 f,
                 "the layer turns by orientation as well as by rotation — the rotation is what \
                  arrives, and the orientation is not carried"
+            ),
+            Self::CastsShadowsNotCarried => write!(
+                f,
+                "the layer casts shadows, and Lumit's lights cast none, so it imported without \
+                 them"
             ),
             Self::SpatialTangentsFlattened => write!(
                 f,

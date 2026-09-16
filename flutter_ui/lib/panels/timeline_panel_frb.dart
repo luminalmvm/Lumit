@@ -1292,14 +1292,16 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     if (_selectedProperties.length == 1 && _selectedProperties.first == path) {
       return;
     }
-    setState(() {
-      _selectedProperties
-        ..clear()
-        ..add(path);
-      _graphKeySelection.clear();
-      _highlighted = layerIdOfPath(path) ?? _highlighted;
-    });
+    _selectedProperties
+      ..clear()
+      ..add(path);
+    _graphKeySelection.clear();
+    _highlighted = layerIdOfPath(path) ?? _highlighted;
     _publishPropertySelection();
+    // Published, not `setState`, for the same reason [_selectOnEdit] is: a row
+    // arriving lit is two rows' shading, not a new panel.
+    _publishRowSelection();
+    if (_graph) setState(() {});
   }
 
   void _publishEffectSelection() {
@@ -2141,7 +2143,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
 
   /// What `Delete` acts on in this panel, finest selection first.
   ///
-  /// **Keyframes before masks before layers.** The shell asks this before it
+  /// **Keyframes before masks and effects before layers.** The shell asks this before it
   /// deletes anything, so a rung that answers `true` is a rung that has already
   /// done the work — and each rung is a selection strictly *inside* the one
   /// below it, which is what makes the order the only sane one: picking a
@@ -2157,7 +2159,42 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     }
     return (_graph && _graphKeySelection.isNotEmpty && _deleteGraphKeys()) ||
         (!_graph && _laneKeySelection.isNotEmpty && _deleteSelectedKeys()) ||
-        _deleteSelectedMasks();
+        _deleteSelectedMasks() ||
+        _deleteSelectedEffects();
+  }
+
+  /// Delete every picked effect row, returning whether there was one.
+  bool _deleteSelectedEffects() {
+    if (!mounted) return false;
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    final wanted = {
+      for (final path in _selectedProperties)
+        if (effectIdOfPath(path) != null) path
+    };
+    if (wanted.isEmpty) return false;
+    var deleted = false;
+    for (final entry in ui.model.layers) {
+      final owner = entry.layer.internallayerId.toString();
+      if (!entry.info.effects
+          .any((e) => wanted.contains(effectPath(owner, '${e.id}')))) {
+        continue;
+      }
+      try {
+        for (final instance in entry.layer.getEffects()) {
+          if (wanted.contains(effectPath(owner, '${instance.id()}'))) {
+            entry.layer.removeEffect(effect: instance);
+            deleted = true;
+          }
+        }
+      } catch (_) {
+        // Gone between the draw and the press; nothing left to delete.
+      }
+    }
+    if (!deleted) return false;
+    setState(() => _selectedProperties.removeWhere(wanted.contains));
+    ui.clearEffectSelection();
+    ui.model.refresh();
+    return true;
   }
 
   /// The claim this panel chained onto when it mounted.

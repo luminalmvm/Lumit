@@ -304,9 +304,13 @@ void main() {
 
       expect(find.byKey(const ValueKey('fx-audio-group')), findsOneWidget,
           reason: 'a stack with an audio entry grows the Audio heading');
-      expect(find.byKey(const ValueKey('fx-card-1')), findsOneWidget,
-          reason: 'the plugin card is an ordinary card, at its stack index');
-      expect(find.byKey(const ValueKey('fx-card-0')), findsOneWidget,
+      // A card is keyed by the effect it draws, not by where it sits.
+      final stack = p.layer.getEffects();
+      final plugin = ValueKey<String>('fx-card-${stack[1].id()}');
+      final picture = ValueKey<String>('fx-card-${stack[0].id()}');
+      expect(find.byKey(plugin), findsOneWidget,
+          reason: 'the plugin card is an ordinary card, under the heading');
+      expect(find.byKey(picture), findsOneWidget,
           reason: 'the picture effect stays in the stack above');
 
       // The machine running this has no such plugin, so the card wears the
@@ -317,11 +321,11 @@ void main() {
       // The heading twirls its rack away and back, leaving the stack alone.
       await tester.tap(find.byKey(const ValueKey('fx-audio-group')));
       await tester.pump();
-      expect(find.byKey(const ValueKey('fx-card-1')), findsNothing);
-      expect(find.byKey(const ValueKey('fx-card-0')), findsOneWidget);
+      expect(find.byKey(plugin), findsNothing);
+      expect(find.byKey(picture), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('fx-audio-group')));
       await tester.pump();
-      expect(find.byKey(const ValueKey('fx-card-1')), findsOneWidget);
+      expect(find.byKey(plugin), findsOneWidget);
     });
 
     testWidgets('a stack with no audio entry grows no Audio heading',

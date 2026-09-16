@@ -141,6 +141,7 @@ pub(crate) fn map_layer(
     // pre-transform deviation is visible exactly on a turned or squashed layer,
     // and that is what decides whether the import says so.
     let transform = transform(conv, &path, props);
+    casts_shadows(conv, &path, ae, props);
     let styles = super::styles::styles(conv, &path, props, &transform);
 
     let layer = Layer {
@@ -462,6 +463,24 @@ fn orientation(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property], out: &m
         Outcome::Adjusted,
         Reason::OrientationNotCarried,
     );
+}
+
+/// Lumit's lights cast no shadows, so a 3D layer set to cast them says so.
+fn casts_shadows(conv: &mut Conv<'_>, path: &ItemPath, ae: &AeLayer, props: &[Property]) {
+    let options = group(props, "ADBE Material Options Group");
+    let Some(node) = child(options, "ADBE Casts Shadows") else {
+        return;
+    };
+    let three_d = ae.switches.as_ref().and_then(|s| s.three_d) == Some(true);
+    let on = still(options, "ADBE Casts Shadows", 0).is_some_and(|v| v != 0.0)
+        || node.keyframes.as_ref().is_some_and(|k| !k.is_empty());
+    if three_d && on {
+        conv.report.row(
+            path.property(display_name(node, "Casts Shadows")),
+            Outcome::Adjusted,
+            Reason::CastsShadowsNotCarried,
+        );
+    }
 }
 
 /// A property that holds a flat zero and nothing else.

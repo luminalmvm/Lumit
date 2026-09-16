@@ -291,12 +291,15 @@ class AudioTrackOutlineRow extends StatelessWidget {
         key: ValueKey<String>('atl-$name-${track.id}'),
         behavior: HitTestBehavior.opaque,
         onTap: () {
-          comp.setSwitchOnLayers(
-            clicked: track.entry.layer.internallayerId,
-            layers: [track.entry.layer.internallayerId],
-            switch_: which,
-            on_: !on,
-          );
+          // A locked layer refuses, and quietly.
+          try {
+            comp.setSwitchOnLayers(
+              clicked: track.entry.layer.internallayerId,
+              layers: [track.entry.layer.internallayerId],
+              switch_: which,
+              on_: !on,
+            );
+          } catch (_) {}
           onChanged();
         },
         child: SizedBox(

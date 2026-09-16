@@ -377,17 +377,16 @@ MenuEntry saveAnimationPresetRow(LumitUiState ui) {
   );
 }
 
-/// Animation ▸ Apply animation preset: a saved `.lumfx` onto **every**
-/// selected layer, read once and applied per layer as one undo step.
+/// Animation ▸ Apply animation preset: a saved `.lumfx` onto the primary
+/// layer only, as one undo step.
 ///
-/// A layer's refusal leaves the rest of the batch standing, and a file that is
-/// not a preset at all is a normal thing for a picker to hand back rather than
-/// something to shout about — the Effects & presets panel's own rules.
+/// A file that is not a preset at all is a normal thing for a picker to hand
+/// back rather than something to shout about.
 MenuEntry applyAnimationPresetRow(LumitState app, LumitUiState ui) {
-  final layers = ui.selectedLayers.value;
+  final layer = ui.selectedLayer.value;
   return MenuEntry(
     l10n.menuApplyAnimationPreset,
-    layers.isEmpty
+    layer == null
         ? null
         : () async {
             final path = await animationPresetOpenPicker();
@@ -399,11 +398,9 @@ MenuEntry applyAnimationPresetRow(LumitState app, LumitUiState ui) {
               return;
             }
             asOneUndoStep(app.project, () {
-              for (final layer in layers) {
-                try {
-                  layer.loadPreset(text: text);
-                } catch (_) {}
-              }
+              try {
+                layer.loadPreset(text: text);
+              } catch (_) {}
             });
             app.notifyDocumentChanged();
           },

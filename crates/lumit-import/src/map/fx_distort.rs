@@ -918,14 +918,7 @@ impl<'a, 'c> Fx<'a, 'c> {
     /// The same number without a report row: for the two rows that have to look
     /// at an option *and* then map it, so the reading does not file twice.
     fn raw(&self, n: u32) -> Option<f64> {
-        let leaf = self.find(n)?;
-        match leaf.keyframes.as_deref() {
-            Some(keys) if !keys.is_empty() => keys
-                .first()
-                .and_then(|k| k.v.as_ref())
-                .and_then(|v| axis_of(v, 0)),
-            _ => leaf.value.as_ref().and_then(|v| axis_of(v, 0)),
-        }
+        props::starting_value(self.find(n)?).0
     }
 
     /// The still number behind a control Lumit does not animate — an option, a
@@ -938,18 +931,11 @@ impl<'a, 'c> Fx<'a, 'c> {
             self.row(Outcome::Skipped, Reason::PropertyUnreadable { match_name });
             return None;
         }
-        if let Some(keys) = leaf.keyframes.as_deref().filter(|k| !k.is_empty()) {
-            let first = keys
-                .first()
-                .and_then(|k| k.v.as_ref())
-                .and_then(|v| axis_of(v, 0));
-            self.approximated(
-                &ae_name,
-                "the value it starts on — Lumit's control is not animated",
-            );
-            return first;
+        let (value, keyed) = props::starting_value(leaf);
+        if keyed {
+            self.approximated(&ae_name, props::STARTS_ON);
         }
-        leaf.value.as_ref().and_then(|v| axis_of(v, 0))
+        value
     }
 
     /// An After Effects dropdown. `table` maps AE's **1-based** index onto a

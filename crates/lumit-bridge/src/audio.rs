@@ -201,6 +201,13 @@ pub(crate) fn jobs_signature(jobs: &[AudioJob], duration_s: f64, master_db: f64)
             c.offset_s.to_bits().hash(&mut h);
             hash_animation(&mut h, &c.volume.animation);
             hash_animation(&mut h, &c.pan.animation);
+            // A Precomp layer's rack is a stage on the sum arriving through
+            // it, so editing that rack changes the mix without touching a
+            // keyframe anywhere below.
+            c.chain.is_some().hash(&mut h);
+            if let Some(chain) = &c.chain {
+                hash_chain(&mut h, chain);
+            }
         }
         // A *Duck under* wire changes what the layer sounds like without
         // touching a keyframe, so the chain — wires and its drivers' values —
@@ -289,11 +296,15 @@ pub(crate) fn build_plan(
     master_db: f64,
 ) -> (Arc<MixPlan>, Vec<Uuid>) {
     let total_frames = (duration_s * f64::from(rate)).round().max(0.0) as usize;
-    // Meter slots in first-sounding order, one per strip: several
-    // jobs from one Precomp layer share its slot, and past the bank's size
-    // the extras play unmetered rather than being dropped.
-    let mut strips: Vec<Uuid> = Vec::new();
-    let clips = jobs
+    /// One job placed and processed, before the bus stage sees it.
+    struct Ready<'a> {
+        job: &'a AudioJob,
+        buffer: Arc<lumit_media::AudioBuffer>,
+        start_frame: i64,
+        src_start: usize,
+        len: usize,
+    }
+    let ready: Vec<Ready<'_>> = jobs
         .iter()
         .filter_map(|job| {
             let buffer = decoded.get(&job.item).filter(|b| b.rate == rate)?;
@@ -334,26 +345,69 @@ pub(crate) fn build_plan(
                 }
                 None => (Arc::clone(buffer), start_frame, src_start, len),
             };
-            let (gain, envelope) = lumit_render::export::volume_bake(job, start_frame, len, rate);
-            let slot = match strips.iter().position(|s| *s == job.layer) {
-                Some(at) => at,
-                None => {
-                    strips.push(job.layer);
-                    strips.len() - 1
-                }
-            };
-            Some(lumit_audio::mix::PlacedClip {
+            Some(Ready {
+                job,
                 buffer,
                 start_frame,
                 src_start,
                 len,
-                gain,
-                envelope: envelope.map(Arc::new),
+            })
+        })
+        .collect();
+    // Then the bus stage: everything arriving through a Precomp layer that
+    // carries a rack is summed and run through it, and what comes back is one
+    // run of its own on that layer's strip (docs/09 §3.1). The export mixes
+    // through the same function, so the two cannot disagree.
+    let staged: Vec<lumit_render::export::PlacedJob<'_>> = ready
+        .iter()
+        .map(|r| lumit_render::export::PlacedJob {
+            job: r.job,
+            start_frame: r.start_frame,
+            samples: &r.buffer.samples[r.src_start * 2..(r.src_start + r.len) * 2],
+        })
+        .collect();
+    let runs = lumit_render::export::bus_runs(&staged, rate, false);
+    // Meter slots in first-sounding order, one per strip: several
+    // jobs from one Precomp layer share its slot, and past the bank's size
+    // the extras play unmetered rather than being dropped.
+    let mut strips: Vec<Uuid> = Vec::new();
+    let clips = runs
+        .into_iter()
+        .map(|run| {
+            let (buffer, src_start, len) = match run.of {
+                lumit_render::export::RunOf::Job(at) => (
+                    Arc::clone(&ready[at].buffer),
+                    ready[at].src_start,
+                    ready[at].len,
+                ),
+                lumit_render::export::RunOf::Bus(samples) => {
+                    let frames = samples.len() / 2;
+                    (
+                        Arc::new(lumit_media::AudioBuffer { rate, samples }),
+                        0,
+                        frames,
+                    )
+                }
+            };
+            let slot = match strips.iter().position(|s| *s == run.layer) {
+                Some(at) => at,
+                None => {
+                    strips.push(run.layer);
+                    strips.len() - 1
+                }
+            };
+            lumit_audio::mix::PlacedClip {
+                buffer,
+                start_frame: run.start_frame,
+                src_start,
+                len,
+                gain: run.gain,
+                envelope: run.envelope.map(Arc::new),
                 meter: u8::try_from(slot)
                     .ok()
                     .filter(|s| usize::from(*s) < lumit_audio::meter::MAX_STRIPS)
                     .unwrap_or(lumit_audio::mix::NO_METER),
-            })
+            }
         })
         .collect();
     strips.truncate(lumit_audio::meter::MAX_STRIPS);
@@ -1075,6 +1129,78 @@ mod tests {
         assert_eq!(plan.frame_at(0), (0.0, 0.0));
         let (l, _r) = plan.frame_at(rate as usize + 10);
         assert!((l - 0.25).abs() < 1e-6);
+    }
+
+    /// **The live plan runs a Precomp layer's rack over the sum** (docs/09
+    /// §3.1), through the same bus stage the export mixes with.
+    ///
+    /// Two sources arrive through one Precomp layer whose rack is a limiter
+    /// set to −6 dB. Each alone is already under that ceiling, so only the sum
+    /// can move it. They come back as one clip on one strip, the Precomp
+    /// layer's own row, which is the row the mixer draws, and the sound the
+    /// callback would play is held at the ceiling rather than reaching full
+    /// scale.
+    #[test]
+    fn build_plan_sums_a_precomp_layers_rack_onto_one_strip() {
+        let rate = 48_000u32;
+        let ceiling = 10f32.powf(-6.0 / 20.0);
+        let mut limiter = lumit_core::fx::instantiate("audio_limiter").expect("a limiter");
+        for param in &mut limiter.params {
+            if param.id == "ceiling" {
+                param.value = lumit_core::model::EffectValue::Float(Property::fixed(-6.0));
+            }
+        }
+        let carrier = lumit_render::export::Carrier {
+            volume: Property::zero(),
+            pan: Property::zero(),
+            offset_s: 0.0,
+            chain: Some(Arc::new(lumit_render::export::AudioChain {
+                doc: Arc::new(lumit_core::model::Document::new()),
+                comp: Uuid::nil(),
+                layer: Uuid::nil(),
+                effects: vec![limiter],
+                graph: lumit_core::graph::LayerGraph::default(),
+                offset_s: 0.0,
+                base_s: 0.0,
+            })),
+        };
+        let row = Uuid::now_v7();
+        let one = || {
+            let mut j = job("a.wav", 0.0, 1.0, 0.0);
+            j.layer = row;
+            j.carriers = vec![carrier.clone()];
+            j
+        };
+        let (a, b) = (one(), one());
+        let mut decoded = HashMap::new();
+        for j in [&a, &b] {
+            decoded.insert(
+                j.item,
+                Arc::new(lumit_media::AudioBuffer {
+                    rate,
+                    // Half scale: two of them reach full scale summed.
+                    samples: vec![0.5; rate as usize * 2],
+                }),
+            );
+        }
+        let (plan, strips) = build_plan(&[a, b], &decoded, rate, 1.0, 0.0);
+        assert_eq!(
+            plan.clips.len(),
+            1,
+            "the two sources are summed into one bus"
+        );
+        assert_eq!(
+            strips,
+            vec![row],
+            "the bus meters on the Precomp layer's row"
+        );
+        assert_eq!(plan.clips[0].meter, 0);
+        let (l, r) = plan.frame_at(rate as usize / 2);
+        assert!(
+            l.abs() < ceiling * 1.05 && r.abs() < ceiling * 1.05,
+            "the limiter heard both sources at once: {l} and {r}"
+        );
+        assert!(l.abs() > 0.1, "and it is sound, not silence");
     }
 
     /// A decoded buffer at the wrong rate is never placed (media is decoded at

@@ -13,7 +13,7 @@ import 'state.dart';
 part 'footage.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `attach_proxy`, `media_ref_at`, `project`, `resolve_path`, `resolve_source`, `source_path`, `stored_path`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `id`, `new`, `project_id`
 
 /// How the running MAKE-PROXY job is getting on. Safe to call on the
@@ -182,6 +182,32 @@ sealed class BridgeProxyState with _$BridgeProxyState {
   }) = BridgeProxyState_Failed;
 }
 
+/// The rate a numbered run of stills plays at, as the exact pair the engine
+/// stores (docs/14 §2: a rate that goes through a float does not come back).
+///
+/// Answered only for an item that **is** a run; one file is `None`, which is
+/// what tells the Project panel's menu whether to offer the field at all.
+class BridgeSequenceRate {
+  final int fpsNum;
+  final int fpsDen;
+
+  const BridgeSequenceRate({
+    required this.fpsNum,
+    required this.fpsDen,
+  });
+
+  @override
+  int get hashCode => fpsNum.hashCode ^ fpsDen.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeSequenceRate &&
+          runtimeType == other.runtimeType &&
+          fpsNum == other.fpsNum &&
+          fpsDen == other.fpsDen;
+}
+
 class FootageReference {
   final UuidValue internalproject;
   final UuidValue internalid;
@@ -320,6 +346,17 @@ class FootageReference {
           frames: frames,
           view: view);
 
+  /// The rate this item's numbered run of stills plays at, or `None` when it
+  /// is one ordinary file.
+  ///
+  /// Stills carry no rate of their own, so this is the item's own statement
+  /// and the only rate there is — the Project panel's menu reads it to fill
+  /// its field, and gets `None` for everything that is not a run.
+  BridgeSequenceRate? sequenceRate() =>
+      BridgeLib.instance.api.crateApiFootageFootageReferenceSequenceRate(
+        that: this,
+      );
+
   /// Say what colour space this footage arrives in, or clear it back to the
   /// built-in defaults. One gesture, one op, one undo step.
   void setColourSpace({String? space}) => BridgeLib.instance.api
@@ -332,6 +369,21 @@ class FootageReference {
   /// detaching invert each other exactly as a relink does.
   void setProxy({required String path}) => BridgeLib.instance.api
       .crateApiFootageFootageReferenceSetProxy(that: this, path: path);
+
+  /// Correct the speed of an imported run of stills (docs/07 §3.1). One
+  /// gesture, one op, one undo step, exactly as a relink is.
+  ///
+  /// The rate crosses as the exact pair, so 23.976 arrives as 24000/1001 and
+  /// stays it. A rate of nought, an item that is one file and an item that is
+  /// not there are all refused rather than rounded into something legal.
+  ///
+  /// Everything that reads the run resolves its timing from the document, so
+  /// the new rate reaches the decode plan and the name of every frame that
+  /// reads this item on the next render; the panel hears about it through the
+  /// op's item scope.
+  void setSequenceRate({required int fpsNum, required int fpsDen}) =>
+      BridgeLib.instance.api.crateApiFootageFootageReferenceSetSequenceRate(
+          that: this, fpsNum: fpsNum, fpsDen: fpsDen);
 
   /// This item's own *use proxy* tick, leaving the proxy attached — how one
   /// clip is checked at full quality without giving up the proxy.
@@ -361,5 +413,8 @@ class FootageReference {
 enum LumitMediaStatus {
   missing,
   ready,
+
+  /// On disk, but the decoder cannot read a picture or sound out of it.
+  undecodable,
   ;
 }

@@ -142,7 +142,9 @@ The rate is the **only** thing stored. Where the run starts, how long it is and 
 are in it are re-read from the folder every time it is opened, because the files on disk are
 the truth about a sequence — add ten frames overnight and the item is ten frames longer, with
 nothing to reconcile. `media` keeps pointing at **one real file**, the run's first, so
-fingerprinting, saving, rebasing and relink all work on a path that exists.
+fingerprinting, saving, rebasing and relink all work on a path that exists. The importer sets
+the rate to 25 and the **Frame rate** field on the item's context menu corrects it, as one op
+and one undo step ([07-UI-SPEC.md](07-UI-SPEC.md) §3.1).
 
 The run one file belongs to is the unbroken block of numbers around it: **a gap ends the
 run**, on the side the picked file is on, and is never bridged. Only still-image
@@ -156,8 +158,6 @@ the same code a video file goes through.
 
 **Future** — not in v1 yet:
 
-- a **control for a sequence's frame rate**. The field is stored, saved and settable by the
-  importer; there is no interface for changing it yet, so an imported run plays at 25;
 - a `FootageInterpretation` (frame-rate override, alpha mode, colour-space tag, loop count,
   timecode policy) — v1 treats every source as sRGB with no per-item overrides.
 (The **missing**-footage state is built: the automatic resolver runs on open, a lost file

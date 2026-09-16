@@ -262,18 +262,10 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
     );
   }
 
-  /// Apply to **every** selected layer, as the Effect menu and the effects
-  /// console do. This panel used to reach for the primary layer alone,
-  /// so the same effect on the same selection landed on three layers from the
-  /// menu and on one from here — the sort of difference that is read as the
-  /// selection having been lost rather than as two paths disagreeing.
-  ///
-  /// With nothing selected there is nowhere for the effect to go, and silently
-  /// doing nothing is better than guessing at a layer.
+  /// Apply to the primary layer only, as the Effect menu and the effects
+  /// console do. With nothing selected it does nothing.
   void _apply(LumitUiState ui, String name) {
-    for (final layer in ui.selectedLayers.value) {
-      layer.addEffect(name: name);
-    }
+    ui.selectedLayer.value?.addEffect(name: name);
     setState(() {});
   }
 
@@ -392,19 +384,11 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
     ];
   }
 
-  /// Apply a library preset's whole stack to **every** selected layer, exactly
-  /// as [_apply] does with a single effect: the two rows sit in the
-  /// same list and are double-clicked with the same gesture, so one of them
-  /// quietly meaning "the first layer only" would read as the selection having
-  /// been lost.
-  ///
-  /// A file that has gone away since the listing just refreshes the listing —
-  /// the library is a folder, and folders change behind running programs. Read
-  /// once and applied many times: the text is the same for every layer, and
-  /// re-reading it per layer would let a file change halfway through a batch.
+  /// Apply a library preset's whole stack to the primary layer only, as
+  /// [_apply] does. A file that has gone away just refreshes the listing.
   void _applyPreset(LumitUiState ui, BridgePresetInfo preset) {
-    final layers = ui.selectedLayers.value;
-    if (layers.isEmpty) return;
+    final layer = ui.selectedLayer.value;
+    if (layer == null) return;
     final file = File(preset.path);
     if (!file.existsSync()) {
       _refreshPresets();
@@ -416,13 +400,9 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
     } catch (_) {
       return;
     }
-    for (final layer in layers) {
-      // Each layer keeps its own `try`: a stack one layer will not take
-      // leaves the rest of the batch standing.
-      try {
-        layer.loadPreset(text: text);
-      } catch (_) {}
-    }
+    try {
+      layer.loadPreset(text: text);
+    } catch (_) {}
     setState(() {});
   }
 }
@@ -647,9 +627,8 @@ class _EffectRow extends StatelessWidget {
 
 /// Save the selected layer's stack as a `.lumfx`, or load one onto it.
 class _PresetBar extends StatelessWidget {
-  /// Every picked layer. **Save** takes the first — a preset file is one
-  /// stack, and saving four would mean choosing which one survives — while
-  /// **Load** lands on all of them, the way every other add here does.
+  /// Every picked layer. **Save** and **Load** both take the first, the
+  /// primary layer, the way every other add here does.
   final List<LayerReference> layers;
   final Future<String?> Function()? savePicker;
   final Future<String?> Function()? loadPicker;
@@ -731,13 +710,11 @@ class _PresetBar extends StatelessWidget {
     } catch (_) {
       return;
     }
-    for (final layer in layers) {
-      try {
-        layer.loadPreset(text: text);
-      } catch (_) {
-        // Not a preset: the picker will take any file, so this is a normal
-        // thing for a user to do and not something to shout about.
-      }
+    try {
+      layers.first.loadPreset(text: text);
+    } catch (_) {
+      // Not a preset: the picker will take any file, so this is a normal
+      // thing for a user to do and not something to shout about.
     }
     onChanged();
   }

@@ -13,7 +13,7 @@ import 'popups.dart';
 import 'value_arithmetic.dart';
 
 /// The **modifier ladder** a value scrub runs on, coarsest first — the study's
-/// four rungs (`Caddis study/notes-editor-ux.md` §3, docs/impl
+/// four rungs (`notes-editor-ux.md` §3, docs/impl
 /// /timeline-interaction.md polish 27), which are After Effects' own two with
 /// a finer one under them: `Shift` ×10, nothing held ×1, `Ctrl` ×0.1, `Alt`
 /// ×0.01.

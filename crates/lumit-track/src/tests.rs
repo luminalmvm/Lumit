@@ -6,6 +6,7 @@
 //! thing on every machine.
 
 use super::*;
+use crate::pyramid::Plane;
 use lumit_core::mask::{flatten_path, Mask, MASK_PATH_TOLERANCE_PX};
 
 // --- The synthetic world ---------------------------------------------------
@@ -758,6 +759,133 @@ fn an_empty_run_is_an_empty_set_not_a_fault() {
     assert!(set.correspondences(0, 1).is_empty());
 }
 
+// --- The response map (docs/impl/tracking.md §2) ---------------------------
+
+/// A plane of the synthetic texture, which is what the response pass sees.
+fn texture_plane(w: usize, h: usize) -> Plane {
+    let mut data = vec![0.0f32; w * h];
+    for y in 0..h {
+        for x in 0..w {
+            data[y * w + x] = texture(x as f64, y as f64);
+        }
+    }
+    Plane { w, h, data }
+}
+
+/// The window walked as one square per pixel, which is how the response pass
+/// summed it before the sums were separated. Kept here as the oracle: the fast
+/// path has to agree with it, and it is the number the separable pass is timed
+/// against.
+fn square_response_map(p: &Plane, radius: usize) -> Vec<f32> {
+    let (w, h) = (p.w, p.h);
+    let mut out = vec![0.0f32; w * h];
+    if w < 3 || h < 3 {
+        return out;
+    }
+    let mut gx = vec![0.0f32; w * h];
+    let mut gy = vec![0.0f32; w * h];
+    for y in 0..h {
+        for x in 0..w {
+            let xm = x.saturating_sub(1);
+            let xp = (x + 1).min(w - 1);
+            let ym = y.saturating_sub(1);
+            let yp = (y + 1).min(h - 1);
+            let at = |px: usize, py: usize| p.data[py * w + px];
+            let (tl, t, tr) = (at(xm, ym), at(x, ym), at(xp, ym));
+            let (l, r) = (at(xm, y), at(xp, y));
+            let (bl, b, br) = (at(xm, yp), at(x, yp), at(xp, yp));
+            gx[y * w + x] = ((tr + 2.0 * r + br) - (tl + 2.0 * l + bl)) / 8.0;
+            gy[y * w + x] = ((bl + 2.0 * b + br) - (tl + 2.0 * t + tr)) / 8.0;
+        }
+    }
+    let r = radius as i64;
+    for y in 0..h {
+        for x in 0..w {
+            let (mut sxx, mut sxy, mut syy) = (0.0f64, 0.0f64, 0.0f64);
+            for oy in -r..=r {
+                let qy = (y as i64 + oy).clamp(0, h as i64 - 1) as usize;
+                for ox in -r..=r {
+                    let qx = (x as i64 + ox).clamp(0, w as i64 - 1) as usize;
+                    let q = qy * w + qx;
+                    let (a, b) = (f64::from(gx[q]), f64::from(gy[q]));
+                    sxx += a * a;
+                    sxy += a * b;
+                    syy += b * b;
+                }
+            }
+            let mid = 0.5 * (sxx + syy);
+            let half_diff = 0.5 * (sxx - syy);
+            let lo = mid - (half_diff * half_diff + sxy * sxy).sqrt();
+            out[y * w + x] = lo.max(0.0) as f32;
+        }
+    }
+    out
+}
+
+/// The separable sums are the same sums. Every radius that matters, including
+/// one wider than the frame, where the window is nearly all clamped edge.
+#[test]
+fn the_separable_response_map_matches_the_square_sum() {
+    let mut worst = 0.0f32;
+    for (w, h, radius) in [
+        (64usize, 48usize, 1usize),
+        (64, 48, 2),
+        (64, 48, 3),
+        (37, 29, 5),
+        (9, 7, 12),
+    ] {
+        let p = texture_plane(w, h);
+        let want = square_response_map(&p, radius);
+        let mut s = Scratch::default();
+        detect::response_map_into(&mut s, &p, radius);
+        let best = want.iter().copied().fold(0.0f32, f32::max);
+        // Deafness guard: a map of zeroes would match anything.
+        assert!(
+            best > 1e-6,
+            "{w}x{h} r{radius}: the oracle found no corners"
+        );
+        for (i, (&a, &b)) in s.resp.iter().zip(want.iter()).enumerate() {
+            let d = (a - b).abs();
+            worst = worst.max(d / best);
+            assert!(
+                d <= 1e-5 * best,
+                "{w}x{h} r{radius}: pixel {i} is {a}, expected {b}"
+            );
+        }
+    }
+    println!(
+        "worst response difference: {:.3e} of the frame's best",
+        worst
+    );
+}
+
+/// What the tracker actually reads off the map is the detections, and they come
+/// out identical: same positions, same order.
+#[test]
+fn the_separable_response_map_detects_the_same_features() {
+    const W: usize = 120;
+    const H: usize = 90;
+    let p = texture_plane(W, H);
+    let want = square_response_map(&p, 2);
+    let mut s = Scratch::default();
+    detect::response_map_into(&mut s, &p, 2);
+    let grid = BucketGrid {
+        gx: 4,
+        gy: 3,
+        w: W,
+        h: H,
+    };
+    let need: Vec<(usize, usize)> = (0..grid.count()).map(|b| (b, 3)).collect();
+    let pick = |resp: &[f32]| {
+        let best = resp.iter().copied().fold(0.0f32, f32::max);
+        detect::detect(resp, &grid, &need, best * 0.05, 6, 6.0, &[], &[])
+    };
+    let a = pick(&want);
+    let b = pick(&s.resp);
+    assert!(a.len() >= 8, "only {} features off the oracle map", a.len());
+    assert_eq!(a, b);
+}
+
 // --- Perf sanity (a number in the output, not a gate) ----------------------
 
 /// Not a gate — docs/13-PERFORMANCE-RULES owns the budgets, and phase 1 has none
@@ -811,6 +939,35 @@ fn perf_100_features_over_30_frames_of_640x360() {
             ms / 30.0
         );
     }
+}
+
+/// The other half of the number above: the response pass on its own, the
+/// separable sums against the square ones they replaced. Not a gate either.
+/// Run with:
+/// `cargo test -p lumit-track --release -- --ignored --nocapture perf`
+#[test]
+#[ignore = "prints a timing; not a gate"]
+fn perf_response_map_over_640x360() {
+    const PW: usize = 640;
+    const PH: usize = 360;
+    const RADIUS: usize = 2;
+    const PASSES: usize = 30;
+    let p = texture_plane(PW, PH);
+    let start = std::time::Instant::now();
+    for _ in 0..PASSES {
+        let _ = square_response_map(&p, RADIUS);
+    }
+    let square = start.elapsed().as_secs_f64() * 1000.0 / PASSES as f64;
+    let mut s = Scratch::default();
+    let start = std::time::Instant::now();
+    for _ in 0..PASSES {
+        detect::response_map_into(&mut s, &p, RADIUS);
+    }
+    let separable = start.elapsed().as_secs_f64() * 1000.0 / PASSES as f64;
+    println!(
+        "lumit-track perf: response map {PW}x{PH} r{RADIUS}: square {square:.2} ms, separable {separable:.2} ms"
+    );
+    assert!(separable < square);
 }
 
 // ===========================================================================

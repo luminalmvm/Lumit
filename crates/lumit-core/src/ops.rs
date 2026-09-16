@@ -75,6 +75,15 @@ pub enum Op {
         id: Uuid,
         media: Box<crate::model::MediaRef>,
     },
+    /// The rate a numbered run of stills plays at (docs/07 §3.1). Stills
+    /// carry no rate of their own, so the item's own rate is the only rate
+    /// there is, and this is where an imported run's speed gets corrected.
+    /// Refused on an item that is one file: a rate there would sit in the
+    /// document meaning nothing.
+    SetSequenceRate {
+        id: Uuid,
+        frame_rate: FrameRate,
+    },
     /// Attach a proxy to a footage item, or clear it (`None`). Carries the
     /// whole [`crate::model::ProxyRef`] — reference and its own *use proxy*
     /// switch — so it is trivially invertible and attaching one is a single
@@ -793,6 +802,7 @@ impl Op {
             Op::AddItem { .. } => "Add item",
             Op::RemoveItem { .. } => "Delete item",
             Op::SetMediaRef { .. } => "Relink footage",
+            Op::SetSequenceRate { .. } => "Set sequence rate",
             Op::SetItemProxy { .. } => "Set proxy",
             Op::SetItemUseProxy { .. } => "Use proxy",
             Op::SetUseProxies { .. } => "Use proxies",
@@ -1088,6 +1098,20 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
             Ok(Op::SetMediaRef {
                 id: *id,
                 media: Box::new(previous),
+            })
+        }
+        Op::SetSequenceRate { id, frame_rate } => {
+            let crate::model::ProjectItem::Footage(f) =
+                doc.item_mut(*id).ok_or(OpError::UnknownItem)?
+            else {
+                return Err(OpError::UnknownItem);
+            };
+            // Only a run of stills has a rate of its own to set.
+            let run = f.sequence.as_mut().ok_or(OpError::UnknownItem)?;
+            let previous = std::mem::replace(&mut run.frame_rate, *frame_rate);
+            Ok(Op::SetSequenceRate {
+                id: *id,
+                frame_rate: previous,
             })
         }
         Op::SetItemProxy { id, proxy } => {

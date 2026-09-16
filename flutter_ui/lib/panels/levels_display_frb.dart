@@ -13,8 +13,8 @@
 // **Presentation only.** Every number this touches already has its own row
 // underneath, and this writes exactly the same values through exactly the same
 // callbacks — nothing about the effect, its parameters or its import changes.
-// The handles drive **Master**; the three colour channels stay on their rows,
-// where a per-channel move is a rarer, more deliberate act.
+// The buttons beside the plot say which of the effect's four channel groups the
+// handles are aiming, the same column Curves puts beside its graph.
 //
 // **Where the picture comes from.** The same trace the Scopes panel reads
 // (`renderScope`, kind 3), asked for once per displayed frame and only while
@@ -40,6 +40,7 @@ import '../l10n/engine_labels.dart';
 import '../state/comp_time.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import '../widgets/curve_editor.dart';
 import 'keyframe_controls_frb.dart';
 import 'scopes_panel_frb.dart';
 
@@ -50,12 +51,22 @@ const int _histogramKind = 3;
 /// The engine's fixed trace size.
 const int _traceEdge = 256;
 
+/// The channels the buttons step through, in the order the effect's own groups
+/// declare them (`crates/lumit-core/src/fx/effects/levels.rs`). Every parameter
+/// id is one of these and one of the tails below, so "red" and "in_black".
+const List<String> levelsChannels = ['master', 'red', 'green', 'blue'];
+
+/// A channel's label as the engine spells it: the effect's group labels are
+/// these ids with a capital, so the translation table already answers them.
+String _channelLabel(String channel) =>
+    engineLabel(channel[0].toUpperCase() + channel.substring(1));
+
 /// The parameters the display drives, in the order they are drawn.
-const String _inBlack = 'master_in_black';
-const String _gamma = 'master_gamma';
-const String _inWhite = 'master_in_white';
-const String _outBlack = 'master_out_black';
-const String _outWhite = 'master_out_white';
+const String _inBlack = 'in_black';
+const String _gamma = 'gamma';
+const String _inWhite = 'in_white';
+const String _outBlack = 'out_black';
+const String _outWhite = 'out_white';
 
 /// Gamma at the far end of the middle handle's travel. Photoshop's, and the
 /// number that makes the handle useful across its whole width rather than
@@ -102,6 +113,11 @@ class LevelsDisplayFrb extends StatefulWidget {
   final void Function(UuidValue effect, String param, BridgeEffectValue value)
       onLive;
 
+  /// What each channel button draws in while it is the one showing, parallel to
+  /// [levelsChannels]. Null hands the buttons back to the theme, which is what
+  /// "Use theme colours in effect graphs" asks for.
+  final List<Color?>? channelColours;
+
   const LevelsDisplayFrb({
     super.key,
     required this.effectId,
@@ -110,6 +126,7 @@ class LevelsDisplayFrb extends StatefulWidget {
     required this.playheadFrame,
     required this.onWrite,
     required this.onLive,
+    this.channelColours,
   });
 
   @override
@@ -121,8 +138,14 @@ class _LevelsDisplayFrbState extends State<LevelsDisplayFrb> {
   StreamSubscription<WorkerResponse>? _responses;
   int _asked = -1;
 
-  /// Which handle a drag has hold of, by parameter id.
+  /// Which handle a drag has hold of, by parameter tail.
   String? _held;
+
+  /// Which channel the handles are aiming, into [levelsChannels].
+  int _channel = 0;
+
+  /// A parameter tail's full id on the channel showing.
+  String _id(String param) => '${levelsChannels[_channel]}_$param';
 
   @override
   void initState() {
@@ -191,7 +214,7 @@ class _LevelsDisplayFrbState extends State<LevelsDisplayFrb> {
     );
   }
 
-  BridgeScalar? _scalarOf(String param) => switch (widget.values[param]) {
+  BridgeScalar? _scalarOf(String param) => switch (widget.values[_id(param)]) {
         BridgeEffectValue_Float(:final field0) => field0,
         _ => null
       };
@@ -298,14 +321,14 @@ class _LevelsDisplayFrbState extends State<LevelsDisplayFrb> {
         onHorizontalDragUpdate: (d) {
           final held = _held;
           if (held == null) return;
-          widget.onLive(widget.effectId, held,
+          widget.onLive(widget.effectId, _id(held),
               _written(held, _valueAt(held, _fractionOf(d.localPosition.dx))));
         },
         onHorizontalDragEnd: (d) {
           final held = _held;
           _held = null;
           if (held == null) return;
-          widget.onWrite(widget.effectId, held,
+          widget.onWrite(widget.effectId, _id(held),
               _written(held, _valueAt(held, _fractionOf(d.localPosition.dx))));
         },
         onHorizontalDragCancel: () => _held = null,
@@ -321,75 +344,96 @@ class _LevelsDisplayFrbState extends State<LevelsDisplayFrb> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _strip(
-            output: false,
-            height: _plotHeight + _handleStrip,
-            child: Column(
-              children: [
-                SizedBox(
-                  width: _plotWidth,
-                  height: _plotHeight,
-                  child: Container(
-                    key: const ValueKey('fx-levels-histogram'),
-                    color: t.surface0,
-                    child: _trace == null
-                        ? null
-                        : RawImage(
-                            image: _trace,
-                            fit: BoxFit.fill,
-                            filterQuality: FilterQuality.none,
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _strip(
+                    output: false,
+                    height: _plotHeight + _handleStrip,
+                    child: Column(
+                      children: [
+                        SizedBox(
+                          width: _plotWidth,
+                          height: _plotHeight,
+                          child: Container(
+                            key: const ValueKey('fx-levels-histogram'),
+                            color: t.surface0,
+                            child: _trace == null
+                                ? null
+                                : RawImage(
+                                    image: _trace,
+                                    fit: BoxFit.fill,
+                                    filterQuality: FilterQuality.none,
+                                  ),
                           ),
-                  ),
-                ),
-                SizedBox(
-                  width: _plotWidth,
-                  height: _handleStrip,
-                  child: CustomPaint(
-                    key: const ValueKey('fx-levels-input-handles'),
-                    painter: _HandlePainter(
-                      at: [at[_inBlack]!, at[_gamma]!, at[_inWhite]!],
-                      colours: [t.textPrimary, t.accent, t.textPrimary],
-                      outline: t.hairlineStrong,
+                        ),
+                        SizedBox(
+                          width: _plotWidth,
+                          height: _handleStrip,
+                          child: CustomPaint(
+                            key: const ValueKey('fx-levels-input-handles'),
+                            painter: _HandlePainter(
+                              at: [at[_inBlack]!, at[_gamma]!, at[_inWhite]!],
+                              colours: [t.textPrimary, t.accent, t.textPrimary],
+                              outline: t.hairlineStrong,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 4),
-          _strip(
-            output: true,
-            height: _outputBar + _handleStrip,
-            child: Column(
-              children: [
-                SizedBox(
-                  width: _plotWidth,
-                  height: _outputBar,
-                  child: CustomPaint(
-                    key: const ValueKey('fx-levels-output-bar'),
-                    painter: _OutputBarPainter(
-                      black: at[_outBlack]!,
-                      white: at[_outWhite]!,
-                      low: t.surface0,
-                      high: t.textPrimary,
-                      edge: t.hairline,
+                  const SizedBox(height: 4),
+                  _strip(
+                    output: true,
+                    height: _outputBar + _handleStrip,
+                    child: Column(
+                      children: [
+                        SizedBox(
+                          width: _plotWidth,
+                          height: _outputBar,
+                          child: CustomPaint(
+                            key: const ValueKey('fx-levels-output-bar'),
+                            painter: _OutputBarPainter(
+                              black: at[_outBlack]!,
+                              white: at[_outWhite]!,
+                              low: t.surface0,
+                              high: t.textPrimary,
+                              edge: t.hairline,
+                            ),
+                          ),
+                        ),
+                        SizedBox(
+                          width: _plotWidth,
+                          height: _handleStrip,
+                          child: CustomPaint(
+                            key: const ValueKey('fx-levels-output-handles'),
+                            painter: _HandlePainter(
+                              at: [at[_outBlack]!, at[_outWhite]!],
+                              colours: [t.textPrimary, t.textPrimary],
+                              outline: t.hairlineStrong,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ),
-                SizedBox(
-                  width: _plotWidth,
-                  height: _handleStrip,
-                  child: CustomPaint(
-                    key: const ValueKey('fx-levels-output-handles'),
-                    painter: _HandlePainter(
-                      at: [at[_outBlack]!, at[_outWhite]!],
-                      colours: [t.textPrimary, t.textPrimary],
-                      outline: t.hairlineStrong,
-                    ),
-                  ),
-                ),
-              ],
-            ),
+                ],
+              ),
+              const SizedBox(width: channelColumnGap),
+              // The same column Curves puts beside its graph, on this effect's
+              // own four channel groups.
+              ChannelButtons(
+                keyPrefix: 'fx-levels',
+                labels: [for (final c in levelsChannels) _channelLabel(c)],
+                channel: _channel,
+                colours: widget.channelColours,
+                onChannel: (i) => setState(() => _channel = i),
+              ),
+            ],
           ),
           const SizedBox(height: 2),
           Text(

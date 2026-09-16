@@ -1,5 +1,5 @@
 // The scrub **modifier ladder** (docs/impl/timeline-interaction.md polish 27,
-// `Caddis study/notes-editor-ux.md` §3): a value drag has four sensitivities —
+// `notes-editor-ux.md` §3): a value drag has four sensitivities —
 // `Shift` ×10, nothing held ×1, `Ctrl` ×0.1, `Alt` ×0.01 — pressing one
 // mid-drag takes effect at once, and while the drag runs a floating chip shows
 // all four with the one in force boxed. Covers both drag surfaces —

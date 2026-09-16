@@ -6094,6 +6094,34 @@ void main() {
           reason: 'Copy took the picked effect, not the layer under it');
     });
 
+    /// Delete on picked effect rows removes those effects and leaves the layer.
+    testWidgets('Delete removes picked effects and leaves their layer',
+        (tester) async {
+      final p = withComp();
+      final layer = p.comp.addSolidLayer();
+      layer.addEffect(name: 'blur');
+      layer.addEffect(name: 'blur');
+      layer.addEffect(name: 'blur');
+      p.uiState.setSelection([layer]);
+      await mount(tester, p);
+      final [first, second, kept] = layer.getEffects();
+
+      p.uiState.activePane.value = Panel.timeline.pane();
+      p.uiState.setEffectSelection(layer, [first.id(), second.id()]);
+      await tester.pump();
+      await settleFrb(tester, minRounds: 4);
+
+      expect(p.uiState.deleteClaim!(), isTrue,
+          reason: 'with effects picked the Timeline takes Delete');
+      await settleFrb(tester, minRounds: 4);
+
+      expect([for (final e in layer.getEffects()) e.id()], [kept.id()],
+          reason: 'both picked effects are gone, the other stays');
+      expect(p.comp.getLayers(), hasLength(1),
+          reason: 'and the layer is still there');
+      expect(p.uiState.selectedEffects.value, isEmpty);
+    });
+
     /// **A locked layer's property rows are read-only too.** The lock
     /// used to guard only the *gestures* — the bar, the razor, rename, reorder,
     /// delete — while the fold-out's transform, effect and volume rows went on
@@ -7978,6 +8006,50 @@ void main() {
       expect(upper.getSwitches().visible, isFalse);
       expect(lower.getSwitches().visible, isTrue,
           reason: 'the locked sibling silently refused its share');
+    });
+
+    /// A switch cell on the locked row itself refuses quietly, while its lock
+    /// and shy cells still work.
+    testWidgets('a locked row refuses its switch cells without throwing',
+        (tester) async {
+      final p = withComp();
+      final layer = p.comp.addSolidLayer();
+      layer.setSwitch(switch_: BridgeLayerSwitch.locked, on_: true);
+      p.uiState.model.refresh();
+      await mount(tester, p);
+      final id = layer.internallayerId;
+
+      await tester.tap(find.byKey(ValueKey<String>('tl-visible-$id')));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(layer.getSwitches().visible, isTrue,
+          reason: 'the locked row kept its eye');
+
+      await tester.tap(find.byKey(ValueKey<String>('tl-shy-$id')));
+      await tester.pumpAndSettle();
+      expect(layer.getSwitches().shy, isTrue);
+      await tester.tap(find.byKey(ValueKey<String>('tl-locked-$id')));
+      await tester.pumpAndSettle();
+      expect(layer.getSwitches().locked, isFalse);
+    });
+
+    /// The Flow cell on a locked footage row refuses quietly too.
+    testWidgets('a locked footage row refuses its Flow cell without throwing',
+        (tester) async {
+      final p = withComp();
+      final footage = p.state.project!.importFootage(path: 'C:/clips/shot.mov');
+      p.comp.addFootageLayer(footage: footage, asSequence: false);
+      final layer = p.comp.getLayers().single;
+      layer.setSwitch(switch_: BridgeLayerSwitch.locked, on_: true);
+      p.uiState.model.refresh();
+      await mount(tester, p);
+
+      final id = layer.internallayerId;
+      await tester.tap(find.byKey(ValueKey<String>('tl-flow-$id')));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(layer.getInfo().flow, isFalse,
+          reason: 'the locked row kept Flow off');
     });
 
     testWidgets('the row menu\'s Delete takes the whole selection',

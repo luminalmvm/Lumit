@@ -267,7 +267,7 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
     super.initState();
     final s = widget.initial;
     _name = TextEditingController(text: s.name);
-    _fps = TextEditingController(text: _formatRate(s.fpsNum, s.fpsDen))
+    _fps = TextEditingController(text: formatRate(s.fpsNum, s.fpsDen))
       // The list beside the field names whatever the field says, so it has to
       // follow every keystroke — not wait for the field to be submitted, which
       // would leave it naming the rate before last.
@@ -440,13 +440,13 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
       options: [null, ..._compPresets],
       label: (preset) => preset == null
           ? l10n.custom
-          : l10n.compPresetLabel(preset.$1, _formatRate(preset.$4, preset.$5)),
+          : l10n.compPresetLabel(preset.$1, formatRate(preset.$4, preset.$5)),
       onChanged: (preset) {
         if (preset == null) return;
         setState(() {
           _width = preset.$2;
           _height = preset.$3;
-          _fps.text = _formatRate(preset.$4, preset.$5);
+          _fps.text = formatRate(preset.$4, preset.$5);
         });
       },
     );
@@ -724,7 +724,11 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
 
 /// A rate as one number: `60`, `23.976`. Trailing zeros are dropped, so the
 /// ordinary rates read as ordinary numbers.
-String _formatRate(int num, int den) {
+///
+/// Public because the Project panel's menu writes a sequence's rate in the same
+/// hand, and [parseRate] reads what this writes straight back as the exact
+/// pair.
+String formatRate(int num, int den) {
   if (den <= 0) return '$num';
   if (num % den == 0) return '${num ~/ den}';
   final decimal = (num / den).toStringAsFixed(3);

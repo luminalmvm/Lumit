@@ -332,6 +332,40 @@ void main() {
       expect(black.field0, lessThan(0.4));
     });
 
+    testWidgets('the channel buttons aim the handles at that channel',
+        (tester) async {
+      final p = withLayer();
+      p.layer.addEffect(name: 'levels');
+      await mount(tester, p);
+
+      // Master, Red, Green and Blue — the effect's own four groups, and no
+      // Alpha, because Levels has no alpha lane.
+      for (var i = 0; i < 4; i++) {
+        expect(
+            find.byKey(ValueKey<String>('fx-levels-tab-$i')), findsOneWidget);
+      }
+      expect(find.byKey(const ValueKey('fx-levels-tab-4')), findsNothing);
+
+      await tester.tap(find.byKey(const ValueKey('fx-levels-tab-1')));
+      await tester.pumpAndSettle();
+
+      final strip = find.byKey(const ValueKey('fx-levels-input-handles'));
+      final box = tester.getRect(strip);
+      await tester.dragFrom(
+          Offset(box.left + 2, box.center.dy), Offset(box.width * 0.3, 0));
+      await tester.pumpAndSettle();
+
+      double black(String param) =>
+          ((p.layer.getEffects().single.getValue(id: param)
+                      as BridgeEffectValue_Float)
+                  .field0 as BridgeScalar_Static)
+              .field0;
+      expect(black('red_in_black'), greaterThan(0.2),
+          reason: 'the drag reached the channel the buttons chose');
+      expect(black('red_in_black'), lessThan(0.4));
+      expect(black('master_in_black'), 0, reason: 'and Master is untouched');
+    });
+
     // --------------------------------------------------------------- Slider
 
     testWidgets('the Controls category holds the five identity effects',

@@ -522,6 +522,10 @@ pub(crate) fn op_scope(op: &lumit_core::Op) -> (Option<Uuid>, Option<Uuid>, bool
         // chips, so the panel has to hear about it.
         | Op::SetItemLabel { .. }
         | Op::SetMediaRef { .. }
+        // A run of stills read at another rate is another picture at every
+        // frame that reads it, and the panel's rate column says so, so the
+        // item scope carries it exactly as a relink does.
+        | Op::SetSequenceRate { .. }
         // A proxy is a second media reference on a footage item, and
         // all three of these change what the item's row says about itself —
         // whether it has a stand-in, whether it is being used, and the

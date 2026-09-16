@@ -229,9 +229,14 @@ impl<'a> Fx<'a> {
 
     /// A parameter's still value, for the switches and option lists that do
     /// not animate in Lumit.
-    pub(super) fn still(&self, ae_id: &str) -> Option<f64> {
+    pub(super) fn still(&mut self, conv: &mut Conv<'_>, ae_id: &str) -> Option<f64> {
         let node = self.leaf(ae_id)?;
-        super::props::axis_of(node.value.as_ref()?, 0)
+        let (value, keyed) = super::props::starting_value(node);
+        if keyed {
+            let param = display_name(node, ae_id).to_string();
+            self.approx_named(conv, &param, super::props::STARTS_ON);
+        }
+        value
     }
 
     pub(super) fn set(&mut self, lumit_id: &str, value: EffectValue) {
@@ -325,8 +330,8 @@ impl<'a> Fx<'a> {
     }
 
     /// An AE checkbox — stored as a number — onto a Lumit switch.
-    pub(super) fn toggle(&mut self, ae_id: &str, lumit_id: &str) {
-        if let Some(v) = self.still(ae_id) {
+    pub(super) fn toggle(&mut self, conv: &mut Conv<'_>, ae_id: &str, lumit_id: &str) {
+        if let Some(v) = self.still(conv, ae_id) {
             self.set(lumit_id, EffectValue::Bool(v.abs() > f64::EPSILON));
         }
     }
@@ -340,7 +345,7 @@ impl<'a> Fx<'a> {
         lumit_id: &str,
         f: impl Fn(i64) -> (u32, Option<&'static str>),
     ) {
-        let Some(v) = self.still(ae_id) else {
+        let Some(v) = self.still(conv, ae_id) else {
             return;
         };
         let (index, approximated) = f(v.round() as i64);
@@ -354,8 +359,8 @@ impl<'a> Fx<'a> {
     }
 
     /// An AE Random Seed onto a Lumit Seed.
-    pub(super) fn seed(&mut self, ae_id: &str, lumit_id: &str) {
-        if let Some(v) = self.still(ae_id) {
+    pub(super) fn seed(&mut self, conv: &mut Conv<'_>, ae_id: &str, lumit_id: &str) {
+        if let Some(v) = self.still(conv, ae_id) {
             let v = if v.is_finite() {
                 v.clamp(0.0, f64::from(u32::MAX))
             } else {
@@ -370,7 +375,7 @@ impl<'a> Fx<'a> {
     /// an index naming a mask the import did not bring over falls back to it
     /// and says so.
     pub(super) fn mask(&mut self, conv: &mut Conv<'_>, ae_id: &str, lumit_id: &str) -> Option<f64> {
-        let index = self.still(ae_id).unwrap_or(0.0).round() as i64;
+        let index = self.still(conv, ae_id).unwrap_or(0.0).round() as i64;
         let found = usize::try_from(index - 1)
             .ok()
             .and_then(|i| conv.masks.get(i).copied());
@@ -767,7 +772,10 @@ fn levels(
     row: &'static Row,
 ) -> Option<EffectInstance> {
     let mut fx = Fx::new(path, node, row)?;
-    let channel = fx.still("ADBE Easy Levels2-0001").unwrap_or(1.0).round() as i64;
+    let channel = fx
+        .still(conv, "ADBE Easy Levels2-0001")
+        .unwrap_or(1.0)
+        .round() as i64;
     let Some(g) = channel_group(channel) else {
         fx.approx_named(
             conv,
@@ -806,7 +814,12 @@ fn hue_saturation(
     row: &'static Row,
 ) -> Option<EffectInstance> {
     let mut fx = Fx::new(path, node, row)?;
-    if fx.still("ADBE HUE SATURATION-0007").unwrap_or(0.0).abs() > f64::EPSILON {
+    if fx
+        .still(conv, "ADBE HUE SATURATION-0007")
+        .unwrap_or(0.0)
+        .abs()
+        > f64::EPSILON
+    {
         conv.report.row(
             fx.here.clone(),
             Outcome::Placeholder,
@@ -818,7 +831,11 @@ fn hue_saturation(
         return None;
     }
     // 1 Master, then AE's six ranges in the order Lumit declares them.
-    let g = match fx.still("ADBE HUE SATURATION-0002").unwrap_or(1.0).round() as i64 {
+    let g = match fx
+        .still(conv, "ADBE HUE SATURATION-0002")
+        .unwrap_or(1.0)
+        .round() as i64
+    {
         2 => "reds",
         3 => "yellows",
         4 => "greens",
@@ -918,7 +935,7 @@ fn photo_filter(
     });
     fx.colour(conv, "ADBE Photo Filter-0002", "colour");
     fx.float(conv, "ADBE Photo Filter-0003", "density", 1.0, 0.0);
-    fx.toggle("ADBE Photo Filter-0004", "preserve_luminosity");
+    fx.toggle(conv, "ADBE Photo Filter-0004", "preserve_luminosity");
     fx.differs(
         conv,
         "the twenty named filters are Lumit's own chromaticities under Adobe's names",
@@ -948,7 +965,7 @@ fn black_and_white(
             0.0,
         );
     }
-    fx.toggle("ADBE Black&White-0007", "tint");
+    fx.toggle(conv, "ADBE Black&White-0007", "tint");
     fx.colour(conv, "ADBE Black&White-0008", "tint_colour");
     fx.approx_named(
         conv,
@@ -992,8 +1009,8 @@ fn shadow_highlight(
         0.0,
     );
     // One gaussian, so one radius: the mean of AE's two, px@comp.
-    let shadow = fx.still("ADBE ShadowHighlight-0008").unwrap_or(30.0);
-    let highlight = fx.still("ADBE ShadowHighlight-0010").unwrap_or(30.0);
+    let shadow = fx.still(conv, "ADBE ShadowHighlight-0008").unwrap_or(30.0);
+    let highlight = fx.still(conv, "ADBE ShadowHighlight-0010").unwrap_or(30.0);
     let radius = (shadow + highlight) * 0.5;
     fx.set("radius", EffectValue::Float(LumProperty::fixed(radius)));
     fx.approx_named(
@@ -1016,7 +1033,12 @@ fn shadow_highlight(
         0.0,
     );
     fx.float(conv, "ADBE ShadowHighlight-0016", "mix", -1.0, 100.0);
-    if fx.still("ADBE ShadowHighlight-0001").unwrap_or(0.0).abs() > f64::EPSILON {
+    if fx
+        .still(conv, "ADBE ShadowHighlight-0001")
+        .unwrap_or(0.0)
+        .abs()
+        > f64::EPSILON
+    {
         fx.approx_named(
             conv,
             "Auto Amounts",
@@ -1145,7 +1167,7 @@ fn invert(
 ) -> Option<EffectInstance> {
     let mut fx = Fx::new(path, node, row)?;
     fx.float(conv, "ADBE Invert-0002", "mix", -1.0, 100.0);
-    if fx.still("ADBE Invert-0001").unwrap_or(0.0).round() as i64 != 0 {
+    if fx.still(conv, "ADBE Invert-0001").unwrap_or(0.0).round() as i64 != 0 {
         fx.approx_named(conv, "Channel", "RGB, the channels Lumit's Invert works on");
     }
     fx.done()
@@ -1225,8 +1247,8 @@ fn fill(
     let mut fx = Fx::new(path, node, row)?;
     fx.colour(conv, "ADBE Fill-0002", "colour");
     fx.float(conv, "ADBE Fill-0005", "mix", 100.0, 0.0);
-    let targeted = fx.still("ADBE Fill-0001").unwrap_or(0.0) > 0.5
-        || fx.still("ADBE Fill-0007").unwrap_or(0.0).abs() > f64::EPSILON;
+    let targeted = fx.still(conv, "ADBE Fill-0001").unwrap_or(0.0) > 0.5
+        || fx.still(conv, "ADBE Fill-0007").unwrap_or(0.0).abs() > f64::EPSILON;
     if targeted {
         fx.approx_named(
             conv,
@@ -1277,7 +1299,7 @@ fn noise(
 ) -> Option<EffectInstance> {
     let mut fx = Fx::new(path, node, row)?;
     fx.float(conv, "ADBE Noise-0001", "amount", 1.0, 0.0);
-    fx.toggle("ADBE Noise-0002", "colour_noise");
+    fx.toggle(conv, "ADBE Noise-0002", "colour_noise");
     fx.differs(
         conv,
         "nothing is clipped: grain rides on top of a highlight instead of flattening it, which \
@@ -1322,11 +1344,11 @@ fn fractal_noise(
         3 => (1, None),
         _ => (1, Some("Perlin, the smoother of the two bases Lumit ships")),
     });
-    fx.toggle("ADBE Fractal Noise-0003", "invert");
+    fx.toggle(conv, "ADBE Fractal Noise-0003", "invert");
     fx.float(conv, "ADBE Fractal Noise-0004", "contrast", 1.0, 0.0);
     fx.float(conv, "ADBE Fractal Noise-0005", "brightness", 1.0, 0.0);
     fx.float(conv, "ADBE Fractal Noise-0008", "rotation", 1.0, 0.0);
-    fx.toggle("ADBE Fractal Noise-0009", "uniform_scaling");
+    fx.toggle(conv, "ADBE Fractal Noise-0009", "uniform_scaling");
     for (ae, lumit) in [
         ("ADBE Fractal Noise-0010", "scale"),
         ("ADBE Fractal Noise-0011", "scale_width"),
@@ -1340,9 +1362,9 @@ fn fractal_noise(
     fx.float(conv, "ADBE Fractal Noise-0017", "sub_influence", 1.0, 0.0);
     fx.float(conv, "ADBE Fractal Noise-0018", "sub_scaling", 1.0, 0.0);
     fx.float(conv, "ADBE Fractal Noise-0023", "evolution", 1.0, 0.0);
-    fx.toggle("ADBE Fractal Noise-0025", "cycle_evolution");
+    fx.toggle(conv, "ADBE Fractal Noise-0025", "cycle_evolution");
     fx.float(conv, "ADBE Fractal Noise-0026", "cycle", 1.0, 0.0);
-    fx.seed("ADBE Fractal Noise-0027", "seed");
+    fx.seed(conv, "ADBE Fractal Noise-0027", "seed");
     fx.float(conv, "ADBE Fractal Noise-0029", "mix", 1.0, 0.0);
     fx.drop_params(
         conv,
@@ -1394,7 +1416,7 @@ fn beam(
     );
     fx.colour(conv, "ADBE Laser-0008", "inside_colour");
     fx.colour(conv, "ADBE Laser-0009", "outside_colour");
-    fx.toggle("ADBE Laser-0011", "composite_on_original");
+    fx.toggle(conv, "ADBE Laser-0011", "composite_on_original");
     fx.drop_param(conv, "3D Perspective");
     fx.done()
 }
@@ -1462,7 +1484,7 @@ fn lightning(
     fx.rebased(conv, "Turbulence");
     fx.float(conv, "ADBE Lightning 2-0017", "forking", 100.0, 0.0);
     fx.float(conv, "ADBE Lightning 2-0018", "decay", 100.0, 0.0);
-    fx.toggle("ADBE Lightning 2-0020", "composite_on_original");
+    fx.toggle(conv, "ADBE Lightning 2-0020", "composite_on_original");
     fx.differs(
         conv,
         "the bolt's shape is Lumit's own, After Effects' displacement being undocumented",
@@ -1506,13 +1528,18 @@ fn radio_waves(
     fx.float(conv, "APC Radio Waves-0036", "expansion", 1.0, 0.0);
     fx.float(conv, "APC Radio Waves-0038", "rotation", 1.0, 0.0);
     fx.float(conv, "APC Radio Waves-0044", "spin", 1.0, 0.0);
-    let lifespan = fx.still("APC Radio Waves-0056").unwrap_or(10.0).max(1e-6);
+    // Lifespan animates, so this read files no row.
+    let lifespan = fx
+        .leaf("APC Radio Waves-0056")
+        .and_then(|n| super::props::starting_value(n).0)
+        .unwrap_or(10.0)
+        .max(1e-6);
     fx.float(conv, "APC Radio Waves-0056", "lifespan", 1.0, 0.0);
     fx.float(conv, "APC Radio Waves-0008", "sides", 1.0, 0.0);
-    fx.toggle("APC Radio Waves-0014", "star");
+    fx.toggle(conv, "APC Radio Waves-0014", "star");
     // AE's Star Depth is signed and Lumit's is a depth; the magnitude is the
     // shape and the sign is which way the points face.
-    if let Some(depth) = fx.still("APC Radio Waves-0016") {
+    if let Some(depth) = fx.still(conv, "APC Radio Waves-0016") {
         fx.set(
             "star_depth",
             EffectValue::Float(LumProperty::fixed((depth.abs() * 100.0).clamp(0.0, 100.0))),
@@ -1552,7 +1579,11 @@ fn radio_waves(
     fx.rebased(conv, "Fade-in Time and Fade-out Time");
 
     // 1 Polygon, 2 Image Contours, 3 Mask.
-    match fx.still("APC Radio Waves-0002").unwrap_or(1.0).round() as i64 {
+    match fx
+        .still(conv, "APC Radio Waves-0002")
+        .unwrap_or(1.0)
+        .round() as i64
+    {
         2 => fx.approx_named(
             conv,
             "Wave Type",
@@ -1592,7 +1623,7 @@ fn vegas(
 ) -> Option<EffectInstance> {
     let mut fx = Fx::new(path, node, row)?;
     // 1 Image Contours, 2 Mask/Path.
-    let mask_half = fx.still("APC Vegas-0052").unwrap_or(1.0).round() as i64 == 2;
+    let mask_half = fx.still(conv, "APC Vegas-0052").unwrap_or(1.0).round() as i64 == 2;
     let perimeter = fx.mask(conv, "APC Vegas-0050", "path");
 
     if mask_half {
@@ -1602,13 +1633,13 @@ fn vegas(
         // Source is the same question with a shorter list, and its first entry
         // is AE's default.
         fx.set("source", EffectValue::Choice(0));
-        if fx.still("APC Vegas-0010").unwrap_or(1.0).round() as i64 != 1 {
+        if fx.still(conv, "APC Vegas-0010").unwrap_or(1.0).round() as i64 != 1 {
             fx.approx_named(conv, "Channel", "a level set of the perceptual luma");
         }
-        if fx.still("APC Vegas-0002").unwrap_or(0.0).abs() > f64::EPSILON {
+        if fx.still(conv, "APC Vegas-0002").unwrap_or(0.0).abs() > f64::EPSILON {
             fx.drop_param(conv, "Input Layer");
         }
-        if fx.still("APC Vegas-0004").unwrap_or(0.0).abs() > f64::EPSILON {
+        if fx.still(conv, "APC Vegas-0004").unwrap_or(0.0).abs() > f64::EPSILON {
             fx.drop_param(conv, "Invert Input");
         }
         fx.float(conv, "APC Vegas-0012", "threshold", 100.0 / 255.0, 0.0);
@@ -1622,7 +1653,7 @@ fn vegas(
 
     // AE counts segments round a contour; Lumit spaces them along it, so the
     // count becomes a length through the path's own perimeter.
-    let segments = fx.still("APC Vegas-0028").unwrap_or(32.0).max(1.0);
+    let segments = fx.still(conv, "APC Vegas-0028").unwrap_or(32.0).max(1.0);
     let (w, h) = conv.size;
     let length = match (mask_half, perimeter) {
         (true, Some(p)) if p > 0.0 => p / segments,
@@ -1689,13 +1720,13 @@ fn add_grain(
     fx.float(conv, "VISINF Grain Implant-0002", "red", 100.0, 0.0);
     fx.float(conv, "VISINF Grain Implant-0003", "green", 100.0, 0.0);
     fx.float(conv, "VISINF Grain Implant-0004", "blue", 100.0, 0.0);
-    fx.toggle("VISINF Grain Implant-0005", "monochrome");
+    fx.toggle(conv, "VISINF Grain Implant-0005", "monochrome");
     fx.float(conv, "VISINF Grain Implant-0040", "shadows", 100.0, 0.0);
     fx.float(conv, "VISINF Grain Implant-0041", "midtones", 100.0, 0.0);
     fx.float(conv, "VISINF Grain Implant-0042", "highlights", 100.0, 0.0);
     // A grain that redraws at a *rate* reads the clock, which §2.4 forbids: a
     // non-zero speed is Animate on, zero is off.
-    if let Some(speed) = fx.still("VISINF Grain Implant-0039") {
+    if let Some(speed) = fx.still(conv, "VISINF Grain Implant-0039") {
         fx.set("animate", EffectValue::Bool(speed.abs() > f64::EPSILON));
         fx.approx_named(
             conv,
@@ -1703,7 +1734,7 @@ fn add_grain(
             "the Animate switch, a grain redrawing at a rate having to read the clock",
         );
     }
-    fx.seed("VISINF Grain Implant-0013", "seed");
+    fx.seed(conv, "VISINF Grain Implant-0013", "seed");
     fx.approx_named(
         conv,
         "the Tonal Ranges boundaries",
@@ -1760,23 +1791,33 @@ fn scribble(
         1.0,
         0.0,
     );
-    fx.seed("ADBE Scribble Fill-0046", "seed");
+    fx.seed(conv, "ADBE Scribble Fill-0046", "seed");
     fx.float(conv, "ADBE Scribble Fill-0024", "opacity", 100.0, 0.0);
     // 1 On Transparent, 2 On Original Image — AE's default of 2 is Lumit's on.
-    if let Some(v) = fx.still("ADBE Scribble Fill-0026") {
+    if let Some(v) = fx.still(conv, "ADBE Scribble Fill-0026") {
         fx.set(
             "composite_on_original",
             EffectValue::Bool(v.round() as i64 != 1),
         );
     }
-    if fx.still("ADBE Scribble Fill-0064").unwrap_or(1.0).round() as i64 != 1 {
+    if fx
+        .still(conv, "ADBE Scribble Fill-0064")
+        .unwrap_or(1.0)
+        .round() as i64
+        != 1
+    {
         fx.approx_named(
             conv,
             "Scribble",
             "one mask, docs/08 §1.2's mask-path row naming a single mask by design",
         );
     }
-    if fx.still("ADBE Scribble Fill-0050").unwrap_or(1.0).round() as i64 != 1 {
+    if fx
+        .still(conv, "ADBE Scribble Fill-0050")
+        .unwrap_or(1.0)
+        .round() as i64
+        != 1
+    {
         fx.approx_named(conv, "Fill Type", "the plain fill");
     }
     fx.drop_params(
@@ -1818,7 +1859,7 @@ fn stroke(
     fx.choice(conv, "ADBE Stroke-0007", "paint_style", |v| {
         (u32::try_from((v - 1).clamp(0, 2)).unwrap_or(0), None)
     });
-    if fx.still("ADBE Stroke-0010").unwrap_or(0.0).abs() > f64::EPSILON {
+    if fx.still(conv, "ADBE Stroke-0010").unwrap_or(0.0).abs() > f64::EPSILON {
         fx.approx_named(
             conv,
             "All Masks",
@@ -1860,7 +1901,7 @@ fn echo(
     // AE's Echo Time is seconds a frame back; Lumit's samples are whole frames.
     let step = -1.0 / conv.tb.rate().fps();
     if fx
-        .still("ADBE Echo-0001")
+        .still(conv, "ADBE Echo-0001")
         .is_some_and(|t| (t - step).abs() > 1e-4)
     {
         fx.approx_named(
