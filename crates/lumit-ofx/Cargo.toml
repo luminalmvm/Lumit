@@ -19,6 +19,11 @@ lumit-core = { path = "../lumit-core" }
 # the number a plugin sizes its scratch from is the number the host really
 # spends. The edge runs one way: `lumit-eval` knows nothing about plugins.
 lumit-eval = { path = "../lumit-eval" }
+# The pipe to the broker, where the broker executable is, and the rules every
+# plugin host must answer the same way. Shared with the audio host and with LFX;
+# this host's own prefix and environment variable are passed in (`ipc::identity`,
+# docs/impl/lfx.md §3.1).
+lumit-ipc = { path = "../lumit-ipc" }
 lumit-peer = { path = "../lumit-peer" }
 # Lumit's working frames are half floats; the boundary widens them to fp32,
 # which is the only depth this host advertises (docs/12 §2.1).
@@ -40,10 +45,10 @@ thiserror = "2"
 # An effect instance is named by a uuid, and a plugin definition keeps one live
 # plugin instance per effect instance.
 uuid = { version = "1", features = ["v7"] }
-# The control plane: length-prefixed `bincode` over a duplex local socket —
-# a named pipe on Windows, a Unix socket elsewhere (docs/impl/ofx-host.md §4).
+# An instance's opaque blob, which the plugin owns and this host only carries.
+# The control plane's own `bincode` is `lumit-ipc`'s; this is the one use left
+# in the crate's own code.
 bincode = "1"
-interprocess = "2"
 # The frame plane: the shared-memory ring. `memmap2` is `CreateFileMapping` +
 # `MapViewOfFile` on Windows and `mmap` on Unix — the two calls the note names,
 # spelled once instead of twice.

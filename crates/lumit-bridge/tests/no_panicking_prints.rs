@@ -14,17 +14,36 @@
 //! gate: it reads the shipping half of every engine source file and fails on a
 //! standard print macro, so the fix cannot quietly come undone.
 //!
-//! Three crates are exempt by design, and all are command-line programs run
+//! Four crates are exempt by design, and all are command-line programs run
 //! outside the editor process: `lumit-bench`, whose printed report *is* its
-//! output, and the two brokers — `lumit-ofx-broker` and `lumit-aplug-broker`
-//! — whose few lines are usage and fatal-error text on their way out. A
-//! broker dying is already its designed failure mode (one dry block and a
-//! badge), so a print that panics costs nothing a fatal exit did not.
+//! output, and the three brokers - `lumit-ofx-broker`, `lumit-aplug-broker`
+//! and `lumit-lfx-broker` - whose few lines are usage and fatal-error text on
+//! their way out. A broker dying is already its designed failure mode (one dry
+//! block or one badged frame), so a print that panics costs nothing a fatal
+//! exit did not.
+//!
+//! One **file** is exempt beside them, because its crate is not a program:
+//! `lumit-lfx-validator/src/main.rs`, whose printed table is the whole of what
+//! `lfx-validator` is for (docs/impl/lfx.md §9). The exemption is the file and
+//! not the crate directory, since the library under that program is a library
+//! like any other - which is §9's own argument against exempting a whole host
+//! crate, made one crate along.
 
 use std::path::{Path, PathBuf};
 
 /// Crates whose console output is the product, not a diagnostic.
-const EXEMPT_CRATES: [&str; 3] = ["lumit-bench", "lumit-ofx-broker", "lumit-aplug-broker"];
+const EXEMPT_CRATES: [&str; 4] = [
+    "lumit-bench",
+    "lumit-ofx-broker",
+    "lumit-aplug-broker",
+    "lumit-lfx-broker",
+];
+
+/// Single files whose console output is the product, in crates whose other
+/// files are held to the ban. Spelled from the crate directory down, matched
+/// against the tail of the path so the check does not depend on where the
+/// checkout is.
+const EXEMPT_FILES: [&str; 1] = ["lumit-lfx-validator/src/main.rs"];
 
 /// The macros that panic on a failed write.
 const BANNED: [&str; 4] = ["println!(", "eprintln!(", "print!(", "eprint!("];
@@ -39,6 +58,9 @@ fn shipping_engine_code_never_uses_a_panicking_print() {
 
     let mut hits = Vec::new();
     for file in crates.iter().flat_map(|c| rust_sources(&c.join("src"))) {
+        if is_exempt_file(&file) {
+            continue;
+        }
         let Ok(text) = std::fs::read_to_string(&file) else {
             continue;
         };
@@ -67,6 +89,12 @@ fn shipping_engine_code_never_uses_a_panicking_print() {
          crate's `note!` macro instead of these:\n{}",
         hits.join("\n")
     );
+}
+
+/// Whether this path is one of the [`EXEMPT_FILES`].
+fn is_exempt_file(file: &Path) -> bool {
+    let path = file.to_string_lossy().replace('\\', "/");
+    EXEMPT_FILES.iter().any(|tail| path.ends_with(tail))
 }
 
 /// Every crate directory in the workspace bar the exempt command-line ones.

@@ -102,9 +102,17 @@ pub enum Unit {
     /// is allowed to declare.
     Percent,
     /// A percentage of the composition diagonal. **No parameter may declare
-    /// it** (every distance is px@comp); it stays for the ROI padding
-    /// declarations and the reference format, and
+    /// it** (every distance is px@comp), and
     /// `no_parameter_is_a_per_cent_of_the_diagonal` enforces the rule.
+    ///
+    /// It stays in the ladder for two reasons, and the ROI padding
+    /// declarations are not among them: [`Roi::PaddedPx`](crate::fx::Roi) is
+    /// px@comp and carries no unit field at all. It stays because
+    /// `reference.rs` spells every member of this enum and the resolve step
+    /// answers this one, and because LFX's `lfx_unit` mirrors this ladder
+    /// value for value so that the host's vocabulary and a plugin's cannot
+    /// drift - where it is a describe refusal, for the reason it is forbidden
+    /// here (docs/impl/lfx.md §2.3).
     PctDiag,
     /// Pixels at composition size (px@comp), converted to the raster in play by
     /// the resolve step — the resolution-independent form docs/08 §2.3

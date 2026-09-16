@@ -237,9 +237,12 @@ not a v1 guess.
 
 `lumit-aplug` (host: `clap` and `vst3` modules behind one `AudioEffectDef`) and
 `lumit-aplug-broker` (the child binary), mirroring `lumit-ofx`/`lumit-ofx-broker` —
-**the architecture is reused, the code is not shared**: the proto types (audio blocks,
-param events) share nothing with frames, so a common crate would be an abstraction with
-one and a half users. What carries over verbatim as *rules* (all learned the hard way):
+**the architecture is reused and the transport is now shared; the code that is about
+sound is not**: the pipe, the spawn helpers and the handful of rules every host must
+answer the same way are `lumit-ipc` ([lfx.md](lfx.md) §3.1), while the proto types (audio
+blocks, param events) share nothing with frames, so a common ring would be an abstraction
+with one and a half users. What carries over verbatim as *rules* (all learned the hard
+way):
 
 - One broker process per vendor module (a `.clap` file / `.vst3` bundle); a bundle's
   plugins share one broker. **One broker binary serves both standards**: the

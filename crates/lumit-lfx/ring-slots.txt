@@ -1,0 +1,25 @@
+# How many slots a ring buys, by frame size and depth.
+# Generated - do not edit. To refresh after a change to the rule:
+#   cargo test -p lumit-lfx regenerate_ring_slot_table -- --ignored
+#
+# slots = clamp(floor(RING_BUDGET_BYTES / slot_bytes), RING_MIN_SLOTS, RING_MAX_SLOTS)
+# slot_bytes = w x h x 4 x depth_bytes + HEADER_BYTES
+# A plugin's declared window asks for hi - lo + 2 and may raise, never lower.
+#
+# RING_BUDGET_BYTES = 536870912, HEADER_BYTES = 64, slots in [3, 64]
+
+| | fp32 slots | fp16 slots |
+|---|---|---|
+| 720p | 36 | 64 |
+| 1080p | 16 | 32 |
+| UHD 4K | 4 | 8 |
+| 8K | 3 | 3 |
+
+And what one declared window costs, at UHD 4K:
+
+| window | fp32 slots | fp16 slots |
+|---|---|---|
+| 0 .. 0 | 4 | 8 |
+| -1 .. 1 | 4 | 8 |
+| -5 .. 5 | 12 | 12 |
+| -32 .. 32 | 64 | 64 |

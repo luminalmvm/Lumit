@@ -3,8 +3,10 @@
 
 pub mod fixtures;
 pub mod plugins;
+pub mod roster;
 
 pub use plugins::{plugin_prefs_path, PluginPrefs};
+pub use roster::{plugin_roster_path, PluginKind, PluginRoster, RosterEntry};
 
 use lumit_core::model::{Fingerprint, MediaRef, ProjectItem};
 use lumit_core::ops::Op;

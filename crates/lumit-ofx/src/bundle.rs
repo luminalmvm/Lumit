@@ -378,7 +378,15 @@ unsafe fn read_c_string(ptr: *const std::ffi::c_char) -> Option<String> {
 }
 
 /// The directories OFX plugins live in, per docs/12 §2.6: the standard
-/// location for the platform, plus anything in `OFX_PLUGIN_PATH`.
+/// location for the platform, plus anything in `OFX_PLUGIN_PATH`, plus Lumit's
+/// own addons folder.
+///
+/// The addons folder is appended **here** rather than onto a caller's
+/// `ScanOptions`, because this function is what every route into a scan goes
+/// through and a caller's list is not (docs/impl/lfx.md §6.1). Appended, never
+/// replacing, exactly as the environment variable is: a person who keeps
+/// plugins somewhere else is adding a folder, not taking the standard ones
+/// away.
 #[must_use]
 pub fn search_paths() -> Vec<PathBuf> {
     let mut paths = Vec::new();
@@ -392,6 +400,7 @@ pub fn search_paths() -> Vec<PathBuf> {
     if let Some(extra) = std::env::var_os("OFX_PLUGIN_PATH") {
         paths.extend(std::env::split_paths(&extra));
     }
+    paths.extend(lumit_ipc::addons_dir());
     paths
 }
 

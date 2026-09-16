@@ -801,16 +801,38 @@ jobs:
       # and lumit-ml for the same kind of reason: its inference half needs a model
       # runtime no runner has.
       #
-      # A new engine crate goes in this list as it is added. Three that did not
-      # are here now: the bounded-ingress reader, the broker handshake and the
-      # governor's ledger are each a crate whose whole job is to be correct
-      # about a number, which is the kind of code a gate is for.
+      # A new engine crate goes in this list as it is added. Four that did not
+      # are here now: the bounded-ingress reader, the broker handshake, the
+      # governor's ledger and the broker transport are each a crate whose whole
+      # job is to be correct about a number or a name, which is the kind of code
+      # a gate is for.
+      #
+      # The three plugin hosts - lumit-ofx, lumit-aplug and lumit-lfx - are
+      # deliberately held out, and the hold-out is the rule rather than an
+      # omission. Most of each is an FFI edge or a second process: their suites
+      # load a cdylib and drive a broker, so a line count over them measures
+      # which fixture plugins a runner managed to build rather than how much of
+      # the host is exercised, and a floor that moves with the weather is a
+      # floor nobody may act on. What each host owes instead is a named test
+      # per behaviour, which is what docs/impl/lfx.md §14 and
+      # docs/impl/ofx-host.md §5 are. A host crate joins this list on the day
+      # its tests need neither.
+      #
+      # Each host's brokers, fixture plugins and tools are held out with it, for
+      # the same reason and not as an oversight: lumit-ofx-broker,
+      # lumit-aplug-broker, lumit-lfx-broker, the three testplug cdylibs and
+      # lumit-lfx-validator are all a second process or the plugin on the other
+      # side of one. lumit-lfx-abi is held out because there is nothing in it to
+      # cover - declarations, a `#[repr(C)]` mirror and a layout suite that
+      # asserts numbers - and its own C half is a build failure rather than a
+      # line count. lumit-ipc is in the list because it is none of those: it is
+      # a crate whose whole job is to be correct about a name and a number.
       - run: >
           cargo llvm-cov
           -p lumit-core -p lumit-project -p lumit-eval
           -p lumit-cache -p lumit-flow -p lumit-text -p lumit-colour
           -p lumit-track -p lumit-roto
-          -p lumit-ingress -p lumit-peer -p lumit-budget
+          -p lumit-ingress -p lumit-peer -p lumit-budget -p lumit-ipc
           --fail-under-lines 80
 
   # The OFX host's conformance pass against real third-party plugins
@@ -924,6 +946,121 @@ jobs:
       # repository, and it wins over whichever toolchain the step above made the
       # default - so without this cargo runs stable and `-Zsanitizer` is refused.
       - run: cargo +nightly test -p lumit-ofx --test handle_fuzz --target x86_64-unknown-linux-gnu
+
+  # `lfx-validator` over `lumit-lfx-testplug`'s twelve personalities
+  # (docs/impl/lfx.md §9). The LFX pair mirrors the OFX pair above with one
+  # difference that matters: **both run on a hosted runner with no FFmpeg and
+  # nothing downloaded**, because the bundle under test is the fixture this
+  # workspace builds. So there is no LUMIT_REQUIRE_LFX_BENCH to defer - the gate
+  # is on from the first day.
+  #
+  # Two steps, because the crate is a library with a program in front of it and
+  # both halves are worth running. The test stages the bundle, drives the ten
+  # suites and asserts which personalities must pass and which three must be
+  # refused by name; the program then runs over the same staged bundle, which is
+  # what a vendor's own CI will do, with the three deliberate refusals named so
+  # that a *pass* by one of them is the failure. `--allow-refused` downgrades the
+  # **describe** refusal it is about and no other, so a named plugin that starts
+  # describing and then fails a suite that drives frames still fails this job.
+  lfx-conformance:
+    name: LFX conformance (lfx-validator over the test bundle)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@d1031067263f94b142dd6c0ce24c5eb9d02d52a0 # master
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - name: The ten suites over every personality
+        run: cargo test -p lumit-lfx-broker --test validator -- --nocapture
+      # The shipped program, over the bundle the step above staged under
+      # target/. It needs the broker beside it, which `cargo build` puts there.
+      - name: The shipped CLI over the same bundle
+        run: |
+          cargo build -p lumit-lfx-broker -p lumit-lfx-validator
+          ./target/debug/lfx-validator \
+            --allow-refused org.lumit.testplug.broken-describe \
+            --allow-refused org.lumit.testplug.duplicate-ids \
+            --allow-refused org.lumit.testplug.missing-extension \
+            target/lfx-validator-bundle/Test.lfx.bundle
+      - name: The pass/fail table, for the pull request
+        if: always()
+        run: |
+          if [ -f target/lfx-conformance.md ]; then
+            {
+              echo "## LFX conformance"
+              cat target/lfx-conformance.md
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Keep the table
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: lfx-conformance
+          path: target/lfx-conformance.md
+          if-no-files-found: ignore
+
+  # The same pass under AddressSanitizer (docs/impl/lfx.md §9). A job of its own
+  # for the reason the OFX one is: `-Zsanitizer=address` is unstable and needs a
+  # nightly compiler.
+  #
+  # What it instruments is not this process. An LFX handle is a `u32` into a map
+  # and cannot be undefined behaviour however forged (`ipc/handles.rs`); the
+  # bytes nobody has checked are read in `lumit-lfx`'s `local` module, which
+  # runs in the **broker**, and RUSTFLAGS reaches that binary too - so a
+  # validator run under ASan is the ABI edge instrumented while a stranger's
+  # declarations, size prefixes and strides go through it. The fuzz suite's
+  # seed is fixed here so a red run names the numbers that made it red.
+  #
+  # std is not rebuilt with the sanitiser, for the OFX job's reason. Leak
+  # detection is off because a describe leaks the declarations for the session
+  # by design (§10).
+  lfx-handle-fuzz:
+    name: LFX ABI edge under ASan
+    runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: -Zsanitizer=address
+      ASAN_OPTIONS: detect_leaks=0
+      LUMIT_LFX_FUZZ_SEED: 20260915
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@d1031067263f94b142dd6c0ce24c5eb9d02d52a0 # master
+        with:
+          toolchain: nightly
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      # `+nightly` explicitly, for the OFX job's reason: rust-toolchain.toml
+      # pins stable for the whole repository and wins over the default set
+      # above.
+      - run: cargo +nightly test -p lumit-lfx-broker --test validator --target x86_64-unknown-linux-gnu
+
+  # The template repository, built and validated before it is published
+  # (docs/impl/lfx.md §10). `template/` is what a vendor starts from: the
+  # header, three sets of bindings and one working example per language. It is
+  # staged in this tree precisely so that this job is what says whether it
+  # works - a template that has drifted from the ABI is worse than none at all,
+  # because it is wrong in a way that looks official.
+  #
+  # Three platforms, because that is the promise the template makes and because
+  # the C and C++ halves are the only code in this repository whose build a
+  # vendor runs rather than we do. Nothing is downloaded: CMake, a C and C++
+  # compiler and Python are on every hosted runner, and the test builds each
+  # example through the template's own CMakeLists and staging script rather
+  # than through a second copy of the recipe.
+  lfx-template:
+    name: LFX template (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@d1031067263f94b142dd6c0ce24c5eb9d02d52a0 # master
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - name: Build all three examples and drive each through the validator
+        run: cargo test -p lumit-lfx-broker --test template -- --nocapture
 
   no-hex-outside-theme:
     name: design-token lint (no hex literals outside the theme module)

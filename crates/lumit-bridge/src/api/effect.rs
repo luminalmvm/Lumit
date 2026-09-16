@@ -420,10 +420,20 @@ fn scan_audio_plugins(prefs: &lumit_project::PluginPrefs, scan: &mut BridgePlugi
 /// answer still holds for this session.
 #[frb(sync)]
 pub fn set_plugin_enabled(effect: String, enabled: bool) -> Result<(), BridgeError> {
-    // Three prefixes, two hosts, one preference file: the name's
-    // own prefix says which host is told, and the file is written the same way
-    // whichever it was. CLAP and VST3 are one host and one switched-off list —
-    // the identifier is a plugin id or a class id, and the list holds either.
+    // Two of the three hosts, one preference file: the name's own prefix says
+    // which host is told, and the file is written the same way whichever it
+    // was. CLAP and VST3 are one host and one switched-off list - the
+    // identifier is a plugin id or a class id, and the list holds either.
+    //
+    // **There is no `lfx:` arm here, on purpose.** `lumit_lfx::set_enabled`
+    // exists and is what would be called, but the Addons page takes the
+    // plugin's own identifier rather than a match name - a plugin switched off
+    // before a scan never registers and so has no match name at all - so LFX
+    // arrives through `set_addon_enabled` beside this rather than as a fourth
+    // prefix inside it (docs/impl/lfx.md §7.2). Until that lands an
+    // `lfx:` name falls through the `_` arm and is ignored, which is the same
+    // nothing this function has always answered for a name that is not a
+    // plugin's.
     let audio = lumit_core::fx::audio_plugin_id(&effect);
     let identifier = match (effect.strip_prefix(lumit_core::fx::OFX_MATCH_PREFIX), audio) {
         (Some(ofx), _) => {
@@ -1922,6 +1932,7 @@ pub const BADGE_REASONS: &[&str] = &[
     "plugin_failed",
     "plugin_disabled",
     "plugin_missing",
+    "plugin_refused",
     "unknown_effect",
     "shader_failed",
     "addon_missing",
@@ -1952,7 +1963,15 @@ fn badge_of(effect: &EffectInstance) -> (Option<String>, Option<String>) {
     if let Some(why) = lumit_render::gpufx::ofx::error_of(effect.id) {
         // A switched-off plugin files the reason key itself, so the badge says
         // "switched off" rather than reporting it as a failure.
-        return if why == lumit_ofx::discover::DISABLED_REASON {
+        // **The shared constant, not one host's.** Every hosted definition files
+        // into this one table, audio included, and both picture hosts file
+        // `lumit_ipc::DISABLED_REASON` when the user has switched a plugin off.
+        // Comparing against a single host's re-export would badge the other
+        // host's switched-off layer `plugin_failed` (docs/impl/lfx.md §4.3,
+        // §11 item 10). Audio never gets this far for that case - a
+        // switched-off audio plugin is never opened, so it files nothing and
+        // the arm above reads the session list instead.
+        return if why == lumit_ipc::DISABLED_REASON {
             (Some("plugin_disabled".to_owned()), None)
         } else {
             (Some("plugin_failed".to_owned()), Some(why))
@@ -1978,15 +1997,32 @@ fn badge_of(effect: &EffectInstance) -> (Option<String>, Option<String>) {
     if lumit_core::fx::def(name).is_some() {
         return (None, None);
     }
-    // Nothing answers to that name. An `ofx:` or `clap:` one is a plugin this
-    // machine has not got — uninstalled, switched off before the scan, or a
-    // project made on somebody else's machine; anything else is an effect from
-    // a newer Lumit. Both are inert placeholders and neither is an error
-    // (docs/12 §1, docs/08 §5) — an audio plugin's inertness being that its
-    // link is left out of the chain and the sound goes through dry.
+    // **Read before the namespace falls through**, which is the order of
+    // certainty this function is written in: a plugin the LFX scan turned away -
+    // a required extension this host has not got, a declaration Lumit cannot
+    // write down - is installed and named, and badging it "not installed on
+    // this machine" is the wrong sentence (docs/impl/lfx.md §4.3, §11 item 10).
+    // The refusal's own words go underneath, so a refused plugin names the
+    // extension it wanted.
+    if let Some(identifier) = name.strip_prefix(lumit_core::fx::LFX_MATCH_PREFIX) {
+        if let Some(refusal) = lumit_lfx::refusal_of(identifier) {
+            return (
+                Some("plugin_refused".to_owned()),
+                Some(refusal.why.to_string()),
+            );
+        }
+    }
+    // Nothing answers to that name. An `ofx:`, `lfx:` or `clap:` one is a
+    // plugin this machine has not got - uninstalled, switched off before the
+    // scan, or a project made on somebody else's machine; anything else is an
+    // effect from a newer Lumit. Both are inert placeholders and neither is an
+    // error (docs/12 §1, docs/08 §5) - an audio plugin's inertness being that
+    // its link is left out of the chain and the sound goes through dry.
     if matches!(
         effect.effect.namespace,
-        lumit_core::model::EffectNamespace::Ofx | lumit_core::model::EffectNamespace::Clap
+        lumit_core::model::EffectNamespace::Ofx
+            | lumit_core::model::EffectNamespace::Lfx
+            | lumit_core::model::EffectNamespace::Clap
     ) {
         (Some("plugin_missing".to_owned()), None)
     } else {

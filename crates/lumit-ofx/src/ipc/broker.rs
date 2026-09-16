@@ -39,14 +39,12 @@ use std::process::{Child, Command, Stdio};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::time::{Duration, Instant};
 
-use interprocess::local_socket::traits::Stream as _;
-use interprocess::local_socket::{Listener, SendHalf};
 use thiserror::Error;
 
 use crate::describe::{Context, PluginDescriptor};
 use crate::image::{Frame16, RectI};
 use crate::instance::ParamSnapshot;
-use crate::ipc::pipe::{self, PipeError};
+use crate::ipc::pipe::{self, Listener, PipeError, SendHalf};
 use crate::ipc::proto::{
     BrokerMessage, FrameRef, FrameWanted, HostMessage, InstanceId, Slot, PROTOCOL_VERSION,
 };
@@ -55,26 +53,21 @@ use crate::quirks::Quirks;
 use crate::render::{RenderRequest, SOURCE_CLIP};
 
 /// How many consecutive failures a plugin gets before it is put away for the
-/// session (docs/12 §2.3).
-pub const STRIKES_BEFORE_DISABLED: u32 = 3;
-
-/// How long the host waits for a freshly spawned broker to connect and say
-/// hello. Separate from the action deadlines: this one is about a program
-/// starting, not about a plugin thinking.
-pub const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
+/// session, and how long the host waits for a freshly spawned broker to connect
+/// and say hello. Both are `lumit-ipc`'s: they are answers every plugin host
+/// must give the same way, not this one's to choose (docs/impl/lfx.md §3.1).
+pub use lumit_ipc::{HANDSHAKE_TIMEOUT, STRIKES_BEFORE_DISABLED};
 
 /// How long a press may take. A plugin with its own editor stays inside the
 /// press until the user closes the window, so this is hours, not seconds. It
 /// exists so a plugin that never comes back is still a plugin that stopped.
 pub const PRESS_TIMEOUT: Duration = Duration::from_secs(60 * 60);
 
-/// How long a describe may take: the handshake's ceiling, or a quirks-table
-/// control deadline set longer than it. The audio broker's twin, for the same
-/// reason: the first describe opens the bundle from disk on a process
-/// that has only just said hello, which is a program starting rather than a
-/// plugin thinking, and nothing on a render waits on it.
+/// How long a describe may take, for this bundle's quirks: the handshake's
+/// ceiling, or a quirks-table control deadline set longer than it. The rule is
+/// `lumit-ipc`'s and the number it is given is this host's.
 pub(crate) fn describe_deadline(quirks: &crate::quirks::Quirks) -> Duration {
-    HANDSHAKE_TIMEOUT.max(quirks.control_timeout)
+    lumit_ipc::describe_deadline(quirks.control_timeout)
 }
 
 /// How many instances of one bundle's plugins may be alive at once.
@@ -91,52 +84,17 @@ pub const MAX_LIVE_INSTANCES: usize = 1_024;
 /// not a queue, it is a memory leak with a plugin attached (docs/14 §3).
 pub const MAX_NOTES: usize = 64;
 
-/// The environment variable that overrides where the broker executable is,
-/// for a test or for a developer running from a build tree.
-pub const BROKER_EXE_ENV: &str = "LUMIT_OFX_BROKER";
-
-/// The broker executable's file name.
-#[must_use]
-pub fn broker_exe_name() -> &'static str {
-    if cfg!(windows) {
-        "lumit-ofx-broker.exe"
-    } else {
-        "lumit-ofx-broker"
-    }
-}
+/// The environment variable that overrides where the broker executable is, and
+/// that executable's file name. Both are this host's own rather than the
+/// transport's, for the reason `ipc::identity` gives.
+pub use crate::ipc::identity::{broker_exe_name, BROKER_EXE_ENV};
 
 /// Where the broker executable is: beside Lumit's own, which is where every
-/// packaging step puts it.
+/// packaging step puts it. `lumit-ipc` does the looking; the two strings that
+/// say which program is being looked for are this host's.
 #[must_use]
 pub fn broker_exe() -> PathBuf {
-    if let Some(override_path) = std::env::var_os(BROKER_EXE_ENV) {
-        return PathBuf::from(override_path);
-    }
-    let name = broker_exe_name();
-    std::env::current_exe()
-        .ok()
-        .and_then(|exe| exe.parent().map(|dir| dir.join(name)))
-        .unwrap_or_else(|| PathBuf::from(name))
-}
-
-/// Start the broker with no console window of its own.
-///
-/// A broker is a console program and Lumit is a windowed one, so on Windows
-/// every spawn opens a console window in front of the editor — one per plugin
-/// file, all at once, during the start-up scan. `CREATE_NO_WINDOW` gives the
-/// child no console at all instead. Nothing is lost by it: the protocol was
-/// never on the child's standard streams (see `ipc::pipe`), and its output is
-/// already sent to nowhere.
-fn no_console(command: &mut Command) {
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        /// `CREATE_NO_WINDOW`, from winbase.h.
-        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-        command.creation_flags(CREATE_NO_WINDOW);
-    }
-    #[cfg(not(windows))]
-    let _ = command;
+    lumit_ipc::broker_exe(broker_exe_name(), BROKER_EXE_ENV)
 }
 
 /// What can go wrong before there is a broker to blame.
@@ -378,7 +336,7 @@ impl Broker {
             // be able to reach the protocol, which is why the protocol is not
             // on standard output in the first place (see `ipc::pipe`).
             .stdout(Stdio::null());
-        no_console(&mut command);
+        lumit_ipc::no_console(&mut command);
         for (key, value) in &self.config.env {
             command.env(key, value);
         }
@@ -1116,7 +1074,7 @@ fn read_loop(listener: Listener, tx: &mpsc::Sender<Incoming>) {
         let _ = tx.send(Incoming::Gone);
         return;
     };
-    let (mut receiver, sender) = stream.split();
+    let (mut receiver, sender) = pipe::split(stream);
     if tx.send(Incoming::Connected(sender)).is_err() {
         return;
     }

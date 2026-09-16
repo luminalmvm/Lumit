@@ -137,15 +137,24 @@ pub fn vst3_search_paths() -> Vec<PathBuf> {
     paths
 }
 
-/// Every folder a scan looks in: CLAP's, then VST3's.
+/// Every folder a scan looks in: CLAP's, then VST3's, then Lumit's own addons
+/// folder.
 ///
 /// One list rather than two calls, because there is one scan. A folder that does
 /// not exist costs a failed `read_dir` and nothing else, which is what a machine
 /// with only one of the two standards installed pays.
+///
+/// The addons folder is appended **here** and not onto a caller's
+/// [`ScanOptions`], because the shipping scan does not go through `ScanOptions`
+/// at all - the bridge calls [`scan_brokered`] with a bare slice of this - so
+/// appending there would reach the tests and leave a running Lumit never
+/// searching it (docs/impl/lfx.md §6.1). Appended, never replacing, exactly as
+/// `CLAP_PATH` and `VST3_PATH` are.
 #[must_use]
 pub fn search_paths() -> Vec<PathBuf> {
     let mut paths = clap_search_paths();
     paths.extend(vst3_search_paths());
+    paths.extend(lumit_ipc::addons_dir());
     paths
 }
 

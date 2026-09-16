@@ -48,11 +48,18 @@ const HEADER_MAGIC: u32 = 0x4c4f_4658;
 /// measured, and the file really is this big on disk — so it is deliberately
 /// not enormous.
 ///
-/// At 1080p it buys fifteen slots, which covers a retimer's `t ± 5` with room
-/// over. **Ceiling:** at 4K a frame is 132 MB, so this buys three — the floor —
-/// and a `t ± 5` prefetch at that size will not fit and is refused (the plugin
-/// gets the frame it was handed, which is a legal OFX answer). Lifting that is a
-/// preference and a bigger number here, not a change of design.
+/// At 1080p it buys sixteen slots, which covers a retimer's `t ± 5` with room
+/// over. **Ceiling:** at 4K a frame is 132 MB, so this buys four, and a `t ± 5`
+/// prefetch at that size - eleven frames and an output - will not fit and is
+/// refused (the plugin gets the frame it was handed, which is a legal OFX
+/// answer). Lifting that is a preference and a bigger number here, not a change
+/// of design.
+///
+/// Both numbers were off by one until LFX's ring made the arithmetic a test
+/// rather than a sentence: this comment said fifteen and three, which
+/// `Ring::create`'s own division three lines below has never agreed with
+/// (docs/impl/lfx.md §13). `lumit-lfx`'s `ring-slots.txt` is generated from the
+/// same rule for that reason.
 pub const RING_BUDGET_BYTES: u64 = 512 * 1024 * 1024;
 
 /// The note's triple buffering, as the floor it is.

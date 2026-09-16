@@ -26,14 +26,21 @@
 //! that fails three times running. The second process itself is the
 //! `lumit-aplug-broker` crate, which is this crate with a pipe in front of it.
 //!
-//! **The architecture is the OFX host's, the code is not shared.** `lumit-ofx`
-//! proved this shape and its lessons are carried over verbatim as rules, but
-//! the messages here carry blocks of sound and parameter events, which have
-//! nothing in common with frames and clips: one crate for both would be an
-//! abstraction with one and a half users (docs/impl/audio-plugins.md §5).
+//! **The architecture is the OFX host's, and the transport alone is shared.**
+//! `lumit-ofx` proved this shape and its lessons are carried over verbatim as
+//! rules. What the two hosts had genuinely written twice - the pipe, where the
+//! broker executable is, and the handful of numbers both must answer the same
+//! way - is now `lumit-ipc`, with each host's own prefix and environment
+//! variable passed in rather than baked in ([`identity`], docs/impl/lfx.md
+//! §3.1). What stays here is everything that is about *sound*: the messages
+//! carry blocks and parameter events, which have nothing in common with frames
+//! and clips, so [`proto`], [`ring`] and [`handles`] are this crate's and one
+//! crate for both would be an abstraction with one and a half users
+//! (docs/impl/audio-plugins.md §5).
 
 pub mod broker;
 pub mod handles;
+pub mod identity;
 pub mod pipe;
 pub mod proto;
 pub mod ring;

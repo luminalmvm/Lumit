@@ -1022,6 +1022,36 @@ fn the_standard_plugin_location_is_always_searched() {
     );
 }
 
+/// Lumit's own addons folder is one of the folders a scan looks in, appended
+/// after the platform's own and after `OFX_PLUGIN_PATH`
+/// (docs/impl/lfx.md §5.2, §6.1).
+///
+/// Named here rather than left to the test above, because on Linux this is not
+/// a convenience: inside a Flatpak `/usr` is the runtime's own, so
+/// `/usr/OFX/Plugins` is empty however correct it is and this directory is the
+/// **only** route a plugin has in. A cleanup that dropped the line would take
+/// OFX discovery out of every sandboxed Lumit with a green suite.
+#[test]
+fn the_addons_folder_is_one_of_the_folders_a_scan_looks_in() {
+    let Some(addons) = lumit_ipc::addons_dir() else {
+        eprintln!(
+            "the_addons_folder_is_one_of_the_folders_a_scan_looks_in: skipped - \
+             this machine has no data directory to put addons in"
+        );
+        return;
+    };
+    let paths = crate::bundle::search_paths();
+    assert!(
+        paths.contains(&addons),
+        "the addons folder is missing from {paths:?}"
+    );
+    assert_eq!(
+        paths.last(),
+        Some(&addons),
+        "appended, never replacing: the standard location comes first"
+    );
+}
+
 // ---------------------------------------------------------------- describe --
 
 /// A loaded bundle of the five test plugins, or `None` if the plugin was not
@@ -3289,23 +3319,69 @@ fn a_plugin_is_told_its_frame_and_handed_its_neighbours() {
     assert!(neighbours.is_empty());
 }
 
+// ------------------------------------------------------------ host identity --
+
+/// The transport is shared; these three strings are not. A rename here and not
+/// in `lumit_ipc::hosts` - or the other way about - is two hosts drifting
+/// towards one namespace, which is exactly what the extraction had to avoid
+/// causing (docs/impl/lfx.md §3.1).
+#[test]
+fn this_hosts_three_strings_are_the_ones_reserved_for_it() {
+    use crate::ipc::identity::{broker_exe_name, BROKER_EXE_ENV, HOST_PREFIX};
+
+    assert_eq!(HOST_PREFIX, lumit_ipc::hosts::OFX.prefix);
+    assert_eq!(BROKER_EXE_ENV, lumit_ipc::hosts::OFX.broker_exe_env);
+    assert_eq!(
+        broker_exe_name(),
+        if cfg!(windows) {
+            "lumit-ofx-broker.exe"
+        } else {
+            "lumit-ofx-broker"
+        },
+        "this one string decides which second program the host starts"
+    );
+    assert!(
+        broker_exe_name().starts_with(lumit_ipc::hosts::OFX.broker_exe_stem),
+        "and the stem it starts with is the one reserved for this host"
+    );
+    assert_eq!(
+        BROKER_EXE_ENV, "LUMIT_OFX_BROKER",
+        "a packaging step depends on this"
+    );
+}
+
+/// The extraction parameterised the prefix; it did not change any name. An
+/// endpoint that moved would be a broker nobody could find and a packaging
+/// step that had to be told.
+#[test]
+fn the_endpoint_name_is_the_one_it_always_was() {
+    let name = crate::ipc::pipe::pipe_name("deadbeef");
+    let expected = if cfg!(windows) {
+        "lumit-ofx-deadbeef.pipe".to_owned()
+    } else {
+        let mut path = std::env::temp_dir();
+        path.push("lumit-ofx-deadbeef.sock");
+        path.to_string_lossy().into_owned()
+    };
+    assert_eq!(name, expected);
+}
+
 // --------------------------------------------------------- console windows --
 
 /// A broker is a console program and Lumit is a windowed one, so on Windows a
 /// spawn without `CREATE_NO_WINDOW` opens a console window per plugin file
 /// during the start-up scan — reported against 0.3.0. Nothing in this process
 /// can observe whether a child was given a console, so the guard is that the
-/// spawn still asks for none.
+/// spawn still asks for none. What the flag *is* is pinned where the helper now
+/// lives, by `no_console_is_create_no_window_and_nothing_else` in `lumit_ipc`.
+/// The match here is the call and not the path it is reached by, so importing
+/// the helper stays a refactor rather than a failure.
 #[test]
 fn the_broker_is_spawned_without_a_console_window() {
     let source = include_str!("ipc/broker.rs");
     assert!(
         source.contains("no_console(&mut command);"),
         "the broker spawn must ask for no console window"
-    );
-    assert!(
-        source.contains("command.creation_flags(CREATE_NO_WINDOW);"),
-        "no_console must be CREATE_NO_WINDOW and nothing else"
     );
 }
 
@@ -3642,5 +3718,33 @@ fn rows_follow_the_pages_and_a_group_is_one_run() {
             ("g1", vec!["a", "c"])
         ],
         "a page is drawn as a group for the rows it lists that have none"
+    );
+}
+
+/// The ring's own arithmetic, against the sentence beside it.
+///
+/// The budget comment said fifteen slots at 1080p and three at 4K for as long
+/// as it existed, and `Ring::create`'s own division three lines below it has
+/// never said either - nothing depended on the numbers, which is how they
+/// drifted (docs/impl/lfx.md §13). The comment is corrected and this is what
+/// stops it drifting again: the two sizes the comment names, worked out by the
+/// code that answers them.
+#[test]
+fn the_ring_budget_buys_the_slots_the_comment_says() {
+    use crate::ipc::shm::{slot_bytes_for, RING_BUDGET_BYTES, RING_MIN_SLOTS};
+
+    let slots = |width: usize, height: usize| -> u64 {
+        RING_BUDGET_BYTES / slot_bytes_for(width, height).max(1)
+    };
+    assert_eq!(slots(1920, 1080), 16, "a 1080p slot is 33 177 664 bytes");
+    assert_eq!(slots(3840, 2160), 4, "a 4K slot is 132 710 464 bytes");
+    assert!(
+        slots(3840, 2160) > u64::from(RING_MIN_SLOTS),
+        "4K is above the floor, not at it"
+    );
+    assert!(
+        slots(3840, 2160) < 12,
+        "and still under a `t ± 5` prefetch's eleven frames and an output, \
+         which is the ceiling the comment names"
     );
 }

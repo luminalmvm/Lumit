@@ -73,6 +73,16 @@ pub fn def(match_name: &str) -> Option<&'static dyn super::EffectDef> {
 /// so the crate that writes it and the crate that reads it cannot drift.
 pub const OFX_MATCH_PREFIX: &str = "ofx:";
 
+/// What every **LFX plugin's** `match_name` begins with - the host mints
+/// `lfx:<the descriptor's reverse-DNS id>`, and this is the one place the
+/// prefix is spelled, so the crate that writes it and the crates that read it
+/// cannot drift (docs/impl/lfx.md §4.1).
+///
+/// Beside OFX's rather than folded into it: an LFX plugin is Lumit's own C ABI
+/// rather than somebody else's standard, and the two are separate namespaces
+/// because the frame key tags them apart and the Addons page lists them apart.
+pub const LFX_MATCH_PREFIX: &str = "lfx:";
+
 /// What every **CLAP audio plugin's** `match_name` begins with — the
 /// host mints `clap:<plugin id>`, and this is the one place the prefix is
 /// spelled, so the crate that writes it and the crates that read it cannot
@@ -110,6 +120,8 @@ pub fn audio_plugin_id(match_name: &str) -> Option<&str> {
 fn namespace_of(match_name: &str) -> EffectNamespace {
     if match_name.starts_with(OFX_MATCH_PREFIX) {
         EffectNamespace::Ofx
+    } else if match_name.starts_with(LFX_MATCH_PREFIX) {
+        EffectNamespace::Lfx
     } else if audio_plugin_id(match_name).is_some() {
         EffectNamespace::Clap
     } else {

@@ -1,0 +1,38 @@
+[package]
+name = "lumit-lfx-testplug"
+version.workspace = true
+edition = "2021"
+license = "GPL-3.0-only"
+# Never goes to crates.io: these crates are the application, and they
+# reference each other by path (docs/05-ARCHITECTURE.md).
+publish = false
+
+[lib]
+# `cdylib` is what the host loads - an `.lfx` is a plain shared library
+# exporting one symbol. `rlib` exists only so `lumit-lfx` can name this package
+# as a dev-dependency and have Cargo build the cdylib before its tests run; the
+# tests never call into the rlib, because the statics the probes read live in
+# the loaded copy, not in this one.
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# The C declarations, and **nothing else** - this is the other side of the same
+# frozen header, so it sees exactly what a vendor sees and never the host
+# (docs/impl/lfx.md §10). A fixture that could reach into `lumit-lfx` would be
+# testing the host against itself.
+lumit-lfx-abi = { path = "../lumit-lfx-abi" }
+# An effect that does maths on an fp16 frame needs half floats, which is what a
+# vendor writing one would reach for too. It is already a `lumit-core`
+# dependency, so this costs the workspace no new crate.
+half = "2"
+
+# A plugin is the other side of a C ABI; same override as the host crates.
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+
+[lints.rust]
+unsafe_code = "allow"

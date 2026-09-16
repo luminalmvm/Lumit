@@ -264,6 +264,9 @@ and every push to `main` (and by hand from the Actions tab):
 | `no-panics-in-frb-api` | `.unwrap()`, `.expect(`, `panic!`, `todo!` or `unimplemented!` in the shipping half of `crates/lumit-bridge/src/api.rs` and `src/api/**` (test modules and `*tests.rs` files exempt) |
 | `ofx-conformance` | The OFX host describing, instancing and rendering every plugin in openfx-misc and ntsc-rs |
 | `ofx-handle-fuzz` | `lumit-ofx`'s `handle_fuzz` under AddressSanitizer, on the nightly compiler |
+| `lfx-conformance` | `lfx-validator` over `lumit-lfx-testplug`'s twelve personalities, then the shipped program over the same staged bundle. Downloads nothing |
+| `lfx-handle-fuzz` | The same pass under AddressSanitizer, where what is instrumented is the ABI edge inside the broker |
+| `lfx-template` | `template/`, the published plugin template: all three examples built through its own CMakeLists and staging script on Linux, macOS and Windows, each bundle driven through the validator |
 
 The definition of done in `docs/14-ENGINEERING-RULES.md` section 10 is the checklist a
 pull request answers: spec reference, tests, cancellation and progress, budget compliance,
@@ -389,10 +392,16 @@ One job per crate.
 | `lumit-keymap` | Shortcuts: chords, contexts, bindings, clash detection, no windowing code |
 | `lumit-ingress` | One budget every reader of untrusted input spends: bytes, items, recursion depth and work, plus checked raster arithmetic and capped file reads. Depends on nothing, so the crates that depend on nothing else can still use it |
 | `lumit-peer` | Proving who is on the other end of a broker pipe: an unguessable endpoint name, a session secret handed over out of sight, and a mutual challenge and response |
+| `lumit-ipc` | The pipe itself, and the rules every plugin host answers the same way: length-prefixed messages under a cap, where the broker executable is, three strikes, the disabled sentence. Each host passes in its own endpoint prefix, so two hosts never share one |
 | `lumit-fx-macros` | `#[derive(Effect)]`: one declaration per built-in effect produces its catalogue entry, parameters and dispatch |
 | `lumit-ofx` | The OpenFX host: suites, property sets, action dispatch, the out-of-process transport |
 | `lumit-ofx-broker` | The expendable program a third-party OFX plugin runs in, one per bundle, so a crash costs one frame |
 | `lumit-ofx-testplug` | Minimal OFX plugins written here, so the host's tests need no download |
+| `lumit-lfx-abi` | LFX, Lumit's own effect ABI: `include/lfx.h` and its `#[repr(C)]` mirror, and nothing else. The one crate here under **MIT** rather than GPLv3, so a vendor adopts the header without licence anxiety |
+| `lumit-lfx` | The LFX host: the describe sink and its lowering onto a schema, the catalogue entry, the instance pool, the protocol and the ring, discovery, `.lfxpack` installation and the trust store |
+| `lumit-lfx-broker` | The program an LFX plugin runs in: the host's own code with a pipe in front of it, one broker per bundle |
+| `lumit-lfx-validator` | The shipped `lfx-validator`: ten suites driving a bundle through a broker, a markdown table and a non-zero exit. What a vendor runs before they ship |
+| `lumit-lfx-testplug` | Twelve personalities behind one `lfx_entry_point`, the dangerous three disarmed unless an environment variable says otherwise, so the ABI edge is driven by a plain `cargo test` |
 | `lumit-aplug` | The audio plugin host: CLAP first, then VST3 |
 | `lumit-aplug-broker` | The program an audio plugin runs in, and a crash plays one block dry |
 | `lumit-aplug-testplug` | Minimal CLAP and VST3 plugins for the host's tests: one library exporting both entry points, laid out either way |

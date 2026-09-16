@@ -1,0 +1,64 @@
+[package]
+name = "lumit-lfx-broker"
+version.workspace = true
+edition = "2021"
+license = "GPL-3.0-only"
+publish = false
+
+[[bin]]
+# The name the host looks for beside its own executable. It is spelled here
+# rather than left to Cargo's default so that renaming the crate cannot quietly
+# rename the file the host spawns.
+name = "lumit-lfx-broker"
+path = "src/main.rs"
+
+[dependencies]
+# Everything the broker does - read a manifest, open a module, describe it,
+# drive a frame - is the host crate's own code. The broker is that code with a
+# pipe in front of it.
+lumit-lfx = { path = "../lumit-lfx" }
+# The handshake that proves the process on the other end of the pipe is Lumit.
+lumit-peer = { path = "../lumit-peer" }
+# The working depth a frame crosses the ring at.
+half = "2"
+
+[dev-dependencies]
+# The plugin the broker is tested against, and the bundle staging the tests do.
+# The tests live here rather than in `lumit-lfx` for one flat Cargo reason:
+# `CARGO_BIN_EXE_lumit-lfx-broker` exists only for tests in the package that
+# owns the binary, and Cargo does not build a dependency's binaries.
+lumit-lfx-testplug = { path = "../lumit-lfx-testplug" }
+# The header's own ABI version, which the manifest a test writes must declare.
+lumit-lfx-abi = { path = "../lumit-lfx-abi" }
+# The ring's bytes are the governor's, and `Broker::spawn` takes the `Arc` that
+# can reserve them.
+lumit-budget = { path = "../lumit-budget" }
+# The catalogue entry a described plugin becomes, driven as the `&dyn EffectDef`
+# the render path will drive it as. It is here for the same flat Cargo reason
+# the rest of this suite is: the end-to-end case needs the broker binary
+# (docs/impl/lfx.md §4.2, §14 item 12).
+lumit-core = { path = "../lumit-core" }
+# `lfx-validator`'s library half, driven end to end over a staged bundle. It is
+# here for the same flat Cargo reason: the validator opens nothing in this
+# process, so proving it needs a broker binary, and that binary is this
+# package's (docs/impl/lfx.md §9).
+lumit-lfx-validator = { path = "../lumit-lfx-validator" }
+tempfile = "3"
+# The install suite writes the packs it installs: a zip, a detached Ed25519
+# signature over its manifest, and one SHA-256 per entry. The library half of
+# all three is `lumit-lfx`'s; what is needed here is the *writing*, which is a
+# test's own (docs/impl/lfx.md §6.2).
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+sha2 = "0.10"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+
+# A broker is the host, in another process: same C ABI, same override.
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+
+[lints.rust]
+unsafe_code = "allow"

@@ -4,7 +4,7 @@ use super::*;
 use crate::{
     expression::ExpressionContext,
     graph::NodeRef,
-    model::{EffectInstance, EffectNamespace, EffectValue},
+    model::{EffectInstance, EffectValue},
 };
 use uuid::Uuid;
 
@@ -334,16 +334,15 @@ pub fn resolve_stack_temporal_named(
     let mut out = ResolvedStack::new();
     // Built-ins and the plugins that registered at run time — the
     // catalogue answers for both, and a lookup that misses resolves to nothing
-    // either way. A Placeholder is excluded by name: it is a name this build
-    // does not know, and asking the catalogue for it would be asking whether
-    // some unrelated effect happens to share it.
-    for e in effects.iter().filter(|e| {
-        e.enabled
-            && matches!(
-                e.effect.namespace,
-                EffectNamespace::Builtin | EffectNamespace::Ofx
-            )
-    }) {
+    // either way. Which namespaces those are is
+    // `EffectNamespace::is_catalogued`, asked here and by the three walks in
+    // `fx::temporal`, and written down in none of the four: a Placeholder is
+    // excluded because it is a name this build does not know, and an audio
+    // plugin because it changes no pixel (docs/impl/lfx.md §4.1).
+    for e in effects
+        .iter()
+        .filter(|e| e.enabled && e.effect.namespace.is_catalogued())
+    {
         let lt = if e.sample_temporally {
             sample_lt
         } else {

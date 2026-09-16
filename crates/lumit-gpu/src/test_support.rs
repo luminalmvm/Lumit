@@ -68,6 +68,12 @@ impl SharedGpu {
         // `release_frame_memory` latches the abandoned frame's overdraft as
         // "the last frame's"; the next test did not draw that frame.
         self.ctx.last_overdrawn.set(0);
+        // And the working depth: a test that rendered an eight- or thirty-two-bit
+        // project would otherwise leave every test after it making working
+        // textures in that format, and a read-back of one of those is a refusal
+        // (`fx::read_back_rows`) rather than a picture. Sixteen is what the
+        // effect catalogue was written against and what a fresh context has.
+        self.ctx.set_working_bits(16);
         // The budgets too: a test that lowered one to reach a ceiling must not
         // leave every test after it renting a smaller card.
         self.ctx
@@ -77,6 +83,11 @@ impl SharedGpu {
             .ledger()
             .set_budget(lumit_budget::Tier::Ram, lumit_budget::DEFAULT_RAM_BUDGET);
         self.ctx.ledger().reset_statistics();
+        // And the working depth: a test that dropped the context to eight bits
+        // to prove a refusal must not leave every test after it working in
+        // bytes. Sixteen is what `WORKING_FORMAT` is and what the engines here
+        // were compiled against.
+        self.ctx.set_working_bits(16);
         self.fx.reset_for_tests();
     }
 }

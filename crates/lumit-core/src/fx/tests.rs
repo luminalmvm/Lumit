@@ -11778,8 +11778,10 @@ fn every_parameter_declares_a_unit() {
 /// **No parameter is a percentage of the composition diagonal** (the
 /// owner's rule: every distance, radius and displacement is px@comp, and the
 /// resolve step scales it to the raster in play). `Unit::PctDiag` stays in the
-/// enum for the ROI declarations and the reference format, but a parameter
-/// declared in it is a defect this test catches.
+/// enum because the reference format spells every member and LFX's own unit
+/// ladder mirrors this one value for value - not for the ROI declarations,
+/// which are px@comp and carry no unit at all - but a parameter declared in it
+/// is a defect this test catches.
 #[test]
 fn no_parameter_is_a_per_cent_of_the_diagonal() {
     let offenders: Vec<(&str, &str)> = BUILTIN_DEFS
@@ -18236,6 +18238,397 @@ fn a_plugin_instance_resolves_between_two_builtins() {
     assert!(
         (plugin_op.lt - 1.5).abs() < 1e-9,
         "the op carries the layer time its values were read at"
+    );
+}
+
+/// An instance of a registered LFX plugin, in the namespace an `lfx:` name
+/// carries.
+fn an_lfx_instance(match_name: &str) -> EffectInstance {
+    let mut inst = instantiate(match_name).expect("the catalogue knows it");
+    assert_eq!(
+        inst.effect.namespace,
+        EffectNamespace::Lfx,
+        "an lfx: name instantiates in the LFX namespace"
+    );
+    inst.enabled = true;
+    inst
+}
+
+/// The provenance an LFX plugin carries is its match name's prefix, and the
+/// prefix is spelled in exactly one place (docs/impl/lfx.md §4.1). Without the
+/// arm in `namespace_of` an `lfx:` name instantiates as a **built-in**, which
+/// is the silent version of every failure this seam has.
+#[test]
+fn an_lfx_name_instantiates_in_the_lfx_namespace() {
+    assert_eq!(LFX_MATCH_PREFIX, "lfx:");
+
+    for name in ["lfx:test.core.prefix", "ofx:test.core.prefix", "lfxish"] {
+        let def: &'static RegisteredDef = Box::leak(Box::new(RegisteredDef {
+            schema: a_registered_schema(name, &[0]),
+            window: None,
+        }));
+        assert!(BUILTIN_DEFS.register(def), "{name} registered");
+    }
+
+    assert_eq!(
+        instantiate("lfx:test.core.prefix")
+            .expect("registered")
+            .effect
+            .namespace,
+        EffectNamespace::Lfx
+    );
+    // The namespaces beside it are untouched, and the prefix is a prefix with
+    // its colon rather than a substring: `lfxish` is a name, not a plugin.
+    assert_eq!(
+        instantiate("ofx:test.core.prefix")
+            .expect("registered")
+            .effect
+            .namespace,
+        EffectNamespace::Ofx
+    );
+    assert_eq!(
+        instantiate("lfxish").expect("registered").effect.namespace,
+        EffectNamespace::Builtin
+    );
+    assert_eq!(
+        instantiate("blur").expect("a built-in").effect.namespace,
+        EffectNamespace::Builtin
+    );
+}
+
+/// The namespace reaches **both** picture walks (docs/impl/lfx.md §4.1, §14
+/// item 8): an LFX instance resolves into the arena beside the built-ins, in
+/// stack order, and its declared window reaches the neighbour frames the layer
+/// decodes - and the frames a node graph demands of the box that holds it,
+/// which is a second function and has to answer the same eleven. Before
+/// `is_catalogued` admitted `Lfx`, both walks dropped it silently - identity,
+/// no badge, no line.
+#[test]
+fn an_lfx_instance_reaches_both_picture_walks() {
+    // Declared ±1 at describe time - the gate. The instance's own answer is
+    // the window, exactly as a retimer's is.
+    let schema = a_registered_schema("lfx:test.core.retimer", &[-1, 0, 1]);
+    let def: &'static RegisteredDef = Box::leak(Box::new(RegisteredDef {
+        schema,
+        window: Some(vec![-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5]),
+    }));
+    assert!(BUILTIN_DEFS.register(def), "it registered");
+
+    // The temporal walk.
+    let inst = an_lfx_instance("lfx:test.core.retimer");
+    let one = std::slice::from_ref(&inst);
+    assert!(stack_is_temporal(one, true), "the declaration is the gate");
+    assert_eq!(
+        stack_temporal_window(one, true, 0.0),
+        vec![-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5],
+        "the plugin's own frames are what the layer decodes"
+    );
+    assert_eq!(stack_temporal_window(one, false, 0.0), vec![0]);
+    let mut off = inst.clone();
+    off.enabled = false;
+    assert_eq!(
+        stack_temporal_window(std::slice::from_ref(&off), true, 0.0),
+        vec![0]
+    );
+
+    // The same window read the other way round: what one **box** of a node
+    // graph demands of its input when it is asked at 10.0, one frame apart.
+    // `CompGraph::time_demands` walks this one, so a plugin the layer path
+    // samples eleven frames of and this path samples one of would be a
+    // planner, a lowering and a frame key that disagree about which frames the
+    // graph is made from.
+    assert_eq!(
+        input_times(&inst, 10.0, 1.0),
+        vec![10.0, 5.0, 6.0, 7.0, 8.0, 9.0, 11.0, 12.0, 13.0, 14.0, 15.0],
+        "the box's own time first, then the frames the plugin asked for"
+    );
+    assert_eq!(
+        input_times(&off, 10.0, 1.0),
+        vec![10.0],
+        "a switched-off plugin demands its own frame and nothing else"
+    );
+
+    // The arena walk, in stack order, carrying the layer time its values were
+    // read at.
+    let stack = vec![
+        instantiate("invert").expect("a built-in"),
+        an_lfx_instance("lfx:test.core.retimer"),
+        instantiate("exposure").expect("a built-in"),
+    ];
+    let resolved = super::resolve_stack(
+        &stack,
+        1.5,
+        1000.0,
+        1.0,
+        &MarkerContext::NONE,
+        Arc::new(ExpressionContext::detached()),
+    );
+    let names: Vec<&str> = resolved
+        .iter()
+        .map(|op| op.def.schema().match_name)
+        .collect();
+    assert_eq!(
+        names,
+        vec!["invert", "lfx:test.core.retimer", "exposure"],
+        "the LFX op resolved between the two built-ins"
+    );
+    let plugin_op = resolved.get(1).expect("the middle op");
+    assert!((plugin_op.lt - 1.5).abs() < 1e-9);
+}
+
+/// One predicate, and it really is a gate. The three picture namespaces are
+/// catalogued and the other two are not - an audio plugin because it changes
+/// no pixel, a placeholder because it is a name this build does not know - and
+/// every walk honours that rather than each carrying its own list
+/// (docs/impl/lfx.md §4.1, §11 trap 1). The arena, the layer's neighbour
+/// window and the graph's time demand are asked here; the frame key's own gate
+/// is asked in `lumit-eval`, which is where the cache is decided.
+#[test]
+fn only_the_picture_namespaces_are_catalogued() {
+    for ns in [
+        EffectNamespace::Builtin,
+        EffectNamespace::Ofx,
+        EffectNamespace::Lfx,
+    ] {
+        assert!(ns.is_catalogued(), "{ns:?} draws pixels and must resolve");
+    }
+    for ns in [EffectNamespace::Clap, EffectNamespace::Placeholder] {
+        assert!(
+            !ns.is_catalogued(),
+            "{ns:?} must never resolve as a picture"
+        );
+    }
+
+    // And the gate bites: a registered audio plugin, temporal declaration and
+    // all, reaches neither walk.
+    let schema = a_registered_schema("clap:test.core.notapicture", &[-1, 0, 1]);
+    let def: &'static RegisteredDef = Box::leak(Box::new(RegisteredDef {
+        schema,
+        window: Some(vec![-2, -1, 0, 1, 2]),
+    }));
+    assert!(BUILTIN_DEFS.register(def), "it registered");
+
+    let mut audio = instantiate("clap:test.core.notapicture").expect("the catalogue knows it");
+    audio.enabled = true;
+    assert_eq!(audio.effect.namespace, EffectNamespace::Clap);
+    let one = std::slice::from_ref(&audio);
+    assert!(
+        !stack_is_temporal(one, true),
+        "an audio plugin is not a temporal picture effect"
+    );
+    assert_eq!(stack_temporal_window(one, true, 0.0), vec![0]);
+    assert_eq!(
+        input_times(&audio, 1.0, 1.0 / 60.0),
+        vec![1.0],
+        "an audio plugin demanded frames of a picture"
+    );
+
+    let stack = vec![instantiate("invert").expect("a built-in"), audio];
+    let resolved = super::resolve_stack(
+        &stack,
+        0.0,
+        1000.0,
+        1.0,
+        &MarkerContext::NONE,
+        Arc::new(ExpressionContext::detached()),
+    );
+    let names: Vec<&str> = resolved
+        .iter()
+        .map(|op| op.def.schema().match_name)
+        .collect();
+    assert_eq!(names, vec!["invert"], "an audio plugin reached the arena");
+}
+
+// ---------------------------------------------------------- the fp16 seam --
+
+/// A definition that works in the project's own depth, as a plugin declaring
+/// `LFX_RGBA_F16` does (docs/impl/lfx.md §2.5, §4.5).
+///
+/// It writes the neighbour it was handed straight over the frame, which is the
+/// cheapest operation that proves both halves arrived as halves: nothing here
+/// widens, narrows or arithmetics, so a bit that changed changed at the seam.
+struct Fp16Def {
+    schema: &'static EffectSchema,
+    /// Whether this one takes the fp16 path at all. `false` is the answer the
+    /// trait's own default gives, and the answer every built-in gives.
+    takes_it: bool,
+}
+
+impl EffectDef for Fp16Def {
+    fn schema(&self) -> &'static EffectSchema {
+        self.schema
+    }
+
+    fn apply_f16_temporal(
+        &self,
+        _inst: uuid::Uuid,
+        _lt: f64,
+        rgba: &mut [half::f16],
+        _w: u32,
+        _h: u32,
+        _p: Params<'_>,
+        neighbours: &[(i32, &[half::f16])],
+    ) -> bool {
+        if !self.takes_it {
+            return false;
+        }
+        if let Some((_, previous)) = neighbours.iter().find(|(offset, _)| *offset == -1) {
+            rgba.copy_from_slice(previous);
+        }
+        true
+    }
+}
+
+/// The four halves the two fp16 tests pass about, compared as **bits**.
+///
+/// `half::f16` compares as a float, so it would call two NaNs unequal and two
+/// zeroes of opposite sign the same - and both of those are values these tests
+/// deliberately carry. What the hook promises is about bits, so it is held in
+/// bits.
+fn as_bits(rgba: [half::f16; 4]) -> [u16; 4] {
+    rgba.map(half::f16::to_bits)
+}
+
+/// **Nothing moves.** The fp16 hook is defaulted, and the default is "I do not
+/// do fp16" - so every built-in declines it and the render path falls back to
+/// the f32 one it has always used (docs/impl/lfx.md §4.5).
+///
+/// Declining is also a promise about the buffer: the caller is about to widen
+/// those same halves for the f32 path, so a definition that says `false` must
+/// not have written to them. Asserted over the whole catalogue rather than over
+/// a sample, because the claim is about all of them.
+#[test]
+fn every_builtin_declines_the_fp16_path_and_leaves_the_picture_alone() {
+    let inst = uuid::Uuid::now_v7();
+    // A signalling NaN first, because it is the one half a trip through f32
+    // does not leave alone: any widening quiets it, so 0x7C01 would come back
+    // 0x7E01 from a definition that "declined" and converted in passing. The
+    // rest are ordinary awkward values - f32 holds every finite half exactly,
+    // so those survive a widening and say nothing on their own.
+    let before = [
+        half::f16::from_bits(0x7C01),
+        half::f16::from_bits(0x8000),
+        half::f16::from_bits(0x7BFF),
+        half::f16::from_bits(0x3C00),
+    ];
+    for schema in BUILTINS.iter() {
+        let def = BUILTIN_DEFS
+            .get(schema.match_name)
+            .expect("every built-in schema has a definition");
+        let mut rgba = before;
+        let took = def.apply_f16_temporal(inst, 0.0, &mut rgba, 1, 1, Params::EMPTY, &[]);
+        assert!(
+            !took,
+            "{} claims the fp16 path: it must then be held to it by its own test",
+            schema.match_name
+        );
+        assert_eq!(
+            as_bits(rgba),
+            as_bits(before),
+            "{} declined the fp16 path and wrote to the picture anyway",
+            schema.match_name
+        );
+    }
+}
+
+/// **A definition that does fp16 is handed the halves themselves**, frame and
+/// neighbours alike, and what it writes is what comes back - bit for bit, with
+/// no f32 anywhere on the way (docs/impl/lfx.md §4.5).
+///
+/// This is the seam the hook exists for: the render path's fp32 read-back and
+/// re-upload is a widening and a narrowing either side of an effect that wanted
+/// neither, and for an fp16 project that is a conversion at exactly the place
+/// docs/12 §3 promises there is none.
+///
+/// Both definitions are reached the way the render path will reach them - by
+/// name, out of the run-time catalogue, as a `&dyn EffectDef` - because an
+/// `lfx:` effect is an entry in that catalogue like any other and the hook is
+/// dispatched, never called on a concrete type.
+#[test]
+fn a_definition_that_does_fp16_is_handed_the_halves_and_its_neighbours() {
+    let inst = uuid::Uuid::now_v7();
+
+    // The frame is ordinary; the neighbour is not. A signalling NaN is the one
+    // half a trip through f32 does not leave alone - any widening quiets it, so
+    // 0x7C01 would arrive as 0x7E01 if anything on the way had converted - and
+    // the rest are a negative zero, the largest half negated and the smallest
+    // subnormal, which are the ends of the format.
+    let frame = [
+        half::f16::from_bits(0x3C00),
+        half::f16::from_bits(0x0000),
+        half::f16::from_bits(0x7BFF),
+        half::f16::from_bits(0x3C00),
+    ];
+    let previous = [
+        half::f16::from_bits(0x7C01),
+        half::f16::from_bits(0x8000),
+        half::f16::from_bits(0xFBFF),
+        half::f16::from_bits(0x0001),
+    ];
+
+    let schema = a_registered_schema("lfx:test.core.fp16", &[-1, 0, 1]);
+    let doer: &'static Fp16Def = Box::leak(Box::new(Fp16Def {
+        schema,
+        takes_it: true,
+    }));
+    assert!(BUILTIN_DEFS.register(doer), "it registered");
+    let found = BUILTIN_DEFS
+        .get("lfx:test.core.fp16")
+        .expect("the catalogue answers to it");
+    assert!(
+        std::ptr::eq(found.schema(), schema),
+        "the catalogue answered with some other definition"
+    );
+    assert_eq!(
+        found.schema().traits.temporal,
+        &[-1, 0, 1],
+        "the neighbour below is the frame this declaration asks for"
+    );
+    let mut rgba = frame;
+    let took = found.apply_f16_temporal(
+        inst,
+        0.0,
+        &mut rgba,
+        1,
+        1,
+        Params::EMPTY,
+        &[(-1, &previous)],
+    );
+    assert!(took, "the definition said it does fp16");
+    assert_eq!(
+        as_bits(rgba),
+        as_bits(previous),
+        "the neighbour did not arrive as the halves it was given"
+    );
+
+    // And the other answer is the contract the fallback depends on: a `false`
+    // leaves the frame exactly as the f32 path will find it. The trait's own
+    // default says `false` too, which is what every built-in answers; this one
+    // says it from an override, which is what a plugin whose depth negotiation
+    // failed will do.
+    let decliner: &'static Fp16Def = Box::leak(Box::new(Fp16Def {
+        schema: a_registered_schema("lfx:test.core.fp16-declines", &[-1, 0, 1]),
+        takes_it: false,
+    }));
+    assert!(BUILTIN_DEFS.register(decliner), "it registered too");
+    let found = BUILTIN_DEFS
+        .get("lfx:test.core.fp16-declines")
+        .expect("the catalogue answers to it");
+    let mut rgba = frame;
+    let took = found.apply_f16_temporal(
+        inst,
+        0.0,
+        &mut rgba,
+        1,
+        1,
+        Params::EMPTY,
+        &[(-1, &previous)],
+    );
+    assert!(!took, "a definition that declines must say so");
+    assert_eq!(
+        as_bits(rgba),
+        as_bits(frame),
+        "a declined frame was written to"
     );
 }
 

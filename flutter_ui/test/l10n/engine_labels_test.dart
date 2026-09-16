@@ -197,6 +197,30 @@ Set<String> _addonTaskWords() {
   return words;
 }
 
+/// The word a **switched-off** plugin files under its instance
+/// (`DISABLED_REASON` in `crates/lumit-ipc/src/rules.rs`).
+///
+/// Read out of the Rust source the way [_badgeReasonKeys] is, and for a
+/// sharper reason: it is not a badge key the engine sends but a key the engine
+/// **compares against**, in one `if` in `badge_of`. Every hosted effect - OFX,
+/// LFX, audio - files into one error table, so the comparison has to be with
+/// the one shared constant; a host filing a twin of it, or `badge_of` reading a
+/// single host's re-export, badges a switched-off layer "the plugin failed"
+/// instead of "switched off", and nothing in either type system notices
+/// (docs/impl/lfx.md §4.3, §11 item 10).
+String _disabledReason() {
+  final source = File('../crates/lumit-ipc/src/rules.rs');
+  expect(source.existsSync(), isTrue,
+      reason: 'run this from flutter_ui/, beside the crates/ tree');
+  final word = RegExp(r'DISABLED_REASON: &str = "([a-z0-9_]+)";')
+      .firstMatch(source.readAsStringSync())
+      ?.group(1);
+  expect(word, isNotNull,
+      reason: 'DISABLED_REASON has moved out of lumit-ipc, which is the one '
+          'place all three plugin hosts read it from');
+  return word!;
+}
+
 void main() {
   test('every import report reason has a sentence to be translated', () {
     final missing = _importReasonKeys().where((k) => !hasImportReason(k)).toList()
@@ -253,6 +277,32 @@ void main() {
       () {
     expect(effectBadge('not_a_real_reason'), isNull);
     expect(hasEffectBadge('plugin_disabled'), isTrue);
+  });
+
+  test('the switched-off word is one shared constant with a sentence', () {
+    final word = _disabledReason();
+    expect(
+      _badgeReasonKeys(),
+      contains(word),
+      reason: 'a switched-off plugin files this word and the badge seam turns '
+          'it into a badge reason, so it has to be one of BADGE_REASONS',
+    );
+    expect(hasEffectBadge(word), isTrue,
+        reason: 'and a badge nobody has words for draws nothing at all');
+
+    // And the comparison is against the shared constant rather than one host's
+    // re-export of it, which is the coupling the trap is recorded for.
+    final badge = File('../crates/lumit-bridge/src/api/effect.rs');
+    expect(badge.existsSync(), isTrue);
+    final source = badge.readAsStringSync();
+    expect(source, contains('lumit_ipc::DISABLED_REASON'));
+    expect(
+      source.contains('discover::DISABLED_REASON'),
+      isFalse,
+      reason: 'badge_of must test the shared constant, not one plugin host\'s '
+          'own re-export of it: a second host filing its own string would '
+          'badge its layers "the plugin failed"',
+    );
   });
 
   test('every colour config refusal has a sentence to be translated', () {

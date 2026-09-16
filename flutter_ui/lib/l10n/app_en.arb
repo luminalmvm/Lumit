@@ -11900,6 +11900,10 @@
   "@badgePluginMissing": {
     "description": "Calm badge at the top of an effect's card in the Effect controls panel, for an OFX plugin effect in the project that this machine has no plugin for. The effect is kept exactly as it was saved and is not lost."
   },
+  "badgePluginRefused": "Lumit turned this plugin away when it looked at it",
+  "@badgePluginRefused": {
+    "description": "Calm badge at the top of an effect's card in the Effect controls panel, for a plugin that is installed and named but that Lumit refused when it scanned it, because it asks for something this build has not got or declares a control Lumit cannot draw. The engine's own reason is shown underneath, untranslated. The effect is kept exactly as it was saved and is not lost."
+  },
   "badgeUnknownEffect": "This build does not know this effect",
   "@badgeUnknownEffect": {
     "description": "Calm badge at the top of an effect's card in the Effect controls panel, for an effect saved by another or newer version of Lumit. The effect is kept exactly as it was saved and is not lost."

@@ -990,6 +990,62 @@ pub enum EffectNamespace {
     Placeholder,
 }
 
+impl EffectNamespace {
+    /// Whether an instance in this namespace is one the picture catalogue can
+    /// answer for - a built-in, or a picture plugin that registered at run
+    /// time (docs/impl/effect-registry.md §2.6).
+    ///
+    /// Every walk that admits a picture effect asks this rather than each
+    /// spelling its own list. There are five, in three files: the arena walk
+    /// [`crate::fx::resolve_stack`]; the three in `fx::temporal` -
+    /// [`crate::fx::stack_temporal_window`] for the neighbour frames a layer
+    /// decodes, [`crate::fx::input_times`] for the frames a graph demands, and
+    /// [`crate::fx::stack_is_temporal`] for the gate in front of both; and
+    /// `comp_frame_key`'s per-effect block in `lumit-eval/src/lib.rs`, which
+    /// decides whether the layer's local time and the markers an effect reads
+    /// join the cache key. A list that must agree with another one and is
+    /// written twice is precisely how the next namespace gets half-integrated,
+    /// and that failure is silent - the effect resolves to nothing, renders
+    /// identity, and wears no badge and no line (docs/impl/lfx.md §4.1). The
+    /// fifth is the proof: it was left on `== Builtin` when the other four
+    /// were converted, and until that was found a seeded plugin's whole span
+    /// hashed to one key and drew one frozen frame.
+    ///
+    /// **Not every `== EffectNamespace::Builtin` left in the tree is one of
+    /// these**, and the ones that remain are deliberate. Two kinds. A lookup
+    /// for **one built-in by name** - `fx::temporal`'s Posterize time,
+    /// accumulation motion blur, Extract channels and Flow neighbours,
+    /// `fx::markers`' Flash, `fx::builtins`' own schema migrations, and the
+    /// several in `lumit-render/src/build.rs` - is asking about an effect this
+    /// build wrote, and no plugin may answer to that name. And three walks in
+    /// `lumit-render/src/build.rs` collect the rows a plugin cannot declare:
+    /// the layer input, the matte parameter and the mask paths, which are
+    /// `ParamKind::Layer`, `Clip` and `MaskPath` - kinds `lumit-lfx`'s
+    /// lowering has no route onto at all, and the OFX host none either, so
+    /// widening them would admit nothing. The rule is the question being
+    /// asked: a gate that asks *is this a picture effect* asks this predicate;
+    /// a gate that asks *is this that one built-in* does not.
+    ///
+    /// Written as an exhaustive `match` with no `_` arm on purpose. The next
+    /// variant added to [`EffectNamespace`] fails this build and forces a
+    /// deliberate answer, which is the whole of what the one-predicate rule
+    /// buys over two `matches!` literals.
+    ///
+    /// [`EffectNamespace::Clap`] is not catalogued here: an audio plugin
+    /// changes no pixel, and the picture path filters on exactly that.
+    /// [`EffectNamespace::Placeholder`] is not either: it is a name this build
+    /// does not know, kept so the project round-trips, and asking the
+    /// catalogue for it would be asking whether some unrelated effect happens
+    /// to share the name.
+    #[must_use]
+    pub fn is_catalogued(self) -> bool {
+        match self {
+            EffectNamespace::Builtin | EffectNamespace::Ofx | EffectNamespace::Lfx => true,
+            EffectNamespace::Clap | EffectNamespace::Placeholder => false,
+        }
+    }
+}
+
 /// Which effect an instance is: namespace + stable match name + version.
 /// The version participates in the frame key, so changing an
 /// effect's maths invalidates stale cached frames rather than mixing

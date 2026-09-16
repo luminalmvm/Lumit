@@ -1469,6 +1469,12 @@ String? effectBadge(String key) {
       return l10n.badgePluginDisabled;
     case 'plugin_missing':
       return l10n.badgePluginMissing;
+    // Installed, named, and turned away at the scan: a plugin asking for
+    // something this build has not got, or declaring a control Lumit cannot
+    // draw (docs/impl/lfx.md §4.3). The engine's own reason goes in the detail
+    // slot beneath, untranslated, because it names the thing it wanted.
+    case 'plugin_refused':
+      return l10n.badgePluginRefused;
     case 'unknown_effect':
       return l10n.badgeUnknownEffect;
     // The one built-in that can wear a badge: a Custom shader whose text does

@@ -1,0 +1,14 @@
+[package]
+name = "lfx-sys"
+version = "1.0.0"
+edition = "2021"
+# MIT, as the header is: docs/12-PLUGINS.md §3.6's carve-out against Lumit's
+# own GPLv3, so a proprietary vendor adopts the declarations without licence
+# anxiety.
+license = "MIT"
+description = "The LFX C ABI's #[repr(C)] declarations: Lumit's native effect interface, version 1."
+repository = "https://github.com/luminalmvm/lumit-lfx-template"
+
+[dependencies]
+# None, and the list stays empty. The declarations describe shapes; they depend
+# on nothing, so a vendor reading them has nothing else to read.

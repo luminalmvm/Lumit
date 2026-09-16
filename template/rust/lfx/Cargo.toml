@@ -1,0 +1,14 @@
+[package]
+name = "lfx"
+version = "1.0.0"
+edition = "2021"
+# MIT, as `lfx-sys` and the header are: a vendor adopts the whole template
+# without licence anxiety.
+license = "MIT"
+description = "A safe Rust wrapper over LFX, Lumit's native effect ABI: one trait, one macro, both pixel depths."
+repository = "https://github.com/luminalmvm/lumit-lfx-template"
+
+[dependencies]
+# The declarations, and nothing else. A wrapper whose dependency list grows is
+# a wrapper a proprietary vendor has to audit.
+lfx-sys = { path = "../lfx-sys", version = "1.0.0" }

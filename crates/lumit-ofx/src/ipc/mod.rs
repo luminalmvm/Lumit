@@ -20,8 +20,16 @@
 //! every action a deadline, restarts one that dies, and gives up on a plugin
 //! that fails three times running. The second process itself is the
 //! `lumit-ofx-broker` crate, which is this crate with a pipe in front of it.
+//!
+//! **The transport is shared with the other hosts; nothing else is.** The pipe,
+//! where the broker executable is, and the handful of numbers every host must
+//! answer the same way live in `lumit-ipc`; [`pipe`] is that module wearing this
+//! host's name, and [`identity`] holds the three strings that are this host's
+//! own and must not be anybody else's (docs/impl/lfx.md §3.1). [`proto`] and
+//! [`shm`] stay here, because a picture and a block of sound share nothing.
 
 pub mod broker;
+pub mod identity;
 pub mod pipe;
 pub mod proto;
 pub mod shm;

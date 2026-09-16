@@ -1,0 +1,34 @@
+[package]
+name = "lumit-ipc"
+version.workspace = true
+edition = "2021"
+license = "GPL-3.0-only"
+# Never goes to crates.io: these crates are the application, and they
+# reference each other by path (docs/05-ARCHITECTURE.md).
+publish = false
+
+[dependencies]
+# The wire format the control plane has always used: length-prefixed `bincode`
+# over a duplex local socket. It moves here with `send`/`recv`, so no host has
+# to name it again.
+bincode = "1"
+# The platform's own application-data locations, for the one directory every
+# host has to look in and none of them owns: `addons`, where a plugin Lumit
+# installed itself lives (docs/impl/lfx.md §6.1).
+directories = "6"
+# The duplex local endpoint itself - a named pipe on Windows, a Unix socket
+# elsewhere. This crate is the only place in the tree that names it, so a host
+# talks about pipes without depending on the library that provides them.
+interprocess = "2"
+# `send` and `recv` are generic over the message type; each host keeps its own
+# protocol enum, and only the bounds live here.
+serde = "1"
+thiserror = "2"
+
+[dev-dependencies]
+# The round-trip tests need something to send, which means a type that derives
+# the two traits.
+serde = { version = "1", features = ["derive"] }
+
+[lints]
+workspace = true

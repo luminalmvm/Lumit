@@ -47,26 +47,21 @@ use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
-use interprocess::local_socket::traits::Stream as _;
-use interprocess::local_socket::{Listener, SendHalf};
 use thiserror::Error;
 
 use crate::describe::{PluginDescriptor, Refusal};
 use crate::ipc::handles::{Handle, KIND_INSTANCE};
-use crate::ipc::pipe::{self, PipeError};
+use crate::ipc::pipe::{self, Listener, PipeError, SendHalf};
 use crate::ipc::proto::{Bring, BrokerMessage, HostMessage, InstanceId, Slot, PROTOCOL_VERSION};
 use crate::ipc::ring::{Ring, RingError};
 use crate::process::ParamEvent;
 use crate::quirks::Quirks;
 
 /// How many consecutive failures a plugin gets before it is put away for the
-/// session (docs/12 §2.3).
-pub const STRIKES_BEFORE_DISABLED: u32 = 3;
-
-/// How long the host waits for a freshly spawned broker to connect and say
-/// hello. Separate from the action deadlines: this one is about a program
-/// starting, not about a plugin thinking.
-pub const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
+/// session, and how long the host waits for a freshly spawned broker to connect
+/// and say hello. Both are `lumit-ipc`'s: they are answers every plugin host
+/// must give the same way, not this one's to choose (docs/impl/lfx.md §3.1).
+pub use lumit_ipc::{HANDSHAKE_TIMEOUT, STRIKES_BEFORE_DISABLED};
 
 /// How long a describe may take: the handshake's ceiling, or a quirks-table
 /// control deadline set longer than it.
@@ -79,14 +74,16 @@ pub const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 /// Windows CI runner it was missed once in seven runs with the test module
 /// alone. Nothing on the audio path waits on describe, and a describe that
 /// genuinely hangs costs ten seconds instead of two, so it takes the ceiling
-/// sized for a program starting.
+/// sized for a program starting. The rule is `lumit-ipc`'s and the number it is
+/// given is this host's.
 pub(crate) fn describe_deadline(quirks: &crate::quirks::Quirks) -> Duration {
-    HANDSHAKE_TIMEOUT.max(quirks.control_timeout)
+    lumit_ipc::describe_deadline(quirks.control_timeout)
 }
 
-/// The environment variable that overrides where the broker executable is, for
-/// a test or for a developer running from a build tree.
-pub const BROKER_EXE_ENV: &str = "LUMIT_APLUG_BROKER";
+/// The environment variable that overrides where the broker executable is, and
+/// that executable's file name. Both are this host's own rather than the
+/// transport's, for the reason `ipc::identity` gives.
+pub use crate::ipc::identity::{broker_exe_name, BROKER_EXE_ENV};
 
 /// The plugins the user has switched off, shared with whoever edits the list.
 ///
@@ -182,48 +179,12 @@ pub fn module_broker(module: &std::path::Path) -> Result<Arc<Mutex<Broker>>, Bro
     Ok(broker)
 }
 
-/// The broker executable's file name.
-#[must_use]
-pub fn broker_exe_name() -> &'static str {
-    if cfg!(windows) {
-        "lumit-aplug-broker.exe"
-    } else {
-        "lumit-aplug-broker"
-    }
-}
-
 /// Where the broker executable is: beside Lumit's own, which is where every
-/// packaging step puts it.
+/// packaging step puts it. `lumit-ipc` does the looking; the two strings that
+/// say which program is being looked for are this host's.
 #[must_use]
 pub fn broker_exe() -> PathBuf {
-    if let Some(override_path) = std::env::var_os(BROKER_EXE_ENV) {
-        return PathBuf::from(override_path);
-    }
-    let name = broker_exe_name();
-    std::env::current_exe()
-        .ok()
-        .and_then(|exe| exe.parent().map(|dir| dir.join(name)))
-        .unwrap_or_else(|| PathBuf::from(name))
-}
-
-/// Start the broker with no console window of its own.
-///
-/// A broker is a console program and Lumit is a windowed one, so on Windows
-/// every spawn opens a console window in front of the editor — one per plugin
-/// file, all at once, during the start-up scan. `CREATE_NO_WINDOW` gives the
-/// child no console at all instead. Nothing is lost by it: the protocol was
-/// never on the child's standard streams (see `ipc::pipe`), and its output is
-/// already sent to nowhere.
-fn no_console(command: &mut Command) {
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        /// `CREATE_NO_WINDOW`, from winbase.h.
-        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-        command.creation_flags(CREATE_NO_WINDOW);
-    }
-    #[cfg(not(windows))]
-    let _ = command;
+    lumit_ipc::broker_exe(broker_exe_name(), BROKER_EXE_ENV)
 }
 
 /// What can go wrong before there is a broker to blame.
@@ -423,7 +384,7 @@ impl Broker {
             // be able to reach the protocol, which is why the protocol is not
             // on standard output in the first place (see `ipc::pipe`).
             .stdout(Stdio::null());
-        no_console(&mut command);
+        lumit_ipc::no_console(&mut command);
         for (key, value) in &self.config.env {
             command.env(key, value);
         }
@@ -621,7 +582,12 @@ impl Broker {
         margin: Duration,
     ) -> Result<(), String> {
         if self.disabled {
-            return Err("the plugin is disabled for this session".to_owned());
+            // The watchdog's own sentence, off the typed variant rather than a
+            // second copy of its words: this is the *three strikes* answer and
+            // a badge reads it as a failure, which is what it is. It is not
+            // `lumit_ipc::DISABLED_REASON` - that key is for a plugin the user
+            // switched off, and this plugin was put away for failing.
+            return Err(BrokerError::Disabled.to_string());
         }
         if !self.instances.contains_key(&instance) {
             return Err("no such plugin instance".to_owned());
@@ -724,9 +690,7 @@ impl Broker {
         deadline: Duration,
     ) -> Result<BrokerMessage, Fault> {
         if self.disabled {
-            return Err(Fault::Refused(
-                "the plugin is disabled for this session".to_owned(),
-            ));
+            return Err(Fault::Refused(BrokerError::Disabled.to_string()));
         }
         match self.exchange(message, deadline) {
             Ok(BrokerMessage::Failed { action, message }) => {
@@ -887,7 +851,7 @@ fn read_loop(listener: Listener, tx: &mpsc::Sender<Incoming>) {
         let _ = tx.send(Incoming::Gone);
         return;
     };
-    let (mut receiver, sender) = stream.split();
+    let (mut receiver, sender) = pipe::split(stream);
     if tx.send(Incoming::Connected(sender)).is_err() {
         return;
     }

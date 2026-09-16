@@ -1,0 +1,59 @@
+[package]
+name = "lumit-lfx-validator"
+version.workspace = true
+edition = "2021"
+license = "GPL-3.0-only"
+# Never goes to crates.io: these crates are the application, and they
+# reference each other by path (docs/05-ARCHITECTURE.md).
+publish = false
+
+[[bin]]
+# The name docs/impl/lfx.md D1 froze, and the name a vendor's own CI will call.
+# Spelled here rather than left to Cargo's default, so that renaming the crate
+# cannot quietly rename the program a template repository invokes.
+name = "lfx-validator"
+path = "src/main.rs"
+
+[dependencies]
+# The host itself. The validator drives a bundle the way Lumit drives it - one
+# broker per bundle, the listing read before any of the plugin's code, the ring,
+# the handles - because a tool that took a shorter road would be proving
+# something the editor never does (docs/impl/lfx.md §9).
+lumit-lfx = { path = "../lumit-lfx" }
+# The unit vocabulary a declaration carries. `Unit::Unset` is a describe
+# refusal (D4), and the suite that reports it by name has to be able to name it;
+# it is `lumit-core`'s enumeration because an LFX row and a built-in row are the
+# same kind of thing to everything downstream.
+lumit-core = { path = "../lumit-core" }
+# The ring's bytes are the governor's, and `Broker::spawn` takes the `Arc` that
+# can reserve them. A validator run buys a ledger of its own, so nothing it maps
+# is charged to an editor that is not running.
+lumit-budget = { path = "../lumit-budget" }
+# The header's own ceilings and its ABI version, read rather than re-spelled:
+# the layout suite's whole claim is that the two halves agree about numbers, so
+# a number written out here would be a third opinion.
+lumit-lfx-abi = { path = "../lumit-lfx-abi" }
+# The depth an fp16 frame is compared at. Both depths are mandatory and the host
+# never converts between them (docs/12 §3.3), so the depth suite has to hold
+# halves as halves.
+half = "2"
+# The baseline file: a stored hash per plugin, written and read as JSON the way
+# all three hosts read their quirks tables.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Typed refusals, as `LfxRejection` and the OFX host's `Rejection` already spell
+# them (docs/14-ENGINEERING-RULES.md §4).
+thiserror = "2"
+
+[dev-dependencies]
+# The baseline file is written to and read from a real directory in its own
+# round-trip test.
+tempfile = "3"
+
+# The workspace block, unchanged: this crate is a library with a thin program in
+# front of it, and the library half is held to the same denies as the host - and
+# to the same ban on a panicking print, since `no_panicking_prints.rs` exempts
+# `src/main.rs` by name rather than this whole directory (docs/impl/lfx.md §11
+# item 13).
+[lints]
+workspace = true

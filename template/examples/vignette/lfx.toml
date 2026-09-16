@@ -1,0 +1,14 @@
+# The bundle's own listing, read before any of this bundle's code runs.
+#
+# It is the cheap listing and never the authority: everything here is compared
+# against what the code answers once the module is open, and a disagreement
+# refuses the plugin.
+abi_version = 1
+
+[[plugin]]
+id = "com.example.lfx.vignette"
+name = "Vignette"
+vendor = "Example"
+version = "1.0.0"
+categories = ["stylise", "utility"]
+required_extensions = []

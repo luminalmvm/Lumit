@@ -3266,9 +3266,10 @@ travel in the `.lum` and are marked below:
   繁體中文 — so somebody who has chosen one they cannot read can find their way back.
 - **Keymap**, **Interface** (UI scale, tooltips, whether shortcut hints show throughout
   the UI — the main menu excluded — and reduced motion follows OS or override),
-  **Autosave** (interval, copies kept), **Plugins** (search paths, disabled list,
-  per-plugin overrides).
-- **Addons**: the optional downloads ([12-PLUGINS.md](12-PLUGINS.md) §6). What is
+  **Autosave** (interval, copies kept).
+- **Addons**: every hosted plugin (OFX, LFX and audio) with its state and its origin, the
+  search paths, which are switched off, and Install and Rescan
+  ([12-PLUGINS.md](12-PLUGINS.md) §3.8). Then the optional downloads (§6). What is
   installed, each row carrying its licence, its size and what it does with Remove on the
   right, then the catalogue's own rows, each with Install or Update; the model runtime's
   own row, since no pack runs until it is there; a button that asks the official catalogue

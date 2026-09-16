@@ -547,6 +547,59 @@ gaps in 0.4.0's release note:
     Effect controls section and the Timeline's box rows as things the editor draws; it
     becomes true when P4 and P5 land, and until then it overclaims.
 
+## Now - LFX (docs/impl/lfx.md)
+
+Four packages left, every one of them needs a desktop.
+
+- **The render pass** (desktop) - `gpufx::hosted`, the aux choice from the
+    declared window (which lives here, not in `lumit-lfx`), the generic file aux a `FILE` row
+    needs, and the correction to the stale matte sentence in `gpufx/ofx.rs`.
+- **The bridge surface** (desktop) - a fourth namespace, the four
+    `#[frb(sync)]` addon calls, and the catalogue filter that finally makes switching a plugin
+    off mean it (§7.2).
+- **The Addons page** (desktop) - rows, the search-path lines, a Reveal that
+    opens the folder on Linux rather than its parent, the sentence Reset page needs, Install,
+    Rescan, the arb keys and the metrics test (§7.3).
+- **Packaging and privilege reduction** (desktop) - the third broker in
+    `make-dmg.sh` and both CMakeLists, and docs/12 §5's job object and sandbox, which cost
+    the workspace its first Win32 binding (§8).
+
+Seven smaller things the packages recorded as left open as they landed. None blocks another
+package; each is a line here so it is not only a *ponytail:* inside a six-hundred-line note:
+
+- **Three refusals are constructed and pinned by nothing** - `CreateRefused` and
+    `InstanceRefused` want a descriptor whose `create` answers null, and `UnspellablePath`
+    cannot be reached through `LocalHost::open` at all because the loader refuses a NUL in a
+    path first (docs/impl/lfx.md §12, the in-process host paragraph).
+- **`Broker::fit`'s ordering is argued in a doc comment and not arranged in a test** - the
+    old ring is dropped before the replacement is asked for, and the case that reaches it,
+    `a_declared_window_sizes_the_ring_the_second_process_maps`, does not arrange a ledger
+    with room for one ring and not two, so it does not exercise the ordering it relies on
+    (docs/impl/lfx.md §3.4).
+- **`LFX_PARAM_FLAG_STATIC` is read, reported and dropped** - on the three kinds Lumit is
+    already static about it asks for nothing, and on every other kind `ParamSchema` has no
+    field to hold it, so the row is drawn keyframeable and `StaticRowAnimatesAnyway` is the
+    sentence. A `ParamSchema` flag is the whole of what honouring it needs
+    (docs/impl/lfx.md §2.3).
+- **A pool is one plugin's and `MAX_LIVE_INSTANCES` is the bundle's** - eviction past
+    `MAX_POOL_ROWS` bounds one plugin's churn, and a bundle of eight much-used effects can
+    still reach eight times the product and be refused at the broker. Closing it wants one
+    pool per **broker**, keyed by plugin id and row, which is also where the bundle's
+    `Serial` belongs (docs/impl/lfx.md §4.4).
+- **Failure 6 is still the wrong sentence** - a plugin switched off *before* a scan never
+    registers, so `badge_of` falls through to `plugin_missing` - "not installed on this
+    machine" for a plugin that is. The roster read from the bridge is what closes it, which
+    is the bridge surface's (docs/impl/lfx.md §4.3, §5.3).
+- **The validator's threading suite measures its own lock** - one bundle's broker holds it
+    across a render and the fixture's rendezvous is an export only the loading process can
+    reach, so the suite files `NothingOverlapped` rather than claiming an absence. It becomes
+    a measurement of the host the day `Broker` offers a `&self` render path
+    (docs/impl/lfx.md §9).
+- **On Windows an upgrade may refuse where every other platform succeeds** - a directory
+    holding a loaded module may not move, so upgrading a bundle a running Lumit has open can
+    answer `InstallError::Io`. The honest fix shuts that bundle's broker down first, which
+    wants an instance table the installer has no reach into (docs/impl/lfx.md §6.2).
+
 ## Next - colour management: OCIO (docs/impl/ocio.md)
 
 **All six work packages have landed**, and after them the four OCIO effects (`d0aab70` -
@@ -1248,9 +1301,8 @@ line goes the moment its subsystem ships.
     actually lands in the export, distinct from the Viewer's preview-only toggle that
     ships today, and it wants [08-EFFECTS.md](08-EFFECTS.md) §3 to gain its entry and a
     curve chosen once, which both then share. This gate is the v1.0 milestone.
-- **Phase 4 - Extensibility** ([12-PLUGINS.md](12-PLUGINS.md)). The LFX C ABI and its
-    validator: there is no `lumit-lfx` crate, only the out-of-process sandbox and IPC
-    substrate `lumit-ofx`/`lumit-ofx-broker` built for OFX that it is meant to share.
+- **Phase 4 - Extensibility** ([12-PLUGINS.md](12-PLUGINS.md)). LFX: what is left is
+    under Now - LFX above.
     Lottie import ([11-AE-IMPORT.md](11-AE-IMPORT.md) §8) is the other half of this
     phase still unbuilt.
 - **Phase 5 - AE parity march.** The **stabiliser** (docs/08 §7's Stabiliser row,

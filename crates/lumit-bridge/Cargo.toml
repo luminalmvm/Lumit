@@ -82,6 +82,17 @@ lumit-ofx = { path = "../lumit-ofx" }
 # composition root and for the same reason as the OFX one: this is the only
 # place that holds the user's preferences and the effect catalogue at once.
 lumit-aplug = { path = "../lumit-aplug" }
+# Lumit's own native plugin host (docs/impl/lfx.md). Here for the badge seam
+# before it is here for the scan: a plugin the scan turned away is named with
+# its own typed refusal rather than badged "not installed"
+# (docs/impl/lfx.md §4.3).
+lumit-lfx = { path = "../lumit-lfx" }
+# The rules every plugin host answers the same way. One constant of them is
+# read here: `DISABLED_REASON`, the word a switched-off plugin files and the
+# badge seam decides "switched off" rather than "failed" by - shared, so a
+# second host filing a string of its own cannot badge its layers wrongly
+# (docs/impl/lfx.md §4.3, §11 item 10).
+lumit-ipc = { path = "../lumit-ipc" }
 # Beat detection maths (docs/09 §5); the audio mixdown rides the same
 # headless input path lumit-render provides.
 lumit-audio = { path = "../lumit-audio" }

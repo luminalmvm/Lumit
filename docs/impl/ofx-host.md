@@ -118,8 +118,8 @@ per-thread scratch by it. Mutex functions: plain `parking_lot` wrappers.
 ## 4. Out-of-process transport
 
 Per [12-PLUGINS.md](../12-PLUGINS.md): one broker process per vendor bundle. Transport:
-control via a length-prefixed bincode protocol over a duplex pipe
-(`interprocess` crate, named pipe/UDS); frames via shared memory ring
+control via a length-prefixed bincode protocol over a duplex pipe (`lumit-ipc`, which is
+where the `interprocess` crate is now named - named pipe/UDS); frames via shared memory ring
 (`CreateFileMapping`/`memfd_create`, triple-buffered, frame header = bounds + rowbytes +
 premult + hash). All suite calls the plugin makes re-enter *our stub inside the broker*;
 the broker resolves what it can locally (memory suite, threading) and forwards the rest

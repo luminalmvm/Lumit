@@ -1,0 +1,16 @@
+# The Rust half of the template: the declarations, the safe wrapper, and the
+# example built with them.
+#
+# One workspace, so `cargo build --release` at the top of this repository
+# builds all three and `cargo test` runs the wrapper's own suite. A vendor who
+# copies `examples/saturation` somewhere else drops this file and points the
+# `lfx` dependency at wherever they keep the wrapper.
+[workspace]
+resolver = "2"
+members = ["rust/lfx-sys", "rust/lfx", "examples/saturation"]
+
+[profile.release]
+# A plugin is somebody else's process to slow down. The panic net stays on:
+# the wrapper turns a panic into a refused frame and a badged layer, and
+# `panic = "abort"` would turn it into a broker that died instead.
+opt-level = 3

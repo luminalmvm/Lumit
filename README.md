@@ -140,6 +140,10 @@ The engine is a Cargo workspace under `crates/`; the interface is
 `flutter_ui/`; they meet at `crates/lumit-bridge`
 ([17-BRIDGE-CONTRACT.md](docs/17-BRIDGE-CONTRACT.md)). `web/` and `web-docs/`
 are the public site [lumitlab.com](lumitlab.com), and depend on nothing else here.
+`template/` is the LFX plugin template - the native effect ABI's header, its C++ and
+Rust wrappers and one working example each, **MIT** rather than GPLv3 and published as a
+repository of its own. It is a Cargo workspace of its own too, so it is not built by a
+command run at the top of this one ([12-PLUGINS.md](docs/12-PLUGINS.md) §3).
 
 ## Contributing
 

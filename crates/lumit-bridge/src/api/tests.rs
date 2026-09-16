@@ -13245,6 +13245,21 @@ fn an_unknown_effect_is_a_badged_placeholder_and_never_an_error() {
         "the instance is kept exactly as it was, so saving cannot lose it"
     );
 
+    // And an **LFX** one, which is Lumit's own C ABI rather than somebody
+    // else's standard: a `.lum` saved on a machine that has the plugin and
+    // opened on one that has not badges the plugin sentence rather than "an
+    // effect from a newer Lumit" (docs/impl/lfx.md §4.1, §4.3).
+    let native = crate::api::effect::read_instance_info(
+        &instance(EffectNamespace::Lfx, "lfx:com.nobody.notinstalled"),
+        lumit_core::time::Rational::ZERO,
+    );
+    assert_eq!(native.badge_reason.as_deref(), Some("plugin_missing"));
+    assert_eq!(native.badge_detail, None);
+    assert_eq!(
+        native.name, "lfx:com.nobody.notinstalled",
+        "the instance is kept exactly as it was, so saving cannot lose it"
+    );
+
     // An audio plugin is the same story whichever standard minted the name:
     // both prefixes land in one namespace, and a machine without the plugin
     // badges it as missing rather than as an effect from the future.
@@ -13287,6 +13302,7 @@ fn an_unknown_effect_is_a_badged_placeholder_and_never_an_error() {
     // frontend's translations are held against.
     for reason in [
         missing.badge_reason.as_deref(),
+        native.badge_reason.as_deref(),
         stranger.badge_reason.as_deref(),
     ]
     .into_iter()
@@ -13297,6 +13313,77 @@ fn an_unknown_effect_is_a_badged_placeholder_and_never_an_error() {
             "{reason} is not in BADGE_REASONS, so nothing will translate it"
         );
     }
+}
+
+/// A plugin the LFX scan turned **away** is installed and named, so it badges
+/// the refusal with the refusal's own sentence underneath rather than "this
+/// plugin is not installed on this machine" (docs/impl/lfx.md §4.3, §11 item
+/// 10).
+///
+/// The **order** is the whole of it: `badge_of` reads the `REFUSED` table
+/// before it falls through to the namespace arm. Move the `strip_prefix` block
+/// below the `matches!` and a refused plugin badges `plugin_missing` with every
+/// other case still green - which is why this one drives the table through
+/// `lumit_lfx::discover::for_test::file_refusal`. A real scan needs a bundle, a
+/// broker executable and a second process, none of which this suite has, and
+/// the branch was otherwise asserted by prose and by nothing else.
+#[test]
+fn a_refused_lfx_plugin_badges_the_refusal_rather_than_missing() {
+    use lumit_core::model::{EffectInstance, EffectKey, EffectNamespace};
+
+    let identifier = "com.nobody.refused";
+    lumit_lfx::discover::for_test::file_refusal(
+        lumit_lfx::AddonRow {
+            identifier: identifier.to_owned(),
+            label: "Refused".to_owned(),
+            vendor: "Nobody".to_owned(),
+            release: (1, 0, 0),
+            bundle: std::path::PathBuf::from("Refused.lfx.bundle"),
+        },
+        lumit_lfx::LfxRejection::RequiresExtension {
+            id: identifier.to_owned(),
+            extension: "lfx.temporal".to_owned(),
+        },
+    );
+
+    let refused = crate::api::effect::read_instance_info(
+        &EffectInstance {
+            id: Uuid::now_v7(),
+            effect: EffectKey {
+                namespace: EffectNamespace::Lfx,
+                match_name: format!("lfx:{identifier}"),
+                version: 1,
+                extra: serde_json::Map::new(),
+            },
+            roto: None,
+            enabled: true,
+            params: Vec::new(),
+            sample_temporally: true,
+            custom_name: None,
+            linked_pairs: Vec::new(),
+            plugin_state: None,
+            extra: serde_json::Map::new(),
+        },
+        lumit_core::time::Rational::ZERO,
+    );
+
+    assert_eq!(
+        refused.badge_reason.as_deref(),
+        Some("plugin_refused"),
+        "installed and turned away is not the same nothing as never installed"
+    );
+    assert!(
+        refused
+            .badge_detail
+            .as_deref()
+            .is_some_and(|why| why.contains("lfx.temporal")),
+        "and the refusal's own words name what it wanted: {:?}",
+        refused.badge_detail
+    );
+    assert!(
+        crate::api::effect::BADGE_REASONS.contains(&"plugin_refused"),
+        "so the frontend has a sentence for it"
+    );
 }
 
 /// Pressing a plugin's button writes what the plugin did into the document,
@@ -13845,7 +13932,7 @@ fn a_plugin_that_fails_a_frame_badges_its_layer_and_the_next_frame_clears_it() {
     // "switched off" rather than reporting somebody's failure.
     let disabled = Arc::new(Moody {
         failing: AtomicBool::new(true),
-        why: lumit_ofx::DISABLED_REASON.to_owned(),
+        why: lumit_ipc::DISABLED_REASON.to_owned(),
     });
     let (off_def, off_name) = a_registered_plugin("com.lumitlab.moody.off", disabled);
     let off = lumit_core::fx::instantiate(&off_name).expect("the plugin is in the catalogue");

@@ -16,6 +16,11 @@ publish = false
 lumit-core = { path = "../lumit-core" }
 # The handshake that proves the process on the other end of the pipe is Lumit.
 lumit-peer = { path = "../lumit-peer" }
+# The pipe to the broker, where the broker executable is, and the rules every
+# plugin host must answer the same way. Shared with the OFX host and with LFX;
+# this host's own prefix and environment variable are passed in (`ipc::identity`,
+# docs/impl/lfx.md §3.1).
+lumit-ipc = { path = "../lumit-ipc" }
 # The CLAP C declarations, MIT/Apache-2.0. A hand-written binding would be a
 # second copy of somebody else's headers, and the headers move (1.2.2 today).
 clap-sys = "0.5"
@@ -35,11 +40,6 @@ thiserror = "2"
 # protocol's messages on the wire (`ipc::proto`).
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-# The control plane: length-prefixed `bincode` over a duplex local socket — a
-# named pipe on Windows, a Unix socket elsewhere. Never the child's stdout:
-# plugins `printf`.
-bincode = "1"
-interprocess = "2"
 # The block plane: the shared-memory ring. `memmap2` is `CreateFileMapping` +
 # `MapViewOfFile` on Windows and `mmap` on Unix.
 memmap2 = "0.9"

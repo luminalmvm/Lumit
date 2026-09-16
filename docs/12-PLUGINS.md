@@ -1,9 +1,15 @@
 # Plugins, scripting, and expressions
 
-**Status: specification only - not yet implemented (roadmap Phase 4).** What *does* exist is
-the placeholder plumbing that lets unknown OFX/LFX/expression data round-trip without loss:
-the `EffectNamespace` enum's `Ofx`/`Lfx`/`Placeholder` variants render as identity while
-preserving parameters and keyframes (shared with [11-AE-IMPORT.md](11-AE-IMPORT.md) §6).
+**Status: specification only - not yet implemented (roadmap Phase 4)**, with one exception
+that has outgrown the line: **§3's LFX half is largely built.** The ABI, the describe sink
+and its lowering, the broker, discovery, installation, the catalogue entry, the instance
+pool, `lfx-validator` and the template repository have all landed, and §3 below is amended
+to the ABI as it exists rather than as it was first sketched;
+[impl/lfx.md](impl/lfx.md) is the binding *how* and the record of what is built and what is
+not. What *does* exist besides is the placeholder plumbing that lets unknown
+OFX/LFX/expression data round-trip without loss: the `EffectNamespace` enum's
+`Ofx`/`Lfx`/`Placeholder` variants render as identity while preserving parameters and
+keyframes (shared with [11-AE-IMPORT.md](11-AE-IMPORT.md) §6).
 This document specifies Lumit's extensibility surfaces: the OFX host, the LFX native
 plugin API, and the expression/scripting runtime. Terminology follows
 [01-GLOSSARY.md](01-GLOSSARY.md) exactly. RFC-2119 keywords (MUST, SHOULD, MAY) are
@@ -210,31 +216,75 @@ sharing the sandbox/IPC substrate with `lumit-ofx`.
 
 The design copies what CLAP got right and what OFX got wrong:
 
-- **A stable, minimal C ABI core**: plugin entry point returning a factory; descriptor
-  (reverse-DNS id, name, version, categories); instance `create` / `destroy`; `describe`
-  (declare parameters and capabilities); `process` (render one request). That is the whole
-  core. The canonical header is C; first-party Rust and C++ wrappers ship alongside.
+- **A stable, minimal C ABI core**: one exported object, `lfx_entry_point`, carrying
+  `init` / `deinit` / `count` / `descriptor` / `create`; a descriptor (reverse-DNS id,
+  name, vendor, three version numbers, categories, the declared traits §3.4 schedules
+  from, and the extensions the effect cannot run without) answered **without creating
+  anything**; and one instance carrying `init` / `destroy` / `describe` / `process` /
+  `get_extension`. That is the whole core. The canonical header is
+  `crates/lumit-lfx-abi/include/lfx.h`, **MIT**; the Rust and C++ wrappers ship beside it
+  in the template repository (§3.6).
 - **Everything else is an extension**: a named, versioned, **typed struct of function
-  pointers** queried at runtime — `host->get_extension("kfx.gpu-frames", 1)`,
-  `plugin->get_extension("kfx.temporal", 1)`. No stringly-typed property soup: OFX's
+  pointers** queried at runtime - `host->get_extension("lfx.gpu-frames", 1)`,
+  `plugin->get_extension("lfx.temporal", 1)`. No stringly-typed property soup: OFX's
   untyped get/set on string keys is the single design mistake LFX most deliberately
-  avoids. Planned first extensions: `kfx.temporal` (frames-needed declarations + fetching
-  input frames at other times), `kfx.gpu-frames` (shared-texture I/O), `kfx.overlay`
-  (Viewer interaction/drawing), `kfx.motion-vectors` (host-computed optical flow, the
-  built-in flow engine exposed to plugins), `kfx.audio` (audio effects, later,
-  [09-AUDIO.md](09-AUDIO.md)).
+  avoids. Five ids are reserved in the frozen header so nobody mints a second spelling of
+  them: `lfx.temporal` (fetching input frames at other times), `lfx.gpu-frames`
+  (shared-texture I/O), `lfx.overlay` (Viewer interaction/drawing), `lfx.motion-vectors`
+  (host-computed optical flow, the built-in flow engine exposed to plugins) and
+  `lfx.audio` (audio effects, later, [09-AUDIO.md](09-AUDIO.md)).
+- **Version 1 offers no extension table at all**, and says so. The header declares the
+  five *ids* and not one typed table a neighbour would arrive through, because offering a
+  name with nothing behind it is exactly the "fails somewhere later" outcome §3.6's
+  negotiation exists to prevent. A plugin that lists one in `required_extensions` is
+  refused before it is instantiated, with the extension named. Two things that sound like
+  extensions are not: the temporal *window* is a trait (§3.4), and the thread-unsafe
+  opt-out is a trait flag.
 - Struct layouts are ABI-frozen and size-prefixed so they can grow; nothing is ever
-  re-ordered or removed.
+  re-ordered or removed. Growth is read in the direction it happens - a side handed a
+  *longer* struct reads the fields it knows and ignores the tail - and the header answers
+  the other direction **per struct** rather than in general: a short `lfx_entry` or
+  `lfx_plugin` is refused (a function pointer that is not there cannot be called), a short
+  `lfx_traits` reads as the pessimistic case exactly as a `NULL` block does, and a short
+  descriptor or declaration is declined with a line in the host's scan report. The one
+  exemption is `lfx_value`, which crosses as a dense array addressed by index: what the two
+  sides agree on there is `lfx_process.value_stride`, and a plugin that strides by its own
+  `sizeof` after the struct grows reads correct-looking kind tags over silently wrong
+  values.
 
 ### 3.2 Parameters: declared, host-owned
 
-At `describe`, a plugin declares parameters **descriptively**: kind (float, int, bool,
-choice, colour, 2D/3D point, curve, string, file, group), range, default, unit, flags
-(animatable, hidden). The host owns everything from there — UI in Effect Controls,
-keyframes and curves in the Timeline and graph editor, expression access, serialisation
-into `.lum` files, undo. At `process` time the plugin receives a read-only,
-time-resolved value block. Plugins MUST NOT store parameter state internally; the host's
-values are the only truth. This is the one OFX idea kept whole, minus the string soup.
+At `describe`, a plugin pushes typed records into a sink the host owns - there is no key,
+no string-valued answer, and no question the host can ask that a plugin can answer in the
+wrong type. The kinds are Lumit's own vocabulary rather than a foreign standard the host
+would have to map: **float, slider, int, angle, bool, choice, colour, seed, 2D point,
+3D point, curve, file, action and group**. Two more are in the frozen enum from day one and
+**refused by name in version 1**: `LFX_PARAM_PATH`, because a bezier path with no on-Viewer
+handles is a control nobody can edit, and `LFX_PARAM_STRING`, because the resolved value bag
+carries no text at all. Admitting either later adds no discriminant and breaks no compiled
+plugin.
+
+Two distinctions the vocabulary makes deliberately. **`LFX_PARAM_CURVE` is the *tone*
+curve** - control points in the unit square, the shape dragged in a Curves panel - and a
+bezier path is `LFX_PARAM_PATH`, waiting on `lfx.overlay`; they are not the same control and
+never were. And **the unit is mandatory**: `LFX_UNIT_UNSET` is a describe refusal, mirroring
+the build failure every one of Lumit's own effects faces, because "dimensionless" and
+"nobody decided" must not look alike. `LFX_UNIT_PX` means pixels at *composition* size,
+never pixels of whatever buffer the plugin was handed.
+
+A declaration the host cannot represent is refused **one row at a time** - the effect still
+loads and that row keeps its declared default, with a line in the scan report. Two faults are
+structural and refuse the whole effect: a duplicate `id`, since two rows hashing to one
+parameter id would ship one control silently driving another, and an unset unit.
+
+The host owns everything from there - UI in Effect Controls, keyframes and curves in the
+Timeline and graph editor, expression access, serialisation into `.lum` files, undo. At
+`process` time the plugin receives a read-only, time-resolved value block: one element per
+declaration that carries a value, in declaration order, a point counting once however many
+rows the panel folded it into. Plugins MUST NOT store parameter state internally; the host's
+values are the only truth, and there is no host-persisted blob in this ABI at all - which is
+what makes a frame key complete and a restart an exact replay. This is the one OFX idea kept
+whole, minus the string soup.
 
 ### 3.3 Frame I/O contract
 
@@ -244,13 +294,23 @@ values are the only truth. This is the one OFX idea kept whole, minus the string
   fp32 frames correctly — the host sends whichever depth the project is set to and never
   converts to accommodate a plugin. A plugin MAY declare a preferred depth as a
   performance hint only. The validator (§3.6) runs the conformance suite at both depths.
+  An **8 bpc project sends fp16**: a plugin never sees an integer buffer, and this is not
+  the conversion the rule forbids - fp16's eleven-bit significand round-trips every 8-bit
+  code value, so the promotion loses nothing the project had.
 - **ROI-aware**: a process request carries the output ROI and DoD; the plugin declared its
-  ROI-expansion function at describe time, and receives exactly the input region it asked
-  for. Full-frame is the degenerate case, not the assumption.
-- **Temporal access by request**: via `kfx.temporal`, a plugin declares which input frames
-  at which times it needs for a given output time (metadata pass), and fetches them during
-  `process`. Declared dependencies feed content hashing, so temporal effects cache
-  correctly ([05-ARCHITECTURE.md](05-ARCHITECTURE.md) §4.2).
+  reach in the trait block (§3.4) - exact, padded by a stated number of px@comp, or
+  full-frame - and receives exactly the input region it asked for. Full-frame is the
+  degenerate case, not the assumption. The **buffer is the definition and the region is
+  inside it**: each frame carries its own top-left corner, so the first requested pixel
+  sits at `roi_x0 - origin_x`, and an effect that worked its geometry out from the region
+  instead would give every tile its own and seam.
+- **Temporal access by declaration, then by request**. The *gate* is the trait block's
+  frame window - `temporal_lo`/`temporal_hi`, in comp frames relative to the one being
+  rendered - which the host reads at describe, decodes the neighbours for, and hashes into
+  the frame key, so temporal effects cache correctly
+  ([05-ARCHITECTURE.md](05-ARCHITECTURE.md) §4.2). An effect that declares no window never
+  sees a neighbour, however loudly it asks at render time. *Reading* those pictures inside
+  `process` is `lfx.temporal`, which version 1 does not offer yet (§3.1).
 
 ### 3.4 Threading contract
 
@@ -260,18 +320,29 @@ Stated precisely, in the header comments, per function — the CLAP lesson:
   instances of the same plugin concurrently.
 - The host MUST NOT re-enter one instance concurrently: for a given instance, `process`
   calls are serialised. A plugin wanting cross-instance shared state must synchronise it
-  itself and declare the `kfx.thread-unsafe` capability to opt out of instance-level
-  concurrency (the host then serialises that plugin bundle-wide, as with OFX).
+  itself and set the **`LFX_TRAIT_THREAD_UNSAFE` bit** in its trait block to opt out of
+  instance-level concurrency (the host then serialises that plugin bundle-wide, as with
+  OFX). It is a trait flag and **not** an extension id: there is no `lfx.thread-unsafe`
+  table, and asking `get_extension` for one returns the NULL that means "not offered",
+  which would leave the plugin scheduled concurrently.
 - `describe` and instance lifecycle run on a single host-designated control thread.
 - Every callback in every extension is annotated with its allowed calling context; the
   validator (§3.6) enforces the annotations at test time.
+
+**How traits are declared.** Each descriptor reaches a `lfx_traits` block by pointer: cost
+class, ROI reach, the temporal window, which alpha the maths expects, the flags above, and
+the scratch bytes one megapixel of output costs. **Every enumeration in it starts at
+`UNSET = 0`, and the host lowers an unstated trait to the *pessimistic* answer** - a zeroed
+block, a short one, or none at all schedules as the most expensive thing it could be, since
+claiming less reach than the kernel uses is a correctness bug and claiming less cost is only
+a slow render.
 
 **Multi-frame rendering is mandatory.** The two rules above make it so: because
 the host may run many instances concurrently, it renders **different frames in parallel by
 default** through a host-owned instance pool (one instance per in-flight frame, parameters
 applied per evaluation snapshot). Plugins therefore MUST NOT assume frames arrive in order,
-one at a time, or on one thread. `kfx.thread-unsafe` is the sole, discouraged opt-out and
-serialises the bundle. **Scheduling is entirely the host's decision**: how many instances,
+one at a time, or on one thread. `LFX_TRAIT_THREAD_UNSAFE` is the sole, discouraged opt-out
+and serialises the bundle. **Scheduling is entirely the host's decision**: how many instances,
 which frames, and in what order is chosen by the host from the plugin's declared traits
 (cost class, temporal window, ROI honesty) and its *measured* per-frame cost and memory
 ledger — the same adaptive-concurrency approach as the engine's own nodes
@@ -301,18 +372,69 @@ ever adding one). Same server-process model, watchdog, and restart policy as OFX
   instantiate with a clear message and becomes a placeholder).
 - **Deliverables shipped with the first LFX release**: MIT-licensed headers (deliberately
   more permissive than Lumit's GPLv3 so proprietary vendors can adopt without licence
-  anxiety), a **`kfx-validator` CLI** (loads a plugin, exercises lifecycle/threading/ROI
-  contracts, fuzzes parameter edges, checks the threading annotations under a stress
-  scheduler — CLAP's proxy-validator idea), and a **plugin template repository** (Rust and
-  C, CI configured, one working example effect per extension).
-- Conformance claim: "passes `kfx-validator`" is the bar for listing in any future plugin
+  anxiety), an **`lfx-validator` CLI** (drives a bundle through a broker - never in
+  process, since the one tool whose job is to find a crash must survive the crash it
+  finds - and asks ten questions: layout, describe, lifecycle, both depths, determinism,
+  ROI honesty, the temporal window, a stress scheduler over the threading annotations,
+  parameter-edge fuzzing from a stated seed, and a stored per-depth digest so a moved pixel
+  with no version bump is a refusal), and a **plugin template repository** (C, C++ and
+  Rust, CI configured for all three platforms, one working example per set of bindings).
+  The template is staged in this tree under `template/`, so this workspace's own CI builds
+  and validates it before it is published, and its copy of the header is held byte for byte
+  against the canonical one.
+- Conformance claim: "passes `lfx-validator`" is the bar for listing in any future plugin
   directory.
 
 ### 3.7 Presentation
 
 LFX effects appear in Effects & Presets identically to built-ins: same categories, same
 search, same apply gestures, same Effect Controls layout rules
-([07-UI-SPEC.md](07-UI-SPEC.md)), same preset save/load. No plugin ghetto.
+([07-UI-SPEC.md](07-UI-SPEC.md)), same preset save/load. No plugin ghetto. The **picture
+family is a closed enumeration** of eight, which is what makes that promise keepable: an
+author may not invent a heading, the first category declared is the one the effect is
+browsed under and the rest are search keywords. The provenance stays in the row's context
+menu rather than in the heading ([07-UI-SPEC.md](07-UI-SPEC.md) §7).
+
+### 3.8 Discovery, installation and the Addons page
+
+An ABI with no discovery story gives a settings page that cannot name a plugin it has not
+run, so the two are specified together.
+
+- **A bundle is a folder**: `Name.lfx.bundle/Contents/`, holding `lfx.toml` and one
+  directory per architecture from a closed list of seven - `win-x86_64`, `win-arm64`,
+  `macos-universal`, `macos-arm64`, `macos-x86_64`, `linux-x86_64`, `linux-aarch64`. The
+  payload inside carries the `.lfx` extension on every platform and is an ordinary shared
+  library exporting `lfx_entry_point`. A scan tries this machine's own architectures in
+  order, so one bundle serves every platform its vendor built for, and a bundle carrying
+  no build for this machine is reported as exactly that rather than as a module that would
+  not load.
+- **`Contents/lfx.toml` is the listing, and it is read before any of the bundle's code
+  runs**: plugin ids, names, vendors, versions, picture families, the ABI version and the
+  required extensions. That is what lets the Addons page name, label and re-enable a plugin
+  that has never started - including one switched off *before* a scan, which otherwise has
+  no row in any listing. It is the cheap listing and **never** the authority: everything in
+  it is compared against what the code answers once the module is open, and a disagreement
+  refuses the plugin. It is parsed **in the broker**, never in the process holding the
+  project and the media handles.
+- **Search paths**: the platform's own plugin directories, plus anything
+  `LFX_PLUGIN_PATH` names - appended, never replacing - plus Lumit's own addons directory
+  under `data_local_dir()`, which matters most inside a Flatpak, where `/usr` belongs to
+  the runtime and the standard locations are empty however correct they are. The walk
+  descends four levels, because vendors install into a suite folder of their own.
+- **Installing** is dropping a `.lfxpack` on Lumit: a zip with a manifest declaring a
+  digest per entry and a detached signature over the manifest. Every entry's name is swept
+  before a byte is read, the signature is checked **before** the manifest is parsed, and
+  the key's fingerprint is recorded - trust on first use, so a later pack under another key
+  is refused by name. Nothing here may be called verified, and the page says so: it stops a
+  silent swap and stops nothing on the first install.
+- **Enable and disable** are the host's, not the plugin's. The disabled list travels with
+  the describe so a switched-off plugin's code never runs, and it is read again per render
+  so that switching one off mid-session stops it now rather than next launch. Filtering the
+  listing is not unregistering: registration is additive, which is what makes a rescan
+  idempotent and a re-enable instant.
+- The page is **Settings ▸ Addons**, and it lists every hosted plugin - OFX, LFX and audio -
+  with its state, its origin and the reason for any refusal
+  ([07-UI-SPEC.md](07-UI-SPEC.md) §15).
 
 ---
 
@@ -619,9 +741,10 @@ budgets, traps, test plans, and the work packages AD1 to AD6.
   *question* is already answered "you decide" at the suite, which is what OFX defines for a
   host that cannot ask. The question is what the finished shape should be, not what happens
   meanwhile.
-- **LFX curve/path parameter kind**: shape-warping effects want a bezier path parameter;
-  does v1 of the parameter set include paths, or does that wait for the `kfx.overlay`
-  extension where on-Viewer editing makes them usable?
+- ~~**LFX curve/path parameter kind**~~ - **answered** (§3.2). `LFX_PARAM_CURVE` is the
+  tone curve and `LFX_PARAM_PATH` is the bezier path; the path is in the frozen enum from
+  day one and refused by name in version 1, waiting on `lfx.overlay`, where on-Viewer
+  editing is what makes it usable. What is still open is *when* that extension lands.
 - **Expression editor scope**: inline editor per property is assumed in
   [07-UI-SPEC.md](07-UI-SPEC.md); syntax highlighting, error ribbon, and pick-whip writing
   are UI-spec questions, but does the expression *language service* (autocomplete against

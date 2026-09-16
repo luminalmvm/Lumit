@@ -1,0 +1,17 @@
+[package]
+name = "saturation"
+version = "1.0.0"
+edition = "2021"
+license = "MIT"
+publish = false
+
+[lib]
+# A plugin is a dynamic library the host loads and calls into. `cdylib` is the
+# one crate type that exports `lfx_entry_point` under its own name on every
+# platform; `dylib` would be a Rust-ABI library only this compiler can load.
+crate-type = ["cdylib"]
+
+[dependencies]
+# One dependency, which re-exports the raw declarations, so a plugin cannot end
+# up compiled against two different ABIs.
+lfx = { path = "../../rust/lfx" }

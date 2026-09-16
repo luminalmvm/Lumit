@@ -233,7 +233,14 @@ impl PluginHost for Gated {
 
 /// What a switched-off plugin files under its instance. Read as a **key** by
 /// the seam that badges the layer, never shown verbatim.
-pub const DISABLED_REASON: &str = "plugin_disabled";
+///
+/// It is `lumit-ipc`'s rather than this host's, and re-exported here so the
+/// name stays where every caller already looks for it. The badge decides
+/// "switched off" rather than "failed" by string equality against this one
+/// constant, over a table every hosted effect files into - so a second host
+/// filing a string of its own would badge its layers with the wrong sentence
+/// (docs/impl/lfx.md §4.3).
+pub use lumit_ipc::DISABLED_REASON;
 
 /// Scan the named directories and register everything new that is found.
 ///

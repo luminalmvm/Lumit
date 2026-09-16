@@ -1,0 +1,43 @@
+[package]
+name = "lumit-lfx-abi"
+version.workspace = true
+edition = "2021"
+# **MIT, deliberately**, and the one crate in this workspace that is not
+# GPL-3.0-only: docs/12-PLUGINS.md §3.6's carve-out, so a proprietary vendor
+# adopts the header without licence anxiety. Nothing but the header, its
+# `#[repr(C)]` mirror and the layout tests may live here - a helper that drifted
+# in would become MIT by accident, and `cargo deny` checks what comes *in* to a
+# crate, never what goes out.
+license = "MIT"
+# Never goes to crates.io: these crates are the application, and they
+# reference each other by path (docs/05-ARCHITECTURE.md). The header itself is
+# published separately, with the template repository.
+publish = false
+
+[dependencies]
+# None, and the list stays empty. The mirror describes shapes; it depends on
+# nothing, so a vendor reading it has nothing else to read.
+
+[build-dependencies]
+# Compiles the C half of the layout suite (`tests/layout.c`), which asserts the
+# header's own `sizeof`/`offsetof` against the same numbers `tests/layout.rs`
+# asserts for the Rust mirror. `cc` is already in the tree - `lumit-ofx`'s
+# variadic shim is built with it.
+cc = "1"
+
+# The plugin hosts cannot inherit the workspace's `unsafe_code = "deny"`: the
+# LFX ABI is a C ABI of raw pointers and function tables, which is unsafe by
+# construction (docs/14 §7 permits it here and requires the layout tests that go
+# with it). The library half re-denies it in `src/lib.rs`, since declarations
+# need no unsafe at all; what needs it is the layout suite's strided walk, which
+# is the plugin's own read spelled out. The clippy denies from the workspace are
+# kept, so no-panic/no-unwrap discipline still holds.
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+
+[lints.rust]
+unsafe_code = "allow"

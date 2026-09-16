@@ -209,6 +209,81 @@ impl Limits {
         work: 1 << 32,
     };
 
+    /// A hosted plugin bundle's own manifest: the `Contents/lfx.toml` an LFX
+    /// bundle declares its plugins in (docs/impl/lfx.md §3.3).
+    ///
+    /// Read **in the broker**, never in the process holding the project, and
+    /// read before any of the bundle's code has run - so this is the ceiling on
+    /// a stranger's structured text at the one moment nothing else is guarding
+    /// it. The honest shape is small: `LFX_MAX_EFFECTS_PER_BUNDLE` is 1024
+    /// plugins, each a handful of short strings, which comes to a few hundred
+    /// kilobytes for a bundle nobody has ever shipped. 8 MiB admits a hundred
+    /// of those and refuses a file whose only purpose is to be long; a hundred
+    /// thousand items is the same number seen from the parser's side, and the
+    /// depth is eight because the grammar here is an array of tables holding
+    /// arrays of scalars, which is two.
+    pub const PLUGIN_MANIFEST: Limits = Limits {
+        bytes: 8 << 20,
+        items: 100_000,
+        depth: 8,
+        work: 16_000_000,
+    };
+
+    /// The plugin roster: every addon this machine has ever seen, by
+    /// identifier (docs/impl/lfx.md §5.3).
+    ///
+    /// Lumit writes it, so why a budget at all? Because what it holds is a
+    /// stranger's strings - a label, a vendor, a version and a bundle path, all
+    /// of them copied out of somebody else's manifest - and the file roams with
+    /// the rest of the application's data area, so the copy being read need not
+    /// be the copy this machine wrote. 2 MiB is generous for the honest shape:
+    /// `LFX_MAX_EFFECTS_PER_BUNDLE` is 1024 plugins and a machine with ten
+    /// bundles on it has ten thousand short records, which is a few hundred
+    /// kilobytes. The items ceiling is the same number seen from the parser's
+    /// side, and the depth is eight because the grammar is an object of objects
+    /// of scalars, which is three.
+    pub const PLUGIN_ROSTER: Limits = Limits {
+        bytes: 2 << 20,
+        items: 100_000,
+        depth: 8,
+        work: 4_000_000,
+    };
+
+    /// A `.lfxpack`, the archive Lumit's own plugin installer unpacks
+    /// (docs/impl/lfx.md §6.2 step 3).
+    ///
+    /// The most hostile file this application opens on purpose: somebody hands
+    /// it over, it is a zip, and a zip entry's compressed size says nothing
+    /// about its decompressed one. The budget is what turns "unpack this"
+    /// into a bounded amount of work - the two-sided check per entry catches a
+    /// file that lies about its own length, and this ceiling catches a thousand
+    /// honest entries that come to a terabyte between them.
+    ///
+    /// A gigabyte because what is inside is **native code**, not text: a plugin
+    /// suite shipping a universal macOS binary and its resources is a few
+    /// hundred megabytes, and the largest third-party effect suites in
+    /// circulation are of that order. It is the ceiling on the *archive*; the
+    /// installer has a smaller one on any single entry, so that one file may
+    /// not claim all of it. A hundred thousand entries is far past any bundle -
+    /// the layout is one manifest, one architecture directory and one payload
+    /// per architecture - and a pack's own manifest has to carry a declaration
+    /// for every entry, so `lumit-lfx`'s `PACK_MANIFEST_MAX_BYTES` is sized
+    /// against this number rather than picked beside it.
+    ///
+    /// The depth is eight because an entry's path is checked component by
+    /// component and the bundle layout is three levels deep; the installer
+    /// charges it with `check_depth` per entry rather than declaring an eight
+    /// of its own. The work is the bytes of entry name swept - sixteen million
+    /// is a hundred and sixty characters for every one of those hundred
+    /// thousand entries - which is what refuses an archive whose only content
+    /// is long names.
+    pub const ADDON: Limits = Limits {
+        bytes: 1 << 30,
+        items: 100_000,
+        depth: 8,
+        work: 16_000_000,
+    };
+
     /// A sidecar or cache file written beside a project — roto mattes, media
     /// indexes, thumbnails.
     pub const SIDECAR: Limits = Limits {

@@ -1,0 +1,149 @@
+[package]
+name = "lumit-lfx"
+version.workspace = true
+edition = "2021"
+license = "GPL-3.0-only"
+# Never goes to crates.io: these crates are the application, and they
+# reference each other by path (docs/05-ARCHITECTURE.md).
+publish = false
+
+[dependencies]
+# The declaration a described plugin becomes: an LFX effect and a built-in are
+# the same kind of thing to everything downstream (docs/12 §1), so the schema
+# types come from the same place. The edge runs one way only - nothing in the
+# engine depends on a plugin host.
+lumit-core = { path = "../lumit-core" }
+# The frozen C ABI's own constants: the parameter kinds, the units, the eight
+# picture families, the trait enumerations and the ceilings. The lowering reads
+# them from the header's mirror rather than re-spelling the numbers, which is
+# what keeps this crate and `include/lfx.h` from drifting (docs/impl/lfx.md §2).
+lumit-lfx-abi = { path = "../lumit-lfx-abi" }
+# The render worker count the instance pool is capped at. §4.4 says "capped at
+# the render worker count", and `lumit-eval::pool::worker_threads` is the sum
+# the evaluation pool really spends - a second opinion about it here would be a
+# pool sized against a thread count nothing else uses. The edge runs one way:
+# `lumit-eval` knows nothing about plugins, exactly as it knows nothing about
+# the OFX host that reads the same sum for `multiThreadNumCPUs`.
+lumit-eval = { path = "../lumit-eval" }
+# The governor's ledger. The ring is up to half a gigabyte of RAM and docs/13 §3
+# says an unaccounted frame allocation fails code review - so unlike the two
+# older hosts, this one reserves what it maps and gives it back through the
+# reservation's own destructor (docs/impl/lfx.md §3.4).
+lumit-budget = { path = "../lumit-budget" }
+# The bounded reader the bundle's own manifest is parsed under. A manifest is a
+# stranger's structured text read in the broker before any of the plugin's code
+# runs, and `Limits::PLUGIN_MANIFEST` is the ceiling on it
+# (docs/impl/lfx.md §3.3, §11 item 7).
+lumit-ingress = { path = "../lumit-ingress" }
+# The shared rules every plugin host answers the same way: the control-message
+# cap the protocol is held under, the handshake timeout, the strike count and
+# the one `DISABLED_REASON` the badge seam tests against
+# (docs/impl/lfx.md §3.1).
+lumit-ipc = { path = "../lumit-ipc" }
+# The handshake's nonce and proof, which ride in the protocol's own messages
+# rather than in a channel of their own.
+lumit-peer = { path = "../lumit-peer" }
+# The platform's own application-data locations. The installer has to find
+# `data_dir()` for its trust store, which sits beside `plugins.json` and belongs
+# to nobody's format but its own; reaching it through `lumit-project` would make
+# a plugin host depend on the project format, which is the edge §5.2 keeps.
+directories = "6"
+# The one signature check in the Rust tree. A `.lfxpack`'s `manifest.json` is
+# verified before it is parsed (docs/impl/lfx.md §6.2 step 1), and there was no
+# Ed25519 anywhere in the tree to verify it with: `Cargo.lock` carried no
+# `ed25519`, no `ring` and no `signature`, and the project's only signature
+# check is `package:cryptography`'s, in Dart. Verifying in Dart and unpacking in
+# Rust cannot satisfy "before the JSON is parsed" across a process boundary - a
+# caller could simply skip the Dart half - so the verifier goes where the unpack
+# is. BSD-3-Clause, which `deny.toml` already admits. Default features off: the
+# `fast` backend's precomputed tables are for a process that signs, and this one
+# only ever verifies. `zeroize` comes in regardless - `std` pulls `alloc` and
+# `alloc` pulls it - and costs one small crate; what it wipes is secret key
+# material, of which this process holds none.
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+# The digests either side of that signature: the fingerprint a key is
+# remembered by, and the per-entry hash that is what makes the signature mean
+# anything about the bundle rather than only about the manifest naming it
+# (§6.2). MIT/Apache-2.0.
+sha2 = "0.10"
+# Lumit's working frames are half floats, and an fp16 frame crosses the ring
+# without being converted at either end - the promise docs/12 §3.3 makes. Already
+# a `lumit-core` dependency, so this costs no new crate.
+half = "2"
+# The catalogue names an effect instance by the document's own id, which is what
+# `EffectDef`'s render and press hooks are handed and what the definition keys
+# its live plugin instances by (docs/impl/lfx.md §4.2).
+uuid = { version = "1", features = ["v7"] }
+# The bundle binary is a plain DLL/dylib opened at run time; libloading is the
+# portable `LoadLibraryW`/`dlopen` wrapper and is already in the tree. It is
+# reached only from `local`, which the suite drives in the test binary and the
+# broker drives in its own: the editor process opens nothing
+# (docs/12:354-356).
+libloading = "0.8"
+# The frame plane: the shared-memory ring. `memmap2` is `CreateFileMapping` +
+# `MapViewOfFile` on Windows and `mmap` on Unix - the two calls the note names,
+# spelled once instead of twice, and the same crate the OFX ring maps through.
+memmap2 = "0.9"
+# The derives that put the control protocol's messages on the wire. The format
+# itself is `lumit-ipc`'s; only the shapes are declared here.
+serde = { version = "1", features = ["derive"] }
+# The quirks table, embedded with `include_str!` and read as JSON, as both
+# older hosts read theirs.
+serde_json = "1"
+# Typed refusals, as the OFX host's `Rejection` already spells them
+# (docs/14-ENGINEERING-RULES.md §4).
+thiserror = "2"
+# A bundle's own `Contents/lfx.toml`. The same parser `lumit-import` already
+# reads its effect map with, with `parse` and `serde` and nothing else: a
+# manifest is read, never written.
+toml = { version = "1.1.4", default-features = false, features = ["parse", "serde"] }
+# A `.lfxpack` is a zip, read with the same library and the same two-sided size
+# check `lumit-project` reads a `.lum` with - the archive's own declared
+# uncompressed size *and* a read one byte past the ceiling, so an entry that
+# lies about its length is refused rather than believed (§6.2 step 3).
+zip = { version = "2", default-features = false, features = ["deflate"] }
+
+[dev-dependencies]
+# The protocol suite serialises a message to prove no picture rides on the
+# control plane, which means naming the wire format `lumit_ipc::pipe` uses.
+bincode = "1"
+# The minimal LFX bundle the in-process host is tested against. It is declared
+# here so a plain `cargo test -p lumit-lfx` builds the cdylib the tests load;
+# the dependency edge is dev-only, and the fixture depends on `lumit-lfx-abi`
+# rather than on this crate, so there is no cycle to permit.
+lumit-lfx-testplug = { path = "../lumit-lfx-testplug" }
+tempfile = "3"
+
+# A library that loads and is not an LFX bundle, built by `cargo test`: the
+# other half of "this file is not a plugin", where the first half is a text file
+# the loader refuses outright.
+[[example]]
+name = "not_an_lfx_bundle"
+crate-type = ["cdylib"]
+
+# A library that is an LFX bundle and lies about its own entry table. The three
+# refusals at the front door - a short size prefix, an ABI this host does not
+# speak, and an `init` that declines - are the ones no honest bundle can be, and
+# `lumit-lfx-testplug` is honest because every other test in the suite opens it.
+[[example]]
+name = "an_lfx_entry_that_lies"
+crate-type = ["cdylib"]
+
+# The same fault told the other way: an `lfx_entry_point` that really is shorter
+# than this header's table rather than one that says so. The liar's static is
+# full size, so a host that formed a reference over it before reading the prefix
+# would read its own bundle's bytes and no sanitiser would object; this one's
+# stops, so the rule is pinned at the allocation rather than at the number.
+[[example]]
+name = "an_lfx_entry_cut_short"
+crate-type = ["cdylib"]
+
+# The workspace's `unsafe_code = "deny"` rather than a crate-level `forbid`:
+# the in-process host drives the frozen C entry point, and a deny is what one
+# `#[allow]` with a `// SAFETY:` comment can answer for, item by item, where a
+# `forbid` would have to be deleted from the crate root. The sibling hosts say
+# `unsafe_code = "allow"` outright because FFI is most of what they are; this
+# crate keeps the deny until it has to give it up
+# (docs/14-ENGINEERING-RULES.md §7).
+[lints]
+workspace = true

@@ -1,0 +1,89 @@
+# The template's own CI: build every example on every platform, then validate
+# each bundle.
+#
+# This file is the published repository's workflow. Inside Lumit's own tree it
+# does nothing - GitHub reads workflows from the repository root only - and the
+# gate there is `cargo test -p lumit-lfx-broker --test template`, which does
+# the same three builds and drives the shipped validator over each bundle. Both
+# exist because they answer to different people: this one tells a vendor their
+# fork still builds, and that one tells Lumit the template still matches the
+# ABI.
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  examples:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: dtolnay/rust-toolchain@d1031067263f94b142dd6c0ce24c5eb9d02d52a0 # master
+        with:
+          toolchain: stable
+
+      # The C and C++ examples, laid out as bundles by the CMakeLists.
+      - name: Build the C and C++ examples
+        run: |
+          cmake -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --config Release
+
+      # The declarations, the wrapper, its own suite, and the Rust example.
+      - name: Build and test the Rust half
+        run: |
+          cargo build --release
+          cargo test
+
+      - name: Lay the Rust example out as a bundle
+        shell: bash
+        run: |
+          case "${{ runner.os }}" in
+            Windows) payload=target/release/saturation.dll ;;
+            macOS) payload=target/release/libsaturation.dylib ;;
+            *) payload=target/release/libsaturation.so ;;
+          esac
+          python3 scripts/stage-bundle.py \
+            --payload "$payload" \
+            --manifest examples/saturation/lfx.toml \
+            --name Saturation \
+            --out build/bundles
+
+      # `lfx-validator` ships with Lumit rather than with this repository, so
+      # the step says plainly when it is not here instead of passing quietly:
+      # a green run that validated nothing is worse than a red one.
+      - name: Validate every bundle
+        shell: bash
+        run: |
+          validator="${LFX_VALIDATOR:-lfx-validator}"
+          if ! command -v "$validator" >/dev/null 2>&1 && [ ! -x "$validator" ]; then
+            echo "::warning::$validator was not found - the bundles were built but not"\
+                 "validated. Install Lumit, or set LFX_VALIDATOR to the program's path."
+            exit 0
+          fi
+          status=0
+          for bundle in build/bundles/*.lfx.bundle; do
+            echo "== $bundle"
+            "$validator" "$bundle" || status=1
+          done
+          exit "$status"
+
+      - name: Keep the bundles
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: bundles-${{ matrix.os }}
+          path: build/bundles
+          if-no-files-found: ignore

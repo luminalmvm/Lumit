@@ -332,17 +332,6 @@ pub fn accumulation_shutter_offsets(layers: &[Layer], t_comp: f64) -> Vec<Vec<f6
     out
 }
 
-/// Whether an instance is one the catalogue can answer for — a built-in, or a
-/// plugin that registered at run time. A placeholder is not: it is a
-/// name this build does not understand, kept so the project round-trips, and it
-/// renders as identity.
-fn is_catalogued(e: &EffectInstance) -> bool {
-    matches!(
-        e.effect.namespace,
-        EffectNamespace::Builtin | EffectNamespace::Ofx
-    )
-}
-
 /// The union of source-relative frame offsets a layer's live effect stack
 /// needs at layer frame `frame` (docs/08 §1.3 `temporal`), always sorted and
 /// always containing 0 (the current frame). `&[0]` when the stack is bypassed,
@@ -365,7 +354,10 @@ fn is_catalogued(e: &EffectInstance) -> bool {
 pub fn stack_temporal_window(effects: &[EffectInstance], fx_on: bool, frame: f64) -> Vec<i32> {
     let mut offsets = vec![0i32];
     if fx_on {
-        for e in effects.iter().filter(|e| e.enabled && is_catalogued(e)) {
+        for e in effects
+            .iter()
+            .filter(|e| e.enabled && e.effect.namespace.is_catalogued())
+        {
             let Some(def) = super::BUILTIN_DEFS.get(&e.effect.match_name) else {
                 continue;
             };
@@ -395,7 +387,7 @@ pub fn stack_temporal_window(effects: &[EffectInstance], fx_on: bool, frame: f64
 /// the lowering, the planner and the frame key cannot disagree about which
 /// frames a graph is made from.
 pub fn input_times(inst: &EffectInstance, t: f64, dt: f64) -> Vec<f64> {
-    if !inst.enabled || !is_catalogued(inst) {
+    if !inst.enabled || !inst.effect.namespace.is_catalogued() {
         return vec![t];
     }
     // The stack helpers answer for a slice of one, so the rate, phase and
@@ -520,7 +512,7 @@ pub fn stack_is_temporal(effects: &[EffectInstance], fx_on: bool) -> bool {
     fx_on
         && effects
             .iter()
-            .filter(|e| e.enabled && is_catalogued(e))
+            .filter(|e| e.enabled && e.effect.namespace.is_catalogued())
             .any(|e| {
                 schema(&e.effect.match_name)
                     .is_some_and(|s| s.traits.temporal.iter().any(|&o| o != 0))

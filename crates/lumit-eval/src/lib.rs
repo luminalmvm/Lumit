@@ -1143,7 +1143,15 @@ fn feed_effect_stack(
         // key for exactly these effects; everything else keeps its
         // time-free keys (a blurred solid still shares one cached
         // frame across its whole span).
-        if e.effect.namespace == lumit_core::model::EffectNamespace::Builtin {
+        //
+        // Every catalogued namespace, not Lumit's own alone: a hosted
+        // plugin declares the same two traits (an LFX plugin through
+        // `LFX_TRAIT_SEEDED`, docs/impl/lfx.md §2.4) and the schema
+        // lookup answers for whatever registered at run time as readily
+        // as for a built-in. Gated on `Builtin`, a seeded plugin's whole
+        // span hashed to one key and the generator rendered one frozen
+        // frame while the panel said it was animating.
+        if e.effect.namespace.is_catalogued() {
             if let Some(s) = lumit_core::fx::schema(&e.effect.match_name) {
                 if s.traits.seeded {
                     h.update(b"fx-time");
@@ -4521,6 +4529,328 @@ mod tests {
             plain,
             comp_frame_key(&doc, &bypassed, 1.0, Quality::default(), &Bumped(55)).unwrap(),
             "a bypassed stack samples nothing but its own frame"
+        );
+    }
+
+    /// The same end-to-end question for the **LFX** namespace
+    /// (docs/impl/lfx.md §4.1, §14 item 8): an `lfx:` retimer's eleven sampled
+    /// frames are what this layer's frame depends on, so the key moves when
+    /// any one of them changes and stands when a frame outside the window
+    /// does.
+    ///
+    /// It is the namespace seam read at the place the cache is decided. Both
+    /// picture walks gate on `EffectNamespace::is_catalogued`, and until that
+    /// predicate admitted `Lfx` an LFX retimer's neighbours never reached the
+    /// key at all - so a cached frame would have outlived what the plugin
+    /// sampled to make it, silently.
+    #[test]
+    fn an_lfx_retimers_sampled_frames_are_what_its_key_depends_on() {
+        use lumit_core::fx::{
+            CostClass, EffectDef, EffectSchema, EffectTraits, FxCategory, MatteRole, Roi,
+        };
+
+        /// A plugin that reads t ± 5, whatever the frame and whatever the
+        /// instance - the smallest thing that is a retimer. It carries its
+        /// declaration rather than minting one per call: a schema is looked up
+        /// by name once and must answer the **same** pointer every time, and
+        /// the key walk asks for it dozens of times a frame.
+        struct LfxRetimer(&'static EffectSchema);
+        impl EffectDef for LfxRetimer {
+            fn schema(&self) -> &'static EffectSchema {
+                self.0
+            }
+
+            fn frames_needed(
+                &self,
+                _inst: &lumit_core::model::EffectInstance,
+                _lt: f64,
+            ) -> Option<Vec<i32>> {
+                Some((-5..=5).collect())
+            }
+        }
+
+        // Declared ±1: the gate. The per-instance `frames_needed` above is
+        // the window. Leaked once, here, and handed to the def.
+        let schema: &'static EffectSchema = Box::leak(Box::new(EffectSchema {
+            match_name: "lfx:test.eval.retimer",
+            label: "Retimer",
+            version: 1_000_000,
+            category: FxCategory::Utility,
+            traits: EffectTraits {
+                cost: CostClass::Heavy,
+                roi: Roi::FullFrame,
+                temporal: &[-1, 0, 1],
+                premultiplied: true,
+                seeded: false,
+                beat_input: false,
+            },
+            params: &[],
+            groups: &[],
+            enabled_when: &[],
+            matte: MatteRole::None,
+        }));
+        let def: &'static LfxRetimer = Box::leak(Box::new(LfxRetimer(schema)));
+        assert!(
+            lumit_core::fx::BUILTIN_DEFS.register(def),
+            "the catalogue took the plugin"
+        );
+        assert!(
+            std::ptr::eq(def.schema(), def.schema()),
+            "one declaration, one pointer"
+        );
+
+        /// The stub stamper with one frame changed: "the footage under this
+        /// layer was re-imported and frame N is different now".
+        struct Bumped(u64);
+        impl SourceStamper for Bumped {
+            fn stamp(&self, item: Uuid, lt: f64, _native: bool) -> Option<(String, u64)> {
+                let frame = (lt * 60.0).round().max(0.0) as u64;
+                let identity = if frame == self.0 {
+                    format!("stub:{item}:changed")
+                } else {
+                    format!("stub:{item}")
+                };
+                Some((identity, frame))
+            }
+        }
+
+        let doc = Arc::new(Document::new());
+        let item = Uuid::now_v7();
+        let mut layer = text_layer("", 0.0, 10.0, 0.0);
+        layer.kind = LayerKind::Footage { item };
+        let inst = lumit_core::fx::instantiate("lfx:test.eval.retimer").expect("it registered");
+        assert_eq!(
+            inst.effect.namespace,
+            lumit_core::model::EffectNamespace::Lfx,
+            "the lfx: prefix is what carries the provenance"
+        );
+        layer.effects.push(inst);
+        let comp = comp_with(vec![layer]);
+
+        // One second in, at sixty frames a second: the frame being rendered is
+        // 60 and the plugin reads 55 to 65.
+        let at = |stamper: &dyn SourceStamper| {
+            comp_frame_key(&doc, &comp, 1.0, Quality::default(), stamper).unwrap()
+        };
+        let base = at(&StubStamper);
+        for inside in [55_u64, 59, 61, 65] {
+            assert_ne!(
+                base,
+                at(&Bumped(inside)),
+                "frame {inside} is one the plugin samples, so the cached frame is stale"
+            );
+        }
+        for outside in [54_u64, 66, 120] {
+            assert_eq!(
+                base,
+                at(&Bumped(outside)),
+                "frame {outside} is outside the plugin's window and must retire nothing"
+            );
+        }
+    }
+
+    /// **An LFX effect carries no `plugin_state`, and its key is complete
+    /// without one** (docs/impl/lfx.md D8, §4.2).
+    ///
+    /// An LFX plugin holds no opaque blob at all: every fact about an instance
+    /// is a stored parameter, so the key that already hashes namespace, name,
+    /// version and values is the whole of what the frame depends on. That is
+    /// what makes a restart a replay rather than an approximation.
+    ///
+    /// The half worth *testing* is the walk, not the fixture: this key ignores
+    /// `plugin_state` entirely, which is why D8 has to be a promise the host
+    /// keeps rather than a thing the key could check. An instance with a blob
+    /// on it and its twin without one key the same here - harmless for LFX,
+    /// where there is no blob, and precisely the hole the OFX host still has,
+    /// where an instance's blob is read once at creation and a plugin whose
+    /// state changed can be served the frame from before it changed
+    /// (docs/impl/lfx.md §13).
+    #[test]
+    fn an_lfx_effect_keys_without_a_plugin_state() {
+        use lumit_core::model::{
+            EffectInstance, EffectKey, EffectNamespace, EffectParam, EffectValue,
+        };
+        let doc = Document::new();
+        let plain = comp_with(vec![text_layer("fx", 0.0, 10.0, 0.0)]);
+        let base = key(&doc, &plain, 1.0);
+
+        let plugin = |gain: f64, version: u32| EffectInstance {
+            id: Uuid::now_v7(),
+            effect: EffectKey {
+                namespace: EffectNamespace::Lfx,
+                match_name: "lfx:com.example.gain".into(),
+                version,
+                extra: serde_json::Map::new(),
+            },
+            roto: None,
+            enabled: true,
+            params: vec![EffectParam {
+                id: "gain".into(),
+                value: EffectValue::Float(lumit_core::anim::Property::fixed(gain)),
+                extra: serde_json::Map::new(),
+            }],
+            sample_temporally: true,
+            custom_name: None,
+            linked_pairs: Vec::new(),
+            // D8: empty for every LFX instance, and nothing anywhere fills it.
+            plugin_state: None,
+            extra: serde_json::Map::new(),
+        };
+
+        // Two releases differing only in the patch place - 1.0.0 and 1.0.1 as
+        // `lumit-lfx`'s `version::mint` groups them, written out rather than
+        // called for: the edge runs one way, a host crate depends on the
+        // engine and never the other way about, so the grouping is pinned in
+        // `lumit-lfx`'s own suite and these are plain numbers here. What is
+        // this crate's to pin is the other half - that the stored number is
+        // content, so a patch release is a different frame, which the OFX
+        // host's major-only version cannot be.
+        let one_zero_zero = 1_000_000;
+        let one_zero_one = 1_000_001;
+
+        let mut with_plugin = plain.clone();
+        with_plugin.layers[0]
+            .effects
+            .push(plugin(2.0, one_zero_zero));
+        let fx_key = key(&doc, &with_plugin, 1.0);
+        assert_ne!(base, fx_key, "a live plugin is content");
+
+        // The fact D8 rests on, stated about the **key walk** rather than
+        // about this fixture: an instance carrying an opaque blob keys
+        // identically to the twin beside it that carries none, because nothing
+        // outside the stored parameters reaches the walk at all. For LFX that
+        // costs nothing - there is no blob to hold - and it is exactly the
+        // hole the OFX host still has, where a blob that changed is not
+        // content either and there it matters (docs/impl/lfx.md §13).
+        let mut with_state = plain.clone();
+        let mut stateful = plugin(2.0, one_zero_zero);
+        stateful.plugin_state = Some("deadbeef".into());
+        with_state.layers[0].effects.push(stateful);
+        assert_eq!(
+            fx_key,
+            key(&doc, &with_state, 1.0),
+            "an opaque blob moved the key, which the key walk has never read. \
+             This is D8 for `Lfx`, where there is no blob to read, and \
+             §13's open hole for `Ofx`, where there is: if that hole is \
+             closed, close it for `Ofx` and leave this assertion green \
+             rather than deleting it"
+        );
+
+        // The same values on another instance key the same: the instance's own
+        // id is not content, the effect it is an instance of is.
+        let mut twin = plain.clone();
+        twin.layers[0].effects.push(plugin(2.0, one_zero_zero));
+        assert_eq!(fx_key, key(&doc, &twin, 1.0));
+
+        // A control that moves renames the frame, and so does a patch release.
+        let mut turned = plain.clone();
+        turned.layers[0].effects.push(plugin(2.5, one_zero_zero));
+        assert_ne!(fx_key, key(&doc, &turned, 1.0));
+        let mut patched = plain.clone();
+        patched.layers[0].effects.push(plugin(2.0, one_zero_one));
+        assert_ne!(
+            fx_key,
+            key(&doc, &patched, 1.0),
+            "a patch release is new maths under the same identifier"
+        );
+
+        // And the namespace is content in its own right: the same name and
+        // values under another host are another effect.
+        let mut as_ofx = plain.clone();
+        let mut other = plugin(2.0, one_zero_zero);
+        other.effect.namespace = EffectNamespace::Ofx;
+        as_ofx.layers[0].effects.push(other);
+        assert_ne!(fx_key, key(&doc, &as_ofx, 1.0));
+
+        // Bypassed, it contributes nothing, exactly as a built-in does.
+        let mut bypassed = with_plugin.clone();
+        bypassed.layers[0].effects[0].enabled = false;
+        assert_eq!(base, key(&doc, &bypassed, 1.0));
+    }
+
+    /// **A seeded LFX effect's key moves with the layer's local time**, as a
+    /// seeded built-in's does (docs/08 §1.3 Randomness, docs/impl/lfx.md §2.4).
+    ///
+    /// `LFX_TRAIT_SEEDED` is a bit a plugin sets on its trait block, and
+    /// `lumit-lfx`'s lowering carries it into `EffectTraits::seeded` - but the
+    /// only thing in the tree that *reads* that field is the block below, and
+    /// until it asked `is_catalogued()` it asked `== Builtin` instead. A
+    /// hash(seed, time) generator - a noise, a shake, a sparkle - therefore
+    /// hashed its whole span to one key and rendered one frozen frame while the
+    /// panel said it was animating. The schema lookup was never the obstacle:
+    /// it answers for whatever registered at run time.
+    ///
+    /// Pinned at the namespace seam rather than in `lumit-lfx`, because this is
+    /// where the cache is decided and the edge runs one way - a host crate
+    /// depends on the engine and never the other way about.
+    #[test]
+    fn a_seeded_lfx_effects_key_moves_with_local_time() {
+        use lumit_core::fx::{
+            CostClass, EffectDef, EffectSchema, EffectTraits, FxCategory, MatteRole, Roi,
+        };
+
+        /// A generator that reads nothing but its own seed and the clock.
+        struct LfxGenerator(&'static EffectSchema);
+        impl EffectDef for LfxGenerator {
+            fn schema(&self) -> &'static EffectSchema {
+                self.0
+            }
+        }
+
+        let declared = |match_name: &'static str, seeded: bool| {
+            let schema: &'static EffectSchema = Box::leak(Box::new(EffectSchema {
+                match_name,
+                label: "Sparkle",
+                version: 1_000_000,
+                category: FxCategory::Generate,
+                traits: EffectTraits {
+                    cost: CostClass::Heavy,
+                    roi: Roi::FullFrame,
+                    temporal: &[0],
+                    premultiplied: true,
+                    seeded,
+                    beat_input: false,
+                },
+                params: &[],
+                groups: &[],
+                enabled_when: &[],
+                matte: MatteRole::None,
+            }));
+            let def: &'static LfxGenerator = Box::leak(Box::new(LfxGenerator(schema)));
+            assert!(
+                lumit_core::fx::BUILTIN_DEFS.register(def),
+                "the catalogue took {match_name}"
+            );
+        };
+        declared("lfx:test.eval.sparkle", true);
+        declared("lfx:test.eval.steady", false);
+
+        let doc = Document::new();
+        let with_fx = |match_name: &str| {
+            let mut layer = text_layer("x", 0.0, 10.0, 0.0);
+            layer
+                .effects
+                .push(lumit_core::fx::instantiate(match_name).expect("it registered"));
+            comp_with(vec![layer])
+        };
+
+        // Different frames, different keys; the same frame twice, the same key.
+        let sparkling = with_fx("lfx:test.eval.sparkle");
+        assert_ne!(
+            key(&doc, &sparkling, 1.0),
+            key(&doc, &sparkling, 2.0),
+            "a seeded plugin's whole span hashed to one key"
+        );
+        assert_eq!(key(&doc, &sparkling, 1.0), key(&doc, &sparkling, 1.0));
+
+        // And the widening costs nothing elsewhere: a plugin that declared no
+        // seed keeps its time-free keys, so one cached frame still serves a
+        // whole span.
+        let steady = with_fx("lfx:test.eval.steady");
+        assert_eq!(
+            key(&doc, &steady, 1.0),
+            key(&doc, &steady, 2.0),
+            "an unseeded plugin lost its time-free keys"
         );
     }
 

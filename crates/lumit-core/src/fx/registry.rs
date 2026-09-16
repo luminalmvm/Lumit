@@ -306,6 +306,54 @@ pub trait EffectDef: Sync + Send + 'static {
         self.apply_cpu_at(inst, lt, rgba, w, h, p);
     }
 
+    /// The **fp16 twin** of [`apply_cpu_temporal`](EffectDef::apply_cpu_temporal),
+    /// for a definition that can work in the project's own working depth
+    /// (docs/impl/lfx.md §4.5).
+    ///
+    /// # In plain terms
+    ///
+    /// The picture lives on the card as linear fp16. To hand it to an effect
+    /// that works on the CPU the render path reads it back as f32 and uploads
+    /// the answer as fp16 again - which for an fp32 project is exactly right,
+    /// and for an **fp16 project** is a widening and a narrowing either side of
+    /// an effect that never wanted either. It is small, and it is a conversion
+    /// at the one seam a plugin API is entitled to be told there is none at.
+    ///
+    /// So a definition that does its own fp16 may say so here and be handed the
+    /// halves. `rgba` is premultiplied scene-linear, four halves per pixel,
+    /// row-major, and the neighbours are the same frames
+    /// [`apply_cpu_temporal`](EffectDef::apply_cpu_temporal) is given, in the
+    /// same depth.
+    ///
+    /// `false` means "I do not do fp16 - use the f32 path", which is every
+    /// built-in and every OFX entry, so nothing moves: the default declines
+    /// without reading a pixel or writing one, and the caller falls back. A
+    /// definition answering `true` has written its answer into `rgba`; one
+    /// answering `false` must leave `rgba` as it found it, because the caller
+    /// will widen those same halves for the f32 path, and a half it wrote on
+    /// the way past is a pixel the f32 effect never saw.
+    ///
+    /// A definition that can only find out half way through whether it can
+    /// finish renders into scratch of its own and copies on the way out. And
+    /// the answer is a `bool` rather than a status because there is one
+    /// question and its two answers are the two paths: a `false` has written
+    /// nothing, so the caller renders the same frame the other way having lost
+    /// nothing.
+    #[must_use = "the answer is which of the two paths rendered the frame"]
+    #[allow(clippy::too_many_arguments)]
+    fn apply_f16_temporal(
+        &self,
+        _inst: uuid::Uuid,
+        _lt: f64,
+        _rgba: &mut [half::f16],
+        _w: u32,
+        _h: u32,
+        _p: Params<'_>,
+        _neighbours: &[(i32, &[half::f16])],
+    ) -> bool {
+        false
+    }
+
     /// Values derived at resolve time from things that are not parameters
     /// (docs/impl/effect-registry.md §2.4a): layer time, the marker
     /// context, a whole keyframed track.
