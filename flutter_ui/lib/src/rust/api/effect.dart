@@ -282,6 +282,10 @@ abstract class BridgeEffectInstance implements RustOpaqueInterface {
   /// of the checkbox in its title bar.
   bool enabled();
 
+  /// The text an Expression box runs, empty for a fresh one. Read when its
+  /// editor opens, never in a rebuild.
+  String expressionSource();
+
   /// One read for everything a card draws — see [`BridgeEffectInstanceInfo`].
   BridgeEffectInstanceInfo getInfo();
 
@@ -452,6 +456,10 @@ abstract class BridgeEffectInstance implements RustOpaqueInterface {
   /// committing op (`LayerReference::set_effect_enabled`) and does not need
   /// this.
   void setEnabled({required bool enabled});
+
+  /// Stage new text on an Expression box. The graph's own commit writes it, so
+  /// an edit is one undo step.
+  void setExpressionSource({required String source});
 
   /// Chain or unchain the vector pair keyed by `stem`, on the **staged**
   /// copy — `LayerReference::set_effects` is the commit, exactly as

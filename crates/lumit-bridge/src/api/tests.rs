@@ -14431,6 +14431,29 @@ fn sync_adopts_the_offered_rows_and_remove_takes_the_unused_ones() {
     assert!(only_effect(&layer).get_value("steps".into()).is_err());
 }
 
+/// An Expression box's text is staged on its handle and written by the graph's
+/// commit, the way a Custom shader's source is.
+#[test]
+fn an_expression_boxs_text_round_trips_through_the_graph() {
+    let (_project, layer) = project_with_layer();
+    let box_ = layer
+        .new_driver("expression".into())
+        .expect("an expression");
+    assert_eq!(box_.expression_source(), "", "a fresh box runs nothing");
+    let id = box_.id();
+    let wiring = layer.get_graph().expect("graph").wiring;
+    layer.set_graph(vec![box_], wiring).expect("added");
+
+    let mut drivers = layer.get_graph_drivers().expect("drivers");
+    drivers[0].set_expression_source("time * 2".into());
+    let wiring = layer.get_graph().expect("graph").wiring;
+    layer.set_graph(drivers, wiring).expect("committed");
+
+    let saved = layer.get_graph_drivers().expect("drivers");
+    assert_eq!(saved[0].id(), id);
+    assert_eq!(saved[0].expression_source(), "time * 2");
+}
+
 /// **The compile state crosses in both directions**, and a refusal and a
 /// compile error read as one sentence because the person is looking at one text
 /// box (§2.1, §2.2).

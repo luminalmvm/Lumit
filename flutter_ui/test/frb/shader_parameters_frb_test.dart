@@ -83,7 +83,7 @@ void main() {
       // Edit: the editor's own commit writes the text and nothing else.
       expect(
           applyShaderSource(
-              home: ShaderHome.layer(p.layer), effect: id, source: _oneRow),
+              home: InstanceHome.layer(p.layer), effect: id, source: _oneRow),
           isTrue);
       await refresh();
 
@@ -132,7 +132,7 @@ void main() {
       // removing it would cost, and offers the new name.
       expect(
           applyShaderSource(
-              home: ShaderHome.layer(p.layer), effect: id, source: _renamed),
+              home: InstanceHome.layer(p.layer), effect: id, source: _renamed),
           isTrue);
       await refresh();
       expect(sync().adds, ['reach']);

@@ -32,6 +32,7 @@ import 'package:lumit_flutter/src/rust/api/layer.dart';
 
 import '../l10n/strings.dart';
 import '../shell/dialog_frame.dart';
+import '../shell/expression_dialog_frb.dart';
 import '../state/file_dialogs.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
@@ -46,10 +47,10 @@ const double shaderEditorWellHeight = 320;
 /// than a measure - the grip changes it and the workspace remembers it.
 const double shaderEditorHeight = 460;
 
-/// Where a Custom shader sits: a layer's stack, or the boxes of a node graph.
-/// Both are read as staged instances and committed whole, so a shader edit is
-/// one op and one undo step in either.
-class ShaderHome {
+/// Where an effect or driver sits: a layer's stack, a layer's drivers, or the
+/// boxes of a node graph. All are read as staged instances and committed
+/// whole, so an edit to a shader or an expression is one op and one undo step.
+class InstanceHome {
   final List<BridgeEffectInstance> Function() read;
 
   /// Commits what [read] handed out. Throws when the document moved under it.
@@ -59,20 +60,27 @@ class ShaderHome {
   /// there is nothing to draw into.
   final void Function(List<BridgeEffectInstance> instances)? draw;
 
-  const ShaderHome({required this.read, required this.commit, this.draw});
+  const InstanceHome({required this.read, required this.commit, this.draw});
 
-  factory ShaderHome.layer(LayerReference layer,
+  factory InstanceHome.layer(LayerReference layer,
           {void Function(List<BridgeEffectInstance> instances)? draw}) =>
-      ShaderHome(
+      InstanceHome(
         read: layer.getEffects,
         commit: (stack) => layer.setEffects(effects: stack),
         draw: draw,
       );
 
   /// The wiring is read at the commit, so it is the graph as it stands then.
-  factory ShaderHome.graph(CompositionReference graph,
+  factory InstanceHome.drivers(LayerReference layer) => InstanceHome(
+        read: layer.getGraphDrivers,
+        commit: (drivers) =>
+            layer.setGraph(drivers: drivers, wiring: layer.getGraph().wiring),
+      );
+
+  /// The wiring is read at the commit, so it is the graph as it stands then.
+  factory InstanceHome.graph(CompositionReference graph,
           {void Function(List<BridgeEffectInstance> instances)? draw}) =>
-      ShaderHome(
+      InstanceHome(
         read: graph.getNodeGraphInstances,
         commit: (instances) => graph.setNodeGraph(
             instances: instances, wiring: graph.getNodeGraph().wiring),
@@ -91,7 +99,7 @@ class ShaderHome {
 /// under the window, where re-reading is the recovery and half a write would be
 /// worse than none.
 bool applyShaderSource({
-  required ShaderHome home,
+  required InstanceHome home,
   required UuidValue effect,
   required String source,
   String? origin,
@@ -116,7 +124,7 @@ bool applyShaderSource({
 /// The source is staged on a handle and never committed, so the document does
 /// not move: this is a question, not an edit. Null when the effect has gone.
 BridgeShaderStatus? shaderStatusFor({
-  required ShaderHome home,
+  required InstanceHome home,
   required UuidValue effect,
   required String source,
 }) {
@@ -136,7 +144,7 @@ BridgeShaderStatus? shaderStatusFor({
 /// was one of them. [onApplied] runs when text landed.
 bool pressShaderButton({
   required BuildContext context,
-  required ShaderHome home,
+  required InstanceHome home,
   required UuidValue effect,
   required String param,
   required VoidCallback onApplied,
@@ -158,6 +166,33 @@ bool pressShaderButton({
   return true;
 }
 
+/// Press an Expression box's Edit expression row: open the expression
+/// dialogue on its text and stage what comes back. [onApplied] runs when text
+/// landed.
+Future<void> editExpressionOn({
+  required BuildContext context,
+  required InstanceHome home,
+  required UuidValue effect,
+  required VoidCallback onApplied,
+}) async {
+  final held =
+      home.read().where((i) => i.id() == effect).firstOrNull?.expressionSource();
+  if (held == null) return;
+  final text = await showExpressionDialogFrb(context: context, initial: held);
+  if (text == null || !context.mounted) return;
+  final staged = home.read();
+  final instance = staged.where((i) => i.id() == effect).firstOrNull;
+  if (instance == null) return;
+  instance.setExpressionSource(source: text);
+  try {
+    home.commit(staged);
+  } catch (_) {
+    // The graph changed under the dialogue; re-reading is the recovery.
+    return;
+  }
+  onApplied();
+}
+
 /// Read a `.wgsl` somebody sent and copy its text onto `effect` (§1.1, §6).
 ///
 /// The **text** is copied, not a reference to the file: a project must be one
@@ -166,7 +201,7 @@ bool pressShaderButton({
 ///
 /// A file that will not read leaves the instance exactly as it was: the
 /// dialogue was the gesture, and half a shader is worse than none.
-Future<void> _loadShader(BuildContext context, ShaderHome home,
+Future<void> _loadShader(BuildContext context, InstanceHome home,
     UuidValue effect, VoidCallback onApplied) async {
   final path = await pickShaderToOpen();
   if (path == null || !context.mounted) return;
@@ -194,12 +229,12 @@ Future<void> _loadShader(BuildContext context, ShaderHome home,
 /// model on the edit and not on a cancel.
 Future<bool> showShaderEditor({
   required BuildContext context,
-  required ShaderHome home,
+  required InstanceHome home,
   required UuidValue effect,
   /// Draw the frame as this text would draw it, without committing
   /// anything - the live preview (Airyz, 2026-09-01: "having to click apply
   /// is kind of annoying while editing the shader"). Left out, the text is
-  /// staged on the effect and handed to [ShaderHome.draw].
+  /// staged on the effect and handed to [InstanceHome.draw].
   void Function(String source)? preview,
 }) async {
   final draw = home.draw;

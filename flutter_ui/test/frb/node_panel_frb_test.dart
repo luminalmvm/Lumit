@@ -125,6 +125,27 @@ void main() {
       }
     });
 
+    /// An Expression box drew Edit expression and did nothing when it was
+    /// pressed. It opens the dialogue and Apply writes the text.
+    testWidgets("an Expression driver's Edit expression writes its text",
+        (tester) async {
+      final p = withBlur();
+      final box = seedWiredDriver(p.layer, 'expression');
+      p.uiState.graphNode.value = BridgeNodeRef.driver(box);
+      await mount(tester, p, const NodePanelFrb(), width: 600);
+
+      await tester.tap(find.byKey(ValueKey<String>('fx-action-$box-edit')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+          find.descendant(
+              of: find.byKey(const ValueKey('expression-text')),
+              matching: find.byType(EditableText)),
+          'time * 2');
+      await tester.tap(find.byKey(const ValueKey('expression-confirm')));
+      await tester.pumpAndSettle();
+      expect(p.layer.getGraphDrivers().single.expressionSource(), 'time * 2');
+    });
+
     /// **Audio level's Source row is a dropdown that starts on the comp**, and
     /// the Audio row under it names no layer until one is picked
     /// (docs/impl/audio-nodes.md §3). The layer list offers **every** layer,

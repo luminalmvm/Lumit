@@ -63,7 +63,8 @@ import 'effect_param_row_frb.dart'
         paramRidersFor;
 import 'graph_panel.dart';
 import 'placeholder.dart';
-import 'shader_editor.dart' show ShaderHome, pressShaderButton;
+import 'shader_editor.dart'
+    show InstanceHome, editExpressionOn, pressShaderButton;
 import 'timeline_extras_frb.dart' show DoubleTap;
 
 /// This canvas's idea of identity, as [graphNodeKey] is the layer canvas's.
@@ -665,7 +666,7 @@ class _CompGraphPanelState extends State<CompGraphPanel> {
         if (node.matchName == 'custom_shader' &&
             pressShaderButton(
               context: context,
-              home: ShaderHome.graph(
+              home: InstanceHome.graph(
                 widget.comp,
                 draw: (staged) => widget.comp.renderFrameWithGraphPreview(
                   frame: BigInt.from(ui.playheadFrame.value),
@@ -680,6 +681,18 @@ class _CompGraphPanelState extends State<CompGraphPanel> {
                 _reload();
               },
             )) {
+          return;
+        }
+        if (node.matchName == 'expression' && param == 'edit') {
+          editExpressionOn(
+            context: context,
+            home: InstanceHome.graph(widget.comp),
+            effect: effect,
+            onApplied: () {
+              ui.model.refresh();
+              _reload();
+            },
+          );
           return;
         }
         _enterBox(node);

@@ -53,7 +53,8 @@ import 'effect_param_row_frb.dart';
 import 'graph_panel.dart'
     show graphCompById, graphNodeKey, graphNoStream, graphToolbarHeight;
 import 'placeholder.dart';
-import 'shader_editor.dart' show ShaderHome, pressShaderButton;
+import 'shader_editor.dart'
+    show InstanceHome, editExpressionOn, pressShaderButton;
 
 /// The box the panel is drawing: which instance it is, whether it lives in the
 /// graph's driver list rather than in the effect stack, and the read model it
@@ -411,8 +412,8 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
   }
 
   /// A press on one of the picked box's buttons, the same press Effect controls
-  /// makes. A driver has no buttons, and a box in a node graph has no layer to
-  /// send an engine event to, so there only the frontend's own buttons answer.
+  /// makes. A driver and a box in a node graph have no stack effect to send an
+  /// engine event to, so there only the frontend's own buttons answer.
   void _press(_Picked picked, UuidValue effect, String param) {
     final ui = _ui;
     if (ui == null) return;
@@ -422,19 +423,32 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     final home = picked.graph
         ? comp == null
             ? null
-            : ShaderHome.graph(comp,
+            : InstanceHome.graph(comp,
                 draw: (staged) => comp.renderFrameWithGraphPreview(
                     frame: frame, scale: ui.viewerScale, instances: staged))
         : layer == null
             ? null
-            : ShaderHome.layer(layer,
-                draw: comp == null
-                    ? null
-                    : (staged) => comp.renderFrameWithPreview(
-                        frame: frame,
-                        scale: ui.viewerScale,
-                        layer: layer,
-                        effects: staged));
+            : picked.driver
+                ? InstanceHome.drivers(layer)
+                : InstanceHome.layer(layer,
+                    draw: comp == null
+                        ? null
+                        : (staged) => comp.renderFrameWithPreview(
+                            frame: frame,
+                            scale: ui.viewerScale,
+                            layer: layer,
+                            effects: staged));
+    if (picked.info.name == 'expression' && param == 'edit') {
+      if (home != null) {
+        editExpressionOn(
+          context: context,
+          home: home,
+          effect: effect,
+          onApplied: ui.model.refresh,
+        );
+      }
+      return;
+    }
     if (picked.info.name == 'custom_shader' &&
         home != null &&
         pressShaderButton(
@@ -452,7 +466,7 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
       if (inner != null) ui.setSelectedComp(inner);
       return;
     }
-    if (picked.graph || layer == null) return;
+    if (picked.graph || picked.driver || layer == null) return;
     try {
       fireEffectAction(
           layer: layer, effect: effect, param: param, frame: frame);
@@ -656,7 +670,7 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
         twoColumn: true,
         siblings: values,
         driven: _driven[param.id],
-        onAction: picked.driver ? null : (e, p) => _press(picked, e, p),
+        onAction: (e, p) => _press(picked, e, p),
       ));
     }
     // A **wire-only** input draws no row at all, and needs no code to say so:
