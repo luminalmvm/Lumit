@@ -383,8 +383,10 @@ pub(crate) fn read_layer_graph(layer: &Layer) -> BridgeLayerGraph {
                 input_wired(InputRef::Matte { effect: effect.id }),
             ));
         }
+        // A Custom shader's own rows get sockets too.
         inputs.extend(param_ports(
             schema,
+            def.map_or(&[], |d| d.derived(effect)),
             NodeRef::Effect(effect.id),
             &input_wired,
         ));
@@ -477,7 +479,7 @@ pub(crate) fn read_layer_graph(layer: &Layer) -> BridgeLayerGraph {
             // The parameter sockets, then the signature's **data inputs** — the
             // wire-only ones with no stored value and no panel row, of
             // which Points sample's Points is the first.
-            inputs: param_ports(schema, NodeRef::Driver(driver.id), &input_wired)
+            inputs: param_ports(schema, &[], NodeRef::Driver(driver.id), &input_wired)
                 .chain(
                     def.map(|d| d.signature().inputs())
                         .unwrap_or_default()
@@ -521,7 +523,7 @@ pub(crate) fn catalogue_ports(match_name: &str) -> (Vec<BridgePort>, Vec<BridgeP
     let Some(def) = lumit_core::fx::BUILTIN_DEFS.get(match_name) else {
         return (Vec::new(), Vec::new());
     };
-    let inputs = param_ports(Some(def.schema()), NodeRef::Source, &|_| false)
+    let inputs = param_ports(Some(def.schema()), &[], NodeRef::Source, &|_| false)
         .chain(
             def.signature()
                 .inputs()
@@ -546,6 +548,7 @@ pub(crate) fn catalogue_ports(match_name: &str) -> (Vec<BridgePort>, Vec<BridgeP
 #[frb(ignore)]
 fn param_ports<'a>(
     schema: Option<&'static lumit_core::fx::EffectSchema>,
+    derived: &'static [lumit_core::fx::ParamSchema],
     node: NodeRef,
     wired: &'a impl Fn(InputRef) -> bool,
 ) -> impl Iterator<Item = BridgePort> + 'a {
@@ -553,6 +556,7 @@ fn param_ports<'a>(
         .map(|s| s.params)
         .unwrap_or_default()
         .iter()
+        .chain(derived)
         .filter_map(move |param| {
             let ty = param.kind.port_type()?;
             Some(BridgePort {

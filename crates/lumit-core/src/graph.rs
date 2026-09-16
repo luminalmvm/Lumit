@@ -563,9 +563,12 @@ impl LayerGraph {
                 }
                 .ok_or(GraphError::UnknownNode)?;
                 let def = Self::def_of(inst)?;
+                // A Custom shader's own rows take a wire the same as its
+                // declared ones.
                 def.schema()
                     .params
                     .iter()
+                    .chain(def.derived(inst))
                     .find(|p| p.id == port)
                     .and_then(|p| p.kind.port_type())
                     // A **declared data input** beside the schema's
@@ -728,6 +731,22 @@ mod tests {
     fn a_well_formed_graph_is_accepted() {
         let (graph, effects) = wiggle_into_blur();
         graph.validate(&effects).expect("a number into a number");
+    }
+
+    /// A Custom shader's own rows come from its source, not its schema, and
+    /// still take a wire. One applied from the UI starts with Gain.
+    #[test]
+    fn a_wire_may_land_on_a_custom_shaders_own_row() {
+        let (mut graph, _) = wiggle_into_blur();
+        let shader = crate::fx::instantiate_for_raster("custom_shader", 1920.0, 1080.0)
+            .expect("the catalogue knows it");
+        graph.edges = vec![param_edge(
+            &graph.nodes[0],
+            "value",
+            NodeRef::Effect(shader.id),
+            "gain",
+        )];
+        graph.validate(&[shader]).expect("a number into Gain");
     }
 
     /// §1.5: a wire naming a node the layer does not have is refused, not
