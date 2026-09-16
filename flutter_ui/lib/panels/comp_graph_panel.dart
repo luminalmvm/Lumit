@@ -1838,105 +1838,107 @@ class _CompGraphPanelState extends State<CompGraphPanel> {
           onPointerUp: (e) => _up(e, layout),
           onPointerSignal: _wheel,
           behavior: HitTestBehavior.opaque,
-          child: Container(
-            key: const ValueKey('comp-graph-canvas'),
-            color: t.surface0,
-            foregroundDecoration: candidate.isEmpty
-                ? null
-                : BoxDecoration(border: Border.all(color: t.accent, width: 2)),
-            child: Stack(
-              key: _canvasKey,
-              clipBehavior: Clip.hardEdge,
-              children: [
-                Positioned.fill(
-                  child: RepaintBoundary(
-                    child: CustomPaint(
-                      key: const ValueKey('comp-graph-ground'),
-                      painter: GraphGroundPainter(
-                        pan: _pan,
-                        zoom: _zoom,
-                        grid: t.surface2,
-                        ground: t.surface0,
+          child: ClipRect(
+            child: Container(
+              key: const ValueKey('comp-graph-canvas'),
+              color: t.surface0,
+              foregroundDecoration: candidate.isEmpty
+                  ? null
+                  : BoxDecoration(border: Border.all(color: t.accent, width: 2)),
+              child: Stack(
+                key: _canvasKey,
+                clipBehavior: Clip.hardEdge,
+                children: [
+                  Positioned.fill(
+                    child: RepaintBoundary(
+                      child: CustomPaint(
+                        key: const ValueKey('comp-graph-ground'),
+                        painter: GraphGroundPainter(
+                          pan: _pan,
+                          zoom: _zoom,
+                          grid: t.surface2,
+                          ground: t.surface0,
+                        ),
                       ),
                     ),
                   ),
-                ),
-                Positioned.fill(
-                  child: CustomPaint(
-                    painter: _CompWirePainter(
-                      wires: [
-                        for (final edge in _graph!.wiring.edges)
-                          if (_edgeEnds(layout, edge) case final ends?)
-                            (
-                              ends.$1,
-                              ends.$2,
-                              edge == _dropWire
-                                  ? t.animated
-                                  : portColour(t, ends.$3),
-                              edge == _dropWire ? 2.0 : 1.0
-                            ),
-                      ],
-                      flight: _flight == null
-                          ? null
-                          : (_flight!.from.at, _flight!.to),
-                      dragged: t.textPrimary,
-                      pan: _pan,
-                      zoom: _zoom,
+                  Positioned.fill(
+                    child: CustomPaint(
+                      painter: _CompWirePainter(
+                        wires: [
+                          for (final edge in _graph!.wiring.edges)
+                            if (_edgeEnds(layout, edge) case final ends?)
+                              (
+                                ends.$1,
+                                ends.$2,
+                                edge == _dropWire
+                                    ? t.animated
+                                    : portColour(t, ends.$3),
+                                edge == _dropWire ? 2.0 : 1.0
+                              ),
+                        ],
+                        flight: _flight == null
+                            ? null
+                            : (_flight!.from.at, _flight!.to),
+                        dragged: t.textPrimary,
+                        pan: _pan,
+                        zoom: _zoom,
+                      ),
                     ),
                   ),
-                ),
-                Positioned.fill(
-                  child: Transform(
-                    transform: Matrix4.identity()
-                      ..setEntry(0, 3, _pan.dx)
-                      ..setEntry(1, 3, _pan.dy)
-                      ..setEntry(0, 0, _zoom)
-                      ..setEntry(1, 1, _zoom),
-                    child: Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        for (final group in _graph!.wiring.groups)
-                          if (graphGroupRect([
-                            for (final member in group.members)
-                              if (layout.byKey[compNodeKey(member)]
-                                  case final box?)
-                                box.rect,
-                          ])
-                              case final rect?)
-                            _groupWash(t, group, rect),
-                        for (final box in layout.boxes)
-                          Positioned(
-                            left: box.rect.left,
-                            top: box.rect.top,
-                            child: GraphNodeCard(
-                              box: box,
-                              selected: _selection.containsKey(box.key),
-                              exposed: _graph!.wiring.exposed
-                                  .any((e) => compNodeKey(e) == box.key),
-                              onOwnPress: () => _claimed = true,
-                              onExpose: () => _toggleExposed(box.key),
-                              onBypass: () =>
-                                  _toggleBypass(box.key, box.card.enabled),
-                              renaming: _renaming == box.key,
-                              onStartRename: () =>
-                                  setState(() => _renaming = box.key),
-                              onRenamed: (name) => _rename(box.key, name),
-                              onRenameCancelled: () =>
-                                  setState(() => _renaming = null),
-                              paramRow: (param) => _paramRow(box.key, param),
+                  Positioned.fill(
+                    child: Transform(
+                      transform: Matrix4.identity()
+                        ..setEntry(0, 3, _pan.dx)
+                        ..setEntry(1, 3, _pan.dy)
+                        ..setEntry(0, 0, _zoom)
+                        ..setEntry(1, 1, _zoom),
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          for (final group in _graph!.wiring.groups)
+                            if (graphGroupRect([
+                              for (final member in group.members)
+                                if (layout.byKey[compNodeKey(member)]
+                                    case final box?)
+                                  box.rect,
+                            ])
+                                case final rect?)
+                              _groupWash(t, group, rect),
+                          for (final box in layout.boxes)
+                            Positioned(
+                              left: box.rect.left,
+                              top: box.rect.top,
+                              child: GraphNodeCard(
+                                box: box,
+                                selected: _selection.containsKey(box.key),
+                                exposed: _graph!.wiring.exposed
+                                    .any((e) => compNodeKey(e) == box.key),
+                                onOwnPress: () => _claimed = true,
+                                onExpose: () => _toggleExposed(box.key),
+                                onBypass: () =>
+                                    _toggleBypass(box.key, box.card.enabled),
+                                renaming: _renaming == box.key,
+                                onStartRename: () =>
+                                    setState(() => _renaming = box.key),
+                                onRenamed: (name) => _rename(box.key, name),
+                                onRenameCancelled: () =>
+                                    setState(() => _renaming = null),
+                                paramRow: (param) => _paramRow(box.key, param),
+                              ),
                             ),
-                          ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
-                ),
-                if (_marqueeFrom != null && _marqueeTo != null)
-                  Positioned.fromRect(
-                    key: const ValueKey('comp-graph-marquee'),
-                    rect: Rect.fromPoints(_marqueeFrom!, _marqueeTo!),
-                    child: const MarqueeBox(),
-                  ),
-              ],
+                  if (_marqueeFrom != null && _marqueeTo != null)
+                    Positioned.fromRect(
+                      key: const ValueKey('comp-graph-marquee'),
+                      rect: Rect.fromPoints(_marqueeFrom!, _marqueeTo!),
+                      child: const MarqueeBox(),
+                    ),
+                ],
+              ),
             ),
           ),
         ),
