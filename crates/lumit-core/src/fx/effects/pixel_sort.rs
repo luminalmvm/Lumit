@@ -99,10 +99,21 @@ pub struct PixelSort {
         max = 1000.0,
         default = 300.0,
         hard_min = 0.0,
-        hard_max = 1024.0,
+        hard_max = 4096.0,
         unit = Px
     )]
     pub max_span: f32,
+
+    #[slider(
+        label = "Random Offset Scale",
+        min = 0.0,
+        max = 1.0,
+        default = 1.0,
+        hard_min = 0.0,
+        hard_max = 1.0,
+        unit = Raw
+    )]
+    pub offset_scale: f32,
 
     /// Which offsets the spans take on each line (§2.4). Sits second-last,
     /// immediately before Mix, as every seeded effect's does.
@@ -142,6 +153,7 @@ impl PixelSort {
             vertical: self.direction == 1,
             span_mode: self.span_mode,
             reverse: self.reverse,
+            offset_scale: self.offset_scale,
             min: self.min.clamp(0.0, 1.0),
             max: self.max.clamp(0.0, 1.0),
             stride,

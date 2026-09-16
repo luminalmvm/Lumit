@@ -44,11 +44,11 @@ struct Params {
     sort_by: u32,               // 0 R, 1 G, 2 B, 3 Luminance, 4 Hue, 5 Saturation
     span_mode: u32,             // 0 Sort, 1 Stretch, 2 Mirror
     stride: u32,                // the piece of line no span may cross, pixels
+    offset_scale: f32,
     seed: u32,                  // which offsets the pieces take on each line
     vertical: u32,              // 1 = spans run down columns
     reverse: u32,               // 1 = every span ordered the other way round
     pad0: u32,
-    pad1: u32,
 };
 
 @group(0) @binding(0) var src: texture_2d<f32>;
@@ -207,7 +207,7 @@ fn pixel_sort(@builtin(global_invocation_id) gid: vec3<u32>) {
     // keeps every line from breaking its spans in the same places and drawing
     // the cap as a column down the frame.
     let stride = i32(p.stride);
-    let offset = i32(nc_lattice_hash(p.seed, 0u, line, 0, 0) % p.stride);
+    let offset = i32(f32(nc_lattice_hash(p.seed, 0u, line, 0, 0) % p.stride) * clamp(p.offset_scale, 0.0, 1.0));
     let piece = (pos + offset) / stride;
     let lo = max(piece * stride - offset, 0);
     let hi = min(piece * stride - offset + stride - 1, len - 1);

@@ -9419,7 +9419,7 @@ pub fn stroke_geometry(
 /// length row's hard maximum. A span costs its own length in reads for every
 /// pixel in it, so this is where the cost stops being anyone's idea of
 /// interactive rather than a limit of the kernel.
-pub const PIXEL_SORT_MAX_SPAN: u32 = 1024;
+pub const PIXEL_SORT_MAX_SPAN: u32 = 4096;
 
 /// How finely a sort key's value is quantised: twenty-two bits, which leaves
 /// the top ten of the `u32` for the span's own start. Far finer than the fp16
@@ -9446,6 +9446,9 @@ pub struct PixelSortParams {
     /// The most pixels one span may hold, `1..=PIXEL_SORT_MAX_SPAN`, raster
     /// pixels.
     pub stride: u32,
+
+    pub offset_scale: f32,
+
     /// Which offsets the chunk grid takes on each line.
     pub seed: u32,
     /// 0..1, blended against the unprocessed input.
@@ -9552,7 +9555,9 @@ pub fn pixel_sort_matted(rgba: &mut [f32], w: u32, h: u32, p: &PixelSortParams, 
         // column down the frame; with it the breaks scatter and the cap is only
         // a cap.
         #[allow(clippy::cast_possible_wrap, clippy::cast_possible_truncation)]
-        let offset = (lattice_hash(p.seed, 0, line as i32, 0, 0) % stride as u32) as i32;
+        let offset = (((lattice_hash(p.seed, 0, line as i32, 0, 0) % stride as u32) as f32)
+            * p.offset_scale.clamp(0.0, 1.0)) as i32;
+            
         let mut base = -offset;
         while base < len as i32 {
             for i in 0..stride {

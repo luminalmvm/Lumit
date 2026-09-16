@@ -1259,11 +1259,11 @@ impl FxEngine {
                 sort_by: op.sort_by,
                 span_mode: op.span_mode,
                 stride: op.stride.clamp(1, PIXEL_SORT_MAX_SPAN),
+                offset_scale: op.offset_scale,
                 seed: op.seed,
                 vertical: u32::from(op.vertical),
                 reverse: u32::from(op.reverse),
-                pad0: 0,
-                pad1: 0,
+                pad0: 0
             }),
         );
         out
@@ -1395,7 +1395,7 @@ impl FxEngine {
 /// The most pixels one span may hold — mirrors
 /// `lumit_core::fx::cpu::PIXEL_SORT_MAX_SPAN`. Both paths clamp, so both reach
 /// the same ceiling when a nonsense number arrives.
-pub const PIXEL_SORT_MAX_SPAN: u32 = 1024;
+pub const PIXEL_SORT_MAX_SPAN: u32 = 4096;
 
 /// One resolved Pixel sort (docs/08 §3.99). Mirrors
 /// `lumit_core::fx::cpu::PixelSortParams` field-for-field so the kernel and the
@@ -1417,6 +1417,7 @@ pub struct PixelSortOp {
     /// The most pixels one span may hold, raster pixels.
     pub stride: u32,
     /// Which offsets the spans take on each line.
+    pub offset_scale: f32,
     pub seed: u32,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
@@ -1432,11 +1433,11 @@ struct PixelSortParams {
     sort_by: u32,
     span_mode: u32,
     stride: u32,
+    offset_scale: f32,
     seed: u32,
     vertical: u32,
     reverse: u32,
     pad0: u32,
-    pad1: u32,
 }
 
 /// One resolved Stroke **style**. Mirrors

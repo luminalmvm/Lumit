@@ -3956,6 +3956,7 @@ impl GpuEffect for PixelSort {
                 min: s.min,
                 max: s.max,
                 stride: s.stride,
+                offset_scale: s.offset_scale,
                 seed: s.seed,
                 mix: s.mix,
             },
