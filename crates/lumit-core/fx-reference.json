@@ -17034,7 +17034,18 @@
           "slider_min": 0.0,
           "slider_max": 1000.0,
           "hard_min": 0.0,
-          "hard_max": 1024.0
+          "hard_max": 4096.0
+        },
+        {
+          "id": "offset_scale",
+          "label": "Random Offset Scale",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": 0.0,
+          "slider_max": 1.0,
+          "hard_min": 0.0,
+          "hard_max": 1.0
         },
         {
           "id": "seed",
