@@ -628,6 +628,7 @@ Radio waves
 Radius
 Ramp
 Random
+Random Offset Scale
 Random span offsets
 Randomness
 Range
