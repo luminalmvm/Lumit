@@ -151,10 +151,41 @@ const double graphWireStub = 40;
 /// [graphWireStub] when that half is smaller or points the wrong way. Free of
 /// the painter so its geometry can be asserted directly.
 Path graphWirePath(Offset a, Offset b, {double zoom = 1}) {
-  final reach = math.max(graphWireStub * zoom, (b.dx - a.dx).abs() / 2);
-  return Path()
-    ..moveTo(a.dx, a.dy)
-    ..cubicTo(a.dx + reach, a.dy, b.dx - reach, b.dy, b.dx, b.dy);
+  final path = Path();
+
+  final dx = b.dx - a.dx;
+  final dy = b.dy - a.dy;
+  final length = math.sqrt(dx * dx + dy * dy);
+
+  if (length < 0.001) {
+    path.moveTo(a.dx, a.dy);
+    return path;
+  }
+
+  final sag = length * 0.25;
+
+  path.moveTo(a.dx, a.dy);
+
+  const samples = 40;
+
+  for (int i = 1; i <= samples; i++) {
+    final t = i / samples;
+
+    final yOffset = 4 * sag * t * (1 - t);
+
+    path.lineTo(
+      a.dx + dx * t,
+      a.dy + dy * t + yOffset,
+    );
+  }
+
+  return path;
+
+  // final reach = math.max(graphWireStub * zoom, (b.dx - a.dx).abs() / 2);
+
+  // return Path()
+  //   ..moveTo(a.dx, a.dy)
+  //   ..cubicTo(a.dx + reach, a.dy, b.dx - reach, b.dy, b.dx, b.dy);
 }
 
 /// The glyphs in the toolbar. A size down from the
