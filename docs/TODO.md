@@ -8,6 +8,15 @@ lives. Delete a point when it lands, its regression test is the record.
 
 ## 1. Bugs
 
+- A value keyframed on a node can't be opened in the Graph editor.
+- A Slider control node should hold its number on the node, with the twirl showing the min
+  and max (`slider_control.rs`).
+- Effects are still defined more than once. Pixel sort is `PixelSort` in
+  `fx/effects/pixel_sort.rs`, `PixelSortParams` in `fx/cpu.rs` and `PixelSortOp` in
+  `lumit-gpu/src/fx/stylise.rs`. The effect's own definition should be the one source.
+- Every effect still has a CPU implementation (`fx/cpu.rs`, 9,600 lines), though effects
+  are meant to be GPU only. Removing it means rewriting the CPU reference rule in
+  docs/08-EFFECTS.md §1.6, docs/05-ARCHITECTURE.md and docs/06-RENDER-PIPELINE.md.
 - Linux Viewer resize can hand Dart a closed fd (`shared_linux.rs` `Drop`,
   `headless.rs` pool). Hold evicted targets one generation or `dup()` at export.
 
