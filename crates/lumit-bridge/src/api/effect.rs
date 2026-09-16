@@ -2798,6 +2798,20 @@ impl BridgeEffectInstance {
         block.remove("graph");
     }
 
+    /// The text an Expression box runs, empty for a fresh one. Read when its
+    /// editor opens, never in a rebuild.
+    #[frb(sync)]
+    pub fn expression_source(&self) -> String {
+        lumit_core::fx::drivers::expression::source_of(&self.effect).to_owned()
+    }
+
+    /// Stage new text on an Expression box. The graph's own commit writes it, so
+    /// an edit is one undo step.
+    #[frb(sync)]
+    pub fn set_expression_source(&mut self, source: String) {
+        lumit_core::fx::drivers::expression::set_source(&mut self.effect, &source);
+    }
+
     /// The node graph composition this instance applies, for a **Node graph**
     /// effect, and `None` for every other effect and for one nobody has bound.
     ///

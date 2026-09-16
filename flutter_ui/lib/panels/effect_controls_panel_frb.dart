@@ -212,10 +212,10 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
   /// The live preview rides the drag path exactly as a parameter does
   /// (`render_frame_with_preview`'s own words: "the live drag path, which
   /// never touches the document").
-  ShaderHome _shaderHome(LayerReference layer) {
+  InstanceHome _shaderHome(LayerReference layer) {
     final ui = context.read<LumitUiState>();
     final comp = ui.selectedComp;
-    return ShaderHome.layer(
+    return InstanceHome.layer(
       layer,
       draw: comp == null
           ? null

@@ -859,6 +859,53 @@ void main() {
       expect(p.graph.documentRevision(), was + BigInt.one, reason: 'one op');
     });
 
+    /// An Expression box drew Edit expression and did nothing when it was
+    /// pressed. It opens the dialogue and Apply is one op on the graph.
+    testWidgets("an Expression box's Edit expression writes its text",
+        (tester) async {
+      final p = withGraph();
+      final box = seedFx(p.graph, 'expression', const Offset(60, 40));
+      p.uiState.model.refresh();
+      await mount(tester, p);
+
+      final was = p.graph.documentRevision();
+      await tester.tap(find.descendant(
+          of: rowOn(box, 'edit'),
+          matching: find.byKey(ValueKey<String>('fx-action-$box-edit'))));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+          find.descendant(
+              of: find.byKey(const ValueKey('expression-text')),
+              matching: find.byType(EditableText)),
+          'time * 2');
+      await tester.tap(find.byKey(const ValueKey('expression-confirm')));
+      await tester.pumpAndSettle();
+      expect(
+          p.graph
+              .getNodeGraphInstances()
+              .firstWhere((i) => i.id() == box)
+              .expressionSource(),
+          'time * 2');
+      expect(p.graph.documentRevision(), was + BigInt.one, reason: 'one op');
+    });
+
+    /// The rows a Custom shader declares drew on the box with nowhere to plug
+    /// a wire in. They are sockets like any other row.
+    testWidgets("a wire plugs into a Custom shader's own row", (tester) async {
+      final p = withGraph();
+      final box = seedFx(p.graph, 'custom_shader', const Offset(300, 40));
+      final wiggle = seedFx(p.graph, 'wiggle', const Offset(20, 280));
+      p.uiState.model.refresh();
+      await mount(tester, p);
+      await tester.tap(twirl(box));
+      await tester.pump();
+
+      await wire(tester, wiggle, 'value', box, 'gain');
+      final edges = p.graph.getNodeGraph().wiring.edges;
+      expect(edges, hasLength(1));
+      expect(edges.single.toPort, 'gain');
+    });
+
     /// The Node panel draws the same box's rows, and its buttons press too.
     testWidgets("the Node panel's Edit shader applies to the graph",
         (tester) async {
