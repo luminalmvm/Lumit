@@ -18262,6 +18262,7 @@ fn pixel_sort_moves_pixels_only_inside_their_own_span() {
         vertical: false,
         span_mode: 0,
         reverse: false,
+        offset_scale: 1.0,
         min: 0.0,
         max: 1.0,
         stride: 4,
