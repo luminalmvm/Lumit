@@ -14116,6 +14116,27 @@ fn only_effect(layer: &LayerReference) -> BridgeEffectInstance {
         .expect("one effect")
 }
 
+/// A Custom shader box in the layer's node graph has a socket for each row its
+/// source declares, so the rows Effect controls shows can be wired.
+#[test]
+fn a_custom_shader_box_has_sockets_for_its_own_rows() {
+    let (_project, layer) = project_with_layer();
+    layer.add_effect("custom_shader".into()).expect("added");
+    set_shader(&layer, TWO_ROWS, None);
+
+    let graph = layer.get_graph().expect("graph");
+    let node = graph
+        .nodes
+        .iter()
+        .find(|n| matches!(n.node, BridgeNodeRef::Effect(_)))
+        .expect("the shader box");
+    let ids: Vec<&str> = node.inputs.iter().map(|p| p.id.as_str()).collect();
+    assert!(
+        ids.ends_with(&["radius", "tint"]),
+        "the source's rows come after the declared ones: {ids:?}"
+    );
+}
+
 /// **The derived rows cross, and they cross as ordinary rows.**
 ///
 /// `list_parameters(match_name)` is per *effect* and can only ever answer the

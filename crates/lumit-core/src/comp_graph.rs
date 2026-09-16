@@ -399,7 +399,8 @@ fn fx_ports(
             }
         }
     }
-    for param in schema.params {
+    // A Custom shader's own rows get sockets too.
+    for param in schema.params.iter().chain(def.derived(inst)) {
         if let Some(ty) = param.kind.port_type() {
             ins.push(GraphPort::new(param.id, param.label, ty));
         }
@@ -1272,6 +1273,32 @@ mod tests {
         );
         assert_eq!(ins[3].ty, PortType::Number);
         assert_eq!(ids(&outs), vec!["output"]);
+    }
+
+    /// A Custom shader box has a socket for each row its source declares, as
+    /// well as its declared ones. One applied from the UI starts with Gain and
+    /// Tint.
+    #[test]
+    fn a_custom_shader_box_has_sockets_for_its_own_rows() {
+        let graph = built(vec![GraphNode::Output { id: Uuid::now_v7() }], Vec::new());
+        let shader = crate::fx::instantiate_for_raster("custom_shader", 1920.0, 1080.0)
+            .expect("the catalogue knows it");
+        let shader = GraphNode::Fx(shader);
+        let (ins, _) = ports_of(&graph, &shader, None);
+        let ids = ids(&ins);
+        assert!(
+            ids.ends_with(&["gain", "tint"]),
+            "the source's rows come after the declared ones: {ids:?}"
+        );
+
+        // And a wire plugs into one.
+        let amount = input("amount", InputKind::Number, 1.0);
+        let edges = vec![wire(&amount, VALUE_PORT.id, &shader, "gain")];
+        let mut nodes = graph.nodes;
+        nodes.extend([amount, shader]);
+        built(nodes, edges)
+            .validate(None)
+            .expect("a number into Gain");
     }
 
     #[test]
