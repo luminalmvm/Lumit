@@ -1,300 +1,129 @@
-# Lumit engineering rules
+# Engineering rules
 
-**Status: canonical and binding.** These rules apply to every line of code in this repository,
-whether written by a human or by an AI agent. They exist because the two product requirements —
-responsive under any load, never crashes — are architectural properties that erode one careless
-commit at a time. RFC-2119 keywords (MUST, MUST NOT, SHOULD, MAY) are binding. Terminology
-follows [01-GLOSSARY.md](01-GLOSSARY.md); architecture context is
-[05-ARCHITECTURE.md](05-ARCHITECTURE.md); runtime degradation policy is
-[13-PERFORMANCE-RULES.md](13-PERFORMANCE-RULES.md).
+Binding on every line of code. They exist because "responsive under any load" and "never
+crashes" erode one careless commit at a time.
 
-A rule here beats convenience, beats performance micro-wins, and beats "it works on my
-machine".
+## 1. Concurrency
 
----
-
-## 1. Concurrency contracts
-
-### 1.1 What may run where
-
-| Work | Allowed threads |
+| Work | Where |
 |---|---|
-| Document edits, snapshot publication | UI thread only |
-| Frontend painting and input | UI thread only |
-| Evaluation-graph pixel jobs | Worker pool only |
-| Metadata pass | UI thread (edit-triggered) or workers (request-triggered) |
-| Media decode | Dedicated decode threads only |
-| Disk IO (cache, journal, proxies, export files) | Dedicated IO threads only |
-| wgpu queue submission | GPU-submit thread only |
-| Audio graph evaluation | Audio-render thread only |
-| cpal callback body | Lock-free ring-buffer reads only; no allocation, no locks, no logging |
+| Document edits, snapshot publication, painting | UI thread only |
+| Pixel jobs | Worker pool only |
+| Media decode | Decode threads only |
+| Disk IO | IO threads only |
+| wgpu submission | GPU-submit thread only |
+| Audio graph | Audio-render thread only |
+| cpal callback | Lock-free ring reads. No allocation, locks or logging |
 
-- The UI thread MUST NOT evaluate any node, decode any frame, run any expression, perform
-  blocking IO, or wait on any render result. It reads latest-wins mailboxes.
-- Workers MUST NOT touch the live document. They read the immutable snapshot their job was
-  created with.
+- The UI thread never evaluates, decodes, runs an expression, does blocking IO or waits on
+  a frame. It reads latest-wins mailboxes.
+- Workers read the snapshot their job was made with, never the live document.
+- Shared types are `Sync` because they're immutable, not because of locks. `unsafe impl
+  Send/Sync` only in `lumit-gpu` and FFI crates, with a safety comment and a test.
+- A new `Mutex` or `RwLock` on a hot path in `lumit-eval`, `lumit-core` or `lumit-cache`
+  needs review: who holds it, how long, why not a channel.
+- No lock held across an `.await`, a GPU submit or readback, a blocking send, an FFI call
+  or plugin IPC.
+- Every loop over frames, rows, tiles, clips or nodes checks its epoch and returns
+  `Err(Cancelled)`. Anything that can take over about 100 ms is cancellable and reports
+  progress.
 
-### 1.2 Send/Sync discipline
+## 2. Time
 
-- Types crossing thread boundaries MUST be `Send`; shared read types MUST be `Sync` by
-  construction (immutable), not by interior locking. `unsafe impl Send/Sync` is forbidden
-  outside `lumit-gpu` and FFI boundary crates, and there requires a safety comment plus a
-  test exercising the cross-thread path.
-- Prefer message passing and snapshot sharing over shared mutable state. A new `Mutex` or
-  `RwLock` in `lumit-eval`, `lumit-core`, or `lumit-cache` hot paths requires review
-  sign-off naming who holds it, for how long, and why a channel does not work. Natron died
-  of render-path locks; see [05-ARCHITECTURE.md](05-ARCHITECTURE.md) §8.
-
-### 1.3 Locks across boundaries
-
-- A lock MUST NOT be held across: an `.await`, a GPU submit or readback wait, a channel send
-  that can block, an FFI call into ffmpeg/OFX/CUDA, or a call into plugin IPC.
-- Lock scope SHOULD be a lexical block small enough to read at a glance. Double-lock
-  acquisition (holding one while taking another) requires a documented ordering.
-
-### 1.4 Cancellation and progress
-
-- Every loop over frames, pixels rows/tiles, clips, or graph nodes MUST check its epoch token
-  at each iteration boundary (`ctx.is_cancelled()`); the idiomatic form returns
-  `Err(Cancelled)` which schedulers treat as clean abort, not failure.
-- Every operation that can exceed ~100 ms (import, index build, proxy generation, export,
-  cache warm, AE import) MUST be cancellable and MUST report progress through the standard
-  progress channel so the UI can show it. No fire-and-forget long work.
-
-## 2. Time discipline
-
-- Authoritative time is an exact rational. The type, its normalisation invariant and its
-  overflow discipline are pinned in [impl/rational-time.md](impl/rational-time.md) — do not
-  re-declare them here or in any spec.
-- The four timebases in [01-GLOSSARY.md](01-GLOSSARY.md) §4 (`SourceTime`, `ClipTime`,
-  `LayerTime`, `CompTime`) MUST be **distinct newtypes** over that rational, so that mixing
-  them cannot type-check.
-
-- Authoritative time MUST NOT be `f32`/`f64`. Floats appear only at leaves: UI display,
-  slider scratch values, and inside numeric kernels — always converted back through rational
-  types before storage or comparison. Two frames that should be equal MUST compare equal;
-  floats cannot promise that.
-- Conversions between timebases exist only as named functions on the mapping objects that own
-  them (a clip's Retime maps `ClipTime → SourceTime`; a layer's in point maps
-  `CompTime → LayerTime`). Arithmetic mixing two timebases without an explicit conversion
-  MUST NOT compile.
-- Frame counts and seconds are different quantities: `FrameIndex(i64)` is not a time. Rounding
-  time → frame happens in exactly one function per direction (`FrameRate::frame_at`,
-  `FrameRate::time_of`), with documented rounding (floor to frame start), used everywhere.
-- Frame rates are rational (`30000/1001`), never `29.97`. Sums of durations MUST be exact:
-  rational arithmetic normalises and checks overflow (`i64` numerator overflows are a typed
-  error, not a wrap).
+- Authoritative time is an exact rational. Never `f32` or `f64`. Floats only at the
+  leaves (display, slider scratch, kernels) and converted back before storage or
+  comparison.
+- `SourceTime`, `ClipTime`, `LayerTime` and `CompTime` are distinct types. Mixing them
+  doesn't compile. Conversions are named functions on the object that owns them.
+- A frame index isn't a time. Rounding happens in `FrameRate::frame_at` and
+  `FrameRate::time_of_frame` only.
+- Frame rates are rational (`30000/1001`, never `29.97`). Overflow is a typed error.
 
 ## 3. Determinism
 
-**Same project + same inputs = same pixels on export, on every machine, every run.**
+Same project and inputs, same exported pixels, every run.
 
-- No wall-clock, no `SystemTime`, no `Instant`, no thread IDs, no iteration-order-sensitive
-  hashing (`HashMap` iteration MUST NOT influence output; use ordered structures where order
-  reaches pixels) anywhere in evaluation.
-- All randomness in effects and expressions is seeded from
-  `(node_uuid, property, local_time, user_seed)`. `wiggle`/`seed_random` reproduce exactly
-  across runs on a given machine. No wall clock, no IO, no locale access in the
-  expression runtime. Across platforms the target is as close as the hardware allows, not
-  bit-identity: libm and the GPU both differ in the last bit, so promising it in the
-  evaluator alone would be a promise the picture does not keep.
-- Scheduling MUST NOT change results: whichever thread, order, or tile split evaluates a
-  node, the output hash is identical. Reductions with float accumulation MUST use a fixed
-  association order (tree reduction), not "whatever order jobs finish".
-- Adaptive degradation, proxies, and preview resolution affect **preview only**; export
-  always evaluates at full quality (glossary §5). Any code path that could let a degradation
-  flag leak into export is a release-blocking bug.
-- GPU/CPU/CUDA implementations of one effect MAY differ within a documented tolerance
-  (§6 golden tests); a single implementation MUST be bit-stable against itself.
-- A trained model is the one thing that cannot be bit-stable against itself: the same
-  weights on two graphics cards, or one card across two driver versions, differ in the low
-  bits. So a model never runs inside a render. It runs as a baked analysis whose answer is
-  written to a sidecar, and every key that answer is filed under carries the pack's hash
-  and the provider that ran it, so a result made under one backend is never served for
-  another. Once it is cached the answer is an input like any other and an export is stable
-  until the user asks for it again. Frame synthesis is the one model with no sidecar, and
-  it says so where it is chosen. The whole arrangement is in
-  [impl/addons.md](impl/addons.md) §7.
+- No wall clock, `Instant`, thread ids or `HashMap` order anywhere in evaluation.
+- Randomness is seeded from node, property, time and user seed.
+- Scheduling never changes results. Float reductions use a fixed order.
+- Degradation, proxies and preview resolution are preview only. A path that leaks one
+  into export is release-blocking.
+- GPU and CPU versions of an effect may differ within its tolerance. One version is
+  bit-stable against itself.
+- Models aren't bit-stable, so they never run inside a render. They run as a baked
+  analysis written to a sidecar, keyed by pack hash and provider.
 
-## 4. Error policy
+## 4. Errors
 
-- **No panics in the engine.** Workspace lints deny `unwrap`, `expect`, `panic!`,
-  `todo!`/`unimplemented!`, indexing that can panic in hot paths, and arithmetic that can
-  overflow-panic, in all non-test code of engine crates (clippy: `unwrap_used`,
-  `expect_used`, `panic`, `indexing_slicing`, `arithmetic_side_effects` — allow-listed per
-  crate only with a comment). **v1 status:** the workspace denies `unwrap_used`,
-  `expect_used`, `panic`, `todo` and `unimplemented`; `indexing_slicing` and
-  `arithmetic_side_effects` are not on yet — they await a sweep of the existing hot paths
-  (noted in the root `Cargo.toml`). Tests and build scripts may panic freely.
-- Every fallible boundary returns a **typed error** (`thiserror` enums per crate); errors
-  carry enough context (asset UUID, node id, file path) to be actionable in the UI. No
-  `Box<dyn Error>` across crate boundaries; no stringly-typed errors.
-- **Degradation over failure**: when a resource limit is hit, the resource governor's ladder
-  in [13-PERFORMANCE-RULES.md](13-PERFORMANCE-RULES.md) applies before any operation is
-  refused, and refusal is a message, never an abort.
-- **GPU device-lost is a recoverable event, not an error.** Code touching `lumit-gpu` MUST
-  treat `DeviceLost` as a normal enum variant that triggers epoch recovery
-  ([05-ARCHITECTURE.md](05-ARCHITECTURE.md) §5); it never propagates to the user as a crash
-  or dialog on first occurrence.
-- A failed node renders as an errored placeholder and the graph continues; one bad effect,
-  expression, or plugin MUST NOT take down a frame, a comp, or the application.
+- No panics in engine crates. The workspace denies `unwrap_used`, `expect_used`,
+  `panic`, `todo` and `unimplemented`. Tests and build scripts may panic.
+- Every fallible boundary returns a typed `thiserror` error with enough context to act on.
+  No `Box<dyn Error>` across crates.
+- Hitting a limit steps down the degradation ladder before anything is refused, and a
+  refusal is a message, never an abort.
+- GPU device loss is an enum variant that triggers recovery, not an error.
+- A failed effect, expression or plugin draws as an error placeholder and the frame
+  carries on.
+- The bridge's `#[frb]` functions are outside clippy's reach, so a CI grep enforces this
+  on `src/api/`.
 
-## 5. Memory rules
+## 5. Memory
 
-- **All frame-sized allocations go through the pooled allocators** (texture pool in
-  `lumit-gpu`, frame arena in `lumit-media`/CPU path), which account against the resource
-  governor's RAM/VRAM budgets. `Vec::with_capacity(width * height * …)` outside the pools is
-  a review reject.
-- **No unbounded queues.** Every channel between threads is bounded; senders block, drop, or
-  degrade per an explicit policy chosen at the call site (decode queues block — that is the
-  back-pressure; mailbox channels overwrite — latest wins; progress channels drop
-  intermediate updates). `unbounded()` in any crate requires a decision-log entry.
-- Caches evict by governor policy only; nothing pins cache entries outside the documented
-  pin set (playhead neighbourhood, current Viewer result).
-- Long-lived collections keyed by UUID (undo journal, cache indices, thumbnails) MUST have a
-  compaction or eviction story stated in a comment at the type definition.
+- Frame-sized buffers come from the pools in `lumit-gpu` and `lumit-media`, which count
+  against the governor. A frame-sized `Vec::with_capacity` elsewhere is a review reject.
+- Every channel between threads is bounded. The sender blocks, drops or overwrites, by a
+  policy chosen at the call site.
+- Caches evict by governor policy only.
+- A long-lived collection keyed by UUID says how it compacts or evicts, in a comment on
+  the type.
 
 ## 6. Testing
 
-- **CPU oracle per effect:** every WGSL effect ships a CPU reference implementation;
-  CI renders both against a corpus of inputs and asserts agreement within the effect's
-  declared tolerance. Every effect declares one and [08-EFFECTS.md](08-EFFECTS.md) §1.6 owns
-  the numbers; this document does not restate them. The CPU path is also the runtime fallback, so the
-  oracle is always shipping code, never a test-only sketch.
-- **Golden-frame tests:** a corpus of small projects renders to reference EXRs; CI compares
-  export output per platform. Golden updates are explicit, reviewed diffs (with visual
-  side-by-sides in the PR), never regenerated silently. **The EXR corpus is not built yet**
-  ([TODO.md](TODO.md)); today's goldens are in-crate oracles (CPU/GPU effect agreement, the
-  Dart graph-maths goldens).
-- **Property tests** (proptest) for retime maths per [04-RETIMING.md](04-RETIMING.md):
-  integrate(speed) ↔ differentiate(map) round-trips, monotone-segment invariants, overrun
-  boundary behaviour (retime never moves edit points); for rational time (associativity,
-  no drift over hour-long sums); for the command journal (apply → invert → apply = identity).
-- **Fuzzing** (cargo-fuzz, in CI on a schedule): the `.lum` deserialiser and journal
-  replayer (arbitrary bytes MUST produce a typed error, never a panic or hang) and the OFX
-  host boundary (malformed plugin responses, wrong-size frames, dead processes).
-  **Not yet set up** — no fuzz targets exist; an obligation, tracked in [TODO.md](TODO.md).
-- **Performance regression gates in CI**, on the reference machine: every budget in
-  [13-PERFORMANCE-RULES.md](13-PERFORMANCE-RULES.md) §2 is a gate, and that document owns
-  every number. Regressions beyond 10% fail the build.
-- Every bug fix lands with a test that fails before the fix. Deadlock-class bugs get a loom
-  or stress test where feasible.
+- Every WGSL effect has a CPU twin, and tests hold the two within the effect's declared
+  tolerance.
+- Retime and rational time get property tests. So does the journal (apply, invert, apply).
+- Every bug fix lands with a test that fails without it.
+- Every performance budget is a CI gate.
+- Not built yet: the golden EXR corpus and the fuzz targets.
 
-## 7. Code style and boundaries
+## 7. Code
 
-- **Workspace lints** (`[workspace.lints]`): the §4 panic lints plus `deny(unsafe_code)`;
-  warnings are errors in CI (`clippy --workspace -- -D warnings`). `clippy::pedantic` with
-  curated allows is the intended end state, not yet switched on.
-- **Unsafe policy:** `unsafe` is permitted only in `lumit-gpu`, `lumit-media`,
-  `lumit-expr` FFI edges, the plugin hosts, and `lumit-core`'s denormal guard
-  (`fx::audio_chain::Denormals`: the two MXCSR instructions the audio chain sets around its
-  block loop, so a built-in and a hosted plugin run under the same arithmetic, covered by
-  `denormals_flush_to_zero_inside_the_guard_and_are_restored_after` in `lumit-aplug`). Each
-  block is wrapped in a safe API within its crate, carries a `// SAFETY:` comment stating
-  the invariant and who upholds it, and is covered by a test (miri where the code is
-  miri-able). `#![deny(unsafe_code)]` in every other crate.
-- **FFI rules** (ffmpeg, OFX, CUDA, QuickJS): all pointers checked before deref; all C
-  return codes converted to typed errors at the boundary; C-owned memory wrapped in RAII
-  types with documented ownership; callbacks into Rust catch unwinds
-  (`catch_unwind` → error code, never unwind across FFI); struct layouts pinned with
-  `#[repr(C)]` and layout tests.
-- **Public API docs:** every public item in engine crates has a doc comment; modules state
-  their thread-role contract (§1.1) at the top. Doc examples compile (`cargo test --doc`).
-- **User-facing strings** go through the i18n table from day one; en-GB, sentence
-  case, calm, no exclamation marks. No string literal shown to a user lives in code. The
-  table is `flutter_ui/lib/l10n/app_en.arb`, reached as `l10n.<key>`, and translation
-  happens on the site's translation page — every other `app_*.arb` is
-  written by the ingest tool from what that page sends back, and is never hand-edited. A new string lands with an `@key` description saying where it appears; a
-  label the *engine* sends gets an entry in `lib/l10n/engine_labels.dart` at the same time,
-  which `test/l10n/engine_labels_test.dart` enforces against the Rust sources.
-- **Glossary compliance** extends to identifiers: `retime_map`, not `time_remap`; `speed`,
-  not `velocity`; `clip`, not `event`; `playhead`, not `cti`; `export`, not `render` when a
-  file is written. CI greps for the banned list in [01-GLOSSARY.md](01-GLOSSARY.md) §9
-  across code, comments, and UI strings (allow-listed only in AE-import and
-  other-app-comparison contexts).
+- Clippy runs with warnings as errors.
+- `unsafe` only in `lumit-gpu`, `lumit-media`, the plugin hosts, their brokers and test
+  plugins, the bridge, and `lumit-core`'s denormal guard. Each block is wrapped in a safe API, has a
+  `// SAFETY:` comment and a test.
+- FFI: check pointers, turn C return codes into typed errors at the edge, wrap C-owned
+  memory in RAII types, `catch_unwind` in every callback, `#[repr(C)]` with layout tests.
+- Public items in engine crates have doc comments. Modules say which thread they run on.
+- No user-facing string literal in code. See the strings section of [GUIDE.md](GUIDE.md).
+- The glossary binds identifiers: `retime_map` not `time_remap`, `speed` not
+  `velocity`, `clip` not `event`, `playhead` not `cti`, `export` not `render` when a file
+  is written.
 
-## 8. Observability
+## 8. Logging
 
-- Structured logging via `tracing` throughout; engine crates emit spans, never `println!`.
-  Log levels are meaningful: `error` is reserved for events a user would want reported,
-  `warn` for degradation-ladder activations and recoveries, `info` for lifecycle, `debug`
-  and below for everything else. Logging in per-pixel or per-sample paths is forbidden;
-  per-frame paths log at `trace` behind a compile-time feature.
-- `tracing` is not wired yet; until it is, the handful of interim diagnostics go through each
-  crate's `note!` macro (`lumit-bridge`, `lumit-gpu`), which drops a failed write. The standard
-  print macros **panic** when the write fails, and a closed console is normal for a windowed
-  build — a panic in a `#[frb(sync)]` call then crosses into Dart as a `PanicException` and the
-  call's real work is reported as a crash. `crates/lumit-bridge/tests/no_panicking_prints.rs`
-  fails the build on a `println!` in shipping engine code; test targets and the two command-line
-  crates (`lumit-bench`, `lumit-ofx-broker`) are exempt.
-- Per-node GPU and CPU timings are collected in release builds (cheap counters, no
-  allocation) — they feed the scheduler's adaptive concurrency and the pre-emptive tiling of
-  nodes that trend towards the TDR window ([05-ARCHITECTURE.md](05-ARCHITECTURE.md) §5).
-- Crash capture is out-of-process (Crashpad-style minidumps) and opt-in for telemetry;
-  Lumit never phones home by default. DRED breadcrumbs are enabled in dev and beta builds
-  only.
-- Every degradation-ladder step and device-lost recovery emits a user-visible, calm status
-  line (per [15-DESIGN.md](15-DESIGN.md) — no red-alert states); silent degradation is a
-  bug because it makes performance reports undiagnosable.
+- Engine crates never use `println!`. A closed console makes it panic. Until `tracing` is
+  wired up, use each crate's `note!` macro. `no_panicking_prints.rs` enforces this.
+- No logging in per-pixel or per-sample paths.
+- Every degradation step and device reset shows a calm status line. Silent degradation is
+  a bug.
+- Lumit never phones home by default.
 
-## 9. Dependency hygiene
+## 9. Dependencies
 
-- New workspace dependencies require justification in the PR description: what it does, why
-  not std/an existing dep, licence (GPLv3-compatible), maintenance signal. `cargo deny`
-  runs in CI over licences, advisories, wildcards and sources; `deny.toml` carries
-  the allowed-licence list and the reasoning, including every deliberately ignored
-  unmaintained-crate advisory and what it would take to leave it. Duplicate versions warn
-  rather than fail — wgpu and rsmpeg each bring their own stack — so the count stays
-  visible without failing builds nobody here can fix.
-- FFI-heavy and slow-to-compile crates (wgpu, rsmpeg, cudarc, QuickJS bindings) stay in
-  their one owning leaf crate ([05-ARCHITECTURE.md](05-ARCHITECTURE.md) §1.1) so incremental
-  builds of app-level crates stay in seconds.
-- The workspace is edition 2021 today; the edition-2024 move is still owed
-  ([TODO.md](TODO.md)). The toolchain **is** pinned: `rust-toolchain.toml` names the one
-  version every machine and every CI job builds with, so a compiler released
-  mid-week cannot turn a new warning into a red build on a commit that changed nothing.
-  Raising it is deliberate — bump the file, run the full suite, log it in the changelog.
+- A new dependency needs a reason in the pull request: what it does, why not std or an
+  existing one, its licence (GPLv3-compatible), and whether it's maintained.
+- `cargo deny` checks licences, advisories and sources against `deny.toml`.
+- Heavy FFI crates stay in their one owning crate.
+- `rust-toolchain.toml` pins the compiler. Raising it is deliberate.
 
-## 10. Definition of done
+## 10. Done means
 
-A feature is done when all of the following hold; PRs state each explicitly:
-
-1. **Spec reference** — the PR links the governing doc section (or adds one); behaviour not
-   in a doc is not done, it is improvised.
-2. **Tests** — unit tests; CPU-oracle + golden coverage if it touches pixels; property tests
-   if it touches time or retiming; a fuzz corpus entry if it touches deserialisation or IPC.
-3. **Cancellation and progress** — any new long operation checks epochs and reports progress
-   (§1.4), demonstrated by a test that cancels it mid-flight.
-4. **Budget compliance** — no CI performance gate regresses; new allocations go through
-   pools; new channels are bounded.
-5. **Error paths** — failure modes return typed errors and degrade per §4; no new panic
-   sites; device-lost handled if GPU-adjacent.
-6. **No new glossary violations** — identifiers, comments, UI strings, and docs pass the
-   banned-term check; new concepts are named in [01-GLOSSARY.md](01-GLOSSARY.md) first.
-7. **Determinism** — if it touches evaluation: no clocks, seeded randomness only, and the
-   golden frames still match across two consecutive CI runs.
-8. **Regression coverage** — a bug fix MUST include a regression test that fails
-   without the fix; the engine-crate line-coverage gate in CI MUST still pass, and its
-   threshold may be raised but never lowered. The suite is the museum of every bug ever
-   fixed; none may return unnoticed.
-9. **Readability** — a new crate or mechanism gets its line in [GUIDE.md](GUIDE.md) in the
-   same commit, and a new impl note opens with a short framing of what it is for.
-
----
-
-## Open questions
-
-- **Tolerance per effect class:** flow interpolation and iterative effects will need looser
-  bounds than the pointwise grades. The tolerance table is owned per effect by
-  [08-EFFECTS.md](08-EFFECTS.md) §1.6; what the bounds should *be* for those two classes is
-  still open.
-- **Reference hardware definition:** the CI performance gates need a pinned machine spec
-  (and a macOS mirror?) in [13-PERFORMANCE-RULES.md](13-PERFORMANCE-RULES.md) before the
-  numbers above are enforceable.
-- **Loom coverage:** which hand-offs justify loom's state-space cost — snapshot publication,
-  epoch cancellation, mailbox overwrite — and which settle for stress tests?
-- **fp16 determinism across GPU vendors:** WGSL fp16 kernels may not be bit-identical
-  between vendors. Is the export determinism promise per-machine bit-exact and cross-machine
-  tolerance-exact, or do accumulation-sensitive nodes force fp32 on export?
-- **Clippy pedantic drift:** the curated allow-list will grow; decide a cadence (per
-  release?) for re-auditing allows so the lint wall stays meaningful.
+1. Tests, including a CPU twin if it touches pixels and property tests if it touches time.
+2. New long operations cancel and report progress, with a test that cancels one.
+3. No performance gate regresses. New allocations use the pools, new channels are bounded.
+4. Failures return typed errors. No new panic sites.
+5. No glossary violations. New concepts are in the glossary first.
+6. Evaluation stays deterministic.
+7. The coverage gate still passes.
+8. A new crate gets its line in [GUIDE.md](GUIDE.md).

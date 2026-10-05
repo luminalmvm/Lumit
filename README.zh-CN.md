@@ -18,8 +18,7 @@
 [官网](https://lumitlab.com) ·
 [下载](https://lumitlab.com/download) ·
 [文档](https://docs.lumitlab.com) ·
-[版本发布](https://lumitlab.com/releases) ·
-[路线图](docs/16-ROADMAP.md)
+[版本发布](https://lumitlab.com/releases)
 
 </div>
 
@@ -66,7 +65,7 @@ cargo test --workspace
 运行：
 
 ```sh
-brew install ffmpeg  # see docs/TODO.md: Homebrew has no ffmpeg@8 yet, and plain ffmpeg is 9.x
+brew install ffmpeg  # Homebrew has no ffmpeg@8 yet, and plain ffmpeg is 9.x
 # Point the build at it:
 export FFMPEG_PKG_CONFIG_PATH="$(brew --prefix ffmpeg)/lib/pkgconfig"
 cargo test --workspace
@@ -106,10 +105,8 @@ cargo test --workspace
 
 | | |
 |---|---|
-| [docs/README.md](docs/README.md) | 索引——从这里开始。十七份带编号的规格说明，从愿景到路线图。 |
 | [docs/GUIDE.md](docs/GUIDE.md) | 贡献者指南：每个 crate 的作用、代码必须遵守的规则，以及如何构建和运行。 |
-| [docs/impl/](docs/impl/) | 实现笔记。 |
-| [docs/TODO.md](docs/TODO.md) | 待完成的工作，按重要程度排列。 |
+| [docs/](docs/) | 术语表、架构、性能与工程规则，以及桥接约定。 |
 
 引擎是在 `crates/`下的一个 Cargo 工作区; 界面在
 `flutter_ui/`; 他们在 `crates/lumit-bridge`

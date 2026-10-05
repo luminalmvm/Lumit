@@ -935,7 +935,7 @@ jobs:
       - run: |
           hits=$(grep -rnE 'Color32::from_rgb|#[0-9a-fA-F]{6}' crates --include='*.rs' || true)
           if [ -n "$hits" ]; then
-            echo "Colour values outside the theme (docs/15-DESIGN.md):"
+            echo "Colour values outside the theme (docs/GUIDE.md, Design):"
             echo "$hits"
             exit 1
           fi
@@ -960,7 +960,7 @@ jobs:
             | grep -v '^flutter_ui/lib/theme/' || true
           )
           if [ -n "$hits" ]; then
-            echo "Colour values outside flutter_ui/lib/theme/ (docs/15-DESIGN.md §4.1):"
+            echo "Colour values outside flutter_ui/lib/theme/ (docs/GUIDE.md, Design):"
             echo "$hits"
             echo
             echo "Read the colour off LumitTheme instead; add a token if none fits."

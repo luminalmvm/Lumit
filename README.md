@@ -18,8 +18,7 @@ After Effects' depth, Vegas' retiming, one application. Free and open source.
 [Website](https://lumitlab.com) ·
 [Download](https://lumitlab.com/download) ·
 [Documentation](https://docs.lumitlab.com) ·
-[Releases](https://lumitlab.com/releases) ·
-[Roadmap](docs/16-ROADMAP.md)
+[Releases](https://lumitlab.com/releases)
 
 </div>
 
@@ -88,7 +87,7 @@ cargo test --workspace
 <summary><b>macOS</b></summary>
 
 ```sh
-brew install ffmpeg  # see docs/TODO.md: Homebrew has no ffmpeg@8 yet, and plain ffmpeg is 9.x
+brew install ffmpeg  # Homebrew has no ffmpeg@8 yet, and plain ffmpeg is 9.x
 # Point the build at it:
 export FFMPEG_PKG_CONFIG_PATH="$(brew --prefix ffmpeg)/lib/pkgconfig"
 cargo test --workspace
@@ -131,10 +130,8 @@ in [docs/GUIDE.md](docs/GUIDE.md).
 
 | | |
 |---|---|
-| [docs/README.md](docs/README.md) | The index — start here. Seventeen numbered specs, from the vision to the roadmap. |
-| [docs/GUIDE.md](docs/GUIDE.md) | The contributor guide. What each crate does, the rules code has to follow, and how to build and run it. |
-| [docs/impl/](docs/impl/) | The implementation notes for more difficult area's. |
-| [docs/TODO.md](docs/TODO.md) | What is left to work on, most important first. |
+| [docs/GUIDE.md](docs/GUIDE.md) | Start here. How to build and run it, the rules code has to follow, and what each crate does. |
+| [docs/](docs/) | The glossary, architecture, performance and engineering rules, and the bridge contract. |
 
 The engine is a Cargo workspace under `crates/`; the interface is
 `flutter_ui/`; they meet at `crates/lumit-bridge`

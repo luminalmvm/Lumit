@@ -1,314 +1,98 @@
-# Lumit system architecture
+# Architecture
 
-**Status: canonical.** This document defines how Lumit is structured as a codebase and a
-running process. Terminology follows [01-GLOSSARY.md](01-GLOSSARY.md) exactly. RFC-2119 keywords (MUST, SHOULD,
-MAY) are binding. The companion rulebook is [14-ENGINEERING-RULES.md](14-ENGINEERING-RULES.md);
-runtime degradation policy lives in [13-PERFORMANCE-RULES.md](13-PERFORMANCE-RULES.md).
+Two requirements drive everything here: the UI stays responsive under any load, and the
+app never crashes. The crate list is in [GUIDE.md](GUIDE.md).
 
-The two requirements everything below serves: **the UI stays responsive under any load**, and
-**the application never crashes**. Every structural choice is downstream of those.
+## 1. Dependencies
 
----
+- They point down only: `lumit-bridge`, then the engine crates, then `lumit-core`. No
+  engine crate depends on the bridge or a UI, so the UI can be replaced without touching
+  the engine. It already was, once (egui to Flutter).
+- `lumit-core` has no wgpu, FFmpeg or audio dependency. The document tests anywhere.
+- `lumit-eval` depends only on `lumit-core`. Its seams are traits it defines
+  (`SourceStamper`, `FrameSource`, `KernelExecutor`, `CacheStore`), so it tests against
+  fakes. Today the shipped pixel path is the draw-list renderer in `lumit-render`.
+- Heavy FFI crates live in one owning crate. wgpu is the exception: `lumit-gpu`,
+  `lumit-flow` and `lumit-render` all use it.
+- If two crates want each other, the shared piece moves down.
 
-## 1. Workspace layout
+## 2. Threads
 
-Lumit is a single cargo workspace of small crates. Small crates keep incremental builds in
-seconds, force interfaces to be explicit, and make the two load-bearing seams — engine/UI and
-engine/media — mechanically enforceable rather than aspirational.
-
-The crates that exist today (v1), then the ones the doc reserves for later:
-
-| Crate | Responsibility |
-|---|---|
-| `lumit-core` | The document model (project, comps, layers, clips, properties, keyframes, Retime segments, markers) **and the rational time types** (`SourceTime`/`ClipTime`/`LayerTime`/`CompTime`/`FrameRate`). Pure data + command application. No IO, no GPU, no threads. |
-| `lumit-eval` | Internal codename **Nova**. Content-hash frame keys, the evaluation-graph *compiler* (structure + identity folding + source dedup), cancellation epochs, and the pure playback-scheduler decision core. NB: the graph's **pixel pass is not here yet** — v1 renders through `lumit-render` (see below). |
-| `lumit-gpu` | The one wgpu device, WGSL effect kernels, the compositor, the colour engine, readback. |
-| `lumit-flow` | Optical flow (**DIS**) — a CPU oracle plus WGSL twin — for Retime flow interpolation and flow motion blur. |
-| `lumit-media` | rsmpeg demux/decode/encode and the frame index. |
-| `lumit-audio` | **Pulsar**: cpal output, the audio clock everything syncs to, multi-source mixing, live waveform, spectral-flux beat detection. |
-| `lumit-cache` | **Nebula**: the frame cache — RAM + disk tiers, content-hash keys, byte-budget eviction. Each store registers with the resource governor, so the tiers' private budgets add up somewhere ([13-PERFORMANCE-RULES.md](13-PERFORMANCE-RULES.md) §3). |
-| `lumit-budget` | The **resource governor's ledger**: two tiers (video and host memory), grant-or-deny reservations that give their bytes back when they drop, and the pressure reading the degradation ladder steps on. Arithmetic only — it counts, it does not allocate, and it is handed the machine's figures rather than asking for them. Spec: [13-PERFORMANCE-RULES.md](13-PERFORMANCE-RULES.md) §3–§4. |
-| `lumit-ingress` | Bounded reading of structured and untrusted input: byte, item and depth budgets, checked size arithmetic, capped readers. The one place the limits every parser needs are written down, so a new parser inherits them rather than restating them. |
-| `lumit-peer` | Authenticated handshakes for the out-of-process plugin brokers: capability tokens, session secrets, nonces, and domain-separated proofs, so a broker pipe proves who is on the other end of it. |
-| `lumit-text` | Text rasterisation (v1: single run, embedded Inter). |
-| `lumit-project` | Serialisation: `.lum` container read/write, the operation journal, autosave. Spec: [10-FILE-FORMAT.md](10-FILE-FORMAT.md). |
-| `lumit-import` | After Effects import: reads a Lumit Bridge bundle's AE-shaped capture, maps it to a `Document` (keyframes, mattes, retime, the effect table, placeholders), and produces the import report. Spec: [11-AE-IMPORT.md](11-AE-IMPORT.md); how: [impl/ae-import.md](impl/ae-import.md). |
-| `lumit-track` | Camera and object tracking: the affine-KLT track substrate, two-view geometry with dynamic-track rejection, and the global zoom-aware camera solve. How: [impl/tracking.md](impl/tracking.md). |
-| `lumit-roto` | Rotoscoping arithmetic: stroke seeding, the geodesic distance transform that turns seeds into a matte, the guided-filter refine band, and the warp-and-seed step that carries a matte to the next frame. Pure CPU, no GPU and no `lumit-flow` dependency — flow arrives as plain slices. How: [impl/roto.md](impl/roto.md). |
-| `lumit-ml` | The addons: the manifest a model pack carries, the scan of the addons folder, the install that puts a verified download in place, the model runtime loaded at run time through `ort`, the execution provider chosen per platform, and one model run over one frame. No GPU device of its own and no document types: it takes plain slices and answers plain slices. How: [impl/addons.md](impl/addons.md). |
-| `lumit-keymap` | The shortcut model: chords, contexts, actions, bindings, and clash resolution. No windowing code — the engine decides what a chord means. |
-| `lumit-colour` | OCIO colour management, hosted natively rather than linked: the transform op set, the tetrahedral and curve samplers, the deterministic bake to one artefact both the Viewer and the export sample, the `.spi1d`/`.spi3d`/CLF readers, the `config.ocio` grammar and its resolution. No GPU, no I/O beyond the files it is handed paths to. How: [impl/ocio.md](impl/ocio.md). |
-| `lumit-render` | **The pixel pass** the eval graph will eventually own: media probing abstraction, decode planning, the decode worker and its decoded-frame cache, draw-list building, the GPU compositor, effect dispatch, frame naming and the cache tiers, export, and the headless renderer both frontends drive frame by frame. An engine crate — it names no frontend. |
-| `lumit-bridge` | The Flutter/Rust seam: a cdylib whose `api` module is the whole surface the Flutter frontend calls through `flutter_rust_bridge`. A frontend leaf, not an engine crate; it depends on `lumit-render` and on **no frontend**. Spec: [17-BRIDGE-CONTRACT.md](17-BRIDGE-CONTRACT.md). |
-
-The original egui shell (`lumit-ui`, launched by `lumit-app`) has been deleted; the git
-history before its removal is the parity reference for anything the Flutter frontend has
-not rebuilt yet. `lumit-keymap` went with it as unused at the time and came back unchanged
-when the shortcut editor was actually built.
-
-Reserved for later (no crate exists yet):
-
-| Crate | Responsibility |
-|---|---|
-| `lumit-time` | The rational time types — **v1 keeps these inside `lumit-core`**, not a separate crate. |
-| `lumit-gpu` (extras) | Texture pool, device-lost recovery, optional CUDA interop — future additions to the existing crate. |
-| `lumit-media` (extras) | Persistent decoder instances, hardware decode and image sequences (`sequence.rs`) are built; proxy generation is future. |
-| `lumit-cache` (extras) | The VRAM tier and `index.db` — future. The resource governor is built and lives in `lumit-budget`. |
-| *(no crate)* | Expressions live in `lumit-core` (`src/expression/`), not a crate of their own: a driven property is resolved by the same code that resolves a keyframed one, so splitting them would put the seam through the middle of `Property`. The expression engine is Rhai. |
-| `lumit-ofx` | OFX host: out-of-process plugin server, C ABI, shared-memory frame transport. |
-| `lumit-lfx` | LFX host. Shares the sandbox/IPC substrate with `lumit-ofx`. |
-
-### 1.1 Dependency direction rules
-
-- Dependencies point **downward only**: `lumit-bridge` → engine crates →
-  `lumit-core` (which holds the rational time types). No engine crate may depend on
-  the bridge or on any UI crate. This is the escape hatch: the UI layer MUST be
-  replaceable without touching the engine - which is exactly what happened when the
-  egui shell was swapped for a Flutter frontend (the egui crates themselves have since
-  been deleted). The frontend is a leaf: `lumit-bridge` depends on `lumit-render` and no
-  engine crate depends on it, so the engine never knows a UI exists.
-- `lumit-core` MUST have no dependency on wgpu, rsmpeg, cpal, or QuickJS. The document model
-  (and the time types folded into it) is testable on any machine with no GPU and no codecs.
-- `lumit-eval` depends **only on `lumit-core`** (it reads compiled snapshots). Its seams are
-  trait objects defined in `lumit-eval` itself: `SourceStamper` (source identity for keys) and
-  the pixel-pass sockets `FrameSource` / `KernelExecutor` / `CacheStore` (`lumit-eval::exec`),
-  so the demand-pull executor unit-tests against fakes with no GPU, codecs or disk. The *real*
-  implementations (GPU kernels, decode, the cache) are wired in app-side; until that wiring
-  lands, the shipped render/present path is the draw-list renderer in `lumit-render`.
-- Heavy FFI crates (`rsmpeg`, cudarc, QuickJS bindings) live only in their one owning crate.
-  **Known deviation:** `wgpu` is a direct dependency of `lumit-gpu`, `lumit-flow` (the flow
-  WGSL twin needs its own device access) and `lumit-render` (the compositor speaks it
-  directly). This is the one `-sys`-adjacent crate that spans tables in v1.
-- Circular dependencies are a build error by construction; if two crates want each other, the
-  shared piece moves down into a new crate or into `lumit-core`.
-
----
-
-## 2. Process and thread model
-
-One main process plus sandbox processes for third-party plugins (§7) and the crash handler.
-Inside the main process, threads have fixed roles:
+One process, plus a sandbox process per third-party plugin bundle.
 
 | Thread | Role |
 |---|---|
-| **UI thread** | Frontend input events, document edits, painting. It MUST NOT evaluate any node, decode any frame, run any expression, or block on any render. It reads results from latest-wins mailboxes and cache-status snapshots. |
-| **Worker pool** | Work-stealing pool (`cores − 3` threads, min 2, per the pinned sizing in [impl/playback-scheduler.md](impl/playback-scheduler.md) §2), running evaluation-graph jobs. Two priority classes: *interactive* (current Viewer frame, scrub, audio-adjacent) and *background* (cache warming, thumbnails, proxy checks). Interactive always pre-empts at job boundaries. **Built:** `lumit-eval::pool` — a dedicated rayon pool behind bounded two-class queues, tested; the shell's per-job `thread::spawn`s migrate onto it as the pixel pass is wired. |
-| **Decode threads** | One per active media stream, owned by `lumit-media`, feeding bounded frame queues. Decode never runs on pool workers: long-GOP seeks stall unpredictably and would starve the pool. |
-| **IO threads** | Disk-cache read/write, project autosave journal appends, proxy/export file IO. |
-| **Analysis thread** | Camera tracking: one at a time, spawned per analysis and named `lumit-track`, decoding a whole clip and solving it. Never a pool worker — for the decode rule's reason, since it *is* a decode that runs for minutes. Cancellable between frames and inside the solve; progress is a value the interface samples. **Built:** `lumit-render::track`. |
-| **Audio thread pair** | The cpal callback (real-time, lock-free ring-buffer reads only) plus an audio-render thread that evaluates the audio graph ahead of the callback, sample-accurately. |
-| **GPU-submit thread** | Sole owner of wgpu queue submission. Interactive work and background work submit through it in separate batches so a scrub pre-empts cache warming. |
+| UI | Input, edits, painting. Never evaluates, decodes, runs expressions or waits on a frame |
+| Worker pool | `cores - 3`, at least 2. Interactive jobs pre-empt background ones at job boundaries |
+| Decode | One per active stream, never on the pool, because a long-GOP seek would stall it |
+| IO | Disk cache, journal, export files |
+| Analysis | Camera tracking, one at a time |
+| Audio pair | The cpal callback (lock-free reads only) and a thread that fills its ring ahead |
+| GPU submit | The only thread that submits to the wgpu queue |
 
-### 2.1 Cancellation
+**Cancellation.** Every request carries an epoch per consumer (the Viewer, each export,
+background warming). Moving the playhead bumps the Viewer's. Jobs check at node and tile
+boundaries and return `Err(Cancelled)`. A stale frame that finishes still goes in the
+cache.
 
-Every render request carries an **epoch** (a monotonically increasing generation number per
-consumer — one for the Viewer, one per export job, one for background warming). Moving the
-playhead bumps the Viewer epoch. Jobs check their epoch at node boundaries and between
-macro-tiles; a superseded job aborts before its next node. GPU work is submitted a few nodes
-per command buffer so a stale frame wastes at most 1–2 ms of GPU time. Frames that complete
-despite being stale still enter the cache — the work is kept, not wasted.
+**Playback** is decode, evaluate, present over bounded queues 2 to 4 frames deep. The audio
+clock is master: the frame shown is a function of the samples played. If evaluation falls
+behind, frames drop. Audio never waits.
 
-### 2.2 Playback pipelining
+## 3. The document
 
-Playback is a three-stage pipeline over bounded queues (2–4 frames deep, back-pressure by
-construction):
+- Every edit is a command (`AddLayer`, `SetKeyframe`, ...) with an inverse. Applying one
+  makes a new immutable snapshot. Today that clones the whole `Document`.
+- Undo and redo walk the journal. Autosave appends the same journal to disk. Recovery is
+  the last snapshot plus a journal replay.
+- Every entity has a stable UUID. Nothing is identified by index or position.
+- The snapshot is published by one atomic pointer swap (`arc-swap`). Workers keep the
+  snapshot they started with, so nobody reads a half-finished edit and edit and render
+  never share a lock.
 
-```
-decode(N+k)  ─▶  evaluate(N+1…)  ─▶  present(N)
-   media threads     worker pool        UI thread blit
-```
+## 4. The evaluation graph
 
-**The audio clock is master.** The audio-render thread counts samples actually consumed by the
-cpal callback; the presented video frame is `f(audio_samples_consumed)`. Video never drives
-audio. If evaluation falls behind, frames are dropped at present (and adaptive degradation
-engages per [13-PERFORMANCE-RULES.md](13-PERFORMANCE-RULES.md)); audio never stutters to wait
-for pixels.
+Layers in the UI, a graph underneath. On each edit the affected comp recompiles:
 
----
+1. A layer becomes source, then effects, then masks and matte, then transform, then a blend
+   over everything below. Adjustment layers apply to the composite so far. A Precomp is
+   the nested comp behind one boundary node.
+2. A Sequence layer becomes a switch: for a given time exactly one clip is live, so its
+   subgraph is emitted.
+3. Retime isn't a pixel node. It changes the time asked of the nodes above it. Frame
+   interpolation adds a node only when the source time falls between frames.
 
-## 3. Document model
+**Two passes.** A cheap metadata pass works out each node's format, frame range and the
+region it defines, pushes the needed region down, and folds out effects that do nothing.
+The pixel pass then runs on workers, full frame per node, tiling only under pressure.
 
-`lumit-core` holds the project as an **immutable snapshot + command journal**:
+**Content hashing.** Each node hashes its type, version, parameters, time, quality and its
+inputs' hashes. The hash is the cache key, so identical work dedupes and nothing needs
+invalidating. An effect that reads other frames declares them so their hashes fold in.
 
-- Every edit is a **command**: a small, serialisable operation (`SetKeyframe`, `TrimClip`,
-  `AddLayer`, …) with a computed inverse. Applying a command produces a **new snapshot**.
-  v1 builds the new snapshot by cloning the whole `Document` (`DocumentStore::commit`) —
-  cheap at current project sizes; structural sharing (`im`-style persistent maps/vectors)
-  is the intended upgrade if profiling shows the clone on the edit path.
-- **Undo/redo** is the command journal walked backwards/forwards. **Autosave** is the same
-  journal appended to disk as edits happen (fsync on a short timer), plus periodic compacted
-  snapshots; crash recovery is last snapshot + journal replay. See
-  [10-FILE-FORMAT.md](10-FILE-FORMAT.md).
-- Every entity (asset, comp, layer, clip, property, keyframe, marker, effect instance) has a
-  **stable UUID** assigned at creation and preserved across save/load, copy/paste (remapped on
-  paste), and AE import. Nothing in the engine, cache, or file format identifies an entity by
-  index or position.
+## 5. GPU
 
-**Snapshot isolation** is what makes the UI-thread rule (§2) workable: the UI thread edits
-the document and publishes a new snapshot; renders in flight keep the snapshot (and compiled
-graph) they started with. Workers never observe a half-applied edit, so there is no locking
-between edit and render paths — publication is a single atomic pointer swap (`arc-swap`).
-The UI reads its own latest snapshot; workers read theirs; both are complete, consistent
-worlds.
+- One wgpu device. DX12 on Windows, Metal on macOS, Vulkan on Linux.
+- First-party effects are WGSL compute. The working format is fp16 scene-linear
+  premultiplied RGBA.
+- Textures come from a pool that spends against the resource governor.
+- Readbacks never block the UI or submit threads.
+- Device loss is routine on Windows. Everything GPU belongs to the renderer, so recovery
+  is dropping it, building a new one, and refilling from the RAM and disk tiers.
+- Every GPU effect has a CPU twin. It's the test oracle and the fallback.
 
----
+## 6. Media
 
-## 4. Compiling the layer stack to the evaluation graph
+`lumit-media` wraps FFmpeg behind a `MediaSource` trait. Decode never runs on the worker
+pool. Proxy level is part of the cache key.
 
-**Layers in the UI, DAG underneath.** Users never see the evaluation graph —
-the Graph panel draws the *document's* stack and wiring, never these compiled
-nodes. A layer's driver graph ([03-DATA-MODEL.md](03-DATA-MODEL.md) §8.1) does not lower
-to pixel nodes at all: driver evaluation is parameter evaluation, resolved before an
-effect's parameters pack, so the graph below keeps its shape.
+## 7. Plugins and expressions
 
-On every document edit, `lumit-eval` incrementally recompiles the affected comp:
-
-1. Each layer lowers to: source node → effect-stack nodes → mask/matte nodes → transform node
-   → blend node compositing over the accumulated result below. Adjustment layers lower to an
-   effect chain applied to the accumulated composite; Precomp layers lower to the nested
-   comp's subgraph behind a single boundary node; a matte is a side input to the blend node.
-2. A **Sequence layer** lowers to a *time-multiplexed switch*: for any requested layer time,
-   exactly one clip is active (clips on a layer that draws a picture never overlap - only an
-   audio-only layer's may, and nothing here compiles those), so compilation resolves which clip covers
-   that time and emits that clip's subgraph — source node, the clip's Retime mapping, its
-   frame-interpolation policy — then the Sequence layer's own effects/masks/transform apply to
-   the switch output. Edit points are pure data; no node exists "between" clips.
-3. **Retime** compiles into the *time argument* of upstream requests, not into a pixel node:
-   a node evaluated under a Retime is asked for a different source time. The request key is
-   `(node_id, local_time, quality, roi)`. Frame interpolation (nearest/blend/flow) inserts a
-   synthesis node only when the mapped source time is non-integral in source frames — flow
-   synthesis is a real (heavy, cacheable) node; nearest is an identity that snaps time.
-   Retime maths is specified in [04-RETIMING.md](04-RETIMING.md).
-
-### 4.1 Two-pass evaluation
-
-- **Metadata pass** — cheap, synchronous, runs on edit and on any request: establishes per
-  node its output format, frame range, and DoD (bounding box of defined pixels), and
-  propagates ROI top-down (each consumer declares what region it needs; effects declare their
-  input-expansion function `roi_in = f(roi_out)`). Identity detection happens here: an effect
-  at neutral parameters, a disabled effect, opacity 1.0, declares itself a pass-through and is
-  folded out.
-- **Pixel pass** — expensive, on workers, cancellable: computes textures only inside
-  `ROI ∩ DoD`. Full-frame-per-node on GPU; macro-tiling only as the VRAM/TDR fallback (§5).
-
-### 4.2 Content hashing
-
-Every node computes a content hash over its type, algorithm version, evaluated parameters,
-local time, quality and its inputs' hashes. Hashes key the cache — never timeline
-position. The architectural consequence is that reuse needs no invalidation logic: identical
-subgraphs deduplicate and a static subgraph hashes identically every frame. Effects sampling
-other frames MUST declare their temporal dependencies in the metadata pass so the sampled
-frames' hashes fold in. The formula and its normative consequences are
-[06-RENDER-PIPELINE.md](06-RENDER-PIPELINE.md) §5.2.
-
----
-
-## 5. GPU architecture
-
-- **One wgpu device** for the whole application. By default `lumit-gpu` lets wgpu pick
-  the backend (DX12 on Windows, Metal on macOS). The zero-copy Viewer features pin a backend
-  for shared-texture interop: `shared-texture` pins **DX12** on Windows, and
-  `shared-texture-linux` pins **Vulkan** on Linux (DMA-BUF). CUDA interop (below) is an
-  optional per-node accelerator, not a backend selector. `lumit-gpu` owns the device; nothing
-  else holds raw device handles.
-- **All first-party effects are WGSL compute kernels.** The working format is **fp16
-  scene-linear premultiplied RGBA** (fp32 per-comp opt-in). Unpremultiply happens only
-  transiently inside colour ops that must not tint transparent regions.
-- **Texture pool**: node outputs are pooled, DoD-sized textures with refcounted lifetimes
-  derived from the compiled graph; the pool allocates through the resource governor's VRAM
-  budget. Nothing allocates a texture ad hoc.
-- **Readback paths**: async buffer readback for RAM-cache demotion, disk-cache writes, scopes
-  export, and CPU-fallback bridges. Readbacks never block the UI thread or the submit thread;
-  they complete on IO/pool threads via mapped-buffer callbacks.
-- **Device-lost recovery** (Windows TDR is routine, not exceptional): all GPU objects belong
-  to a device **epoch**. On `DeviceLost`, `lumit-gpu` tears down the epoch, recreates the
-  device, and replays the current request from the lower cache tiers — VRAM contents are
-  never the only copy of anything the user would miss. The TDR window, the macro-tiling
-  obligation and the repeated-loss ladder are
-  [13-PERFORMANCE-RULES.md](13-PERFORMANCE-RULES.md) §5.
-- **CUDA**: optional per-node accelerators (optical flow first) via
-  `wgpu as_hal` → `VK_KHR_external_memory/semaphore` → cudarc. CUDA is never a pipeline;
-  **every CUDA-accelerated node MUST have a WGSL or CPU implementation** that produces
-  acceptably close output, selected automatically when CUDA is absent or misbehaving.
-- **CPU fallback** is per-node, not per-app: the scheduler inserts readback → CPU node →
-  upload bridges, batching adjacent CPU nodes to avoid bus ping-pong. Every WGSL effect ships
-  a CPU reference implementation, which is also its test oracle.
-
----
-
-## 6. Media layer
-
-`lumit-media` wraps rsmpeg behind a `MediaSource` trait (open → probe → indexed frame
-server) so the binding choice stays swappable.
-
-The architectural commitments here are the `MediaSource` seam and the thread-ownership rule:
-**decode never runs on pool workers**, because long-GOP seeks stall unpredictably and would
-starve the pool. Decoders live on dedicated decode threads feeding bounded queues (§2), and
-proxy level is a dimension of the cache key.
-
-The mechanics — the frame index and exact long-GOP seeking, persistent decoder instances,
-the hardware-decode path into wgpu, proxy generation, image sequences and encoder selection —
-are specified in [impl/media-io.md](impl/media-io.md), which is authoritative for them.
-[TODO.md](TODO.md) says which are built.
-
----
-
-## 7. Plugin isolation
-
-First-party effects are trusted, in-process, GPU-native. **Third-party OFX and LFX effects
-run out-of-process** — in-process plugins are the number-one crash source in every host
-Lumit is replacing, and "never crashes" cannot be delegated to third parties.
-
-Architecture level (full protocol in [12-PLUGINS.md](12-PLUGINS.md)):
-
-- A **plugin server process** per vendor bundle loads plugins; frames cross via shared memory
-  (CPU path) or shared GPU handles; parameters and UI actions cross via RPC.
-- Each server has a **watchdog**: a hung or crashed plugin process is killed and restarted;
-  the affected node renders as an errored placeholder (checkerboard, per
-  [15-DESIGN.md](15-DESIGN.md)) and the application continues.
-- The evaluation graph treats a plugin node like any other node: it declares ROI expansion,
-  temporal needs, and a thread-safety capability flag; non-reentrant plugins serialise on
-  their own server without stalling the rest of the graph.
-
-Expressions (`lumit-core::expression`) are in-process and hermetic: no IO, no
-wall clock, seeded random only. An expression can be wrong, never non-deterministic on a
-given machine, and never fatal to a frame. Two caveats the earlier wording did not carry:
-results are reproducible per machine rather than bit-identical across platforms,
-and there is no evaluation time budget yet, so a runaway expression can still stall a
-render thread ([12-PLUGINS.md](12-PLUGINS.md) §4.4).
-
----
-
-## 8. Appendix: anti-lessons
-
-Each failure below is somebody else's decade; each maps to a binding Lumit rule.
-
-| Anti-lesson | What happened | Lumit rule |
-|---|---|---|
-| **Olive's unshipped rewrite** | The 0.2 ground-up rewrite (nodes-as-document, float, OCIO, disk cache — the right shopping list) consumed six-plus years and never shipped stable; development halted, then restarted again in another stack. | Ship a usable editing loop early and grow the engine underneath it. No big-bang rewrites: the crate seams (§1) exist so any layer is replaced incrementally. Nodes stay internal; layers are the document. |
-| **Natron's CPU-only stall** | A credible Nuke-alike whose performance reputation died on CPU-only rendering, with GPU retrofit never achieved before the maintainers left. | GPU-first from day one: every first-party effect is WGSL compute; CPU is the fallback and oracle, never the plan. |
-| **Natron's deadlocks** | Their own docs: render-path deadlocks were the hardest bugs they had. Fine-grained locking between edit, cache, and render paths. | No shared mutable state between edit and render: immutable snapshots, atomic publication, message passing, bounded queues, epoch cancellation (§2, §3). The lock-across-boundary rules in [14-ENGINEERING-RULES.md](14-ENGINEERING-RULES.md) §2 are load-bearing. |
-| **AE's thread-safety retrofit** | A 1993 single-threaded codebase took Adobe a multi-year campaign to make Multi-Frame Rendering possible, including retrofitting a plugin thread-safety flag. | Concurrency contracts are day-one architecture: what runs where is fixed (§2), and the effect/plugin API carries a thread-safety capability flag from its first version (§7). |
-| **MLT's GPU afterthought** | An elegant CPU frame pipeline where GPU residency was bolted on and stayed fragile, forcing CPU↔GPU ping-pong. | Texture residency is the default frame contract; CPU excursions are explicit bridge nodes inserted by the scheduler (§5). |
-| **Blender's execution-model migrations** | Tiled → full-frame → GPU: three multi-year compositor rewrites to land where it should have started. | Full-frame-per-node on GPU now, ROI/DoD as metadata, tiling only as fallback (§4.1, §5). Execution models are the most expensive thing to retrofit; Lumit picks the endpoint. |
-
----
-
-## Open questions
-
-- **Multi-queue GPU scheduling**: wgpu has no multi-queue today; background submissions share
-  the queue with interactive ones. If pre-emption at batch granularity proves too coarse on
-  low-end GPUs, do we need `as_hal` async-compute plumbing, and on which backends?
-- **Snapshot memory ceiling**: persistent structures make snapshots cheap, but a long session
-  with heavy undo history plus in-flight renders pins many snapshots. Journal compaction
-  policy needs a measured budget — entry in [13-PERFORMANCE-RULES.md](13-PERFORMANCE-RULES.md)?
-- **OFX GPU suites**: which OFX GPU render suites (CUDA/OpenCL/Metal images) do the target
-  plugins (Twixtor, RSMB, Sapphire) actually require, and does the shared-texture transport
-  cover them, or do some force a CPU staging path at v1? Needs a plugin-by-plugin audit in
-  [12-PLUGINS.md](12-PLUGINS.md).
-- **HDR/wide-gamut swapchain**: scRGB output on Windows through wgpu needs a spike; may
-  require hal access. Affects Viewer colour accuracy claims in [15-DESIGN.md](15-DESIGN.md).
-- **Sequence layer transitions**: a cross-fade at an edit point means two clips are briefly
-  live, which breaks the "exactly one clip active" compilation rule. Decide the lowering
-  (overlap window with a dedicated transition node?) before transitions enter
-  [03-DATA-MODEL.md](03-DATA-MODEL.md).
+- First-party effects run in-process. Third-party OFX plugins run in a broker process per
+  bundle. Frames cross in shared memory. A crashed or hung broker is restarted and the
+  node draws as an error placeholder.
+- A plugin node declares its region, its temporal needs and whether it's thread-safe. A
+  plugin that isn't serialises on its own broker only.
+- Expressions run in-process with no IO, no clock and seeded randomness. Results match per
+  machine, not bit for bit across platforms. There's no time limit yet, so a runaway
+  expression can stall a render thread.

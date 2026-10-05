@@ -24,7 +24,7 @@
     Title card.mp4, Music.wav, Logo.png). They are not committed - a repository
     is not the place for video - so a fresh machine makes them with ffmpeg once.
 
-    See docs/learn/09-DOING-IT-YOURSELF.md.
+    See docs/GUIDE.md.
 
 .PARAMETER Sweep
     Which sweep to run: 1 to 7, or one of the named ones - graph, modes, retakes,
