@@ -30,15 +30,16 @@ void main() {
     expect(left.active, 0, reason: 'the left group opens on Project');
 
     expect((upper.children[1] as DockPane).panel, Panel.viewer);
-    // The right column carries Effects & presets fronted (docs/07 §1.6's
-    // Edit workspace), with Scopes, Text and Paragraph tabbed behind it.
-    // Debug is in no shipped arrangement.
+    // The right column is a stack: Effects & presets open,
+    // with Scopes, Text and Paragraph shut under it. Debug is in no shipped
+    // arrangement.
     final right = upper.children[2] as DockTabs;
     expect(
       [for (final c in right.children) c.panel],
       [Panel.effectsAndPresets, Panel.scopes, Panel.text, Panel.paragraph],
     );
-    expect(right.active, 0,
+    expect(right.stacked, isTrue);
+    expect(right.open, {Panel.effectsAndPresets.pane()},
         reason: 'the right group opens on Effects & presets');
     expect((root.children[1] as DockPane).panel, Panel.timeline);
   });

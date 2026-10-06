@@ -13631,5 +13631,13 @@
   "paragraphSpaceAfter": "Space after",
   "@paragraphSpaceAfter": {
     "description": "Paragraph panel: label beside the room added below each paragraph, in pixels."
+  },
+  "panelGroupStacked": "Stacked group",
+  "@panelGroupStacked": {
+    "description": "The right-click menu on a panel's tab or header: a tick that draws the group's panels one above another, each under a header that opens and shuts it, instead of as tabs."
+  },
+  "panelGroupSolo": "One open at a time",
+  "@panelGroupSolo": {
+    "description": "The right-click menu on a panel's header in a stacked group: a tick that makes opening one panel shut the others."
   }
 }
