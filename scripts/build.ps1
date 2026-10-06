@@ -11,7 +11,7 @@
     itself. You need it before `flutter test`, because the Dart-side frb tests
     load the built library rather than building it.
 
-    See docs/learn/09-DOING-IT-YOURSELF.md for the whole routine.
+    See docs/GUIDE.md.
 
 .PARAMETER Release
     Build with optimisations and no debug assertions. Slower to compile, and

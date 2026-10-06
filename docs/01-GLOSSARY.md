@@ -1,210 +1,149 @@
-# Lumit glossary
+# Glossary
 
-**Status: canonical.** Every document, UI string, code identifier, and commit message in this
-repository uses these terms exactly. If a concept is not named here, name it here first, then
-use it. Terminology drift is a bug; file it like one.
-
-Lumit is layer-based like After Effects, with one deliberate extension (the Sequence layer,
-which brings Vegas-style cutting). Terms below note their AE/Vegas equivalents where that helps
-someone arriving from those tools, but the Lumit term is the only one used in Lumit.
-
----
+Every identifier, comment, UI string, commit and doc uses these terms. A new concept gets
+its entry here first. AE and Vegas names are noted only to help people arriving from them.
 
 ## 1. Project structure
 
-| Term | Definition |
+| Term | Meaning |
 |---|---|
-| **Project** | The complete editable document: assets, compositions, settings. Serialised as a `.lum` file (see [10-FILE-FORMAT.md](10-FILE-FORMAT.md)). Exactly one project is open at a time. |
-| **Asset** | Anything importable that lives in the Project panel: footage items, audio items, image sequences, still images, and compositions themselves. |
-| **Footage item** | An asset referencing a media file on disk (video, image, image sequence). Lumit never modifies the file; the project stores a reference plus interpretation settings (frame rate override, alpha interpretation, colour space tag). |
-| **Audio item** | An asset referencing an audio file. |
-| **Folder** | A grouping node in the Project panel. (AE calls this a folder too; Premiere calls it a bin — *bin* is not a Lumit term.) |
-| **Composition (comp)** | A timeline with fixed resolution, frame rate, duration, and background colour, containing an ordered stack of layers, or a node graph (below). Comps can be nested via Precomp layers. |
-| **Node graph** (composition) | A composition whose picture is made by nodes and wires instead of a layer stack. Sized, timed and filed like any comp, so it is placed as a Precomp layer, read by another node graph, or applied to a layer as the Node graph effect. |
+| **Project** | The whole document, saved as a `.lum` file. One open at a time |
+| **Asset** | Anything in the Project panel: footage, audio, sequences, stills, comps |
+| **Footage item** | An asset pointing at a media file. Lumit never changes the file |
+| **Audio item** | An asset pointing at an audio file |
+| **Folder** | A group in the Project panel. Not *bin* |
+| **Composition (comp)** | Resolution, frame rate, duration, background, and a layer stack or a node graph |
+| **Node graph** | A comp whose picture is made by nodes and wires instead of layers |
 
 ## 2. Layers
 
-A **layer** is one row in a composition's timeline. Layers stack: the bottom layer renders
-first, each layer above composites over the result (full render order in
-[06-RENDER-PIPELINE.md](06-RENDER-PIPELINE.md)). Every layer has transform properties, an
-in point and out point on the comp timeline, switches, and (where visual) masks, effects,
-and a blend mode.
+A **layer** is one row in a comp. The bottom layer draws first and each one above
+composites over it.
 
-| Layer type | Definition |
+| Layer | Meaning |
 |---|---|
-| **Footage layer** | A layer whose source is exactly one footage item. Supports Retime (§4). The AE-style default. |
-| **Retimeable layer** | Collective term for the layer kinds that carry their own Retime: Footage layers and Precomp layers. (Clips carry Retime individually inside Sequence layers.) |
-| **Sequence layer** | A layer that contains an ordered run of **clips** cut back-to-back on its single row. This is Lumit's Vegas-style editing surface: each clip has its own source, trim, and Retime. Effects, masks, transforms, and switches on a Sequence layer apply to its whole output, after clip retiming. |
-| **Precomp layer** | A layer whose source is another composition. The verb is **precompose**. Supports Retime (§4), as AE users expect of time-remapped precomps. |
-| **Solid layer** | A layer of flat colour at a fixed size. |
-| **Text layer** | Editable styled text. |
-| **Shape layer** | Vector shape groups with fills, strokes, and path operations. |
-| **Null layer** | An invisible transform-only layer used for parenting rigs. |
-| **Adjustment layer** | A layer whose effect stack is applied to the composite of everything below it rather than to a picture of its own. It is a **switch** any layer that draws can carry, and also a kind — the one *New adjustment layer* makes, which has nothing else to show. |
-| **Layer group** | A named band folding an unbroken run of layers under one header row in the Timeline's outline. **Organisation only**: the render walk never reads it, so a comp builds the identical frame grouped or not. The header carries a colour tick, a combined bar spanning its members, and switches that broadcast to them. Distinct from a **property group** (below) and from the Timeline's **column groups**; the render-level collapse is **precompose**, which a group's own menu offers. |
-| **Audio layer** | A layer whose source is an audio item (or the audio channel of footage). Multiple audio layers per comp; see [09-AUDIO.md](09-AUDIO.md). |
-| **Camera layer** | A 3D viewpoint: its position is the eye, and a two-node camera aims at its point of interest. Only affects 3D layers. See 2.5D in [03-DATA-MODEL.md](03-DATA-MODEL.md) and [impl/camera.md](impl/camera.md). |
-| **Light layer** | A 3D light source. Only affects 3D layers with lighting enabled. |
+| **Footage layer** | One footage item. Has Retime |
+| **Sequence layer** | Clips cut back to back on one row, each with its own source, trim and Retime. The layer's own effects apply to the whole output |
+| **Precomp layer** | Another comp as a source. The verb is **precompose**. Has Retime |
+| **Solid**, **Text**, **Shape**, **Null** layers | Flat colour, styled text, vector shapes, a transform-only rig |
+| **Adjustment layer** | Applies its effects to everything below. Also a switch any drawing layer can carry |
+| **Layer group** | A header row folding layers together in the Timeline. Organisation only, the render never reads it |
+| **Audio layer** | An audio item, or footage's audio |
+| **Camera**, **Light** layers | 3D viewpoint and light. Only affect 3D layers |
 
-**Clip** — an entry inside a Sequence layer only: a reference to one source (footage item or
-comp) plus a source in/out trim, a Retime, and per-clip render policies (frame interpolation
-mode), and, where the layer is heard rather than seen, a fade at each end and an effect
-stack of its own. **Whether two clips may overlap is decided per layer**: on a Sequence
-layer that draws a picture they never do, because one frame shows one clip; on an
-audio-only Sequence layer they may, and the overlap is the crossfade
-([03-DATA-MODEL.md](03-DATA-MODEL.md) §5.3). A cut between two clips is an **edit point**.
-Ordinary layers do not contain clips.
-
-**Anchor point** (a.k.a. the layer's **origin**) — the point, in the layer's own pixel
-coordinates, that the transform pivots about: scale and rotation happen around it, and
-**Position** places *it* in comp space. New layers default their anchor to the centre of
-their content, so a fresh layer sits centred and pivots about its middle (the AE default).
-The UI labels the two properties Anchor x / Anchor y.
-
-**Parenting** — a layer may name another layer as its parent; transforms concatenate. No cycles.
-
-**Switches** — per-layer toggles: visible, audible, solo, lock, shy, quality (draft/full),
-motion blur, adjustment, 3D, collapse (for Precomp layers). Defined in
-[03-DATA-MODEL.md](03-DATA-MODEL.md).
+- **Clip**: an entry inside a Sequence layer, and only there. Clips on a picture layer
+  never overlap. On an audio-only Sequence layer they may, and the overlap is a crossfade.
+  A cut between clips is an **edit point**.
+- **Anchor point**: the point the transform pivots around. Position places it.
+- **Parenting**: a layer can follow another layer's transform. No cycles.
+- **Switches**: per-layer toggles. Visible, audible, solo, lock, shy, quality, motion blur,
+  adjustment, 3D, collapse.
 
 ## 3. Animation
 
-| Term | Definition |
+| Term | Meaning |
 |---|---|
-| **Property** | A named animatable value on a layer, effect, mask, or clip (e.g. Position, Opacity, a blur radius). Properties nest in **property groups**. |
-| **Keyframe** | A (time, value) anchor on a property, with per-side interpolation: hold, linear, or bezier with **speed** (units/second) and **influence** (percentage handle reach), matching AE's keyframe maths so imports are lossless. |
-| **Curve** | The evaluated function of a property over time. |
-| **Graph editor** | The panel that edits curves, with two views: the **value graph** (value against time) and the **speed graph** (first derivative against time). These are *views of the same data*, never separate data. |
-| **Expression** | A per-property script (JavaScript) that computes the property's value each frame, optionally reading other properties. See [12-PLUGINS.md](12-PLUGINS.md) §scripting. |
-| **Marker** | A labelled point (or span) on a comp, layer, or asset. **Beat markers** are markers generated by audio onset detection. |
-| **Motion blur** | Shutter-simulated blur along motion. Three distinct forms: the per-layer transform **motion-blur switch** (a layer switch that smears one layer along its own transform); the **Motion blur** effect (optical flow, docs/08 §3.2 — a single-pass per-pixel smear of footage-internal motion, the everyday one); and the **Accumulation motion blur** effect (§3.26 — re-renders the whole scene below at sub-frame times and averages, the correct whole-scene kind, and priced like it). |
+| **Property** | A named animatable value. Properties nest in **property groups** |
+| **Keyframe** | A time and value, with hold, linear or bezier (**speed** and **influence**, AE's maths) |
+| **Graph editor** | Edits curves as a **value graph** or a **speed graph**. Two views of the same data |
+| **Expression** | A per-property script that computes the value each frame |
+| **Marker** | A labelled point or span. **Beat markers** come from audio onset detection |
+| **Motion blur** | Three things: the layer switch, the **Motion blur** effect (optical flow), and **Accumulation motion blur** (re-renders and averages) |
 
-## 4. Time and retiming
+## 4. Time and Retime
 
-Lumit has four timebases. Being explicit about which one a number lives in is mandatory in
-code and docs (see [14-ENGINEERING-RULES.md](14-ENGINEERING-RULES.md) on time types).
+Four timebases, and code always says which one a number is in: **source time**, **clip
+time**, **layer time**, **comp time**.
 
-| Timebase | Definition |
+**Retime** is the one retiming system: a map from layer or clip time to source time, made
+of segments. The value graph is AE's time remapping, the speed graph is Vegas' velocity.
+They are two views, not two features.
+
+| Term | Meaning |
 |---|---|
-| **Source time** | Seconds within a media file or nested comp, before any retiming. |
-| **Clip time** | Seconds from the start of a clip, within a Sequence layer. |
-| **Layer time** | Seconds from a layer's in point. |
-| **Comp time** | Seconds from the start of a composition. |
+| **Speed** | The slope of the Retime map. 100% normal, 0% freeze, negative reverse |
+| **Freeze** | A stretch at speed 0 |
+| **Overrun** | Retime asking past the media's ends. Holds the end frame, marked in the Timeline, never moves edit points |
+| **Frame interpolation** | Nearest, blend or flow, for in-between source frames |
+| **Stretch** | A command that rewrites the Retime map for a new speed. Not a stored multiplier |
 
-**Retime** — Lumit's single retiming system: a per-layer (Footage and Precomp layers) or
-per-clip (Sequence layer) mapping from layer/clip time to source time, stored as an ordered list of
-**retime segments** (see [04-RETIMING.md](04-RETIMING.md)). Edited in the graph editor through
-either the value graph (AE-style time remapping) or the speed graph (Vegas-style velocity).
-There is **no separate "time remap" and "velocity" feature** — those are AE/Vegas names for the
-two views of Retime.
+## 5. Render, preview, export
 
-| Term | Definition |
+Not interchangeable.
+
+| Term | Meaning |
 |---|---|
-| **Speed** | The derivative of the retime map: 1.0 = normal, 0.0 = freeze, negative = reverse. The UI shows percentages (100%, 0%, −100%). The Retime graph channel *labels* its derivative lens **Velocity** and its value lens **Time** (Vegas/AE heritage); "speed" stays the term for the quantity itself. |
-| **Freeze** | A retime region of speed 0. |
-| **Overrun** | The state where a retime map requests source time beyond the media's end (or before its start). Lumit renders a hold of the boundary frame and marks the region visibly in the timeline. Overrun never moves clip boundaries or edit points. |
-| **Frame interpolation** | How non-integer source frames are synthesised: **nearest** (duplicate), **blend** (crossfade), or **flow** (optical-flow synthesis). A per-clip/per-layer render policy, independent of the retime map itself. |
-| **Stretch** | A layer-level *command* (AE's time stretch): a new speed, and the length that speed implies. It is not a stored multiplier — it rewrites the layer's Retime map and its span (docs/04 §11.2). |
-
-## 5. Rendering, preview, and export
-
-These three words are **not interchangeable**.
-
-| Term | Definition |
-|---|---|
-| **Render** | The engine producing pixels/samples for any purpose — preview or export. Internal act. |
-| **Preview** | Interactive playback inside Lumit. Never writes user files. |
-| **Export** | Writing a deliverable media file via the export queue. Export may **bake** (flatten retimes, rasterise, pre-composite) for speed; baking exists only inside the export pipeline and never alters the project. |
-| **Evaluation graph** | The immutable DAG the layer stack compiles into for rendering. Users never see this term. |
-| **Cache** | Stored intermediate frames, in three tiers: **VRAM cache**, **RAM cache**, **disk cache**. Cache entries are keyed by content hash, never by timeline position. |
-| **Cache bar** | The timeline stripe showing which frames are cached (per tier). |
-| **Proxy** | A lower-resolution/intermediate-codec stand-in for a footage item, generated in the background and toggled globally. |
-| **Preview resolution** | Full / Half / Third / Quarter / Auto — true raster downsampling in the Viewer, per-comp. |
-| **Adaptive degradation** | The engine's automatic quality reduction under load (resolution, skipped effects) during interaction only; it must never affect export. See [13-PERFORMANCE-RULES.md](13-PERFORMANCE-RULES.md). |
+| **Render** | The engine making pixels, for anything |
+| **Preview** | Playback inside Lumit. Never writes user files |
+| **Export** | Writing a media file. May **bake**, which never changes the project |
+| **Evaluation graph** | What the layer stack compiles into. Users never see the term |
+| **Cache** | Frames stored in VRAM, RAM and disk tiers, keyed by content hash |
+| **Proxy** | A smaller stand-in for footage |
+| **Preview resolution** | Full, Half, Third, Quarter, Auto |
+| **Adaptive degradation** | Lowering preview quality under load. Never touches export |
 
 ## 6. Compositing
 
-| Term | Definition |
+| Term | Meaning |
 |---|---|
-| **Mask** | A bezier path on a layer that gates its alpha, with feather, expansion, opacity, and a combine mode. |
-| **Matte** | Using another layer's alpha or luma to gate this layer. Any layer can be chosen as a matte from a dropdown (AE 2023-style); one matte layer can serve many layers. *Track matte* is the AE name; Lumit says **matte**. |
-| **Roto brush** | The tool and effect that build a per-frame **matte** from painted foreground/background strokes, propagated frame to frame by optical flow. **Refine edge** is its boundary band, where a matting filter recovers soft edges. Lumit never says *rotobrush* or *magic mask*. |
-| **Blend mode** | Per-layer composite operator (Normal, Add, Screen, Multiply, Overlay, …). Full list in [06-RENDER-PIPELINE.md](06-RENDER-PIPELINE.md). |
-| **Effect** | One image (or audio) operation instance in a layer's **effect stack**, ordered top-to-bottom, or one box of a node graph composition. Built-in effects, OFX plugins, and LFX plugins are all "effects" to the user. |
-| **Driver** | A node in a layer's graph, or in a node graph composition, that makes a *value* rather than a picture (Wiggle, Audio level, Math, …) and drives a parameter through a wire. A driven parameter overrides its keyframes and says so in Effect controls. |
-| **Read node** | A box that brings a project item into a node graph: footage, a solid or a composition. Drawn under the item's own name, with the item's kind as its kicker. |
-| **Input node** | A box standing for a value or picture handed in from outside the graph. Applied as an effect or nested, an Input is a parameter row or a socket on the outer box. Viewed on its own, it is its default (a value) or transparent (a picture). |
-| **Output node** | The one box whose picture the node graph shows. Every node graph has exactly one and it cannot be deleted. |
-| **Merge** | The node that lays picture A over picture B with a blend mode and an opacity. A node graph's own; a layer stack joins pictures with layers and blend modes. |
-| **Switch** (node) | The node that shows one of its pictures, chosen by an index. Not a layer's switches, which stay the per-layer toggles they were. |
-| **Time offset** (node) | The node that shows its input at another time, by an Offset in seconds. A node graph's own, and the only per-node time there is. |
-| **Split channels** | The node that hands out a picture's red, green, blue and alpha as four greyscale pictures. A node graph's own. Not the Split driver, which takes a colour value apart. |
-| **Combine channels** | The node that builds one picture from four greyscale pictures, one per channel: Split channels in reverse. Not the Combine driver. |
-| **Node graph effect** | The effect that applies a node graph to a layer. The layer's picture is the graph's first picture Input, the graph's other Inputs are the effect's rows, and the Output is what the effect hands on. |
-| **Wire** / **port** | A connection on the Graph panel's canvas, and the typed socket it plugs into. Wire and socket colour is the data type. |
-| **Points stream** | The typed, evaluated data a points-emitting effect produces (Particulate first) — per-frame particle attributes, never stored in the project, like an image. |
-| **Working space** | The engine's internal pixel format: scene-linear, premultiplied alpha, fp16 (fp32 opt-in per comp). |
-| **OCIO config** | An OpenColorIO configuration a project can name: one `config.ocio` file plus the LUT files it points at, whose colour space, display and view names fill the footage item's colour-space tag, the Viewer's colour-pipeline picker, and the export's output space. |
+| **Mask** | A bezier path gating a layer's alpha |
+| **Matte** | Another layer's alpha or luma gating this one. Not *track matte* |
+| **Roto brush** | Builds a matte from painted strokes, carried by optical flow. **Refine edge** is its soft boundary |
+| **Blend mode** | How a layer composites over what's below |
+| **Effect** | One operation in a layer's **effect stack**, or one box in a node graph |
+| **Driver** | A node that makes a value rather than a picture and drives a parameter through a wire |
+| **Read**, **Input**, **Output** nodes | Bring an item in, take a value or picture from outside, the one picture the graph shows |
+| **Merge**, **Switch**, **Time offset** nodes | A over B, pick one input, show the input at another time |
+| **Split channels**, **Combine channels** | Picture into four greyscale pictures, and back |
+| **Node graph effect** | Applies a node graph to a layer |
+| **Wire**, **port** | A connection on the Graph panel, and the typed socket it plugs into |
+| **Points stream** | Per-frame particle data an effect produces. Never stored |
+| **Working space** | Scene-linear, premultiplied, fp16 (fp32 opt-in) |
+| **OCIO config** | An OpenColorIO config a project can name |
 
 ## 7. Interface
 
-| Term | Definition |
+| Term | Meaning |
 |---|---|
-| **Panel** | A dockable UI unit (Timeline, Viewer, Project, Effect Controls, Scopes, …). Full inventory in [07-UI-SPEC.md](07-UI-SPEC.md). |
-| **Workspace** | A named, saveable arrangement of panels. Ships with presets (Edit, Effects, Colour, Audio, Retiming, Nodes); fully user-rearrangeable. |
-| **Graph panel** | The panel drawing a layer's effect stack as nodes and wires — a second view of the same document that can also wire drivers into parameters. It draws three things: a layer's graph, a Custom shader's inner graph, and a node graph composition. Not the evaluation graph, which stays internal. Seeing the picture at one box is the Viewer's own "at effect" chip ([07-UI-SPEC.md](07-UI-SPEC.md) §2.2.1), not a panel. |
-| **Viewer** | The panel that displays a comp (or footage/layer) with its toolbar: preview resolution, magnification, channel view, transparency grid, guides, and wireframe toggles. A workspace MAY hold several. |
-| **View** | One picture surface inside a Viewer panel. A Viewer holds one, two or four in a layout; each is bound to its own item, can be locked, and carries its own magnification, channel and exposure. Not the OCIO *view*, which always keeps its qualifier (colour view, display and view). |
-| **Timeline** | The panel showing a comp's layer stack against time, with expandable property lanes, keyframes, and cache bars. |
-| **Work area** | The comp-time span used for preview and default export range. |
-| **Playhead** | The current-time indicator. *CTI* is not a Lumit term. |
-| **Scopes** | Waveform, vectorscope, histogram panels (GPU-computed). |
-| **Easing panel** | The panel holding the shape editor: one normalised curve, drawn once and applied to the selected keyframe **spans**. |
-| **Composer** | The planned audio workspace for sound design against the edit. See [09-AUDIO.md](09-AUDIO.md). |
+| **Panel** | A dockable piece of UI |
+| **Workspace** | A saved panel layout |
+| **Graph panel** | Draws a layer's effects as nodes and wires. Not the evaluation graph |
+| **Viewer** | Shows a comp, footage or layer. Holds one, two or four **views** |
+| **Timeline** | A comp's layers against time |
+| **Work area** | The span used for preview and default export |
+| **Playhead** | The current time. Not *CTI* |
+| **Scopes** | Waveform, vectorscope, histogram |
+| **Easing panel** | One curve shape applied to selected keyframe spans |
 
 ## 8. Extensibility
 
-| Term | Definition |
+| Term | Meaning |
 |---|---|
-| **LFX** | Lumit's native plugin API: stable C ABI, sandboxed out-of-process execution. See [12-PLUGINS.md](12-PLUGINS.md). |
-| **OFX** | The OpenFX standard; Lumit is an OFX host, which is how Twixtor, RSMB, Sapphire et al. run. |
-| **CLAP** | The CLever Audio Plug-in standard (MIT, C ABI); Lumit's first audio plugin host. See [12-PLUGINS.md](12-PLUGINS.md) §4a. |
-| **VST3** | Steinberg's plugin standard, hosted under its GPLv3 licence branch. VST2 is not hosted. |
-| **Addon** | A large optional download installed from Settings, never shipped inside the application: the model runtime, and the model packs that run on it. An addon adds analysis, never generation, and Lumit works fully without every one of them. See [12-PLUGINS.md](12-PLUGINS.md) §6. |
-| **Model pack** | One addon holding one analysis model: its weights, the manifest naming the task it does and the tensors it speaks, its licence, and the hash it was verified against. A pack is installed and removed on its own; the runtime is the one addon every pack needs. |
-| **Preset** | A saved, shareable configuration of effects/properties/animations, importable per layer. |
+| **OFX** | OpenFX. Lumit hosts it |
+| **LFX** | Lumit's own planned plugin API |
+| **CLAP**, **VST3** | Audio plugin standards Lumit hosts. No VST2 |
+| **Addon** | An optional download from Settings: the model runtime and model packs. Analysis only, never generation |
+| **Model pack** | One addon holding one model |
+| **Preset** | Saved effects, properties or animation |
 
-## 9. Words we do not use
+## 9. Words we don't use
 
-| Banned term | Use instead | Why |
-|---|---|---|
-| **Track** / **line** | Layer, or Sequence layer | "Track" imports NLE semantics that don't match layer stacking; ambiguity here is exactly what this glossary exists to prevent. One scoped exception, below: the Audio timeline panel's own strings. |
-| **Velocity** | Speed (the quantity) | Reversed as the UI *label* for the Retime graph's derivative lens only; "speed" stays the word for the quantity everywhere else. |
-| **Time remap(ping)** | Retime (value graph) | AE legacy name for one view of Retime. Acceptable in AE-import docs when describing AE itself. |
-| **Bin** | Folder | Premiere-ism. |
-| **CTI** | Playhead | |
-| **Render** (meaning export) | Export | Render is the engine's act, not the user's. |
-| **Event** | Clip | Vegas-ism. |
-| **Pre-render** (user-facing) | Cache / bake | Reserved for internal cache warming. |
+| Don't say | Say |
+|---|---|
+| Track, line (a timeline row) | Layer, Sequence layer |
+| Velocity (the quantity) | Speed |
+| Time remap | Retime |
+| Bin | Folder |
+| CTI | Playhead |
+| Render (meaning export) | Export |
+| Event | Clip |
+| Pre-render (user-facing) | Cache, bake |
 
-The **clip** restriction is about the noun: a clip is an entry inside a Sequence
-layer, never a general word for a layer or a piece of footage. **To clip** as the
-keying and colour verb — the Matte key's Clip black / Clip white / Clip rollback,
-clipped highlights — is ordinary trade language and stays.
-
-The **track** restriction is about the same noun. **To track** — following
-something through a shot — is the trade's own verb and stays: *camera tracking*,
-*object tracking*, the **Camera track** effect and the *2D track* it exports, and
-a **track** in that sense is one followed feature, never a row of the timeline.
-
-The noun has **one scoped exception**: inside the **Audio timeline** panel
-([07-UI-SPEC.md](07-UI-SPEC.md) §4.8) a row is called a **track** in what the user
-reads, because a mixing desk has tracks and calling them layers there would be the
-drift this section exists to stop. The exception reaches that panel's own strings and
-the source files that draw it, where an identifier or a comment may say track because
-the row on screen is one. Every op, every bridge name, every file outside that panel
-and every document sentence still says layer, and what that panel calls a track is a
-Sequence layer with `audio_only` set. No other panel takes the word.
-**Switch** carries two senses and both stay: the **Switch** node in a node graph is the
-box that shows one of its pictures, and a layer's **switches** are the per-layer toggles
-they have always been.
+- **To track** something through a shot is the trade's verb and stays. A track is one
+  followed feature, never a timeline row.
+- **To clip** in keying and colour (clip black, clipped highlights) stays.
+- The Audio timeline panel calls its rows tracks, in its own strings and files only.
+  Everywhere else it's a Sequence layer with `audio_only` set.
+- The Retime graph labels its lenses Time and Velocity. Speed stays the word for the
+  quantity.
+- **Switch** means both the node and a layer's toggles.

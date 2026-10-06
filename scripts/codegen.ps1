@@ -19,8 +19,7 @@
 
     Never edit anything under flutter_ui/lib/src/rust/ by hand. It is generated,
     CI regenerates it and compares, and a hand edit is undone by the next run of
-    this script. See docs/17-BRIDGE-CONTRACT.md and
-    docs/learn/09-DOING-IT-YOURSELF.md.
+    this script. See docs/17-BRIDGE-CONTRACT.md.
 
 .PARAMETER SkipBuild
     Run the generator but not the rebuild. Only useful when you are about to

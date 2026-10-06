@@ -4,9 +4,7 @@ Lumit's interface. The Rust engine crates are untouched; it talks to the engine
 through `crates/lumit-bridge`.
 
 **How the frontend and engine communicate is specified in
-[`docs/17-BRIDGE-CONTRACT.md`](../docs/17-BRIDGE-CONTRACT.md).** The historical port
-notes (strategy, UI inventory, parity checklist) are archived under
-[`docs/archive/flutter-port/`](../docs/archive/flutter-port/README.md).
+[`docs/17-BRIDGE-CONTRACT.md`](../docs/17-BRIDGE-CONTRACT.md).**
 
 ## Running
 
@@ -25,5 +23,5 @@ flutter analyze           # the lint pass (must stay clean)
 - Glossary terms bind (docs/01-GLOSSARY.md): layer not track, speed not
   velocity, Retime not time remap, export not render.
 - British English, sentence case, no exclamation marks, no emoji.
-- Owned widgets over Material chrome - see docs/archive/flutter-port/04-WIDGET-MAP.md.
+- Owned widgets over Material chrome.
 - Every feature lands with its tests.
