@@ -595,8 +595,27 @@ impl EffectDef for OfxEffectDef {
         }
     }
 
+    /// Asked with the instance's own values, since a plugin's window can
+    /// follow its settings and the declared defaults would answer for a
+    /// different effect. A keyframed or expression row is the playhead's, so
+    /// the plugin is not told about it, as in a render.
+    // ponytail: this question carries the frame and no rate, so a moving row
+    // is read at the frame number as if it were seconds. The render sets it
+    // right before it draws. Hand the rate down if a plugin's window ever
+    // follows a keyframed row.
     fn frames_needed(&self, inst: &EffectInstance, frame: f64) -> Option<Vec<i32>> {
-        self.host.frames_needed(inst.id, frame, &self.defaults)
+        let mut params = self.snapshot_of(inst, frame);
+        for route in &self.routes {
+            let moving = inst
+                .params
+                .iter()
+                .find(|param| param.id == route.row)
+                .is_some_and(|param| moves(&param.value));
+            if moving {
+                params.quiet.insert(route.name.clone());
+            }
+        }
+        self.host.frames_needed(inst.id, frame, &params)
     }
 
     fn last_error(&self) -> Option<String> {
@@ -744,7 +763,7 @@ impl LocalHost {
         &self,
         instance: Uuid,
         request: &RenderRequest,
-        params: Option<&ParamSnapshot>,
+        params: &ParamSnapshot,
     ) -> Result<Rendered, String> {
         self.with_instance(instance, params, |plugin, live| {
             let token = lumit_eval::epoch::Epoch::new().token();
@@ -753,14 +772,12 @@ impl LocalHost {
     }
 
     /// The plugin and the live instance, made on first use and holding
-    /// `params`, handed to `call`.
-    /// `None` leaves the values as they are: a question about frames, not a
-    /// render, and handing the defaults over would tell the plugin every
-    /// value had changed and then changed back.
+    /// `params`, handed to `call`. A question about frames hands them over
+    /// as a render does, since the answer can depend on them.
     fn with_instance<T>(
         &self,
         instance: Uuid,
-        params: Option<&ParamSnapshot>,
+        params: &ParamSnapshot,
         call: impl FnOnce(&PluginRef, &Instance) -> Result<T, String>,
     ) -> Result<T, String> {
         let plugin = self
@@ -776,23 +793,15 @@ impl LocalHost {
         // the plugin, which is docs/14 §7's rule.
         let mut pool = self.instances.lock();
         if let std::collections::btree_map::Entry::Vacant(slot) = pool.entry(instance) {
-            let empty = ParamSnapshot::new();
-            let made = Instance::create(
-                plugin,
-                &self.descriptor,
-                self.context,
-                params.unwrap_or(&empty),
-            )
-            .map_err(|status| format!("the plugin refused an instance ({status:?})"))?;
+            let made = Instance::create(plugin, &self.descriptor, self.context, params)
+                .map_err(|status| format!("the plugin refused an instance ({status:?})"))?;
             slot.insert(made);
         }
         let live = pool
             .get(&instance)
             .ok_or_else(|| "the instance vanished".to_owned())?;
-        if let Some(params) = params {
-            live.set_params(params.clone())
-                .map_err(|status| format!("the values would not go in ({status:?})"))?;
-        }
+        live.set_params(params.clone())
+            .map_err(|status| format!("the values would not go in ({status:?})"))?;
         call(plugin, live)
     }
 }
@@ -808,7 +817,7 @@ impl PluginHost for LocalHost {
     ) -> Rendering {
         let mut request = RenderRequest::filter(time, source.clone());
         request.neighbours = neighbours.to_vec();
-        match self.attempt(instance, &request, Some(params)) {
+        match self.attempt(instance, &request, params) {
             Ok(rendered) => Rendering {
                 frame: rendered.frame,
                 error: None,
@@ -822,18 +831,13 @@ impl PluginHost for LocalHost {
         }
     }
 
-    fn frames_needed(
-        &self,
-        instance: Uuid,
-        time: f64,
-        _params: &ParamSnapshot,
-    ) -> Option<Vec<i32>> {
+    fn frames_needed(&self, instance: Uuid, time: f64, params: &ParamSnapshot) -> Option<Vec<i32>> {
         // A one-pixel frame: the question is which *times* the plugin wants, and
         // it is answered before any picture is looked at. The pixels that come
         // back are thrown away.
         let source = Frame16::black(1, 1).ok()?;
         let request = RenderRequest::filter(time, source);
-        let rendered = self.attempt(instance, &request, None).ok()?;
+        let rendered = self.attempt(instance, &request, params).ok()?;
         offsets_of(&rendered.frames_needed, time)
     }
 
@@ -845,7 +849,7 @@ impl PluginHost for LocalHost {
         name: &str,
         source: Frame16,
     ) -> Result<ParamSnapshot, String> {
-        self.with_instance(instance, Some(params), |plugin, live| {
+        self.with_instance(instance, params, |plugin, live| {
             live.press(plugin, name, time, &source)
                 .map_err(|status| format!("the plugin refused the press ({status:?})"))
         })
@@ -1011,6 +1015,9 @@ impl PluginHost for BrokerHost {
             return None;
         }
         let id = self.instance_of(&mut broker, instance, params)?;
+        // The answer can depend on the values, so they go across first, as
+        // they do for a render.
+        let _ = broker.set_params(id, params.clone());
         let source = Frame16::black(1, 1).ok()?;
         let request = RenderRequest::filter(time, source);
         let answer = broker.render(id, &request, &|_, _| None).ok()?;

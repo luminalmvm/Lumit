@@ -275,8 +275,11 @@ void main() {
           reason: 'the pill words are in the body face');
       expect(style.fontSize, 12);
       final word = tester.getRect(label);
-      expect(word.center.dy, closeTo(capsule.center.dy + 1.5, 0.6),
-          reason: 'the word sits a pixel and a half low to look centred');
+      expect(word.center.dy, closeTo(capsule.center.dy + 1, 0.1),
+          reason: 'the word sits a pixel low to look centred');
+      expect(word.top,
+          tester.getRect(find.text(WorkspacePreset.values[1].title)).top,
+          reason: 'and level with the words that are not fronted');
       expect(word.center.dx, closeTo(capsule.center.dx, 0.5),
           reason: 'and no rule padding pushes it off centre');
       expect(style.color, t.textPrimary,
@@ -319,10 +322,16 @@ void main() {
               .widget<Container>(find
                   .descendant(of: entry, matching: find.byType(Container))
                   .last)
-              .decoration as BoxDecoration?)
+              .foregroundDecoration as BoxDecoration?)
           ?.border as Border?;
       expect(rule?.bottom.color, t.accent);
       expect(rule?.bottom.width, 2);
+      expect(
+          tester.getRect(word).top,
+          tester
+              .getRect(find.text(WorkspacePreset.effects.title.toLowerCase()))
+              .top,
+          reason: 'the rule does not lift the fronted word above the others');
       expect(
           (tester
                   .widget<AnimatedContainer>(find

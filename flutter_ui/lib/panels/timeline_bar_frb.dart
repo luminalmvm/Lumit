@@ -10,6 +10,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
+import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:uuid/uuid.dart';
 import '../theme/theme.dart';
@@ -115,7 +116,8 @@ class SelectionMove {
 /// cannot be dragged earlier than the source's first frame, and its tail cannot
 /// be dragged past its last. Every generated kind — Solid, Text, Adjustment,
 /// Null, Camera, Sequence — has no such source, so both its ends are free and
-/// it is whatever length the user drags it to. Switching **Retime** on frees
+/// it is whatever length the user drags it to. A still image is free the same
+/// way: one frame, held for as long as the bar runs. Switching **Retime** on frees
 /// the ends too (docs/04-RETIMING.md): a retimed layer decides for itself which
 /// source moment each of its own frames shows, so its length stops being the
 /// source's business.
@@ -159,6 +161,14 @@ BarBounds barBounds({
             minIn: startOffsetFrame,
             maxOut: startOffsetFrame + sourceFrames,
           );
+
+/// A footage source's length in comp frames, for [barBounds].
+///
+/// A still answers null. Its one frame holds for as long as the bar runs, so
+/// there is nothing to run out of and both ends drag freely, the way a Solid's
+/// do.
+int? footageSourceFrames(BridgeMediaInfo info, int fpsNum, int fpsDen) =>
+    info.isStill ? null : frameOfTime(info.duration, fpsNum, fpsDen);
 
 /// How far a grab of [grab] may actually travel when the gesture has moved
 /// [delta] frames: inside the layer's source, and never far enough to turn the

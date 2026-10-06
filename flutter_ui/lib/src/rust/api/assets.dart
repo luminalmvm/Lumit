@@ -9,7 +9,15 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:uuid/uuid.dart';
 
 // These functions are ignored because they are not marked as `pub`: `animator_from`, `colour_of`, `linear_of`, `read_animator`, `shift_property`, `text_document_of`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+
+/// Lay out `text` at `size` the way the engine draws it, with or without the
+/// room animators get round it. It only measures the embedded font, so it
+/// takes no lock and can't fail.
+BridgeTextLine measureTextLine(
+        {required String text, required double size, required bool animated}) =>
+    BridgeLib.instance.api.crateApiAssetsMeasureTextLine(
+        text: text, size: size, animated: animated);
 
 /// A colour as the document stores it: scene-linear RGBA, which may exceed 1
 /// (an HDR tint) or dip below 0 (a lift), so it is not a byte triple.
@@ -241,4 +249,53 @@ class BridgeTextDocument {
           path == other.path &&
           pathOffset == other.pathOffset &&
           animators == other.animators;
+}
+
+/// Where a straight line of text sits inside its layer, in layer pixels.
+/// It's the engine's own layout, so the Type tool's caret, its selection and
+/// the Viewer's box agree with the picture.
+class BridgeTextLine {
+  /// The layer's size: the raster the engine draws the line into.
+  final double width;
+  final double height;
+
+  /// The baseline, measured down from the layer's top edge.
+  final double baseline;
+
+  /// How far a caret reaches above and below the baseline.
+  final double ascent;
+  final double descent;
+
+  /// The x of every gap between letters, one more than there are characters.
+  final Float64List carets;
+
+  const BridgeTextLine({
+    required this.width,
+    required this.height,
+    required this.baseline,
+    required this.ascent,
+    required this.descent,
+    required this.carets,
+  });
+
+  @override
+  int get hashCode =>
+      width.hashCode ^
+      height.hashCode ^
+      baseline.hashCode ^
+      ascent.hashCode ^
+      descent.hashCode ^
+      carets.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeTextLine &&
+          runtimeType == other.runtimeType &&
+          width == other.width &&
+          height == other.height &&
+          baseline == other.baseline &&
+          ascent == other.ascent &&
+          descent == other.descent &&
+          carets == other.carets;
 }

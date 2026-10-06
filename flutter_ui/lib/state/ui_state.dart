@@ -1604,8 +1604,9 @@ class LumitUiState extends ChangeNotifier {
   /// previewed on the picture while the document still holds the old document,
   /// so a box measured from the document does not grow as the words do. Empty
   /// whenever nothing is being typed.
-  final ValueNotifier<Map<UuidValue, ({String text, double size})>> liveText =
-      ValueNotifier(const {});
+  final ValueNotifier<
+          Map<UuidValue, ({String text, double size, bool animated})>>
+      liveText = ValueNotifier(const {});
 
   /// The transform a value scrub is part way through, by layer id.
   ///

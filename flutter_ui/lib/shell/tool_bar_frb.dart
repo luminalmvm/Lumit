@@ -1083,9 +1083,11 @@ class _StripEntry extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 10),
             onPressed: onPressed,
             // The word's optical centre sits above its box's, so it is
-            // nudged down by a pixel and a half to look centred.
+            // nudged down by a pixel to look centred. Two of padding is all
+            // the fronted capsule has room for, any more squeezes the line
+            // and drops that word below the others.
             child: Padding(
-              padding: const EdgeInsets.only(top: 3),
+              padding: const EdgeInsets.only(top: 2),
               child: Text(
                 label,
                 style: t.body.copyWith(
@@ -1099,11 +1101,13 @@ class _StripEntry extends StatelessWidget {
         ),
       ThemeShape.desk => HouseButton(
           frameless: true,
-          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 2),
+          padding: const EdgeInsets.fromLTRB(9, 2, 9, 0),
           onPressed: onPressed,
+          // The rule is painted over the foot of the padding, so it takes no
+          // room of its own and the fronted word stays level with the rest.
           child: Container(
-            padding: const EdgeInsets.only(bottom: 2),
-            decoration: active
+            padding: const EdgeInsets.only(bottom: 4),
+            foregroundDecoration: active
                 ? BoxDecoration(
                     border: Border(
                         bottom: BorderSide(color: t.accent, width: 2)))

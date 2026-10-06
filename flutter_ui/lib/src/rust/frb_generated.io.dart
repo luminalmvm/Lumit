@@ -906,6 +906,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeTextDocument dco_decode_bridge_text_document(dynamic raw);
 
   @protected
+  BridgeTextLine dco_decode_bridge_text_line(dynamic raw);
+
+  @protected
   BridgeTierBudget dco_decode_bridge_tier_budget(dynamic raw);
 
   @protected
@@ -2443,6 +2446,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   BridgeTextDocument sse_decode_bridge_text_document(
       SseDeserializer deserializer);
+
+  @protected
+  BridgeTextLine sse_decode_bridge_text_line(SseDeserializer deserializer);
 
   @protected
   BridgeTierBudget sse_decode_bridge_tier_budget(SseDeserializer deserializer);
@@ -4174,6 +4180,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_text_document(
       BridgeTextDocument self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_text_line(
+      BridgeTextLine self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_tier_budget(
