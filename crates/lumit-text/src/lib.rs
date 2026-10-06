@@ -16,11 +16,16 @@
 use std::sync::OnceLock;
 
 use lumit_core::mask::{BezierPath, MaskPolyline, Vertex};
-use lumit_core::model::LinearColour;
-use lumit_core::text::GlyphXform;
+use lumit_core::model::{LinearColour, TextDocument};
+use lumit_core::text::{GlyphXform, ParagraphStyle, TextStyle};
+
+mod fonts;
+mod styled;
+
+pub use fonts::{faces, families};
 
 /// Inter Regular, embedded at compile time — deterministic across machines.
-static INTER: &[u8] = include_bytes!("../../../assets/fonts/Inter-Regular.otf");
+pub(crate) static INTER: &[u8] = include_bytes!("../../../assets/fonts/Inter-Regular.otf");
 
 fn font() -> &'static fontdue::Font {
     static FONT: OnceLock<fontdue::Font> = OnceLock::new();
@@ -36,6 +41,150 @@ pub struct RasterText {
     pub width: u32,
     pub height: u32,
     pub rgba: Vec<u8>,
+}
+
+/// Everything about a Text layer's words that decides the picture.
+#[derive(Clone, Copy)]
+pub struct TextBlock<'a> {
+    pub text: &'a str,
+    pub size: f32,
+    pub fill: LinearColour,
+    pub style: &'a TextStyle,
+    pub paragraph: &'a ParagraphStyle,
+}
+
+impl<'a> TextBlock<'a> {
+    /// `text` is the resolved line, which an expression may have written.
+    #[must_use]
+    pub fn of(document: &'a TextDocument, text: &'a str) -> Self {
+        Self {
+            text,
+            #[allow(clippy::cast_possible_truncation)]
+            size: document.size as f32,
+            fill: document.fill,
+            style: &document.style,
+            paragraph: &document.paragraph,
+        }
+    }
+
+    /// One unstyled line, which draws the way every Text layer drew before
+    /// there was a style. Keeping that path is what keeps old projects, and
+    /// the frames they have cached, exactly as they were.
+    fn plain(&self) -> bool {
+        self.style.is_default() && self.paragraph.is_default() && !self.text.contains(['\n', '\r'])
+    }
+}
+
+/// Where a block's letters sit inside the layer the engine draws it into, in
+/// the layer's own pixels. The Type tool places its caret with it and the
+/// Viewer draws its box from it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BlockLayout {
+    /// The layer's size, the same as the raster [`rasterise`] makes.
+    pub width: u32,
+    pub height: u32,
+    /// How far a caret reaches above and below a baseline.
+    pub ascent: f32,
+    pub descent: f32,
+    /// The left and right edges of the words' own box, without the room an
+    /// outline or an animator is given round it.
+    pub left: f32,
+    pub right: f32,
+    /// One per line, top to bottom. There is always at least one.
+    pub lines: Vec<BlockLine>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct BlockLine {
+    /// The index of the line's first character in the whole text.
+    pub start: usize,
+    /// Where the baseline runs, measured down from the layer's top edge.
+    pub baseline: f32,
+    /// The x of every gap between the line's letters, one more than it has
+    /// characters. The break that ends a line isn't one of them.
+    pub carets: Vec<f32>,
+}
+
+/// The layout of a block, drawn with or without animators.
+#[must_use]
+pub fn layout(block: &TextBlock<'_>, animated: bool) -> BlockLayout {
+    if !block.plain() {
+        return styled::layout(block, animated);
+    }
+    let line = line_layout(block.text, block.size, animated);
+    BlockLayout {
+        width: line.width,
+        height: line.height,
+        ascent: line.ascent,
+        descent: line.descent,
+        left: line.carets.first().copied().unwrap_or(0.0),
+        right: line.carets.last().copied().unwrap_or(0.0),
+        lines: vec![BlockLine {
+            start: 0,
+            baseline: line.baseline,
+            carets: line.carets,
+        }],
+    }
+}
+
+/// Draw a block, with its animators applied when there are any.
+#[must_use]
+pub fn rasterise(block: &TextBlock<'_>, xforms: &[GlyphXform]) -> RasterText {
+    if block.plain() {
+        rasterise_line_animated(block.text, block.size, block.fill, xforms)
+    } else {
+        styled::rasterise(block, xforms)
+    }
+}
+
+/// Draw a block along `path` into a `width` × `height` buffer, the box
+/// [`path_box`] hands out.
+#[must_use]
+pub fn rasterise_along(
+    block: &TextBlock<'_>,
+    path: &MaskPolyline,
+    offset: f32,
+    width: u32,
+    height: u32,
+    xforms: &[GlyphXform],
+) -> RasterText {
+    if block.plain() {
+        rasterise_on_path_animated(
+            block.text, block.size, block.fill, path, offset, width, height, xforms,
+        )
+    } else {
+        styled::rasterise_on_path(block, path, offset, width, height, xforms)
+    }
+}
+
+/// The shape items a Type layer converts to, styled or not.
+#[must_use]
+pub fn shape_items(
+    block: &TextBlock<'_>,
+    path: Option<&MaskPolyline>,
+    offset: f32,
+) -> Vec<lumit_core::shape::ShapeItem> {
+    if block.plain() {
+        return shape_items_for(block.text, block.size, block.fill, path, offset);
+    }
+    let style = block.style;
+    let mut items = Vec::new();
+    for glyph in styled::outlines(block, path, offset) {
+        for (i, contour) in glyph.contours.into_iter().enumerate() {
+            let mut item =
+                lumit_core::shape::ShapeItem::filled(glyph.ch.to_string(), contour, block.fill);
+            if !style.fill_on {
+                item.fill = None;
+            }
+            if style.stroke_on && style.stroke_width > 0.0 {
+                item.stroke = Some(style.stroke);
+                item.stroke_width = style.stroke_width;
+            }
+            item.combine = u32::from(i > 0) * 4;
+            items.push(item);
+        }
+    }
+    items
 }
 
 /// The measuring walk for a straight line: each glyph's pen position, and how
@@ -769,22 +918,13 @@ pub fn glyph_outlines(
         let Some(id) = face.glyph_index(ch) else {
             continue;
         };
-        let mut outliner = Outliner {
-            scale,
-            frame,
-            contours: Vec::new(),
-            current: Vec::new(),
-            start: (0.0, 0.0),
-        };
+        let mut outliner = Outliner::new(|x: f32, y: f32| frame.point(x * scale, -y * scale));
         if face.outline_glyph(id, &mut outliner).is_none() {
             continue; // a space, or a glyph the font draws with nothing
         }
-        outliner.finish();
-        if !outliner.contours.is_empty() {
-            out.push(GlyphOutline {
-                ch,
-                contours: outliner.contours,
-            });
+        let contours = outliner.finish();
+        if !contours.is_empty() {
+            out.push(GlyphOutline { ch, contours });
         }
     }
     out
@@ -797,18 +937,28 @@ pub fn glyph_outlines(
 /// made of — becomes the cubic every path in this document is made of, by the
 /// exact equivalence (the two cubic handles sit two thirds of the way to the
 /// quadratic's single control point). Nothing is approximated.
-struct Outliner {
-    scale: f32,
-    frame: Frame,
+///
+/// `place` puts a font point, y up, where it lands in the layer.
+pub(crate) struct Outliner<P> {
+    place: P,
     contours: Vec<BezierPath>,
     current: Vec<Vertex>,
     start: (f64, f64),
 }
 
-impl Outliner {
+impl<P: Fn(f32, f32) -> (f64, f64)> Outliner<P> {
+    pub(crate) fn new(place: P) -> Self {
+        Self {
+            place,
+            contours: Vec::new(),
+            current: Vec::new(),
+            start: (0.0, 0.0),
+        }
+    }
+
     /// A font point, placed.
     fn at(&self, x: f32, y: f32) -> (f64, f64) {
-        self.frame.point(x * self.scale, -y * self.scale)
+        (self.place)(x, y)
     }
 
     /// A font-space offset, turned. `from` is the point it leaves.
@@ -853,12 +1003,35 @@ impl Outliner {
         }
     }
 
-    fn finish(&mut self) {
+    pub(crate) fn finish(mut self) -> Vec<BezierPath> {
         self.end_contour();
+        self.contours
     }
 }
 
-impl ttf_parser::OutlineBuilder for Outliner {
+impl<P: Fn(f32, f32) -> (f64, f64)> skrifa::outline::OutlinePen for Outliner<P> {
+    fn move_to(&mut self, x: f32, y: f32) {
+        ttf_parser::OutlineBuilder::move_to(self, x, y);
+    }
+
+    fn line_to(&mut self, x: f32, y: f32) {
+        ttf_parser::OutlineBuilder::line_to(self, x, y);
+    }
+
+    fn quad_to(&mut self, cx0: f32, cy0: f32, x: f32, y: f32) {
+        ttf_parser::OutlineBuilder::quad_to(self, cx0, cy0, x, y);
+    }
+
+    fn curve_to(&mut self, cx0: f32, cy0: f32, cx1: f32, cy1: f32, x: f32, y: f32) {
+        ttf_parser::OutlineBuilder::curve_to(self, cx0, cy0, cx1, cy1, x, y);
+    }
+
+    fn close(&mut self) {
+        ttf_parser::OutlineBuilder::close(self);
+    }
+}
+
+impl<P: Fn(f32, f32) -> (f64, f64)> ttf_parser::OutlineBuilder for Outliner<P> {
     fn move_to(&mut self, x: f32, y: f32) {
         self.end_contour();
         self.start = self.at(x, y);
@@ -959,6 +1132,37 @@ mod tests {
         let r = rasterise_line("", 48.0, [255, 0, 0]);
         assert_eq!((r.width, r.height), (1, 1));
         assert_eq!(r.rgba[3], 0);
+    }
+
+    /// One unstyled line goes down the old path and draws the old bytes. A
+    /// style, or a line break, is what sends a block to the shaper.
+    #[test]
+    fn an_unstyled_line_draws_the_bytes_it_always_drew() {
+        let (style, paragraph) = (TextStyle::default(), ParagraphStyle::default());
+        let block = |text| TextBlock {
+            text,
+            size: 48.0,
+            fill: white(),
+            style: &style,
+            paragraph: &paragraph,
+        };
+        let old = rasterise_line("Lumit", 48.0, [255, 255, 255]);
+        let new = rasterise(&block("Lumit"), &[]);
+        assert_eq!((new.width, new.height), (old.width, old.height));
+        assert_eq!(new.rgba, old.rgba);
+        let l = layout(&block("Lumit"), false);
+        assert_eq!(l.lines.len(), 1);
+        assert_eq!(l.lines[0].carets, line_layout("Lumit", 48.0, false).carets);
+
+        let broken = layout(
+            &block(
+                "Lu
+mit",
+            ),
+            false,
+        );
+        assert_eq!(broken.lines.len(), 2);
+        assert!(broken.height > l.height);
     }
 
     /// The layout's box is the raster's own size, with and without animators.

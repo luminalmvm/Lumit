@@ -2,7 +2,7 @@
 // gap between two letters it lands in, and what a double-click selects.
 //
 // How wide a line is, and where its letters sit, are the engine's answers now
-// (`measureTextLine`), so those are pinned against the real engine in
+// (`measureText`), so those are pinned against the real engine in
 // test/frb/viewer_type_frb_test.dart. What is left here needs no library.
 
 import 'dart:typed_data';
@@ -42,23 +42,54 @@ void main() {
   });
 
   group('Which gap a click lands in', () {
-    // Three letters of unequal width, as a real font sets them.
-    final line = BridgeTextLine(
+    // Three letters of unequal width, as a real font sets them, and a second
+    // line of two under them. The break between the lines is character 3.
+    final block = BridgeTextBlock(
       width: 100,
-      height: 50,
-      baseline: 40,
+      height: 110,
       ascent: 45,
       descent: 10,
-      carets: Float64List.fromList([0, 40, 50, 100]),
+      left: 0,
+      right: 100,
+      lines: [
+        BridgeTextBlockLine(
+          start: 0,
+          baseline: 40,
+          carets: Float64List.fromList([0, 40, 50, 100]),
+        ),
+        BridgeTextBlockLine(
+          start: 4,
+          baseline: 100,
+          carets: Float64List.fromList([0, 30, 60]),
+        ),
+      ],
     );
+    // Halfway up the first line's letters.
+    Offset first(double x) => Offset(x, 22);
 
     test('the nearest gap, not the nearest letter', () {
-      expect(caretNearest(line, -20), 0, reason: 'before the line');
-      expect(caretNearest(line, 19), 0);
-      expect(caretNearest(line, 21), 1);
-      expect(caretNearest(line, 46), 2, reason: 'the narrow letter');
-      expect(caretNearest(line, 76), 3);
-      expect(caretNearest(line, 400), 3, reason: 'past the end');
+      expect(caretNearest(block, first(-20)), 0, reason: 'before the line');
+      expect(caretNearest(block, first(19)), 0);
+      expect(caretNearest(block, first(21)), 1);
+      expect(caretNearest(block, first(46)), 2, reason: 'the narrow letter');
+      expect(caretNearest(block, first(76)), 3);
+      expect(caretNearest(block, first(400)), 3, reason: 'past the end');
+    });
+
+    test('a click on the second line counts on from the first', () {
+      expect(caretNearest(block, const Offset(-5, 85)), 4);
+      expect(caretNearest(block, const Offset(32, 85)), 5);
+      expect(caretNearest(block, const Offset(500, 300)), 6,
+          reason: 'below and past the last line');
+    });
+
+    test('a caret knows its line, and the break stays on the line it ends',
+        () {
+      expect(caretPlace(block, 1), (line: 0, x: 40.0));
+      expect(caretPlace(block, 3), (line: 0, x: 100.0));
+      expect(caretPlace(block, 4), (line: 1, x: 0.0));
+      expect(caretPlace(block, 6), (line: 1, x: 60.0));
+      expect(caretPlace(block, 99), (line: 1, x: 60.0));
     });
   });
 

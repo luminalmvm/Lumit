@@ -3692,6 +3692,11 @@ class LayerReference {
   /// arrived. Removing the last one puts it back. One `Op::Batch`, so it is
   /// one undo step: the same rule as typing, where committing the document
   /// and the pivot separately made `Ctrl+Z` undo a pivot nobody had moved.
+  ///
+  /// A change of size, style or paragraph moves the anchor the same way, so
+  /// the first baseline stays where it is on screen, at the side the lines
+  /// line up on. An outline then grows round the letters, and centred text
+  /// that is tracked out grows both ways.
   void setText({required BridgeTextDocument document}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceSetText(that: this, document: document);
 

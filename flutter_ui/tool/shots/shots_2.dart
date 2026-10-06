@@ -25,6 +25,7 @@ import 'package:flutter/material.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/panels/layer_fold_frb.dart';
 import 'package:lumit_flutter/src/rust/api/assets.dart';
+import 'package:lumit_flutter/state/text_documents.dart';
 import 'package:lumit_flutter/src/rust/api/cache.dart';
 import 'package:lumit_flutter/src/rust/api/beats.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
@@ -90,7 +91,7 @@ Future<void> main() async {
   comp.addFootageLayer(footage: logoItem, asSequence: false);
   final title = comp.addTextLayer();
   title.setText(
-    document: const BridgeTextDocument(animators: [], pathOffset: BridgeScalar.static_(0), 
+    document: const BridgeTextDocument(style: plainTextStyle, paragraph: plainParagraphStyle, animators: [], pathOffset: BridgeScalar.static_(0), 
       text: 'Northern lights',
       size: 140,
       fill: BridgeColourRgba(r: 1, g: 1, b: 1, a: 1),

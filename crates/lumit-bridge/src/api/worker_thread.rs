@@ -3977,7 +3977,7 @@ fn apply_text_preview(
     kind: &mut lumit_core::model::LayerKind,
     document: crate::api::assets::BridgeTextDocument,
     offset: lumit_core::time::Rational,
-) {
+) -> (f64, f64) {
     if let lumit_core::model::LayerKind::Text { document: existing } = kind {
         // Through the one conversion, so the typing preview carries the
         // expression and applies the same "an empty box is no expression"
@@ -3987,9 +3987,12 @@ fn apply_text_preview(
         // Keys the seam cannot read are a preview nobody can draw, so the
         // layer keeps the document it has rather than the frame failing.
         if let Ok(written) = crate::api::assets::text_document_of(document, offset) {
+            let shift = crate::api::assets::restyle_shift(existing, &written);
             *existing = written;
+            return shift;
         }
     }
+    (0.0, 0.0)
 }
 
 /// Render a frame under effect values the user is still dragging.
@@ -4083,8 +4086,13 @@ fn render_comp_with_preview(
         comp.layers[index].graph.nodes = drivers;
     }
     if let Some(document) = req.text {
-        let offset = comp.layers[index].start_offset.0;
-        apply_text_preview(&mut comp.layers[index].kind, document, offset);
+        let layer = &mut comp.layers[index];
+        let offset = layer.start_offset.0;
+        // A restyle moves the anchor when it is written, so the preview moves
+        // it too and the words don't jump as the drag ends.
+        let shift = apply_text_preview(&mut layer.kind, document, offset);
+        crate::api::assets::shift_property(&mut layer.transform.anchor_x, shift.0);
+        crate::api::assets::shift_property(&mut layer.transform.anchor_y, shift.1);
     }
     if let Some(paint) = req.paint {
         // Keys cross the seam on the comp clock, so the layer's own
@@ -6528,6 +6536,8 @@ mod tests {
             path: None,
             path_offset: crate::api::effect::BridgeScalar::Static(0.0),
             animators: Vec::new(),
+            style: crate::api::assets::default_text_style(),
+            paragraph: crate::api::assets::default_paragraph_style(),
         };
 
         let mut text = LayerKind::Text {
@@ -6539,6 +6549,8 @@ mod tests {
                 path: None,
                 path_offset: lumit_core::anim::Property::zero(),
                 animators: Vec::new(),
+                style: Default::default(),
+                paragraph: Default::default(),
                 extra: serde_json::Map::new(),
             },
         };

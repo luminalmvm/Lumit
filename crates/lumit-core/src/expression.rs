@@ -419,6 +419,8 @@ mod tests {
             path: None,
             path_offset: crate::anim::Property::zero(),
             animators: Vec::new(),
+            style: Default::default(),
+            paragraph: Default::default(),
             extra: serde_json::Map::new(),
         }
     }

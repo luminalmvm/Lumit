@@ -2099,8 +2099,24 @@ pub struct TextDocument {
     /// bytes it always drew.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub animators: Vec<crate::text::TextAnimator>,
+    /// The font, spacing, scale and outline of the letters. Absent from the
+    /// file until something is styled. Boxed, so a text layer stays about the
+    /// size of the other kinds.
+    #[serde(default, skip_serializing_if = "style_is_default")]
+    pub style: Box<crate::text::TextStyle>,
+    /// Alignment, indents and the room between lines. Absent the same way.
+    #[serde(
+        default,
+        skip_serializing_if = "crate::text::ParagraphStyle::is_default"
+    )]
+    pub paragraph: crate::text::ParagraphStyle,
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
+#[allow(clippy::borrowed_box)] // serde hands the field over as it is stored
+fn style_is_default(style: &Box<crate::text::TextStyle>) -> bool {
+    style.is_default()
 }
 
 impl TextDocument {
@@ -3926,6 +3942,8 @@ mod tests {
             path: None,
             path_offset: crate::anim::Property::zero(),
             animators: Vec::new(),
+            style: Default::default(),
+            paragraph: Default::default(),
             extra: serde_json::Map::new(),
         };
 
@@ -3965,6 +3983,8 @@ mod tests {
             path: None,
             path_offset: crate::anim::Property::zero(),
             animators: Vec::new(),
+            style: Default::default(),
+            paragraph: Default::default(),
             extra: serde_json::Map::new(),
         };
         let plain = serde_json::to_string(&document).unwrap();
@@ -4214,6 +4234,8 @@ mod tests {
                 path: None,
                 path_offset: crate::anim::Property::zero(),
                 animators: Vec::new(),
+                style: Default::default(),
+                paragraph: Default::default(),
                 extra: serde_json::Map::new(),
             },
         };

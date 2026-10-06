@@ -7,7 +7,8 @@
 // across the words to select some of them, double-click for a word, triple-click
 // for the line, Shift-click to stretch a selection. What you type appears in the
 // picture as you type it, and the edit ends when you press `Escape`, press
-// `Enter`, click somewhere else, or put the tool down. A new layer you never
+// `Enter`, click somewhere else, or put the tool down. `Shift+Enter` starts a
+// new line. A new layer you never
 // typed anything into is removed again — After Effects does the same, and a
 // project full of empty text layers left by stray clicks is nobody's idea of a
 // feature.
@@ -24,10 +25,11 @@
 // field, so arrows, selection, backspace, paste and IME all behave as they do
 // everywhere else — but its *drawing* is turned off, because the text the user
 // should see is the engine's own rendering of the layer. What is drawn here is
-// the caret and the selection, placed by the engine's own layout of the line
-// (`measuredTextLine`). It's the same walk the rasteriser lays the letters out
-// with, so the caret stands in the gap between two letters and the box hugs
-// the words.
+// the caret and the selection, placed by the engine's own layout of the block
+// (`measuredText`). It's the same layout the rasteriser sets the letters with,
+// so the caret stands in the gap between two letters and the box hugs the
+// words. Up, Down, Home and End are placed by that layout too, since the
+// hidden field has no idea where the lines are.
 //
 // **Why the field is always there.** It stays mounted for as long as the tool
 // is in hand, and only takes focus while an edit is open. A field built at the
@@ -49,7 +51,8 @@ import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/state/tools.dart';
 
 import '../l10n/strings.dart';
-import '../state/layer_bounds.dart' show measuredTextLine, textIsAnimated;
+import '../state/layer_bounds.dart' show measuredText;
+import '../state/text_documents.dart';
 import '../state/preview_throttle.dart';
 import '../widgets/controls.dart';
 import 'viewer_gizmo.dart';
@@ -58,19 +61,22 @@ import 'viewer_tool_cursor.dart';
 import '../widgets/escape_ladder.dart';
 import 'viewer_layer_map.dart';
 
-/// The anchor a text layer of this text wants: the middle of the box the engine
-/// draws it into, so it scales and turns about itself rather than about its
-/// first letter. An empty line has no middle, and keeps its anchor where the
+/// The anchor a text layer saying [document] wants: the middle of the box the
+/// engine draws it into, so it scales and turns about itself rather than about
+/// its first letter. Empty text has no middle, and keeps its anchor where the
 /// line starts.
-Offset textAnchor(String text, double size, {bool animated = false}) {
-  final line = measuredTextLine(text, size, animated: animated);
-  if (text.isEmpty) return Offset(0, line.baseline);
-  return Offset(line.width * 0.5, line.height * 0.5);
+Offset textAnchor(BridgeTextDocument document) {
+  final block = measuredText(document);
+  if (document.text.isEmpty) {
+    final line = block.lines.first;
+    return Offset(line.carets.first, line.baseline);
+  }
+  return Offset(block.width * 0.5, block.height * 0.5);
 }
 
-/// The character gap nearest [x] (layer pixels) on [line], which is the caret
-/// a click there puts down. Counted in characters, as the engine counts them.
-int caretNearest(BridgeTextLine line, double x) {
+/// The gap on [line] nearest [x] (layer pixels), counted from the line's own
+/// first character.
+int nearestGapOn(BridgeTextBlockLine line, double x) {
   final carets = line.carets;
   var best = 0;
   var bestDistance = double.infinity;
@@ -82,6 +88,39 @@ int caretNearest(BridgeTextLine line, double x) {
     }
   }
   return best;
+}
+
+/// The character gap nearest [at] (layer pixels) in [block], which is the
+/// caret a click there puts down: the line whose baseline is nearest, then the
+/// nearest gap on it. Counted in characters over the whole text, as the engine
+/// counts them.
+int caretNearest(BridgeTextBlock block, Offset at) {
+  var line = block.lines.first;
+  var bestDistance = double.infinity;
+  // A line's letters sit above its baseline, so the middle of that band is
+  // what a click is nearest to.
+  final middle = (block.ascent - block.descent) * 0.5;
+  for (final candidate in block.lines) {
+    final d = (candidate.baseline - middle - at.dy).abs();
+    if (d < bestDistance) {
+      line = candidate;
+      bestDistance = d;
+    }
+  }
+  return line.start + nearestGapOn(line, at.dx);
+}
+
+/// Where the caret in front of character [index] stands in [block]: which
+/// line, and how far along it. The break that ends a line belongs to the line
+/// it ends, so a caret there stands after its last letter.
+({int line, double x}) caretPlace(BridgeTextBlock block, int index) {
+  var at = 0;
+  for (var i = 1; i < block.lines.length; i++) {
+    if (block.lines[i].start <= index) at = i;
+  }
+  final line = block.lines[at];
+  final gap = (index - line.start).clamp(0, line.carets.length - 1);
+  return (line: at, x: line.carets[gap]);
 }
 
 /// [text]'s UTF-16 offset (what a [TextSelection] counts) as a character index
@@ -190,13 +229,8 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
   /// can take it away again.
   bool _created = false;
 
-  /// The point size and fill the edit is using, from the toolbar's options.
-  double _size = 72;
-  BridgeColourRgba _fill = const BridgeColourRgba(r: 1, g: 1, b: 1, a: 1);
-
-  /// Whether the layer's letters are animated, which draws the line a margin
-  /// in from the edges of a bigger box, so the caret has to know.
-  bool _animated = false;
+  /// The document the edit opened on, for the moment the layer can't be read.
+  BridgeTextDocument? _held;
 
   /// The words as the picture was last asked to show them.
   String _typed = '';
@@ -267,16 +301,75 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
   /// the application looked as though undo had stopped working. Ending the edit
   /// first is what makes the next `Ctrl+Z` undo the thing the user means — the
   /// line they just typed, and after that the layer itself.
+  ///
+  /// **Shift+Enter** starts a new line, and the keys that move by line are
+  /// answered here from the engine's layout.
   bool _onKey(KeyEvent event) {
-    if (!_editingNow || event is! KeyDownEvent) return false;
+    if (!_editingNow || event is KeyUpEvent) return false;
+    if (_moveByLine(event)) return true;
+    if (event is! KeyDownEvent) return false;
+    final keys = HardwareKeyboard.instance;
+    final enter = event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.numpadEnter;
+    if (enter && keys.isShiftPressed) {
+      final value = _controller.value;
+      final selection = value.selection.isValid
+          ? value.selection
+          : TextSelection.collapsed(offset: value.text.length);
+      _controller.value = TextEditingValue(
+        text: value.text.replaceRange(selection.start, selection.end, '\n'),
+        selection: TextSelection.collapsed(offset: selection.start + 1),
+      );
+      return true;
+    }
     final undo = event.logicalKey == LogicalKeyboardKey.keyZ &&
-        (HardwareKeyboard.instance.isControlPressed ||
-            HardwareKeyboard.instance.isMetaPressed);
+        (keys.isControlPressed || keys.isMetaPressed);
     if (!undo) return false;
     // Written, then handed on: the shell's own undo takes it from here, so
     // there is one undo path in the application rather than two.
     _finish();
     return false;
+  }
+
+  /// Up, Down, Home and End: the caret goes to the gap the engine's layout
+  /// says is there, and Shift stretches the selection to it. Up from the first
+  /// line goes to the start of the text and Down from the last to its end.
+  bool _moveByLine(KeyEvent event) {
+    final key = event.logicalKey;
+    final up = key == LogicalKeyboardKey.arrowUp;
+    final down = key == LogicalKeyboardKey.arrowDown;
+    final home = key == LogicalKeyboardKey.home;
+    final end = key == LogicalKeyboardKey.end;
+    if (!(up || down || home || end)) return false;
+    final keys = HardwareKeyboard.instance;
+    if (keys.isControlPressed || keys.isMetaPressed || keys.isAltPressed) {
+      return false;
+    }
+    final block = _block;
+    final selection = _controller.selection;
+    if (block == null || !selection.isValid) return false;
+    final text = _controller.text;
+    final here =
+        caretPlace(block, characterIndexOf(text, selection.extentOffset));
+    final line = block.lines[here.line];
+    final int target;
+    if (home) {
+      target = line.start;
+    } else if (end) {
+      target = line.start + line.carets.length - 1;
+    } else if (up && here.line == 0) {
+      target = 0;
+    } else if (down && here.line == block.lines.length - 1) {
+      target = characterIndexOf(text, text.length);
+    } else {
+      final next = block.lines[here.line + (down ? 1 : -1)];
+      target = next.start + nearestGapOn(next, here.x);
+    }
+    final offset = utf16OffsetOf(text, target);
+    _controller.selection = keys.isShiftPressed
+        ? selection.extendTo(TextPosition(offset: offset))
+        : TextSelection.collapsed(offset: offset);
+    return true;
   }
 
   @override
@@ -327,31 +420,47 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
     return null;
   }
 
-  /// The line being typed, laid out as the engine lays it out.
-  BridgeTextLine get _line =>
-      measuredTextLine(_controller.text, _size, animated: _animated);
+  /// The document being typed into, as the layer has it now. The Text panel
+  /// can restyle the layer while an edit is open, so it is read each time.
+  BridgeTextDocument? get _document {
+    final layer = _editing;
+    if (layer == null) return null;
+    try {
+      return layer.getText() ?? _held;
+    } catch (_) {
+      return _held;
+    }
+  }
 
-  /// The UTF-16 offset of the gap nearest [at] on screen, in the line being
+  /// The words being typed, laid out as the engine lays them out.
+  BridgeTextBlock? get _block {
+    final document = _document;
+    if (document == null) return null;
+    return measuredText(document, text: _controller.text);
+  }
+
+  /// The UTF-16 offset of the gap nearest [at] on screen, in the words being
   /// typed.
   int _offsetAt(LayerBox box, Offset at) {
-    final x = box.map.layerOf(at).dx;
-    return utf16OffsetOf(_controller.text, caretNearest(_line, x));
+    final block = _block;
+    if (block == null) return _controller.text.length;
+    return utf16OffsetOf(
+        _controller.text, caretNearest(block, box.map.layerOf(at)));
   }
 
   /// Whether a press at [at] is on the words being typed: inside the layer's
-  /// box, or the band a caret occupies, with a little room round either so a
+  /// box, or the band the carets occupy, with a little room round either so a
   /// click just past the last letter still lands on the line.
   bool _onEditingText(Offset at) {
     final box = _editingBox;
-    if (box == null) return false;
-    final line = _line;
+    final block = _block;
+    if (box == null || block == null) return false;
     final p = box.map.layerOf(at);
-    final pad = _size * 0.25;
-    final right = line.carets.isEmpty ? 0.0 : line.carets.last;
-    final top = line.baseline - line.ascent;
-    final bottom = line.baseline + line.descent;
-    final inBand = p.dx >= -pad &&
-        p.dx <= right + pad &&
+    final pad = (_document?.size ?? 72) * 0.25;
+    final top = block.lines.first.baseline - block.ascent;
+    final bottom = block.lines.last.baseline + block.descent;
+    final inBand = p.dx >= block.left - pad &&
+        p.dx <= block.right + pad &&
         p.dy >= top - pad &&
         p.dy <= bottom + pad;
     return inBand || box.contains(at);
@@ -366,15 +475,17 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
     final vertical = widget.tool == ToolMode.typeVertical;
     final t = ThemeScope.of(context).theme;
     final box = _editingNow ? _editingBox : null;
-    final line = _line;
+    final block = _block;
     final text = _controller.text;
     final selection = _controller.selection;
     final valid = selection.isValid;
     final start = characterIndexOf(text, valid ? selection.start : text.length);
     final end = characterIndexOf(text, valid ? selection.end : text.length);
-    final caretAt = box?.map.toScreen(
-        line.carets[end.clamp(0, line.carets.length - 1)],
-        line.baseline - line.ascent);
+    final place = block == null ? null : caretPlace(block, end);
+    final caretAt = place == null
+        ? null
+        : box?.map.toScreen(place.x,
+            block!.lines[place.line].baseline - block.ascent);
     // Clicks on the picture are this tool's (they place the caret, or make a
     // layer), so they are inside the field's tap region and don't take its
     // focus away. A click anywhere else in the application is outside it, and
@@ -436,9 +547,15 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
                       child: EditableText(
                         controller: _controller,
                         focusNode: _focus,
-                        style: TextStyle(fontSize: _size * viewScale),
+                        style: TextStyle(
+                            fontSize: (_document?.size ?? 72) * viewScale),
                         cursorColor: widget.accent,
                         backgroundCursorColor: widget.accent,
+                        // Several lines, so a pasted break is kept. Enter
+                        // still ends the edit, and Shift+Enter is what breaks
+                        // a line ([_onKey]).
+                        maxLines: null,
+                        textInputAction: TextInputAction.done,
                         // A desktop field selects all its text when it takes
                         // focus, which would throw away the caret a click
                         // just placed.
@@ -455,7 +572,7 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
                       child: CustomPaint(
                         painter: _SelectionPainter(
                           map: box?.map,
-                          line: line,
+                          block: block,
                           start: start,
                           end: end,
                           accent: widget.accent,
@@ -635,6 +752,10 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
           // straight, and has no letters to animate separately.
           pathOffset: const BridgeScalar.static_(0),
           animators: const [],
+          // What the Text and Paragraph panels were last set to with no text
+          // layer selected.
+          style: options.textStyle,
+          paragraph: options.paragraphStyle,
         ),
         x: cx,
         y: cy,
@@ -664,22 +785,17 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
       }
     }();
     if (document == null) return;
-    _size = document.size;
-    _animated = textIsAnimated(document);
     final text = document.text;
     final caret = box != null && at != null
         ? utf16OffsetOf(
             text,
-            caretNearest(
-              measuredTextLine(text, _size, animated: _animated),
-              box.map.layerOf(at).dx,
-            ),
+            caretNearest(measuredText(document), box.map.layerOf(at)),
           )
         : text.length;
     setState(() {
       _editing = layer;
       _created = created;
-      _fill = document.fill;
+      _held = document;
       _typed = text;
       _controller.value = TextEditingValue(
         text: text,
@@ -693,12 +809,10 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
   /// Tell the Viewer's boxes what is being typed, and stop telling it when the
   /// edit ends — the document is the only truth from then on.
   void _publishLive(LayerReference layer) {
+    final document = _document;
+    if (document == null) return;
     widget.uiState.liveText.value = {
-      layer.internallayerId: (
-        text: _controller.text,
-        size: _size,
-        animated: _animated,
-      ),
+      layer.internallayerId: document.copyWith(text: _controller.text),
     };
   }
 
@@ -725,11 +839,13 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
     _publishLive(layer);
     _throttle.request(() {
       try {
+        final document = _typedDocument(_controller.text);
+        if (document == null) return;
         widget.comp.renderFrameWithTextPreview(
           frame: BigInt.from(widget.uiState.playheadFrame.value),
           scale: widget.uiState.viewerScale,
           layer: layer,
-          document: _document(layer, _controller.text),
+          document: document,
         );
       } catch (_) {
         // A preview is a courtesy; the typing carries on without it.
@@ -743,10 +859,13 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
     final layer = _editing;
     if (layer == null) return;
     final text = _controller.text;
+    // Read before the edit is closed, since it is the open edit's document.
+    final document = _typedDocument(text);
     _throttle.cancel();
     _clearLive();
     setState(() {
       _editing = null;
+      _held = null;
       _typed = '';
       _controller.clear();
     });
@@ -766,7 +885,7 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
         }
         return;
       }
-      _write(layer, text);
+      if (document != null) _write(layer, document);
       widget.onChanged();
     } catch (_) {
       // The layer was deleted while it was being typed into.
@@ -780,13 +899,12 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
   /// committing them separately made the first `Ctrl+Z` undo a pivot the user
   /// had never moved, leaving the words exactly where they were and the undo
   /// looking broken.
-  void _write(LayerReference layer, String text) {
-    final document = _document(layer, text);
+  void _write(LayerReference layer, BridgeTextDocument document) {
     if (!_created) {
       layer.setText(document: document);
       return;
     }
-    final placed = _recentredAnchor(layer, text);
+    final placed = _recentredAnchor(layer, document);
     layer.setTextPlaced(
       document: document,
       anchorX: placed.anchor.dx,
@@ -796,29 +914,19 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
     );
   }
 
-  /// The document to write for `layer` saying `text`, carrying its **path**
-  /// along: typing into a line that runs round a curve must not
-  /// straighten it, and the document is written whole.
-  BridgeTextDocument _document(LayerReference layer, String text) {
-    final current = layer.getText();
-    return BridgeTextDocument(
-      text: text,
-      size: _size,
-      fill: _fill,
-      path: current?.path,
-      pathOffset: current?.pathOffset ?? const BridgeScalar.static_(0),
-      // Carried along for the same reason the path is: typing into a line
-      // whose letters are animated must not throw the animators away.
-      animators: current?.animators ?? const [],
-    );
-  }
+  /// The open edit's document saying [text]. Everything else is carried
+  /// along, since the document is written whole: typing into a line that runs
+  /// round a curve must not straighten it, or throw away its animators or its
+  /// style. An expression is the one thing typing replaces, as it always has.
+  BridgeTextDocument? _typedDocument(String text) =>
+      _document?.copyWith(text: text, expression: '');
 
   /// Where a new layer's anchor and position want to be once the line is known:
   /// the pivot in the middle of the text, **without the line moving** — the
   /// pivot slides and Position compensates, the same pan-behind sum the Anchor
   /// point tool commits.
   ({Offset anchor, Offset position}) _recentredAnchor(
-      LayerReference layer, String text) {
+      LayerReference layer, BridgeTextDocument document) {
     final transform = layer.getTransform();
     final old = Offset(
       staticValueOf(transform.anchorX) ?? 0,
@@ -828,7 +936,7 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
       staticValueOf(transform.positionX) ?? 0,
       staticValueOf(transform.positionY) ?? 0,
     );
-    final wanted = textAnchor(text, _size, animated: _animated);
+    final wanted = textAnchor(document);
     return (
       anchor: wanted,
       position: panBehindPosition(
@@ -857,7 +965,7 @@ class _SelectionPainter extends CustomPainter {
   /// The layer's map, or null when there is nothing to draw: no edit open, or
   /// a layer the Viewer has not boxed yet.
   final ViewerLayerMap? map;
-  final BridgeTextLine line;
+  final BridgeTextBlock? block;
 
   /// The selection, in characters: equal for a caret.
   final int start;
@@ -866,7 +974,7 @@ class _SelectionPainter extends CustomPainter {
 
   const _SelectionPainter({
     required this.map,
-    required this.line,
+    required this.block,
     required this.start,
     required this.end,
     required this.accent,
@@ -875,40 +983,47 @@ class _SelectionPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size canvasSize) {
     final map = this.map;
-    final carets = line.carets;
-    if (map == null || carets.isEmpty) return;
-    double xOf(int i) => carets[i.clamp(0, carets.length - 1)];
-    final top = line.baseline - line.ascent;
-    final bottom = line.baseline + line.descent;
+    final block = this.block;
+    if (map == null || block == null) return;
     if (start == end) {
-      final x = xOf(end);
+      final place = caretPlace(block, end);
+      final baseline = block.lines[place.line].baseline;
       canvas.drawLine(
-        map.toScreen(x, top),
-        map.toScreen(x, bottom),
+        map.toScreen(place.x, baseline - block.ascent),
+        map.toScreen(place.x, baseline + block.descent),
         Paint()
           ..color = accent
           ..strokeWidth = 1.5,
       );
       return;
     }
-    final x0 = xOf(start);
-    final x1 = xOf(end);
-    canvas.drawPath(
-      Path()
-        ..addPolygon([
-          map.toScreen(x0, top),
-          map.toScreen(x1, top),
-          map.toScreen(x1, bottom),
-          map.toScreen(x0, bottom),
-        ], true),
-      Paint()..color = accent.withValues(alpha: 0.35),
-    );
+    // One band per line the selection reaches.
+    final paint = Paint()..color = accent.withValues(alpha: 0.35);
+    for (final line in block.lines) {
+      final last = line.start + line.carets.length - 1;
+      if (end < line.start || start > last) continue;
+      final x0 = line.carets[(start - line.start).clamp(0, last - line.start)];
+      final x1 = line.carets[(end - line.start).clamp(0, last - line.start)];
+      if (x0 == x1) continue;
+      final top = line.baseline - block.ascent;
+      final bottom = line.baseline + block.descent;
+      canvas.drawPath(
+        Path()
+          ..addPolygon([
+            map.toScreen(x0, top),
+            map.toScreen(x1, top),
+            map.toScreen(x1, bottom),
+            map.toScreen(x0, bottom),
+          ], true),
+        paint,
+      );
+    }
   }
 
   @override
   bool shouldRepaint(_SelectionPainter old) =>
       old.map != map ||
-      old.line != line ||
+      old.block != block ||
       old.start != start ||
       old.end != end ||
       old.accent != accent;

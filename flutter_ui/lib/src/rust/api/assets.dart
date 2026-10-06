@@ -8,16 +8,49 @@ import 'effect.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:uuid/uuid.dart';
 
-// These functions are ignored because they are not marked as `pub`: `animator_from`, `colour_of`, `linear_of`, `read_animator`, `shift_property`, `text_document_of`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `animator_from`, `colour_of`, `linear_of`, `paragraph_of`, `read_animator`, `read_paragraph`, `read_style`, `reference_point`, `restyle_shift`, `shift_property`, `style_of`, `text_document_of`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
-/// Lay out `text` at `size` the way the engine draws it, with or without the
-/// room animators get round it. It only measures the embedded font, so it
-/// takes no lock and can't fail.
-BridgeTextLine measureTextLine(
-        {required String text, required double size, required bool animated}) =>
-    BridgeLib.instance.api.crateApiAssetsMeasureTextLine(
-        text: text, size: size, animated: animated);
+/// The style a text layer has before anything is styled.
+BridgeTextStyle defaultTextStyle() =>
+    BridgeLib.instance.api.crateApiAssetsDefaultTextStyle();
+
+/// The paragraph a text layer has before anything is set.
+BridgeParagraphStyle defaultParagraphStyle() =>
+    BridgeLib.instance.api.crateApiAssetsDefaultParagraphStyle();
+
+/// The font families installed on this machine, sorted for a menu. Not sync,
+/// since the first call asks the system for its fonts.
+Future<List<String>> textFontFamilies() =>
+    BridgeLib.instance.api.crateApiAssetsTextFontFamilies();
+
+/// The faces of one family, such as Regular, Bold and Bold Italic. Empty when
+/// the family isn't installed here.
+Future<List<String>> textFontFaces({required String family}) =>
+    BridgeLib.instance.api.crateApiAssetsTextFontFaces(family: family);
+
+/// Lay out `text` the way the engine draws it in this style, with or without
+/// the room animators get round it. The first call with a font loads it.
+BridgeTextBlock measureText(
+        {required String text,
+        required double size,
+        required BridgeTextStyle style,
+        required BridgeParagraphStyle paragraph,
+        required bool animated}) =>
+    BridgeLib.instance.api.crateApiAssetsMeasureText(
+        text: text,
+        size: size,
+        style: style,
+        paragraph: paragraph,
+        animated: animated);
+
+/// Capitals: as typed, all capitals, or small capitals for the lower case.
+enum BridgeCaps {
+  normal,
+  all,
+  small,
+  ;
+}
 
 /// A colour as the document stores it: scene-linear RGBA, which may exceed 1
 /// (an HDR tint) or dip below 0 (a lift), so it is not a byte triple.
@@ -46,6 +79,53 @@ class BridgeColourRgba {
           g == other.g &&
           b == other.b &&
           a == other.a;
+}
+
+/// Whether pairs of letters are pulled together by the font's own kerning.
+enum BridgeKerning {
+  off,
+  metrics,
+  ;
+}
+
+/// How the lines of a text layer are laid out against each other. All px.
+class BridgeParagraphStyle {
+  final BridgeTextAlign align;
+  final double indentLeft;
+  final double indentRight;
+  final double indentFirst;
+  final double spaceBefore;
+  final double spaceAfter;
+
+  const BridgeParagraphStyle({
+    required this.align,
+    required this.indentLeft,
+    required this.indentRight,
+    required this.indentFirst,
+    required this.spaceBefore,
+    required this.spaceAfter,
+  });
+
+  @override
+  int get hashCode =>
+      align.hashCode ^
+      indentLeft.hashCode ^
+      indentRight.hashCode ^
+      indentFirst.hashCode ^
+      spaceBefore.hashCode ^
+      spaceAfter.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeParagraphStyle &&
+          runtimeType == other.runtimeType &&
+          align == other.align &&
+          indentLeft == other.indentLeft &&
+          indentRight == other.indentRight &&
+          indentFirst == other.indentFirst &&
+          spaceBefore == other.spaceBefore &&
+          spaceAfter == other.spaceAfter;
 }
 
 /// Which stretch of the words an animator reaches, in per cent of the run.
@@ -82,6 +162,14 @@ class BridgeRangeSelector {
           offset == other.offset &&
           basis == other.basis &&
           shape == other.shape;
+}
+
+/// Where the letters sit against the baseline.
+enum BridgeScript {
+  normal,
+  superscript,
+  subscript,
+  ;
 }
 
 /// What a range selector counts.
@@ -125,6 +213,14 @@ class BridgeSolidDef {
           colour == other.colour &&
           width == other.width &&
           height == other.height;
+}
+
+/// Which side the lines of a block line up on.
+enum BridgeTextAlign {
+  left,
+  centre,
+  right,
+  ;
 }
 
 /// One animator group: what a reached letter is asked to do, and the range
@@ -192,6 +288,90 @@ class BridgeTextAnimator {
           fillB == other.fillB;
 }
 
+/// Where a block of text sits inside its layer, in layer pixels. Styled or
+/// not, one line or several, it's the engine's own layout.
+class BridgeTextBlock {
+  /// The layer's size: the raster the engine draws the block into.
+  final double width;
+  final double height;
+
+  /// How far a caret reaches above and below a baseline.
+  final double ascent;
+  final double descent;
+
+  /// The left and right edges of the words' own box.
+  final double left;
+  final double right;
+
+  /// One per line, top to bottom. There is always at least one.
+  final List<BridgeTextBlockLine> lines;
+
+  const BridgeTextBlock({
+    required this.width,
+    required this.height,
+    required this.ascent,
+    required this.descent,
+    required this.left,
+    required this.right,
+    required this.lines,
+  });
+
+  @override
+  int get hashCode =>
+      width.hashCode ^
+      height.hashCode ^
+      ascent.hashCode ^
+      descent.hashCode ^
+      left.hashCode ^
+      right.hashCode ^
+      lines.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeTextBlock &&
+          runtimeType == other.runtimeType &&
+          width == other.width &&
+          height == other.height &&
+          ascent == other.ascent &&
+          descent == other.descent &&
+          left == other.left &&
+          right == other.right &&
+          lines == other.lines;
+}
+
+/// One line of a laid out block.
+class BridgeTextBlockLine {
+  /// The index of the line's first character in the whole text, counted in
+  /// characters.
+  final int start;
+
+  /// The baseline, measured down from the layer's top edge.
+  final double baseline;
+
+  /// The x of every gap between the line's letters, one more than it has
+  /// characters. The break that ends a line isn't one of them.
+  final Float64List carets;
+
+  const BridgeTextBlockLine({
+    required this.start,
+    required this.baseline,
+    required this.carets,
+  });
+
+  @override
+  int get hashCode => start.hashCode ^ baseline.hashCode ^ carets.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeTextBlockLine &&
+          runtimeType == other.runtimeType &&
+          start == other.start &&
+          baseline == other.baseline &&
+          carets == other.carets;
+}
+
 /// A text layer's document (v1: one styled run — docs/03 §9.1).
 class BridgeTextDocument {
   final String text;
@@ -217,6 +397,12 @@ class BridgeTextDocument {
   /// ordinary text layer.
   final List<BridgeTextAnimator> animators;
 
+  /// The font, spacing, scale and outline of the letters.
+  final BridgeTextStyle style;
+
+  /// Alignment, indents and the room between lines.
+  final BridgeParagraphStyle paragraph;
+
   const BridgeTextDocument({
     required this.text,
     this.expression,
@@ -225,6 +411,8 @@ class BridgeTextDocument {
     this.path,
     required this.pathOffset,
     required this.animators,
+    required this.style,
+    required this.paragraph,
   });
 
   @override
@@ -235,7 +423,9 @@ class BridgeTextDocument {
       fill.hashCode ^
       path.hashCode ^
       pathOffset.hashCode ^
-      animators.hashCode;
+      animators.hashCode ^
+      style.hashCode ^
+      paragraph.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -248,54 +438,115 @@ class BridgeTextDocument {
           fill == other.fill &&
           path == other.path &&
           pathOffset == other.pathOffset &&
-          animators == other.animators;
+          animators == other.animators &&
+          style == other.style &&
+          paragraph == other.paragraph;
 }
 
-/// Where a straight line of text sits inside its layer, in layer pixels.
-/// It's the engine's own layout, so the Type tool's caret, its selection and
-/// the Viewer's box agree with the picture.
-class BridgeTextLine {
-  /// The layer's size: the raster the engine draws the line into.
-  final double width;
-  final double height;
+/// How a text layer's letters are set. One style for the whole layer.
+class BridgeTextStyle {
+  /// The font family as the system lists it. Empty is the built-in Inter.
+  final String family;
 
-  /// The baseline, measured down from the layer's top edge.
-  final double baseline;
+  /// The face inside the family, such as "Bold Italic". Empty is the
+  /// family's regular face.
+  final String face;
 
-  /// How far a caret reaches above and below the baseline.
-  final double ascent;
-  final double descent;
+  /// Baseline to baseline in px. Unset is auto, 120 % of the size.
+  final double? leading;
+  final BridgeKerning kerning;
 
-  /// The x of every gap between letters, one more than there are characters.
-  final Float64List carets;
+  /// Extra space after every letter, in thousandths of an em.
+  final double tracking;
 
-  const BridgeTextLine({
-    required this.width,
-    required this.height,
-    required this.baseline,
-    required this.ascent,
-    required this.descent,
-    required this.carets,
+  /// Per cent.
+  final double scaleX;
+
+  /// Per cent.
+  final double scaleY;
+
+  /// Px the letters are lifted off the baseline, positive is up.
+  final double baselineShift;
+  final BridgeCaps caps;
+  final BridgeScript script;
+  final bool fauxBold;
+  final bool fauxItalic;
+  final bool ligatures;
+
+  /// Off draws the outline alone.
+  final bool fillOn;
+  final bool strokeOn;
+  final BridgeColourRgba stroke;
+
+  /// Px, centred on the letter's edge.
+  final double strokeWidth;
+
+  /// The outline is drawn over the fill. Off puts the fill on top.
+  final bool strokeOver;
+
+  const BridgeTextStyle({
+    required this.family,
+    required this.face,
+    this.leading,
+    required this.kerning,
+    required this.tracking,
+    required this.scaleX,
+    required this.scaleY,
+    required this.baselineShift,
+    required this.caps,
+    required this.script,
+    required this.fauxBold,
+    required this.fauxItalic,
+    required this.ligatures,
+    required this.fillOn,
+    required this.strokeOn,
+    required this.stroke,
+    required this.strokeWidth,
+    required this.strokeOver,
   });
 
   @override
   int get hashCode =>
-      width.hashCode ^
-      height.hashCode ^
-      baseline.hashCode ^
-      ascent.hashCode ^
-      descent.hashCode ^
-      carets.hashCode;
+      family.hashCode ^
+      face.hashCode ^
+      leading.hashCode ^
+      kerning.hashCode ^
+      tracking.hashCode ^
+      scaleX.hashCode ^
+      scaleY.hashCode ^
+      baselineShift.hashCode ^
+      caps.hashCode ^
+      script.hashCode ^
+      fauxBold.hashCode ^
+      fauxItalic.hashCode ^
+      ligatures.hashCode ^
+      fillOn.hashCode ^
+      strokeOn.hashCode ^
+      stroke.hashCode ^
+      strokeWidth.hashCode ^
+      strokeOver.hashCode;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is BridgeTextLine &&
+      other is BridgeTextStyle &&
           runtimeType == other.runtimeType &&
-          width == other.width &&
-          height == other.height &&
-          baseline == other.baseline &&
-          ascent == other.ascent &&
-          descent == other.descent &&
-          carets == other.carets;
+          family == other.family &&
+          face == other.face &&
+          leading == other.leading &&
+          kerning == other.kerning &&
+          tracking == other.tracking &&
+          scaleX == other.scaleX &&
+          scaleY == other.scaleY &&
+          baselineShift == other.baselineShift &&
+          caps == other.caps &&
+          script == other.script &&
+          fauxBold == other.fauxBold &&
+          fauxItalic == other.fauxItalic &&
+          ligatures == other.ligatures &&
+          fillOn == other.fillOn &&
+          strokeOn == other.strokeOn &&
+          stroke == other.stroke &&
+          strokeWidth == other.strokeWidth &&
+          strokeOver == other.strokeOver;
 }

@@ -1777,6 +1777,18 @@ fn feed_source(
             for c in document.fill.0 {
                 h.update(&c.to_le_bytes());
             }
+            // The style and the paragraph, once there is one. An unstyled
+            // layer feeds nothing here and keeps the key it has always had.
+            if !document.style.is_default() {
+                h.update(b"style/");
+                h.update(&document.style.key_bytes());
+                h.update(&[0]);
+            }
+            if !document.paragraph.is_default() {
+                h.update(b"paragraph/");
+                h.update(&document.paragraph.key_bytes());
+                h.update(&[0]);
+            }
             // Text on a path. The mask this names is already fed to
             // the key by the layer's own mask walk, so what is left is which
             // mask it is and how far the line has been slid along it — both of
@@ -2278,6 +2290,8 @@ mod tests {
                     path: None,
                     path_offset: lumit_core::anim::Property::zero(),
                     animators: Vec::new(),
+                    style: Default::default(),
+                    paragraph: Default::default(),
                     extra: serde_json::Map::new(),
                 },
             },
@@ -4071,6 +4085,30 @@ mod tests {
         // An offset nobody has touched is inert on a straight layer: it cannot
         // retire frames of a line that never reads it.
         assert_eq!(straight, key(&doc, &comp_with_path(None, 25.0), 1.0));
+    }
+
+    /// A style or a paragraph changes the picture, so it changes the key. An
+    /// unstyled layer feeds neither and keeps the key it had before there was
+    /// a style to feed.
+    #[test]
+    fn a_text_layer_keys_by_its_style_and_its_paragraph() {
+        let doc = Document::new();
+        let styled = |edit: &dyn Fn(&mut lumit_core::model::TextDocument)| {
+            let mut l = text_layer("Lumit", 0.0, 10.0, 0.0);
+            if let LayerKind::Text { document } = &mut l.kind {
+                edit(document);
+            }
+            key(&doc, &comp_with(vec![l]), 1.0)
+        };
+        let plain = styled(&|_| {});
+        let tracked = styled(&|d| d.style.tracking = 50.0);
+        let bold = styled(&|d| d.style.face = "Bold".into());
+        let centred = styled(&|d| d.paragraph.align = lumit_core::text::TextAlign::Centre);
+        assert_ne!(plain, tracked, "tracking left the name alone");
+        assert_ne!(tracked, bold);
+        assert_ne!(plain, centred, "alignment left the name alone");
+        // Setting a field to the value it already had is no style at all.
+        assert_eq!(plain, styled(&|d| d.style.scale_x = 100.0));
     }
 
     /// The stored `text` is dead while an expression drives the layer: editing

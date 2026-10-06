@@ -26,6 +26,7 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/panels/hierarchy_panel_frb.dart';
 import 'package:lumit_flutter/panels/project_panel_frb.dart';
 import 'package:lumit_flutter/src/rust/api/assets.dart';
+import 'package:lumit_flutter/state/text_documents.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/lib.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
@@ -62,7 +63,7 @@ Future<void> main() async {
   final role = lower.addTextLayer();
   role.rename(name: 'Role');
   role.setText(
-    document: const BridgeTextDocument(animators: [], pathOffset: BridgeScalar.static_(0), 
+    document: const BridgeTextDocument(style: plainTextStyle, paragraph: plainParagraphStyle, animators: [], pathOffset: BridgeScalar.static_(0), 
       text: 'Director of photography',
       size: 48,
       fill: BridgeColourRgba(r: 0.8, g: 0.82, b: 0.86, a: 1),
@@ -71,7 +72,7 @@ Future<void> main() async {
   final person = lower.addTextLayer();
   person.rename(name: 'Name');
   person.setText(
-    document: const BridgeTextDocument(animators: [], pathOffset: BridgeScalar.static_(0), 
+    document: const BridgeTextDocument(style: plainTextStyle, paragraph: plainParagraphStyle, animators: [], pathOffset: BridgeScalar.static_(0), 
       text: 'Ada Whitcombe',
       size: 84,
       fill: BridgeColourRgba(r: 1, g: 1, b: 1, a: 1),
@@ -93,7 +94,7 @@ Future<void> main() async {
   comp.addPrecompLayer(comp: lower);
   final title = comp.addTextLayer();
   title.setText(
-    document: const BridgeTextDocument(animators: [], pathOffset: BridgeScalar.static_(0), 
+    document: const BridgeTextDocument(style: plainTextStyle, paragraph: plainParagraphStyle, animators: [], pathOffset: BridgeScalar.static_(0), 
       text: 'Northern lights',
       size: 140,
       fill: BridgeColourRgba(r: 1, g: 1, b: 1, a: 1),

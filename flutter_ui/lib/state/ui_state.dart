@@ -23,6 +23,8 @@ import 'package:lumit_flutter/panels/layer_fold_frb.dart' show RevealFilter;
 import 'package:lumit_flutter/l10n/strings.dart';
 import 'package:lumit_flutter/panels/viewer_texture_controller.dart';
 import 'package:lumit_flutter/shell/about_window_frb.dart';
+import 'package:lumit_flutter/src/rust/api/assets.dart'
+    show BridgeTextDocument;
 import 'package:lumit_flutter/src/rust/api/audio.dart'
     show audioSetMuted, setAudioDevice;
 import 'package:lumit_flutter/src/rust/api/cache.dart';
@@ -1598,15 +1600,15 @@ class LumitUiState extends ChangeNotifier {
   final ValueNotifier<Map<UuidValue, double>> liveRotations =
       ValueNotifier(const {});
 
-  /// The line a Type edit is part way through, by layer id.
+  /// The text document an edit is part way through, by layer id: a line being
+  /// typed, or a style being dragged in the Text panel.
   ///
-  /// Published for the same reason as [liveRotations]: what is being typed is
-  /// previewed on the picture while the document still holds the old document,
-  /// so a box measured from the document does not grow as the words do. Empty
-  /// whenever nothing is being typed.
-  final ValueNotifier<
-          Map<UuidValue, ({String text, double size, bool animated})>>
-      liveText = ValueNotifier(const {});
+  /// Published for the same reason as [liveRotations]: the edit is previewed
+  /// on the picture while the layer still holds the old document, so a box
+  /// measured from the layer does not grow as the words do. Empty whenever
+  /// nothing is being edited.
+  final ValueNotifier<Map<UuidValue, BridgeTextDocument>> liveText =
+      ValueNotifier(const {});
 
   /// The transform a value scrub is part way through, by layer id.
   ///

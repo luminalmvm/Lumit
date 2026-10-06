@@ -38,38 +38,54 @@ import 'package:uuid/uuid.dart';
 /// the same square.
 const Size nullLayerBounds = Size(100, 100);
 
-/// Where a straight line of text sits inside its layer. This is the engine's
-/// own layout, asked of the bridge and remembered.
+/// Where [document]'s lines sit inside its layer. This is the engine's own
+/// layout, asked of the bridge and remembered.
 ///
 /// The box round the words, the caret between two letters and the letter a
-/// click lands on are all read off the walk the rasteriser lays the line out
-/// with (`lumit_text::line_layout`), so none of them can drift from the
-/// picture. Typing asks once per keystroke and painting asks every frame, so
-/// the answers are held, and dropped wholesale once there are enough of them.
-BridgeTextLine measuredTextLine(String text, double size,
-    {bool animated = false}) {
-  final key = (text, size, animated);
-  final held = _lines[key];
+/// click lands on are all read off the layout the rasteriser sets the block
+/// with (`lumit_text::layout`), so none of them can drift from the picture.
+/// Typing asks once per keystroke and painting asks every frame, so the
+/// answers are held, and dropped wholesale once there are enough of them.
+///
+/// [text] is measured in place of the document's own words when given, which
+/// is how a line still being typed is measured.
+BridgeTextBlock measuredText(BridgeTextDocument document, {String? text}) {
+  final key = (
+    text ?? document.text,
+    document.size,
+    document.style,
+    document.paragraph,
+    textIsAnimated(document),
+  );
+  final held = _blocks[key];
   if (held != null) return held;
-  if (_lines.length >= _maxHeldLines) _lines.clear();
-  return _lines[key] =
-      measureTextLine(text: text, size: size, animated: animated);
+  if (_blocks.length >= _maxHeldBlocks) _blocks.clear();
+  return _blocks[key] = measureText(
+    text: key.$1,
+    size: key.$2,
+    style: key.$3,
+    paragraph: key.$4,
+    animated: key.$5,
+  );
 }
 
-final Map<(String, double, bool), BridgeTextLine> _lines = {};
-const int _maxHeldLines = 512;
+final Map<(String, double, BridgeTextStyle, BridgeParagraphStyle, bool),
+    BridgeTextBlock> _blocks = {};
+const int _maxHeldBlocks = 512;
 
 /// A text layer's box, in layer pixels: exactly the raster the engine draws
-/// the line into, so the wireframe hugs the words.
+/// the block into, so the wireframe hugs the words.
 ///
-/// An empty line still gets a box, half a size wide and as tall as a line of
+/// Empty text still gets a box, half a size wide and as tall as a line of
 /// capitals, since the engine draws it as one transparent pixel. A layer
 /// waiting to be typed into is then visible and says what size it will be
 /// set at.
-Size textLayerBounds(String text, double size, {bool animated = false}) {
-  final line = measuredTextLine(text, size, animated: animated);
-  if (text.isEmpty) return Size(size * 0.5, line.baseline);
-  return Size(line.width, line.height);
+Size textLayerBounds(BridgeTextDocument document) {
+  final block = measuredText(document);
+  if (document.text.isEmpty) {
+    return Size(document.size * 0.5, block.lines.first.baseline);
+  }
+  return Size(block.width, block.height);
 }
 
 /// Whether the engine draws [document] into the bigger box animators get:
@@ -313,8 +329,7 @@ class LayerBoundsCache extends ChangeNotifier {
       try {
         final document = entry.layer.getText();
         if (document != null) {
-          return textLayerBounds(document.text, document.size,
-              animated: textIsAnimated(document));
+          return textLayerBounds(document);
         }
       } catch (_) {
         // The layer went away between the model being read and this call.

@@ -38,6 +38,7 @@ import 'package:lumit_flutter/shell/export_queue_frb.dart';
 import 'package:lumit_flutter/shell/recovery_dialog_frb.dart';
 import 'package:lumit_flutter/shell/settings_window_frb.dart';
 import 'package:lumit_flutter/src/rust/api/assets.dart';
+import 'package:lumit_flutter/state/text_documents.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/lib.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
@@ -78,7 +79,7 @@ Future<void> main() async {
 
   final title = comp.addTextLayer();
   title.setText(
-    document: const BridgeTextDocument(animators: [], pathOffset: BridgeScalar.static_(0), 
+    document: const BridgeTextDocument(style: plainTextStyle, paragraph: plainParagraphStyle, animators: [], pathOffset: BridgeScalar.static_(0), 
       text: 'Northern lights',
       size: 140,
       fill: BridgeColourRgba(r: 1, g: 1, b: 1, a: 1),
