@@ -965,8 +965,8 @@ impl Realiser<'_> {
                 region,
             );
             // An adjustment layer processes the composite below, which has no
-            // footage neighbour frames — temporal effects on an adjustment
-            // layer are a later refinement, so no neighbours here. Its LUT and
+            // footage neighbour frames. A temporal effect's neighbours are
+            // the below-stack built again (`measure_below_flow`). Its LUT and
             // depth-of-field effects still apply (§3.11, §3.22): load/render
             // them the same way the per-layer path does, so preview stays
             // identical to export. The adjustment stack runs on the
@@ -1242,9 +1242,11 @@ impl Realiser<'_> {
     ) -> (Vec<(i32, wgpu::Texture)>, Vec<(i32, wgpu::Texture)>) {
         let mut neighbours = Vec::with_capacity(l.flow_below.len());
         let mut fields = Vec::with_capacity(l.flow_below.len());
-        for (offset, draws, camera) in &l.flow_below {
+        for (offset, draws, camera, measure) in &l.flow_below {
             let then = self.realise(*camera, width, height, background, draws);
-            if let Some(field) = self.measure_flow(now, &then) {
+            // Only an offset a flow consumer asked for is measured. An Echo
+            // or a plugin reads the neighbour picture and nothing more.
+            if let Some(field) = measure.then(|| self.measure_flow(now, &then)).flatten() {
                 fields.push((*offset, field));
             }
             neighbours.push((*offset, then));
