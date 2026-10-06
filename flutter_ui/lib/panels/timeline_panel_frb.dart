@@ -490,7 +490,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       source.field0.mediaInfo().then((info) {
         if (!mounted || info == null) return;
         setState(() {
-          _footageFrames[id] = frameOfTime(info.duration, fpsNum, fpsDen);
+          _footageFrames[id] = footageSourceFrames(info, fpsNum, fpsDen);
           // The answer changes the bounds, and the document has not moved:
           // forget the revision so the next build works them out again.
           _boundsRevision = null;

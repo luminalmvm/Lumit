@@ -2128,7 +2128,8 @@ impl CompositionReference {
     }
 
     /// The span end and natural pixel size a placed clip should take: the media's
-    /// own when it probes, the comp's when it does not.
+    /// own when it probes, the comp's when it does not. A still takes the
+    /// comp's length either way.
     #[frb(ignore)]
     fn footage_span_and_size(
         state: &LumitBridgeState,
@@ -2149,12 +2150,17 @@ impl CompositionReference {
             let Some(info) = crate::probe::ensure_probed(&src) else {
                 return fallback;
             };
-            let frames = (info.duration_seconds * comp.frame_rate.fps()).round() as i64;
-            let out = comp
-                .frame_rate
-                .time_of_frame(frames.max(1))
-                .map(|t| t.0)
-                .unwrap_or(comp.duration.0);
+            // A still has no length of its own, so it lasts as long as the comp
+            // does and is dragged shorter from there.
+            let out = if info.has_picture() && !info.runs_as_video() {
+                comp.duration.0
+            } else {
+                let frames = (info.duration_seconds * comp.frame_rate.fps()).round() as i64;
+                comp.frame_rate
+                    .time_of_frame(frames.max(1))
+                    .map(|t| t.0)
+                    .unwrap_or(comp.duration.0)
+            };
             // Audio-only media has no video stream at all, so it takes the comp's
             // size — there is no natural size to anchor on.
             let (nat_w, nat_h) = match &info.video {
