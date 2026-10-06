@@ -62,6 +62,11 @@ class LumitAppNew extends StatelessWidget {
       locale: uiState.locale,
       localizationsDelegates: Strings.localizationsDelegates,
       supportedLocales: Strings.supportedLocales,
+      actions: {
+        ...WidgetsApp.defaultActions,
+        NextFocusIntent: _TabOnwards(),
+        PreviousFocusIntent: _TabBack(),
+      },
       home: ChangeNotifierProvider.value(
         value: state,
         child: ChangeNotifierProvider.value(
@@ -101,6 +106,24 @@ class LumitAppNew extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Whether Tab has somewhere to move on from: a control holding the focus, or
+/// a window that is up. With neither it would pick the first control in the
+/// application, the File menu, and a focused control keeps every shortcut.
+bool get _tabMovesFocus {
+  final focus = FocusManager.instance.primaryFocus;
+  return lumitModalOpen || (focus != null && focus is! FocusScopeNode);
+}
+
+class _TabOnwards extends NextFocusAction {
+  @override
+  bool isEnabled(NextFocusIntent intent) => _tabMovesFocus;
+}
+
+class _TabBack extends PreviousFocusAction {
+  @override
+  bool isEnabled(PreviousFocusIntent intent) => _tabMovesFocus;
 }
 
 /// The boot splash, the welcome screen, and the shell behind them once both are
