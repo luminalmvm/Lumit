@@ -1282,8 +1282,8 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     final side = isOut ? key.interpOut : key.interpIn;
     final other = isOut ? key.interpIn : key.interpOut;
     // Joined when both sides have a tangent and it moves at the same speed;
-    // `Alt` held as the drag begins flips it — break them apart, or join them
-    // back. A side with no span on the other flank has nothing to join to.
+    // the keymap's modifier (`Alt` as shipped) held as the drag begins flips
+    // it — break them apart, or join them back. A side with no span on the other flank has nothing to join to.
     // A pair of automatic sides is joined by construction: the neighbours give
     // both of them the same aim.
     bool eased(BridgeSideInterp s) =>
@@ -1294,7 +1294,9 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
                     sideSpeedAtKey(keys, index, isOut: !isOut))
                 .abs() <
             1e-9;
-    final alt = altActuallyHeld();
+    final alt = Provider.of<LumitUiState>(context, listen: false)
+        .keymap
+        .breakHandlesHeld;
     final hasOther = _neighbour(keys, index, !isOut) != null;
     final speed = sideSpeedAtKey(keys, index, isOut: isOut);
 

@@ -2390,6 +2390,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             ),
         ]),
       ..._wheelSection(t, km),
+      ..._dragSection(t, km),
     ];
   }
 
@@ -2424,6 +2425,29 @@ class _SettingsWindowState extends State<_SettingsWindow> {
     ].whereType<Widget>().toList();
     if (rows.isEmpty) return const [];
     return [settingsSection(t, l10n.keymapWheel, rows)];
+  }
+
+  /// Which modifier changes what a drag does, under the scroll wheel's.
+  List<Widget> _dragSection(LumitTheme t, KeymapState km) {
+    final row = _row(
+      t,
+      l10n.keymapDragBreakHandles,
+      _dropdown<BridgeHandleModifier>(
+        key: 'keymap-drag-break-handles',
+        value: km.breakHandles,
+        options: BridgeHandleModifier.values,
+        label: (m) => switch (m) {
+          BridgeHandleModifier.alt => l10n.keymapWheelAlt,
+          BridgeHandleModifier.ctrl => l10n.keymapWheelCtrl,
+        },
+        onChanged: (m) async {
+          await km.setBreakHandles(m);
+          if (mounted) setState(() {});
+        },
+      ),
+    );
+    if (row == null) return const [];
+    return [settingsSection(t, l10n.keymapDrag, [row])];
   }
 
   /// What the last import or export said, shown under the buttons.

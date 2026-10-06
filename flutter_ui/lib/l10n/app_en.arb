@@ -4482,6 +4482,14 @@
       }
     }
   },
+  "keymapDrag": "Dragging",
+  "@keymapDrag": {
+    "description": "Heading at the bottom of the Shortcuts page, over the rows that choose which modifier key changes what a drag does."
+  },
+  "keymapDragBreakHandles": "Break or join graph handles",
+  "@keymapDragBreakHandles": {
+    "description": "Dragging row: the modifier that, held as a handle drag begins in the Graph editor, lets one handle of a keyframe move without the other, or joins two that were apart."
+  },
   "keymapExported": "Keymap exported.",
   "@keymapExported": {
     "description": "Shown after a keymap file has been written."
