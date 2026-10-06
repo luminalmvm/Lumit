@@ -1883,8 +1883,8 @@ class _TimelineRulerState extends State<TimelineRuler> {
                       // the pointer carries on.
                       onHorizontalDragUpdate: (d) {
                         if (!_escape.running) return;
-                        final at = axis.frameAtExact(
-                            d.globalPosition.dx - _originX(context));
+                        final at = axis
+                            .frameAtExact(_rulerX(context, d.globalPosition));
                         setState(() {
                           // Snapped to the shared targets, this edge excepted
                           // — an edge that snaps to itself never moves.
@@ -2038,9 +2038,9 @@ class _TimelineRulerState extends State<TimelineRuler> {
                     },
                     onHorizontalDragUpdate: (d) {
                       if (!_escape.running) return;
-                      _dragMarkerTo(axis.frameAtExact(d.globalPosition.dx -
-                          _originX(context) -
-                          _dragMarkerGrab));
+                      _dragMarkerTo(axis.frameAtExact(
+                          _rulerX(context, d.globalPosition) -
+                              _dragMarkerGrab));
                     },
                     onHorizontalDragEnd: (_) {
                       if (_escape.end()) {
@@ -2739,11 +2739,12 @@ class _PlayheadHeadPainter extends CustomPainter {
       old.shape != shape;
 }
 
-/// The ruler's left edge in global coordinates — a drag reports globally, and
-/// the axis speaks in the ruler's own pixels.
-double _originX(BuildContext context) {
+/// Where a drag's global position falls in the ruler's own pixels, which is
+/// what the axis speaks in. Taken through the render box, since the interface
+/// scale makes a global distance longer than the same distance in the ruler.
+double _rulerX(BuildContext context, Offset global) {
   final box = context.findRenderObject();
-  return box is RenderBox ? box.localToGlobal(Offset.zero).dx : 0;
+  return box is RenderBox ? box.globalToLocal(global).dx : global.dx;
 }
 
 /// The label step for a ruler: the smallest nice second count whose labels
