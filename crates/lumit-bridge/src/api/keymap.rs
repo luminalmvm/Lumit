@@ -25,7 +25,9 @@
 //! export a user mails to a friend — one format, two reasons to write it.
 
 use flutter_rust_bridge::frb;
-use lumit_keymap::{ActionId, Chord, KeyContext, Keymap, WheelAction, WheelModifier};
+use lumit_keymap::{
+    ActionId, Chord, HandleModifier, KeyContext, Keymap, WheelAction, WheelModifier,
+};
 use std::sync::{Mutex, OnceLock};
 
 use crate::api::BridgeError;
@@ -408,6 +410,36 @@ pub fn keymap_set_wheel(
     };
     with_keymap(|km| km.wheel.set(wheel_action(action), modifier));
     keymap_wheel()
+}
+
+/// A modifier held as a handle drag begins in the Graph editor. Mirrors
+/// `lumit_keymap::HandleModifier`.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BridgeHandleModifier {
+    Alt,
+    Ctrl,
+}
+
+/// The modifier that breaks or joins a keyframe's handles as a drag begins.
+#[frb(sync)]
+#[must_use]
+pub fn keymap_break_handles() -> BridgeHandleModifier {
+    with_keymap(|km| match km.break_handles {
+        HandleModifier::Alt => BridgeHandleModifier::Alt,
+        HandleModifier::Ctrl => BridgeHandleModifier::Ctrl,
+    })
+}
+
+/// Choose the modifier that breaks or joins handles and hand back what is set.
+pub fn keymap_set_break_handles(modifier: BridgeHandleModifier) -> BridgeHandleModifier {
+    with_keymap(|km| {
+        km.break_handles = match modifier {
+            BridgeHandleModifier::Alt => HandleModifier::Alt,
+            BridgeHandleModifier::Ctrl => HandleModifier::Ctrl,
+        };
+    });
+    keymap_break_handles()
 }
 
 /// The whole keymap as JSON — what the frontend stores between sessions and

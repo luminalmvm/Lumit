@@ -582,6 +582,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeGroupSwitch dco_decode_bridge_group_switch(dynamic raw);
 
   @protected
+  BridgeHandleModifier dco_decode_bridge_handle_modifier(dynamic raw);
+
+  @protected
   BridgeHistory dco_decode_bridge_history(dynamic raw);
 
   @protected
@@ -2084,6 +2087,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeGroupSwitch sse_decode_bridge_group_switch(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeHandleModifier sse_decode_bridge_handle_modifier(
       SseDeserializer deserializer);
 
   @protected
@@ -3776,6 +3783,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_group_switch(
       BridgeGroupSwitch self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_handle_modifier(
+      BridgeHandleModifier self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_history(BridgeHistory self, SseSerializer serializer);

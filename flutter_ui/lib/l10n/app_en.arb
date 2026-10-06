@@ -3928,6 +3928,10 @@
   "@graphAutoFit": {
     "description": "Graph editor button: keep the curves framed in the view."
   },
+  "graphBreakHandles": "Break handles",
+  "@graphBreakHandles": {
+    "description": "Graph editor button: while it is on, dragging one handle of a keyframe leaves the handle on its other side where it is."
+  },
   "graphEditorEmpty": "Select a property to see its curve — click its name in the outline; Ctrl/Shift-click adds more",
   "@graphEditorEmpty": {
     "description": "Empty state in the graph editor. Ctrl and Shift are key names and stay as they are."
@@ -4497,6 +4501,14 @@
         "type": "int"
       }
     }
+  },
+  "keymapDrag": "Dragging",
+  "@keymapDrag": {
+    "description": "Heading at the bottom of the Shortcuts page, over the rows that choose which modifier key changes what a drag does."
+  },
+  "keymapDragBreakHandles": "Break or join graph handles",
+  "@keymapDragBreakHandles": {
+    "description": "Dragging row: the modifier that, held as a handle drag begins in the Graph editor, lets one handle of a keyframe move without the other, or joins two that were apart."
   },
   "keymapExported": "Keymap exported.",
   "@keymapExported": {
@@ -6792,6 +6804,14 @@
   "tipBlendMode": "Blend mode",
   "@tipBlendMode": {
     "description": "Tooltip on the blend cell. One or two words."
+  },
+  "tipBreakHandlesOff": "Handles joined",
+  "@tipBreakHandlesOff": {
+    "description": "Tooltip on the graph editor's Break handles button, when it is off. One or two words."
+  },
+  "tipBreakHandlesOn": "Handles broken",
+  "@tipBreakHandlesOn": {
+    "description": "Tooltip on the graph editor's Break handles button, when it is on. One or two words."
   },
   "tipBrushSize": "Brush size",
   "@tipBrushSize": {
