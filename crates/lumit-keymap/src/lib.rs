@@ -17,6 +17,9 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
 
+mod after_effects;
+pub use after_effects::{import_after_effects_shortcuts, AfterEffectsImport, NotAfterEffects};
+
 /// Something a chord can be bound to, identified by a stable string (e.g.
 /// `"playback.toggle"`). A string — not a giant enum — so new commands never
 /// force a breaking change and a keymap file stays readable.
@@ -1010,11 +1013,12 @@ pub fn with_new_defaults(stored: Keymap) -> Keymap {
 #[must_use]
 pub fn after_effects_preset() -> Keymap {
     let mut km = default_keymap();
-    // AE has no J/K/L shuttle; the letters go back to their AE meanings.
-    for k in ["J", "K", "L"] {
-        if let Ok(chord) = k.parse::<Chord>() {
-            km.unbind(KeyContext::Global, &chord);
-        }
+    // AE has no J/K/L shuttle; the letters go back to their AE meanings. Unbound
+    // by action, so the stored file remembers it and a restart doesn't put the
+    // shuttle back.
+    for direction in ["reverse", "pause", "forward"] {
+        let action = ActionId(format!("playback.shuttle.{direction}"));
+        km.unbind_action(KeyContext::Global, &action);
     }
     // `bind`, not `rebind_action`, for the keyframe pair: `,` / `.` stay as a
     // second way in, exactly as the default keeps `*` beside `Shift+M`.
@@ -1444,6 +1448,20 @@ mod tests {
                 "{chord_text} should still run {action}"
             );
         }
+    }
+
+    /// The preset takes the shuttle off J/K/L, and a restart must not hand it
+    /// back on top of the keyframe keys.
+    #[test]
+    fn the_after_effects_preset_survives_the_stored_file() {
+        let restored = with_new_defaults(after_effects_preset());
+        assert!(restored.conflicts().is_empty());
+        assert_eq!(
+            restored.lookup(KeyContext::Viewer, &chord("L")),
+            None,
+            "the shuttle stays off"
+        );
+        assert_eq!(restored, after_effects_preset());
     }
 
     /// Layer ▸ New rows carry a chord each, so the menu shows one beside

@@ -358,6 +358,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeAddonKind dco_decode_bridge_addon_kind(dynamic raw);
 
   @protected
+  BridgeAfterEffectsKeymap dco_decode_bridge_after_effects_keymap(dynamic raw);
+
+  @protected
   BridgeAnimatedMaskPath dco_decode_bridge_animated_mask_path(dynamic raw);
 
   @protected
@@ -1829,6 +1832,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeAddonKind sse_decode_bridge_addon_kind(SseDeserializer deserializer);
+
+  @protected
+  BridgeAfterEffectsKeymap sse_decode_bridge_after_effects_keymap(
+      SseDeserializer deserializer);
 
   @protected
   BridgeAnimatedMaskPath sse_decode_bridge_animated_mask_path(
@@ -3488,6 +3495,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_addon_kind(
       BridgeAddonKind self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_after_effects_keymap(
+      BridgeAfterEffectsKeymap self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_animated_mask_path(

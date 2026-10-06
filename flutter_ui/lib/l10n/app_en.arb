@@ -1472,6 +1472,10 @@
   "@fileTypeFootage": {
     "description": "A file type in the system's Import dialogue: video, images and sound."
   },
+  "fileTypeAfterEffectsShortcuts": "After Effects shortcuts",
+  "@fileTypeAfterEffectsShortcuts": {
+    "description": "A file type in the system's file dialogues: the shortcut file Adobe After Effects saves. After Effects is a product name."
+  },
   "fileTypeKeymap": "Lumit keymap",
   "@fileTypeKeymap": {
     "description": "A file type in the system's file dialogues: an exported set of shortcuts."
@@ -4484,6 +4488,15 @@
   "@keymapAfterEffects": {
     "description": "Button that loads shortcuts matching Adobe After Effects. A product name — leave it as it is."
   },
+  "keymapAfterEffectsImported": "{count, plural, =1{One shortcut taken from After Effects.} other{{count} shortcuts taken from After Effects.}}",
+  "@keymapAfterEffectsImported": {
+    "description": "Shown after an After Effects shortcut file has been read. {count} is how many commands took their keys from it. After Effects is a product name.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "keymapClashGlobalCount": "{count, plural, =1{One shortcut runs two things} other{{count} shortcuts run two things}}",
   "@keymapClashGlobalCount": {
     "description": "Warning in the keymap table: the same chord is bound to two commands everywhere. {count} is how many chords clash.",
@@ -4525,6 +4538,14 @@
   "keymapImported": "Keymap imported.",
   "@keymapImported": {
     "description": "Shown after a keymap file has been loaded."
+  },
+  "keymapKeyboard": "Keyboard",
+  "@keymapKeyboard": {
+    "description": "Settings window, Shortcuts: the heading over the picture of a keyboard that shows which keys have a shortcut."
+  },
+  "keymapKeyboardPanel": "In one panel",
+  "@keymapKeyboardPanel": {
+    "description": "Settings window, Shortcuts: the legend under the keyboard picture for a key whose shortcut only works while one panel is in use. Its partner reads Anywhere."
   },
   "keymapLumitDefault": "Lumit default",
   "@keymapLumitDefault": {
@@ -10002,6 +10023,10 @@
   "settingsAudioNoDevice": "This machine has no audio output.",
   "@settingsAudioNoDevice": {
     "description": "Settings window, Audio: the line under the output device row when the machine offers no sound output at all, so nothing can be played."
+  },
+  "settingsKeymapAfterEffects": "After Effects shortcuts",
+  "@settingsKeymapAfterEffects": {
+    "description": "Settings window, Shortcuts: the name of the row whose button reads the shortcuts out of a file saved by Adobe After Effects. After Effects is a product name."
   },
   "settingsKeymapFile": "Keymap file",
   "@settingsKeymapFile": {
