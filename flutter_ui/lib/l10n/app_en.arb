@@ -6781,13 +6781,13 @@
   "@tipBlendMode": {
     "description": "Tooltip on the blend cell. One or two words."
   },
-  "tipBreakHandlesOff": "Handles move together",
+  "tipBreakHandlesOff": "Handles joined",
   "@tipBreakHandlesOff": {
-    "description": "Tooltip on the graph editor's Break handles button, when it is off. Keep it short."
+    "description": "Tooltip on the graph editor's Break handles button, when it is off. One or two words."
   },
-  "tipBreakHandlesOn": "Handles move apart",
+  "tipBreakHandlesOn": "Handles broken",
   "@tipBreakHandlesOn": {
-    "description": "Tooltip on the graph editor's Break handles button, when it is on. Keep it short."
+    "description": "Tooltip on the graph editor's Break handles button, when it is on. One or two words."
   },
   "tipBrushSize": "Brush size",
   "@tipBrushSize": {
