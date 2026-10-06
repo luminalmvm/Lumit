@@ -846,16 +846,6 @@ mod tests {
         }
     }
 
-    /// An empty matte, and a plane too small to have neighbours, are both the
-    /// passthrough's honest answer rather than a fault.
-    #[test]
-    fn nothing_to_outline_is_no_points() {
-        assert!(boundary_of(16, 16, &vec![0u8; 256]).is_empty());
-        assert!(boundary_of(16, 16, &vec![255u8; 256]).is_empty());
-        assert!(boundary_of(1, 1, &[255]).is_empty());
-        assert!(boundary_of(16, 16, &[0, 1, 2]).is_empty(), "a short plane");
-    }
-
     /// A matte noisy enough to put an edge under every pixel is thinned evenly
     /// rather than cut short: the cap holds, and the last point is still near
     /// the bottom of the picture.

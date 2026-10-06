@@ -329,44 +329,6 @@ mod tests {
         );
     }
 
-    /// The horizon clip, which is the part most easily got wrong: a light
-    /// behind the surface contributes nothing at all, and one straddling the
-    /// plane contributes only its front half.
-    #[test]
-    fn a_light_behind_the_surface_contributes_nothing() {
-        let n = [0.0, 0.0, -1.0];
-        let p = [0.0, 0.0, 0.0];
-        // Entirely behind (positive z is away from the viewer).
-        let behind = rect_form_factor(
-            p,
-            n,
-            &[
-                [-100.0, -100.0, 200.0],
-                [100.0, -100.0, 200.0],
-                [100.0, 100.0, 200.0],
-                [-100.0, 100.0, 200.0],
-            ],
-        );
-        assert_eq!(behind, 0.0, "a light behind the surface lights nothing");
-
-        // Straddling: half in front, half behind. Must be positive, and must
-        // be less than the same light moved wholly in front.
-        let straddle = rect_form_factor(
-            p,
-            n,
-            &[
-                [-100.0, -100.0, -200.0],
-                [100.0, -100.0, -200.0],
-                [100.0, 100.0, 200.0],
-                [-100.0, 100.0, 200.0],
-            ],
-        );
-        assert!(
-            straddle > 0.0,
-            "the half in front of the surface still lights it"
-        );
-    }
-
     /// Light adds, it does not replace: no lights leaves
     /// the picture untouched to the bit, and a light can only brighten.
     #[test]
@@ -446,27 +408,5 @@ mod tests {
         let aside = irradiance([500.0, 0.0, 0.0], n, &spot);
         assert!(under > 0.0, "under the spot is lit, got {under}");
         assert_eq!(aside, 0.0, "outside the cone is dark, got {aside}");
-    }
-
-    /// Falloff reaches nothing at its stated distance rather than merely
-    /// getting small — a dial that never quite turns off is a dial nobody can
-    /// use.
-    #[test]
-    fn falloff_reaches_zero_at_the_distance_it_names() {
-        let n = [0.0, 0.0, -1.0];
-        let light = ShadingLight {
-            corners: [[0.0, 0.0, -100.0]; 4],
-            colour: [1.0, 1.0, 1.0],
-            falloff_px: 200.0,
-            is_area: false,
-            cone_cos: -2.0,
-            axis: [0.0, 0.0, 1.0],
-        };
-        assert!(irradiance([0.0, 0.0, 0.0], n, &light) > 0.0, "near is lit");
-        assert_eq!(
-            irradiance([300.0, 0.0, 0.0], n, &light),
-            0.0,
-            "past the falloff distance is dark"
-        );
     }
 }

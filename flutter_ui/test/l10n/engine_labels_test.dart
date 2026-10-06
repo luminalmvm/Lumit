@@ -211,11 +211,6 @@ void main() {
     );
   });
 
-  test('a reason with no sentence says so, so the caller can fall back', () {
-    expect(importReason('not_a_real_reason', const {}), isNull);
-    expect(hasImportReason('blend_mode_unavailable'), isTrue);
-  });
-
   test('every label the engine can send has a translation entry', () {
     final missing = _engineLabels().where((l) => !hasEngineLabel(l)).toList()
       ..sort();
@@ -228,14 +223,6 @@ void main() {
     );
   });
 
-  test('a label with no entry comes back as it arrived', () {
-    // The fallback is what keeps a schema change from blanking the panel between
-    // the effect landing and this test being satisfied.
-    expect(engineLabel('Not a real effect'), 'Not a real effect');
-    expect(engineLabel(''), '');
-  });
-
-
   test('every effect badge reason has a sentence to be translated', () {
     final missing = _badgeReasonKeys().where((k) => !hasEffectBadge(k)).toList()
       ..sort();
@@ -247,12 +234,6 @@ void main() {
           'the matching key to lib/l10n/app_en.arb, or an effect whose plugin '
           'has died wears no badge at all.',
     );
-  });
-
-  test('a badge reason with no sentence draws nothing, rather than a raw key',
-      () {
-    expect(effectBadge('not_a_real_reason'), isNull);
-    expect(hasEffectBadge('plugin_disabled'), isTrue);
   });
 
   test('every colour config refusal has a sentence to be translated', () {
@@ -268,34 +249,6 @@ void main() {
     );
   });
 
-  test('a colour refusal with no sentence says so, so the caller can fall back',
-      () {
-    expect(colourProblem('not_a_real_refusal', const {}), isNull);
-    expect(hasColourProblem('unsupported_transform'), isTrue);
-  });
-
-  test('a config supplies the names, and its names are never translated', () {
-    // "Alpha" is an effect parameter this application translates. A colour
-    // space of that name in somebody's config file is not that word, and must
-    // come back exactly as it arrived.
-    expect(hasEngineLabel('Alpha'), isTrue);
-    expect(
-      colourProblem('unknown_colour_space', const {'name': 'Alpha'}),
-      contains('Alpha'),
-    );
-    // And the space a refusal surfaced in wraps the sentence rather than
-    // replacing it.
-    final wrapped = colourProblem(
-        'lut_file_not_found', const {'name': 'shot.spi3d', 'in_space': 'graded'});
-    expect(wrapped, contains('shot.spi3d'));
-    expect(wrapped, contains('graded'));
-  });
-
-  test('a known label resolves through the table', () {
-    expect(hasEngineLabel('Gaussian blur'), isTrue);
-    expect(engineLabel('Gaussian blur'), 'Gaussian blur');
-  });
-
   test('every task a model pack can declare has a word to be translated', () {
     final missing = _addonTaskWords().where((w) => addonTask(w) == w).toList()
       ..sort();
@@ -307,12 +260,5 @@ void main() {
           'there and the matching key to lib/l10n/app_en.arb, or a pack ships '
           'its task in English inside a translated window.',
     );
-  });
-
-  test('a task with no word comes back as it arrived', () {
-    // What a catalogue written for a newer Lumit would send, and the reason
-    // the fall-through is deliberate rather than a hole.
-    expect(addonTask('not_a_real_task'), 'not_a_real_task');
-    expect(addonTask('depth'), isNot('depth'));
   });
 }

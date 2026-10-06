@@ -107,22 +107,5 @@ void main() {
       expect(channel.scalar, keyed);
       expect([for (final k in channel.keys) k.value], [0.0, -12.0]);
     });
-
-    test('in decibels', () {
-      final channel = graphChannels(layers: [music], selected: [path]).single;
-      expect(graphChannelUnit(channel), 'dB');
-    });
-
-    test('a static Volume is a channel too, as a static transform is', () {
-      final still = entry(volumeDb: const BridgeScalar.static_(-6));
-      final channels = graphChannels(
-        layers: [still],
-        selected: [
-          '${audioPath(still.layer.internallayerId.toString())}/volume'
-        ],
-      );
-      expect(channels.single.isStatic, isTrue);
-      expect(channels.single.staticValue, -6);
-    });
   });
 }

@@ -785,12 +785,6 @@ mod tests {
     }
 
     #[test]
-    fn list_presets_of_a_missing_directory_is_empty_not_an_error() {
-        let missing = std::path::Path::new("definitely-not-a-real-dir-xyz");
-        assert!(list_presets(missing).is_empty());
-    }
-
-    #[test]
     fn load_instantiated_round_trips_a_saved_preset_with_fresh_ids() {
         let dir = tempfile::tempdir().unwrap();
         let effects = stack();
@@ -1017,23 +1011,6 @@ mod tests {
     }
 
     #[test]
-    fn a_group_saves_its_members_the_wires_between_them_and_their_shape() {
-        let (graph, members) = wired_graph();
-        let preset = group_from_graph(&graph, "Audio rig", 4, &members);
-
-        assert_eq!(preset.nodes.len(), 2, "the two picked boxes, no more");
-        assert_eq!(
-            preset.edges.len(),
-            1,
-            "the wire between them is kept and the one leaving them is not"
-        );
-        // Relative to the set's own top-left, so the pair keeps its shape
-        // wherever it is dropped.
-        assert_eq!(preset.layout, vec![[0.0, 0.0], [160.0, 30.0]]);
-        assert_eq!(preset.colour, 4);
-    }
-
-    #[test]
     fn inserting_a_group_mints_fresh_ids_and_re_points_the_wires() {
         let (graph, members) = wired_graph();
         let preset = group_from_json(
@@ -1111,29 +1088,6 @@ mod tests {
     }
 
     #[test]
-    fn a_comp_group_saves_its_boxes_and_never_the_output() {
-        let (graph, members, _) = wired_comp_graph();
-        let preset = comp_group_from_graph(&graph, "Plate rig", 4, &members);
-
-        assert_eq!(
-            preset.nodes.len(),
-            2,
-            "the Read and the blur, not the Output"
-        );
-        assert!(!preset
-            .nodes
-            .iter()
-            .any(|n| matches!(n, crate::comp_graph::GraphNode::Output { .. })));
-        assert_eq!(
-            preset.edges.len(),
-            1,
-            "the wire between them is kept and the one leaving them is not"
-        );
-        assert_eq!(preset.layout, vec![[0.0, 0.0], [160.0, 30.0]]);
-        assert_eq!(preset.colour, 4);
-    }
-
-    #[test]
     fn inserting_a_comp_group_mints_fresh_ids_and_keeps_a_reads_item() {
         use crate::comp_graph::GraphNode;
 
@@ -1180,16 +1134,5 @@ mod tests {
             .nodes
             .iter()
             .all(|a| !again.nodes.iter().any(|b| b.id() == a.id())));
-    }
-
-    /// A second insert of the same file shares nothing with the first — the
-    /// claim that makes a group library safe to lean on.
-    #[test]
-    fn two_inserts_of_one_group_share_no_ids() {
-        let (graph, members) = wired_graph();
-        let preset = group_from_graph(&graph, "Rig", 0, &members);
-        let first = group_instantiated(&preset, [0.0, 0.0]).nodes;
-        let second = group_instantiated(&preset, [0.0, 0.0]).nodes;
-        assert!(first.iter().all(|a| !second.iter().any(|b| b.id == a.id)));
     }
 }

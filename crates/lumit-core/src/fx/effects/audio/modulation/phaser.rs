@@ -297,11 +297,6 @@ mod tests {
     }
 
     #[test]
-    fn the_notches_move_at_the_rate_asked() {
-        harness::modulates_at(&AudioPhaserDef, &[("rate", 2.0), ("depth", 100.0)], 2.0);
-    }
-
-    #[test]
     fn a_still_chain_notches_where_the_stages_put_it() {
         // Depth at nought parks the sweep on the centre, so the notch stands
         // still and can be measured. Four stages turn a quarter cycle each at

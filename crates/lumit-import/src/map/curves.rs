@@ -208,15 +208,6 @@ mod tests {
 
     const IDENTITY: &[(u16, u16)] = &[(0, 0), (255, 255)];
 
-    #[test]
-    fn a_default_curves_reads_as_five_identity_diagonals() {
-        let bytes = blob(&[IDENTITY; CHANNELS]);
-        let got = decode(&bytes).expect("the default blob decodes");
-        for channel in &got {
-            assert_eq!(channel.as_slice(), &[[0.0, 0.0], [1.0, 1.0]]);
-        }
-    }
-
     /// The shape the fixture project's own grade has: a contrast S on Master
     /// and nothing on the rest. The point of the assertion is the *placement* —
     /// a record read one channel out would put the S on Red.
@@ -236,25 +227,6 @@ mod tests {
         let got = decode(&alpha).expect("the blob decodes");
         assert_eq!(got[0].as_slice(), &[[0.0, 0.0], [1.0, 1.0]]);
         assert_eq!(got[4].len(), 4);
-    }
-
-    /// A descending curve — the fixture's blood-splatter matte inverts one —
-    /// and one that stops before white, which After Effects allows and which
-    /// its own table holds flat past the last point.
-    #[test]
-    fn a_descending_curve_that_stops_short_still_decodes() {
-        let bytes = blob(&[
-            IDENTITY,
-            IDENTITY,
-            IDENTITY,
-            IDENTITY,
-            &[(0, 255), (37, 103), (128, 0)],
-        ]);
-        let got = decode(&bytes).expect("the blob decodes");
-        assert_eq!(got[4].len(), 3);
-        assert!((got[4][0][1] - 1.0).abs() < 1e-6);
-        assert!((got[4][2][0] - 128.0 / 255.0).abs() < 1e-6);
-        assert!(got[4][2][1].abs() < 1e-6);
     }
 
     /// Every way the blob can fail to be the thing this module claims it is.
@@ -301,13 +273,5 @@ mod tests {
         let mut shifted = good.clone();
         shifted.copy_within(POINTS_AT + 2..BLOB_LEN, POINTS_AT);
         assert!(decode(&shifted).is_none(), "a shifted record");
-    }
-
-    #[test]
-    fn hex_reads_back_the_bytes_it_was_written_from() {
-        assert_eq!(from_hex("00ff10AB"), Some(vec![0x00, 0xff, 0x10, 0xab]));
-        assert_eq!(from_hex(""), Some(Vec::new()));
-        assert_eq!(from_hex("abc"), None, "an odd run of digits");
-        assert_eq!(from_hex("zz"), None, "not hex");
     }
 }

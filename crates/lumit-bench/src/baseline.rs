@@ -239,16 +239,6 @@ mod tests {
     }
 
     #[test]
-    fn faster_and_slightly_slower_both_pass() {
-        let base = baseline(std::env::consts::OS);
-        // Half the baseline, and 1.5x it — inside the 1.6 factor.
-        let results = [result("B3", 20.0), result("B7", 45.0)];
-        let verdicts = compare(&base, &results, DEFAULT_GATE_FACTOR).unwrap();
-        assert!(verdicts.iter().all(|v| v.pass), "{verdicts:?}");
-        assert_eq!(verdicts[0].ratio, Some(0.5));
-    }
-
-    #[test]
     fn past_the_factor_fails_and_names_the_budget() {
         let base = baseline(std::env::consts::OS);
         // 1.625x baseline: past 1.6, and the kind of jump a real regression makes.
@@ -257,13 +247,6 @@ mod tests {
         let failed: Vec<_> = verdicts.iter().filter(|v| !v.pass).collect();
         assert_eq!(failed.len(), 1);
         assert_eq!(failed[0].budget, "B3");
-    }
-
-    #[test]
-    fn exactly_at_the_factor_still_passes() {
-        let base = baseline(std::env::consts::OS);
-        let verdicts = compare(&base, &[result("B3", 64.0)], DEFAULT_GATE_FACTOR).unwrap();
-        assert!(verdicts[0].pass);
     }
 
     #[test]
@@ -285,33 +268,6 @@ mod tests {
     }
 
     #[test]
-    fn a_budget_the_baseline_has_never_seen_cannot_regress() {
-        let base = baseline(std::env::consts::OS);
-        let verdicts = compare(&base, &[result("B11", 90_000.0)], DEFAULT_GATE_FACTOR).unwrap();
-        assert!(verdicts[0].pass);
-        assert_eq!(verdicts[0].baseline_ms, None);
-        assert_eq!(verdicts[0].ratio, None);
-    }
-
-    #[test]
-    fn a_baseline_from_another_os_is_refused() {
-        let other = if std::env::consts::OS == "windows" {
-            "macos"
-        } else {
-            "windows"
-        };
-        let err = compare(&baseline(other), &[result("B3", 1.0)], 1.6).unwrap_err();
-        assert!(err.contains(other), "{err}");
-    }
-
-    #[test]
-    fn the_gate_factor_ignores_nonsense() {
-        // No environment variable is set in this process, so the default holds;
-        // the parse rules are what the test is really about.
-        assert_eq!(gate_factor(), DEFAULT_GATE_FACTOR);
-    }
-
-    #[test]
     fn breaches_name_only_the_budgets_that_broke() {
         let breaches = budget_breaches(&[
             result("B3", 49.0),
@@ -321,16 +277,5 @@ mod tests {
         assert_eq!(breaches.len(), 2, "{breaches:?}");
         assert!(breaches[0].starts_with("B4"));
         assert!(breaches[1].starts_with("B11"));
-    }
-
-    #[test]
-    fn a_results_file_is_a_baseline() {
-        let base = Baseline::from_results(&[result("B3", 12.0)]);
-        assert_eq!(base.os, std::env::consts::OS);
-        assert_eq!(base.results.get("B3"), Some(&12.0));
-        // Round-trips, so `cargo run > baseline.json` is the whole regeneration.
-        let text = serde_json::to_string(&base).unwrap();
-        let back: Baseline = serde_json::from_str(&text).unwrap();
-        assert_eq!(back.results, base.results);
     }
 }

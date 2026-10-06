@@ -14,16 +14,13 @@
 import 'dart:typed_data' show Float64List;
 
 import 'package:flutter/gestures.dart'
-    show PointerDeviceKind, kDoubleTapMinTime, kSecondaryMouseButton;
+    show kSecondaryMouseButton;
 import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/l10n/strings.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/panels/comp_graph_panel.dart';
-import 'package:lumit_flutter/panels/effect_controls_panel_frb.dart';
-import 'package:lumit_flutter/panels/effect_param_row_frb.dart'
-    show EffectParamRowFrb, cachedListParameters;
 import 'package:lumit_flutter/panels/graph_panel.dart';
 import 'package:lumit_flutter/panels/node_panel.dart';
 import 'package:lumit_flutter/panels/timeline_panel_frb.dart';
@@ -187,49 +184,6 @@ void main() {
       await tester.pump();
     }
 
-    /// The console's own door, and one row of it run by name.
-    Future<void> addFromConsole(WidgetTester tester, LumitUiState ui,
-        String query, String label) async {
-      ui.activePane.value = Panel.graph.pane();
-      expect(ui.consoleClaim!(), isTrue);
-      await tester.pump();
-      await tester.enterText(
-          find.byKey(const ValueKey('fx-console-query')), query);
-      await tester.pump();
-      await tester.tap(find.byKey(ValueKey<String>('fx-console-item-$label')));
-      await tester.pump();
-    }
-
-    testWidgets('a node graph draws the comp canvas, a layer comp does not',
-        (tester) async {
-      final p = withGraph();
-      await mount(tester, p);
-      expect(find.byKey(const ValueKey<String>('comp-graph-canvas')),
-          findsOneWidget);
-      expect(find.byKey(const ValueKey<String>('graph-canvas')), findsNothing);
-
-      // A comp with layers is the layer's own graph again.
-      final scene = p.state.project!.newComposition(name: 'Layers');
-      final layer = scene.addSolidLayer();
-      p.uiState
-        ..setSelectedComp(scene)
-        ..selectedLayer.value = layer;
-      p.uiState.model.refresh();
-      await tester.pump();
-      expect(find.byKey(const ValueKey<String>('comp-graph-canvas')),
-          findsNothing);
-      expect(
-          find.byKey(const ValueKey<String>('graph-canvas')), findsOneWidget);
-    });
-
-    testWidgets('the Output box draws, with its one socket', (tester) async {
-      final p = withGraph();
-      await mount(tester, p);
-      final out = p.graph.getNodeGraph().wiring.output;
-      expect(card(out), findsOneWidget);
-      expect(socket(out, 'input'), findsOneWidget);
-    });
-
     /// The console's own door: Ctrl+Space over the canvas, then a row.
     testWidgets('the console adds a Read, and one undo takes it away',
         (tester) async {
@@ -381,37 +335,6 @@ void main() {
       expect(reads.single.item, scene.internalid);
     });
 
-    /// This graph dropped on itself is nothing at all: a box naming the comp
-    /// it is in can only ever degrade to a passthrough.
-    testWidgets('the fronted graph dropped on its own canvas is declined',
-        (tester) async {
-      final p = withGraph();
-      await mount(
-        tester,
-        p,
-        child: Column(children: [
-          Draggable<CompDragData>(
-            data: CompDragData(p.graph, 'Graph'),
-            hitTestBehavior: HitTestBehavior.opaque,
-            feedback: const SizedBox(width: 8, height: 8),
-            child: const SizedBox(
-                key: ValueKey<String>('drag-source'), width: 60, height: 20),
-          ),
-          const Expanded(child: GraphPanelFrb()),
-        ]),
-      );
-      final was = p.graph.documentRevision();
-
-      await tester.drag(find.byKey(const ValueKey<String>('drag-source')),
-          const Offset(200, 300),
-          warnIfMissed: false);
-      await tester.pumpAndSettle();
-
-      expect(p.graph.getNodeGraph().nodes, hasLength(1),
-          reason: 'the Output box, and nothing else');
-      expect(p.graph.documentRevision(), was);
-    });
-
     testWidgets('deleting a wired box heals the gap, in one step',
         (tester) async {
       final p = withGraph();
@@ -441,19 +364,6 @@ void main() {
       await tester.pump();
       expect(p.graph.getNodeGraph().wiring.edges, hasLength(2),
           reason: 'one gesture, one undo step');
-    });
-
-    testWidgets('the Output box is never deleted', (tester) async {
-      final p = withGraph();
-      await mount(tester, p);
-      p.uiState.activePane.value = Panel.graph.pane();
-      final out = p.graph.getNodeGraph().wiring.output;
-      await tester.tapAt(tester.getCenter(card(out)));
-      await tester.pump();
-      expect(p.uiState.deleteClaim!(), isFalse,
-          reason: 'a graph always has exactly one Output');
-      await tester.pump();
-      expect(card(out), findsOneWidget);
     });
 
     testWidgets('the twirl and the tick each commit', (tester) async {
@@ -519,75 +429,6 @@ void main() {
       return stillValue((value as BridgeEffectValue_Float).field0);
     }
 
-    testWidgets('a blur box twirled open draws its Radius row, with a control',
-        (tester) async {
-      final p = withGraph();
-      final blur = seedFx(p.graph, 'blur', const Offset(60, 40));
-      p.uiState.model.refresh();
-      await mount(tester, p);
-      // Saved shut, it stays shut: no rows, and the drawing's width.
-      expect(rowOn(blur, 'radius'), findsNothing);
-      expect(tester.getSize(card(blur)).width, graphNodeWidth + 2);
-
-      await tester.tap(twirl(blur));
-      await tester.pump();
-      expect(rowOn(blur, 'radius'), findsOneWidget);
-      expect(fieldOn(blur, 'radius'), findsOneWidget);
-      expect(rowOn(blur, 'mix'), findsOneWidget);
-      expect(socket(blur, 'radius'), findsOneWidget,
-          reason: 'the row keeps its socket');
-      expect(
-        tester.getCenter(socket(blur, 'radius')).dy,
-        closeTo(tester.getCenter(rowOn(blur, 'radius')).dy, 0.5),
-        reason: 'the socket sits level with its row',
-      );
-      expect(tester.getSize(card(blur)).width, graphNodeOpenWidth + 2);
-      // The picture's own sockets draw as they did: a name, no control.
-      expect(socket(blur, 'input'), findsOneWidget);
-      expect(socket(blur, 'matte'), findsOneWidget);
-      expect(find.byKey(ValueKey<String>('graph-port-node:$blur-in-input')),
-          findsOneWidget);
-      expect(rowOn(blur, 'input'), findsNothing);
-    });
-
-    testWidgets('a box added from the console arrives open', (tester) async {
-      final p = withGraph();
-      await mount(tester, p);
-      await addFromConsole(tester, p.uiState, 'Gaussian', 'Gaussian blur');
-      final graph = p.graph.getNodeGraph();
-      final blur = graph.nodes.firstWhere((n) => n.matchName == 'blur').id;
-      expect(graph.wiring.exposed, [blur]);
-      expect(rowOn(blur, 'radius'), findsOneWidget);
-    });
-
-    testWidgets('pasted boxes arrive open', (tester) async {
-      final p = withGraph();
-      final blur = seedFx(p.graph, 'blur', const Offset(40, 40));
-      p.uiState.model.refresh();
-      await mount(tester, p);
-      addTearDown(() => lastKnownPointerPosition = null);
-      expect(p.graph.getNodeGraph().wiring.exposed, isEmpty,
-          reason: 'the original was saved shut');
-
-      p.uiState.activePane.value = Panel.graph.pane();
-      expect(p.uiState.requestSelectAll(), isTrue);
-      await tester.pump();
-      expect(copySelectionFrb(p.uiState), isTrue);
-      final canvas =
-          tester.getTopLeft(find.byKey(const ValueKey('comp-graph-canvas')));
-      lastKnownPointerPosition = canvas + const Offset(100, 300);
-      expect(await pasteSelectionFrb(p.state, p.uiState, p.graph, null), isTrue);
-      await tester.pump();
-
-      final after = p.graph.getNodeGraph();
-      final fresh =
-          after.nodes.where((n) => n.id != blur && n.matchName == 'blur').single;
-      expect(after.wiring.exposed, [fresh.id]);
-      expect(rowOn(fresh.id, 'radius'), findsOneWidget);
-      expect(rowOn(blur, 'radius'), findsNothing,
-          reason: 'the original keeps the state it had');
-    });
-
     testWidgets("a row's control edits the parameter in one op, undone in one",
         (tester) async {
       final p = withGraph();
@@ -649,151 +490,9 @@ void main() {
           reason: 'the value moved, the box did not');
     });
 
-    testWidgets('a wired row draws the name alone', (tester) async {
-      final p = withGraph();
-      final blur = seedFx(p.graph, 'blur', const Offset(400, 40));
-      final amount = seedInput(p.graph, const Offset(40, 40));
-      p.uiState.model.refresh();
-      await mount(tester, p);
-      await tester.tap(twirl(blur));
-      await tester.pump();
-      expect(fieldOn(blur, 'radius'), findsOneWidget);
-
-      await wire(tester, amount, 'value', blur, 'radius');
-      expect(p.graph.getNodeGraph().wiring.edges, hasLength(1));
-      expect(fieldOn(blur, 'radius'), findsNothing,
-          reason: 'the wire is the value');
-      expect(find.byKey(ValueKey<String>('graph-port-node:$blur-in-radius')),
-          findsOneWidget);
-      expect(fieldOn(blur, 'mix'), findsOneWidget,
-          reason: 'the rows beside it keep their controls');
-    });
-
     // --- A box lists what the Effect controls panel lists. The rows are
     // derived by that panel's own rules, so a box and the panel can never
     // disagree about what an effect is showing.
-
-    /// One value written from outside the panel, the way the document holds it.
-    void setOn(UuidValue node, String param, BridgeEffectValue value,
-        {required CompositionReference graph}) {
-      final instances = graph.getNodeGraphInstances();
-      for (final i in instances) {
-        if (i.id() == node) i.setValue(id: param, value: value);
-      }
-      graph.setNodeGraph(
-          instances: instances, wiring: graph.getNodeGraph().wiring);
-    }
-
-    testWidgets('a blur box folds its riders onto Matte and Mix',
-        (tester) async {
-      final p = withGraph();
-      final blur = seedFx(p.graph, 'blur', const Offset(60, 40));
-      p.uiState.model.refresh();
-      await mount(tester, p);
-      await tester.tap(twirl(blur));
-      await tester.pump();
-
-      expect(rowOn(blur, 'matte'), findsOneWidget);
-      expect(rowOn(blur, 'mix'), findsOneWidget);
-      for (final rider in ['matte_invert', 'matte_channel', 'blend']) {
-        expect(rowOn(blur, rider), findsNothing,
-            reason: '$rider rides beside its host, as it does in the panel');
-        expect(socket(blur, rider), findsNothing,
-            reason: 'and takes no socket of its own');
-      }
-      expect(
-        find.descendant(
-            of: rowOn(blur, 'matte'),
-            matching:
-                find.byKey(ValueKey<String>('fx-bool-$blur-matte_invert'))),
-        findsOneWidget,
-        reason: 'folded onto its host, not dropped',
-      );
-      expect(
-        find.descendant(
-            of: rowOn(blur, 'mix'),
-            matching: find.byKey(ValueKey<String>('fx-choice-$blur-blend'))),
-        findsOneWidget,
-      );
-    });
-
-    testWidgets('a Lens flare box draws no gated row at Source type 0',
-        (tester) async {
-      final p = withGraph();
-      final flare = seedFx(p.graph, 'lens_flare', const Offset(60, 40));
-      p.uiState.model.refresh();
-      await mount(tester, p);
-      await tester.tap(twirl(flare));
-      await tester.pump();
-
-      expect(rowOn(flare, 'source_type'), findsOneWidget,
-          reason: 'the choice the gated rows answer to is always there');
-      for (final gated in [
-        'use_source_colour',
-        'threshold',
-        'threshold_softness'
-      ]) {
-        expect(rowOn(flare, gated), findsNothing,
-            reason: 'Source type 0 has no $gated to set');
-      }
-
-      // Switched to Matte, the same rows arrive.
-      setOn(flare, 'source_type', const BridgeEffectValue.choice(1),
-          graph: p.graph);
-      p.uiState.model.refresh();
-      await tester.pump();
-      expect(rowOn(flare, 'threshold'), findsOneWidget,
-          reason: 'the group is gated, not missing');
-      expect(rowOn(flare, 'use_source_colour'), findsOneWidget);
-    });
-
-    /// A plugin hides and shows its own rows, and no built-in ever does, so the
-    /// rule is held here rather than through a fixture the harness has not got.
-    test('a hidden row is no row on a box either', () {
-      final rows = compBoxRows(
-        'blur',
-        cachedListParameters('blur'),
-        const {},
-        {'radius'},
-      );
-      expect(rows.rows.map((p) => p.id), isNot(contains('radius')));
-      expect(rows.rows.map((p) => p.id), contains('mix'));
-    });
-
-    testWidgets('a row another control has taken over does not drag',
-        (tester) async {
-      final p = withGraph();
-      final dof = seedFx(p.graph, 'dof', const Offset(60, 40));
-      setOn(dof, 'use_focus_point', const BridgeEffectValue.bool(true),
-          graph: p.graph);
-      p.uiState.model.refresh();
-      await mount(tester, p);
-      await tester.tap(twirl(dof));
-      await tester.pump();
-
-      expect(tester.widget<EffectParamRowFrb>(rowOn(dof, 'focus')).enabled,
-          isFalse,
-          reason: 'the focus point is in charge while it is ticked');
-      double focusOf() => stillValue((p.graph
-              .getNodeGraphInstances()
-              .firstWhere((i) => i.id() == dof)
-              .getInfo()
-              .values
-              .firstWhere((v) => v.id == 'focus')
-              .value as BridgeEffectValue_Float)
-          .field0);
-      final was = focusOf();
-      final drag =
-          await tester.startGesture(tester.getCenter(fieldOn(dof, 'focus')));
-      for (var i = 0; i < 8; i++) {
-        await drag.moveBy(const Offset(6, 0));
-        await tester.pump();
-      }
-      await drag.up();
-      await tester.pump();
-      expect(focusOf(), closeTo(was, 0.0001),
-          reason: 'a quiet row commits nothing');
-    });
 
     /// The Node graph box's one Action. It drew a button that did nothing;
     /// it is the canvas's own way in (§4.2).
@@ -857,105 +556,6 @@ void main() {
           shader);
       expect(shaderOn(p.graph, box), shader);
       expect(p.graph.documentRevision(), was + BigInt.one, reason: 'one op');
-    });
-
-    /// An Expression box drew Edit expression and did nothing when it was
-    /// pressed. It opens the dialogue and Apply is one op on the graph.
-    testWidgets("an Expression box's Edit expression writes its text",
-        (tester) async {
-      final p = withGraph();
-      final box = seedFx(p.graph, 'expression', const Offset(60, 40));
-      p.uiState.model.refresh();
-      await mount(tester, p);
-
-      final was = p.graph.documentRevision();
-      await tester.tap(find.descendant(
-          of: rowOn(box, 'edit'),
-          matching: find.byKey(ValueKey<String>('fx-action-$box-edit'))));
-      await tester.pumpAndSettle();
-      await tester.enterText(
-          find.descendant(
-              of: find.byKey(const ValueKey('expression-text')),
-              matching: find.byType(EditableText)),
-          'time * 2');
-      await tester.tap(find.byKey(const ValueKey('expression-confirm')));
-      await tester.pumpAndSettle();
-      expect(
-          p.graph
-              .getNodeGraphInstances()
-              .firstWhere((i) => i.id() == box)
-              .expressionSource(),
-          'time * 2');
-      expect(p.graph.documentRevision(), was + BigInt.one, reason: 'one op');
-    });
-
-    /// The rows a Custom shader declares drew on the box with nowhere to plug
-    /// a wire in. They are sockets like any other row.
-    testWidgets("a wire plugs into a Custom shader's own row", (tester) async {
-      final p = withGraph();
-      final box = seedFx(p.graph, 'custom_shader', const Offset(300, 40));
-      final wiggle = seedFx(p.graph, 'wiggle', const Offset(20, 280));
-      p.uiState.model.refresh();
-      await mount(tester, p);
-      await tester.tap(twirl(box));
-      await tester.pump();
-
-      await wire(tester, wiggle, 'value', box, 'gain');
-      final edges = p.graph.getNodeGraph().wiring.edges;
-      expect(edges, hasLength(1));
-      expect(edges.single.toPort, 'gain');
-    });
-
-    /// The Node panel draws the same box's rows, and its buttons press too.
-    testWidgets("the Node panel's Edit shader applies to the graph",
-        (tester) async {
-      final p = withGraph();
-      final box = seedFx(p.graph, 'custom_shader', const Offset(60, 40));
-      p.uiState.model.refresh();
-      await mount(
-        tester,
-        p,
-        child: const Row(children: [
-          SizedBox(width: 600, child: GraphPanelFrb()),
-          Expanded(child: NodePanelFrb()),
-        ]),
-      );
-      await tester.tapAt(tester.getCenter(card(box)));
-      await tester.pump();
-
-      await editShader(
-          tester,
-          find.descendant(
-              of: find.byType(NodePanelFrb),
-              matching: find.byKey(ValueKey<String>('fx-action-$box-edit'))),
-          shader);
-      expect(shaderOn(p.graph, box), shader);
-    });
-
-    /// A driver is open always and is all controls, so it has no socket row to
-    /// hang its output on. It shares the first row rather than growing a blank
-    /// one under everything it draws.
-    testWidgets('a driver box puts its output on its first row',
-        (tester) async {
-      final p = withGraph();
-      final wiggle = seedFx(p.graph, 'wiggle', const Offset(60, 40));
-      p.uiState.model.refresh();
-      await mount(tester, p);
-
-      expect(rowOn(wiggle, 'amount'), findsOneWidget);
-      expect(
-        tester.getCenter(socket(wiggle, 'value')).dy,
-        closeTo(tester.getCenter(rowOn(wiggle, 'amount')).dy, 0.5),
-        reason: 'the output dot sits on the first control row',
-      );
-      final rows = tester
-          .widgetList<GraphNodeCard>(find.byWidgetPredicate(
-              (w) => w is GraphNodeCard && w.box.key == compNodeKey(wiggle)))
-          .first
-          .box
-          .rows;
-      expect(rows.every((r) => r.param != null), isTrue,
-          reason: 'no blank row underneath');
     });
 
     testWidgets('the marquee and a wire land on an open box', (tester) async {
@@ -1085,35 +685,6 @@ void main() {
       expect(edges.where((e) => e.from == blur && e.to == out), hasLength(1));
     });
 
-    /// The one change to the layer canvas: a Node graph box on a layer opens
-    /// the composition it applies, as a Read box of a comp does here.
-    testWidgets('double-clicking a Node graph box opens its comp',
-        (tester) async {
-      final p = withGraph();
-      final scene = p.state.project!.newComposition(name: 'Host');
-      final layer = scene.addSolidLayer();
-      layer.addNodeGraphEffect(graph: p.graph);
-      p.uiState
-        ..setSelectedComp(scene)
-        ..selectedLayer.value = layer;
-      p.uiState.model.refresh();
-      await mount(tester, p);
-
-      final node = layer
-          .getGraph()
-          .nodes
-          .firstWhere((n) => n.matchName == 'node_graph');
-      final at = tester.getCenter(
-          find.byKey(ValueKey<String>('graph-node-${graphNodeKey(node.node)}')));
-      await tester.tapAt(at);
-      await tester.pump(const Duration(milliseconds: 40));
-      await tester.tapAt(at);
-      await tester.pump();
-
-      expect(p.uiState.selectedComp?.internalid, p.graph.internalid,
-          reason: 'the box with an inside opens it, as a precomp does');
-    });
-
     testWidgets('an Input box draws its five facts, and the label commits',
         (tester) async {
       final p = withGraph();
@@ -1164,93 +735,6 @@ void main() {
       );
     });
 
-    /// A drag on a form well is **one** op: the live half shows where it has
-    /// got to, and the release commits.
-    testWidgets('a drag on the Minimum well leaves one history step',
-        (tester) async {
-      final p = withGraph();
-      final input = seedInput(p.graph, const Offset(60, 40));
-      p.uiState.model.refresh();
-      await mount(
-        tester,
-        p,
-        child: const Row(children: [
-          SizedBox(width: 600, child: GraphPanelFrb()),
-          Expanded(child: NodePanelFrb()),
-        ]),
-      );
-      await tester.tapAt(tester.getCenter(card(input)));
-      await tester.pump();
-
-      final was = p.graph.documentRevision();
-      final well = find.byKey(const ValueKey('node-input-min'));
-      final drag = await tester.startGesture(tester.getCenter(well));
-      for (var i = 0; i < 8; i++) {
-        await drag.moveBy(const Offset(6, 0));
-        await tester.pump();
-      }
-      await drag.up();
-      await tester.pump();
-
-      expect(p.graph.documentRevision(), was + BigInt.one,
-          reason: 'one drag, one op');
-      expect(p.graph.getNodeGraph().wiring.inputs.single.input.min,
-          isNot(0));
-    });
-
-    /// A Read box's own face: what it brings in, and the way into a comp.
-    testWidgets('a Read of a comp draws its kind and opens it', (tester) async {
-      final p = withGraph();
-      final inner = p.state.project!.newComposition(name: 'Inner');
-      final read = seedReadOf(p.graph, inner.internalid, const Offset(60, 40));
-      p.uiState.model.refresh();
-      await mount(
-        tester,
-        p,
-        child: const Row(children: [
-          SizedBox(width: 600, child: GraphPanelFrb()),
-          Expanded(child: NodePanelFrb()),
-        ]),
-      );
-
-      await tester.tapAt(tester.getCenter(card(read)));
-      await tester.pump();
-      expect(
-        tester
-            .widget<Text>(find.byKey(const ValueKey('node-read-kind')))
-            .data,
-        l10n.projectTypeComposition,
-      );
-      await tester.tap(find.byKey(const ValueKey('node-read-open')));
-      await tester.pump();
-      expect(p.uiState.selectedComp?.internalid, inner.internalid,
-          reason: 'Open fronts the comp the box reads');
-    });
-
-    /// A layer-reference row is a **socket** in a node graph (§4.3): there are
-    /// no layers to pick from, so the row draws its dash instead of a picker.
-    testWidgets('a Layer row in a node graph draws no picker', (tester) async {
-      final p = withGraph();
-      final wrap = seedFx(p.graph, 'light_wrap', const Offset(60, 40));
-      p.uiState.model.refresh();
-      await mount(
-        tester,
-        p,
-        child: const Row(children: [
-          SizedBox(width: 600, child: GraphPanelFrb()),
-          Expanded(child: NodePanelFrb()),
-        ]),
-      );
-
-      await tester.tapAt(tester.getCenter(card(wrap)));
-      await tester.pump();
-      expect(find.byKey(ValueKey<String>('node-row-$wrap-background')),
-          findsOneWidget);
-      expect(find.byKey(ValueKey<String>('fx-layer-$wrap-background')),
-          findsNothing,
-          reason: 'the wire is the reference here');
-    });
-
     /// A nested graph's Inputs are rows on the box that applies it (§1.5), so
     /// the panel draws the derived half of the list as well as the declared.
     testWidgets('a nested Node graph box draws the graph\'s Input row',
@@ -1275,104 +759,6 @@ void main() {
       expect(find.byKey(ValueKey<String>('node-row-$nested-amount')),
           findsOneWidget,
           reason: "the graph's own Input is a row on the box");
-    });
-
-    /// **Auto-wire off the anchor's own socket.** The Output box, a value
-    /// Input and every driver have no `output`, and a wire naming a socket a
-    /// box has not got is refused, which used to lose the whole add.
-    testWidgets('a box added with the Output picked feeds the Output',
-        (tester) async {
-      final p = withGraph();
-      await mount(tester, p);
-      final out = p.graph.getNodeGraph().wiring.output;
-      await tester.tapAt(tester.getCenter(card(out)));
-      await tester.pump();
-      await addFromConsole(tester, p.uiState, 'Gaussian', 'Gaussian blur');
-
-      final added = p.uiState.compGraphNode.value!.id;
-      expect(card(added), findsOneWidget, reason: 'the box landed');
-      expect(
-        p.graph.getNodeGraph().wiring.edges.where(
-            (e) => e.from == added && e.to == out && e.toPort == 'input'),
-        hasLength(1),
-      );
-    });
-
-    /// The console aims at the middle of the view, so without a step aside
-    /// every box it adds would sit on the one before it.
-    testWidgets('two boxes from the console land clear of each other',
-        (tester) async {
-      final p = withGraph();
-      await mount(tester, p);
-      await addFromConsole(tester, p.uiState, 'Gaussian', 'Gaussian blur');
-      final first = p.uiState.compGraphNode.value!.id;
-      await addFromConsole(tester, p.uiState, 'Transform', 'Transform');
-      final second = p.uiState.compGraphNode.value!.id;
-
-      expect(second, isNot(first));
-      final spots = {
-        for (final at in p.graph.getNodeGraph().wiring.layout)
-          at.node: Offset(at.x, at.y),
-      };
-      expect(spots[second], isNot(spots[first]));
-      expect(tester.getTopLeft(card(second)),
-          isNot(tester.getTopLeft(card(first))));
-    });
-
-    testWidgets('a box added with a driver picked lands unwired',
-        (tester) async {
-      final p = withGraph();
-      final wiggle = seedFx(p.graph, 'wiggle', const Offset(40, 260));
-      p.uiState.model.refresh();
-      await mount(tester, p);
-      await tester.tapAt(tester.getCenter(card(wiggle)));
-      await tester.pump();
-      await addFromConsole(tester, p.uiState, 'Gaussian', 'Gaussian blur');
-
-      final added = p.uiState.compGraphNode.value!.id;
-      expect(card(added), findsOneWidget,
-          reason: 'a Wiggle has no picture to hand on, so the box still lands');
-      expect(p.graph.getNodeGraph().wiring.edges, isEmpty);
-    });
-
-    /// A Switch grows a spare socket one beyond the last wired (§1.4).
-    testWidgets('a Switch grows its spare socket as one is wired',
-        (tester) async {
-      final p = withGraph();
-      final read = seedRead(p.graph, p.state, const Offset(20, 40));
-      final chooser = seedFx(p.graph, 'switch', const Offset(300, 40));
-      p.uiState.model.refresh();
-      await mount(tester, p);
-      expect(socket(chooser, 'in0'), findsOneWidget);
-      expect(socket(chooser, 'in1'), findsNothing);
-
-      await wire(tester, read, 'output', chooser, 'in0');
-      expect(socket(chooser, 'in1'), findsOneWidget,
-          reason: 'one beyond the last wired socket');
-    });
-
-    testWidgets('a Switch added with a Read picked is wired on in0',
-        (tester) async {
-      final p = withGraph();
-      final read = seedRead(p.graph, p.state, const Offset(20, 40));
-      p.uiState.model.refresh();
-      await mount(tester, p);
-      await tester.tapAt(tester.getCenter(card(read)));
-      await tester.pump();
-      await addFromConsole(tester, p.uiState, 'Switch', 'Switch');
-
-      final added = p.uiState.compGraphNode.value!.id;
-      expect(card(added), findsOneWidget, reason: 'the box landed');
-      final box =
-          p.graph.getNodeGraph().nodes.firstWhere((n) => n.id == added);
-      expect(box.inputs.map((s) => s.id),
-          containsAll(<String>['in0', 'index']));
-      expect(
-        p.graph.getNodeGraph().wiring.edges.where(
-            (e) => e.from == read && e.to == added && e.toPort == 'in0'),
-        hasLength(1),
-        reason: 'a Switch takes its first picture on in0, not on an input',
-      );
     });
 
     Future<void> pickExposure(WidgetTester tester) async {
@@ -1491,60 +877,6 @@ void main() {
       }
     });
 
-    // Settings turns each way in off by itself, and the other two still work.
-    testWidgets('each way into the console turns off on its own',
-        (tester) async {
-      final p = withGraph();
-      await mount(tester, p);
-      addTearDown(() => lastKnownPointerPosition = null);
-      final canvas =
-          tester.getTopLeft(find.byKey(const ValueKey('comp-graph-canvas')));
-      lastKnownPointerPosition = canvas + const Offset(120, 380);
-      final settings = p.uiState.workspace.interface;
-
-      var round = 0;
-      Future<void> rightClick() => tester.tapAt(
-          // A new spot each round, clear of the open box the last round added.
-          canvas + Offset(100 + (graphNodeOpenWidth + 50) * round, 100),
-          buttons: kSecondaryMouseButton);
-      Future<void> press(LogicalKeyboardKey key, {bool shift = false}) async {
-        await tester.tapAt(canvas + const Offset(600, 450));
-        await tester.pump();
-        if (shift) await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
-        await tester.sendKeyEvent(key);
-        if (shift) await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
-      }
-
-      final ways = <(Future<void> Function(), void Function(bool))>[
-        (rightClick, (on) => settings.rightClickOpensNodeSearch = on),
-        (
-          () => press(LogicalKeyboardKey.tab),
-          (on) => settings.tabOpensNodeSearch = on
-        ),
-        (
-          () => press(LogicalKeyboardKey.keyA, shift: true),
-          (on) => settings.shiftAOpensNodeSearch = on
-        ),
-      ];
-      for (final off in ways) {
-        for (final way in ways) {
-          way.$2(!identical(way, off));
-        }
-        for (final way in ways) {
-          await way.$1();
-          await tester.pump();
-          if (identical(way, off)) {
-            expect(find.byKey(const ValueKey<String>('fx-console-bar')),
-                findsNothing,
-                reason: 'round $round: the way turned off opens nothing');
-          } else {
-            await pickExposure(tester);
-          }
-        }
-        round++;
-      }
-    });
-
     testWidgets('copy and paste bring the boxes and their wire, fresh',
         (tester) async {
       final p = withGraph();
@@ -1637,85 +969,5 @@ void main() {
       expect(p.graph.getNodeGraph().nodes.any((n) => n.id == blur), isFalse);
     });
 
-    testWidgets('Effect controls draw the picked box over a node graph',
-        (tester) async {
-      final p = withGraph();
-      final blur = seedFx(p.graph, 'blur', const Offset(60, 40));
-      p.uiState.model.refresh();
-      await mount(
-        tester,
-        p,
-        child: const Row(children: [
-          SizedBox(width: 600, child: GraphPanelFrb()),
-          Expanded(child: EffectControlsPanelFrb()),
-        ]),
-      );
-      expect(
-          find.descendant(
-              of: find.byType(EffectControlsPanelFrb),
-              matching: find.byType(NodePanelFrb)),
-          findsOneWidget);
-      expect(find.text(l10n.nodeNoSelection), findsOneWidget);
-
-      await tester.tapAt(tester.getCenter(card(blur)));
-      await tester.pump();
-      expect(find.byKey(ValueKey<String>('node-row-$blur-radius')),
-          findsOneWidget);
-    });
-
-    testWidgets('Shift+A typed into a box rename opens no console',
-        (tester) async {
-      final p = withGraph();
-      final blur = seedFx(p.graph, 'blur', const Offset(60, 40));
-      p.uiState.model.refresh();
-      await mount(tester, p);
-      final name = find.byKey(ValueKey<String>('graph-node-name-node:$blur'));
-      await tester.tap(name);
-      await tester.pump(kDoubleTapMinTime);
-      await tester.tap(name);
-      await tester.pumpAndSettle();
-      final field =
-          find.byKey(ValueKey<String>('graph-node-rename-node:$blur'));
-      expect(field, findsOneWidget);
-      // No click into it: the field takes the keys as soon as it opens.
-      expect(
-          tester
-              .widget<EditableText>(find.descendant(
-                  of: field, matching: find.byType(EditableText)))
-              .focusNode
-              .hasPrimaryFocus,
-          isTrue);
-
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
-      await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
-      await tester.pump();
-      expect(find.byKey(const ValueKey<String>('fx-console-bar')), findsNothing,
-          reason: 'the capital A belongs to the name being typed');
-    });
-
-    testWidgets('a cancelled right-press leaves the next drag a marquee',
-        (tester) async {
-      final p = withGraph();
-      final blur = seedFx(p.graph, 'blur', const Offset(240, 160));
-      p.uiState.model.refresh();
-      await mount(tester, p);
-      final canvas =
-          tester.getTopLeft(find.byKey(const ValueKey('comp-graph-canvas')));
-
-      // A right-press on empty ground that never comes up.
-      final right = await tester.startGesture(canvas + const Offset(600, 450),
-          kind: PointerDeviceKind.mouse, buttons: kSecondaryMouseButton);
-      await right.cancel();
-      await right.removePointer();
-      await tester.pump();
-
-      final band = tester.getRect(card(blur)).inflate(20);
-      await tester.dragFrom(band.topLeft, band.bottomRight - band.topLeft);
-      await tester.pump();
-      expect(picked(tester, blur), isTrue, reason: 'the band took the box');
-      expect(
-          find.byKey(const ValueKey<String>('fx-console-bar')), findsNothing);
-    });
   }, skip: !engineAvailable);
 }

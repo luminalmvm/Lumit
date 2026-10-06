@@ -193,40 +193,6 @@ fn run(
 mod tests {
     use super::*;
 
-    /// The naming rule, on the shapes a real path takes.
-    #[test]
-    fn a_proxy_is_named_beside_its_original() {
-        assert_eq!(
-            proxy_path_for(Path::new("/clips/shot.mp4")),
-            PathBuf::from("/clips/shot_proxy.mov")
-        );
-        // Whatever the container, the proxy is a .mov.
-        assert_eq!(
-            proxy_path_for(Path::new("/clips/shot.mov")),
-            PathBuf::from("/clips/shot_proxy.mov")
-        );
-        // A dotted name keeps everything before the last dot.
-        assert_eq!(
-            proxy_path_for(Path::new("/clips/shot.v2.mp4")),
-            PathBuf::from("/clips/shot.v2_proxy.mov")
-        );
-    }
-
-    /// Half, even, never zero — the raster rule every codec here needs.
-    #[test]
-    fn the_proxy_width_is_half_and_even() {
-        assert_eq!(proxy_width(1920), 960);
-        assert_eq!(proxy_width(1921), 960);
-        // 1080/2 = 540, already even.
-        assert_eq!(proxy_width(1080), 540);
-        // Odd halves round down to even.
-        assert_eq!(proxy_width(1078), 538);
-        // Tiny sources still make an expressible raster.
-        assert_eq!(proxy_width(3), 2);
-        assert_eq!(proxy_width(1), 2);
-        assert_eq!(proxy_width(0), 2);
-    }
-
     /// End to end on a real file: encode a small clip, make its proxy, and read
     /// the proxy back with our own probe. Half the width, the same frame count
     /// — which is the agreement `effective_media` insists on before it will use

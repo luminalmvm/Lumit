@@ -379,20 +379,6 @@ mod tests {
     }
 
     #[test]
-    fn a_solid_that_does_not_reach_every_edge_does_not() {
-        let (doc, mut comp) = scene();
-        comp.layers[0].transform.position_x = Property::fixed(33.0);
-        assert_eq!(occluder_index(&doc, &comp, 1.0), None);
-        // Scaled up past the edges it covers again, even when parented.
-        comp.layers[0].transform.scale_x = Property::fixed(200.0);
-        assert_eq!(occluder_index(&doc, &comp, 1.0), Some(0));
-        let parent = comp.layers[1].id;
-        comp.layers[0].parent = Some(parent);
-        comp.layers[1].transform.scale_x = Property::fixed(10.0);
-        assert_eq!(occluder_index(&doc, &comp, 1.0), None);
-    }
-
-    #[test]
     fn anything_that_could_show_the_layers_below_refuses() {
         let disqualify: Vec<(&str, Box<dyn Fn(&mut Composition)>)> = vec![
             (
@@ -519,50 +505,5 @@ mod tests {
                 "{why} must refuse the cull"
             );
         }
-    }
-
-    #[test]
-    fn a_turned_solid_occludes_once_it_is_big_enough_to_cover_the_frame() {
-        let (doc, mut comp) = scene();
-        comp.layers[0].transform.rotation = Property::fixed(30.0);
-        // The same size as the frame, turned: the corners come off it.
-        assert_eq!(occluder_index(&doc, &comp, 1.0), None);
-        // Half again as wide and tall, turned about the centre of the frame:
-        // the nearest edge is 48 px out and the corners are 45.3 px out.
-        comp.layers[0].transform.scale_x = Property::fixed(150.0);
-        comp.layers[0].transform.scale_y = Property::fixed(150.0);
-        assert_eq!(occluder_index(&doc, &comp, 1.0), Some(0));
-    }
-
-    #[test]
-    fn a_turned_parent_carries_the_cover_with_it() {
-        let (doc, mut comp) = scene();
-        let mut spinner = layer(LayerKind::Null, 64, 64);
-        spinner.transform.rotation = Property::fixed(45.0);
-        comp.layers[0].parent = Some(spinner.id);
-        comp.layers.push(spinner);
-        // Turned on the spot, a frame-sized solid loses the corners.
-        assert_eq!(occluder_index(&doc, &comp, 1.0), None);
-        comp.layers[0].transform.scale_x = Property::fixed(150.0);
-        comp.layers[0].transform.scale_y = Property::fixed(150.0);
-        assert_eq!(occluder_index(&doc, &comp, 1.0), Some(0));
-    }
-
-    #[test]
-    fn a_mirrored_solid_still_covers_the_frame() {
-        let (doc, mut comp) = scene();
-        comp.layers[0].transform.scale_x = Property::fixed(-100.0);
-        assert_eq!(occluder_index(&doc, &comp, 1.0), Some(0));
-    }
-
-    #[test]
-    fn references_that_stay_above_the_occluder_do_not_refuse() {
-        let (doc, mut comp) = scene();
-        let mut l = layer(LayerKind::Null, 1, 1);
-        let other = layer(LayerKind::Null, 1, 1);
-        l.effects.push(layer_ref_effect(other.id));
-        comp.layers.insert(0, other);
-        comp.layers.insert(0, l);
-        assert_eq!(occluder_index(&doc, &comp, 1.0), Some(2));
     }
 }

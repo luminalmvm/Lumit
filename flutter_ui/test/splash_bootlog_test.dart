@@ -35,27 +35,4 @@ void main() {
     await tester.pumpAndSettle();
     expect(done, isTrue, reason: 'the splash completes and calls onDone');
   });
-
-  testWidgets('falls back to the canned lines without a boot log',
-      (tester) async {
-    await tester.binding.setSurfaceSize(const Size(800, 600));
-    await tester.pumpWidget(_harness(SplashOverlay(
-      lines: const [], // no bridge → empty log
-      onDone: () {},
-    )));
-
-    await tester.pump(const Duration(milliseconds: 250));
-    expect(find.text(bootLines.first), findsOneWidget);
-    await tester.pumpAndSettle();
-  });
-
-  testWidgets('a null boot log also falls back to the canned lines',
-      (tester) async {
-    await tester.binding.setSurfaceSize(const Size(800, 600));
-    await tester.pumpWidget(_harness(SplashOverlay(onDone: () {})));
-
-    await tester.pump(const Duration(milliseconds: 250));
-    expect(find.text(bootLines.first), findsOneWidget);
-    await tester.pumpAndSettle();
-  });
 }

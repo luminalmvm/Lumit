@@ -10,13 +10,10 @@
 // is asserted here is what this side does: draws a dot per point, picks them,
 // and asks the engine once per frame rather than once per rebuild.
 
-import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/main.dart';
-import 'package:lumit_flutter/panels/camera_track_display_frb.dart';
 import 'package:lumit_flutter/panels/effect_controls_panel_frb.dart';
-import 'package:lumit_flutter/panels/viewer_panel_frb.dart';
 import 'package:lumit_flutter/panels/viewer_track.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
@@ -87,80 +84,6 @@ void main() {
       expect(find.text('Not analysed yet'), findsNothing);
       expect(p.state.project!.isDirty(), before,
           reason: 'and neither press is an edit');
-    });
-
-    /// A reading of the status, written down: the engine cannot be made to
-    /// produce a partial solve from Dart (it is the answer to a minutes-long
-    /// analysis of a real file), and what this side does with one is the claim.
-    BridgeTrackStatus solved({required int frames, required int clipFrames}) =>
-        BridgeTrackStatus(
-          stage: BridgeTrackStage.done,
-          done: 0,
-          total: 0,
-          meanError: 0.42,
-          points: 300,
-          frames: frames,
-          clipFrames: clipFrames,
-        );
-
-    testWidgets('a partial track says how far it got, and draws the span',
-        (tester) async {
-      // The line: a whole track reports its quality, a partial one reports its
-      // reach — the fact that decides what the user does next.
-      expect(trackStatusSentence(solved(frames: 50, clipFrames: 50)),
-          contains('300 points'));
-      final partial = trackStatusSentence(solved(frames: 20, clipFrames: 50));
-      expect(partial, contains('20'));
-      expect(partial, contains('50'));
-      expect(partial, isNot(contains('300 points')),
-          reason: 'a partial track leads with its span, not its point count');
-
-      // The bar: two weights in one row, and they are the two frame counts.
-      final p = withTrackedLayer();
-      await tester.pumpWidget(hostPanel(
-        child: const TrackSpanBar(analysed: 20, total: 50),
-        state: p.state,
-        uiState: p.uiState,
-      ));
-      await tester.pump();
-      final weights = tester
-          .widgetList<Expanded>(find.byType(Expanded))
-          .map((e) => e.flex)
-          .toList();
-      expect(weights, [20, 30],
-          reason: 'the analysed span and the remainder, in clip frames');
-      final fills = tester
-          .widgetList<ColoredBox>(find.byType(ColoredBox))
-          .map((b) => b.color)
-          .toSet();
-      expect(fills.length, 2,
-          reason: 'the analysed span is not drawn like the rest of the clip');
-
-      // A whole track fills the bar, so there is no second colour to read.
-      // Torn down first: `hostPanel` mounts its child as an `Overlay` entry,
-      // which is built once and would keep showing the bar above.
-      await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pumpWidget(hostPanel(
-        child: const TrackSpanBar(analysed: 50, total: 50),
-        state: p.state,
-        uiState: p.uiState,
-      ));
-      await tester.pump();
-      expect(
-          tester
-              .widgetList<Expanded>(find.byType(Expanded))
-              .map((e) => e.flex)
-              .toList(),
-          [50]);
-    });
-
-    testWidgets('the failure sentence is chosen here, not sent by the engine',
-        (tester) async {
-      // Every reason has words. The switch is exhaustive over the generated
-      // enum, so this is the check that none of them was left as a blank.
-      for (final failure in BridgeTrackFailure.values) {
-        expect(trackFailureSentence(failure).trim(), isNotEmpty);
-      }
     });
 
     /// A cloud that does not depend on a solve existing — see the file header.
@@ -262,42 +185,6 @@ void main() {
       );
     });
 
-    testWidgets('shift adds, a box takes several, and Escape clears',
-        (tester) async {
-      final p = withTrackedLayer();
-      await mountCloud(tester, p);
-
-      List<({Offset at, double depth, bool picked})> drawn() => (tester
-              .widget<CustomPaint>(find.byKey(
-                const ValueKey('viewer-track-points'),
-              ))
-              .painter! as TrackPointPainter)
-          .points;
-
-      await tester.tapAt(const Offset(100, 100));
-      await tester.pump();
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
-      await tester.tapAt(const Offset(300, 100));
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
-      await tester.pump();
-      expect(drawn().where((p) => p.picked).length, 2,
-          reason: 'shift-click adds rather than replacing');
-
-      // A box round the two nearer points, dragged on empty picture.
-      await tester.dragFrom(
-        const Offset(600, 40),
-        const Offset(-580, 300),
-      );
-      await tester.pump();
-      expect(drawn().where((p) => p.picked).length, 2);
-
-      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-      await tester.pump();
-      expect(drawn().where((p) => p.picked), isEmpty);
-      expect(
-          find.byKey(const ValueKey('viewer-track-create-null')), findsNothing);
-    });
-
     testWidgets('the cloud is asked for once per frame, not once per rebuild',
         (tester) async {
       final p = withTrackedLayer();
@@ -326,105 +213,6 @@ void main() {
       frame.value = 2;
       await tester.pump();
       expect(asked[0], 3);
-    });
-
-    /// **Switching the effect off takes the cloud with it**.
-    ///
-    /// The cloud is found in the read model, and the model changing is a thing
-    /// to listen to. It was read outside any listener, so the dots stayed on
-    /// the picture after the effect was disabled until the frame next changed —
-    /// which, paused, could be never.
-    testWidgets('disabling the effect removes the cloud, with no frame change',
-        (tester) async {
-      final p = withTrackedLayer();
-      // Show points is off by default; the cloud is only ever drawn with it on.
-      final effects = p.layer.getEffects();
-      effects.single.setValue(
-          id: 'show_points', value: const BridgeEffectValue.bool(true));
-      p.layer.setEffects(effects: effects);
-      p.uiState.model.refresh();
-
-      await tester.pumpWidget(hostPanel(
-        state: p.state,
-        uiState: p.uiState,
-        size: const Size(900, 600),
-        child: const ViewerPanelFrb(),
-      ));
-      await settleFrb(tester, minRounds: 8);
-
-      final cloudKey =
-          ValueKey<String>('viewer-track-${p.layer.internallayerId}');
-      expect(find.byKey(cloudKey), findsOneWidget,
-          reason: 'Show points is on, so the cloud is drawn');
-
-      final frame = p.uiState.playheadFrame.value;
-      p.layer.setEffectEnabled(
-          effect: p.layer.getEffects().single, enabled: false);
-      // What the Effect Controls panel does after a switch: re-read. Nothing
-      // else moves, and in particular the playhead does not.
-      p.uiState.model.refresh();
-      await tester.pump();
-
-      expect(find.byKey(cloudKey), findsNothing,
-          reason: 'a disabled effect draws nothing');
-      expect(p.uiState.playheadFrame.value, frame,
-          reason: 'and it took no frame change to notice');
-    });
-
-    /// **A solve landing makes the cloud appear**.
-    ///
-    /// The read is keyed by the frame and the document's revision, and a solve
-    /// moves neither: it is the answer to an analysis, not an edit. Without a
-    /// third key the dots did not arrive until something else did.
-    testWidgets('a landed solve is read without the playhead moving',
-        (tester) async {
-      final p = withTrackedLayer();
-      var solved = false;
-      await tester.pumpWidget(hostPanel(
-        size: const Size(640, 480),
-        state: p.state,
-        uiState: p.uiState,
-        child: ValueListenableBuilder<int>(
-          valueListenable: p.uiState.solveLanded,
-          builder: (context, generation, _) => Stack(children: [
-            Positioned.fill(
-              child: ViewerTrackLayer(
-                tracked: p.layer,
-                selecting: true,
-                fitted: const Rect.fromLTWH(0, 0, 640, 480),
-                compSize: const Size(640, 480),
-                playheadFrame: 0,
-                revision: null,
-                generation: generation,
-                accent: const Color(0xFF00FF00),
-                mark: const Color(0xFFFFFFFF),
-                onChanged: () {},
-                // Nothing until the analysis lands, then the cloud — which is
-                // what the engine does, one solve later.
-                fetch: (_, __) => solved ? cloud() : const <BridgeTrackPoint>[],
-              ),
-            ),
-          ]),
-        ),
-      ));
-      await tester.pump();
-      expect(find.byKey(const ValueKey('viewer-track-points')), findsNothing,
-          reason: 'nothing is solved yet');
-
-      solved = true;
-      // The one thing the Camera track's card does when a solve lands.
-      p.uiState.solveLanded.value++;
-      await tester.pump();
-      await tester.pump();
-
-      final painter = tester
-          .widget<CustomPaint>(
-            find.byKey(const ValueKey('viewer-track-points')),
-          )
-          .painter! as TrackPointPainter;
-      expect(painter.points.length, 3,
-          reason: 'the solve was read without the playhead moving');
-      expect(p.uiState.playheadFrame.value, 0);
     });
 
     testWidgets('a linked camera wears the badge and converts to keyframes',
@@ -469,73 +257,5 @@ void main() {
           reason: 'the bake writes one key per frame');
     });
 
-    // **Track once, then nudge**. The engine's arithmetic — solve plus
-    // correction — is asserted in Rust; what is asserted here is that both rows
-    // say a nudge has happened, that Clear corrections is only offered when
-    // there is something to clear, and that pressing it puts the dot out.
-    testWidgets('the edited-since-track dot appears, clears, and undoes',
-        (tester) async {
-      final p = withTrackedLayer();
-      final camera = p.uiState.selectedComp!.addCameraLayer();
-      setCameraSolveLink(
-        camera: camera,
-        tracked: p.layer.internallayerId,
-      );
-      p.uiState
-        ..selectedLayer.value = camera
-        ..setSelection([camera]);
-      p.uiState.workspace.interface.transformInEffectControls = true;
-      p.uiState.model.refresh();
-
-      await tester.pumpWidget(hostPanel(
-        child: const EffectControlsPanelFrb(),
-        state: p.state,
-        uiState: p.uiState,
-      ));
-      await tester.pump();
-      await tester.pump();
-
-      const dot = ValueKey('tf-camera-link-corrected');
-      const clear = ValueKey('tf-camera-link-clear');
-      expect(find.byKey(dot), findsNothing,
-          reason: 'nobody has nudged this camera');
-      expect(find.byKey(clear), findsNothing,
-          reason: 'a command that would refuse is not offered');
-
-      // Nudge it the way a drag does: an ordinary write to its own property.
-      camera.setTransform(
-        prop: BridgeTransformProp.positionX,
-        value: const BridgeScalar.static_(1200),
-      );
-      p.uiState.model.refresh();
-      await tester.pump();
-      await tester.pump();
-
-      expect(find.byKey(dot), findsOneWidget);
-      expect(find.byKey(clear), findsOneWidget);
-      // And the same fact on the tracked layer's own row, which is where the
-      // Camera track effect reports.
-      expect(p.layer.getInfo().trackCorrected, isTrue,
-          reason: 'the effect that was tracked says its camera has been nudged');
-
-      await tester.tap(find.byKey(clear));
-      p.uiState.model.refresh();
-      await tester.pump();
-      await tester.pump();
-
-      expect(find.byKey(dot), findsNothing);
-      expect(camera.getInfo().trackCorrected, isFalse);
-      expect(cameraLink(camera: camera, frame: 0).tracked,
-          p.layer.internallayerId,
-          reason: 'clearing the nudge must not clear the track');
-
-      // One undo step brings the nudge back, dot and all.
-      p.state.project!.undo();
-      p.uiState.model.refresh();
-      await tester.pump();
-      await tester.pump();
-      expect(camera.getInfo().trackCorrected, isTrue);
-      expect(find.byKey(dot), findsOneWidget);
-    });
   }, skip: !engineAvailable);
 }

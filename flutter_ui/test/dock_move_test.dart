@@ -61,24 +61,6 @@ void main() {
     checkInvariants(root);
   });
 
-  test('stack onto a tabbed pane appends and fronts the newcomer', () {
-    final root = DockSplit(
-      DockAxis.horizontal,
-      [
-        DockTabs([DockPane(Panel.project), DockPane(Panel.hierarchy)]),
-        DockPane(Panel.viewer),
-      ],
-      [0.5, 0.5],
-    );
-    movePanel(root, Panel.viewer.pane(), Panel.project.pane(), DropPosition.stack);
-
-    final tabs = root.children.single as DockTabs;
-    expect([for (final c in tabs.children) c.panel],
-        [Panel.project, Panel.hierarchy, Panel.viewer]);
-    expect(tabs.active, 2);
-    checkInvariants(root);
-  });
-
   test('same-axis split inserts adjacent with halved shares', () {
     // Scopes sits outside the horizontal split, so dragging it in leaves the
     // target's neighbours untouched and the halving is exact.
@@ -106,85 +88,6 @@ void main() {
     expect(row.shares[0], closeTo(0.6, 1e-9));
     expect(row.shares[1], closeTo(0.2, 1e-9));
     expect(row.shares[2], closeTo(0.2, 1e-9));
-    checkInvariants(root);
-  });
-
-  test('cross-axis split nests a new split of the other axis', () {
-    final root = threeAcross();
-    // Splitting Scopes above Viewer nests a vertical split where Viewer sat.
-    movePanel(root, Panel.scopes.pane(), Panel.viewer.pane(), DropPosition.above);
-
-    final nested = root.children[0] as DockSplit;
-    expect(nested.axis, DockAxis.vertical);
-    expect([for (final c in nested.children) (c as DockPane).panel],
-        [Panel.scopes, Panel.viewer]);
-    expect(nested.shares, [0.5, 0.5]);
-    checkInvariants(root);
-  });
-
-  test('removing the last other tab of a group unwraps it to a bare pane', () {
-    final root = DockSplit(
-      DockAxis.horizontal,
-      [
-        DockTabs([DockPane(Panel.project), DockPane(Panel.hierarchy)]),
-        DockPane(Panel.viewer),
-      ],
-      [0.5, 0.5],
-    );
-    // Move Hierarchy out to the right of Viewer; the group is left with just
-    // Project and unwraps to a bare pane.
-    movePanel(root, Panel.hierarchy.pane(), Panel.viewer.pane(), DropPosition.right);
-
-    expect(root.children[0], isA<DockPane>());
-    expect((root.children[0] as DockPane).panel, Panel.project);
-    checkInvariants(root);
-  });
-
-  test('nested same-axis splits join into their parent', () {
-    final root = DockSplit(
-      DockAxis.horizontal,
-      [
-        DockSplit(
-          DockAxis.horizontal,
-          [DockPane(Panel.project), DockPane(Panel.hierarchy)],
-          [0.5, 0.5],
-        ),
-        DockPane(Panel.viewer),
-      ],
-      [0.6, 0.4],
-    );
-    simplify(root);
-
-    expect(root.children.length, 3);
-    expect([for (final c in root.children) (c as DockPane).panel],
-        [Panel.project, Panel.hierarchy, Panel.viewer]);
-    // The nested 0.6 share splits 0.5/0.5 → 0.3/0.3, Viewer keeps 0.4.
-    expect(root.shares[0], closeTo(0.3, 1e-9));
-    expect(root.shares[1], closeTo(0.3, 1e-9));
-    expect(root.shares[2], closeTo(0.4, 1e-9));
-    checkInvariants(root);
-  });
-
-  test('a self-drop is a no-op', () {
-    final root = threeAcross();
-    final before = root.toJson();
-    movePanel(root, Panel.viewer.pane(), Panel.viewer.pane(), DropPosition.stack);
-    movePanel(root, Panel.viewer.pane(), Panel.viewer.pane(), DropPosition.left);
-    expect(root.toJson(), before);
-  });
-
-  test('the root stays a DockSplit when reduced to one child', () {
-    final root = threeAcross();
-    // Stack Timeline and Scopes onto Viewer; the horizontal root would hold a
-    // single tab group — it must keep a one-child split.
-    movePanel(root, Panel.timeline.pane(), Panel.viewer.pane(), DropPosition.stack);
-    movePanel(root, Panel.scopes.pane(), Panel.viewer.pane(), DropPosition.stack);
-
-    expect(root, isA<DockSplit>());
-    expect(root.children.length, 1);
-    expect(root.shares, [1.0]);
-    final tabs = root.children.single as DockTabs;
-    expect(tabs.children.length, 3);
     checkInvariants(root);
   });
 

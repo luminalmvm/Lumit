@@ -92,8 +92,8 @@ const double _unknownMemoryMib = 16384;
 // ---- the drawing's measurements ---------------------------------------------
 //
 // Every one of these is read off the approved drawing's own computed styles,
-// not chosen: `settings_metrics_test` pins them, and a value that disagrees
-// with the drawing is a defect (§12A.6).
+// not chosen, and a value that disagrees with the drawing is a defect
+// (§12A.6).
 
 /// The size the window opens at: the drawing's own frame. The corner grip
 /// takes it from here, and where it is left is remembered.

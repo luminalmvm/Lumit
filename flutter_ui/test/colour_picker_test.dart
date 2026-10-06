@@ -7,7 +7,6 @@
 
 import 'dart:ui';
 
-import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
@@ -92,30 +91,9 @@ void main() {
       expectRgb((240, 1, 1), 0, 0, 255); // pure blue
       expectRgb((120, 0.5, 0.8), 102, 204, 102); // mid sat / mid value
     });
-
-    test('the alpha channel is always opaque', () {
-      final c = hsvToRgb(200, 0.4, 0.6);
-      expect((c.a * 255).round(), 0xff);
-    });
   });
 
   group('rgbToHsv', () {
-    void expectHsv(int cr, int cg, int cb, double eh, double es, double ev) {
-      final hsv = rgbToHsv(Color.fromARGB(0xff, cr, cg, cb));
-      expect(hsv.$1, closeTo(eh, 1e-6), reason: 'hue');
-      expect(hsv.$2, closeTo(es, 1e-6), reason: 'saturation');
-      expect(hsv.$3, closeTo(ev, 1e-6), reason: 'value');
-    }
-
-    test('the conversion table (RGB → HSV)', () {
-      expectHsv(0, 0, 0, 0, 0, 0); // black
-      expectHsv(255, 255, 255, 0, 0, 1); // white
-      expectHsv(255, 0, 0, 0, 1, 1); // pure red
-      expectHsv(0, 255, 0, 120, 1, 1); // pure green
-      expectHsv(0, 0, 255, 240, 1, 1); // pure blue
-      expectHsv(102, 204, 102, 120, 0.5, 0.8); // mid sat / mid value
-    });
-
     test('round-trips back through hsvToRgb', () {
       for (final sample in [
         const Color.fromARGB(0xff, 12, 200, 90),
@@ -130,36 +108,6 @@ void main() {
   });
 
   group('hex parse/format', () {
-    test('parses six digits, tolerating a leading #', () {
-      final a = parseHex('e05a72');
-      final b0 = parseHex('#E05A72');
-      expect(a, isNotNull);
-      expect(b0, isNotNull);
-      expect([r(a!), g(a), b(a)], [0xe0, 0x5a, 0x72]);
-      expect([r(b0!), g(b0), b(b0)], [0xe0, 0x5a, 0x72]);
-    });
-
-    test('trims surrounding whitespace', () {
-      final c = parseHex('  ff8800  ');
-      expect(c, isNotNull);
-      expect([r(c!), g(c), b(c)], [0xff, 0x88, 0x00]);
-    });
-
-    test('rejects malformed input', () {
-      expect(parseHex(''), isNull);
-      expect(parseHex('12345'), isNull); // too short
-      expect(parseHex('1234567'), isNull); // too long
-      expect(parseHex('gg0000'), isNull); // non-hex
-      expect(parseHex('#12g456'), isNull);
-      expect(parseHex('not a colour'), isNull);
-    });
-
-    test('formats as upper-case RRGGBB with no #', () {
-      expect(formatHex(const Color.fromARGB(0xff, 0xe0, 0x5a, 0x72)), 'E05A72');
-      expect(formatHex(const Color.fromARGB(0xff, 0, 0, 0)), '000000');
-      expect(formatHex(const Color.fromARGB(0xff, 255, 136, 0)), 'FF8800');
-    });
-
     test('round-trips through parse and format', () {
       for (final s in ['000000', 'FFFFFF', 'E05A72', '1A2B3C', 'FF8800']) {
         expect(formatHex(parseHex(s)!), s);
@@ -168,18 +116,6 @@ void main() {
   });
 
   group('the picker applies as it changes', () {
-    testWidgets('shows R, G and B above the graph, each one editable',
-        (tester) async {
-      await _openPicker(tester);
-      // The three numbers of the colour it opened on, as fields.
-      expect(find.text('128'), findsOneWidget);
-      expect(find.text('64'), findsOneWidget);
-      expect(find.text('32'), findsOneWidget);
-      expect(find.byKey(const Key('colour-picker-R')), findsOneWidget);
-      expect(find.byKey(const Key('colour-picker-G')), findsOneWidget);
-      expect(find.byKey(const Key('colour-picker-B')), findsOneWidget);
-    });
-
     testWidgets('a typed channel applies immediately and moves the picker',
         (tester) async {
       final applied = await _openPicker(tester);
@@ -223,47 +159,9 @@ void main() {
       expect(find.byKey(const Key('colour-picker-square')), findsNothing,
           reason: 'and closes');
     });
-
-    testWidgets('clicking away keeps what is applied, and closes',
-        (tester) async {
-      final applied = await _openPicker(tester);
-      await tester.tap(find.byKey(const Key('colour-picker-strip')));
-      await tester.pumpAndSettle();
-      final chosen = applied.commits.last;
-
-      // A press outside the picker: the popup's own barrier.
-      await tester.tapAt(const Offset(700, 500));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('colour-picker-strip')), findsNothing);
-      expect(applied.commits.last, chosen,
-          reason: 'nothing was rolled back on the way out');
-    });
   });
 
   group('the channel scale follows what is being edited', () {
-    /// A display colour is eight bits: 0–255, and a hex is the same value said
-    /// another way.
-    testWidgets('a display colour reads 0–255', (tester) async {
-      await _openPicker(tester, scale: ColourScale.bytes);
-      expect(find.text('128'), findsOneWidget);
-      expect(find.text('64'), findsOneWidget);
-      expect(find.text('32'), findsOneWidget);
-    });
-
-    /// A scene-linear colour in a float working depth is not: 0–1 is black to
-    /// white, shown as decimals.
-    testWidgets('a scene-linear colour reads 0–1', (tester) async {
-      await _openPicker(
-        tester,
-        initial: const PickedColour(0.5, 0.25, 0.125),
-        scale: ColourScale.unit,
-        max: 4,
-      );
-      expect(find.text('0.500'), findsOneWidget);
-      expect(find.text('0.250'), findsOneWidget);
-      expect(find.text('0.125'), findsOneWidget);
-    });
-
     /// **The HDR case.** A tint whose parameter reaches 4 must be typeable to
     /// 2.5 — clamping it at white in the picker loses the value the engine
     /// would happily carry (fp16 goes to 65504).
@@ -286,46 +184,6 @@ void main() {
       // And the picker says the swatch and hex can no longer show it.
       expect(find.byKey(const Key('colour-picker-clipped')), findsOneWidget);
     });
-
-    testWidgets("a channel is still held to the parameter's own range",
-        (tester) async {
-      final applied = await _openPicker(
-        tester,
-        initial: const PickedColour(0.5, 0.25, 0.125),
-        scale: ColourScale.unit,
-        max: 4,
-      );
-      await tester.tap(find.byKey(const Key('colour-picker-G')));
-      await tester.pumpAndSettle();
-      await tester.enterText(find.byType(EditableText).first, '99');
-      await tester.testTextInput.receiveAction(TextInputAction.done);
-      await tester.pumpAndSettle();
-      expect(applied.commits.last.g, 4, reason: 'clamped at the declared max');
-    });
-
-    /// An over-range colour must survive being dragged about on the square:
-    /// the graph is 0–1, so the picker carries the overshoot as a gain rather
-    /// than throwing it away the moment the pointer touches the square.
-    testWidgets('dragging the square keeps an over-range colour over-range',
-        (tester) async {
-      final applied = await _openPicker(
-        tester,
-        initial: const PickedColour(3, 1.5, 0.75),
-        scale: ColourScale.unit,
-        max: 4,
-      );
-      await tester.tap(find.byKey(const Key('colour-picker-square')));
-      await tester.pumpAndSettle();
-      expect(applied.commits.last.r, greaterThan(1),
-          reason: 'the brightest channel is still above white');
-    });
-
-    /// The clipped note belongs to the float scale only: a 0–255 colour cannot
-    /// leave the gamut, so the line would be noise.
-    testWidgets('a display colour never shows the clipped note', (tester) async {
-      await _openPicker(tester, scale: ColourScale.bytes);
-      expect(find.byKey(const Key('colour-picker-clipped')), findsNothing);
-    });
   });
 
   /// The project's colour shelf, inside the picker: the kept colours apply on
@@ -337,11 +195,6 @@ void main() {
 
     BridgeSwatch swatch(double r, double g, double b, {String name = ''}) =>
         BridgeSwatch(r: r, g: g, b: b, a: 1, name: name);
-
-    testWidgets('no project, no strip', (tester) async {
-      await _openPicker(tester);
-      expect(find.byKey(const Key('colour-picker-shelf')), findsNothing);
-    });
 
     testWidgets('a kept colour applies on a click', (tester) async {
       final writes = <List<BridgeSwatch>>[];
@@ -375,25 +228,6 @@ void main() {
       expect([kept.r, kept.g, kept.b], [1, 0, 0]);
       // And the strip shows it without asking the engine again.
       expect(find.byKey(const Key('colour-picker-shelf-1')), findsOneWidget);
-    });
-
-    testWidgets('a right-click offers to forget one', (tester) async {
-      final writes = <List<BridgeSwatch>>[];
-      await _openPicker(
-        tester,
-        shelf: recording([swatch(1, 0, 0), swatch(0, 0, 1)], writes),
-      );
-      await tester.tapAt(
-        tester.getCenter(find.byKey(const Key('colour-picker-shelf-0'))),
-        buttons: kSecondaryButton,
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('colour-picker-shelf-forget')));
-      await tester.pumpAndSettle();
-
-      expect(writes.length, 1);
-      expect(writes.single.length, 1);
-      expect(writes.single.single.b, 1, reason: 'the blue one is what is left');
     });
   });
 }

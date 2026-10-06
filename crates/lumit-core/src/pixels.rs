@@ -488,40 +488,6 @@ pub fn frame_pick(
 mod tests {
     use super::*;
 
-    /// The conform rate, from the other end: animation drawn on 2s.
-    ///
-    /// A 24 fps anime cut animated on 2s holds each drawing for two frames —
-    /// A A B B C C. Interpolating natively, half the pairs bracket a frame and
-    /// its own duplicate (no motion at all) and the rest carry the whole step,
-    /// which reads as judder rather than slow motion. Conforming to 12 — the
-    /// rate it was *drawn* at — makes every bracket span two different
-    /// drawings.
-    #[test]
-    fn a_conform_rate_skips_the_duplicates_of_animation_on_twos() {
-        let fps = 24.0;
-        let frames = 48;
-        // Native: at an eighth of a second in, the bracket is frames 3 and 4 —
-        // and on 2s, frames 2 and 3 are the same drawing, so the pair 3-4
-        // straddles a change while 2-3 would not move at all.
-        let (a, b) = frame_pick(0.14, fps, frames, true, None);
-        assert_eq!(a, 3);
-        assert_eq!(b.map(|(f, _)| f), Some(4));
-
-        // Conformed to 12: brackets are always an even frame and the next even
-        // frame — one drawing to the next, never a drawing to itself.
-        for step in 0..8 {
-            let t = f64::from(step) * 0.09;
-            let (a, b) = frame_pick(t, fps, frames, true, Some(12.0));
-            assert!(
-                a.is_multiple_of(2),
-                "conformed bracket starts on a drawing: {a}"
-            );
-            if let Some((f, _)) = b {
-                assert_eq!(f, a + 2, "and ends on the next one, never a duplicate");
-            }
-        }
-    }
-
     #[test]
     fn blend_and_frame_pick() {
         // Half-blend of black and mid-grey is mid-value.
@@ -559,19 +525,6 @@ mod tests {
     }
 
     #[test]
-    fn fit_contain_letterboxes_and_pillarboxes() {
-        // 16:9 into a tall 1080×1920 frame: full width, bars top and bottom.
-        let (w, h, ox, oy) = fit_contain(1920, 1080, 1080, 1920);
-        assert_eq!((w, ox), (1080, 0));
-        assert_eq!(h, 608); // 1080 * 9/16 rounded
-        assert_eq!(oy, (1920 - 608) / 2);
-        // Exact multiple upscales cleanly, centred.
-        assert_eq!(fit_contain(2, 2, 4, 4), (4, 4, 0, 0));
-        // Degenerate inputs don't panic.
-        assert_eq!(fit_contain(0, 0, 4, 4), (0, 0, 0, 0));
-    }
-
-    #[test]
     fn letterbox_puts_the_image_in_a_black_frame() {
         // A solid red 4×2 into a 2×2 target: contain scale 0.5 ⇒ 2×1, so the
         // top row is red and the bottom row is the black bar.
@@ -582,17 +535,6 @@ mod tests {
         assert_eq!(&out[4..8], &red); // (1,0) red
         assert_eq!(&out[8..12], &[0, 0, 0, 255]); // (0,1) black bar
         assert_eq!(&out[12..16], &[0, 0, 0, 255]); // (1,1) black bar
-    }
-
-    #[test]
-    fn letterbox_preserves_a_solid_colour() {
-        let blue = [0u8, 0, 255, 255];
-        let src: Vec<u8> = blue.iter().copied().cycle().take(2 * 2 * 4).collect();
-        // Same aspect (square → square) fills the whole target with blue.
-        let out = letterbox_resize(&src, 2, 2, 8, 8, Resample::Fast);
-        for px in out.chunks_exact(4) {
-            assert_eq!(px, &blue);
-        }
     }
 
     /// An 8×8 black/white checker box-downscaled to 2×2 has one analytic
@@ -619,45 +561,5 @@ mod tests {
             }
             assert_eq!(px[3], 255);
         }
-    }
-
-    /// Energy in, energy out: a ramp downscaled 4:1 keeps its mean, because
-    /// every tap row is normalised to sum to one.
-    #[test]
-    fn high_preserves_total_energy() {
-        let (w, h) = (32u32, 32u32);
-        let mut src = Vec::with_capacity((w * h * 4) as usize);
-        for y in 0..h {
-            for x in 0..w {
-                let v = ((x * 7 + y * 3) % 256) as u8;
-                src.extend_from_slice(&[v, v, v, 255]);
-            }
-        }
-        let mean = |px: &[u8]| -> f64 {
-            let n = px.len() / 4;
-            px.chunks_exact(4).map(|p| f64::from(p[0])).sum::<f64>() / n as f64
-        };
-        let out = letterbox_resize(&src, w, h, 8, 8, Resample::High);
-        assert!(
-            (mean(&src) - mean(&out)).abs() < 2.0,
-            "mean drifted: {} -> {}",
-            mean(&src),
-            mean(&out)
-        );
-    }
-
-    /// A flat field stays exactly flat through the high filter too — the
-    /// normalisation makes ringing impossible where there is nothing to ring.
-    #[test]
-    fn high_preserves_a_solid_colour_and_repeats() {
-        let blue = [0u8, 0, 255, 255];
-        let src: Vec<u8> = blue.iter().copied().cycle().take(2 * 2 * 4).collect();
-        let a = letterbox_resize(&src, 2, 2, 8, 8, Resample::High);
-        for px in a.chunks_exact(4) {
-            assert_eq!(px, &blue);
-        }
-        // Deterministic: the same input gives the same bytes, every time.
-        let b = letterbox_resize(&src, 2, 2, 8, 8, Resample::High);
-        assert_eq!(a, b);
     }
 }

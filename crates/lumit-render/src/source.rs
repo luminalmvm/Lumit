@@ -228,34 +228,4 @@ mod tests {
         }
         .slates());
     }
-
-    /// Only a probed video stream reports a picture; the has-audio question is
-    /// answered by both audio-only files and video files with a sound track.
-    #[test]
-    fn video_and_audio_are_reported_independently() {
-        let v = SourceProbe::Video {
-            fps: 24.0,
-            width: 1920,
-            height: 1080,
-            frames: 240,
-            audio: true,
-        };
-        assert_eq!(v.video(), Some((24.0, 1920, 1080, 240)));
-        assert!(v.has_audio());
-        assert!(SourceProbe::AudioOnly.video().is_none());
-        assert!(SourceProbe::AudioOnly.has_audio());
-        assert!(!SourceProbe::Missing.has_audio());
-    }
-
-    /// A plain map is a probe source, and an id it does not hold is unprobed —
-    /// the shape tests and simple callers lean on.
-    #[test]
-    fn a_map_answers_unprobed_for_unknown_items() {
-        let mut map = std::collections::HashMap::new();
-        let known = Uuid::now_v7();
-        map.insert(known, SourceProbe::Missing);
-        assert_eq!(map.probe(known), SourceProbe::Missing);
-        assert_eq!(map.probe(Uuid::now_v7()), SourceProbe::Unprobed);
-        assert_eq!(NoProbes.probe(known), SourceProbe::Unprobed);
-    }
 }

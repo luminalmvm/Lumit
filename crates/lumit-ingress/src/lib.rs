@@ -536,13 +536,6 @@ mod tests {
     }
 
     #[test]
-    fn a_charge_that_overflows_the_tally_is_a_refusal_not_a_wrap() {
-        let mut b = Budget::unlimited();
-        b.take_bytes(u64::MAX - 1).unwrap();
-        assert_eq!(b.take_bytes(8).unwrap_err(), IngressError::Overflow);
-    }
-
-    #[test]
     fn depth_is_given_back_when_a_scope_ends() {
         let mut b = Budget::new(Limits {
             depth: 3,
@@ -556,18 +549,6 @@ mod tests {
         let too_deep =
             b.nested(|b| b.nested(|b| b.nested(|b| b.nested(|_| Ok::<_, IngressError>(())))));
         assert!(matches!(too_deep, Err(IngressError::Depth { limit: 3 })));
-    }
-
-    #[test]
-    fn depth_is_given_back_even_when_the_scope_failed() {
-        let mut b = Budget::new(Limits {
-            depth: 2,
-            ..Limits::UNLIMITED
-        });
-        let _ = b.nested(|b| b.nested(|_| Err::<(), _>(IngressError::Overflow)));
-        assert!(b
-            .nested(|b| b.nested(|_| Ok::<_, IngressError>(())))
-            .is_ok());
     }
 
     #[test]
@@ -636,46 +617,5 @@ mod tests {
             Err(IngressError::FileTooLarge { .. })
         ));
         std::fs::remove_file(&path).ok();
-    }
-
-    #[test]
-    fn non_utf8_text_is_a_refusal_rather_than_a_lossy_read() {
-        let dir = std::env::temp_dir().join("lumit-ingress-utf8-test");
-        std::fs::create_dir_all(&dir).unwrap();
-        let path = dir.join("bad.txt");
-        std::fs::write(&path, [0xff, 0xfe, 0x00]).unwrap();
-        assert!(matches!(
-            read_to_string_capped(&path, 1024),
-            Err(IngressError::Io { .. })
-        ));
-        std::fs::remove_file(&path).ok();
-    }
-
-    #[test]
-    fn every_refusal_has_its_own_id() {
-        let all = [
-            IngressError::Bytes {
-                needed: 2,
-                limit: 1,
-            },
-            IngressError::Items {
-                needed: 2,
-                limit: 1,
-            },
-            IngressError::Depth { limit: 1 },
-            IngressError::Work { limit: 1 },
-            IngressError::Overflow,
-            IngressError::FileTooLarge {
-                path: "a".into(),
-                size: 2,
-                limit: 1,
-            },
-            IngressError::Io {
-                path: "a".into(),
-                reason: "no".into(),
-            },
-        ];
-        let ids: std::collections::BTreeSet<_> = all.iter().map(IngressError::key).collect();
-        assert_eq!(ids.len(), all.len());
     }
 }

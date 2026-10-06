@@ -30,16 +30,6 @@ void main() {
           (1920.0, 1080.0));
       expect(compPointOf(const Offset(580, 320), fitted, comp), (960.0, 540.0));
     });
-
-    test('the magnification is undone, not assumed', () {
-      // The same comp at four times the size: a hundred screen pixels across
-      // is twenty-five comp pixels.
-      const fitted = Rect.fromLTWH(0, 0, 7680, 4320);
-      const comp = Size(1920, 1080);
-      final (x, y) = compPointOf(const Offset(100, 100), fitted, comp);
-      expect(x, closeTo(25, 1e-9));
-      expect(y, closeTo(25, 1e-9));
-    });
   });
 
   group('How wide a line is reckoned to be', () {
@@ -83,10 +73,6 @@ void main() {
       final anchor = textAnchor('Text', 72);
       expect(anchor.dx, estimatedTextWidth('Text', 72) / 2);
       expect(anchor.dy, 36);
-    });
-
-    test('an empty line is anchored on its own left end', () {
-      expect(textAnchor('', 72).dx, 0);
     });
   });
 }

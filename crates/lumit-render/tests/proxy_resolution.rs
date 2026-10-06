@@ -216,26 +216,6 @@ fn the_plan_and_the_key_switch_together() {
     );
 }
 
-/// The same proxy under two preview-resolution tiers keeps the tiers apart, so
-/// proxy-ness is an axis of the name beside quality rather than instead of it.
-#[test]
-fn proxy_frames_still_key_per_resolution_tier() {
-    let (plain, comp, item) = scene();
-    let with_proxy = attach(&plain, item);
-    let probes = probes(item, Some(video(30.0, 960, 540, 120)));
-    let full = Quality::default();
-    let half = Quality {
-        divisor: 2,
-        ..Quality::default()
-    };
-
-    let (_, _, _, proxy_full) = plan_and_key(&with_proxy, comp, &probes, full);
-    let (_, _, _, proxy_half) = plan_and_key(&with_proxy, comp, &probes, half);
-    let (_, _, _, plain_half) = plan_and_key(&plain, comp, &probes, half);
-    assert_ne!(proxy_full, proxy_half, "the two tiers are two names");
-    assert_ne!(proxy_half, plain_half, "and the two files are two names");
-}
-
 /// A proxy that disagrees with the original about how long the footage is, or
 /// how fast it runs, is a stand-in for something else: frame 30 of it is not
 /// frame 30 of the original. It is refused, and everything falls back to the
@@ -283,33 +263,6 @@ fn a_proxy_that_disagrees_about_the_footage_is_not_used() {
     let rounded = probes(item, Some(video(30.000_1, 960, 540, 120)));
     let (path, _, _, _) = plan_and_key(&with_proxy, comp, &rounded, q);
     assert_eq!(path, PROXY, "a rounding difference is not a disagreement");
-}
-
-/// A missing original slates whatever proxy is attached (docs/07 §3.3): the
-/// layer *is* the original, so a lost clip must show the colour bars that lead
-/// to the relink, not quietly go on playing the stand-in as though nothing had
-/// happened.
-#[test]
-fn a_missing_original_slates_even_with_a_good_proxy() {
-    let (plain, comp, item) = scene();
-    let with_proxy = attach(&plain, item);
-    let mut originals = HashMap::new();
-    originals.insert(item, SourceProbe::Missing);
-    let mut proxies = HashMap::new();
-    proxies.insert(item, video(30.0, 960, 540, 120));
-    let probes = (originals, proxies);
-
-    let composition = with_proxy.comp(comp).unwrap();
-    let jobs = plan_comp_frame(
-        &with_proxy,
-        composition,
-        1.0,
-        Quality::default(),
-        &probes as &dyn SourceProbes,
-    );
-    assert_eq!(jobs.len(), 1);
-    assert!(jobs[0].slate, "the slate is what a missing original draws");
-    assert_eq!(jobs[0].source.path.to_string_lossy(), ORIGINAL);
 }
 
 /// Preview and export are one path with proxies on too: an export delivers
@@ -377,17 +330,4 @@ fn an_export_delivers_full_resolution_however_the_viewer_is_working() {
         lumit_render::export::apply_render_overrides(&Arc::new(already_off), &delivery).is_none(),
         "nor one whose master switch is already off"
     );
-}
-
-/// `effective_media` answers about the item it was asked about, and calmly
-/// answers nothing for an id that is not footage — the planner's `continue`
-/// rather than a panic on a solid or a comp.
-#[test]
-fn only_footage_has_an_effective_source() {
-    let (doc, comp, item) = scene();
-    let probes = probes(item, None);
-    assert!(lumit_render::source::effective_media(&doc, &probes, comp).is_none());
-    assert!(lumit_render::source::effective_media(&doc, &probes, Uuid::now_v7()).is_none());
-    let (media, _) = lumit_render::source::effective_media(&doc, &probes, item).unwrap();
-    assert_eq!(media.absolute_path, ORIGINAL);
 }

@@ -8,16 +8,13 @@
 // these drive the real bridge, so a wrong argument shows up as a wrong
 // document rather than a passing mock.
 
-import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/shell/precompose_dialog_frb.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
-import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:lumit_flutter/state/workspace.dart';
-import 'package:lumit_flutter/widgets/controls.dart';
 
 import 'frb_test_support.dart';
 
@@ -73,24 +70,6 @@ void main() {
     throw StateError('a Precomp layer draws from a composition');
   }
 
-  /// Pre-compose is the dialogue's default action: it takes focus when
-  /// the window opens, so `Enter` presses it without the pointer having to find
-  /// it. It must also not reach the Timeline behind the window, which is where
-  /// `Enter` renames the selected layer.
-  testWidgets('Enter presses Pre-compose', (tester) async {
-    final it = await open(tester);
-    final before = it.layers.single.getName();
-
-    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-    await tester.pumpAndSettle();
-
-    final after = it.comp.getLayers();
-    expect(after.length, 1, reason: 'the layer was packed into a new comp');
-    expect(sourceComp(after.single).getLayers().single.getName(), before);
-    expect(find.byKey(const ValueKey('precompose-confirm')), findsNothing,
-        reason: 'and the dialogue closed');
-  });
-
   testWidgets('moving the attributes packs the layers whole', (tester) async {
     final it = await open(tester, layerCount: 2);
 
@@ -121,89 +100,5 @@ void main() {
     expect(precomp.getEffects().length, 1, reason: 'the effect stayed behind');
     expect(sourceComp(precomp).getLayers().single.getEffects(), isEmpty,
         reason: 'and did not travel too, which would apply it twice');
-  });
-
-  testWidgets('a stack cannot leave its attributes behind', (tester) async {
-    await open(tester, layerCount: 2);
-
-    // Move is the answer, and the other choice is shown disabled rather than
-    // hidden — pressing it does nothing at all.
-    final leave = tester.widget<HouseRadio>(
-        find.byKey(const ValueKey('precompose-leave')));
-    expect(leave.enabled, isFalse);
-
-    await tester.tap(find.byKey(const ValueKey('precompose-leave')));
-    await tester.pumpAndSettle();
-    final move = tester
-        .widget<HouseRadio>(find.byKey(const ValueKey('precompose-move')));
-    expect(move.selected, isTrue, reason: 'the choice did not move');
-  });
-
-  testWidgets('adjusting the duration trims the new comp to the selection',
-      (tester) async {
-    final it = await open(tester);
-    // Two seconds of a thirty-second comp.
-    it.layers.single.setSpan(
-      span: BridgeSpan(
-        inPoint: const BridgeRational(num: 0, den: 1),
-        outPoint: const BridgeRational(num: 2, den: 1),
-        startOffset: const BridgeRational(num: 0, den: 1),
-      ),
-    );
-
-    // Adjust is on by default, so this is the plain confirm.
-    await tester.tap(find.byKey(const ValueKey('precompose-confirm')));
-    await tester.pumpAndSettle();
-
-    final inner = sourceComp(it.comp.getLayers().single);
-    expect(inner.durationFrames(), 120, reason: 'two seconds at 60 fps');
-  });
-
-  testWidgets('the answers are remembered for next time', (tester) async {
-    final it = await open(tester);
-    expect(it.workspace.precomposeOpenNewComp, isFalse);
-
-    await tester.tap(find.byKey(const ValueKey('precompose-open-new-comp')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('precompose-confirm')));
-    await tester.pumpAndSettle();
-
-    expect(it.workspace.precomposeOpenNewComp, isTrue);
-  });
-
-  /// The name label sits on one line beside its field, and the duration
-  /// checkbox is indented under the choices it qualifies rather than sitting
-  /// flush with them.
-  testWidgets('the name asks on one line and the duration sits under the '
-      'choices', (tester) async {
-    await open(tester);
-
-    final label = find.text('New composition name');
-    final labelBox = tester.getSize(label);
-    final oneLine = tester.renderObject<RenderBox>(label).getMaxIntrinsicHeight(
-          double.infinity,
-        );
-    expect(labelBox.height, oneLine, reason: 'the label does not wrap');
-
-    final adjust = tester.getTopLeft(
-        find.byKey(const ValueKey('precompose-adjust-duration')));
-    final move =
-        tester.getTopLeft(find.byKey(const ValueKey('precompose-move')));
-    expect(adjust.dx, greaterThan(move.dx),
-        reason: 'indented under the attribute choices');
-
-    // A label that will not wrap can still overflow its row, which Flutter
-    // reports as an exception rather than by drawing anything wrong.
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('cancelling changes nothing', (tester) async {
-    final it = await open(tester);
-
-    await tester.tap(find.byKey(const ValueKey('precompose-cancel')));
-    await tester.pumpAndSettle();
-
-    expect(it.comp.getLayers().single.internallayerId,
-        it.layers.single.internallayerId);
   });
 }

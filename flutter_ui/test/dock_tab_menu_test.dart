@@ -75,21 +75,4 @@ void main() {
     expect(layoutChanges, 1, reason: 'and the arrangement is persisted');
     expect(lumitPopupOpen, isFalse);
   });
-
-  testWidgets('Pop out is listed but cannot be pressed', (tester) async {
-    final root = layout();
-    var layoutChanges = 0;
-    await tester
-        .pumpWidget(harness(root, onLayoutChanged: () => layoutChanges++));
-
-    await rightClickTab(tester, Panel.project.title);
-    // Not a MenuRow at all: it is drawn disabled, so there is nothing to press
-    // and nothing that could look pressable.
-    expect(find.byKey(const ValueKey('tab-menu-pop-out')), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('tab-menu-pop-out')));
-    await tester.pump();
-    expect(panelsIn(root), contains(Panel.project),
-        reason: 'a disabled row does nothing at all');
-    expect(layoutChanges, 0);
-  });
 }

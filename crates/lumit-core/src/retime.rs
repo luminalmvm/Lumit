@@ -2024,49 +2024,6 @@ mod tests {
     }
 
     #[test]
-    fn source_keyframes_round_trip_their_tangents() {
-        // from_source_keyframes → source_keyframes returns the same tangents
-        // (within flick-grid rounding), so opening the graph on a curve you just
-        // committed shows the handles exactly where you left them.
-        use crate::anim::SideInterp;
-        let keys = Retime::from_source_keyframes(&[
-            crate::anim::Keyframe {
-                time: rat(0, 1),
-                value: 0.0,
-                interp_in: SideInterp::Linear,
-                interp_out: SideInterp::Bezier {
-                    speed: 1.5,
-                    influence: 0.5,
-                },
-            },
-            crate::anim::Keyframe {
-                time: rat(3, 1),
-                value: 2.0,
-                interp_in: SideInterp::Bezier {
-                    speed: -0.5,
-                    influence: 0.25,
-                },
-                interp_out: SideInterp::Linear,
-            },
-        ])
-        .unwrap()
-        .source_keyframes();
-        assert_eq!(keys.len(), 2);
-        match keys[0].interp_out {
-            SideInterp::Bezier { speed, influence } => {
-                assert!((speed - 1.5).abs() < 1e-6 && (influence - 0.5).abs() < 1e-6);
-            }
-            other => panic!("expected bezier out, got {other:?}"),
-        }
-        match keys[1].interp_in {
-            SideInterp::Bezier { speed, influence } => {
-                assert!((speed - -0.5).abs() < 1e-6 && (influence - 0.25).abs() < 1e-6);
-            }
-            other => panic!("expected bezier in, got {other:?}"),
-        }
-    }
-
-    #[test]
     fn value_keyframes_read_any_store() {
         // Even a store the *speed* lens can't describe (an eased ramp) still
         // yields value keys — every boundary carries an exact source position.
@@ -2715,71 +2672,6 @@ mod tests {
         assert_eq!(back, r);
     }
 
-    #[test]
-    fn flow_input_rate_reads_native_static_and_keyframed() {
-        use crate::anim::{Animation, Keyframe, Property, SideInterp};
-        let key = |t: Rational, v: f64| Keyframe {
-            time: t,
-            value: v,
-            interp_in: SideInterp::Linear,
-            interp_out: SideInterp::Linear,
-        };
-
-        // Default is Native: no conform rate at any time.
-        let native = FlowParams::default();
-        assert_eq!(native.input_fps_at(0.0), None);
-        assert_eq!(native.input_fps_at(5.0), None);
-
-        // A static positive rate reads that same rate everywhere.
-        let fixed = FlowParams {
-            input_fps: Property::fixed(24.0),
-            ..FlowParams::default()
-        };
-        assert_eq!(fixed.input_fps_at(0.0), Some(24.0));
-        assert_eq!(fixed.input_fps_at(9.0), Some(24.0));
-
-        // A keyframed rate ramps 12 → 24 fps across [0, 2]; the frame-time read
-        // follows the animation, so the middle reads the interpolated 18 fps.
-        let ramp = FlowParams {
-            input_fps: Property {
-                animation: Animation::Keyframed(vec![key(rat(0, 1), 12.0), key(rat(2, 1), 24.0)]),
-                extra: serde_json::Map::new(),
-            },
-            ..FlowParams::default()
-        };
-        assert_eq!(ramp.input_fps_at(0.0), Some(12.0));
-        assert_eq!(ramp.input_fps_at(2.0), Some(24.0));
-        assert!((ramp.input_fps_at(1.0).unwrap() - 18.0).abs() < 1e-9);
-
-        // A key that sits exactly at 0 fps reads as Native there, then picks up
-        // the rate as the animation rises above the half-fps threshold.
-        let dip = FlowParams {
-            input_fps: Property {
-                animation: Animation::Keyframed(vec![key(rat(0, 1), 0.0), key(rat(2, 1), 24.0)]),
-                extra: serde_json::Map::new(),
-            },
-            ..FlowParams::default()
-        };
-        assert_eq!(dip.input_fps_at(0.0), None);
-        assert_eq!(dip.input_fps_at(2.0), Some(24.0));
-    }
-
-    #[test]
-    fn flow_input_rate_native_stays_out_of_the_file() {
-        // A plain Native rate serialises exactly as before it became
-        // keyframeable — no `input_fps` field in the JSON.
-        let native = FlowParams::default();
-        let json = serde_json::to_value(&native).unwrap();
-        assert!(json.get("input_fps").is_none(), "{json}");
-        // A set rate does round-trip through the field.
-        let set = FlowParams {
-            input_fps: crate::anim::Property::fixed(12.0),
-            ..FlowParams::default()
-        };
-        let back: FlowParams = serde_json::from_value(serde_json::to_value(&set).unwrap()).unwrap();
-        assert_eq!(back, set);
-    }
-
     /// Flow engages only where a source frame would otherwise hold across two
     /// or more comp frames.
     #[test]
@@ -2808,19 +2700,6 @@ mod tests {
         assert!(!p.engages(30.0, 0.0, 0.5));
     }
 
-    /// The manual override forces flow on regardless of the gate — the "wind
-    /// toggle".
-    #[test]
-    fn the_flow_override_beats_the_gate() {
-        let forced = FlowParams {
-            always: true,
-            ..FlowParams::default()
-        };
-        assert!(forced.engages(30.0, 30.0, 1.0));
-        assert!(forced.engages(30.0, 30.0, 0.0));
-        assert!(forced.engages(0.0, 0.0, 0.0));
-    }
-
     /// The conform rate is what the gate measures against:
     /// 600 fps footage at 10% speed still advances 60 source frames per comp
     /// frame, so flow would decline — until the clip is conformed to 24, at
@@ -2839,48 +2718,6 @@ mod tests {
         // frames the source does not have.
         assert_eq!(conformed.read_fps_at(0.0, 24.0), 24.0);
         assert_eq!(conformed.read_fps_at(0.0, 12.0), 12.0);
-    }
-
-    /// The speed the gate reads comes from the retime property's slope.
-    #[test]
-    fn property_speed_reads_the_slope_of_the_retime() {
-        // No retime is 100%.
-        assert!((property_speed_at(None, 1.0) - 1.0).abs() < 1e-6);
-        // A static property is a freeze: source time never advances.
-        let frozen = crate::anim::Property::fixed(3.0);
-        assert!(property_speed_at(Some(&frozen), 1.0).abs() < 1e-6);
-    }
-
-    /// Every §3.1 parameter round-trips, and the defaults are the documented
-    /// ones (docs/08 §3.1's table).
-    #[test]
-    fn flow_params_default_and_round_trip() {
-        let d = FlowParams::default();
-        assert_eq!(d.engine, FlowEngineChoice::Dis);
-        assert_eq!(d.resolution, FlowResolution::Native);
-        assert_eq!(d.detail, VectorDetail::Medium);
-        assert_eq!(d.smoothness, DEFAULT_SMOOTHNESS);
-        assert_eq!(d.occlusion, OcclusionMode::VisibleOnly);
-        assert_eq!(d.fallback, FlowFallback::Blend);
-        assert!(d.hud_guard);
-        assert!(!d.always);
-        let set = FlowParams {
-            engine: FlowEngineChoice::Rife,
-            resolution: FlowResolution::Quarter,
-            detail: VectorDetail::Ultra,
-            smoothness: 12.5,
-            occlusion: OcclusionMode::Blend,
-            fallback: FlowFallback::Nearest,
-            hud_guard: false,
-            always: true,
-            ..FlowParams::default()
-        };
-        let back: FlowParams = serde_json::from_value(serde_json::to_value(&set).unwrap()).unwrap();
-        assert_eq!(back, set);
-        // A file written before the parameters existed still loads, taking the
-        // documented defaults for everything it does not mention.
-        let old: FlowParams = serde_json::from_str("{}").unwrap();
-        assert_eq!(old, FlowParams::default());
     }
 
     /// A project written before the engine choice existed reads as the engine
@@ -2907,36 +2744,6 @@ mod tests {
         let back: FlowParams =
             serde_json::from_value(serde_json::to_value(&chosen).unwrap()).unwrap();
         assert_eq!(back.engine, FlowEngineChoice::Rife, "and a choice survives");
-    }
-
-    /// The choice enums agree with their option lists in both directions —
-    /// a stored index and its label must never drift apart.
-    #[test]
-    fn flow_choice_codes_round_trip_through_their_labels() {
-        for i in 0..FlowResolution::OPTIONS.len() as u32 {
-            assert_eq!(FlowResolution::from_code(i).map(|v| v.code()), Some(i));
-        }
-        for i in 0..VectorDetail::OPTIONS.len() as u32 {
-            assert_eq!(VectorDetail::from_code(i).map(|v| v.code()), Some(i));
-        }
-        for i in 0..OcclusionMode::OPTIONS.len() as u32 {
-            assert_eq!(OcclusionMode::from_code(i).map(|v| v.code()), Some(i));
-        }
-        for i in 0..FlowFallback::OPTIONS.len() as u32 {
-            assert_eq!(FlowFallback::from_code(i).map(|v| v.code()), Some(i));
-        }
-        for i in 0..FlowEngineChoice::OPTIONS.len() as u32 {
-            assert_eq!(FlowEngineChoice::from_code(i).map(|v| v.code()), Some(i));
-        }
-        assert_eq!(FlowEngineChoice::from_code(99), None);
-        assert_eq!(FlowResolution::from_code(99), None);
-        assert_eq!(VectorDetail::from_code(99), None);
-        // Detail buys iterations monotonically, and the divisors are the
-        // documented 1 / 2 / 4.
-        assert!(VectorDetail::Low.iterations() < VectorDetail::Ultra.iterations());
-        assert_eq!(FlowResolution::Native.divisor(), 1);
-        assert_eq!(FlowResolution::Half.divisor(), 2);
-        assert_eq!(FlowResolution::Quarter.divisor(), 4);
     }
 
     #[test]

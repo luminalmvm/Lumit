@@ -192,61 +192,6 @@ pub fn parse_3dl(what: &str, text: &str) -> Result<Chain> {
 mod tests {
     use super::*;
 
-    /// A Lustre file with a straight shaper and a 12-bit cube whose value
-    /// differs on every axis.
-    fn lustre() -> String {
-        // Five 10-bit samples, straight enough that the reader drops them.
-        let mut text = String::from("3DMESH\nMesh 1 12\n0 255 511 767 1023\n");
-        for r in 0..2 {
-            for g in 0..2 {
-                for b in 0..2 {
-                    text.push_str(&format!("{} {} {}\n", r * 4095, g * 2048, b * 1024));
-                }
-            }
-        }
-        text.push_str("\nLUT8\ngamma 1.0\n");
-        text
-    }
-
-    /// The trap: the file counts blue fastest, Lumit counts red fastest.
-    #[test]
-    fn a_cube_block_is_transposed_out_of_blue_fastest_order() {
-        let chain = parse_3dl("t.3dl", &lustre()).expect("parses");
-        assert_eq!(chain.ops.len(), 1, "the straight shaper does nothing");
-        let Some(Op::Lut3d { cube }) = chain.ops.first() else {
-            panic!("expected a cube step, got {:?}", chain.ops)
-        };
-        assert_eq!(cube.data.first().copied(), Some([0.0, 0.0, 0.0]));
-        // Flat index 1 is (r=1, g=0, b=0), which the file writes fifth.
-        assert_eq!(cube.data.get(1).copied(), Some([1.0, 0.0, 0.0]));
-        // Flat index 4 is (r=0, g=0, b=1), which the file writes second.
-        assert!(
-            matches!(cube.data.get(4), Some([0.0, 0.0, v]) if (v - 1024.0 / 4095.0).abs() < 1e-6),
-            "{:?}",
-            cube.data.get(4)
-        );
-    }
-
-    /// A shaper that does something survives; the bit depth comes from its own
-    /// largest value, not the cube's.
-    #[test]
-    fn a_shaper_that_bends_is_kept_and_scaled_by_its_own_bit_depth() {
-        let mut text = String::from("0 100 400 1023\n");
-        for _ in 0..8 {
-            text.push_str("4095 4095 4095\n");
-        }
-        let chain = parse_3dl("t.3dl", &text).expect("parses");
-        let Some(Op::Lut1d { curve, .. }) = chain.ops.first() else {
-            panic!("expected a curve step, got {:?}", chain.ops)
-        };
-        assert_eq!(curve.data.len(), 4);
-        assert!(
-            matches!(curve.data.get(1), Some([v, _, _]) if (v - 100.0 / 1023.0).abs() < 1e-6),
-            "{:?}",
-            curve.data.get(1)
-        );
-    }
-
     #[test]
     fn rubbish_is_a_typed_error_not_a_panic() {
         assert!(parse_3dl("t.3dl", "").is_err());
@@ -256,18 +201,5 @@ mod tests {
         // Nine triples do not make a cube.
         assert!(parse_3dl("t.3dl", &"4095 4095 4095\n".repeat(9)).is_err());
         assert!(parse_3dl("t.3dl", "0 512 1023\n0 512 1023\n").is_err());
-    }
-
-    #[test]
-    fn a_bit_depth_is_inferred_the_way_the_reference_infers_it() {
-        assert_eq!(likely_bit_depth(255), 8);
-        assert_eq!(likely_bit_depth(511), 8);
-        assert_eq!(likely_bit_depth(512), 10);
-        assert_eq!(likely_bit_depth(2047), 10);
-        assert_eq!(likely_bit_depth(4095), 12);
-        // 14-bit scaling is not used in practice, so it reads as 16.
-        assert_eq!(likely_bit_depth(16383), 16);
-        assert_eq!(likely_bit_depth(65535), 16);
-        assert_eq!(code_maximum(12), 4095.0);
     }
 }

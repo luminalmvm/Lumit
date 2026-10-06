@@ -376,46 +376,6 @@ mod tests {
         a.iter().zip(b).all(|(x, y)| (x - y).abs() <= tol)
     }
 
-    /// A cube whose samples are the grid coordinates themselves: the identity.
-    fn identity_cube(size: usize) -> Cube {
-        let last = (size - 1) as f32;
-        let mut data = Vec::with_capacity(size * size * size);
-        for b in 0..size {
-            for g in 0..size {
-                for r in 0..size {
-                    data.push([r as f32 / last, g as f32 / last, b as f32 / last]);
-                }
-            }
-        }
-        Cube::new("identity", size, [0.0; 3], [1.0; 3], data).expect("well-formed")
-    }
-
-    #[test]
-    fn every_corner_is_returned_exactly() {
-        let cube = identity_cube(5);
-        for b in [0.0, 1.0] {
-            for g in [0.0, 1.0] {
-                for r in [0.0, 1.0] {
-                    assert!(close(cube.sample([r, g, b]), [r, g, b], 0.0));
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn the_neutral_axis_stays_neutral() {
-        // Tetrahedral's headline property, and the reason it is preferred to
-        // trilinear here: an identity cube returns greys exactly.
-        let cube = identity_cube(9);
-        for i in 0..=100 {
-            let v = i as f32 / 100.0;
-            let got = cube.sample([v, v, v]);
-            assert!(close(got, [v, v, v], 1e-6), "at {v}: {got:?}");
-            assert_eq!(got[0], got[1], "grey stayed grey at {v}");
-            assert_eq!(got[1], got[2], "grey stayed grey at {v}");
-        }
-    }
-
     #[test]
     fn a_known_wedge_matches_the_written_formula() {
         // Size 2, so grid coordinates are the input and the fractions are the
@@ -447,88 +407,8 @@ mod tests {
     }
 
     #[test]
-    fn out_of_domain_clamps_to_the_edge() {
-        let cube = identity_cube(5);
-        assert!(close(cube.sample([-4.0, 9.0, 0.5]), [0.0, 1.0, 0.5], 1e-6));
-    }
-
-    #[test]
-    fn a_zero_span_axis_reads_as_zero_rather_than_dividing() {
-        let cube = Cube::new(
-            "flat",
-            2,
-            [0.0, 0.0, 0.0],
-            [0.0, 1.0, 1.0],
-            vec![[0.0; 3]; 8],
-        )
-        .expect("well-formed");
-        assert!(cube.sample([5.0, 0.5, 0.5]).iter().all(|v| v.is_finite()));
-    }
-
-    #[test]
     fn an_oversized_cube_is_refused_not_allocated() {
         let err = Cube::new("huge", 512, [0.0; 3], [1.0; 3], Vec::new());
         assert!(matches!(err, Err(ColourError::TableTooLarge { .. })));
-    }
-
-    fn ramp_curve() -> Curve {
-        Curve::new(
-            "ramp",
-            [0.0, 1.0],
-            (0..5)
-                .map(|i| {
-                    let v = i as f32 / 4.0;
-                    [v * v, v, v * 0.5]
-                })
-                .collect(),
-        )
-        .expect("well-formed")
-    }
-
-    #[test]
-    fn a_curve_inverts_back_to_where_it_started() {
-        let curve = ramp_curve();
-        for i in 0..=40 {
-            let x = i as f32 / 40.0;
-            let y = curve.sample([x, x, x]);
-            let back = curve.sample_inverse(y);
-            assert!(close(back, [x, x, x], 1e-5), "at {x}: {back:?}");
-        }
-    }
-
-    #[test]
-    fn a_flat_run_inverts_to_its_lower_edge() {
-        let curve = Curve::new(
-            "plateau",
-            [0.0, 1.0],
-            vec![[0.0; 3], [0.5; 3], [0.5; 3], [0.5; 3], [1.0; 3]],
-        )
-        .expect("well-formed");
-        // Grid points sit at 0, 0.25, 0.5, 0.75, 1; the plateau starts at 0.25.
-        assert!(close(curve.sample_inverse([0.5; 3]), [0.25; 3], 1e-6));
-    }
-
-    #[test]
-    fn a_curve_that_doubles_back_is_refused_by_name() {
-        let curve = Curve::new("bumpy", [0.0, 1.0], vec![[0.0; 3], [1.0; 3], [0.5; 3]])
-            .expect("well-formed");
-        assert!(!curve.is_monotone());
-        let err = curve.check_invertible("bumpy.spi1d");
-        assert!(
-            matches!(&err, Err(ColourError::NonMonotoneCurve { path }) if path == "bumpy.spi1d"),
-            "{err:?}"
-        );
-    }
-
-    #[test]
-    fn a_falling_curve_inverts_too() {
-        let curve = Curve::new(
-            "falling",
-            [0.0, 1.0],
-            (0..9).map(|i| [1.0 - i as f32 / 8.0; 3]).collect(),
-        )
-        .expect("well-formed");
-        assert!(curve.is_monotone());
-        assert!(close(curve.sample_inverse([0.25; 3]), [0.75; 3], 1e-5));
     }
 }

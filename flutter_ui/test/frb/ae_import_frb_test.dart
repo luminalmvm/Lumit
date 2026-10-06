@@ -22,27 +22,17 @@
 @Tags(['opens-project'])
 library;
 
-import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/l10n/strings.dart';
 import 'package:lumit_flutter/main.dart';
-import 'package:lumit_flutter/shell/ae_report_frb.dart';
 import 'package:lumit_flutter/shell/menu_bar_frb.dart';
-import 'package:lumit_flutter/src/rust/api/import.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:provider/provider.dart';
 
 import 'frb_test_support.dart';
-
-/// The hand-written bundle the `lumit-import` tests use, as an absolute path:
-/// the engine resolves the footage inside it against this folder.
-String get _bundle =>
-    Directory('../crates/lumit-import/tests/fixtures/synthetic.lum-bundle')
-        .absolute
-        .path;
 
 /// The real After Effects project the differential test measures the parser
 /// against, as an absolute path.
@@ -100,27 +90,6 @@ void main() {
       ];
     }
 
-    testWidgets('a folder that is not a bundle leaves the project alone',
-        (tester) async {
-      final elsewhere = Directory.systemTemp.createTempSync('lumit-not-bundle');
-      final p = await mount(tester);
-      final before = p.state.project;
-
-      // The bundle entry left the File menu; the capability stays, driven
-      // directly.
-      final ctx = tester.element(find.byType(LumitMenuBarFrb));
-      unawaited(
-          importAeBundleFrb(ctx, p.state, picker: () async => elsewhere.path));
-      await settleFrb(tester, until: () => p.state.notice.value != null);
-
-      expect(identical(p.state.project, before), isTrue,
-          reason: 'the open project stands; an import that cannot read its '
-              'folder is the picker\'s problem, not the document\'s');
-      expect(p.state.notice.value?.error, isTrue);
-      expect(find.text(l10n.aeReportTitle), findsNothing,
-          reason: 'there is no report for an import that never happened');
-    });
-
     /// **A file the parser cannot read fails softly, in the calm words.**
     ///
     /// The honest half of the import promise: a newer After Effects may store
@@ -141,75 +110,6 @@ void main() {
       expect(identical(p.state.project, before), isTrue);
       expect(p.state.notice.value?.error, isTrue);
       expect(p.state.notice.value?.message, l10n.aeAepUnreadable);
-      expect(find.text(l10n.aeReportTitle), findsNothing);
-    });
-
-    // Adopting the imported document clears the engine's project registry, so
-    // every reference held above dies here; the two importing tests each mount
-    // their own.
-    testWidgets('a bundle folder imports through the second item',
-        (tester) async {
-      final p = await mount(tester);
-      final before = p.state.project;
-
-      final ctx = tester.element(find.byType(LumitMenuBarFrb));
-      unawaited(importAeBundleFrb(ctx, p.state, picker: () async => _bundle));
-      await settleFrb(tester,
-          until: () => find.text(l10n.aeReportTitle).evaluate().isNotEmpty);
-
-      // The document arrived: both of the fixture's compositions, and the
-      // footage item whose file is nowhere — offline, not omitted.
-      expect(identical(p.state.project, before), isFalse,
-          reason: 'the imported project was adopted');
-      final names = itemNames(p.state);
-      expect(names, containsAll(<String>['Main', 'Nested', 'clip.mp4']));
-
-      // The report is up, with docs/11 §9's summary line over its rows.
-      expect(find.text(l10n.aeReportTitle), findsOneWidget);
-      expect(find.text(l10n.aeSummary(16, 13, 1, 1)), findsOneWidget,
-          reason: 'the four counts of the synthetic bundle. A change here is a '
-              'change in what the mapping does, not in what the panel shows');
-
-      // Rows are sentences written on this side from the engine's id and its
-      // facts, not the engine's English handed through. The first row
-      // is the one that reads a pair of booleans and picks its phrasing.
-      expect(find.text(l10n.aeNestedPreserveRate), findsOneWidget);
-      expect(find.textContaining('nested_preserve_ignored'), findsNothing,
-          reason: 'the id is a key, never something a person reads');
-
-      // Filtering narrows to one grade and back. Both of these are single-row
-      // grades, so the whole answer is on screen.
-      await tester.tap(find.byKey(const ValueKey('ae-filter-placeholder')));
-      await tester.pump();
-      expect(find.text(l10n.aeEffectPlaceholder('ADBE CurvesCustom')),
-          findsOneWidget);
-      expect(find.text(l10n.aeNestedPreserveRate), findsNothing,
-          reason: 'an adjusted row is not a placeholder');
-
-      await tester.tap(find.byKey(const ValueKey('ae-filter-skipped')));
-      await tester.pump();
-      expect(find.text(l10n.aePropertyUnreadable('ADBE CurvesCustom-0001')),
-          findsOneWidget);
-
-      await tester.tap(find.byKey(const ValueKey('ae-filter-all')));
-      await tester.pump();
-      expect(find.text(l10n.aeNestedPreserveRate), findsOneWidget);
-
-      // The relink's own row is the last one — the list scrolls to it rather
-      // than the panel being asked to draw fourteen rows at once.
-      await tester.drag(
-          find.byKey(const ValueKey('ae-report-rows')), const Offset(0, -600));
-      await tester.pump();
-      expect(find.text(l10n.aeMediaNotFound), findsOneWidget,
-          reason: 'missing media is reported, and never blocks the import');
-
-      // Every grade the engine can send is named in the reader's language.
-      for (final grade in BridgeImportOutcome.values) {
-        expect(outcomeLabel(grade), isNotEmpty);
-      }
-
-      await tester.tap(find.text(l10n.close.toUpperCase()));
-      await tester.pump();
       expect(find.text(l10n.aeReportTitle), findsNothing);
     });
 

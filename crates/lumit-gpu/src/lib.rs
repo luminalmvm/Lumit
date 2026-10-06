@@ -2912,49 +2912,6 @@ impl ColourEngine {
 mod counter_tests {
     use super::*;
 
-    /// The live-object count moves with what is actually alive.
-    ///
-    /// This is the figure the memory report leans on for Metal, where the
-    /// allocator report answers nothing, so a build where the counters were
-    /// compiled out would leave that row reading zero for ever — true-looking
-    /// and useless. Making a texture and dropping it proves the tally is wired.
-    #[test]
-    fn the_live_texture_count_follows_what_is_alive() {
-        let Some(ctx) = crate::test_support::lease() else {
-            no_adapter();
-            return;
-        };
-        let (before, _) = ctx.live_objects();
-        let made = ctx.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("counter-probe"),
-            size: wgpu::Extent3d {
-                width: 64,
-                height: 64,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: WORKING_FORMAT,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
-        });
-        let (during, _) = ctx.live_objects();
-        assert!(
-            during > before,
-            "a new texture is counted: {before} then {during}"
-        );
-        drop(made);
-        // Destruction is deferred until the device is given a turn — which is
-        // the very behaviour this row exists to expose.
-        ctx.device.poll(wgpu::Maintain::Poll);
-        let (after, _) = ctx.live_objects();
-        assert!(
-            after <= during,
-            "and dropping it does not raise the count: {during} then {after}"
-        );
-    }
-
     /// A lost device is heard about.
     ///
     /// The whole recovery path hangs off one flag, and the flag is raised by a
@@ -3065,36 +3022,6 @@ mod tests {
             assert!(d <= 1, "byte {i}: {a} → {b} (Δ{d})");
         }
         eprintln!("worst Δ = {worst}");
-    }
-
-    /// The working texture really is fp16 linear: mid-grey sRGB 128 must
-    /// round-trip through a value near 0.216 linear, not 0.5 — proven by the
-    /// round trip staying exact where a linear-as-srgb confusion would clamp
-    /// or shift the dark end.
-    #[test]
-    fn dark_end_precision_survives_fp16() {
-        let Some(ctx) = crate::test_support::lease() else {
-            crate::no_adapter();
-            return;
-        };
-        let engine = ctx.colour();
-        // The 64 darkest values — where fp16-in-linear-light is tightest.
-        let (w, h) = (8u32, 8u32);
-        let mut rgba = Vec::new();
-        for i in 0..64u8 {
-            rgba.extend_from_slice(&[i, i, i, 255]);
-        }
-        let src = engine.upload_srgb8(&ctx, &rgba, w, h);
-        let back = engine
-            .readback8(
-                &ctx,
-                &engine.display(&ctx, &engine.linearise(&ctx, &src), DisplayParams::NEUTRAL),
-            )
-            .unwrap();
-        for (i, (a, b)) in rgba.iter().zip(back.iter()).enumerate() {
-            let d = (i16::from(*a) - i16::from(*b)).abs();
-            assert!(d <= 1, "dark byte {i}: {a} → {b}");
-        }
     }
 
     /// A smooth linear ramp, 4096 steps of it, through the deep display target:

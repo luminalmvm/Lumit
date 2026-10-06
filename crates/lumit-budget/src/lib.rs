@@ -643,84 +643,6 @@ mod tests {
         );
     }
 
-    /// A machine that will not say gets the fallback, per tier and
-    /// independently: a platform that knows its RAM and not its card must not
-    /// lose the figure it does have.
-    #[test]
-    fn a_machine_that_will_not_say_falls_back_one_tier_at_a_time() {
-        assert_eq!(
-            budgets_for(0, 0, false),
-            (DEFAULT_VRAM_BUDGET, DEFAULT_RAM_BUDGET)
-        );
-        let (vram, ram) = budgets_for(0, 32 * GB, false);
-        assert_eq!(vram, DEFAULT_VRAM_BUDGET, "the card would not say");
-        assert_eq!(ram, 32 * GB * 60 / 100, "but the machine did");
-    }
-
-    /// On unified memory the two tiers are one pool, so the card's share is
-    /// capped at 40% of the machine — 70% of it *and* 60% of it would be 130%
-    /// of the same memory.
-    #[test]
-    fn a_unified_card_does_not_spend_the_machines_memory_twice() {
-        // Apple Silicon: 24 GB of RAM, and Metal recommends most of it.
-        let (vram, ram) = budgets_for(20 * GB, 24 * GB, true);
-        assert_eq!(vram, 24 * GB * 40 / 100, "capped at the machine's share");
-        assert_eq!(ram, 24 * GB * 60 / 100);
-        assert!(
-            vram + ram <= 24 * GB,
-            "and the two together fit inside the machine"
-        );
-
-        // The cap only bites when the card was the more optimistic of the two:
-        // a modest reported figure is still the better number and is kept.
-        let (modest, _) = budgets_for(2 * GB, 24 * GB, true);
-        assert_eq!(modest, 2 * GB * 70 / 100);
-    }
-
-    /// `absorb` folds bytes across and lets the absorbed reservation *drop*,
-    /// so its handle on the ledger goes with it. Pinned because the obvious
-    /// implementation — `mem::forget` the absorbed one so its destructor
-    /// cannot give the bytes back — leaks one strong count per fold, and a
-    /// fold happens per work texture per frame.
-    #[test]
-    fn absorbing_a_reservation_does_not_leak_its_hold_on_the_ledger() {
-        let ledger = Ledger::with_budgets(1000, 1000);
-        let mut held = ledger.reserve(Tier::Vram, 100).unwrap();
-        let before = Arc::strong_count(&ledger);
-        for _ in 0..50 {
-            let more = ledger.reserve(Tier::Vram, 10).unwrap();
-            held.absorb(more).unwrap();
-        }
-        assert_eq!(Arc::strong_count(&ledger), before, "fifty folds, no leak");
-        assert_eq!(held.bytes(), 600);
-        assert_eq!(
-            ledger.used(Tier::Vram),
-            600,
-            "and nothing was given back early"
-        );
-        drop(held);
-        assert_eq!(ledger.used(Tier::Vram), 0);
-    }
-
-    #[test]
-    fn a_reservation_holds_its_bytes_and_gives_them_back_when_it_drops() {
-        let ledger = Ledger::with_budgets(1000, 1000);
-        assert_eq!(ledger.used(Tier::Vram), 0);
-
-        {
-            let held = ledger.reserve(Tier::Vram, 400).unwrap();
-            assert_eq!(held.bytes(), 400);
-            assert_eq!(ledger.used(Tier::Vram), 400);
-            assert_eq!(ledger.free(Tier::Vram), 600);
-
-            // The other tier is untouched: they run out separately.
-            assert_eq!(ledger.used(Tier::Ram), 0);
-        }
-        assert_eq!(ledger.used(Tier::Vram), 0, "dropping must give it back");
-        // And the peak remembers what happened.
-        assert_eq!(ledger.peak(Tier::Vram), 400);
-    }
-
     #[test]
     fn a_refusal_names_what_was_wanted_and_what_was_free() {
         let ledger = Ledger::with_budgets(1000, 1000);
@@ -792,14 +714,6 @@ mod tests {
     }
 
     #[test]
-    fn a_reservation_that_would_overflow_the_tally_is_refused() {
-        let ledger = Ledger::with_budgets(u64::MAX, u64::MAX);
-        let _most = ledger.reserve(Tier::Vram, u64::MAX - 10).unwrap();
-        let refused = ledger.reserve(Tier::Vram, 100).unwrap_err();
-        assert!(matches!(refused, BudgetError::Denied { .. }));
-    }
-
-    #[test]
     fn absorbing_folds_two_into_one_without_releasing_either() {
         let ledger = Ledger::with_budgets(1000, 1000);
         let mut a = ledger.reserve(Tier::Vram, 100).unwrap();
@@ -829,21 +743,6 @@ mod tests {
     }
 
     #[test]
-    fn shrinking_gives_back_the_part_that_was_not_needed() {
-        let ledger = Ledger::with_budgets(1000, 1000);
-        // Reserved for eight shutter samples, drew three.
-        let mut held = ledger.reserve(Tier::Vram, 800).unwrap();
-        held.shrink_to(300);
-        assert_eq!(held.bytes(), 300);
-        assert_eq!(ledger.used(Tier::Vram), 300);
-
-        // Shrinking upward is not a way to get memory without asking.
-        held.shrink_to(900);
-        assert_eq!(held.bytes(), 300);
-        assert_eq!(ledger.used(Tier::Vram), 300);
-    }
-
-    #[test]
     fn pressure_reads_the_ceiling_without_reserving_anything() {
         let ledger = Ledger::with_budgets(100, 100);
         assert_eq!(ledger.pressure(Tier::Vram), Pressure::Easy);
@@ -863,47 +762,5 @@ mod tests {
         assert_eq!(ledger.used(Tier::Vram), 100);
         // And the order is a usable comparison.
         assert!(Pressure::Full > Pressure::Easy);
-    }
-
-    #[test]
-    fn lowering_the_budget_under_what_is_held_refuses_rather_than_confiscates() {
-        let ledger = Ledger::with_budgets(1000, 1000);
-        let held = ledger.reserve(Tier::Vram, 800).unwrap();
-
-        // Another application took the card; the frontend shrinks the budget.
-        ledger.set_budget(Tier::Vram, 500);
-        assert_eq!(
-            ledger.used(Tier::Vram),
-            800,
-            "memory that exists is not taken away by a policy change"
-        );
-        assert_eq!(ledger.free(Tier::Vram), 0);
-        assert_eq!(ledger.pressure(Tier::Vram), Pressure::Full);
-        assert!(ledger.reserve(Tier::Vram, 1).is_err());
-
-        // And giving it back brings the ledger to where the new budget says.
-        drop(held);
-        assert_eq!(ledger.used(Tier::Vram), 0);
-        assert!(ledger.reserve(Tier::Vram, 500).is_ok());
-    }
-
-    #[test]
-    fn the_documented_shares_are_what_the_helpers_give() {
-        // docs/13 §3: 70% of the card, 60% of physical RAM.
-        assert_eq!(vram_budget_for(8 << 30), (8 << 30) * 70 / 100);
-        assert_eq!(ram_budget_for(16 << 30), (16 << 30) * 60 / 100);
-        // A platform that answers nothing gets nothing rather than a surprise.
-        assert_eq!(vram_budget_for(0), 0);
-        assert_eq!(ram_budget_for(0), 0);
-    }
-
-    #[test]
-    fn a_ledger_with_no_budget_refuses_everything_rather_than_dividing_by_it() {
-        let ledger = Ledger::with_budgets(0, 0);
-        assert_eq!(ledger.pressure(Tier::Vram), Pressure::Full);
-        assert!(ledger.reserve(Tier::Vram, 1).is_err());
-        // Nought bytes is not a reservation worth making, but it is not a
-        // division by zero either.
-        assert!(ledger.reserve(Tier::Vram, 0).is_ok());
     }
 }

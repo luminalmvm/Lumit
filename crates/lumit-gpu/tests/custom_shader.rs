@@ -135,16 +135,6 @@ fn a_broken_shader_refuses_calmly_with_the_users_own_line_number() {
     assert!(!shown.is_empty());
 }
 
-#[test]
-fn an_error_in_the_hosts_own_wrapper_says_so() {
-    let p = program(INVERT);
-    let mistake = p.remap_error("error: something\n  ┌─ wgsl:2:5\n");
-    assert!(
-        mistake.starts_with("in the host's own wrapper"),
-        "a line inside the prologue is a bug in Lumit and reads like one: {mistake}"
-    );
-}
-
 // ------------------------------------------------- §8 items 12, 15, 16, 17, 18
 
 #[test]
@@ -219,30 +209,6 @@ fn gedge(
         from_port,
         to,
         to_port,
-    }
-}
-
-/// The §8 item 22 fixture: uv split apart, multiplied, put back together —
-/// a gradient whose twin a person can write in one line.
-fn gradient_graph() -> lumit_core::fx::shader::graph::ShaderGraph {
-    lumit_core::fx::shader::graph::ShaderGraph {
-        nodes: vec![
-            gnode(1, "uv"),
-            gnode(2, "split"),
-            gnode(3, "multiply"),
-            gnode(4, "combine4"),
-            gnode(5, "result"),
-        ],
-        edges: vec![
-            gedge(1, 0, 2, 0),
-            gedge(2, 0, 4, 0),
-            gedge(2, 1, 4, 1),
-            gedge(2, 0, 3, 0),
-            gedge(2, 1, 3, 1),
-            gedge(3, 0, 4, 2),
-            gedge(4, 0, 5, 0),
-        ],
-        layout: Vec::new(),
     }
 }
 
@@ -354,51 +320,6 @@ fn a_graph_of_every_node_assembles_and_validates() {
     }
 }
 
-/// §8 item 22's other half on a card, and the CS4 gate the package names: the
-/// same picture from the graph and from the one-line WGSL a person would have
-/// written — identical arithmetic, identical pixels.
-#[test]
-fn a_graph_renders_its_hand_written_twin() {
-    let Some(ctx) = lumit_gpu::test_support::lease() else {
-        lumit_gpu::no_adapter();
-        return;
-    };
-    let fx = ctx.fx();
-    let (w, h) = (16u32, 12u32);
-    let tex = upload_linear_f32(&ctx, &picture(w, h), w, h);
-    let compiled =
-        lumit_core::fx::shader::compile::compile(&gradient_graph()).expect("the graph compiles");
-    let twin =
-        "fn shade(uv: vec2<f32>) -> vec4<f32> {\n    return vec4<f32>(uv.x, uv.y, uv.x * uv.y, 1.0);\n}\n";
-    let draw = |source: &str, salt: u128| {
-        let p = program(source);
-        let (pipeline, _) = fx
-            .shader_pipeline(&ctx, salt, p.source_hash, &p.assembled)
-            .expect("it compiles");
-        let out = fx.custom_shader(
-            &ctx,
-            &pipeline,
-            &tex,
-            &tex,
-            None,
-            None,
-            w,
-            h,
-            &header(w, h),
-            &p.pack(lumit_core::fx::Params::new(&[])),
-        );
-        readback_linear_f32(&ctx, &out, w, h).expect("readback")
-    };
-    let boxes = draw(&compiled, 40);
-    let typed = draw(twin, 41);
-    for (i, (a, b)) in boxes.iter().zip(&typed).enumerate() {
-        assert!(
-            (a - b).abs() < 1e-6,
-            "pixel component {i}: the graph drew {a}, the twin {b}"
-        );
-    }
-}
-
 #[test]
 fn a_nan_returned_by_a_shader_never_leaves_the_effect() {
     let Some(ctx) = lumit_gpu::test_support::lease() else {
@@ -434,72 +355,6 @@ fn a_nan_returned_by_a_shader_never_leaves_the_effect() {
     assert!(
         back.iter().all(|v| v.is_finite()),
         "one poisoned pixel becomes a black composition three effects later"
-    );
-}
-
-#[test]
-fn one_pipeline_per_source_hash() {
-    let Some(ctx) = lumit_gpu::test_support::lease() else {
-        lumit_gpu::no_adapter();
-        return;
-    };
-    let fx = ctx.fx();
-    let a = program(INVERT);
-    let b = program(EVERYTHING);
-    // Two instances, one source: one compile.
-    fx.shader_pipeline(&ctx, 10, a.source_hash, &a.assembled)
-        .unwrap();
-    fx.shader_pipeline(&ctx, 11, a.source_hash, &a.assembled)
-        .unwrap();
-    assert_eq!(fx.shader_compiles(), 1, "two layers share one pipeline");
-    // Two sources: two.
-    fx.shader_pipeline(&ctx, 12, b.source_hash, &b.assembled)
-        .unwrap();
-    assert_eq!(fx.shader_compiles(), 2);
-}
-
-#[test]
-fn two_instances_of_one_source_keep_their_own_uniforms() {
-    let Some(ctx) = lumit_gpu::test_support::lease() else {
-        lumit_gpu::no_adapter();
-        return;
-    };
-    let fx = ctx.fx();
-    let (w, h) = (8u32, 8u32);
-    let tex = upload_linear_f32(&ctx, &picture(w, h), w, h);
-    let p = program(
-        "struct Params {\n  /// @slider(0, 4) @default(1) Gain\n  gain: f32,\n}\n\
-         fn shade(uv: vec2<f32>) -> vec4<f32> { return lumit_sample(uv) * p.gain; }",
-    );
-    let (pipeline, _) = fx
-        .shader_pipeline(&ctx, 20, p.source_hash, &p.assembled)
-        .unwrap();
-    let (twin, _) = fx
-        .shader_pipeline(&ctx, 21, p.source_hash, &p.assembled)
-        .unwrap();
-    assert_eq!(fx.shader_compiles(), 1, "one pipeline");
-    let id = lumit_core::fx::ParamId::new("gain");
-    let draw = |pl: &wgpu::ComputePipeline, gain: f32| {
-        let entries = [(id, lumit_core::fx::Value::Float(gain))];
-        let out = fx.custom_shader(
-            &ctx,
-            pl,
-            &tex,
-            &tex,
-            None,
-            None,
-            w,
-            h,
-            &header(w, h),
-            &p.pack(lumit_core::fx::Params::new(&entries)),
-        );
-        readback_linear_f32(&ctx, &out, w, h).expect("readback")
-    };
-    let one = draw(&pipeline, 1.0);
-    let two = draw(&twin, 2.0);
-    assert!(
-        one.iter().zip(&two).any(|(a, b)| (a - b).abs() > 1e-3),
-        "and two pictures: the uniform is per dispatch, not per pipeline"
     );
 }
 

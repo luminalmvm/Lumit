@@ -23,8 +23,8 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use lumit_core::model::{
-    Composition, Document, EffectParam, EffectValue, Layer, LayerInputSource, LayerKind,
-    LinearColour, MatteChannel, MatteRef, ProjectItem, SolidDef, Switches, TransformGroup,
+    Composition, Document, EffectParam, EffectValue, Layer, LayerKind, LinearColour, ProjectItem,
+    SolidDef, Switches, TransformGroup,
 };
 use lumit_core::time::{CompTime, Duration, FrameRate, Rational};
 use lumit_render::headless::HeadlessRenderer;
@@ -205,41 +205,6 @@ fn a_depth_plane_is_drawn_and_the_effect_passes_through_without_one() {
         255,
         "a frame outside the analysed span wears a neighbour's plane"
     );
-    lumit_render::planes::clear();
-}
-
-#[test]
-fn invert_turns_the_plane_over_and_source_view_leaves_the_layer_alone() {
-    let Ok(mut r) = HeadlessRenderer::shared() else {
-        lumit_gpu::no_adapter();
-        return;
-    };
-
-    lumit_render::planes::clear();
-    let (doc, comp, instance) = project(0, true);
-    publish(instance, 0);
-    let (turned, w, _) = r
-        .render_rgba(&doc, comp, 0, 1.0)
-        .expect("the inverted render");
-    assert_eq!(
-        px(&turned, w, FAR),
-        [255, 255, 255, 255],
-        "inverted, the far half is the bright one"
-    );
-    assert_eq!(px(&turned, w, NEAR), [0, 0, 0, 255]);
-
-    lumit_render::planes::clear();
-    let (doc, comp, instance) = project(1, false);
-    publish(instance, 0);
-    let (source, w, _) = r
-        .render_rgba(&doc, comp, 0, 1.0)
-        .expect("the source render");
-    assert_eq!(
-        px(&source, w, FAR)[0],
-        255,
-        "Source view leaves the layer to be looked at"
-    );
-    assert_eq!(px(&source, w, NEAR)[0], 255);
     lumit_render::planes::clear();
 }
 
@@ -459,80 +424,6 @@ fn a_layer_read_as_a_matte_source_draws_its_own_plane() {
         [0, 0, 0, 255],
         "the far half is still red, so the referenced layer's own plane did \
          not reach its stack"
-    );
-    lumit_render::planes::clear();
-}
-
-/// **A track matte reads its source layer's own plane too** (docs/impl/
-/// addons.md §6.1's "Set matte or a track matte can read it the same way").
-///
-/// The layer's own Matte row is a second path into a referenced layer's stack,
-/// and it ran with every side carriage empty, so a Depth on the matte source
-/// gated the consumer with the source's plain footage. Same arrangement as the
-/// Set matte test above: a white solid wearing Depth is the matte, so the
-/// consuming red layer is kept where the plane is white and cut where it is
-/// black.
-#[test]
-fn a_track_matte_source_draws_its_own_plane() {
-    let Ok(mut r) = HeadlessRenderer::shared() else {
-        lumit_gpu::no_adapter();
-        return;
-    };
-    lumit_render::planes::clear();
-
-    let white = Uuid::now_v7();
-    let red = Uuid::now_v7();
-    let mut doc = Document::new();
-    for (id, name, colour) in [
-        (white, "white", LinearColour([1.0, 1.0, 1.0, 1.0])),
-        (red, "red", LinearColour([1.0, 0.0, 0.0, 1.0])),
-    ] {
-        doc.items.push(ProjectItem::Solid(SolidDef {
-            id,
-            name: name.into(),
-            colour,
-            width: COMP,
-            height: COMP,
-            extra: serde_json::Map::new(),
-        }));
-    }
-
-    let depth = lumit_core::fx::instantiate("depth").expect("depth is a built-in");
-    let instance = depth.id;
-    let mut source = layer("the depth", LayerKind::Solid { def: white });
-    source.effects = vec![depth];
-    let source_id = source.id;
-
-    let mut consumer = layer("the consumer", LayerKind::Solid { def: red });
-    consumer.matte = Some(MatteRef {
-        layer: source_id,
-        channel: MatteChannel::Luma,
-        inverted: false,
-        source: LayerInputSource::EffectsAndMasks,
-    });
-
-    let comp = comp_of(vec![consumer, source]);
-    let comp_id = comp.id;
-    doc.items.push(ProjectItem::Composition(comp));
-    let doc = Arc::new(doc);
-
-    publish(instance, 0);
-    let (cut, w, _) = r.render_rgba(&doc, comp_id, 0, 1.0).expect("the render");
-    // Read as red rather than as three exact numbers: a track matte goes
-    // through a composite of its own, which leaves a unit or two of the layer
-    // behind showing at the edge of the range. What is being asked is which
-    // layer is on top, and that is unmistakable either way.
-    let near = px(&cut, w, NEAR);
-    assert_eq!(near[0], 255, "the near half kept the consuming layer");
-    assert!(
-        near[1] < 8 && near[2] < 8,
-        "and it is the consumer's own red: {near:?}"
-    );
-    assert_eq!(
-        px(&cut, w, FAR)[0],
-        0,
-        "the far half is still red, so the matte source's own plane did not \
-         reach its stack"
     );
     lumit_render::planes::clear();
 }

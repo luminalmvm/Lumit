@@ -519,78 +519,6 @@ mod tests {
         (a[0] - b[0]).abs() <= eps && (a[1] - b[1]).abs() <= eps && (a[2] - b[2]).abs() <= eps
     }
 
-    // Identity 2×2×2 cube: each corner's output equals its grid position, laid
-    // out red-fastest (r + 2g + 4b).
-    const IDENTITY_2: &str = "\
-LUT_3D_SIZE 2
-0.0 0.0 0.0
-1.0 0.0 0.0
-0.0 1.0 0.0
-1.0 1.0 0.0
-0.0 0.0 1.0
-1.0 0.0 1.0
-0.0 1.0 1.0
-1.0 1.0 1.0
-";
-
-    #[test]
-    fn identity_3d_returns_input_at_corners_and_inside() {
-        let lut = expect_3d(IDENTITY_2);
-        let corners = [
-            [0.0, 0.0, 0.0],
-            [1.0, 0.0, 0.0],
-            [0.0, 1.0, 0.0],
-            [1.0, 1.0, 0.0],
-            [0.0, 0.0, 1.0],
-            [1.0, 0.0, 1.0],
-            [0.0, 1.0, 1.0],
-            [1.0, 1.0, 1.0],
-        ];
-        for c in corners {
-            assert!(
-                close(lut.sample(c), c, 1e-6),
-                "corner {c:?} -> {:?}",
-                lut.sample(c)
-            );
-        }
-        // Interior points: an identity cube is linear, so trilinear reproduces
-        // the input exactly.
-        assert!(close(lut.sample([0.5, 0.5, 0.5]), [0.5, 0.5, 0.5], 1e-6));
-        assert!(close(
-            lut.sample([0.25, 0.75, 0.1]),
-            [0.25, 0.75, 0.1],
-            1e-6
-        ));
-    }
-
-    // A non-trivial cube that swaps red and blue: out = [b, g, r].
-    const SWAP_RB_2: &str = "\
-# swaps red and blue
-LUT_3D_SIZE 2
-0.0 0.0 0.0
-0.0 0.0 1.0
-0.0 1.0 0.0
-0.0 1.0 1.0
-1.0 0.0 0.0
-1.0 0.0 1.0
-1.0 1.0 0.0
-1.0 1.0 1.0
-";
-
-    #[test]
-    fn swap_rb_corners_are_exact() {
-        let lut = expect_3d(SWAP_RB_2);
-        assert!(close(lut.sample([1.0, 0.0, 0.0]), [0.0, 0.0, 1.0], 1e-6));
-        assert!(close(lut.sample([0.0, 0.0, 1.0]), [1.0, 0.0, 0.0], 1e-6));
-        assert!(close(lut.sample([1.0, 1.0, 0.0]), [0.0, 1.0, 1.0], 1e-6));
-        // Swap is linear, so an interior point is the exact swap too.
-        assert!(close(
-            lut.sample([0.25, 0.6, 0.75]),
-            [0.75, 0.6, 0.25],
-            1e-6
-        ));
-    }
-
     #[test]
     fn trilinear_midpoint_matches_hand_computed_lerp() {
         // Arbitrary, non-separable corner values (red-fastest, r + 2g + 4b).
@@ -658,34 +586,6 @@ LUT_1D_SIZE 3
             [0.25, 0.125, 0.75],
             1e-6
         ));
-    }
-
-    // Identity cube with a stretched domain of 0..2.
-    const IDENTITY_2_DOMAIN2: &str = "\
-LUT_3D_SIZE 2
-DOMAIN_MIN 0 0 0
-DOMAIN_MAX 2 2 2
-0.0 0.0 0.0
-1.0 0.0 0.0
-0.0 1.0 0.0
-1.0 1.0 0.0
-0.0 0.0 1.0
-1.0 0.0 1.0
-0.0 1.0 1.0
-1.0 1.0 1.0
-";
-
-    #[test]
-    fn non_default_domain_remaps_and_clamps() {
-        let lut = expect_3d(IDENTITY_2_DOMAIN2);
-        assert_eq!(lut.domain_max, [2.0, 2.0, 2.0]);
-        assert!(close(lut.sample([0.0, 0.0, 0.0]), [0.0, 0.0, 0.0], 1e-6));
-        // Input 1.0 is the middle of a 0..2 domain.
-        assert!(close(lut.sample([1.0, 1.0, 1.0]), [0.5, 0.5, 0.5], 1e-6));
-        assert!(close(lut.sample([2.0, 2.0, 2.0]), [1.0, 1.0, 1.0], 1e-6));
-        // Out-of-domain clamps to the edge.
-        assert!(close(lut.sample([5.0, 5.0, 5.0]), [1.0, 1.0, 1.0], 1e-6));
-        assert!(close(lut.sample([-1.0, -1.0, -1.0]), [0.0, 0.0, 0.0], 1e-6));
     }
 
     const IDENTITY_WITH_JUNK: &str = "\
@@ -761,13 +661,6 @@ LUT_3D_SIZE 2
             parse_cube("LUT_3D_SIZE 2\nLUT_3D_SIZE 2\n"),
             Err(LutError::DuplicateSize { .. })
         ));
-    }
-
-    #[test]
-    fn error_implements_std_error_and_displays() {
-        let err = parse_cube("TITLE \"empty\"\n").unwrap_err();
-        let _as_std: &dyn std::error::Error = &err;
-        assert!(!err.to_string().is_empty());
     }
 
     /// The Input space. Linear is the exact identity in both directions

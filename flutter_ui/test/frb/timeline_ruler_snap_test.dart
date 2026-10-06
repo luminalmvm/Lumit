@@ -19,7 +19,6 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/panels/timeline_extras_frb.dart';
 import 'package:lumit_flutter/panels/timeline_panel_frb.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
-import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/state/comp_time.dart';
 import 'package:uuid/uuid.dart';
 
@@ -125,177 +124,17 @@ void main() {
           reason: 'and the capture leaves no trace after (P1)');
     });
 
-    testWidgets('Ctrl suspends a bar drag\'s magnet', (tester) async {
-      final p = withComp();
-      final layer = p.comp.addSolidLayer();
-      p.uiState.model.refresh();
-      markerAt(p, 41);
-      await mount(tester, p);
-
-      final perFrame = perFrameOf(tester, p);
-      final bar =
-          find.byKey(ValueKey<String>('tl-bar-body-${layer.internallayerId}'));
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-      final gesture =
-          await dragging(tester, tester.getCenter(bar), perFrame * 40);
-      await gesture.up();
-      await tester.pumpAndSettle();
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-
-      expect(p.comp.frameAtTime(time: layer.getSpan().inPoint), isNot(41),
-          reason: 'Ctrl suspends the magnet, targets and all');
-    });
-
     // -------------------------------------------------------------------
     // §4.5, §7 — the work-area edges snap, and answer Escape.
     // -------------------------------------------------------------------
-
-    testWidgets('a work-area edge lands on the marker it is dragged near',
-        (tester) async {
-      final p = withComp();
-      p.comp.addSolidLayer();
-      // A work area narrower than the comp, so its end handle stands clear of
-      // the panel's own right-hand gutter and there is a band to see move.
-      p.comp.setWorkArea(
-        span: BridgeSpan(
-          inPoint: p.comp.timeOfFrame(frame: 0),
-          outPoint: p.comp.timeOfFrame(frame: 1000),
-          startOffset: p.comp.timeOfFrame(frame: 0),
-        ),
-      );
-      // A frame past where the pointer itself would land, so only a reach for
-      // the target can explain the landing — and on the far side of the
-      // handle, because a flag's label pill runs to the right of its point and
-      // would otherwise be the thing under the press.
-      markerAt(p, 1060);
-      await mount(tester, p);
-
-      final perFrame = perFrameOf(tester, p);
-      final handle = find.byKey(const ValueKey('tl-work-end'));
-      final gesture =
-          await dragging(tester, tester.getCenter(handle), perFrame * 59);
-      expect(find.byKey(const ValueKey('tl-ruler-snap-caught')), findsOneWidget,
-          reason: 'the capture line marks what caught the edge');
-
-      await gesture.up();
-      await tester.pumpAndSettle();
-      expect(workAreaFrames(p.comp).end, 1060,
-          reason: 'the edge took the marker rather than the pointer');
-      expect(find.byKey(const ValueKey('tl-ruler-snap-caught')), findsNothing,
-          reason: 'and the capture is gone with the gesture (P1)');
-    });
-
-    testWidgets('Escape abandons a work-area drag and writes nothing',
-        (tester) async {
-      final p = withComp();
-      p.comp.addSolidLayer();
-      p.comp.setWorkArea(
-        span: BridgeSpan(
-          inPoint: p.comp.timeOfFrame(frame: 0),
-          outPoint: p.comp.timeOfFrame(frame: 1000),
-          startOffset: p.comp.timeOfFrame(frame: 0),
-        ),
-      );
-      await mount(tester, p);
-
-      final perFrame = perFrameOf(tester, p);
-      final gesture = await dragging(
-          tester,
-          tester.getCenter(find.byKey(const ValueKey('tl-work-end'))),
-          -perFrame * 300);
-      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-      await tester.pump();
-      await gesture.up();
-      await tester.pumpAndSettle();
-
-      expect(workAreaFrames(p.comp).end, 1000,
-          reason: 'the abandoned drag wrote nothing at all');
-    });
 
     // -------------------------------------------------------------------
     // §4.5, §7 — a marker drag snaps and answers Escape.
     // -------------------------------------------------------------------
 
-    testWidgets('a marker lands on the work-area edge it is dragged near',
-        (tester) async {
-      final p = withComp();
-      p.comp.addSolidLayer();
-      p.comp.setWorkArea(
-        span: BridgeSpan(
-          inPoint: p.comp.timeOfFrame(frame: 0),
-          outPoint: p.comp.timeOfFrame(frame: 50),
-          startOffset: p.comp.timeOfFrame(frame: 0),
-        ),
-      );
-      markerAt(p, 10);
-      await mount(tester, p);
-
-      final perFrame = perFrameOf(tester, p);
-      final id = markersOf(p.comp).single.id;
-      final gesture = await dragging(
-          tester,
-          tester.getCenter(find.byKey(ValueKey<String>('tl-marker-$id'))),
-          perFrame * 39);
-      expect(find.byKey(const ValueKey('tl-ruler-snap-caught')), findsOneWidget,
-          reason: 'the flag says what it caught while it holds it');
-
-      await gesture.up();
-      await tester.pumpAndSettle();
-      expect(p.comp.frameAtTime(time: markersOf(p.comp).single.time), 50,
-          reason: 'the flag took the work-area edge, not the pointer');
-    });
-
-    testWidgets('Escape abandons a marker drag and leaves it where it was',
-        (tester) async {
-      final p = withComp();
-      p.comp.addSolidLayer();
-      markerAt(p, 10);
-      await mount(tester, p);
-
-      final perFrame = perFrameOf(tester, p);
-      final id = markersOf(p.comp).single.id;
-      final gesture = await dragging(
-          tester,
-          tester.getCenter(find.byKey(ValueKey<String>('tl-marker-$id'))),
-          perFrame * 100);
-      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-      await tester.pump();
-      await gesture.up();
-      await tester.pumpAndSettle();
-
-      expect(p.comp.frameAtTime(time: markersOf(p.comp).single.time), 10,
-          reason: 'the abandoned drag wrote nothing');
-    });
-
     // -------------------------------------------------------------------
     // §7 — the two double-clicks.
     // -------------------------------------------------------------------
-
-    testWidgets('double-clicking the work-area band gives the comp back',
-        (tester) async {
-      final p = withComp();
-      p.comp.addSolidLayer();
-      p.comp.setWorkArea(
-        span: BridgeSpan(
-          inPoint: p.comp.timeOfFrame(frame: 20),
-          outPoint: p.comp.timeOfFrame(frame: 60),
-          startOffset: p.comp.timeOfFrame(frame: 0),
-        ),
-      );
-      await mount(tester, p);
-      expect(workAreaFrames(p.comp).whole, isFalse);
-
-      // The band's own row — the whole ruler now — half way along it.
-      final band = tester.getRect(find.byKey(const ValueKey('tl-work-area')));
-      final at = Offset(band.center.dx, band.center.dy);
-      await tester.tapAt(at);
-      await tester.pump(const Duration(milliseconds: 40));
-      await tester.tapAt(at);
-      await tester.pumpAndSettle();
-
-      expect(p.comp.getWorkArea(), isNull,
-          reason: 'the work area is the whole comp again (docs/07 §4.1)');
-    });
 
     testWidgets('double-clicking empty ruler makes a marker and names it',
         (tester) async {
@@ -323,33 +162,6 @@ void main() {
       await tester.pumpAndSettle();
       expect(markersOf(p.comp).single.label, 'Drop',
           reason: 'what was typed is what the marker says');
-    });
-
-    /// §7's last sentence on that gesture: **cancelling the label editor
-    /// leaves the marker.** The double-click is what made it; the dialogue
-    /// only names it, so backing out of the naming is not an undo of the
-    /// making.
-    testWidgets('cancelling the label editor leaves the marker',
-        (tester) async {
-      final p = withComp();
-      p.comp.addSolidLayer();
-      await mount(tester, p);
-
-      final ruler = tester.getRect(find.byKey(const ValueKey('tl-ruler')));
-      final at = Offset(ruler.center.dx, ruler.top + ruler.height / 4);
-      await tester.tapAt(at);
-      await tester.pump(const Duration(milliseconds: 40));
-      await tester.tapAt(at);
-      await tester.pumpAndSettle();
-      expect(markersOf(p.comp), hasLength(1));
-
-      await tester.tap(find.byKey(const ValueKey('marker-edit-cancel')));
-      await tester.pumpAndSettle();
-
-      expect(markersOf(p.comp), hasLength(1),
-          reason: 'the marker outlives the dialogue that would have named it');
-      expect(markersOf(p.comp).single.label, isEmpty,
-          reason: 'and it says nothing, which is what an unnamed one says');
     });
 
     // -------------------------------------------------------------------

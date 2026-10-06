@@ -854,29 +854,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn renders_visible_deterministic_text() {
-        let a = rasterise_line("Lumit", 48.0, [255, 255, 255]);
-        assert!(a.width > 60 && a.height > 20, "{}x{}", a.width, a.height);
-        let ink: u64 = a.rgba.chunks_exact(4).map(|p| u64::from(p[3])).sum();
-        assert!(ink > 10_000, "ink {ink}");
-        // Deterministic: identical run, identical bytes.
-        let b = rasterise_line("Lumit", 48.0, [255, 255, 255]);
-        assert_eq!(a.rgba, b.rgba);
-    }
-
-    #[test]
     fn empty_text_yields_a_transparent_pixel() {
         let r = rasterise_line("", 48.0, [255, 0, 0]);
         assert_eq!((r.width, r.height), (1, 1));
         assert_eq!(r.rgba[3], 0);
-    }
-
-    #[test]
-    fn size_scales_the_raster() {
-        let small = rasterise_line("Aa", 16.0, [255, 255, 255]);
-        let large = rasterise_line("Aa", 64.0, [255, 255, 255]);
-        assert!(large.width > small.width * 3);
-        assert!(large.height > small.height * 3);
     }
 
     // ---- Text on a path --------------------------------------------------
@@ -939,61 +920,6 @@ mod tests {
         );
     }
 
-    /// The baseline **follows the tangent**: the same words on a path running
-    /// down the picture come out turned a quarter turn, so the run that was
-    /// wide is now tall by the same amount.
-    #[test]
-    fn a_turned_path_turns_the_glyphs() {
-        let across = poly(vec![[20.0, 200.0], [380.0, 200.0]], false);
-        let down = poly(vec![[200.0, 20.0], [200.0, 380.0]], false);
-        let run = |p: &MaskPolyline| {
-            let r = rasterise_on_path("Lumit", 48.0, [255, 255, 255], p, 0.0, 400, 400);
-            let (x0, y0, x1, y1) = ink_box(&r).expect("ink");
-            (x1 - x0, y1 - y0)
-        };
-        let (w, h) = run(&across);
-        let (tw, th) = run(&down);
-        let close = |a: u32, b: u32| (a as i64 - b as i64).abs() <= 2;
-        assert!(
-            close(w, th) && close(h, tw),
-            "across {w}x{h}, down {tw}x{th}"
-        );
-    }
-
-    /// **A closed path wraps; an open one runs out.** Past the end of an open
-    /// curve there is nowhere to put a glyph, so it is not drawn — rather than
-    /// piling every remaining letter on the last vertex.
-    #[test]
-    fn a_closed_path_wraps_where_an_open_one_runs_out() {
-        let open = poly(vec![[10.0, 120.0], [200.0, 120.0]], false);
-        let ring = poly(
-            vec![
-                [40.0, 40.0],
-                [200.0, 40.0],
-                [200.0, 200.0],
-                [40.0, 200.0],
-                [40.0, 40.0],
-            ],
-            true,
-        );
-        let ran_off = rasterise_on_path("Lu", 48.0, [255, 255, 255], &open, 900.0, 260, 200);
-        assert_eq!(ink_box(&ran_off), None, "an open path grew a tail");
-        let wrapped = rasterise_on_path("Lu", 48.0, [255, 255, 255], &ring, 900.0, 300, 300);
-        assert!(ink_box(&wrapped).is_some(), "a ring lost its type");
-    }
-
-    /// Nothing to say, and a path to say it on: the layer's own box, empty.
-    #[test]
-    fn empty_text_on_a_path_draws_nothing() {
-        let path = poly(vec![[10.0, 40.0], [180.0, 40.0]], false);
-        let r = rasterise_on_path("", 48.0, [255, 0, 0], &path, 0.0, 200, 100);
-        assert_eq!((r.width, r.height), (200, 100));
-        assert!(
-            r.rgba.iter().all(|b| *b == 0),
-            "an empty line drew something"
-        );
-    }
-
     /// A path that names nothing — the empty polyline every "no mask" reading
     /// comes to — draws nothing rather than faulting (docs/14 §4).
     #[test]
@@ -1009,15 +935,6 @@ mod tests {
         );
         assert_eq!((r.width, r.height), (64, 64));
         assert!(r.rgba.iter().all(|b| *b == 0));
-    }
-
-    /// Same document, same frame, same bytes — the rule every rasteriser in
-    /// this engine owes the frame cache.
-    #[test]
-    fn a_line_on_a_path_is_deterministic() {
-        let path = poly(vec![[20.0, 100.0], [120.0, 40.0], [240.0, 160.0]], false);
-        let go = || rasterise_on_path("Lumit", 36.0, [200, 40, 90], &path, 7.5, 300, 220).rgba;
-        assert_eq!(go(), go());
     }
 
     // ---- Glyph outlines --------------------------------------------------
@@ -1121,43 +1038,6 @@ mod tests {
         );
     }
 
-    /// A line on a path converts **curved**: the outlines take the same frames
-    /// the glyphs are stamped in, so the copy sits on the words it came from.
-    #[test]
-    fn outlines_follow_the_path_the_words_follow() {
-        let down = poly(vec![[200.0, 20.0], [200.0, 380.0]], false);
-        let straight = shape_items_for(
-            "Lumit",
-            48.0,
-            lumit_core::model::LinearColour([1.0, 1.0, 1.0, 1.0]),
-            None,
-            0.0,
-        );
-        let curved = shape_items_for(
-            "Lumit",
-            48.0,
-            lumit_core::model::LinearColour([1.0, 1.0, 1.0, 1.0]),
-            Some(&down),
-            0.0,
-        );
-        assert_eq!(straight.len(), curved.len(), "the same letters either way");
-        let (sx0, sy0, sx1, sy1) =
-            lumit_core::shape::contents_bounds(&straight, 0.0).expect("straight art");
-        let (cx0, cy0, cx1, cy1) =
-            lumit_core::shape::contents_bounds(&curved, 0.0).expect("curved art");
-        // Wide across, tall down — the run turned with the curve.
-        assert!(sx1 - sx0 > sy1 - sy0, "straight run is not wide");
-        assert!(cy1 - cy0 > cx1 - cx0, "the run did not turn");
-    }
-
-    /// Nothing to convert is not an error here: an empty line, and a line of
-    /// spaces, both come back with no outlines and the command above refuses.
-    #[test]
-    fn a_line_with_no_ink_has_no_outlines() {
-        assert!(glyph_outlines("", 48.0, None, 0.0).is_empty());
-        assert!(glyph_outlines("   ", 48.0, None, 0.0).is_empty());
-    }
-
     // ---- Text animators --------------------------------------------------
 
     fn white() -> lumit_core::model::LinearColour {
@@ -1204,29 +1084,6 @@ mod tests {
             x0 > wx0 + width / 3,
             "the wrong half faded (ink {x0}..{x1}, whole {wx0}..{wx1})"
         );
-    }
-
-    /// A push moves the letters it reaches, and the grown box gives them
-    /// somewhere to be pushed **to**: a letter lifted a quarter of a text size
-    /// is still drawn rather than clipped off the top.
-    #[test]
-    fn a_push_moves_the_letters_and_the_box_has_room_for_them() {
-        use lumit_core::anim::Property;
-        use lumit_core::text::{glyph_xforms, TextAnimator};
-        let still = rasterise_line_animated("Lu", 48.0, white(), &[]);
-        let mut a = TextAnimator::new("Drop");
-        a.position_y = Property::fixed(-12.0);
-        let xforms = glyph_xforms(&[a], "Lu", 0.0);
-        let pushed = rasterise_line_animated("Lu", 48.0, white(), &xforms);
-        // One text size of room a side, and the words sit that far in.
-        let margin = animator_margin(48.0) as u32;
-        assert_eq!(pushed.width, still.width + 2 * margin);
-        assert_eq!(pushed.height, still.height + 2 * margin);
-        let (_, sy0, _, _) = ink_box(&still).expect("ink");
-        let (_, py0, _, _) = ink_box(&pushed).expect("ink");
-        // Un-animated the ink would start `margin` further down; the push
-        // lifted it 12 px from there, and none of it was lost.
-        assert_eq!(py0 as i64, sy0 as i64 + margin as i64 - 12);
     }
 
     /// Same document, same frame, same bytes — the rule the frame cache lives

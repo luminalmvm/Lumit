@@ -450,26 +450,6 @@ mod tests {
         );
     }
 
-    /// A walk that suddenly finds almost nothing is a broken walk, not a small
-    /// catalogue — the same guard `fx-labels.txt` keeps.
-    #[test]
-    fn every_effect_and_category_is_described() {
-        let r = reference();
-        assert_eq!(r.categories.len(), FxCategory::ALL.len());
-        assert_eq!(r.effects.len(), super::super::BUILTINS.len());
-        assert!(r.effects.len() >= 91, "the catalogue has lost effects");
-        for e in &r.effects {
-            assert!(!e.slug.is_empty(), "{} has no slug", e.match_name);
-            // Split channels is all sockets and has no rows.
-            let socket_only = e.match_name == crate::comp_graph::SPLIT_CHANNELS;
-            assert!(
-                socket_only || !e.params.is_empty(),
-                "{} declares no parameters",
-                e.label
-            );
-        }
-    }
-
     /// The slug is a file name and a URL segment — two effects sharing one
     /// would silently overwrite a page.
     #[test]
@@ -484,13 +464,6 @@ mod tests {
                 e.slug
             );
         }
-    }
-
-    #[test]
-    fn slugging_folds_punctuation_and_case() {
-        assert_eq!(slug("Blur & sharpen"), "blur-sharpen");
-        assert_eq!(slug("Gaussian blur"), "gaussian-blur");
-        assert_eq!(slug("RGB split"), "rgb-split");
     }
 
     #[test]

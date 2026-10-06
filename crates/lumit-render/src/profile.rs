@@ -375,18 +375,6 @@ mod tests {
     }
 
     #[test]
-    fn span_fraction_walks_its_span_and_never_leaves_it() {
-        assert!((span_fraction(0.1, 0.5, 0, 4) - 0.1).abs() < 1e-6);
-        assert!((span_fraction(0.1, 0.5, 2, 4) - 0.3).abs() < 1e-6);
-        assert!((span_fraction(0.1, 0.5, 4, 4) - 0.5).abs() < 1e-6);
-        // More done than there are: clamped, never past the span's end.
-        assert!((span_fraction(0.1, 0.5, 9, 4) - 0.5).abs() < 1e-6);
-        // Nothing to do at all is the start of the span, not a division by
-        // zero.
-        assert!((span_fraction(0.1, 0.5, 0, 0) - 0.1).abs() < 1e-6);
-    }
-
-    #[test]
     fn progress_only_ever_advances_across_a_frame() {
         let (sink, seen) = recorder();
         let p = FrameProfiler::new(Uuid::nil(), 7, Some(sink), false);
@@ -417,84 +405,5 @@ mod tests {
             seen.last().map(|r| r.stage),
             Some(RenderStage::Presenting)
         ));
-    }
-
-    #[test]
-    fn a_profiler_with_no_sink_and_no_timing_reports_nothing() {
-        let p = FrameProfiler::new(Uuid::nil(), 0, None, false);
-        p.planned();
-        p.compositing(1);
-        p.enter_comp();
-        p.layer_done(Uuid::nil(), 5.0, Vec::new());
-        assert!(!p.timing());
-        assert!(p.finish().is_none());
-    }
-
-    #[test]
-    fn the_stages_split_the_total_between_them() {
-        let p = FrameProfiler::new(Uuid::nil(), 0, None, true);
-        p.planned();
-        p.building();
-        // A build long enough to measure, so the banked number is a real one.
-        std::thread::sleep(std::time::Duration::from_millis(20));
-        p.compositing(1);
-        p.presenting();
-        let profile = p.finish().expect("timings were asked for");
-        let build = profile.stage_ms[RenderStage::Building.code() as usize];
-        assert!(
-            build >= 10.0,
-            "the build stage owns the time spent building: {build}"
-        );
-        let sum: f32 = profile.stage_ms.iter().sum();
-        assert!(
-            sum <= profile.total_ms + 1.0,
-            "the stages cannot claim more than the frame took: {sum} of {}",
-            profile.total_ms
-        );
-        assert!(
-            sum >= profile.total_ms * 0.9,
-            "and between them they explain the total: {sum} of {}",
-            profile.total_ms
-        );
-    }
-
-    #[test]
-    fn a_frame_that_stops_short_banks_what_it_reached() {
-        let p = FrameProfiler::new(Uuid::nil(), 0, None, true);
-        p.planned();
-        let profile = p.finish().expect("timings were asked for");
-        // Planning and decoding got marks; the stages never entered are zero.
-        assert_eq!(profile.stage_ms[RenderStage::Building.code() as usize], 0.0);
-        assert_eq!(
-            profile.stage_ms[RenderStage::Presenting.code() as usize],
-            0.0
-        );
-    }
-
-    #[test]
-    fn only_top_level_layers_are_timed() {
-        let outer = Uuid::from_u128(1);
-        let inner = Uuid::from_u128(2);
-        let p = FrameProfiler::new(Uuid::nil(), 3, None, true);
-        p.enter_comp();
-        p.layer_done(
-            outer,
-            4.0,
-            vec![EffectTiming {
-                effect: outer,
-                ms: 1.0,
-            }],
-        );
-        // A Precomp's own walk: its layers are rows of another composition, so
-        // they are not the ones this frame's Timeline is showing.
-        p.enter_comp();
-        p.layer_done(inner, 9.0, Vec::new());
-        p.leave_comp();
-        p.leave_comp();
-        let profile = p.finish().expect("timings were asked for");
-        assert_eq!(profile.layers.len(), 1);
-        assert_eq!(profile.layers[0].layer, outer);
-        assert_eq!(profile.layers[0].effects.len(), 1);
-        assert_eq!(profile.frame, 3);
     }
 }

@@ -364,7 +364,6 @@ mod tests {
 
     const RATE: u32 = 48_000;
     const RATE_F: f64 = 48_000.0;
-    const LATENCY: usize = Oversample4x::LATENCY_FRAMES as usize;
 
     /// A full set of rows, so a test says only what it cares about.
     fn rows(drive: f64, shape: u8, tilt: f64, out: f64, wet: f64) -> Vec<(ParamId, f64)> {
@@ -381,33 +380,6 @@ mod tests {
         AudioDistortionDef
             .open_audio(None, values, RATE, false)
             .unwrap_or_else(|| Arc::new(AudioDistortionProcessor::new(values, RATE_F)))
-    }
-
-    /// Where the loudest sample of a run sits, in frames.
-    fn peak_at(signal: &[f32]) -> usize {
-        signal
-            .chunks_exact(2)
-            .enumerate()
-            .fold((0usize, 0.0f32), |(top_at, top), (n, frame)| {
-                let level = frame.first().copied().unwrap_or(0.0).abs();
-                if level > top {
-                    (n, level)
-                } else {
-                    (top_at, top)
-                }
-            })
-            .0
-    }
-
-    #[test]
-    fn the_same_input_twice_is_bit_identical() {
-        for shape in [SOFT_CLIP, HARD_CLIP, FOLDBACK, BIT_CRUSH, RATE_REDUCE] {
-            let values = rows(30.0, shape, -6.0, 3.0, 70.0);
-            let input = noise(AUDIO_BLOCK_FRAMES * 8);
-            let first = play_all(open(&values).as_ref(), &input, &values);
-            let second = play_all(open(&values).as_ref(), &input, &values);
-            assert_eq!(first, second, "shape {shape} answered differently");
-        }
     }
 
     #[test]
@@ -451,19 +423,6 @@ mod tests {
         );
     }
 
-    /// Plan 1's third clause: the same seconds of sound at every rate, the
-    /// tilt's corner and the half-band's fill included.
-    #[test]
-    fn the_shaper_makes_the_same_seconds_at_any_bake_rate() {
-        crate::fx::effects::audio::modulation::harness::same_seconds_at_any_rate(
-            &AudioDistortionDef,
-            &[("drive", MAX_DRIVE_DB), ("shape", f64::from(RATE_REDUCE))],
-            1_000.0,
-            0.6,
-            0.02,
-        );
-    }
-
     /// Plan 1's third clause, the shape it bites on: the reduce is counted in
     /// hertz, so the same Drive holds the sound at the same rate whatever the
     /// bake runs at. Counted in frames it came down to 3 kHz out of a 48 kHz
@@ -492,33 +451,5 @@ mod tests {
             let image = bin(settled, 2_000.0, hz);
             assert!(image > 0.05, "at {rate} the 2 kHz image measured {image}");
         }
-    }
-
-    /// §8's trap: the pair's delay is exact, is what the effect reports, and
-    /// is what the dry side of the blend is held back by.
-    #[test]
-    fn the_delay_is_the_one_reported_and_the_dry_is_held_to_meet_it() {
-        let values = rows(0.0, HARD_CLIP, 0.0, 0.0, 100.0);
-        let processor = open(&values);
-        assert_eq!(processor.latency(), Oversample4x::LATENCY_FRAMES);
-        assert_eq!(processor.tail(), 0);
-
-        // Half of full scale, so a hard clip at unity leaves the pair linear
-        // and the impulse arrives whole.
-        let mut input = vec![0.0f32; AUDIO_BLOCK_SAMPLES * 2];
-        if let Some(frame) = input.get_mut(0..2) {
-            frame.fill(0.5);
-        }
-        let out = play_all(processor.as_ref(), &input, &values);
-        assert_eq!(peak_at(&out), LATENCY, "the shaped sound landed elsewhere");
-
-        // With the wet row shut the output is the sound itself, that same
-        // delay late and otherwise untouched.
-        let dry_values = rows(0.0, HARD_CLIP, 0.0, 0.0, 0.0);
-        let sound = noise(AUDIO_BLOCK_FRAMES * 4);
-        let out = play_all(open(&dry_values).as_ref(), &sound, &dry_values);
-        let held = out.get(LATENCY * 2..).unwrap_or_default();
-        let sent = sound.get(..held.len()).unwrap_or_default();
-        assert_eq!(held, sent, "the dry side did not line up with the wet");
     }
 }

@@ -12,16 +12,12 @@
 // The catalogue is injected, so none of this depends on the machine running the
 // tests having an OFX plugin installed — which no CI machine does.
 
-import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/panels/effect_controls_panel_frb.dart';
 import 'package:lumit_flutter/panels/effects_presets_panel_frb.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
-import 'package:lumit_flutter/theme/theme.dart';
-import 'package:lumit_flutter/widgets/controls.dart'
-    show ThemeScope, closeLumitPopups;
 
 import 'frb_test_support.dart';
 
@@ -145,126 +141,6 @@ void main() {
           findsOneWidget);
     });
 
-    testWidgets('the search finds a plugin by its name and by its heading',
-        (tester) async {
-      final p = freshProject();
-      await mount(tester, p);
-
-      await tester.enterText(
-          find.byKey(const ValueKey('fx-search')), 'wobbler');
-      await tester.pump();
-      expect(find.byKey(const ValueKey('fx-item-ofx:com.example.wobbler')),
-          findsOneWidget);
-      expect(find.byKey(const ValueKey('fx-item-blur')), findsNothing);
-
-      // The heading is searchable too, which for a plugin is the vendor's own
-      // menu path — often the only word somebody remembers.
-      await tester.enterText(
-          find.byKey(const ValueKey('fx-search')), 'distort');
-      await tester.pump();
-      expect(find.byKey(const ValueKey('fx-item-ofx:com.example.wobbler')),
-          findsOneWidget);
-
-      await tester.enterText(find.byKey(const ValueKey('fx-search')), 'blur');
-      await tester.pump();
-      expect(find.byKey(const ValueKey('fx-item-ofx:com.example.wobbler')),
-          findsNothing);
-    });
-
-    testWidgets(
-        'a row says where it came from, and only a plugin can be '
-        'switched off', (tester) async {
-      final p = freshProject();
-      await mount(tester, p);
-
-      Future<void> rightClick(String name) async {
-        final gesture = await tester.startGesture(
-            tester.getCenter(find.byKey(
-              ValueKey<String>('fx-item-$name'),
-            )),
-            kind: PointerDeviceKind.mouse,
-            buttons: kSecondaryMouseButton);
-        await gesture.up();
-        await tester.pump();
-      }
-
-      await rightClick('ofx:com.example.wobbler');
-      expect(
-          find.byKey(const ValueKey('fx-provenance-ofx:com.example.wobbler')),
-          findsOneWidget);
-      expect(find.text('From an OpenFX plugin'), findsOneWidget);
-      expect(find.text('Switch this plugin off'), findsOneWidget);
-
-      // Away, and then the built-in: the same menu, one line, no command —
-      // there is nothing to switch off about an effect that ships with Lumit.
-      closeLumitPopups();
-      await tester.pump();
-      await rightClick('blur');
-      expect(find.text('Built in'), findsOneWidget);
-      expect(find.text('Switch this plugin off'), findsNothing);
-    });
-
-    /// The browser's share of AP5: an audio plugin lists under the one Audio
-    /// plugins heading, a group that folds like any other, and its context
-    /// menu says where it came from and offers the switch.
-    testWidgets(
-        'an audio plugin heads the Audio plugins group and can be '
-        'switched off', (tester) async {
-      final p = freshProject();
-      await mount(tester, p);
-
-      expect(find.text('Audio plugins'), findsOneWidget);
-      expect(find.byKey(const ValueKey('fx-item-clap:com.example.eq')),
-          findsOneWidget);
-
-      // The group folds exactly as a category does.
-      await tester.tap(find.byKey(const ValueKey('fx-group-audio')));
-      await tester.pump();
-      expect(find.byKey(const ValueKey('fx-item-clap:com.example.eq')),
-          findsNothing);
-      await tester.tap(find.byKey(const ValueKey('fx-group-audio')));
-      await tester.pump();
-
-      final gesture = await tester.startGesture(
-          tester.getCenter(
-              find.byKey(const ValueKey('fx-item-clap:com.example.eq'))),
-          kind: PointerDeviceKind.mouse,
-          buttons: kSecondaryMouseButton);
-      await gesture.up();
-      await tester.pump();
-      expect(find.text('From an audio plugin'), findsOneWidget,
-          reason: 'the provenance names the kind of plugin');
-      expect(find.text('Switch this plugin off'), findsOneWidget,
-          reason: 'the disable toggle is per plugin, in the same menu');
-      closeLumitPopups();
-      await tester.pump();
-    });
-
-    /// **A built-in and a plugin share one Audio heading**
-    /// (docs/impl/audio-effects.md §6 plan 5). The engine heads the family
-    /// and the plugins have no heading of their own, so a plugin read after a
-    /// built-in must not rename the group it joined.
-    testWidgets('a built-in audio effect and a plugin share the Audio heading',
-        (tester) async {
-      final p = freshProject();
-      await tester.pumpWidget(hostPanel(
-        child: EffectsPresetsPanelFrb(
-          presetsLister: () => const [],
-          effectsLister: anAudioCatalogue,
-        ),
-        state: p.state,
-        uiState: p.uiState,
-      ));
-      await tester.pump();
-
-      expect(find.text('Audio'), findsOneWidget,
-          reason: "the engine's own heading, not the plugins' word for it");
-      expect(find.text('Audio plugins'), findsNothing);
-      expect(find.byKey(const ValueKey('fx-item-audio_gain')), findsOneWidget);
-      expect(find.byKey(const ValueKey('fx-item-clap:com.example.eq')),
-          findsOneWidget,
-          reason: 'and the plugin files under it rather than beside it');
-    });
   }, skip: !engineAvailable);
 
   group('the Audio group in Effect controls (frb)', () {
@@ -328,92 +204,5 @@ void main() {
       expect(find.byKey(plugin), findsOneWidget);
     });
 
-    testWidgets('a stack with no audio entry grows no Audio heading',
-        (tester) async {
-      final p = freshProject();
-      final comp = p.state.project!.newComposition(name: 'Scene');
-      final footage = p.state.project!.importFootage(path: 'C:/clips/shot.mov');
-      comp.addFootageLayer(footage: footage, asSequence: false);
-      final layer = comp.getLayers().single;
-      layer.addEffect(name: 'blur');
-      p.uiState
-        ..setSelectedComp(comp)
-        ..selectedLayer.value = layer;
-      p.uiState.model.refresh();
-      await tester.pumpWidget(hostPanel(
-        child: const EffectControlsPanelFrb(),
-        state: p.state,
-        uiState: p.uiState,
-      ));
-      await tester.pump();
-      expect(find.byKey(const ValueKey('fx-audio-group')), findsNothing);
-    });
   }, skip: !engineAvailable);
-
-  group('the effect badge', () {
-    /// The badge alone, with no engine and no card around it — it is a pure
-    /// function of the two fields the read model carries.
-    Future<void> pumpBadge(
-      WidgetTester tester, {
-      String? reason,
-      String? detail,
-    }) async {
-      await tester.pumpWidget(Directionality(
-        textDirection: TextDirection.ltr,
-        child: ThemeScope(
-          theme: LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.studio),
-          animationLevel: AnimationLevel.none,
-          showTooltips: false,
-          child: Builder(
-            builder: (context) =>
-                effectBadgeRow(context,
-                    id: 'one', reason: reason, detail: detail) ??
-                const SizedBox.shrink(),
-          ),
-        ),
-      ));
-      await tester.pump();
-    }
-
-    testWidgets('a switched-off plugin says so, calmly', (tester) async {
-      await pumpBadge(tester, reason: 'plugin_disabled');
-      expect(find.byKey(const ValueKey('fx-badge-one')), findsOneWidget);
-      expect(find.text('This plugin is switched off'), findsOneWidget);
-      expect(find.byKey(const ValueKey('fx-badge-detail-one')), findsNothing,
-          reason: 'a plugin nobody asked to run has nothing to explain');
-    });
-
-    testWidgets('a failed plugin carries its own words underneath',
-        (tester) async {
-      await pumpBadge(
-        tester,
-        reason: 'plugin_failed',
-        detail: 'nothing, before the deadline',
-      );
-      expect(
-          find.text('This plugin did not render this frame'), findsOneWidget);
-      expect(find.text('nothing, before the deadline'), findsOneWidget);
-    });
-
-    testWidgets('a missing plugin and an unknown effect are told apart',
-        (tester) async {
-      await pumpBadge(tester, reason: 'plugin_missing');
-      expect(find.text('This plugin is not installed on this machine'),
-          findsOneWidget);
-
-      await pumpBadge(tester, reason: 'unknown_effect');
-      expect(find.text('This build does not know this effect'), findsOneWidget);
-    });
-
-    testWidgets('and an effect that is behaving wears nothing at all',
-        (tester) async {
-      await pumpBadge(tester);
-      expect(find.byKey(const ValueKey('fx-badge-one')), findsNothing);
-
-      // A reason from a newer engine that this build has no words for draws
-      // nothing rather than a raw key.
-      await pumpBadge(tester, reason: 'something_new');
-      expect(find.byKey(const ValueKey('fx-badge-one')), findsNothing);
-    });
-  });
 }

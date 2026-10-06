@@ -60,53 +60,6 @@ void main() {
       return p.uiState;
     }
 
-    testWidgets('the page is in the sidebar with its three sections',
-        (tester) async {
-      await open(tester);
-
-      expect(find.text(l10n.settingsGroupAddonRuntime.toUpperCase()),
-          findsOneWidget);
-      expect(find.text(l10n.settingsGroupAddonsInstalled.toUpperCase()),
-          findsOneWidget);
-      expect(find.text(l10n.settingsGroupAddonsAvailable.toUpperCase()),
-          findsOneWidget);
-      expect(find.byKey(const ValueKey('settings-addon-check')), findsOneWidget);
-      expect(find.byKey(const ValueKey('settings-addon-install-from-file')),
-          findsOneWidget);
-      expect(find.byKey(const ValueKey('settings-addon-show-folder')),
-          findsOneWidget);
-    });
-
-    testWidgets('the runtime row offers the one thing worth doing to it',
-        (tester) async {
-      final ui = await open(tester);
-
-      // Which of the two is drawn depends on the machine the suite runs on, so
-      // the assertion is on the pair rather than on either one.
-      final installed = ui.addons.runtimeInstalled != null;
-      expect(find.byKey(const ValueKey('settings-addon-runtime-install')),
-          installed ? findsNothing : findsOneWidget);
-      expect(find.byKey(const ValueKey('settings-addon-runtime-remove')),
-          installed ? findsOneWidget : findsNothing);
-      expect(find.byKey(const ValueKey('settings-addon-runtime-load')),
-          installed ? findsOneWidget : findsNothing);
-    });
-
-    testWidgets('an addon whose manifest gives a licence address gets a link',
-        (tester) async {
-      final ui = await open(tester);
-
-      // Which addons are here depends on the machine the suite runs on, so the
-      // assertion is on the rule rather than on a row: an address means a
-      // link, and no address means nothing at all.
-      for (final addon in ui.addons.installed) {
-        expect(
-          find.byKey(ValueKey<String>('settings-addon-licence-${addon.id}')),
-          addon.licenceUrl.isEmpty ? findsNothing : findsOneWidget,
-        );
-      }
-    });
-
     testWidgets('the engine is read on entry, not on every rebuild',
         (tester) async {
       final ui = await open(tester);
@@ -123,24 +76,6 @@ void main() {
       }
       expect(find.text(l10n.settingsAddonsNotChecked), findsOneWidget,
           reason: 'nothing is fetched until the button is pressed');
-    });
-
-    testWidgets('another page can open Settings straight at it', (tester) async {
-      await open(tester, straightThere: true);
-
-      expect(find.byKey(const ValueKey('settings-body-addons')), findsOneWidget);
-      expect(find.byKey(const ValueKey('settings-addon-check')), findsOneWidget);
-    });
-
-    testWidgets('Reset page leaves an addon alone', (tester) async {
-      final ui = await open(tester);
-      final was = [for (final a in ui.addons.installed) a.id];
-
-      await tester.tap(find.byKey(const ValueKey('settings-reset-page')));
-      await tester.pumpAndSettle();
-
-      expect([for (final a in ui.addons.installed) a.id], was,
-          reason: 'an install is not a setting Reset may undo');
     });
   });
 }

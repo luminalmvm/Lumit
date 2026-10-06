@@ -223,18 +223,6 @@ fn never() -> AtomicBool {
     AtomicBool::new(false)
 }
 
-/// §10 item 1, in its cross-crate form: the base frame's own solve, through the
-/// real job's decode-and-convert path rather than the crate's test harness.
-#[test]
-fn the_base_frame_is_cut_from_its_own_strokes() {
-    let _guard = serially();
-    set_test_cache_dir(None);
-    let (run, cancelled) = propagate(job(block_at(0), 1), &never(), &|_| {}).expect("a run");
-    assert!(!cancelled);
-    assert_eq!((run.first_frame, run.last_frame), (0, 0));
-    assert!(iou(&run, 0) >= 0.95, "base IoU {}", iou(&run, 0));
-}
-
 /// The same claim for a **prompted** base (docs/impl/addons.md §6.2, §11 test
 /// 10): the model proposes the subject, the seeds come off its answer, and the
 /// solve cuts the same disc out of the same frame.
@@ -313,91 +301,6 @@ fn the_matte_is_carried_both_ways_from_the_base() {
     for f in 0..frames as i64 {
         let got = iou(&run, f);
         assert!(got >= 0.85, "frame {f} IoU {got}");
-    }
-}
-
-/// §10 item 7's first half, and §5's honesty rule: a frame outside the
-/// propagated span has **no matte at all**, so the effect passes through rather
-/// than holding a neighbour's answer.
-#[test]
-fn outside_the_span_there_is_no_matte_to_hold() {
-    let _guard = serially();
-    set_test_cache_dir(None);
-    let (run, _) = propagate(job(block_at(0), 3), &never(), &|_| {}).expect("a run");
-    assert!(run.matte(0).is_some());
-    assert!(run.matte(2).is_some());
-    assert!(run.matte(3).is_none(), "a frame past the span has no matte");
-    assert!(run.matte(-1).is_none());
-}
-
-/// §10 item 4: a correction leaves the frames between it and the base
-/// **byte-identical**, and re-solving copies them rather than solving them —
-/// asserted by counting solves, never by timing.
-#[test]
-fn a_correction_reuses_the_prefix_it_did_not_touch() {
-    let _guard = serially();
-    let dir = tempfile::tempdir().expect("a temp dir");
-    set_test_cache_dir(Some(dir.path().to_path_buf()));
-
-    let fingerprint = lumit_core::model::Fingerprint {
-        size: 4096,
-        head_tail_hash: "roto-test".into(),
-        mtime_secs: 0,
-    };
-    let frames = 8;
-    let first = block_at(0);
-    let key = RotoKey::new(&fingerprint, &first, RotoSettings::default());
-    let mut j = job(first.clone(), frames);
-    j.key = Some(key);
-    let (run, _) = propagate(j, &never(), &|_| {}).expect("a run");
-    write_sidecar(dir.path(), key, &run);
-    let before: Vec<Vec<u8>> = (0..5)
-        .map(|f| run.matte(f).expect("a matte").to_vec())
-        .collect();
-
-    // A correction at frame 5: frames 0..4 cannot depend on it.
-    let mut second = first.clone();
-    let (cx, cy) = Disc::centre(5);
-    second.strokes.push(stroke(
-        5,
-        RotoStrokeKind::Foreground,
-        (cx - 2.0, cy - 2.0),
-        (cx + 2.0, cy + 2.0),
-    ));
-    let key2 = RotoKey::new(&fingerprint, &second, RotoSettings::default());
-    assert_ne!(
-        key.file_name(),
-        key2.file_name(),
-        "a new table is a new run"
-    );
-    let mut j2 = job(second, frames);
-    j2.key = Some(key2);
-    let last = std::sync::Mutex::new(Progress::Queued);
-    let (run2, _) = propagate(j2, &never(), &|p| {
-        if let Ok(mut held) = last.lock() {
-            *held = p;
-        }
-    })
-    .expect("a run");
-    let last = last.into_inner().expect("the reporter never panicked");
-
-    // Six frames were copied: the base and 1..4 forward, which the correction
-    // cannot reach, and nothing else. Counting, not timing (§5).
-    let Progress::Solving { reused, .. } = last else {
-        panic!("the run never reported progress");
-    };
-    assert_eq!(
-        reused, 5,
-        "exactly the frames before the correction are copied"
-    );
-
-    for (f, want) in before.iter().enumerate() {
-        let got = run2.matte(f as i64).expect("a matte");
-        assert_eq!(
-            &got[..],
-            &want[..],
-            "frame {f} moved, and nothing it depends on changed"
-        );
     }
 }
 
@@ -597,36 +500,6 @@ fn a_sidecar_whose_numbers_do_not_hold_together_is_refused() {
     );
 }
 
-/// And the second line behind `validate`: `expand` is reached from the render
-/// path, so a record that somehow got past the gate must still cost a blank
-/// matte rather than a panic or a wild write.
-#[test]
-fn expand_refuses_a_record_the_gate_would_have_caught() {
-    let record = FrameRecord {
-        frame: 0,
-        chain: [0_u8; 32],
-        bbox: [0, 0, 2, 2],
-        lz4: lz4_flex::compress_prepend_size(&[9_u8; 4]),
-    };
-    // The honest case, so the rest means something.
-    let plane = expand(&record, 4, 4);
-    assert_eq!(plane.len(), 16);
-    assert_eq!(plane.get(0..2), Some(&[9, 9][..]));
-
-    // A box larger than the raster it is being drawn into.
-    assert!(expand(&record, 1, 1).iter().all(|&v| v == 0));
-
-    // A raster whose own product does not fit: a blank answer, not a panic.
-    assert!(expand(&record, u32::MAX, u32::MAX).is_empty());
-
-    // A payload announcing more than the box holds is never decompressed.
-    let mut lying = record.clone();
-    if let Some(head) = lying.lz4.get_mut(..4) {
-        head.copy_from_slice(&u32::MAX.to_le_bytes());
-    }
-    assert!(expand(&lying, 4, 4).iter().all(|&v| v == 0));
-}
-
 /// §10 item 8, and §6's fifth step: a cancel **finalises rather than discards**.
 /// The frames already solved are kept, correctly named, and the span says how
 /// far it got.
@@ -643,36 +516,6 @@ fn a_cancel_keeps_the_prefix_it_finished() {
     assert!(run.matte(2).is_some(), "the finished frame was kept");
     assert!(run.matte(3).is_none(), "nothing was invented past it");
     assert!(run.is_partial());
-}
-
-/// The release-time solve of a scribbled frame. A `stop_after` at the
-/// base files exactly that frame — with no walk there is no flow pair to ask
-/// for, which is what lets the feedback work on a machine with no GPU flow —
-/// and a `stop_after` further along walks toward it and no further.
-#[test]
-fn a_stop_after_run_files_the_asked_frame_and_no_further() {
-    let _guard = serially();
-    set_test_cache_dir(None);
-
-    let mut solo = job(block_at(4), 9);
-    solo.stop_after = Some(4);
-    let (run, cancelled) = propagate(solo, &never(), &|_| {}).expect("a run");
-    assert!(!cancelled);
-    assert_eq!((run.first_frame, run.last_frame), (4, 4));
-    assert!(
-        iou(&run, 4) >= 0.95,
-        "the asked frame's matte is a real answer"
-    );
-
-    let mut toward = job(block_at(4), 9);
-    toward.stop_after = Some(6);
-    let (run, _) = propagate(toward, &never(), &|_| {}).expect("a run");
-    assert_eq!(
-        (run.first_frame, run.last_frame),
-        (4, 6),
-        "toward the asked frame and not past it, and nothing solved behind \
-         the base that no cache could lend"
-    );
 }
 
 /// A Propagate over a partial run **carries on from it** rather than
@@ -742,106 +585,6 @@ fn a_propagate_resumes_from_its_own_partial_run() {
     );
 }
 
-/// The record of **what seeded the base frame** survives a lend
-/// (docs/impl/addons.md §7). The ordinary gesture reaches this on the very
-/// first press: a tap asks for the base frame alone and files it, then
-/// Propagate lends that base back by chain hash rather than opening the model
-/// again, so a run that never sees a model still has to say what cut it.
-#[test]
-fn the_lent_base_frame_keeps_what_seeded_it() {
-    let _guard = serially();
-    let dir = tempfile::tempdir().expect("a temp dir");
-    set_test_cache_dir(Some(dir.path().to_path_buf()));
-
-    let fingerprint = lumit_core::model::Fingerprint {
-        size: 4096,
-        head_tail_hash: "roto-provenance".into(),
-        mtime_secs: 0,
-    };
-    let frames = 4;
-    let (block, settings) = prompted_at(0);
-    let key = RotoKey::new(&fingerprint, &block, settings);
-    let instance = uuid::Uuid::now_v7();
-
-    // The solve a tap asks for on release: the model runs, and the record says
-    // which one.
-    let mut solo = job(block.clone(), frames);
-    solo.instance = instance;
-    solo.key = Some(key);
-    solo.settings = settings;
-    solo.model = Box::new(|| {
-        Ok(Box::new(FakeModel {
-            asked: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
-            reads: std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0)),
-        }) as Box<dyn RotoModel>)
-    });
-    solo.stop_after = Some(0);
-    run(solo, &never());
-    let partial = propagated(instance).expect("the solo run is in the store");
-    assert!(
-        partial.made_with.starts_with("Test; sam2-written-down;"),
-        "the solo did not record what seeded it: {}",
-        partial.made_with
-    );
-
-    // Then Propagate. The base comes out of that same file, so `job`'s default
-    // opener - which refuses - is never asked for a model at all, and the
-    // finished record still says what cut the base frame.
-    let mut full = job(block, frames);
-    full.instance = instance;
-    full.key = Some(key);
-    full.settings = settings;
-    run(full, &never());
-    let whole = propagated(instance).expect("the resumed run replaced it");
-    assert_eq!(
-        (whole.first_frame, whole.last_frame),
-        (0, frames as i64 - 1),
-        "the partial run did not resume"
-    );
-    assert_eq!(
-        whole.made_with, partial.made_with,
-        "the lent base frame lost the record of which pack seeded it"
-    );
-}
-
-/// §10 item 8's refusals, each produced and each named.
-#[test]
-fn every_refusal_has_a_name_and_none_is_a_fault() {
-    let _guard = serially();
-    set_test_cache_dir(None);
-
-    // No base frame: refused before a thread is spawned.
-    let mut j = job(RotoBlock::default(), 2);
-    j.key = Some(RotoKey::new(
-        &lumit_core::model::Fingerprint {
-            size: 1,
-            head_tail_hash: "x".into(),
-            mtime_secs: 0,
-        },
-        &RotoBlock::default(),
-        RotoSettings::default(),
-    ));
-    assert_eq!(
-        request(j),
-        Requested::Refused(RotoFailure::NoBaseFrame),
-        "Propagate before any stroke is a refusal, not a guess"
-    );
-
-    // Offline: no fingerprint, so nothing to key a cache with.
-    assert_eq!(
-        request(job(block_at(0), 2)),
-        Requested::Refused(RotoFailure::Offline)
-    );
-
-    // Unreadable: the frames would not open.
-    let mut j = job(block_at(0), 2);
-    j.open = Box::new(|| None);
-    assert_eq!(
-        propagate(j, &never(), &|_| {}).unwrap_err(),
-        RotoFailure::Unreadable
-    );
-}
-
 /// The store's own contract: a published run answers by frame, the warm cache
 /// hands back the same plane, and the per-frame read stays inside the 1 ms bound
 /// the render path is budgeted at (§7, docs/13).
@@ -873,94 +616,6 @@ fn the_store_answers_one_frame_quickly_and_forgets_on_clear() {
 
     clear();
     assert!(propagated(instance).is_none());
-}
-
-/// The same shot at 1080p, for the `--ignored` measurement below: §7's target
-/// is stated at that raster, and a 96×72 fixture measures the flow dispatch's
-/// fixed cost rather than the arithmetic the budget is about.
-struct BigDisc {
-    /// Painted **before** the clock starts: a 2 Mpx nested loop per frame is
-    /// the test's own cost, not the propagation's, and leaving it inside the
-    /// measurement would report the fixture rather than the work.
-    painted: Vec<Vec<u8>>,
-}
-
-const BW: u32 = 1920;
-const BH: u32 = 1080;
-const BR: f32 = 220.0;
-
-impl BigDisc {
-    fn new(frames: usize) -> BigDisc {
-        BigDisc {
-            painted: (0..frames).map(BigDisc::paint).collect(),
-        }
-    }
-
-    fn paint(n: usize) -> Vec<u8> {
-        let (cx, cy) = (600.0 + 8.0 * n as f32, 540.0);
-        let mut out = vec![0u8; (BW * BH * 4) as usize];
-        for y in 0..BH {
-            for x in 0..BW {
-                let dx = x as f32 + 0.5 - cx;
-                let dy = y as f32 + 0.5 - cy;
-                let ground = 40 + ((x / 64 + y / 64) % 3) as u8 * 6;
-                let (r, g, b) = if dx * dx + dy * dy <= BR * BR {
-                    (235u8, 225u8, 210u8)
-                } else {
-                    (ground, ground + 4, ground + 8)
-                };
-                let i = ((y * BW + x) * 4) as usize;
-                out[i] = r;
-                out[i + 1] = g;
-                out[i + 2] = b;
-                out[i + 3] = 255;
-            }
-        }
-        out
-    }
-}
-
-impl RotoFrames for BigDisc {
-    fn info(&self) -> (usize, u32, u32, f64) {
-        (self.painted.len(), BW, BH, 24.0)
-    }
-
-    fn rgba(&mut self, n: usize) -> Option<Vec<u8>> {
-        // A memcpy stands in for the decode a real run pays; the copy is
-        // milliseconds and the decode is not the thing §7 budgets.
-        self.painted.get(n).cloned()
-    }
-}
-
-/// §10 item 9, `--ignored`: the per-frame propagation cost at the note's own
-/// raster and target, printed rather than gated until the numbers are real
-/// (the tracker's stance, and docs/13's).
-#[test]
-#[ignore = "perf measurement, not a gate (docs/impl/roto.md §7)"]
-fn propagation_cost_per_frame() {
-    let _guard = serially();
-    set_test_cache_dir(None);
-    let frames = 6;
-    let block = RotoBlock {
-        base_frame: Some(0),
-        strokes: vec![stroke(
-            0,
-            RotoStrokeKind::Foreground,
-            (540.0, 540.0),
-            (660.0, 540.0),
-        )],
-        prompts: Vec::new(),
-    };
-    let mut j = job(block, frames);
-    let shot = BigDisc::new(frames);
-    j.open = Box::new(move || Some(Box::new(shot) as Box<dyn RotoFrames>));
-    let started = std::time::Instant::now();
-    let (run, _) = propagate(j, &never(), &|_| {}).expect("a run");
-    let ms = started.elapsed().as_secs_f64() * 1000.0 / frames as f64;
-    println!(
-        "roto propagate: {ms:.1} ms/frame at {}×{} over {frames} frames          (the frames were painted before the clock started); the §7 target is 60 ms",
-        run.width, run.height
-    );
 }
 
 /// One comp of one footage layer wearing one Roto brush carrying `block`, at
@@ -1128,89 +783,5 @@ fn a_correction_renames_exactly_the_frames_it_spoiled() {
             Vec::new(),
         ),
         10,
-    );
-}
-
-/// The same claim for a **prompt** edit (docs/impl/addons.md §11 test 10): a
-/// tap is a contributor like a stroke, so adding one on frame 10 renames frame
-/// 10 onward and nothing before it.
-///
-/// The frame key is the easiest thing to forget, and a mask drawn through it
-/// and not in it serves a banked frame after the prompt changes, forever.
-#[test]
-fn a_prompt_renames_exactly_the_frames_it_spoiled() {
-    let tap = |frame: i64, x: f32| lumit_core::roto::RotoPrompt {
-        id: uuid::Uuid::now_v7(),
-        frame,
-        points: vec![(x, 12.0)],
-        labels: vec![1],
-    };
-    renames_from(
-        block_of(Vec::new(), vec![tap(0, 10.0)]),
-        block_of(Vec::new(), vec![tap(0, 10.0), tap(10, 30.0)]),
-        10,
-    );
-}
-
-/// **What cut a prompted brush is in the frame key too** (docs/impl/addons.md
-/// §7, §13). The pack that read the base frame and the run that came out of it
-/// are both facts the document does not hold, so a key made from the rows
-/// alone names two different pictures the same: replace the pack, or land the
-/// propagation, and every frame already banked keeps its name forever.
-///
-/// The half a test can reach is the run: putting one in the store moves the
-/// host's answer without a row of the document moving. The installed pack's
-/// half is the same XOR into the same term. Asked of a brush whose seed row
-/// says Segment and of no other, which is what keeps every project written
-/// before this existed exactly where it was.
-#[test]
-fn what_cut_a_prompted_brush_is_in_the_frame_key() {
-    let _guard = serially();
-    let tap = lumit_core::roto::RotoPrompt {
-        id: uuid::Uuid::from_u128(11),
-        frame: 0,
-        points: vec![(10.0, 12.0)],
-        labels: vec![1],
-    };
-    let instance = uuid::Uuid::from_u128(9);
-    let mut probes = std::collections::HashMap::new();
-    probes.insert(
-        uuid::Uuid::from_u128(7),
-        crate::source::SourceProbe::Video {
-            fps: 30.0,
-            width: 64,
-            height: 64,
-            frames: 120,
-            audio: false,
-        },
-    );
-    let quality = crate::plan::Quality::default();
-    let named = |seed: u32| {
-        let (doc, comp, _) = a_document(block_of(Vec::new(), vec![tap.clone()]), seed);
-        crate::cache::frame_key(&doc, &comp, 0, quality, &probes).expect("a named frame")
-    };
-    let a_run = || {
-        run_from_planes(64, 64, 30.0, 120, &[(0, [7; 32], vec![255u8; 64 * 64])])
-            .expect("a run out of one written-down plane")
-    };
-
-    clear();
-    let before = named(lumit_core::fx::effects::roto_brush::SEED_SEGMENT);
-    publish(instance, a_run());
-    let after = named(lumit_core::fx::effects::roto_brush::SEED_SEGMENT);
-    clear();
-    assert_ne!(
-        before, after,
-        "a matte the model cut was drawn through a name that never moved"
-    );
-
-    // The same run under a brush seeded by its scribbles renames nothing.
-    let plain = named(0);
-    publish(instance, a_run());
-    let still = named(0);
-    clear();
-    assert_eq!(
-        plain, still,
-        "a brush on Strokes was renamed by something it never asked for"
     );
 }

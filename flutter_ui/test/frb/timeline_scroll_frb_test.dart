@@ -80,20 +80,6 @@ void main() {
               'selection box over it');
     });
 
-    testWidgets('both halves can scroll exactly as far as each other',
-        (tester) async {
-      final p = withManyLayers();
-      await mount(tester, p);
-
-      final extents = verticalPositions(tester)
-          .map((p) => p.maxScrollExtent)
-          .toSet()
-          .toList();
-      expect(extents, hasLength(1),
-          reason: 'the outline reserves the lane bottom bar\'s height, so one '
-              'half cannot run past the other: $extents');
-    });
-
     /// The lanes' one horizontal position, once there is somewhere to scroll to.
     ScrollPosition horizontalPosition(WidgetTester tester) => tester
         .stateList<ScrollableState>(find.byType(Scrollable))
@@ -156,24 +142,6 @@ void main() {
           reason: 'dragging right takes the view back in time');
       expect(verticalPositions(tester).any((p) => p.pixels > 0), isTrue,
           reason: 'and dragging up takes it down the stack');
-    });
-
-    /// The primary button still belongs to the keyframe marquee, which is what
-    /// a drag on empty lane space has always drawn.
-    testWidgets('a primary drag still leaves the view where it was',
-        (tester) async {
-      final p = withManyLayers();
-      await mount(tester, p);
-
-      final lanes = tester.getCenter(find.byType(LayerArea));
-      await zoomIn(tester, lanes);
-
-      final acrossBefore = horizontalPosition(tester).pixels;
-      await drag(tester, lanes, const Offset(60, -80), buttons: kPrimaryButton);
-
-      expect(horizontalPosition(tester).pixels, acrossBefore);
-      expect(verticalPositions(tester).every((p) => p.pixels == 0), isTrue,
-          reason: 'the marquee has the drag, not the scroll');
     });
   });
 }

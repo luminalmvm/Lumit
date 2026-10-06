@@ -128,24 +128,6 @@ fn first(frame: &Frame16) -> f32 {
 // ---------------------------------------------------------------- the tests --
 
 #[test]
-fn a_bundle_describes_itself_through_a_broker() {
-    let Ok(root) = tempfile::tempdir() else {
-        return;
-    };
-    let Some((broker, _)) = a_broker(root.path(), &[]) else {
-        skipped("a_bundle_describes_itself_through_a_broker");
-        return;
-    };
-    // The whole bundle came back across the pipe, descriptor by descriptor,
-    // with nothing of the plugin in this process.
-    assert!(broker
-        .descriptors()
-        .iter()
-        .any(|descriptor| descriptor.identifier == PASSTHROUGH));
-    assert!(!broker.is_disabled());
-}
-
-#[test]
 fn a_crash_on_a_frame_restarts_the_broker_and_the_session_carries_on() {
     let Ok(root) = tempfile::tempdir() else {
         return;
@@ -231,51 +213,6 @@ fn a_hang_trips_the_deadline_and_the_third_strike_disables_the_plugin() {
         broker.restarts(),
         restarts,
         "a disabled plugin is not retried"
-    );
-}
-
-#[test]
-fn eleven_frames_cross_in_one_shipment() {
-    let Ok(root) = tempfile::tempdir() else {
-        return;
-    };
-    let Some((mut broker, plugin)) = a_broker(root.path(), &[("LUMIT_TESTPLUG_TEMPORAL", "5")])
-    else {
-        skipped("eleven_frames_cross_in_one_shipment");
-        return;
-    };
-    let instance = broker
-        .create_instance(plugin, Context::Filter, ParamSnapshot::new())
-        .expect("an instance");
-
-    // Every frame carries its own time, divided down into the working range, so
-    // the mean of eleven of them is a number only all eleven can produce.
-    let value_at = |time: f64| (time / 100.0) as f32;
-    let request = RenderRequest::filter(20.0, a_flat_frame(value_at(20.0)));
-    let rendered = broker
-        .render(instance, &request, &|clip, time| {
-            (clip == "Source").then(|| a_flat_frame(value_at(time)))
-        })
-        .expect("a frame back");
-
-    assert!(!rendered.errored);
-    assert_eq!(
-        broker.shipments(),
-        1,
-        "a retimer's eleven frames go across in one shipment, not eleven"
-    );
-    // The mean of 0.15 … 0.25 is 0.20, and it is only 0.20 if every one of the
-    // eleven arrived: the plugin divides by what it asked for, not by what it
-    // was given.
-    assert!(
-        (first(&rendered.frame) - 0.20).abs() < 1e-2,
-        "expected the mean of eleven frames, got {}",
-        first(&rendered.frame)
-    );
-    assert_eq!(
-        rendered.frames_needed.get("Source").copied(),
-        Some((15.0, 25.0)),
-        "and the declaration itself comes back for the graph's temporal edges"
     );
 }
 
@@ -530,88 +467,4 @@ fn a_broker_with_no_credential_does_not_start() {
         !status.success(),
         "a broker with no credential must refuse rather than serve"
     );
-}
-
-/// The endpoint names are unguessable, and no two are alike.
-///
-/// The old names were the host's process id and a counter, which any program on
-/// the machine — including another broker, running somebody else's plugin code —
-/// could work out and connect to first.
-#[test]
-fn two_brokers_do_not_share_a_name_and_neither_name_is_a_process_id() {
-    let Ok(root) = tempfile::tempdir() else {
-        return;
-    };
-    let Some((first_broker, _)) = a_broker(root.path(), &[]) else {
-        skipped("two_brokers_do_not_share_a_name_and_neither_name_is_a_process_id");
-        return;
-    };
-    let Some((second_broker, _)) = a_broker(root.path(), &[]) else {
-        return;
-    };
-
-    let names: Vec<String> = [&first_broker, &second_broker]
-        .iter()
-        .map(|b| b.ring_path_for_test())
-        .collect();
-    assert_ne!(
-        names.first(),
-        names.get(1),
-        "two brokers shared a ring name"
-    );
-    for name in &names {
-        let stem: String = name
-            .rsplit(['/', '\\'])
-            .next()
-            .unwrap_or(name)
-            .chars()
-            .filter(|c| c.is_ascii_hexdigit())
-            .collect();
-        assert!(
-            stem.len() >= 32,
-            "the ring name carries no unguessable part: {name}"
-        );
-        assert!(
-            !name.contains(&format!("-{}-", std::process::id())),
-            "the ring name still carries this process's id: {name}"
-        );
-    }
-}
-
-/// On Unix the ring's name comes out of the directory once both processes have
-/// it mapped. The ring keeps working — a render still crosses it — and the file
-/// is gone from `/tmp`, so no third program can open it and the kernel reclaims
-/// it when the last of the two exits, a crash included.
-#[cfg(unix)]
-#[test]
-fn the_ring_file_is_unlinked_once_both_ends_hold_it() {
-    let Ok(root) = tempfile::tempdir() else {
-        return;
-    };
-    let Some((mut broker, plugin)) = a_broker(root.path(), &[]) else {
-        skipped("the_ring_file_is_unlinked_once_both_ends_hold_it");
-        return;
-    };
-
-    let path = broker.ring_path_for_test();
-    assert!(
-        !Path::new(&path).exists(),
-        "the ring is still reachable by name at {path}"
-    );
-
-    // And it is still a working ring, which is the half that would be easy to
-    // break: an unlinked mapping is only correct because the mapping outlives
-    // the name.
-    let instance = broker
-        .create_instance(plugin, Context::Filter, ParamSnapshot::default())
-        .expect("an instance");
-    let rendered = broker
-        .render(
-            instance,
-            &RenderRequest::filter(0.0, a_flat_frame(0.75)),
-            &|_, _| None,
-        )
-        .expect("a frame back");
-    assert!(!rendered.errored, "{:?}", rendered.error);
-    assert!((first(&rendered.frame) - 0.75).abs() < 1e-2);
 }

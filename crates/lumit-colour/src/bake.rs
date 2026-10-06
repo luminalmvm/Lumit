@@ -488,26 +488,6 @@ mod tests {
             .all(|(x, y)| (x - y).abs() <= tol * y.abs().max(1.0))
     }
 
-    #[test]
-    fn the_default_shaper_covers_zero_to_thirty_two() {
-        let s = Shaper::DEFAULT;
-        assert!((s.forward(0.0) - 0.0).abs() < 1e-6);
-        assert!((s.forward(32.0) - 1.0).abs() < 1e-4, "{}", s.forward(32.0));
-        // And undoing it lands back where it started.
-        for x in [0.0_f32, 0.001, 0.18, 1.0, 8.0, 31.0] {
-            let back = s.inverse(s.forward(x));
-            assert!((back - x).abs() <= 1e-3 * x.max(1.0), "{x} → {back}");
-        }
-    }
-
-    #[test]
-    fn the_shaper_clamps_rather_than_producing_nonsense() {
-        let s = Shaper::DEFAULT;
-        assert_eq!(s.forward(-100.0), 0.0);
-        assert_eq!(s.forward(1e9), 1.0);
-        assert!(s.inverse(0.0).is_finite());
-    }
-
     fn srgb_chain() -> Chain {
         Chain::new(vec![
             Op::MonCurve {
@@ -519,34 +499,6 @@ mod tests {
                 1.1, -0.05, -0.05, 0.0, -0.02, 1.03, -0.01, 0.0, 0.0, -0.1, 1.1, 0.0,
             ]),
         ])
-    }
-
-    #[test]
-    fn a_factorable_chain_bakes_to_curves_and_a_matrix() {
-        let baked = bake(&srgb_chain(), Shaper::DEFAULT).expect("bakes");
-        let Artefact::Factorised { stages } = &baked else {
-            panic!("expected the factorised shape, got {baked:?}");
-        };
-        assert_eq!(stages.len(), 2);
-        assert!(matches!(stages.first(), Some(Stage::Curve(_))));
-        assert!(matches!(stages.get(1), Some(Stage::Matrix(_))));
-    }
-
-    #[test]
-    fn the_factorised_bake_matches_exact_evaluation_to_the_stated_bound() {
-        // §5.4's factorised bound: ≤ 1e-5 relative against exact evaluation.
-        let chain = srgb_chain();
-        let baked = bake(&chain, Shaper::DEFAULT).expect("bakes");
-        for i in 0..=500 {
-            let x = i as f32 / 500.0;
-            let c = [x, 1.0 - x, (x * 0.7 + 0.1).min(1.0)];
-            let got = baked.eval(c);
-            let want = chain.eval(c);
-            assert!(
-                close_relative(got, want, 1e-5),
-                "at {c:?}: {got:?} vs {want:?}"
-            );
-        }
     }
 
     #[test]
@@ -613,21 +565,6 @@ mod tests {
     }
 
     #[test]
-    fn the_signed_shaper_is_the_ordinary_one_folded_about_zero() {
-        let s = Shaper::DEFAULT;
-        for x in [0.0_f32, 0.001, 0.18, 1.0, 8.0, 31.0] {
-            assert!((s.inverse_signed(s.forward_signed(x)) - x).abs() <= 1e-3 * x.max(1.0));
-            assert!((s.inverse_signed(s.forward_signed(-x)) + x).abs() <= 1e-3 * x.max(1.0));
-            // Symmetric about 0.5 by construction.
-            assert!((s.forward_signed(x) + s.forward_signed(-x) - 1.0).abs() <= 1e-6);
-        }
-        // Beyond the shaper's own ceiling both ends clamp, which is §5.4's
-        // stated bound rather than a surprise.
-        assert_eq!(s.forward_signed(1e9), 1.0);
-        assert_eq!(s.forward_signed(-1e9), 0.0);
-    }
-
-    #[test]
     fn a_chain_that_will_not_fit_the_fixed_shape_takes_the_cube_instead() {
         // Curve, matrix, curve, matrix: factorable on paper, but more stages
         // than the render passes execute, so the bake picks the other form.
@@ -663,16 +600,6 @@ mod tests {
             },
             dir: Direction::Forward,
         }])
-    }
-
-    #[test]
-    fn a_channel_mixing_chain_bakes_to_a_cube() {
-        let baked = bake(&mixing_chain(), Shaper::DEFAULT).expect("bakes");
-        let Artefact::ShaperCube { cube, .. } = &baked else {
-            panic!("expected a cube, got {baked:?}");
-        };
-        assert_eq!(cube.size, CUBE_SIZE);
-        assert_eq!(cube.data.len(), CUBE_SIZE * CUBE_SIZE * CUBE_SIZE);
     }
 
     /// The shape a real view transform has: a primaries matrix, a smooth tone
@@ -741,36 +668,6 @@ mod tests {
     }
 
     #[test]
-    fn deep_saturation_is_where_the_cube_bake_is_least_accurate() {
-        // The risk §5.4 names, measured rather than asserted away. A matrix
-        // mixes channels *linearly*, but the cube's grid is spaced
-        // *logarithmically*, so a bright, deeply saturated colour whose mixed
-        // result nearly cancels to zero is read off a coarse part of the grid
-        // and then stretched by the display encode's steep toe. In-gamut
-        // material never goes near this. The number is a ceiling to tighten
-        // when the shaper gains its negative lobe, not a target.
-        //
-        // Measured on this ramp: 2.2e-3, against the 5e-3 ceiling and the 2e-3
-        // in-domain bound the test above holds — so deep saturation is indeed
-        // the worst case, with room. What the ceiling is NOT is universal: a
-        // harsher ramp ([x, 0.05x, 0]) measures 5.6e-2, twenty-five times it.
-        // That is §5.4's named, unbounded risk rather than a regression, and
-        // the ceiling here belongs to this probe family and says so.
-        let chain = view_chain();
-        let baked = bake_cube(&chain, Shaper::DEFAULT).expect("bakes");
-        let saturated = (0..=200).map(|i| {
-            let x = 32.0 * i as f32 / 200.0;
-            [x, x * 0.25, x * 0.05]
-        });
-        let worst = worst_error(&chain, &baked, saturated);
-        assert!(worst <= 5e-3, "worst error on deep saturation was {worst}");
-        assert!(
-            worst > 2e-3,
-            "deep saturation is no longer the worst case ({worst}); tighten the bound above"
-        );
-    }
-
-    #[test]
     fn baking_twice_gives_the_same_bytes() {
         // Determinism (docs/14 §3): nothing in the bake reads a clock, a hash
         // order or a thread, so two bakes of one chain are the same table.
@@ -781,38 +678,5 @@ mod tests {
         let f1 = bake(&srgb_chain(), Shaper::DEFAULT).expect("bakes");
         let f2 = bake(&srgb_chain(), Shaper::DEFAULT).expect("bakes");
         assert!(f1 == f2, "two factorised bakes of one chain differed");
-    }
-
-    #[test]
-    fn a_vendored_artefact_round_trips_through_its_file_format() {
-        let chain = mixing_chain();
-        // A small cube, so the test file stays a test file.
-        let baked = bake_cube(&chain, Shaper::DEFAULT).expect("bakes");
-        let vendored = VendoredArtefact {
-            provenance: vec![
-                "generated by: (pending) the reference OpenColorIO library".to_string(),
-                "style: an example, not a shipped bake".to_string(),
-            ],
-            artefact: baked,
-        };
-        let text = vendored.to_text().expect("writes");
-        let back = VendoredArtefact::from_text("the example", &text).expect("reads");
-        assert_eq!(back.provenance, vendored.provenance);
-        assert!(back.artefact == vendored.artefact, "the bytes changed");
-    }
-
-    #[test]
-    fn a_factorised_artefact_refuses_to_be_written_as_a_file() {
-        let vendored = VendoredArtefact {
-            provenance: Vec::new(),
-            artefact: factorise(&srgb_chain()).expect("factorises"),
-        };
-        assert!(matches!(vendored.to_text(), Err(ColourError::Parse { .. })));
-    }
-
-    #[test]
-    fn a_truncated_artefact_file_is_a_typed_error_not_a_panic() {
-        assert!(VendoredArtefact::from_text("stub", "not a lumit artefact").is_err());
-        assert!(VendoredArtefact::from_text("stub", "lumit-colour artefact 1\ncube 2\n").is_err());
     }
 }

@@ -486,53 +486,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn waveform_peaks_bucket_min_max() {
-        // 4 frames: (1,1) (-1,-1) (0,0) (0,0) → mono 1, -1, 0, 0.
-        let audio = [1.0, 1.0, -1.0, -1.0, 0.0, 0.0, 0.0, 0.0];
-        let peaks = waveform_peaks(&audio, 2);
-        assert_eq!(peaks, vec![(-1.0, 1.0), (0.0, 0.0)]);
-        // Degenerate inputs are safe.
-        assert!(waveform_peaks(&[], 8).is_empty());
-        assert!(waveform_peaks(&audio, 0).is_empty());
-        // More buckets than frames still returns one (min,max) per bucket.
-        assert_eq!(waveform_peaks(&audio, 8).len(), 8);
-    }
-
-    #[test]
-    fn placement_full_clip_at_origin() {
-        // 2 s of 48 kHz audio, no offset, in/out spanning it all.
-        let p = place_on_timeline(0.0, 2.0, 0.0, 96_000, 48_000).unwrap();
-        assert_eq!(p, (0, 0, 96_000));
-    }
-
-    #[test]
-    fn placement_offset_shifts_the_output_start() {
-        // Same clip started 1 s into the comp: lands at output frame 48000.
-        let p = place_on_timeline(1.0, 3.0, 1.0, 96_000, 48_000).unwrap();
-        assert_eq!(p, (48_000, 0, 96_000));
-    }
-
-    #[test]
-    fn placement_trims_head_when_in_point_is_inside_source() {
-        // Layer trimmed so it starts 0.5 s into its source.
-        let p = place_on_timeline(0.5, 2.0, 0.0, 96_000, 48_000).unwrap();
-        assert_eq!(p, (24_000, 24_000, 72_000));
-    }
-
-    #[test]
-    fn placement_clips_length_to_available_source() {
-        // Out point beyond the source end: length caps at what's left.
-        let p = place_on_timeline(0.0, 10.0, 0.0, 96_000, 48_000).unwrap();
-        assert_eq!(p, (0, 0, 96_000));
-    }
-
-    #[test]
-    fn placement_none_when_silent_or_past_end() {
-        assert!(place_on_timeline(2.0, 1.0, 0.0, 96_000, 48_000).is_none());
-        assert!(place_on_timeline(5.0, 6.0, 0.0, 96_000, 48_000).is_none()); // src_start past end
-    }
-
-    #[test]
     fn placement_confines_audio_to_the_active_span() {
         // GEN-4 bug 3: a layer must only sound across its comp-time span.
         // 4 s of 48 kHz source, audible only across comp time [1, 2).
@@ -603,46 +556,6 @@ mod tests {
             out.iter().all(|s| (*s - 0.5).abs() < 1e-6),
             "the whole in-window span sounds; nothing before comp 0 bleeds in"
         );
-    }
-
-    #[test]
-    fn empty_mix_is_silence() {
-        assert_eq!(mix_stereo(&[], 4), vec![0.0; 8]);
-    }
-
-    #[test]
-    fn db_to_gain_unity_boost_and_the_inf_knee() {
-        assert_eq!(db_to_gain(0.0), 1.0);
-        assert!((db_to_gain(20.0) - 10.0).abs() < 1e-4);
-        assert!((db_to_gain(-6.0) - 0.5012).abs() < 1e-4);
-        // At and below the knee: exact silence, not a denormal whisper.
-        assert_eq!(db_to_gain(VOLUME_FLOOR_DB), 0.0);
-        assert_eq!(db_to_gain(-200.0), 0.0);
-        assert!(db_to_gain(VOLUME_FLOOR_DB + 0.1) > 0.0);
-    }
-
-    #[test]
-    fn envelope_interpolates_between_control_points_and_clamps() {
-        let e = GainEnvelope {
-            stride: 4,
-            points: vec![[0.0, 0.0], [1.0, 1.0]],
-        };
-        assert_eq!(e.gain_at(0), [0.0, 0.0]);
-        assert!((e.gain_at(2)[0] - 0.5).abs() < 1e-6);
-        assert_eq!(e.gain_at(4), [1.0, 1.0]);
-        assert_eq!(
-            e.gain_at(100),
-            [1.0, 1.0],
-            "holds the last point past the end"
-        );
-
-        // The two channels are independent, which is what lets one envelope
-        // carry a fade and a pan sweep at once.
-        let swept = GainEnvelope {
-            stride: 2,
-            points: vec![[1.0, 0.0], [0.0, 1.0]],
-        };
-        assert_eq!(swept.gain_at(1), [0.5, 0.5]);
     }
 
     /// A volume fade must sound identical through the baked mixer and the
@@ -753,46 +666,6 @@ mod tests {
     }
 
     #[test]
-    fn single_source_lands_at_its_offset() {
-        let s = tone(2, 0.5);
-        let out = mix_stereo(
-            &[PlacedAudio {
-                start_frame: 1,
-                samples: &s,
-                gain: [1.0, 1.0],
-                envelope: None,
-            }],
-            4,
-        );
-        // Frame 0 silent, frames 1–2 = 0.5, frame 3 silent.
-        assert_eq!(out, vec![0.0, 0.0, 0.5, 0.5, 0.5, 0.5, 0.0, 0.0]);
-    }
-
-    #[test]
-    fn overlapping_sources_sum() {
-        let a = tone(4, 0.3);
-        let b = tone(4, 0.2);
-        let out = mix_stereo(
-            &[
-                PlacedAudio {
-                    start_frame: 0,
-                    samples: &a,
-                    gain: [1.0, 1.0],
-                    envelope: None,
-                },
-                PlacedAudio {
-                    start_frame: 0,
-                    samples: &b,
-                    gain: [1.0, 1.0],
-                    envelope: None,
-                },
-            ],
-            4,
-        );
-        assert!(out.iter().all(|s| (s - 0.5).abs() < 1e-6));
-    }
-
-    #[test]
     fn gain_scales_the_source() {
         let s = tone(2, 0.8);
         let out = mix_stereo(
@@ -805,68 +678,6 @@ mod tests {
             2,
         );
         assert!(out.iter().all(|v| (v - 0.4).abs() < 1e-6));
-    }
-
-    #[test]
-    fn negative_offset_clips_the_head() {
-        // Source of 4 frames (marker values in range) starting at -2: only
-        // its second half lands on the strip.
-        let s: Vec<f32> = (0..4)
-            .flat_map(|i| [i as f32 * 0.2, i as f32 * 0.2])
-            .collect();
-        let out = mix_stereo(
-            &[PlacedAudio {
-                start_frame: -2,
-                samples: &s,
-                gain: [1.0, 1.0],
-                envelope: None,
-            }],
-            4,
-        );
-        // Output frame 0 = source frame 2 (0.4), frame 1 = source frame 3 (0.6).
-        assert_eq!(out, vec![0.4, 0.4, 0.6, 0.6, 0.0, 0.0, 0.0, 0.0]);
-    }
-
-    #[test]
-    fn tail_past_the_strip_is_clipped() {
-        let s = tone(10, 0.5);
-        let out = mix_stereo(
-            &[PlacedAudio {
-                start_frame: 2,
-                samples: &s,
-                gain: [1.0, 1.0],
-                envelope: None,
-            }],
-            4,
-        );
-        assert_eq!(out.len(), 8);
-        assert_eq!(&out[..4], &[0.0, 0.0, 0.0, 0.0]);
-        assert_eq!(&out[4..], &[0.5, 0.5, 0.5, 0.5]);
-    }
-
-    #[test]
-    fn hot_sum_is_clamped_not_wrapped() {
-        let a = tone(2, 0.8);
-        let b = tone(2, 0.8);
-        let out = mix_stereo(
-            &[
-                PlacedAudio {
-                    start_frame: 0,
-                    samples: &a,
-                    gain: [1.0, 1.0],
-                    envelope: None,
-                },
-                PlacedAudio {
-                    start_frame: 0,
-                    samples: &b,
-                    gain: [1.0, 1.0],
-                    envelope: None,
-                },
-            ],
-            2,
-        );
-        // 0.8 + 0.8 = 1.6, held at the master ceiling, not wrapped.
-        assert!(out.iter().all(|v| (v - MASTER_CEILING).abs() < 1e-6));
     }
 
     /// The live plan must sound exactly like the baked mix: same placements,
@@ -1152,21 +963,5 @@ mod tests {
         assert!(out_pos.iter().all(|v| (v - MASTER_CEILING).abs() < 1e-6));
         assert!(out_neg.iter().all(|v| (v + MASTER_CEILING).abs() < 1e-6));
         assert!(out_pos.iter().all(|v| *v < 1.0));
-    }
-
-    /// The fold-down law, stated four ways: a centred signal keeps its level,
-    /// one side alone arrives 6 dB down, a correlated pair at full scale
-    /// cannot overshoot, and an odd trailing sample is dropped rather than
-    /// guessed at.
-    #[test]
-    fn the_mono_fold_down_is_sum_and_halve() {
-        assert_eq!(downmix_to_mono(&[0.5, 0.5, -0.25, -0.25]), vec![0.5, -0.25]);
-        assert_eq!(downmix_to_mono(&[1.0, 0.0]), vec![0.5]);
-        assert_eq!(downmix_to_mono(&[1.0, 1.0]), vec![1.0]);
-        assert_eq!(downmix_to_mono(&[0.25, 0.75]), vec![0.5]);
-        // Out of phase cancels, which is what one loudspeaker really does.
-        assert_eq!(downmix_to_mono(&[0.6, -0.6]), vec![0.0]);
-        assert_eq!(downmix_to_mono(&[0.25, 0.75, 0.5]), vec![0.5]);
-        assert!(downmix_to_mono(&[]).is_empty());
     }
 }

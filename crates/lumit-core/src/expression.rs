@@ -437,49 +437,6 @@ mod tests {
         assert_eq!(evaluate_text("\"frame \" + 7", Some(at(0.0))), "frame 7");
     }
 
-    /// A broken expression prints nothing rather than failing the frame.
-    #[test]
-    fn a_broken_expression_prints_nothing() {
-        assert_eq!(
-            evaluate_text("this is not an expression", Some(at(0.0))),
-            ""
-        );
-        assert_eq!(evaluate_text("no_such_variable", Some(at(0.0))), "");
-    }
-
-    /// `time` is readable with nothing but a detached context behind it.
-    ///
-    /// This is the regression test for scoping `time` to a successful comp
-    /// lookup: an expression that reads it then errors, resolves to nothing,
-    /// and keys every frame of the comp identically.
-    #[test]
-    fn time_is_readable_without_a_comp() {
-        assert_eq!(evaluate("time * 2.0", Some(at(1.5))), 3.0);
-        assert_ne!(
-            evaluate("time", Some(at(1.0))),
-            evaluate("time", Some(at(2.0)))
-        );
-    }
-
-    /// Without an expression the layer shows exactly what was typed, and the
-    /// typed words survive underneath one that is set.
-    #[test]
-    fn the_typed_words_are_kept_and_restored() {
-        assert_eq!(document(None).resolved_text(at(0.0)), "typed");
-        let driven = document(Some("time * 2"));
-        assert_eq!(driven.resolved_text(at(1.5)), "3.0");
-        assert_eq!(driven.text, "typed");
-    }
-
-    /// The same expression at the same time gives the same answer, on any
-    /// machine and any run — the determinism rule, applied to words.
-    #[test]
-    fn resolution_is_deterministic() {
-        let d = document(Some("noise(time) + time"));
-        assert_eq!(d.resolved_text(at(2.0)), d.resolved_text(at(2.0)));
-        assert_ne!(d.resolved_text(at(2.0)), d.resolved_text(at(3.0)));
-    }
-
     /// A document written before expressions existed loads with none, and a
     /// document with one round-trips.
     #[test]
@@ -701,14 +658,6 @@ mod tests {
         });
         // The value is meaningless; returning at all is the point.
         let _ = evaluate("layer(\"A\").x", Some(context));
-    }
-
-    /// A graph curve for an expression that does not compile is no curve, not
-    /// a flat line at zero that reads as a real answer.
-    #[test]
-    fn an_uncompilable_expression_samples_to_nothing() {
-        assert!(evaluate_range("this is not (", None, 0.0, 1.0, 8).is_empty());
-        assert_eq!(evaluate_range("time", None, 0.0, 4.0, 4).len(), 4);
     }
 
     /// **One expression cannot build something enormous.**

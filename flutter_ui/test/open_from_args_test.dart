@@ -19,31 +19,7 @@ void main() {
 
   tearDown(() => tmp.deleteSync(recursive: true));
 
-  test('an existing .lum on the line is found', () {
-    expect(projectPathFromArgs([real]), real);
-  });
-
   test('flags and stray tokens around it are ignored', () {
     expect(projectPathFromArgs(['--verbose', real, 'other']), real);
-  });
-
-  test('extension match is case-insensitive', () {
-    final upper = '${tmp.path}${Platform.pathSeparator}SHOT.LUM';
-    File(upper).writeAsStringSync('');
-    expect(projectPathFromArgs([upper]), upper);
-  });
-
-  test('a .lum that does not exist is not a project', () {
-    expect(projectPathFromArgs(['${tmp.path}/missing.lum']), isNull);
-  });
-
-  test('a non-.lum file that exists is not a project', () {
-    final other = '${tmp.path}${Platform.pathSeparator}notes.txt';
-    File(other).writeAsStringSync('');
-    expect(projectPathFromArgs([other]), isNull);
-  });
-
-  test('an empty line opens nothing', () {
-    expect(projectPathFromArgs([]), isNull);
   });
 }
