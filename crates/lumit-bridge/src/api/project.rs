@@ -323,15 +323,31 @@ impl ProjectReference {
         settings: Option<BridgeCompSettings>,
         graph: Option<lumit_core::comp_graph::CompGraph>,
     ) -> Result<CompositionReference, BridgeError> {
+        let state = self.state()?;
+        let state = state.write().map_err(|_| BridgeError::WriteFailed)?;
+        let (comp_id, ops) = Self::new_comp_ops(&state.store.snapshot(), name, settings, graph)?;
+        state
+            .store
+            .commit(Op::Batch { ops })
+            .map_err(BridgeError::OpError)?;
+
+        Ok(CompositionReference::new(self.id, comp_id))
+    }
+
+    /// The ops that add a composition and file it, with the new comp's id.
+    /// Nothing is committed, so a caller can add to the batch.
+    #[frb(ignore)]
+    fn new_comp_ops(
+        doc: &lumit_core::Document,
+        name: String,
+        settings: Option<BridgeCompSettings>,
+        graph: Option<lumit_core::comp_graph::CompGraph>,
+    ) -> Result<(Uuid, Vec<Op>), BridgeError> {
         use lumit_core::model::{Composition, Folder, LinearColour, MotionBlur, ProjectItem};
         use lumit_core::ops::AutoFolderKind;
 
-        let state = self.state()?;
-        let state = state.write().map_err(|_| BridgeError::WriteFailed)?;
-        let doc = state.store.snapshot();
-
         let name = if name.trim().is_empty() {
-            Self::next_comp_name_in(&doc, graph.is_some())
+            Self::next_comp_name_in(doc, graph.is_some())
         } else {
             name
         };
@@ -416,12 +432,80 @@ impl ProjectReference {
             children,
         });
 
-        state
-            .store
-            .commit(Op::Batch { ops })
-            .map_err(BridgeError::OpError)?;
+        Ok((comp_id, ops))
+    }
 
-        Ok(CompositionReference::new(self.id, comp_id))
+    /// Bring a layered image file in as a composition, as one undo step: a
+    /// footage item per layer, filed in a folder named for the file, and a
+    /// composition the document's size holding a Footage layer for each.
+    ///
+    /// `None` when `path` is not a layered file this build reads, which is
+    /// anything but a Photoshop document, one of a kind that is not read, or
+    /// one with fewer than two layers. The caller then imports it as plain
+    /// footage. Otherwise the number of layers left out because they hold no
+    /// picture, which is what an adjustment layer or a fill layer is.
+    ///
+    /// Only the layer list is read here. The pixels are read when a layer is
+    /// first drawn.
+    #[frb(sync)]
+    pub fn import_layers(&self, path: String) -> Result<Option<u32>, BridgeError> {
+        #[cfg(not(feature = "media"))]
+        {
+            let _ = path;
+            Ok(None)
+        }
+        #[cfg(feature = "media")]
+        {
+            let file = std::path::PathBuf::from(&path);
+            if !lumit_media::psd::is_psd(&file) {
+                return Ok(None);
+            }
+            let Ok(psd) = lumit_media::psd::open(&file) else {
+                return Ok(None);
+            };
+            if psd.layers.iter().filter(|l| l.has_pixels()).count() < 2 {
+                return Ok(None);
+            }
+            let name = file
+                .file_stem()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            let settings = BridgeCompSettings {
+                width: psd.width,
+                height: psd.height,
+                ..BridgeCompSettings::defaults()
+            };
+            let (_, duration) = settings.to_engine().ok_or(BridgeError::InvalidFrameRate)?;
+
+            let state = self.state()?;
+            let left_out = {
+                let state = state.write().map_err(|_| BridgeError::WriteFailed)?;
+                let doc = state.store.snapshot();
+                let (comp, mut ops) = Self::new_comp_ops(&doc, name, Some(settings), None)?;
+                let queued = ops
+                    .iter()
+                    .filter(|o| matches!(o, Op::AddItem { .. }))
+                    .count();
+                let (more, left_out) = crate::layered::psd_ops(
+                    &psd,
+                    &file,
+                    comp,
+                    (psd.width.clamp(16, 16384), psd.height.clamp(16, 16384)),
+                    duration.0,
+                    doc.items.len() + queued,
+                );
+                ops.extend(more);
+                state
+                    .store
+                    .commit(Op::Batch { ops })
+                    .map_err(BridgeError::OpError)?;
+                left_out
+            };
+
+            // Outside the lock: one probe answers for every layer of the file.
+            crate::probe::request(file);
+            Ok(Some(left_out))
+        }
     }
 
     /// Record `path` as a footage item, as one undo step.
