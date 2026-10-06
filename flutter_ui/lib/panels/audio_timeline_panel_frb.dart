@@ -821,13 +821,21 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
   /// The navigator asked for a window: `start` frames from the left, `span`
   /// frames across. The window's left edge is the anchor and is held for the
   /// length of the gesture, so dragging its right-hand end zooms about its
-  /// left-hand one.
-  void _navigateTo(double start, double span) {
+  /// left-hand one. A pan only scrolls (see the Timeline panel's own).
+  void _navigateTo(double start, double span, {required bool pan}) {
     if (_laneFrames <= 0 || span <= 0) return;
+    if (pan) {
+      _scrollFrameToLeftEdge(start);
+      return;
+    }
     _zoomAnchorFrame = start;
     _zoomAnchorViewportX = 0;
     _zoomAnchorHeld = true;
-    final want = (_laneFrames / span).clamp(1.0, _maxZoom);
+    final want = navigatorZoom(
+      span: span,
+      frames: _laneFrames,
+      viewport: positionOf(_hLane)?.viewportDimension ?? _laneViewport,
+    ).clamp(1.0, _maxZoom);
     if ((want - _zoomMotion.target).abs() > 1e-9) {
       _setZoom(want, fly: false);
     } else {

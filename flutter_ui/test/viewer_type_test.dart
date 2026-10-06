@@ -1,19 +1,18 @@
-// The Type tool's arithmetic: where a click falls in the composition,
-// how wide a line is reckoned to be, and where that puts a new layer's anchor.
+// The Type tool's arithmetic: where a click falls in the composition, which
+// gap between two letters it lands in, and what a double-click selects.
 //
-// All three are estimates the *engine* also makes — a text layer's anchor is
-// placed by the same sum on the Rust side — so what these tests really pin is
-// that the two sides agree. A caret that walks off the end of the line is what
-// disagreeing looks like.
+// How wide a line is, and where its letters sit, are the engine's answers now
+// (`measureTextLine`), so those are pinned against the real engine in
+// test/frb/viewer_type_frb_test.dart. What is left here needs no library.
+
+import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/panels/viewer_shape_layer.dart'
     show ShapeSpace;
 import 'package:lumit_flutter/panels/viewer_type.dart';
-// The width estimate lives with the other "how big is a layer" answers now:
-// the same sum places the caret, the anchor and the wireframe.
-import 'package:lumit_flutter/state/layer_bounds.dart';
+import 'package:lumit_flutter/src/rust/api/assets.dart';
 
 void main() {
   // The Type tool places a click through the shared comp space now, not a
@@ -42,51 +41,62 @@ void main() {
     });
   });
 
-  group('How wide a line is reckoned to be', () {
-    test('half the point size per character — the engine\'s own estimate', () {
-      expect(estimatedTextWidth('', 72), 0);
-      expect(estimatedTextWidth('Text', 72), 4 * 36);
-      expect(estimatedTextWidth('ab', 10), 10);
-    });
+  group('Which gap a click lands in', () {
+    // Three letters of unequal width, as a real font sets them.
+    final line = BridgeTextLine(
+      width: 100,
+      height: 50,
+      baseline: 40,
+      ascent: 45,
+      descent: 10,
+      carets: Float64List.fromList([0, 40, 50, 100]),
+    );
 
-    test('it counts characters, not bytes', () {
-      // A single non-Latin character is one character wide, not its byte count
-      // — the caret would otherwise run away on any accented word.
-      expect(estimatedTextWidth('é', 40), estimatedTextWidth('e', 40));
-    });
-  });
-
-  /// The box the Viewer draws round a line of text. It used to be the
-  /// whole composition — text had no measured bounds and the comp was the
-  /// fallback — so a click with the Type tool put a box the size of the frame
-  /// round twelve-pixel text.
-  group('How big a text layer is', () {
-    test('as tall as the point size, and no taller', () {
-      expect(textLayerBounds('Text', 72).height, 72);
-      expect(textLayerBounds('Text', 12).height, 12);
-    });
-
-    test('as wide as the line is reckoned to be', () {
-      expect(textLayerBounds('Text', 72).width, estimatedTextWidth('Text', 72));
-    });
-
-    test('an empty line still has a box, one character wide', () {
-      final empty = textLayerBounds('', 12);
-      expect(empty.height, 12, reason: 'it says what size it will be set at');
-      expect(empty.width, greaterThan(0),
-          reason: 'a layer waiting to be typed into must still be visible');
+    test('the nearest gap, not the nearest letter', () {
+      expect(caretNearest(line, -20), 0, reason: 'before the line');
+      expect(caretNearest(line, 19), 0);
+      expect(caretNearest(line, 21), 1);
+      expect(caretNearest(line, 46), 2, reason: 'the narrow letter');
+      expect(caretNearest(line, 76), 3);
+      expect(caretNearest(line, 400), 3, reason: 'past the end');
     });
   });
 
-  group('Where a new text layer is anchored', () {
-    test('the middle of the estimated line, so it turns about itself', () {
-      final anchor = textAnchor('Text', 72);
-      expect(anchor.dx, estimatedTextWidth('Text', 72) / 2);
-      expect(anchor.dy, 36);
+  group('Characters and UTF-16', () {
+    test('the same count until a character takes two units', () {
+      expect(characterIndexOf('abc', 2), 2);
+      expect(utf16OffsetOf('abc', 2), 2);
     });
 
-    test('an empty line is anchored on its own left end', () {
-      expect(textAnchor('', 72).dx, 0);
+    test('an emoji is one character and two units', () {
+      const text = 'a\u{1F600}b';
+      expect(text.length, 4);
+      expect(characterIndexOf(text, 3), 2, reason: 'after the emoji');
+      expect(utf16OffsetOf(text, 2), 3);
+      expect(utf16OffsetOf(text, 3), 4);
+    });
+  });
+
+  group('What a double-click selects', () {
+    const text = 'Hello, this is';
+
+    test('the word under the click', () {
+      expect(wordAround(text, 1),
+          const TextSelection(baseOffset: 0, extentOffset: 5));
+      expect(wordAround(text, 9),
+          const TextSelection(baseOffset: 7, extentOffset: 11));
+    });
+
+    test('a run of spaces, or a lone mark, is its own word', () {
+      expect(wordAround(text, 5),
+          const TextSelection(baseOffset: 5, extentOffset: 6));
+      expect(wordAround(text, 6),
+          const TextSelection(baseOffset: 6, extentOffset: 7));
+    });
+
+    test('past the end is the last word', () {
+      expect(wordAround(text, text.length),
+          const TextSelection(baseOffset: 12, extentOffset: 14));
     });
   });
 }
