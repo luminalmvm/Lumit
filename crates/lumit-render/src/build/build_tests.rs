@@ -1423,6 +1423,7 @@ fn a_matte_from_tagged_footage_carries_its_own_colour_space() {
         },
         colour_space: space.map(str::to_owned),
         extra: serde_json::Map::new(),
+        source_layer: None,
     };
     let plate = footage("plate.mov", Some("ACEScct"));
     let holdout = footage("holdout.mov", Some("srgb_texture"));
@@ -1876,6 +1877,7 @@ fn a_footage_read_box_is_centred_by_its_own_size() {
         },
         extra: serde_json::Map::new(),
         colour_space: None,
+        source_layer: None,
     }));
     let read = Uuid::now_v7();
     let out = Uuid::now_v7();

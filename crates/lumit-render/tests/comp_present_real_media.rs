@@ -42,6 +42,7 @@ fn doc_with_clip(path: &str, w: u32, h: u32, fps: (u32, u32)) -> (std::sync::Arc
         },
         extra: serde_json::Map::new(),
         colour_space: None,
+        source_layer: None,
     }));
 
     let comp_id = Uuid::now_v7();

@@ -501,6 +501,7 @@ impl ProjectReference {
             sequence: run.as_ref().map(|_| SequenceRef::default()),
             extra: serde_json::Map::new(),
             colour_space: None,
+            source_layer: None,
         };
         let item_id = item.id;
 
@@ -545,6 +546,7 @@ impl ProjectReference {
                 let r = SequenceRef::default().frame_rate;
                 (r.num(), r.den())
             }),
+            source_layer: None,
         });
         // Nothing to probe without a decoder, and the call says so itself.
         #[cfg(not(feature = "media"))]

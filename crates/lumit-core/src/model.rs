@@ -177,6 +177,14 @@ pub struct FootageItem {
     /// project written before sequences existed round-trips byte for byte.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sequence: Option<SequenceRef>,
+    /// Set when this item reads one layer of a layered image file (a
+    /// Photoshop document) rather than the file's flattened picture: the
+    /// layer's place in the file's own list, bottom first
+    /// (docs/01-GLOSSARY.md: Source layer).
+    // ponytail: an index, so reordering the layers in Photoshop re-points
+    // it. The file's own layer ids are the upgrade.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_layer: Option<u32>,
     /// Unknown fields from newer Lumit versions, preserved on load/save
     /// (docs/10-FILE-FORMAT.md §1.1 — mandatory forward compatibility).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
@@ -4743,6 +4751,7 @@ mod tests {
             },
             extra: serde_json::Map::new(),
             colour_space: None,
+            source_layer: None,
         }));
 
         let mut graph = bare_comp("graph");
@@ -4852,6 +4861,7 @@ mod tests {
             },
             colour_space: None,
             extra: serde_json::Map::new(),
+            source_layer: None,
         }
     }
 

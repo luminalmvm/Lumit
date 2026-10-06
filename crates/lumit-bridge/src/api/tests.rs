@@ -53,6 +53,7 @@ fn project_with_folder() -> (
         },
         extra: serde_json::Map::new(),
         colour_space: None,
+        source_layer: None,
     };
     let loose = FootageItem {
         sequence: None,
@@ -66,6 +67,7 @@ fn project_with_folder() -> (
         },
         extra: serde_json::Map::new(),
         colour_space: None,
+        source_layer: None,
     };
     let folder = Folder {
         id: Uuid::now_v7(),
@@ -295,6 +297,7 @@ fn relinking_one_clip_rewrites_the_prefix_for_every_other_lost_clip() {
             extra: serde_json::Map::new(),
         },
         extra: serde_json::Map::new(),
+        source_layer: None,
     };
     let picked_item = footage("Depth.avi", "Cine1");
     let sibling = footage("World.avi", "Cine5");
@@ -386,6 +389,7 @@ fn relinking_a_sequence_by_any_of_its_frames_finds_the_run_and_its_neighbours() 
             extra: serde_json::Map::new(),
         },
         extra: serde_json::Map::new(),
+        source_layer: None,
     };
     let sibling = FootageItem {
         colour_space: None,
@@ -399,6 +403,7 @@ fn relinking_a_sequence_by_any_of_its_frames_finds_the_run_and_its_neighbours() 
             extra: serde_json::Map::new(),
         },
         extra: serde_json::Map::new(),
+        source_layer: None,
     };
     let (run_id, sibling_id) = (run.id, sibling.id);
 
@@ -544,6 +549,7 @@ fn relinking_a_sequence_renames_it_for_its_new_span_unless_the_user_renamed_it()
                 extra: serde_json::Map::new(),
             },
             extra: serde_json::Map::new(),
+            source_layer: None,
         };
         let id = item.id;
         let state = project.state().expect("state");
@@ -12196,6 +12202,7 @@ fn the_proxy_path_is_named_beside_the_original() {
                     },
                     extra: serde_json::Map::new(),
                     colour_space: None,
+                    source_layer: None,
                 })),
             })
             .expect("seeded");
@@ -12295,6 +12302,7 @@ fn project_with_footage() -> (ProjectReference, FootageReference, tempfile::Temp
                     },
                     extra: serde_json::Map::new(),
                     colour_space: None,
+                    source_layer: None,
                 })),
             })
             .expect("seeded");

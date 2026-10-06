@@ -78,6 +78,7 @@ fn doc_naming(path: &std::path::Path) -> Document {
         },
         colour_space: Some("srgb_texture".into()),
         extra: serde_json::Map::new(),
+        source_layer: None,
     }));
     doc
 }
@@ -397,6 +398,7 @@ fn one_input_table_is_uploaded_per_distinct_colour_space() {
             },
             colour_space: Some(space.into()),
             extra: serde_json::Map::new(),
+            source_layer: None,
         }));
     }
 

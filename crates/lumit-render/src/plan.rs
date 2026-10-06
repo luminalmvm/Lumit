@@ -192,21 +192,23 @@ pub struct PlanContext<'a> {
 ///
 /// The rate rides only when the file *is* the item's own media. A proxy is one
 /// file standing in for the whole run, so reading it as a sequence would be
-/// reading files that are not there.
+/// reading files that are not there. The same goes for a source layer: a
+/// proxy has no layers to pick from.
 fn media_source(
     doc: &Document,
     item: Uuid,
     media: &lumit_core::model::MediaRef,
 ) -> lumit_media::MediaSource {
-    let sequence_fps = match doc.item(item) {
+    let (sequence_fps, source_layer) = match doc.item(item) {
         Some(lumit_core::model::ProjectItem::Footage(f)) if std::ptr::eq(&f.media, media) => {
-            f.sequence_fps()
+            (f.sequence_fps(), f.source_layer)
         }
-        _ => None,
+        _ => (None, None),
     };
     lumit_media::MediaSource {
         path: PathBuf::from(&media.absolute_path),
         sequence_fps,
+        source_layer,
     }
 }
 
@@ -1273,6 +1275,7 @@ mod tests {
                 },
                 extra: serde_json::Map::new(),
                 colour_space: None,
+                source_layer: None,
             }));
             let inner = comp(vec![layer(LayerKind::Footage { item })]);
             let inner_id = inner.id;
@@ -1444,6 +1447,7 @@ mod tests {
                 },
                 extra: serde_json::Map::new(),
                 colour_space: None,
+                source_layer: None,
             }));
             // Hidden, as a matte source always is: its picture is the gate, not
             // part of the frame.
@@ -1554,6 +1558,7 @@ mod tests {
                 },
                 extra: serde_json::Map::new(),
                 colour_space: None,
+                source_layer: None,
             }));
             let solid = Uuid::now_v7();
             doc.items.push(ProjectItem::Solid(SolidDef {
@@ -1696,6 +1701,7 @@ mod tests {
             },
             extra: serde_json::Map::new(),
             colour_space: None,
+            source_layer: None,
         }));
         let inner = comp(vec![layer(LayerKind::Footage { item })]);
         let inner_id = inner.id;
@@ -1833,6 +1839,7 @@ mod tests {
             },
             extra: serde_json::Map::new(),
             colour_space: None,
+            source_layer: None,
         }));
         let inner = comp(vec![layer(LayerKind::Footage { item })]);
         let inner_id = inner.id;
@@ -1933,6 +1940,7 @@ mod tests {
                 },
                 extra: serde_json::Map::new(),
                 colour_space: None,
+                source_layer: None,
             }));
             probes.insert(
                 item,
@@ -2093,6 +2101,7 @@ mod tests {
                 },
                 extra: serde_json::Map::new(),
                 colour_space: None,
+                source_layer: None,
             }));
             item
         };
@@ -2300,6 +2309,7 @@ mod tests {
             },
             extra: serde_json::Map::new(),
             colour_space: None,
+            source_layer: None,
         }));
         let probes: HashMap<Uuid, crate::SourceProbe> = [(
             item,

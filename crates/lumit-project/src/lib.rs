@@ -1450,6 +1450,7 @@ mod tests {
                 fingerprint: None,
                 extra: serde_json::Map::new(),
             },
+            source_layer: None,
         }
     }
 
@@ -1724,6 +1725,7 @@ mod tests {
             },
             sequence: Some(lumit_core::model::SequenceRef::default()),
             extra: serde_json::Map::new(),
+            source_layer: None,
         };
         lumit_core::ops::apply(
             &mut doc,
@@ -2056,6 +2058,7 @@ mod tests {
             media: media_ref(rel, abs, None),
             extra: serde_json::Map::new(),
             colour_space: None,
+            source_layer: None,
         })
     }
 
@@ -2606,6 +2609,24 @@ mod tests {
         let back: lumit_core::model::FootageItem =
             serde_json::from_str(&serde_json::to_string(&run).unwrap()).unwrap();
         assert_eq!(back.sequence_fps(), Some((24000, 1001)));
+    }
+
+    /// The same bargain for a source layer: nothing in a project that has
+    /// none, and the pick carried back in one that does.
+    #[test]
+    fn a_source_layer_saves_only_when_there_is_one() {
+        let plain = footage("art.psd");
+        let json = serde_json::to_string(&plain).unwrap();
+        assert!(
+            !json.contains("source_layer"),
+            "a flat file must not grow a source layer field: {json}"
+        );
+
+        let mut layer = footage("Hat/art.psd");
+        layer.source_layer = Some(3);
+        let back: lumit_core::model::FootageItem =
+            serde_json::from_str(&serde_json::to_string(&layer).unwrap()).unwrap();
+        assert_eq!(back.source_layer, Some(3));
     }
 
     /// **A project's own cache location travels with it.** The whole reason it

@@ -5063,6 +5063,7 @@ mod tests {
             colour_space: None,
             sequence: None,
             extra: serde_json::Map::new(),
+            source_layer: None,
         }));
         if let Some(GraphNode::Read { item: named, .. }) = comp
             .graph

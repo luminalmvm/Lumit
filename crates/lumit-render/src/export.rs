@@ -3073,6 +3073,7 @@ pub fn item_infos(
                     source: lumit_media::MediaSource {
                         path: PathBuf::from(&f.media.absolute_path),
                         sequence_fps: f.sequence_fps(),
+                        source_layer: f.source_layer,
                     },
                     fps,
                     frames,
@@ -3090,6 +3091,7 @@ pub fn item_infos(
                     source: lumit_media::MediaSource {
                         path: PathBuf::from(&f.media.absolute_path),
                         sequence_fps: f.sequence_fps(),
+                        source_layer: f.source_layer,
                     },
                     fps: 1.0,
                     frames: 1,
@@ -4665,6 +4667,7 @@ mod tests {
             },
             extra: serde_json::Map::new(),
             colour_space: None,
+            source_layer: None,
         }));
         let (solid, comp_id) = solid_doc(32, 16);
         let mut layer = solid.comp(comp_id).unwrap().layers[0].clone();

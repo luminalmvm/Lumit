@@ -404,6 +404,7 @@ fn footage(report: &mut ImportReport, item: &Item, id: Uuid, name: &str) -> Foot
             ("height", serde_json::json!(item.height)),
         ]),
         colour_space: None,
+        source_layer: None,
     }
 }
 

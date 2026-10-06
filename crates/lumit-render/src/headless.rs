@@ -3539,6 +3539,7 @@ fn footage_source(f: &FootageItem) -> lumit_media::MediaSource {
     lumit_media::MediaSource {
         path: footage_path(f),
         sequence_fps: f.sequence_fps(),
+        source_layer: f.source_layer,
     }
 }
 
@@ -3848,6 +3849,7 @@ mod tests {
                 },
                 colour_space: None,
                 extra: serde_json::Map::new(),
+                source_layer: None,
             }));
         }
         // Both items probe as ordinary video of the same shape, so the only
@@ -4061,6 +4063,7 @@ mod tests {
                 },
                 extra: serde_json::Map::new(),
                 colour_space: None,
+                source_layer: None,
             }));
         id
     }
@@ -4680,6 +4683,7 @@ mod tests {
                 lumit_media::MediaSource {
                     path: PathBuf::from("frame[0001-0050].png"),
                     sequence_fps: Some((25, 1)),
+                    source_layer: None,
                 },
                 seed,
             ),
@@ -4914,6 +4918,7 @@ mod tests {
                 },
                 extra: serde_json::Map::new(),
                 colour_space: None,
+                source_layer: None,
             }));
         if let Some(ProjectItem::Composition(c)) = doc
             .items
@@ -6738,6 +6743,7 @@ surfaces:
             },
             extra: serde_json::Map::new(),
             colour_space: None,
+            source_layer: None,
         }));
         let mut music = matrix_layer("Music", LayerKind::Footage { item }, cw, ch);
         music.audio_only = true;
@@ -7098,6 +7104,7 @@ surfaces:
                     },
                     extra: serde_json::Map::new(),
                     colour_space: None,
+                    source_layer: None,
                 }));
                 let comp_id = push_comp(&mut doc, "Scene", cw, ch);
                 let clip_layer = matrix_layer("Clip", LayerKind::Footage { item }, 320, 240);
@@ -7855,6 +7862,7 @@ surfaces:
                     },
                     extra: serde_json::Map::new(),
                     colour_space: None,
+                    source_layer: None,
                 }));
             let comp_id = Uuid::now_v7();
             let mut clip_layer = matrix_layer("Clip", LayerKind::Footage { item }, 320, 240);
@@ -7947,6 +7955,7 @@ surfaces:
                     },
                     extra: serde_json::Map::new(),
                     colour_space: None,
+                    source_layer: None,
                 }));
             let comp_id = Uuid::now_v7();
             let mut clip_layer = matrix_layer("Clip", LayerKind::Footage { item }, 320, 240);
@@ -8111,6 +8120,7 @@ surfaces:
                     },
                     extra: serde_json::Map::new(),
                     colour_space: None,
+                    source_layer: None,
                 }));
             let comp_id = Uuid::now_v7();
             let mut layer = matrix_layer("Clip", LayerKind::Footage { item }, 320, 240);
@@ -9899,6 +9909,7 @@ surfaces:
                 },
                 extra: serde_json::Map::new(),
                 colour_space: None,
+                source_layer: None,
             }));
         let (inner_doc, inner_id, _) = matrix_base(32, 24, LinearColour([0.0, 0.0, 0.0, 0.0]));
         for it in inner_doc.items {

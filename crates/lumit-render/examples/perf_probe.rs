@@ -189,6 +189,7 @@ fn main() {
         },
         extra: serde_json::Map::new(),
         colour_space: None,
+        source_layer: None,
     });
     let (doc, comp) = doc_with(LayerKind::Footage { item: item_id }, Some(footage));
     run(

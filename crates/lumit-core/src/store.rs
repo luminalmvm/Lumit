@@ -563,6 +563,7 @@ mod tests {
                 },
                 colour_space: None,
                 extra: serde_json::Map::new(),
+                source_layer: None,
             },
         ));
         let store = DocumentStore::new(doc);
@@ -649,6 +650,7 @@ mod tests {
                 colour_space: None,
                 sequence,
                 extra: serde_json::Map::new(),
+                source_layer: None,
             })
         };
         doc.items.push(item(
@@ -1068,6 +1070,7 @@ mod tests {
                     },
                     extra: serde_json::Map::new(),
                     colour_space: None,
+                    source_layer: None,
                 })),
             })
             .unwrap();
@@ -1292,6 +1295,7 @@ mod tests {
                 extra: serde_json::Map::new(),
             },
             colour_space: None,
+            source_layer: None,
         };
         let layer = test_layer(footage.id);
         let layer_id = layer.id;

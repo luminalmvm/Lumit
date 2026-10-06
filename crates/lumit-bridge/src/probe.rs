@@ -247,6 +247,14 @@ fn unqueue(src: &MediaSource) {
     }
 }
 
+/// A source layer is probed as the file it lives in: the layer is read at the
+/// document's own size, so every layer of one file shares one answer.
+#[cfg(feature = "media")]
+fn whole_file(mut src: MediaSource) -> MediaSource {
+    src.source_layer = None;
+    src
+}
+
 /// Ask the worker to probe `path` in the background. Returns at once, always.
 ///
 /// A file already answered for, already queued, or queued past the budget is
@@ -254,7 +262,7 @@ fn unqueue(src: &MediaSource) {
 /// whether [`ensure_probed`] finds its answer waiting or pays for it.
 #[cfg(feature = "media")]
 pub(crate) fn request(src: impl Into<MediaSource>) {
-    let src = src.into();
+    let src = whole_file(src.into());
     let Some(stamp) = stamp(src.on_disk()) else {
         return;
     };
@@ -308,7 +316,7 @@ pub(crate) fn request<T>(_src: T) {}
 pub(crate) fn ensure_probed(
     src: impl Into<MediaSource>,
 ) -> Option<Arc<lumit_media::probe::MediaProbe>> {
-    let src = src.into();
+    let src = whole_file(src.into());
     let stamp = stamp(src.on_disk())?;
     let probed = match lookup(&src, stamp) {
         Some(hit) => hit,

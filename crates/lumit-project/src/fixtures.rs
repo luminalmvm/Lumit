@@ -131,6 +131,7 @@ pub fn stress_document(p: &StressParams) -> Document {
                 sequence: None,
                 extra: serde_json::Map::new(),
                 colour_space: None,
+                source_layer: None,
             }));
             id
         })

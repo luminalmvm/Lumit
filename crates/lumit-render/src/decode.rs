@@ -637,6 +637,31 @@ fn decode(
             });
         }
     }
+    // One layer of a layered image file: the file's own reader again, since
+    // ffmpeg only ever opens the flattened picture.
+    if let Some(layer) = req.source.source_layer {
+        let out = lumit_media::psd::downsample(
+            lumit_media::psd::read_layer(req.source.on_disk(), layer).map_err(|e| e.to_string())?,
+            req.target_width,
+        );
+        cache.insert(
+            cache_key,
+            CachedFrame {
+                width: out.width,
+                height: out.height,
+                rgba: out.rgba.clone(),
+                format: out.format,
+            },
+        );
+        return Ok(FramePixels {
+            width: out.width,
+            height: out.height,
+            rgba: out.rgba,
+            format: out.format,
+            frame: req.frame,
+            item: req.item,
+        });
+    }
     let dec = match decoders.entry(req.item) {
         std::collections::hash_map::Entry::Occupied(e) => e.into_mut(),
         std::collections::hash_map::Entry::Vacant(e) => {
