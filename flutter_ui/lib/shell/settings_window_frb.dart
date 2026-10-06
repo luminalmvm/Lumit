@@ -911,10 +911,6 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               },
               child: Text(l10n.customiseEllipsis, style: t.small),
             ),
-            description: ui.workspace.customThemeName == null
-                ? ''
-                : l10n.settingsHelpEditingTheme(
-                    '${ui.workspace.customThemeName}'),
           ),
           _row(t, l10n.settingsYourThemes, _themeShelf(t, ui),
               description: _themeMessage ?? ''),
@@ -1728,8 +1724,6 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                     style: t.mono.copyWith(fontSize: 10, color: t.textMuted)),
               ],
             ),
-            description:
-                workspace.autosaveMinutes == 0 ? l10n.settingsAutosaveOff : '',
           ),
           _row(
             t,
@@ -2025,7 +2019,6 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                   : () => revealInFolder(path: service.folder!),
               child: Text(l10n.settingsAddonsShow, style: t.small),
             ),
-            description: service.folder ?? '',
           ),
         ]
       ),
@@ -2130,8 +2123,8 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   /// What the runtime is doing, in one line. A library that would not load says
   /// so in its own words, which is the one place they are shown untranslated.
   String _runtimeLine(RuntimeStatus status) => switch (status.state) {
-        RuntimeState.missing => l10n.settingsAddonsStateMissing,
-        RuntimeState.present => l10n.settingsAddonsStatePresent,
+        // The Install and Load buttons already say these two.
+        RuntimeState.missing || RuntimeState.present => '',
         RuntimeState.loaded =>
           l10n.settingsAddonsStateLoaded(status.provider, status.version),
         RuntimeState.failed =>
@@ -2205,14 +2198,10 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         : l10n.settingsAddonsUpdate;
   }
 
-  /// The line under the Check row: why the last press did not work, or where
-  /// the catalogue has got to.
+  /// The line under the Check row: why the last press did not work.
   String _addonsMessage(AddonService service) {
     final why = service.failure;
-    if (why != null) return _addonFailure(why);
-    if (service.entries.isEmpty) return l10n.settingsAddonsNotChecked;
-    if (service.available.isEmpty) return l10n.settingsAddonsAllInstalled;
-    return '';
+    return why == null ? '' : _addonFailure(why);
   }
 
   String _addonFailure(AddonFailure why) => switch (why) {
@@ -2335,34 +2324,6 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                   ),
               ],
             ),
-          ),
-        ),
-      // Panels that have taken a chord over from an app-wide one. Not
-      // a warning — nothing is ambiguous, the focused panel simply wins — so
-      // it is a quiet note rather than a bordered banner. It is said at all
-      // because the app-wide meaning does stop working in that one panel, and
-      // finding that out by pressing the key is worse than reading it here.
-      if (km.shadows.isNotEmpty)
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-          child: Column(
-            key: const ValueKey('keymap-shadows'),
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                l10n.keymapClashPanelCount(km.shadows.length),
-                style: t.small.copyWith(color: t.textMuted),
-              ),
-              for (final shadow in km.shadows)
-                Padding(
-                  padding: const EdgeInsets.only(top: 2),
-                  child: Text(
-                    l10n.keymapShadowLine(chordLabel(shadow.chord),
-                        shadow.action, shadow.context, shadow.shadowed),
-                    style: t.small.copyWith(color: t.textMuted),
-                  ),
-                ),
-            ],
           ),
         ),
       if (groups.isEmpty)
@@ -2591,8 +2552,6 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                 ),
               ],
             ),
-            description: l10n.settingsHelpCacheInUse('${stats.hits}',
-                '${stats.hits + stats.misses}', '${stats.compDecodes}'),
           ),
         ],
       ),
