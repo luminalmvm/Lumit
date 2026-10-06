@@ -3,6 +3,8 @@
 // cannot open in a widget test, so tests supply their own stubs and never touch
 // a plugin channel; this file is only ever exercised in the running app.
 
+import 'dart:io';
+
 import 'package:file_selector/file_selector.dart';
 import 'package:lumit_flutter/l10n/strings.dart';
 
@@ -167,6 +169,30 @@ XTypeGroup _keymapGroup() =>
 /// Pick a keymap file to import, or null when the dialogue was cancelled.
 Future<String?> pickKeymapToOpen() async {
   final file = await openFile(acceptedTypeGroups: [_keymapGroup()]);
+  return file?.path;
+}
+
+/// After Effects' shortcut files, which are plain `.txt`.
+XTypeGroup _afterEffectsShortcutsGroup() => XTypeGroup(
+    label: l10n.fileTypeAfterEffectsShortcuts, extensions: const ['txt']);
+
+/// Where After Effects keeps its settings on this machine, or null when it
+/// isn't there. The shortcut files sit in an `aeks` folder under each version
+/// in here, which is not a place anyone finds by browsing.
+Future<String?> _afterEffectsSettingsFolder() async {
+  final env = Platform.environment;
+  final path = Platform.isWindows
+      ? '${env['APPDATA']}\\Adobe\\After Effects'
+      : '${env['HOME']}/Library/Preferences/Adobe/After Effects';
+  return await Directory(path).exists() ? path : null;
+}
+
+/// Pick an After Effects shortcut file to read, or null when cancelled.
+Future<String?> pickAfterEffectsShortcuts() async {
+  final file = await openFile(
+    acceptedTypeGroups: [_afterEffectsShortcutsGroup()],
+    initialDirectory: await _afterEffectsSettingsFolder(),
+  );
   return file?.path;
 }
 

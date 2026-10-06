@@ -307,6 +307,23 @@ class KeymapState extends ChangeNotifier {
     return null;
   }
 
+  Map<String, List<BridgeKeyBinding>> _byChord = const {};
+
+  /// Everything [chord] runs, in every context. The table shows one chord a
+  /// row, so the keyboard picture reads this to light a key for an action's
+  /// second chord too.
+  List<BridgeKeyBinding> bindingsFor(String chord) =>
+      _byChord[chord] ?? const [];
+
+  /// An empty search is every binding the engine holds.
+  void _indexChords() {
+    final byChord = <String, List<BridgeKeyBinding>>{};
+    for (final binding in keymapSearch(query: '')) {
+      (byChord[binding.chord] ??= []).add(binding);
+    }
+    _byChord = byChord;
+  }
+
   /// Re-read the table, the conflicts and the shadows from the engine.
   void refresh() {
     _groups = keymapGroups();
@@ -314,6 +331,7 @@ class KeymapState extends ChangeNotifier {
     _shadows = keymapShadows();
     _wheel = keymapWheel();
     _breakHandles = keymapBreakHandles();
+    _indexChords();
     notifyListeners();
   }
 
@@ -323,6 +341,7 @@ class KeymapState extends ChangeNotifier {
     _shadows = keymapShadows();
     _wheel = keymapWheel();
     _breakHandles = keymapBreakHandles();
+    _indexChords();
     _store();
     notifyListeners();
   }
@@ -368,6 +387,19 @@ class KeymapState extends ChangeNotifier {
       return null;
     } on AnyhowException catch (e) {
       return e.message;
+    }
+  }
+
+  /// Take the shortcuts from an After Effects shortcut file. Returns how many
+  /// actions took their keys from it, or null when the engine refused the
+  /// text and left the keymap alone.
+  Future<int?> importAfterEffects(String text) async {
+    try {
+      final result = await keymapImportAfterEffects(text: text);
+      _adopt(result.groups);
+      return result.actions;
+    } catch (_) {
+      return null;
     }
   }
 
