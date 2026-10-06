@@ -2356,6 +2356,22 @@
   "@fxClipNoLayer": {
     "description": "Effect controls: the clip picker on an Audio level node, shown while the Audio row above it names no layer, so there are no clips to offer."
   },
+  "flowchartAlone": "Not nested, and nothing is nested in it",
+  "@flowchartAlone": {
+    "description": "The flowchart popover (Tab): the sentence at its foot when the composition is not placed in any other composition and places none itself."
+  },
+  "flowchartContains": "Contains",
+  "@flowchartContains": {
+    "description": "The flowchart popover (Tab): the heading over the right-hand column, the compositions nested inside the one in the middle."
+  },
+  "flowchartOpens": "Enter opens the composition",
+  "@flowchartOpens": {
+    "description": "The flowchart popover (Tab): the sentence at its foot, saying what choosing a composition will do. Enter is the key."
+  },
+  "flowchartUsedIn": "Used in",
+  "@flowchartUsedIn": {
+    "description": "The flowchart popover (Tab): the heading over the left-hand column, the compositions that the one in the middle is nested inside."
+  },
   "fxConsoleAll": "All",
   "@fxConsoleAll": {
     "description": "The FX console popover’s category strip: the first entry, which shows every result rather than one category’s."
@@ -4160,6 +4176,10 @@
   "@keyOpenTheCommandPalette": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
+  "keyOpenTheFlowchart": "Open the flowchart",
+  "@keyOpenTheFlowchart": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
   "keyOpenTheFxConsole": "Open the FX console",
   "@keyOpenTheFxConsole": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
@@ -4843,6 +4863,10 @@
   "menuFlow": "Flow",
   "@menuFlow": {
     "description": "Menu item."
+  },
+  "menuFlowchart": "Flowchart",
+  "@menuFlowchart": {
+    "description": "The Composition menu row that opens the flowchart: a small picture of which compositions the open one is nested in and which are nested inside it."
   },
   "menuFreezeFrame": "Freeze frame at playhead",
   "@menuFreezeFrame": {

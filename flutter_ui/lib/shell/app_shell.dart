@@ -11,6 +11,7 @@ import 'package:lumit_flutter/panels/timeline_group_row_frb.dart';
 import 'package:lumit_flutter/shell/precompose_dialog_frb.dart';
 import 'package:lumit_flutter/shell/dock_widget.dart';
 import 'package:lumit_flutter/shell/first_run_frb.dart';
+import 'package:lumit_flutter/shell/flowchart_frb.dart';
 import 'package:lumit_flutter/shell/fx_console_frb.dart'
     show lastKnownPointerPosition;
 import 'package:lumit_flutter/shell/menu_bar_frb.dart';
@@ -628,6 +629,13 @@ class _LumitAppViewState extends State<LumitAppView> {
         // The menu bar owns the console's lists too, so the key asks for it
         // rather than assembling a second one.
         ui.requestConsole();
+      case 'comp.flowchart':
+        // Only with nothing focused, since a graph canvas holding the focus
+        // has a Tab of its own. Not on a held key either, which would reopen
+        // the chart Tab had just shut.
+        handled = event is KeyDownEvent &&
+            FocusManager.instance.primaryFocus is FocusScopeNode &&
+            openFlowchartFrb(context, ui);
       case 'palette.open':
         // The menu bar owns the palette's list of commands, so the key asks
         // for it rather than assembling a second one (docs/07 §12).

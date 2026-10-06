@@ -10662,6 +10662,33 @@ fn is_used_answers_for_a_placed_item_and_only_a_placed_one() {
     assert!(filed.is_used().expect("asked"), "hidden is still placed");
 }
 
+/// The flowchart's reading of a comp: what places it and what it places,
+/// by name, with a mark where the nesting carries on.
+#[test]
+fn get_flow_names_the_comps_either_side() {
+    let (project, ..) = project_with_folder();
+    let comp = |name: &str| project.new_composition(name.into(), None).expect("comp");
+    let (film, shot, plate, grain) = (comp("Film"), comp("Shot"), comp("Plate"), comp("Grain"));
+    film.add_precomp_layer(&shot, None).expect("nested");
+    shot.add_precomp_layer(&plate, None).expect("nested");
+    plate.add_precomp_layer(&grain, None).expect("nested");
+
+    let flow = shot.get_flow().expect("flow");
+    assert_eq!(flow.name, "Shot");
+    let read = |links: &[crate::api::composition::BridgeCompFlowLink]| {
+        links
+            .iter()
+            .map(|l| (l.comp.clone(), l.name.clone(), l.more))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(read(&flow.used_by), [(film.clone(), "Film".into(), false)]);
+    assert_eq!(read(&flow.uses), [(plate, "Plate".into(), true)]);
+
+    let top = film.get_flow().expect("flow");
+    assert!(top.used_by.is_empty(), "nothing places the film");
+    assert_eq!(read(&top.uses), [(shot, "Shot".into(), true)]);
+}
+
 /// The colour tag. Untagging leaves the document exactly as it was found, so
 /// tagging and untagging is not an edit that shows up in the file.
 #[test]

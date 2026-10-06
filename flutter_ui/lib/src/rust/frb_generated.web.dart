@@ -465,6 +465,12 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeCompEdge dco_decode_bridge_comp_edge(dynamic raw);
 
   @protected
+  BridgeCompFlow dco_decode_bridge_comp_flow(dynamic raw);
+
+  @protected
+  BridgeCompFlowLink dco_decode_bridge_comp_flow_link(dynamic raw);
+
+  @protected
   BridgeCompGraph dco_decode_bridge_comp_graph(dynamic raw);
 
   @protected
@@ -1044,6 +1050,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeCompEdge> dco_decode_list_bridge_comp_edge(dynamic raw);
+
+  @protected
+  List<BridgeCompFlowLink> dco_decode_list_bridge_comp_flow_link(dynamic raw);
 
   @protected
   List<BridgeCompNode> dco_decode_list_bridge_comp_node(dynamic raw);
@@ -1936,6 +1945,13 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeCompEdge sse_decode_bridge_comp_edge(SseDeserializer deserializer);
 
   @protected
+  BridgeCompFlow sse_decode_bridge_comp_flow(SseDeserializer deserializer);
+
+  @protected
+  BridgeCompFlowLink sse_decode_bridge_comp_flow_link(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeCompGraph sse_decode_bridge_comp_graph(SseDeserializer deserializer);
 
   @protected
@@ -2596,6 +2612,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeCompEdge> sse_decode_list_bridge_comp_edge(
+      SseDeserializer deserializer);
+
+  @protected
+  List<BridgeCompFlowLink> sse_decode_list_bridge_comp_flow_link(
       SseDeserializer deserializer);
 
   @protected
@@ -3597,6 +3617,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeCompEdge self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_comp_flow(
+      BridgeCompFlow self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_comp_flow_link(
+      BridgeCompFlowLink self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_comp_graph(
       BridgeCompGraph self, SseSerializer serializer);
 
@@ -4338,6 +4366,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_list_bridge_comp_edge(
       List<BridgeCompEdge> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_bridge_comp_flow_link(
+      List<BridgeCompFlowLink> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_bridge_comp_node(
