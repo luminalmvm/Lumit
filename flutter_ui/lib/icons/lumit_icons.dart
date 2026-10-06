@@ -351,6 +351,27 @@ abstract final class LumitIcons {
   static const String tick =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8l3 3 7-7"/></svg>';
 
+  // --- Text ---
+  static const String alignLeft =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 3.5h11M2.5 7.5h7M2.5 11.5h9"/></svg>';
+  static const String alignCentre =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 3.5h11M4.5 7.5h7M3.5 11.5h9"/></svg>';
+  static const String alignRight =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 3.5h11M6.5 7.5h7M4.5 11.5h9"/></svg>';
+  static const String fauxBold =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 3.5h4a2 2 0 0 1 0 4h-4zM4.5 7.5h4.5a2.5 2.5 0 0 1 0 5H4.5z"/></svg>';
+  static const String fauxItalic =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 3.5h4M4.5 12.5h4M9.5 3.5l-3 9"/></svg>';
+  static const String allCaps =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4.5h5M4.5 4.5v7M9 4.5h5M11.5 4.5v7"/></svg>';
+  /// A capital T beside a shorter one standing on the same baseline, which is what small capitals are.
+  static const String smallCaps =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4.5h5M4.5 4.5v7M9.5 7.5h4M11.5 7.5v4"/></svg>';
+  static const String superscript =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 5.5h6M5.5 5.5v7M11 4l1.5-1v4"/></svg>';
+  static const String subscript =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 3.5h6M5.5 3.5v7M11 10l1.5-1v4"/></svg>';
+
   /// Every glyph by its chrome word — the names tooltips and
   /// the Words setting use (docs/15-DESIGN.md §5.1).
   static const Map<String, String> byName = <String, String>{
@@ -499,5 +520,14 @@ abstract final class LumitIcons {
     'Manual': manual,
     'Workspace': workspace,
     'Tick': tick,
+    'Align left': alignLeft,
+    'Align centre': alignCentre,
+    'Align right': alignRight,
+    'Faux bold': fauxBold,
+    'Faux italic': fauxItalic,
+    'All caps': allCaps,
+    'Small caps': smallCaps,
+    'Superscript': superscript,
+    'Subscript': subscript,
   };
 }

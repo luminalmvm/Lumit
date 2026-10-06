@@ -22,7 +22,9 @@ import 'hierarchy_panel_frb.dart';
 import 'mixer_panel_frb.dart';
 import 'node_panel.dart';
 import 'project_panel_frb.dart';
+import 'paragraph_panel_frb.dart';
 import 'scopes_panel_frb.dart';
+import 'text_panel_frb.dart';
 import 'timeline_panel_frb.dart';
 import 'viewer_panel_frb.dart';
 
@@ -42,5 +44,7 @@ Widget buildPanelBodyFrb(BuildContext context, PaneId pane) => switch (pane.pane
       Panel.mixer => const MixerPanelFrb(),
       Panel.audio => const AudioPanelFrb(),
       Panel.audioTimeline => const AudioTimelinePanelFrb(),
+      Panel.text => const TextPanelFrb(),
+      Panel.paragraph => const ParagraphPanelFrb(),
       Panel.debug => const DebugPanel(),
     };

@@ -49,7 +49,14 @@ enum Panel {
   /// spectrogram on the lane and the clips laid along it. It stands where the
   /// Timeline stands in the Audio arrangement and keeps its own zoom, scroll
   /// and twirls, so the two tables can be open together.
-  audioTimeline;
+  audioTimeline,
+
+  /// The font, size, spacing and outline of a text layer's letters, or of the
+  /// next text the Type tool makes when no text layer is selected.
+  text,
+
+  /// Which side a text layer's lines line up on, and the room round them.
+  paragraph;
 
   String get title => switch (this) {
         Panel.project => l10n.panelProject,
@@ -65,6 +72,8 @@ enum Panel {
         Panel.mixer => l10n.panelMixer,
         Panel.audio => l10n.panelAudio,
         Panel.audioTimeline => l10n.panelAudioTimeline,
+        Panel.text => l10n.panelText,
+        Panel.paragraph => l10n.panelParagraph,
         Panel.debug => l10n.panelDebug
       };
 }
@@ -220,7 +229,7 @@ class DockSplit extends DockNode {
 /// 0.68, Timeline 0.32 across the full width); the upper band horizontal
 /// (left tab group 0.22, Viewer 0.58, right tab group 0.20). The left group
 /// tabs Project (fronted) and Effect controls; the right group tabs
-/// Effects & presets (fronted) and Scopes — the spec's right-hand
+/// Effects & presets (fronted), Scopes, Text and Paragraph — the spec's right-hand
 /// Effects & presets column, which this layout used to bury as a left tab
 /// behind Project while fronting Debug on the right. Viewer and Timeline sit
 /// alone and render bare.
@@ -248,6 +257,8 @@ DockSplit defaultLayout() => DockSplit(
             DockTabs([
               DockPane(Panel.effectsAndPresets),
               DockPane(Panel.scopes),
+              DockPane(Panel.text),
+              DockPane(Panel.paragraph),
             ]),
           ],
           [0.22, 0.58, 0.20],

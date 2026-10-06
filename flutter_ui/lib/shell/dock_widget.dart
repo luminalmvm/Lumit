@@ -67,6 +67,9 @@ double panelMinWidth(Panel panel) => switch (panel) {
       // chip and the 10 trailing inset. That comes to 278, and the board draws
       // the column at 300.
       Panel.audioTimeline => 300,
+      // A label and a value well side by side, which is every row they have.
+      Panel.text => 220,
+      Panel.paragraph => 220,
       Panel.debug => 180,
     };
 

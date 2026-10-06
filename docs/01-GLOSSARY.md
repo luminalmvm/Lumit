@@ -114,6 +114,8 @@ Not interchangeable.
 | **Playhead** | The current time. Not *CTI* |
 | **Scopes** | Waveform, vectorscope, histogram |
 | **Easing panel** | One curve shape applied to selected keyframe spans |
+| **Text panel** | Sets a text layer's font, size, spacing and outline |
+| **Paragraph panel** | Sets how a text layer's lines are aligned and spaced |
 
 ## 8. Extensibility
 

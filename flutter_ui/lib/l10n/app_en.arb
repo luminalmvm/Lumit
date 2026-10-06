@@ -13482,5 +13482,154 @@
         "type": "String"
       }
     }
+  },
+  "panelText": "Text",
+  "@panelText": {
+    "description": "The name of the panel that sets a text layer's font, size, spacing and outline. A panel name, so a noun."
+  },
+  "panelParagraph": "Paragraph",
+  "@panelParagraph": {
+    "description": "The name of the panel that sets how a text layer's lines are aligned and spaced. A panel name, so a noun."
+  },
+  "textNewText": "New text",
+  "@textNewText": {
+    "description": "Text and Paragraph panels: heading shown when no text layer is selected, so the settings apply to the next text the Type tool makes."
+  },
+  "textFont": "Font",
+  "@textFont": {
+    "description": "Text panel: label beside the font family picker."
+  },
+  "textFontBuiltIn": "Inter (built in)",
+  "@textFontBuiltIn": {
+    "description": "Text panel: the font picker's first entry, the font Lumit carries itself. Inter is the font's name and is not translated."
+  },
+  "textFontMissing": "{family} (not installed)",
+  "@textFontMissing": {
+    "description": "Text panel: the font picker's face when the layer names a font this computer does not have. The layer draws in the built-in font until it is installed.",
+    "placeholders": {
+      "family": {
+        "type": "String"
+      }
+    }
+  },
+  "textFontSearch": "Search fonts",
+  "@textFontSearch": {
+    "description": "Text panel: placeholder in the search box above the list of installed fonts."
+  },
+  "textFace": "Style",
+  "@textFace": {
+    "description": "Text panel: label beside the picker for the face inside a font family, such as Regular, Bold or Italic."
+  },
+  "textFaceRegular": "Regular",
+  "@textFaceRegular": {
+    "description": "Text panel: the face picker's reading when the layer names no face, which draws the family's regular one."
+  },
+  "textLeading": "Leading",
+  "@textLeading": {
+    "description": "Text panel: label beside the distance from one baseline to the next, in pixels. The typesetting term."
+  },
+  "textLeadingAuto": "Auto leading",
+  "@textLeadingAuto": {
+    "description": "Text panel: tick box that lets the leading follow the size, at 120 per cent of it."
+  },
+  "textKerning": "Kerning",
+  "@textKerning": {
+    "description": "Text panel: label beside the picker for whether pairs of letters are pulled together. The typesetting term."
+  },
+  "textKerningMetrics": "Metrics",
+  "@textKerningMetrics": {
+    "description": "Text panel: kerning choice that uses the spacing pairs the font itself carries. After Effects uses the same word."
+  },
+  "textTracking": "Tracking",
+  "@textTracking": {
+    "description": "Text panel: label beside the extra space after every letter, in thousandths of the size. The typesetting term for letter spacing, nothing to do with following motion."
+  },
+  "textStrokeWidth": "Width",
+  "@textStrokeWidth": {
+    "description": "Text panel: label beside how wide the outline round the letters is, in pixels."
+  },
+  "textStrokeOver": "Stroke over fill",
+  "@textStrokeOver": {
+    "description": "Text panel: tick box. On draws the outline on top of the letters, off puts the letters on top of it."
+  },
+  "textScaleY": "Vertical scale",
+  "@textScaleY": {
+    "description": "Text panel: label beside how far the letters are stretched upwards, in per cent."
+  },
+  "textScaleX": "Horizontal scale",
+  "@textScaleX": {
+    "description": "Text panel: label beside how far the letters are stretched sideways, in per cent."
+  },
+  "textBaselineShift": "Baseline shift",
+  "@textBaselineShift": {
+    "description": "Text panel: label beside how far the letters are lifted off the line they stand on, in pixels."
+  },
+  "textLigatures": "Ligatures",
+  "@textLigatures": {
+    "description": "Text panel: tick box for joining letter pairs such as fi into the font's own combined shape."
+  },
+  "textMore": "More",
+  "@textMore": {
+    "description": "Text panel: button that reveals the less used controls below the main ones."
+  },
+  "textLess": "Less",
+  "@textLess": {
+    "description": "Text panel: button that hides the less used controls again."
+  },
+  "tipTextFauxBold": "Faux bold",
+  "@tipTextFauxBold": {
+    "description": "Tooltip on the Text panel button that thickens the letters of a font with no bold of its own."
+  },
+  "tipTextFauxItalic": "Faux italic",
+  "@tipTextFauxItalic": {
+    "description": "Tooltip on the Text panel button that slants the letters of a font with no italic of its own."
+  },
+  "tipTextAllCaps": "All caps",
+  "@tipTextAllCaps": {
+    "description": "Tooltip on the Text panel button that sets every letter as a capital."
+  },
+  "tipTextSmallCaps": "Small caps",
+  "@tipTextSmallCaps": {
+    "description": "Tooltip on the Text panel button that sets lower-case letters as small capitals."
+  },
+  "tipTextSuperscript": "Superscript",
+  "@tipTextSuperscript": {
+    "description": "Tooltip on the Text panel button that sets the letters small and raised."
+  },
+  "tipTextSubscript": "Subscript",
+  "@tipTextSubscript": {
+    "description": "Tooltip on the Text panel button that sets the letters small and lowered."
+  },
+  "tipParagraphAlignLeft": "Align left",
+  "@tipParagraphAlignLeft": {
+    "description": "Tooltip on the Paragraph panel button that lines the text up on its left side."
+  },
+  "tipParagraphAlignCentre": "Align centre",
+  "@tipParagraphAlignCentre": {
+    "description": "Tooltip on the Paragraph panel button that centres every line of the text."
+  },
+  "tipParagraphAlignRight": "Align right",
+  "@tipParagraphAlignRight": {
+    "description": "Tooltip on the Paragraph panel button that lines the text up on its right side."
+  },
+  "paragraphIndentLeft": "Indent left",
+  "@paragraphIndentLeft": {
+    "description": "Paragraph panel: label beside how far the lines are moved in from the left, in pixels."
+  },
+  "paragraphIndentRight": "Indent right",
+  "@paragraphIndentRight": {
+    "description": "Paragraph panel: label beside how far the lines are moved in from the right, in pixels."
+  },
+  "paragraphIndentFirst": "Indent first line",
+  "@paragraphIndentFirst": {
+    "description": "Paragraph panel: label beside the extra indent given to the first line of each paragraph, in pixels."
+  },
+  "paragraphSpaceBefore": "Space before",
+  "@paragraphSpaceBefore": {
+    "description": "Paragraph panel: label beside the room added above each paragraph, in pixels."
+  },
+  "paragraphSpaceAfter": "Space after",
+  "@paragraphSpaceAfter": {
+    "description": "Paragraph panel: label beside the room added below each paragraph, in pixels."
   }
 }

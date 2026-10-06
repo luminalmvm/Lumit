@@ -31,12 +31,12 @@ void main() {
 
     expect((upper.children[1] as DockPane).panel, Panel.viewer);
     // The right column carries Effects & presets fronted (docs/07 §1.6's
-    // Edit workspace), with Scopes tabbed behind it. Debug is in no shipped
-    // arrangement.
+    // Edit workspace), with Scopes, Text and Paragraph tabbed behind it.
+    // Debug is in no shipped arrangement.
     final right = upper.children[2] as DockTabs;
     expect(
       [for (final c in right.children) c.panel],
-      [Panel.effectsAndPresets, Panel.scopes],
+      [Panel.effectsAndPresets, Panel.scopes, Panel.text, Panel.paragraph],
     );
     expect(right.active, 0,
         reason: 'the right group opens on Effects & presets');
