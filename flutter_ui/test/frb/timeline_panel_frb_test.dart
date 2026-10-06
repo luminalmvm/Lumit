@@ -41,6 +41,7 @@ import 'package:lumit_flutter/state/tools.dart';
 import 'package:lumit_flutter/src/rust/api/assets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
+import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:lumit_flutter/src/rust/api/graph.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/state.dart';
@@ -114,6 +115,48 @@ void main() {
       expect(laneWidth(), greaterThan(fitted * 1.5),
           reason: 'half the comp across the same panel is about twice the '
               'pixels per frame');
+    });
+
+    /// Dragging the window pans and nothing else. Each pointer move used to
+    /// zoom out a little, so the window crept wider for as long as it was
+    /// dragged.
+    testWidgets('dragging the navigator window pans without zooming',
+        (tester) async {
+      final p = withComp();
+      p.comp.addSolidLayer();
+      p.uiState.model.refresh();
+      await mount(tester, p);
+
+      double laneWidth() =>
+          tester.widget<TimelineRuler>(find.byType(TimelineRuler)).axis.width;
+
+      final box = tester.getRect(find.byKey(const ValueKey('tl-navigator')));
+      // Zoom in to about a third of the comp first, so there is room to pan.
+      await tester.dragFrom(
+        Offset(box.right - TimelineNavigator.handleGrab / 2, box.center.dy),
+        Offset(-box.width * 2 / 3, 0),
+      );
+      await tester.pumpAndSettle();
+      final zoomed = laneWidth();
+
+      // Take hold of the window's middle and drag it along in small steps,
+      // the way a mouse reports a drag, then back.
+      final gesture = await tester.startGesture(
+          Offset(box.left + box.width / 6, box.center.dy),
+          kind: PointerDeviceKind.mouse);
+      for (var i = 0; i < 80; i++) {
+        await gesture.moveBy(const Offset(3, 0));
+        await tester.pump();
+      }
+      for (var i = 0; i < 80; i++) {
+        await gesture.moveBy(const Offset(-3, 0));
+        await tester.pump();
+      }
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      expect(laneWidth(), closeTo(zoomed, 0.01),
+          reason: 'a pan is not a zoom, however many moves it is made of');
     });
 
     /// The Razor tool. Clicking a bar cuts that layer **where the
@@ -4415,6 +4458,29 @@ void main() {
         barBounds(startOffsetFrame: 10, sourceFrames: null, retimed: false),
         BarBounds.free,
         reason: 'a generated layer — or media that would not read — is free',
+      );
+    });
+
+    /// A still has one frame and no length. Its tail used to stop on that one
+    /// frame, so the only way to make an image last was Stretch.
+    test('a still has no source length, so its ends are free', () {
+      BridgeMediaInfo media({required bool isStill}) => BridgeMediaInfo(
+            width: 2,
+            height: 2,
+            fpsNum: 25,
+            fpsDen: 1,
+            duration: const BridgeRational(num: 2, den: 1),
+            videoCodec: 'png',
+            channels: 0,
+            sampleRate: 0,
+            isStill: isStill,
+          );
+      expect(footageSourceFrames(media(isStill: false), 30, 1), 60);
+      final still = footageSourceFrames(media(isStill: true), 30, 1);
+      expect(still, isNull);
+      expect(
+        barBounds(startOffsetFrame: 0, sourceFrames: still, retimed: false),
+        BarBounds.free,
       );
     });
 

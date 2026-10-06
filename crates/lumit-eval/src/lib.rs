@@ -1396,6 +1396,62 @@ fn feed_layer(
                 }
             }
         }
+        // An adjustment layer and a Precomp have no source frames to stamp.
+        // Their neighbours are their own picture built again a frame away
+        // (`lumit-render`'s `rebuild_offsets`), so that picture is named:
+        // the layers below at the neighbour time, or the nested comp's frame
+        // there. Two times that share this frame and not the one before it
+        // are then two names.
+        let comp_dt = 1.0 / comp.frame_rate.fps().max(1.0);
+        let window = || {
+            lumit_core::fx::stack_temporal_window(&layer.effects, layer.switches.fx, lt / comp_dt)
+                .into_iter()
+                .filter(|&o| o != 0)
+        };
+        if layer.is_adjustment() {
+            h.update(b"temporal-below/");
+            let any_solo = lumit_core::model::any_picture_solo(comp);
+            let below = comp.layers.iter().skip_while(|l| l.id != layer.id).skip(1);
+            for o in window() {
+                let tau = t + f64::from(o) * comp_dt;
+                h.update(&o.to_le_bytes());
+                // The gates `feed_comp` puts in front of a layer, at `tau`.
+                for l in below.clone().filter(|l| {
+                    !l.audio_only
+                        && l.switches.visible
+                        && !l.graph.out_unwired
+                        && tau >= l.in_point.0.to_f64()
+                        && tau < l.out_point.0.to_f64()
+                        && !(any_solo && !l.switches.solo)
+                        && !matches!(l.kind, LayerKind::Camera { .. })
+                }) {
+                    let llt = lumit_core::time::layer_time(tau, l.start_offset.0);
+                    feed_layer(h, doc, comp, l, tau, llt, quality, stamper, visited)?;
+                }
+            }
+        } else if let LayerKind::Precomp { comp: nested_id } = &layer.kind {
+            if let Some(nested) = doc
+                .comp(*nested_id)
+                .filter(|_| !visited.contains(nested_id))
+            {
+                h.update(b"temporal-nested/");
+                for o in window() {
+                    let nt = lumit_core::model::nested_source_time(
+                        layer,
+                        nested,
+                        lumit_core::time::layer_time(
+                            t + f64::from(o) * comp_dt,
+                            layer.start_offset.0,
+                        ),
+                    );
+                    visited.push(*nested_id);
+                    let r = comp_key_visited(doc, nested, nt, quality, stamper, visited);
+                    visited.pop();
+                    h.update(&o.to_le_bytes());
+                    h.update(&r?.0.to_le_bytes());
+                }
+            }
+        }
     }
 
     // Paint: strokes are stamped into the layer's own pixels before its masks
@@ -5159,6 +5215,55 @@ mod tests {
             key(&doc, &held, 6.0),
             "two layer times on one source time are one frame"
         );
+    }
+
+    /// **A temporal effect on a Precomp or an adjustment layer names its
+    /// neighbours.** Neither has source frames to stamp, so the picture a
+    /// frame away is named instead: without it, two times that show one
+    /// picture now and different ones next would share a name, and the cache
+    /// would hand one frame's blur to the other.
+    #[test]
+    fn a_temporal_effect_on_a_precomp_or_an_adjustment_keys_its_neighbours() {
+        let mut doc = Document::new();
+        // Still for five seconds and moving after: 4 s and 5 s show the same
+        // picture, and only at 5 s is the next frame a different one.
+        let key_at = |time: i64, value: f64| Keyframe {
+            time: Rational::new(time, 1).unwrap(),
+            value,
+            interp_in: SideInterp::Linear,
+            interp_out: SideInterp::Linear,
+        };
+        let mut mover = text_layer("inner", 0.0, 10.0, 0.0);
+        mover.transform.position_x = Property {
+            animation: Animation::Keyframed(vec![
+                key_at(0, 0.0),
+                key_at(5, 0.0),
+                key_at(10, 1000.0),
+            ]),
+            extra: serde_json::Map::new(),
+        };
+        let blur = || lumit_core::fx::instantiate("motion_blur").unwrap();
+
+        let nested = comp_with(vec![mover.clone()]);
+        let mut pre = precomp_layer(nested.id);
+        pre.effects.push(blur());
+        doc.items.push(ProjectItem::Composition(nested));
+        let mut adjust = text_layer("", 0.0, 10.0, 0.0);
+        adjust.kind = LayerKind::Adjustment;
+        adjust.effects.push(blur());
+
+        for comp in [comp_with(vec![pre]), comp_with(vec![adjust, mover])] {
+            assert_ne!(
+                key(&doc, &comp, 4.0),
+                key(&doc, &comp, 5.0),
+                "one picture now, another next: two names"
+            );
+            assert_eq!(
+                key(&doc, &comp, 3.0),
+                key(&doc, &comp, 4.0),
+                "and a still stretch keeps one name"
+            );
+        }
     }
 
     /// **A placed graph's Input value renames the parent frame** (§5.3), and a

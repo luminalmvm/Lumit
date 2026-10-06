@@ -8149,6 +8149,47 @@ fn video_is_wrapped_and_a_still_is_not() {
     }
 }
 
+/// A still lands as long as the comp. It used to land one frame long, which
+/// drew a bar too thin to take hold of.
+///
+/// Needs an ffmpeg on PATH for the fixture; skips itself without one.
+#[test]
+#[cfg(feature = "media")]
+fn a_still_lands_as_long_as_the_comp() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let Some(clip) = lumit_media::index::tests_support::fixture(dir.path()) else {
+        return; // no ffmpeg on this machine
+    };
+    let Some(bin) = lumit_media::index::tests_support::ffmpeg_bin() else {
+        return;
+    };
+    let still = dir.path().join("still.png");
+    let made = std::process::Command::new(bin)
+        .args(["-v", "error", "-y", "-i"])
+        .arg(&clip)
+        .args(["-frames:v", "1"])
+        .arg(&still)
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+    if !made {
+        return;
+    }
+
+    let project = LumitBridgeState::new_project(None).expect("a new project");
+    let comp = project.new_composition("Scene".into(), None).expect("comp");
+    let image = project
+        .import_footage(still.to_string_lossy().into_owned())
+        .expect("imported");
+    comp.add_footage_layer(&image, false, None).expect("placed");
+
+    let info = comp.get_layers().expect("layers")[0]
+        .get_info()
+        .expect("info");
+    assert_eq!(info.in_frame, 0);
+    assert_eq!(info.out_frame, comp.duration_frames().expect("frames"));
+}
+
 /// Placing footage answers with the media's own size and length whether the
 /// probe worker got there first or not — the two halves of `crate::probe`,
 /// checked through the op that actually needs them.

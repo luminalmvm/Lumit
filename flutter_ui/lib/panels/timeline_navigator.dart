@@ -47,18 +47,23 @@ import 'timeline_extras_frb.dart' show TimelineAxis;
 ///
 /// [pad] is the axis's own padding at each end of the content, which the frames
 /// do not occupy ([TimelineAxis.pad]).
+///
+/// [clamp] false gives the raw view, padding and all: what a pan has to move,
+/// since the window drawn on the strip is cut short at either end of the comp.
 ({double start, double end}) navigatorWindow({
   required double offset,
   required double viewport,
   required double content,
   required int frames,
   double pad = TimelineAxis.pad,
+  bool clamp = true,
 }) {
   final span = content - pad * 2;
   if (frames <= 0 || span <= 0) return (start: 0, end: frames.toDouble());
   final perFrame = span / frames;
   final start = (offset - pad) / perFrame;
   final end = (offset + viewport - pad) / perFrame;
+  if (!clamp) return (start: start, end: end);
   // Fit-to-panel shows the whole comp and a little of the padding either side,
   // so the raw numbers run slightly outside it. The window is a statement about
   // the composition and cannot leave it.
@@ -83,6 +88,11 @@ import 'timeline_extras_frb.dart' show TimelineAxis;
 /// instead would mean the window jumping the moment it was grabbed anywhere but
 /// exactly its middle. A press on the bare track has no such frame to keep, so
 /// the caller passes half the span and the window arrives centred.
+///
+/// A pan is given the raw view ([navigatorWindow] with `clamp: false`) and
+/// [overhang], the axis padding in frames, so it can travel into the padding
+/// at either end the way the scrollbar does. Its span is passed back untouched:
+/// a pan is not a zoom.
 ({double start, double span}) navigatorDrag({
   required NavigatorGrab grab,
   required double frame,
@@ -91,25 +101,40 @@ import 'timeline_extras_frb.dart' show TimelineAxis;
   required int frames,
   double hold = 0,
   double minSpan = 1,
+  double overhang = 0,
 }) {
   final total = frames.toDouble();
-  final span = (end - start).clamp(minSpan, total);
-  return switch (grab) {
+  switch (grab) {
     // The window travels; its width is the drag's to leave alone.
-    NavigatorGrab.body => (
-        start: (frame - hold).clamp(0.0, (total - span).clamp(0.0, total)),
-        span: span,
-      ),
+    case NavigatorGrab.body:
+      final span = end - start < minSpan ? minSpan : end - start;
+      final lo = -overhang;
+      final hi = total - span + overhang;
+      return (start: (frame - hold).clamp(lo, hi < lo ? lo : hi), span: span);
     // The far end stays where it is, so what the eye was on does not move.
-    NavigatorGrab.start => () {
-        final s = frame.clamp(0.0, end - minSpan);
-        return (start: s, span: end - s);
-      }(),
-    NavigatorGrab.end => () {
-        final e = frame.clamp(start + minSpan, total);
-        return (start: start, span: e - start);
-      }(),
-  };
+    case NavigatorGrab.start:
+      final s = frame.clamp(0.0, end - minSpan);
+      return (start: s, span: end - s);
+    case NavigatorGrab.end:
+      final e = frame.clamp(start + minSpan, total);
+      return (start: start, span: e - start);
+  }
+}
+
+/// The magnification that shows [span] frames across a [viewport] of lanes.
+///
+/// Not `frames / span`: the content is `viewport * zoom` wide but the frames
+/// fill only that less the axis padding at each end, so `frames / span` shows a
+/// little more than was asked. A window of the whole comp or more is
+/// fit-to-panel.
+double navigatorZoom({
+  required double span,
+  required int frames,
+  required double viewport,
+  double pad = TimelineAxis.pad,
+}) {
+  if (span <= 0 || viewport <= 0 || span >= frames) return 1;
+  return (viewport * frames / span + pad * 2) / viewport;
 }
 
 /// Which part of the window a press landed on.
@@ -162,7 +187,11 @@ class TimelineNavigator extends StatefulWidget {
   /// The window a gesture is asking for, in frames. The panel turns it into a
   /// magnification and an anchored offset: what the view *is* belongs to the
   /// panel that owns the zoom, not to the strip that draws it.
-  final void Function(double start, double span) onWindow;
+  ///
+  /// [pan] says the window is only moving: the panel scrolls and leaves the
+  /// zoom alone, rather than working a zoom back out of a span that already is
+  /// the one on screen.
+  final void Function(double start, double span, {required bool pan}) onWindow;
 
   /// The gesture ended — the panel's cue to let go of the zoom anchor it held
   /// for the length of it.
@@ -189,7 +218,15 @@ class _TimelineNavigatorState extends State<TimelineNavigator> {
   /// that lights.
   NavigatorGrab? _hover;
 
-  ({double start, double end}) get _window {
+  ({double start, double end}) get _window => _view().window;
+
+  /// The window as drawn, and the raw view a pan moves along with the axis
+  /// padding in frames ([navigatorDrag]'s `overhang`).
+  ({
+    ({double start, double end}) window,
+    ({double start, double end}) raw,
+    double overhang,
+  }) _view() {
     // Three ways there is nothing yet to describe, and all three are ordinary.
     // **No client, or two**: the lanes are mid-rebuild, and the controller is
     // briefly attached to the outgoing view and the incoming one at once —
@@ -204,13 +241,24 @@ class _TimelineNavigatorState extends State<TimelineNavigator> {
     if (position == null ||
         !position.hasViewportDimension ||
         !position.hasContentDimensions) {
-      return (start: 0, end: widget.frames.toDouble());
+      final whole = (start: 0.0, end: widget.frames.toDouble());
+      return (window: whole, raw: whole, overhang: 0.0);
     }
-    return navigatorWindow(
-      offset: position.pixels,
-      viewport: position.viewportDimension,
-      content: position.viewportDimension + position.maxScrollExtent,
-      frames: widget.frames,
+    final content = position.viewportDimension + position.maxScrollExtent;
+    ({double start, double end}) at({required bool clamp}) => navigatorWindow(
+          offset: position.pixels,
+          viewport: position.viewportDimension,
+          content: content,
+          frames: widget.frames,
+          clamp: clamp,
+        );
+    final span = content - TimelineAxis.pad * 2;
+    return (
+      window: at(clamp: true),
+      raw: at(clamp: false),
+      overhang: widget.frames > 0 && span > 0
+          ? TimelineAxis.pad * widget.frames / span
+          : 0.0,
     );
   }
 
@@ -233,19 +281,23 @@ class _TimelineNavigatorState extends State<TimelineNavigator> {
   /// the bare track brings the window there, which is the same gesture
   /// continued as a drag.
   void _press(double x, TimelineAxis axis) {
-    final window = _window;
+    final view = _view();
+    final window = view.window;
     final frame = axis.frameAtExact(x);
     final grab = _grabAt(x, axis);
     final inside = frame >= window.start && frame <= window.end;
+    // Measured against the raw view, which is what a pan moves.
     _hold = grab == NavigatorGrab.body && inside
-        ? frame - window.start
-        : (window.end - window.start) / 2;
+        ? frame - view.raw.start
+        : (view.raw.end - view.raw.start) / 2;
     setState(() => _grab = grab);
     _ask(grab, x, axis);
   }
 
   void _ask(NavigatorGrab grab, double x, TimelineAxis axis) {
-    final window = _window;
+    final view = _view();
+    final pan = grab == NavigatorGrab.body;
+    final window = pan ? view.raw : view.window;
     final asked = navigatorDrag(
       grab: grab,
       frame: axis.frameAtExact(x),
@@ -253,8 +305,9 @@ class _TimelineNavigatorState extends State<TimelineNavigator> {
       end: window.end,
       frames: widget.frames,
       hold: _hold,
+      overhang: view.overhang,
     );
-    widget.onWindow(asked.start, asked.span);
+    widget.onWindow(asked.start, asked.span, pan: pan);
   }
 
   MouseCursor get _cursor => switch (_grab ?? _hover) {

@@ -878,6 +878,10 @@ pub fn build_comp_draws_at(
     spliced: bool,
 ) -> Vec<CompLayerDraw> {
     use lumit_core::model::LayerKind;
+    // A rebuild at another moment draws each clip as it is at that moment,
+    // where the planner fetched it.
+    let at_moment = pixels_at_moment(comp, t_comp, frame_t, pixels_by_layer);
+    let pixels_by_layer = at_moment.as_ref().unwrap_or(pixels_by_layer);
     let in_span = |l: &lumit_core::model::Layer| {
         t_comp >= l.in_point.0.to_f64() && t_comp < l.out_point.0.to_f64()
     };
@@ -2420,45 +2424,51 @@ pub fn build_comp_draws_at(
                     ),
                 };
                 // The nested picture again at each neighbour time (docs/08
-                // §3.2), for a Motion blur or Datamosh on the
-                // Precomp layer itself: a comp has no decoded frames for the
-                // worker to measure between, but it can be built again at
+                // §3.2), for a temporal effect on the Precomp layer itself:
+                // a comp has no decoded frames for the worker to hand over or
+                // measure between, but it can be built again at
                 // another moment. The offset steps by the *parent* comp's
                 // frame, because that is the shutter the effect smears over.
                 // No frame keyer and the temporal inputs stripped, exactly as
-                // `below_draws_at` does and for the same reason: with the
-                // decode held, this is not the picture that name would claim.
+                // `below_draws_at` does and for the same reason: a neighbour
+                // carries no neighbours of its own, so this is not the
+                // picture that name would claim. Footage inside is drawn at
+                // the neighbour's own moment (`pixels_at_moment`).
                 // Empty unless one of those effects is live.
                 let dt = 1.0 / comp.frame_rate.fps().max(1.0);
-                flow_below =
-                    lumit_core::fx::stack_flow_neighbours(&layer.effects, layer.switches.fx)
-                        .into_iter()
-                        .map(|offset| {
-                            // The neighbour's own layer time, then the Retime
-                            // map (§5.6): a retimed Precomp measures its
-                            // motion between the moments it actually shows.
-                            let nt = lumit_core::model::nested_source_time(
-                                layer,
-                                nested,
-                                lumit_core::time::layer_time(
-                                    t_comp + f64::from(offset) * dt,
-                                    layer.start_offset.0,
-                                ),
-                            );
-                            let mut inner = build_comp_draws_at(
-                                doc,
-                                nested,
-                                nt,
-                                frame_st,
-                                pixels_by_layer,
-                                visited,
-                                None,
-                                false,
-                            );
-                            strip_temporal_inputs(&mut inner);
-                            (offset, inner, crate::track::camera_pose(doc, nested, nt))
-                        })
-                        .collect();
+                flow_below = crate::plan::rebuild_offsets(layer, lt, dt)
+                    .into_iter()
+                    .map(|(offset, measure)| {
+                        // The neighbour's own layer time, then the Retime
+                        // map (§5.6): a retimed Precomp measures its
+                        // motion between the moments it actually shows.
+                        let nt = lumit_core::model::nested_source_time(
+                            layer,
+                            nested,
+                            lumit_core::time::layer_time(
+                                t_comp + f64::from(offset) * dt,
+                                layer.start_offset.0,
+                            ),
+                        );
+                        let mut inner = build_comp_draws_at(
+                            doc,
+                            nested,
+                            nt,
+                            frame_st,
+                            pixels_by_layer,
+                            visited,
+                            None,
+                            false,
+                        );
+                        strip_temporal_inputs(&mut inner);
+                        (
+                            offset,
+                            inner,
+                            crate::track::camera_pose(doc, nested, nt),
+                            measure,
+                        )
+                    })
+                    .collect();
                 visited.pop();
                 (
                     DrawSource::Nested {
@@ -2671,8 +2681,9 @@ pub fn build_comp_draws_at(
                     lights: Vec::new(),
                     temporal_below,
                     accumulation_below,
-                    // The composite this layer's Motion blur or Datamosh
-                    // measures its motion against (docs/08 §3.2): the
+                    // The composite this layer's temporal effects read as
+                    // their neighbours, and Motion blur or Datamosh measure
+                    // their motion against (docs/08 §3.2): the
                     // below-stack again at each neighbour time. Empty unless
                     // one of those effects is live, which is the whole cost
                     // gate — nothing else on an adjustment layer builds it.
@@ -4043,9 +4054,8 @@ fn own_shutter_average(
     })
 }
 
-/// The neighbour below-stacks a flow-consuming effect on an **adjustment**
-/// layer measures its motion against (docs/08 §3.2), or None when the
-/// layer carries no such effect.
+/// The neighbour below-stacks a temporal effect on an **adjustment** layer
+/// reads (docs/08 §3.2), empty when the layer carries no such effect.
 ///
 /// An adjustment layer's picture is the composite of everything below it, which
 /// the decode worker never sees — so Motion blur and Datamosh on one were
@@ -4058,7 +4068,8 @@ fn own_shutter_average(
 ///
 /// One entry per offset the stack asked for, in ascending order — Fast motion
 /// blur's `+1` and Datamosh's `-1` are different measurements, and each consumer
-/// gets its own.
+/// gets its own. An Echo or a plugin that only reads the neighbour picture
+/// gets its entry with no measurement asked for.
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn adjustment_flow_below(
     doc: &Arc<lumit_core::model::Document>,
@@ -4073,15 +4084,16 @@ fn adjustment_flow_below(
     i32,
     Vec<CompLayerDraw>,
     Option<lumit_core::model::CameraPose>,
+    bool,
 )> {
-    let offsets = lumit_core::fx::stack_flow_neighbours(&layer.effects, layer.switches.fx);
     // The comp's own frame interval: the shutter this effect smears over is a
     // frame of the render, not a frame of some source nobody here has.
     let dt = 1.0 / comp.frame_rate.fps().max(1.0);
+    let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
     let below = &comp.layers[idx + 1..];
-    offsets
-        .iter()
-        .map(|&offset| {
+    crate::plan::rebuild_offsets(layer, lt, dt)
+        .into_iter()
+        .map(|(offset, measure)| {
             let (draws, camera) = below_draws_at(
                 doc,
                 comp,
@@ -4092,9 +4104,45 @@ fn adjustment_flow_below(
                 pixels_by_layer,
                 visited,
             );
-            (offset, draws, camera)
+            (offset, draws, camera, measure)
         })
         .collect()
+}
+
+/// The decoded pixels a rebuild of `comp` at `t_comp` draws from, when that
+/// is another moment than the frame's own `frame_t`: each clip the planner
+/// fetched at that moment ([`CompLayerPixels::shutter`]) stands in for its
+/// frame-time picture. `None` on an ordinary build, and when no clip here has
+/// the moment, so the caller's map is used as it is and nothing is copied.
+///
+/// A clip with no picture for the moment (a Sequence clip, a dropped decode)
+/// keeps its frame-time pixels, which is what every rebuild used to draw.
+fn pixels_at_moment<'a>(
+    comp: &lumit_core::model::Composition,
+    t_comp: f64,
+    frame_t: f64,
+    pixels_by_layer: &std::collections::HashMap<uuid::Uuid, &'a CompLayerPixels>,
+) -> Option<std::collections::HashMap<uuid::Uuid, &'a CompLayerPixels>> {
+    if t_comp.to_bits() == frame_t.to_bits() {
+        return None;
+    }
+    let dt = 1.0 / comp.frame_rate.fps().max(1.0);
+    let offset = crate::plan::moment_offset(t_comp, frame_t, dt);
+    let mut out = None;
+    for layer in &comp.layers {
+        let Some(lp) = pixels_by_layer.get(&layer.id).copied() else {
+            continue;
+        };
+        if let Some((_, moment)) = lp
+            .shutter
+            .iter()
+            .find(|(o, _)| o.to_bits() == offset.to_bits())
+        {
+            out.get_or_insert_with(|| pixels_by_layer.clone())
+                .insert(layer.id, &**moment);
+        }
+    }
+    out
 }
 
 /// Drop the neighbour frames and flow field a temporal effect reads, recursing
@@ -5494,7 +5542,7 @@ mod render_below_at_tests {
                 .expect("the adjustment emits a staging draw")
                 .flow_below
                 .iter()
-                .map(|(o, _, _)| *o)
+                .map(|(o, ..)| *o)
                 .collect()
         };
         assert_eq!(
@@ -5575,10 +5623,20 @@ mod render_below_at_tests {
         }
 
         fn render(&self, doc: &Document, comp: &Composition, t: f64) -> Vec<u8> {
-            let pixels: HashMap<Uuid, &CompLayerPixels> = HashMap::new();
+            self.render_with(doc, comp, t, &HashMap::new())
+        }
+
+        // The same render over decoded footage.
+        fn render_with(
+            &self,
+            doc: &Document,
+            comp: &Composition,
+            t: f64,
+            pixels: &HashMap<Uuid, &CompLayerPixels>,
+        ) -> Vec<u8> {
             let mut v = vec![comp.id];
             let draws =
-                build_comp_draws(&std::sync::Arc::new(doc.clone()), comp, t, &pixels, &mut v);
+                build_comp_draws(&std::sync::Arc::new(doc.clone()), comp, t, pixels, &mut v);
             let tex = self.realiser().realise(
                 comp.camera_pose(t),
                 comp.width,
@@ -5717,7 +5775,7 @@ mod render_below_at_tests {
         );
         let d = draws.first().expect("the Precomp draws");
         assert_eq!(
-            d.flow_below.iter().map(|(o, _, _)| *o).collect::<Vec<_>>(),
+            d.flow_below.iter().map(|(o, ..)| *o).collect::<Vec<_>>(),
             vec![1],
             "the Precomp carries the +1 neighbour Motion blur asked for"
         );
@@ -5783,7 +5841,7 @@ mod render_below_at_tests {
         );
         let d = draws.first().expect("the Precomp draws");
         assert_eq!(
-            d.flow_below.iter().map(|(o, _, _)| *o).collect::<Vec<_>>(),
+            d.flow_below.iter().map(|(o, ..)| *o).collect::<Vec<_>>(),
             vec![1],
             "the Precomp still carries the +1 neighbour"
         );
@@ -5807,6 +5865,395 @@ mod render_below_at_tests {
             rig.render(&doc, &blurred, 0.5),
             rig.render(&doc, &blurred, 0.5),
             "and it is deterministic across two runs"
+        );
+    }
+
+    // A stand-in for a plugin that reads the frame before this one, as a
+    // motion blur does: it paints the picture with its -1 neighbour, and
+    // leaves it alone when it is handed none.
+    struct Previous(&'static lumit_core::fx::EffectSchema);
+
+    impl lumit_core::fx::EffectDef for Previous {
+        fn schema(&self) -> &'static lumit_core::fx::EffectSchema {
+            self.0
+        }
+        fn apply_cpu_temporal(
+            &self,
+            _inst: Uuid,
+            _lt: f64,
+            rgba: &mut [f32],
+            _w: u32,
+            _h: u32,
+            _p: lumit_core::fx::Params<'_>,
+            neighbours: &[(i32, &[f32])],
+        ) {
+            if let Some((_, previous)) = neighbours.iter().find(|(o, _)| *o == -1) {
+                rgba.copy_from_slice(previous);
+            }
+        }
+    }
+
+    // One instance of it, registered the way a scanned plugin is: a window of
+    // a frame either side, which is what a plugin with temporal access declares.
+    fn previous_frame_effect() -> lumit_core::model::EffectInstance {
+        const NAME: &str = "ofx:test.build.previous";
+        static REGISTERED: std::sync::Once = std::sync::Once::new();
+        REGISTERED.call_once(|| {
+            let schema = Box::leak(Box::new(lumit_core::fx::EffectSchema {
+                match_name: NAME,
+                label: "Previous frame",
+                version: 1,
+                category: lumit_core::fx::FxCategory::Utility,
+                traits: lumit_core::fx::EffectTraits {
+                    cost: lumit_core::fx::CostClass::Heavy,
+                    roi: lumit_core::fx::Roi::FullFrame,
+                    temporal: &[-1, 0, 1],
+                    premultiplied: true,
+                    seeded: false,
+                    beat_input: false,
+                },
+                params: &[],
+                groups: &[],
+                enabled_when: &[],
+                matte: lumit_core::fx::MatteRole::None,
+            }));
+            assert!(crate::gpufx::ofx::register(Box::leak(Box::new(Previous(
+                schema
+            )))));
+        });
+        lumit_core::fx::instantiate(NAME).unwrap()
+    }
+
+    // A clip that fills the frame, and the item and probe the planner reads
+    // it by: 10 fps, the rate of the comps here, so a comp frame is a source
+    // frame.
+    fn clip(doc: &mut Document) -> (Layer, HashMap<Uuid, crate::SourceProbe>) {
+        use lumit_core::model::{FootageItem, MediaRef, ProjectItem};
+        let item = Uuid::now_v7();
+        doc.items.push(ProjectItem::Footage(FootageItem {
+            sequence: None,
+            id: item,
+            name: "f".into(),
+            media: MediaRef {
+                relative_path: "f.mp4".into(),
+                absolute_path: "/f.mp4".into(),
+                fingerprint: None,
+                extra: serde_json::Map::new(),
+            },
+            extra: serde_json::Map::new(),
+            colour_space: None,
+            source_layer: None,
+        }));
+        let mut l = text_layer(0.0);
+        l.kind = LayerKind::Footage { item };
+        l.transform.position_y = Property::fixed(0.0);
+        let probe = crate::SourceProbe::Video {
+            fps: 10.0,
+            width: 320,
+            height: 180,
+            frames: 100,
+            audio: false,
+        };
+        (l, [(item, probe)].into_iter().collect())
+    }
+
+    // The clip as the decode worker hands it over for a planned job: grey at
+    // the frame's own time and orange at every other moment the plan asked
+    // for, filed under the plan's own keys.
+    fn decoded(job: &crate::decode::CompJob) -> CompLayerPixels {
+        let flat = |rgb: [u8; 3], shutter| CompLayerPixels {
+            layer: job.layer,
+            width: 8,
+            height: 8,
+            rgba: [rgb[0], rgb[1], rgb[2], 255].repeat(64).into(),
+            format: lumit_media::PixelFormat::Srgb8,
+            natural_w: 320,
+            natural_h: 180,
+            temporal: Vec::new(),
+            flow_fields: Vec::new(),
+            shutter,
+            source_key: 0,
+            source_frame: 0,
+        };
+        let moments = job
+            .shutter
+            .iter()
+            .map(|s| (s.offset, Box::new(flat(ORANGE, Vec::new()))))
+            .collect();
+        flat(GREY, moments)
+    }
+    const GREY: [u8; 3] = [60, 60, 60];
+    const ORANGE: [u8; 3] = [230, 120, 20];
+
+    // The colour a draw list's first clip is drawn in.
+    fn clip_colour(draws: &[CompLayerDraw]) -> [u8; 3] {
+        match &draws.first().expect("the clip draws").source {
+            DrawSource::Pixels { rgba, .. } => [rgba[0], rgba[1], rgba[2]],
+            _ => panic!("a clip draws from decoded pixels"),
+        }
+    }
+
+    // The red in the middle of a rendered frame.
+    fn centre_red(px: &[u8]) -> u8 {
+        px[(90 * 320 + 160) * 4]
+    }
+
+    // A plugin on a **Precomp** layer that reads the previous frame must be
+    // handed the nested comp as it was a frame ago, footage and all. The
+    // nested rebuild used to draw the clip inside from the one decode in
+    // hand, so the plugin compared a frame with itself, saw no motion and
+    // gave the picture back unchanged.
+    #[test]
+    fn a_plugin_on_a_precomp_reads_the_nested_footage_a_frame_back() {
+        use lumit_core::model::ProjectItem;
+        let mut doc = Document::new();
+        let (footage, probes) = clip(&mut doc);
+        let footage_id = footage.id;
+        let nested = comp_with(10, vec![footage]);
+        let nested_id = nested.id;
+        doc.items.push(ProjectItem::Composition(nested));
+        let precomp = |effects: Vec<lumit_core::model::EffectInstance>| {
+            let mut l = text_layer(0.0);
+            l.kind = LayerKind::Precomp { comp: nested_id };
+            l.transform.position_y = Property::fixed(0.0);
+            l.effects = effects;
+            comp_with(10, vec![l])
+        };
+        let outer = precomp(vec![previous_frame_effect()]);
+
+        // The plan fetches the clip at both of the plugin's neighbours, each
+        // the one real frame it shows then.
+        let plan = |comp: &Composition| {
+            crate::plan_comp_frame(&doc, comp, 0.5, crate::Quality::default(), &probes)
+        };
+        let jobs = plan(&outer);
+        let job = jobs
+            .iter()
+            .find(|j| j.layer == footage_id)
+            .expect("planned");
+        assert_eq!(job.source_frame, 5);
+        assert_eq!(
+            job.shutter
+                .iter()
+                .map(|s| (s.offset.round(), s.source_frame, s.blend))
+                .collect::<Vec<_>>(),
+            vec![(-1.0, 4, None), (1.0, 6, None)],
+            "the clip is planned a frame either side"
+        );
+
+        // And the builder draws each neighbour from those pixels.
+        let lp = decoded(job);
+        let pixels: HashMap<Uuid, &CompLayerPixels> = [(footage_id, &lp)].into_iter().collect();
+        let mut v = vec![outer.id];
+        let draws = build_comp_draws(
+            &std::sync::Arc::new(doc.clone()),
+            &outer,
+            0.5,
+            &pixels,
+            &mut v,
+        );
+        let d = draws.first().expect("the Precomp draws");
+        match &d.source {
+            DrawSource::Nested { draws, .. } => assert_eq!(clip_colour(draws), GREY),
+            _ => panic!("a Precomp layer draws a nested comp"),
+        }
+        assert_eq!(
+            d.flow_below
+                .iter()
+                .map(|(o, inner, _, measure)| (*o, clip_colour(inner), *measure))
+                .collect::<Vec<_>>(),
+            vec![(-1, ORANGE, false), (1, ORANGE, false)],
+            "each neighbour is the clip at its own moment, with no flow asked for"
+        );
+
+        let Some(rig) = FlowRig::new() else {
+            return;
+        };
+        let plain = rig.render_with(&doc, &precomp(Vec::new()), 0.5, &pixels);
+        let read = rig.render_with(&doc, &outer, 0.5, &pixels);
+        assert!(
+            centre_red(&read) > centre_red(&plain).saturating_add(60),
+            "the plugin was handed the previous frame ({} → {})",
+            centre_red(&plain),
+            centre_red(&read)
+        );
+    }
+
+    // The same on an **adjustment** layer, whose picture is the composite
+    // below it: the clip beneath is planned and drawn a frame either side.
+    #[test]
+    fn a_plugin_on_an_adjustment_reads_the_footage_below_a_frame_back() {
+        let mut doc = Document::new();
+        let (footage, probes) = clip(&mut doc);
+        let footage_id = footage.id;
+        let mut adjust = flow_adjustment(&[]);
+        adjust.effects = vec![previous_frame_effect()];
+        let plain = comp_with(10, vec![footage.clone()]);
+        let comp = comp_with(10, vec![adjust, footage]);
+
+        let jobs = crate::plan_comp_frame(&doc, &comp, 0.5, crate::Quality::default(), &probes);
+        let job = jobs
+            .iter()
+            .find(|j| j.layer == footage_id)
+            .expect("planned");
+        assert_eq!(
+            job.shutter
+                .iter()
+                .map(|s| (s.offset.round(), s.source_frame, s.blend))
+                .collect::<Vec<_>>(),
+            vec![(-1.0, 4, None), (1.0, 6, None)],
+            "the clip below is planned a frame either side"
+        );
+
+        let lp = decoded(job);
+        let pixels: HashMap<Uuid, &CompLayerPixels> = [(footage_id, &lp)].into_iter().collect();
+        let mut v = vec![comp.id];
+        let draws = build_comp_draws(
+            &std::sync::Arc::new(doc.clone()),
+            &comp,
+            0.5,
+            &pixels,
+            &mut v,
+        );
+        let adj = draws
+            .iter()
+            .find(|d| matches!(d.source, DrawSource::Adjust))
+            .expect("the adjustment draws");
+        assert_eq!(
+            adj.flow_below
+                .iter()
+                .map(|(o, below, _, measure)| (*o, clip_colour(below), *measure))
+                .collect::<Vec<_>>(),
+            vec![(-1, ORANGE, false), (1, ORANGE, false)],
+            "each neighbour is the clip below at its own moment"
+        );
+
+        let Some(rig) = FlowRig::new() else {
+            return;
+        };
+        let before = rig.render_with(&doc, &plain, 0.5, &pixels);
+        let read = rig.render_with(&doc, &comp, 0.5, &pixels);
+        assert!(
+            centre_red(&read) > centre_red(&before).saturating_add(60),
+            "the plugin was handed the previous frame ({} → {})",
+            centre_red(&before),
+            centre_red(&read)
+        );
+    }
+
+    // What it costs, and who pays. A Precomp whose stack reads only its own
+    // frame plans one decode and builds no neighbour, and a held frame still
+    // saves its decodes. A temporal stack rebuilds once per frame of its
+    // window, and only a flow consumer's offset is measured.
+    #[test]
+    fn only_a_temporal_stack_on_a_precomp_pays_for_neighbours() {
+        use lumit_core::model::ProjectItem;
+        let mut doc = Document::new();
+        let (footage, probes) = clip(&mut doc);
+        let footage_id = footage.id;
+        let nested = comp_with(10, vec![footage]);
+        let nested_id = nested.id;
+        doc.items.push(ProjectItem::Composition(nested));
+        let precomp = |names: &[&str]| {
+            let mut l = text_layer(0.0);
+            l.kind = LayerKind::Precomp { comp: nested_id };
+            l.effects = names
+                .iter()
+                .map(|n| lumit_core::fx::instantiate(n).unwrap())
+                .collect();
+            comp_with(10, vec![l])
+        };
+        let plan = |comp: &Composition, held: bool| {
+            crate::plan::plan_comp_frame_held(
+                &doc,
+                comp,
+                0.5,
+                crate::Quality::default(),
+                &probes,
+                Some(&|_, _, _| held),
+            )
+        };
+        let rebuilds = |comp: &Composition| -> Vec<(i32, bool)> {
+            let pixels: HashMap<Uuid, &CompLayerPixels> = HashMap::new();
+            let mut v = vec![comp.id];
+            build_comp_draws(
+                &std::sync::Arc::new(doc.clone()),
+                comp,
+                0.5,
+                &pixels,
+                &mut v,
+            )
+            .first()
+            .expect("the Precomp draws")
+            .flow_below
+            .iter()
+            .map(|(o, _, _, measure)| (*o, *measure))
+            .collect()
+        };
+
+        let bare = precomp(&[]);
+        let blurred = precomp(&["blur"]);
+        let jobs = plan(&blurred, false);
+        let job = jobs
+            .iter()
+            .find(|j| j.layer == footage_id)
+            .expect("planned");
+        assert!(job.shutter.is_empty(), "one frame, no other moment");
+        assert_eq!(
+            job.source_key(),
+            plan(&bare, false)[0].source_key(),
+            "and the decode keeps its name"
+        );
+        assert!(rebuilds(&blurred).is_empty(), "no neighbour is built");
+        assert!(
+            plan(&blurred, true).is_empty(),
+            "a held frame wants no decodes"
+        );
+
+        // Echo reads back through its window and measures nothing.
+        let echoed = precomp(&["echo"]);
+        let trail = rebuilds(&echoed);
+        assert_eq!(trail.len(), 16, "one rebuild per frame of the window");
+        assert!(trail.iter().all(|(o, measure)| *o < 0 && !measure));
+        // A rebuild is made from pixels, so its footage is decoded even
+        // where the frame itself is held.
+        let jobs = plan(&echoed, true);
+        let job = jobs
+            .iter()
+            .find(|j| j.layer == footage_id)
+            .expect("planned");
+        assert!(!job.shutter.is_empty());
+
+        // Motion blur still gets its measurement.
+        assert_eq!(rebuilds(&precomp(&["motion_blur"])), vec![(1, true)]);
+    }
+
+    // Echo on a Precomp layer had the same fault as the plugin: every tap
+    // was the frame in hand, so there was no trail.
+    #[test]
+    fn an_echo_on_a_precomp_trails_the_comp_inside_it() {
+        use lumit_core::model::ProjectItem;
+        let Some(rig) = FlowRig::new() else {
+            return;
+        };
+        let nested = comp_with(10, vec![sweeping_text(400.0)]);
+        let nested_id = nested.id;
+        let mut doc = Document::new();
+        doc.items.push(ProjectItem::Composition(nested));
+        let precomp = |names: &[&str]| {
+            let mut l = text_layer(0.0);
+            l.kind = LayerKind::Precomp { comp: nested_id };
+            l.transform.position_y = Property::fixed(0.0);
+            l.effects = names
+                .iter()
+                .map(|n| lumit_core::fx::instantiate(n).unwrap())
+                .collect();
+            comp_with(10, vec![l])
+        };
+        assert_ne!(
+            rig.render(&doc, &precomp(&[]), 0.5),
+            rig.render(&doc, &precomp(&["echo"]), 0.5),
+            "Echo on a Precomp layer must trail the comp inside it"
         );
     }
 }
