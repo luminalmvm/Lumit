@@ -110,6 +110,42 @@ pub struct BridgeSolidDef {
     pub height: u32,
 }
 
+/// Where a straight line of text sits inside its layer, in layer pixels.
+/// It's the engine's own layout, so the Type tool's caret, its selection and
+/// the Viewer's box agree with the picture.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct BridgeTextLine {
+    /// The layer's size: the raster the engine draws the line into.
+    pub width: f64,
+    pub height: f64,
+    /// The baseline, measured down from the layer's top edge.
+    pub baseline: f64,
+    /// How far a caret reaches above and below the baseline.
+    pub ascent: f64,
+    pub descent: f64,
+    /// The x of every gap between letters, one more than there are characters.
+    pub carets: Vec<f64>,
+}
+
+/// Lay out `text` at `size` the way the engine draws it, with or without the
+/// room animators get round it. It only measures the embedded font, so it
+/// takes no lock and can't fail.
+#[frb(sync)]
+#[must_use]
+#[allow(clippy::cast_possible_truncation, clippy::needless_pass_by_value)]
+pub fn measure_text_line(text: String, size: f64, animated: bool) -> BridgeTextLine {
+    let l = lumit_text::line_layout(&text, size as f32, animated);
+    BridgeTextLine {
+        width: f64::from(l.width),
+        height: f64::from(l.height),
+        baseline: f64::from(l.baseline),
+        ascent: f64::from(l.ascent),
+        descent: f64::from(l.descent),
+        carets: l.carets.into_iter().map(f64::from).collect(),
+    }
+}
+
 impl LayerReference {
     /// This layer's text document, or `None` when it is not a text layer.
     #[frb(sync)]
