@@ -367,6 +367,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeAddonKind dco_decode_bridge_addon_kind(dynamic raw);
 
   @protected
+  BridgeAfterEffectsKeymap dco_decode_bridge_after_effects_keymap(dynamic raw);
+
+  @protected
   BridgeAnimatedMaskPath dco_decode_bridge_animated_mask_path(dynamic raw);
 
   @protected
@@ -584,6 +587,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeGroupSwitch dco_decode_bridge_group_switch(dynamic raw);
+
+  @protected
+  BridgeHandleModifier dco_decode_bridge_handle_modifier(dynamic raw);
 
   @protected
   BridgeHistory dco_decode_bridge_history(dynamic raw);
@@ -1860,6 +1866,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeAddonKind sse_decode_bridge_addon_kind(SseDeserializer deserializer);
 
   @protected
+  BridgeAfterEffectsKeymap sse_decode_bridge_after_effects_keymap(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeAnimatedMaskPath sse_decode_bridge_animated_mask_path(
       SseDeserializer deserializer);
 
@@ -2110,6 +2120,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeGroupSwitch sse_decode_bridge_group_switch(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeHandleModifier sse_decode_bridge_handle_modifier(
       SseDeserializer deserializer);
 
   @protected
@@ -3539,6 +3553,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeAddonKind self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_after_effects_keymap(
+      BridgeAfterEffectsKeymap self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_animated_mask_path(
       BridgeAnimatedMaskPath self, SseSerializer serializer);
 
@@ -3825,6 +3843,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_group_switch(
       BridgeGroupSwitch self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_handle_modifier(
+      BridgeHandleModifier self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_history(BridgeHistory self, SseSerializer serializer);

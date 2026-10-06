@@ -74,6 +74,7 @@ import 'export_dialog_frb.dart'
         exportDestinationProject,
         exportTokenComp,
         exportTokenDate;
+import 'keymap_keyboard.dart';
 import 'menu_bar_frb.dart';
 import 'settings_rows.dart';
 import 'theme_editor_frb.dart';
@@ -2292,8 +2293,23 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                 ],
               ),
             ),
+            settingsRow(
+              t,
+              l10n.settingsKeymapAfterEffects,
+              _afterEffectsMessage ?? '',
+              HouseButton(
+                key: const ValueKey('keymap-import-ae'),
+                small: true,
+                onPressed: () => _importAfterEffects(km),
+                child: Text(l10n.menuImport, style: t.small),
+              ),
+            ),
           ],
           first: true),
+      // The picture shows the whole map, so it steps aside for a search.
+      if (km.query.trim().isEmpty)
+        settingsSection(
+            t, l10n.keymapKeyboard, [KeymapKeyboard(keymap: km)]),
       // The clash warning. Present only when there is one, because a banner
       // that is always there is a banner nobody reads.
       if (km.conflicts.isNotEmpty)
@@ -2351,6 +2367,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             ),
         ]),
       ..._wheelSection(t, km),
+      ..._dragSection(t, km),
     ];
   }
 
@@ -2387,6 +2404,29 @@ class _SettingsWindowState extends State<_SettingsWindow> {
     return [settingsSection(t, l10n.keymapWheel, rows)];
   }
 
+  /// Which modifier changes what a drag does, under the scroll wheel's.
+  List<Widget> _dragSection(LumitTheme t, KeymapState km) {
+    final row = _row(
+      t,
+      l10n.keymapDragBreakHandles,
+      _dropdown<BridgeHandleModifier>(
+        key: 'keymap-drag-break-handles',
+        value: km.breakHandles,
+        options: BridgeHandleModifier.values,
+        label: (m) => switch (m) {
+          BridgeHandleModifier.alt => l10n.keymapWheelAlt,
+          BridgeHandleModifier.ctrl => l10n.keymapWheelCtrl,
+        },
+        onChanged: (m) async {
+          await km.setBreakHandles(m);
+          if (mounted) setState(() {});
+        },
+      ),
+    );
+    if (row == null) return const [];
+    return [settingsSection(t, l10n.keymapDrag, [row])];
+  }
+
   /// What the last import or export said, shown under the buttons.
   String? _keymapMessage;
 
@@ -2407,6 +2447,30 @@ class _SettingsWindowState extends State<_SettingsWindow> {
     final refusal = await km.fromJson(text);
     if (!mounted) return;
     setState(() => _keymapMessage = refusal ?? l10n.keymapImported);
+  }
+
+  /// What the last After Effects import said, shown under its row.
+  String? _afterEffectsMessage;
+
+  /// Read an After Effects shortcut file and hand it to the engine, which
+  /// keeps the commands it has an action for and refuses a file with none.
+  Future<void> _importAfterEffects(KeymapState km) async {
+    final path = await pickAfterEffectsShortcuts();
+    if (path == null) return;
+    String text;
+    try {
+      text = await File(path).readAsString();
+    } catch (e) {
+      if (mounted) {
+        setState(() => _afterEffectsMessage = l10n.keymapFileUnreadable);
+      }
+      return;
+    }
+    final actions = await km.importAfterEffects(text);
+    if (!mounted) return;
+    setState(() => _afterEffectsMessage = actions == null
+        ? l10n.keymapFileUnreadable
+        : l10n.keymapAfterEffectsImported(actions));
   }
 
   /// Write the keymap out as the shareable file docs/07 §15 promises.

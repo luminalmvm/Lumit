@@ -17,6 +17,9 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
 
+mod after_effects;
+pub use after_effects::{import_after_effects_shortcuts, AfterEffectsImport, NotAfterEffects};
+
 /// Something a chord can be bound to, identified by a stable string (e.g.
 /// `"playback.toggle"`). A string — not a giant enum — so new commands never
 /// force a breaking change and a keymap file stays readable.
@@ -407,6 +410,20 @@ pub struct Keymap {
     /// file without it gets the shipped ones.
     #[serde(default)]
     pub wheel: WheelKeys,
+
+    /// The modifier that breaks or joins a keyframe's handles when it is held as
+    /// a handle drag begins in the Graph editor. An older file without it gets Alt.
+    #[serde(default)]
+    pub break_handles: HandleModifier,
+}
+
+/// A modifier held as a handle drag begins. Shift isn't offered, since it
+/// already constrains the drag.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum HandleModifier {
+    #[default]
+    Alt,
+    Ctrl,
 }
 
 /// A modifier held with the scroll wheel. Ctrl is the Control key on every
@@ -935,6 +952,7 @@ pub fn default_keymap() -> Keymap {
         bindings,
         unbound: Vec::new(),
         wheel: WheelKeys::default(),
+        break_handles: HandleModifier::default(),
     }
 }
 
@@ -992,11 +1010,12 @@ pub fn with_new_defaults(stored: Keymap) -> Keymap {
 #[must_use]
 pub fn after_effects_preset() -> Keymap {
     let mut km = default_keymap();
-    // AE has no J/K/L shuttle; the letters go back to their AE meanings.
-    for k in ["J", "K", "L"] {
-        if let Ok(chord) = k.parse::<Chord>() {
-            km.unbind(KeyContext::Global, &chord);
-        }
+    // AE has no J/K/L shuttle; the letters go back to their AE meanings. Unbound
+    // by action, so the stored file remembers it and a restart doesn't put the
+    // shuttle back.
+    for direction in ["reverse", "pause", "forward"] {
+        let action = ActionId(format!("playback.shuttle.{direction}"));
+        km.unbind_action(KeyContext::Global, &action);
     }
     // `bind`, not `rebind_action`, for the keyframe pair: `,` / `.` stay as a
     // second way in, exactly as the default keeps `*` beside `Shift+M`.
@@ -1414,6 +1433,20 @@ mod tests {
         }
     }
 
+    /// The preset takes the shuttle off J/K/L, and a restart must not hand it
+    /// back on top of the keyframe keys.
+    #[test]
+    fn the_after_effects_preset_survives_the_stored_file() {
+        let restored = with_new_defaults(after_effects_preset());
+        assert!(restored.conflicts().is_empty());
+        assert_eq!(
+            restored.lookup(KeyContext::Viewer, &chord("L")),
+            None,
+            "the shuttle stays off"
+        );
+        assert_eq!(restored, after_effects_preset());
+    }
+
     /// Layer ▸ New rows carry a chord each, so the menu shows one beside
     /// the label, and the six take nothing another row already has.
     #[test]
@@ -1485,6 +1518,23 @@ mod tests {
         value.as_object_mut().unwrap().remove("wheel");
         let older: Keymap = serde_json::from_value(value).unwrap();
         assert_eq!(older.wheel, WheelKeys::default());
+    }
+
+    #[test]
+    fn the_handle_modifier_ships_as_alt_and_travels_in_the_file() {
+        let mut km = default_keymap();
+        assert_eq!(km.break_handles, HandleModifier::Alt);
+
+        km.break_handles = HandleModifier::Ctrl;
+        let json = serde_json::to_string(&km).unwrap();
+        let back: Keymap = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.break_handles, HandleModifier::Ctrl);
+
+        // A file from before the modifier could be chosen still reads.
+        let mut value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        value.as_object_mut().unwrap().remove("break_handles");
+        let older: Keymap = serde_json::from_value(value).unwrap();
+        assert_eq!(older.break_handles, HandleModifier::Alt);
     }
 
     #[test]

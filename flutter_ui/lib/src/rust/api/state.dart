@@ -18,7 +18,7 @@ import 'project_item.dart';
 import 'solid.dart';
 part 'state.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `adopt`, `forget_streams_except`, `handle_change_callback`, `journal_for`, `op_scope`, `phase_fraction`, `report_phase`
+// These functions are ignored because they are not marked as `pub`: `adopt`, `discard_unsaved_journal`, `forget_streams_except`, `handle_change_callback`, `journal_file`, `journal_for`, `op_scope`, `phase_fraction`, `report_phase`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<LumitBridgeState>>
