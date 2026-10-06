@@ -157,7 +157,7 @@ class _ProjectSettingsWindowState extends State<_ProjectSettingsWindow> {
         settingsRow(
           t,
           l10n.settingsColourDepth,
-          l10n.settingsHelpColourDepth,
+          '',
           SizedBox(
             width: 130,
             child: BareDropdown<int>(
@@ -175,7 +175,7 @@ class _ProjectSettingsWindowState extends State<_ProjectSettingsWindow> {
           settingsRow(
             t,
             l10n.settingsColourDepthInUse,
-            l10n.settingsHelpColourDepthInUse,
+            '',
             Text(
               _depthLabel(depthInUse),
               key: const ValueKey('project-colour-depth-in-use'),
@@ -185,7 +185,7 @@ class _ProjectSettingsWindowState extends State<_ProjectSettingsWindow> {
         settingsRow(
           t,
           l10n.settingsAntiAliasing,
-          l10n.settingsHelpAntiAliasing,
+          '',
           SizedBox(
             width: 130,
             child: BareDropdown<int>(
@@ -205,7 +205,7 @@ class _ProjectSettingsWindowState extends State<_ProjectSettingsWindow> {
           settingsRow(
             t,
             l10n.settingsAntiAliasingInUse,
-            l10n.settingsHelpAntiAliasingInUse,
+            '',
             Text(
               _aaLabel(inUse),
               key: const ValueKey('project-anti-aliasing-in-use'),
@@ -291,8 +291,9 @@ class _ProjectSettingsWindowState extends State<_ProjectSettingsWindow> {
       ];
 
   /// The line under the config row: what was loaded, or why nothing was.
+  /// With no config the well already says None.
   String get _colourState {
-    if (_colour.path.isEmpty) return l10n.projectColourNoConfig;
+    if (_colour.path.isEmpty) return '';
     if (_colour.loaded) {
       // How many listed names the config cannot make, each counted once
       // however many ways it refuses.
