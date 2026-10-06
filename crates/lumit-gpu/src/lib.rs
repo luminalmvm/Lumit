@@ -3112,7 +3112,6 @@ mod tests {
 
 pub mod composite;
 pub mod fx;
-pub mod oklab;
 pub mod scope;
 /// The Windows-only zero-copy Viewer target. Present only in the opt-in
 /// `shared-texture` build on Windows; every other build has no shared texture at

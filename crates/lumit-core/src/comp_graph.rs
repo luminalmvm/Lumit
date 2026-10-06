@@ -503,75 +503,6 @@ impl CompGraph {
             .any(|n| matches!(n, GraphNode::Read { item: named, .. } if *named == item))
     }
 
-    /// A copy with fresh ids for every box, its wires, positions, exposure and
-    /// groups all re-pointed at them.
-    ///
-    /// What duplicating or pasting a node graph makes. A copy that kept its
-    /// ids would alias its original's boxes, because a node graph's ids are
-    /// resolved across the whole comp.
-    #[must_use]
-    pub fn fresh_copy(&self) -> CompGraph {
-        let fresh: std::collections::BTreeMap<Uuid, Uuid> = self
-            .nodes
-            .iter()
-            .map(|n| (n.id(), Uuid::now_v7()))
-            .collect();
-        let renamed = |id: &Uuid| fresh.get(id).copied().unwrap_or(*id);
-        let nodes = self
-            .nodes
-            .iter()
-            .cloned()
-            .map(|node| match node {
-                GraphNode::Read {
-                    id,
-                    item,
-                    custom_name,
-                } => GraphNode::Read {
-                    id: renamed(&id),
-                    item,
-                    custom_name,
-                },
-                GraphNode::Input { id, input } => GraphNode::Input {
-                    id: renamed(&id),
-                    input,
-                },
-                GraphNode::Output { id } => GraphNode::Output { id: renamed(&id) },
-                GraphNode::Fx(mut inst) => {
-                    inst.id = renamed(&inst.id);
-                    GraphNode::Fx(inst)
-                }
-            })
-            .collect();
-        CompGraph {
-            nodes,
-            edges: self
-                .edges
-                .iter()
-                .map(|e| GraphEdge {
-                    from: renamed(&e.from),
-                    from_port: e.from_port.clone(),
-                    to: renamed(&e.to),
-                    to_port: e.to_port.clone(),
-                })
-                .collect(),
-            layout: self
-                .layout
-                .iter()
-                .map(|(id, at)| (renamed(id), *at))
-                .collect(),
-            exposed: self.exposed.iter().map(renamed).collect(),
-            groups: self
-                .groups
-                .iter()
-                .map(|g| GraphGroup {
-                    name: g.name.clone(),
-                    colour: g.colour,
-                    members: g.members.iter().map(renamed).collect(),
-                })
-                .collect(),
-        }
-    }
-
     /// A copy whose Output shows `node`'s picture - the Viewer's *at this box*
     /// reading (§4.5).
     ///
@@ -1583,34 +1514,6 @@ mod tests {
             with_driver.viewed_at(wiggle_id).is_none(),
             "a driver makes a number, not a picture"
         );
-    }
-
-    #[test]
-    fn a_fresh_copy_mints_new_ids_and_repoints_everything() {
-        let (mut graph, source_id, blur_id, out_id) = read_blur_output();
-        graph.layout = vec![(source_id, [10.0, 20.0]), (blur_id, [30.0, 40.0])];
-        graph.exposed = vec![blur_id];
-        graph.groups = vec![GraphGroup {
-            name: "The plate".into(),
-            colour: 2,
-            members: vec![source_id, blur_id],
-        }];
-
-        let copy = graph.fresh_copy();
-        let old: Vec<Uuid> = vec![source_id, blur_id, out_id];
-        for node in &copy.nodes {
-            assert!(!old.contains(&node.id()), "every box is a fresh box");
-        }
-        copy.validate(None).expect("the wires found their boxes");
-        let ids: Vec<Uuid> = copy.nodes.iter().map(GraphNode::id).collect();
-        for edge in &copy.edges {
-            assert!(ids.contains(&edge.from) && ids.contains(&edge.to));
-        }
-        assert!(copy.layout.iter().all(|(id, _)| ids.contains(id)));
-        assert!(copy.exposed.iter().all(|id| ids.contains(id)));
-        assert!(copy.groups[0].members.iter().all(|id| ids.contains(id)));
-        assert_eq!(copy.groups[0].name, "The plate");
-        assert_eq!(copy.layout.len(), 2);
     }
 
     // -- the file ------------------------------------------------------------

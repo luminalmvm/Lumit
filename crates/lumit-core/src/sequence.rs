@@ -112,15 +112,6 @@ fn clamp_handles(x1: f64, y1: f64, x2: f64, y2: f64) -> (f64, f64, f64, f64) {
     )
 }
 
-/// The gain that keeps a pair's power constant: `sqrt(1 - g²)`, which is what
-/// *Keep level* puts on the other side of a crossfade. The complement of a
-/// Fast fade in is a Fast fade out, so an untouched overlap already holds its
-/// level.
-#[must_use]
-pub fn power_complement(gain: f64) -> f64 {
-    (1.0 - gain * gain).max(0.0).sqrt()
-}
-
 /// One end of a clip's fade: how long it takes, and the curve it takes
 /// (docs/impl/audio-timeline.md §3). Zero seconds is no fade.
 ///
@@ -623,58 +614,6 @@ impl Clip {
         })
     }
 
-    /// Slip the source under the fixed clip by `delta` (docs/04-RETIMING.md
-    /// §8.2): the clip keeps its place and duration, but a different stretch of
-    /// the source plays. The trim window and every retime source position shift
-    /// by `delta` together, so the retime's shape is untouched; overrun is
-    /// re-evaluated at render time. None if the slip would read before the
-    /// source start, or on overflow.
-    pub fn slip(&self, delta: Rational) -> Option<Clip> {
-        let source_in = self.source_in.checked_add(delta).ok()?;
-        if source_in.is_negative() {
-            return None;
-        }
-        let source_out = self.source_out.checked_add(delta).ok()?;
-        // Every source position moves by the same amount, so the curve's shape
-        // — and every keyframe time — is untouched. Tangent speeds are
-        // slopes and a constant offset does not change them.
-        let shift = delta.to_f64();
-        let retime = match &self.retime {
-            Some(map) => match &map.animation {
-                Animation::Keyframed(keys) => Some(Property {
-                    animation: Animation::Keyframed(
-                        keys.iter()
-                            .map(|k| Keyframe {
-                                value: k.value + shift,
-                                ..*k
-                            })
-                            .collect(),
-                    ),
-                    extra: map.extra.clone(),
-                }),
-                Animation::Static(v) => Some(Property {
-                    animation: Animation::Static(v + shift),
-                    extra: map.extra.clone(),
-                }),
-                // An expression-driven Retime cannot be shifted the way a
-                // number or a keyframe can: the source positions it produces
-                // are computed, so moving them means rewriting what the user
-                // typed — `(expr) + shift`, compounding on every slip. Refused
-                // rather than silently rewritten. Unreachable today (only
-                // transform and effect properties can be given expressions),
-                // and wants deciding properly if Retime ever offers one.
-                Animation::Expression(_) => return None,
-            },
-            None => None,
-        };
-        Some(Clip {
-            source_in,
-            source_out,
-            retime,
-            ..self.clone()
-        })
-    }
-
     /// Trim the clip's tail inward to end at layer time `new_end`
     /// (docs/04-RETIMING.md §8.2, non-ripple): the retime is split at the new
     /// edge and the outside discarded, so the kept portion plays exactly as
@@ -808,49 +747,6 @@ impl Clip {
                 ..self.clone()
             }
         })
-    }
-
-    /// Trim the out point to the last moment still inside the source extent
-    /// (docs/04-RETIMING.md §7.4, non-ripple): when the retime runs the clip
-    /// past its trimmed source end (tail overrun), crop the clip to the crossing
-    /// point. The clip's start never moves and a gap is left after it (gaps are
-    /// never auto-closed — the beat-sync covenant). None when there is no
-    /// tail overrun, so the command can report "nothing to trim".
-    pub fn trim_to_source_end(&self) -> Option<Clip> {
-        let crossing = self.overrun_local_time()?;
-        let new_end = self.place_start.checked_add(crossing).ok()?;
-        self.trim_end(new_end)
-    }
-
-    /// The clip-local time at which the map first reaches [`Self::source_out`],
-    /// or None when it never does — which is the ordinary case, and what makes
-    /// "nothing to trim" reportable rather than a silent no-op.
-    ///
-    /// Found by walking the clip's own frame-free domain in small steps and
-    /// bisecting the step that crosses. The map is monotone in every shape the
-    /// editor can author, and the answer only has to be good to a frame: it
-    /// decides where a *trim* lands, and rendering clamps per sample either way
-    /// (docs/04 §7.2 — "rendering correctness never depends on this solve").
-    fn overrun_local_time(&self) -> Option<Rational> {
-        let target = self.source_out.to_f64();
-        let d = self.place_duration.to_f64();
-        if d <= 0.0 || self.source_time(self.place_start.to_f64() + d) <= target {
-            return None; // never runs past the source it has
-        }
-        let at = |t: f64| self.source_time(self.place_start.to_f64() + t);
-        if at(0.0) > target {
-            return None; // over from the first moment: nothing to keep
-        }
-        let (mut lo, mut hi) = (0.0, d);
-        for _ in 0..60 {
-            let mid = (lo + hi) / 2.0;
-            if at(mid) <= target {
-                lo = mid;
-            } else {
-                hi = mid;
-            }
-        }
-        Rational::from_f64_on_grid(lo, Rational::FLICK_DEN).ok()
     }
 }
 
@@ -1140,38 +1036,6 @@ pub fn resolve(clips: &[Clip], lt: f64) -> Option<(Uuid, ClipSource, f64)> {
     })
 }
 
-/// The single source shared by all clips, if they share one — a sequenced
-/// layer is single-source. None when empty or mixed.
-pub fn single_source(clips: &[Clip]) -> Option<ClipSource> {
-    let first = clips.first()?.source;
-    clips.iter().all(|c| c.source == first).then_some(first)
-}
-
-/// True when clips never jump backwards in the source as you read the layer
-/// left to right — "no mixing footage time": `source_in` is
-/// non-decreasing by timeline position. Gaps are allowed; reordering is not.
-pub fn is_source_ordered(clips: &[Clip]) -> bool {
-    let mut by_place: Vec<&Clip> = clips.iter().collect();
-    by_place.sort_by_key(|c| c.place_start);
-    by_place
-        .windows(2)
-        .all(|w| w[0].source_in <= w[1].source_in)
-}
-
-/// Do any two clips overlap on the layer timeline? (docs/03-DATA-MODEL.md
-/// §5.3: clips on a layer that draws a picture MUST NOT overlap - this is the
-/// check those editors run after a move before committing. An audio-only
-/// layer's clips may overlap, so an overlap there is a crossfade rather than
-/// a fault, and the answer is a fact about the list rather than a verdict.)
-pub fn has_overlap(clips: &[Clip]) -> bool {
-    let mut spans: Vec<(f64, f64)> = clips
-        .iter()
-        .map(|c| (c.place_start.to_f64(), c.place_end().to_f64()))
-        .collect();
-    spans.sort_by(|a, b| a.0.total_cmp(&b.0));
-    spans.windows(2).any(|w| w[1].0 < w[0].1)
-}
-
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
@@ -1266,27 +1130,6 @@ mod tests {
     }
 
     #[test]
-    fn slipping_changes_the_source_but_not_the_place() {
-        // Clip at layer [2,6), source [0,4) at natural rate. Slip +1 shows
-        // source [1,5); the place is unchanged and every moment shifts by +1.
-        let src = Uuid::now_v7();
-        let c = clip(src, 2, 4);
-        let s = c.slip(rat(1, 1)).unwrap();
-        assert_eq!(s.place_start, c.place_start); // place held
-        assert_eq!(s.place_duration, c.place_duration);
-        assert_eq!(s.source_in, rat(1, 1)); // window shifted
-        assert_eq!(s.source_out, rat(5, 1));
-        for &lt in &[2.0, 4.0, 5.9] {
-            assert!(
-                (s.source_time(lt) - (c.source_time(lt) + 1.0)).abs() < 1e-9,
-                "@ {lt}"
-            );
-        }
-        // Slipping before the source start is refused.
-        assert!(c.slip(rat(-1, 1)).is_none());
-    }
-
-    #[test]
     fn trimming_an_edge_inward_keeps_the_rest_in_place() {
         let src = Uuid::now_v7();
         // Clip at layer [2,6), source [0,4) at natural rate.
@@ -1319,24 +1162,6 @@ mod tests {
         assert!(c.trim_end(rat(7, 1)).is_none());
         assert!(c.trim_start(rat(1, 1)).is_none());
         assert!(c.trim_end(rat(2, 1)).is_none()); // zero length
-    }
-
-    #[test]
-    fn trim_to_source_end_crops_a_tail_overrun() {
-        let src = Uuid::now_v7();
-        // Clip at layer [0,4), source [0,4). Retime it to 2× so f(t) = 2t runs
-        // out of the source (out = 4) at local time 2.
-        let mut c = clip(src, 0, 4).with_ramp(rat(2, 1), rat(2, 1));
-        // Re-speeding re-derives how much source the clip *asks* for (8 s);
-        // the media it actually has is still the 4 s it was trimmed to, and
-        // that mismatch is exactly what overrun is.
-        c.source_out = rat(4, 1);
-        let t = c.trim_to_source_end().expect("a tail overrun trims");
-        assert_eq!(t.place_start, c.place_start); // non-ripple: start held
-        assert!((t.place_duration.to_f64() - 2.0).abs() < 1e-6);
-        assert!((t.source_out.to_f64() - 4.0).abs() < 1e-6); // ends at the source end
-                                                             // A clip that fits inside its source has nothing to trim.
-        assert!(clip(src, 0, 4).trim_to_source_end().is_none());
     }
 
     /// The overwrite edit: a clip dropped on others takes its whole
@@ -1387,17 +1212,6 @@ mod tests {
         clear.id = Uuid::now_v7();
         let all = vec![a.clone(), b.clone(), c.clone(), clear.clone()];
         assert_eq!(overwrite_with(&all, clear.id).len(), 4);
-    }
-
-    #[test]
-    fn overlap_detection() {
-        let s = Uuid::now_v7();
-        // Back-to-back is fine (end-exclusive touching).
-        assert!(!has_overlap(&[clip(s, 0, 2), clip(s, 2, 2)]));
-        // A gap is fine.
-        assert!(!has_overlap(&[clip(s, 0, 2), clip(s, 5, 2)]));
-        // Genuine overlap is caught.
-        assert!(has_overlap(&[clip(s, 0, 3), clip(s, 2, 2)]));
     }
 
     #[test]
@@ -1511,53 +1325,6 @@ mod tests {
         assert!((moved.source_time(5.0) - start_frame.to_f64()).abs() < 1e-9);
     }
 
-    #[test]
-    fn single_source_and_ordering_invariants() {
-        let (a, b) = (Uuid::now_v7(), Uuid::now_v7());
-        // Two clips of the same source in order.
-        let c0 = Clip::new(
-            ClipSource::Footage(a),
-            rat(0, 1),
-            rat(2, 1),
-            rat(0, 1),
-            rat(2, 1),
-        );
-        let c1 = Clip::new(
-            ClipSource::Footage(a),
-            rat(2, 1),
-            rat(4, 1),
-            rat(3, 1),
-            rat(2, 1),
-        );
-        assert_eq!(
-            single_source(&[c0.clone(), c1.clone()]),
-            Some(ClipSource::Footage(a))
-        );
-        assert!(is_source_ordered(&[c0.clone(), c1.clone()]));
-        // A gap between them is fine (still ordered).
-        assert!(is_source_ordered(&[c0.clone(), c1.clone()]));
-        // Mixed sources → not single-source.
-        let other = Clip::new(
-            ClipSource::Footage(b),
-            rat(0, 1),
-            rat(2, 1),
-            rat(5, 1),
-            rat(2, 1),
-        );
-        assert_eq!(single_source(&[c0.clone(), other]), None);
-        assert_eq!(single_source(&[]), None);
-        // Reordered so a later timeline slot holds an earlier source moment →
-        // "mixing footage time", rejected.
-        let early_source_late_place = Clip::new(
-            ClipSource::Footage(a),
-            rat(0, 1),
-            rat(1, 1),
-            rat(6, 1),
-            rat(1, 1),
-        );
-        assert!(!is_source_ordered(&[c1, early_source_late_place]));
-    }
-
     // ------------------------------------------------- fades and shapes --
 
     /// One effect instance for a clip's own rack. Any effect will do: nothing
@@ -1656,27 +1423,6 @@ mod tests {
             let (a, b) = (FadeShape::Linear.gain(u), FadeShape::Linear.gain(1.0 - u));
             assert!((a + b - 1.0).abs() < 1e-9, "u={u}: not equal amplitude");
         }
-    }
-
-    /// *Keep level*: the power complement of a curve sums its squares with it
-    /// to one everywhere, and the complement of Fast is Fast (plan 1).
-    #[test]
-    fn the_power_complement_holds_the_level_and_answers_fast_for_fast() {
-        let custom = FadeShape::custom(0.1, 0.7, 0.4, 0.9);
-        for n in 0..=20 {
-            let u = f64::from(n) / 20.0;
-            let g = custom.gain(u);
-            let other = power_complement(g);
-            assert!((g * g + other * other - 1.0).abs() < 1e-9, "u={u}");
-            assert!(
-                (power_complement(FadeShape::Fast.gain(u)) - FadeShape::Fast.gain(1.0 - u)).abs()
-                    < 1e-9,
-                "u={u}: the complement of Fast is not Fast"
-            );
-        }
-        // A gain past full has no complement to give, and answers zero rather
-        // than the square root of a negative number.
-        assert_eq!(power_complement(2.0), 0.0);
     }
 
     /// The razor divides the new fields the way docs/impl/audio-timeline.md §2
