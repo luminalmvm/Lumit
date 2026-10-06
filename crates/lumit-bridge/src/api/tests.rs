@@ -623,7 +623,6 @@ fn a_photoshop_document_imports_as_a_comp_of_its_layers_in_one_undo_step() {
         assert_eq!(answer.expect("no error"), None);
     }
     assert_eq!(snapshot().items.len(), before, "and nothing was added");
-    project.close().expect("closed");
 }
 
 // A relinked run that grew is renamed for its new span in one undo step,
