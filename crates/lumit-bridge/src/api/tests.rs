@@ -9065,6 +9065,26 @@ fn a_wheel_modifier_is_stored_with_the_keymap_and_reset_by_a_preset() {
     );
 }
 
+/// The handle modifier set in Settings is in the file that gets stored, and a
+/// preset puts Alt back.
+#[test]
+fn the_handle_modifier_is_stored_with_the_keymap_and_reset_by_a_preset() {
+    use crate::api::keymap::*;
+    let _guard = keymap_test();
+
+    assert_eq!(keymap_break_handles(), BridgeHandleModifier::Alt);
+    assert_eq!(
+        keymap_set_break_handles(BridgeHandleModifier::Ctrl),
+        BridgeHandleModifier::Ctrl
+    );
+
+    let json = keymap_to_json();
+    keymap_load_preset(BridgeKeymapPreset::Lumit);
+    assert_eq!(keymap_break_handles(), BridgeHandleModifier::Alt);
+    keymap_from_json(json).expect("the stored file reads back");
+    assert_eq!(keymap_break_handles(), BridgeHandleModifier::Ctrl);
+}
+
 /// Text that is not a chord is refused with words a dialogue can show, and the
 /// live keymap is left exactly as it was — a typo must not cost a binding.
 #[test]

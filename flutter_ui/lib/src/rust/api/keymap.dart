@@ -8,7 +8,7 @@ import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `preset_map`, `row`, `wheel_action`, `with_keymap`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`
 
 /// Every binding, grouped by context in the order the page lists them — the
 /// whole table in one call.
@@ -94,6 +94,16 @@ Future<List<BridgeWheelBinding>> keymapSetWheel(
     BridgeLib.instance.api
         .crateApiKeymapKeymapSetWheel(action: action, modifier: modifier);
 
+/// The modifier that breaks or joins a keyframe's handles as a drag begins.
+BridgeHandleModifier keymapBreakHandles() =>
+    BridgeLib.instance.api.crateApiKeymapKeymapBreakHandles();
+
+/// Choose the modifier that breaks or joins handles and hand back what is set.
+Future<BridgeHandleModifier> keymapSetBreakHandles(
+        {required BridgeHandleModifier modifier}) =>
+    BridgeLib.instance.api
+        .crateApiKeymapKeymapSetBreakHandles(modifier: modifier);
+
 /// The whole keymap as JSON — what the frontend stores between sessions and
 /// what "Export keymap…" writes to a file the user can share. One format for
 /// both, so a keymap that survives a restart is the same keymap that travels.
@@ -114,6 +124,14 @@ String keymapToJson() => BridgeLib.instance.api.crateApiKeymapKeymapToJson();
 /// only the ones it never heard of take their default.
 Future<List<BridgeKeymapGroup>> keymapFromJson({required String json}) =>
     BridgeLib.instance.api.crateApiKeymapKeymapFromJson(json: json);
+
+/// A modifier held as a handle drag begins in the Graph editor. Mirrors
+/// `lumit_keymap::HandleModifier`.
+enum BridgeHandleModifier {
+  alt,
+  ctrl,
+  ;
+}
 
 /// One row of the Settings → Keymap table: what the action is called, what it
 /// is called internally, and the chord that runs it.

@@ -407,6 +407,20 @@ pub struct Keymap {
     /// file without it gets the shipped ones.
     #[serde(default)]
     pub wheel: WheelKeys,
+
+    /// The modifier that breaks or joins a keyframe's handles when it is held as
+    /// a handle drag begins in the Graph editor. An older file without it gets Alt.
+    #[serde(default)]
+    pub break_handles: HandleModifier,
+}
+
+/// A modifier held as a handle drag begins. Shift isn't offered, since it
+/// already constrains the drag.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum HandleModifier {
+    #[default]
+    Alt,
+    Ctrl,
 }
 
 /// A modifier held with the scroll wheel. Ctrl is the Control key on every
@@ -935,6 +949,7 @@ pub fn default_keymap() -> Keymap {
         bindings,
         unbound: Vec::new(),
         wheel: WheelKeys::default(),
+        break_handles: HandleModifier::default(),
     }
 }
 
@@ -1485,6 +1500,23 @@ mod tests {
         value.as_object_mut().unwrap().remove("wheel");
         let older: Keymap = serde_json::from_value(value).unwrap();
         assert_eq!(older.wheel, WheelKeys::default());
+    }
+
+    #[test]
+    fn the_handle_modifier_ships_as_alt_and_travels_in_the_file() {
+        let mut km = default_keymap();
+        assert_eq!(km.break_handles, HandleModifier::Alt);
+
+        km.break_handles = HandleModifier::Ctrl;
+        let json = serde_json::to_string(&km).unwrap();
+        let back: Keymap = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.break_handles, HandleModifier::Ctrl);
+
+        // A file from before the modifier could be chosen still reads.
+        let mut value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        value.as_object_mut().unwrap().remove("break_handles");
+        let older: Keymap = serde_json::from_value(value).unwrap();
+        assert_eq!(older.break_handles, HandleModifier::Alt);
     }
 
     #[test]

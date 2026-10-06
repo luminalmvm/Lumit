@@ -490,6 +490,10 @@ class KeyCommandStrip extends StatelessWidget {
   final ValueChanged<GraphLens>? onLens;
   final bool autoFit;
   final VoidCallback? onToggleAutoFit;
+
+  /// Break handles: on, a handle drag in the graph moves one side only.
+  final bool breakHandles;
+  final VoidCallback? onToggleBreakHandles;
   final ValueChanged<BridgeSideInterp>? onInterp;
 
   /// A tangent mode chosen for the selected keys — Auto / Clamp / Free (§6.3).
@@ -511,6 +515,8 @@ class KeyCommandStrip extends StatelessWidget {
     this.onLens,
     this.autoFit = true,
     this.onToggleAutoFit,
+    this.breakHandles = false,
+    this.onToggleBreakHandles,
     this.onInterp,
     this.onTangentMode,
     this.onOpenEasing,
@@ -726,6 +732,15 @@ class KeyCommandStrip extends StatelessWidget {
                   tip: autoFit ? l10n.tipAutoFitOn : l10n.tipAutoFitOff,
                   on: autoFit,
                   onPressed: () => onToggleAutoFit?.call()),
+              const SizedBox(width: 2),
+              _button(t,
+                  keyName: 'graph-break-handles',
+                  label: l10n.graphBreakHandles,
+                  tip: breakHandles
+                      ? l10n.tipBreakHandlesOn
+                      : l10n.tipBreakHandlesOff,
+                  on: breakHandles,
+                  onPressed: () => onToggleBreakHandles?.call()),
               const SizedBox(width: 12),
             ],
           ],
