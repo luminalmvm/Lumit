@@ -41,6 +41,7 @@ import 'package:lumit_flutter/state/tools.dart';
 import 'package:lumit_flutter/src/rust/api/assets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
+import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:lumit_flutter/src/rust/api/graph.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/state.dart';
@@ -4457,6 +4458,29 @@ void main() {
         barBounds(startOffsetFrame: 10, sourceFrames: null, retimed: false),
         BarBounds.free,
         reason: 'a generated layer — or media that would not read — is free',
+      );
+    });
+
+    /// A still has one frame and no length. Its tail used to stop on that one
+    /// frame, so the only way to make an image last was Stretch.
+    test('a still has no source length, so its ends are free', () {
+      BridgeMediaInfo media({required bool isStill}) => BridgeMediaInfo(
+            width: 2,
+            height: 2,
+            fpsNum: 25,
+            fpsDen: 1,
+            duration: const BridgeRational(num: 2, den: 1),
+            videoCodec: 'png',
+            channels: 0,
+            sampleRate: 0,
+            isStill: isStill,
+          );
+      expect(footageSourceFrames(media(isStill: false), 30, 1), 60);
+      final still = footageSourceFrames(media(isStill: true), 30, 1);
+      expect(still, isNull);
+      expect(
+        barBounds(startOffsetFrame: 0, sourceFrames: still, retimed: false),
+        BarBounds.free,
       );
     });
 
