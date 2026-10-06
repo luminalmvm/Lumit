@@ -17,6 +17,9 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
 
+mod after_effects;
+pub use after_effects::{import_after_effects_shortcuts, AfterEffectsImport, NotAfterEffects};
+
 /// Something a chord can be bound to, identified by a stable string (e.g.
 /// `"playback.toggle"`). A string — not a giant enum — so new commands never
 /// force a breaking change and a keymap file stays readable.

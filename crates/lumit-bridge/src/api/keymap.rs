@@ -443,3 +443,29 @@ pub fn keymap_from_json(json: String) -> Result<Vec<BridgeKeymapGroup>, BridgeEr
     with_keymap(|km| *km = lumit_keymap::with_new_defaults(parsed));
     Ok(keymap_groups())
 }
+
+/// What reading an After Effects shortcut file gave the keymap.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BridgeAfterEffectsKeymap {
+    /// The table as it now stands.
+    pub groups: Vec<BridgeKeymapGroup>,
+    /// How many actions took their keys from the file.
+    pub actions: u32,
+}
+
+/// Take the shortcuts from an After Effects shortcut file, the `.txt` it keeps
+/// in its `aeks` folder, and hand back the table.
+///
+/// Laid over the After Effects preset, so an action the file has no command
+/// for keeps the preset's chord. Text with no After Effects command in it is
+/// refused and the current map is left alone.
+pub fn keymap_import_after_effects(text: String) -> Result<BridgeAfterEffectsKeymap, BridgeError> {
+    let import = lumit_keymap::import_after_effects_shortcuts(&text)
+        .map_err(|e| BridgeError::InvalidKeymapFile(e.to_string()))?;
+    with_keymap(|km| *km = import.keymap);
+    Ok(BridgeAfterEffectsKeymap {
+        groups: keymap_groups(),
+        actions: u32::try_from(import.actions).unwrap_or(u32::MAX),
+    })
+}

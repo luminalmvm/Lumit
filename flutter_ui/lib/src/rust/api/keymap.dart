@@ -8,7 +8,7 @@ import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `preset_map`, `row`, `wheel_action`, `with_keymap`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`
 
 /// Every binding, grouped by context in the order the page lists them — the
 /// whole table in one call.
@@ -114,6 +114,41 @@ String keymapToJson() => BridgeLib.instance.api.crateApiKeymapKeymapToJson();
 /// only the ones it never heard of take their default.
 Future<List<BridgeKeymapGroup>> keymapFromJson({required String json}) =>
     BridgeLib.instance.api.crateApiKeymapKeymapFromJson(json: json);
+
+/// Take the shortcuts from an After Effects shortcut file, the `.txt` it keeps
+/// in its `aeks` folder, and hand back the table.
+///
+/// Laid over the After Effects preset, so an action the file has no command
+/// for keeps the preset's chord. Text with no After Effects command in it is
+/// refused and the current map is left alone.
+Future<BridgeAfterEffectsKeymap> keymapImportAfterEffects(
+        {required String text}) =>
+    BridgeLib.instance.api.crateApiKeymapKeymapImportAfterEffects(text: text);
+
+/// What reading an After Effects shortcut file gave the keymap.
+class BridgeAfterEffectsKeymap {
+  /// The table as it now stands.
+  final List<BridgeKeymapGroup> groups;
+
+  /// How many actions took their keys from the file.
+  final int actions;
+
+  const BridgeAfterEffectsKeymap({
+    required this.groups,
+    required this.actions,
+  });
+
+  @override
+  int get hashCode => groups.hashCode ^ actions.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeAfterEffectsKeymap &&
+          runtimeType == other.runtimeType &&
+          groups == other.groups &&
+          actions == other.actions;
+}
 
 /// One row of the Settings → Keymap table: what the action is called, what it
 /// is called internally, and the chord that runs it.
