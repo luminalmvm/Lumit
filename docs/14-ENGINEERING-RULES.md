@@ -82,7 +82,10 @@ Same project and inputs, same exported pixels, every run.
 - Every WGSL effect has a CPU twin, and tests hold the two within the effect's declared
   tolerance.
 - Retime and rational time get property tests. So does the journal (apply, invert, apply).
-- Every bug fix lands with a test that fails without it.
+- A test has to earn its place. No tests for labels, layout, getters, or a second route
+  to something already tested.
+- A bug fix gets a regression test only if the bug lost work, crashed, hung, or exported
+  wrong pixels.
 - Every performance budget is a CI gate.
 - Not built yet: the golden EXR corpus and the fuzz targets.
 
@@ -119,7 +122,8 @@ Same project and inputs, same exported pixels, every run.
 
 ## 10. Done means
 
-1. Tests, including a CPU twin if it touches pixels and property tests if it touches time.
+1. The tests section 6 asks for, including a CPU twin if it touches pixels and property
+   tests if it touches time.
 2. New long operations cancel and report progress, with a test that cancels one.
 3. No performance gate regresses. New allocations use the pools, new channels are bounded.
 4. Failures return typed errors. No new panic sites.

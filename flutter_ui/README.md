@@ -24,4 +24,4 @@ flutter analyze           # the lint pass (must stay clean)
   velocity, Retime not time remap, export not render.
 - British English, sentence case, no exclamation marks, no emoji.
 - Owned widgets over Material chrome.
-- Every feature lands with its tests.
+- Only add a test when it's essential (docs/GUIDE.md, section 2).
