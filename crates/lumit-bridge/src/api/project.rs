@@ -155,6 +155,7 @@ impl ProjectReference {
             // are not this one's to drop. The `planes/` sidecar is untouched,
             // so reopening reads them back.
             lumit_render::planes::forget(&lumit_render::planes::owned_ids(&doc));
+            crate::api::state::discard_unsaved_journal(&state);
         }
         // The roto mattes go the same way and for the same reason: the
         // `roto/` sidecar is untouched, so reopening reads them back.

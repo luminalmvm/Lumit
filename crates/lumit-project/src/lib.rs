@@ -1423,10 +1423,19 @@ impl JournalFile {
 
     pub fn clear(&self) -> Result<(), ProjectError> {
         match fs::remove_file(&self.path) {
-            Ok(()) => Ok(()),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Err(e) => Err(e.into()),
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e.into()),
         }
+        // The journal folder and the document's folder above it go too, or the
+        // cache keeps an empty pair for every project. `remove_dir` only takes
+        // an empty folder, so anything else in there stays.
+        for dir in self.path.ancestors().skip(1).take(2) {
+            if fs::remove_dir(dir).is_err() {
+                break;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -3745,6 +3754,25 @@ mod tests {
         );
         journal.clear().unwrap();
         assert!(journal.read().unwrap().is_empty());
+    }
+
+    /// The cache used to keep an empty folder pair for every project ever made.
+    #[test]
+    fn clearing_a_journal_removes_the_folders_it_made() {
+        let dir = tempfile::tempdir().unwrap();
+        let doc_dir = dir.path().join("a-document");
+        let journal = JournalFile::at_path(doc_dir.join("journal").join("ops.jsonl"));
+        journal
+            .append(&Op::AddItem {
+                index: 0,
+                item: Box::new(ProjectItem::Footage(footage("a.mp4"))),
+            })
+            .unwrap();
+        assert!(doc_dir.join("journal").join("ops.jsonl").is_file());
+
+        journal.clear().unwrap();
+        assert!(!doc_dir.exists(), "the document's folder went with it");
+        assert!(dir.path().is_dir(), "and nothing above that was touched");
     }
 
     /// **A layer's audio insert chain survives the file**

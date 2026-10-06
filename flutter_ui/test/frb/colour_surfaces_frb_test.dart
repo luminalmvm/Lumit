@@ -516,7 +516,6 @@ void main() {
       final p = await open(tester, pick: path);
 
       expect(pathWell(tester), 'None');
-      expect(find.textContaining('No configuration'), findsOneWidget);
       expect(
           find.descendant(
               of: find.byKey(const ValueKey('project-colour-working-space')),

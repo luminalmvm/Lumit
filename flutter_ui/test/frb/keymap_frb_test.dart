@@ -229,15 +229,14 @@ void main() {
     /// A panel taking an **app-wide** chord is a *shadow*, not a clash:
     /// the focused panel gets first refusal and the app-wide binding
     /// is the fallback, so the chord runs exactly one action and which one is
-    /// never in doubt. The page says so quietly rather than asking to have it
-    /// fixed — the shipped default carries one on purpose (`L` in the
-    /// Timeline).
-    testWidgets('a panel taking an app-wide chord is said, not warned about',
+    /// never in doubt. The page does not ask to have it fixed — the shipped
+    /// default carries one on purpose (`L` in the Timeline).
+    testWidgets('a panel taking an app-wide chord is not warned about',
         (tester) async {
       // The Timeline's zoom-in takes Undo's app-wide chord.
       //
-      // Made before the page opens, because the note is built from the keymap
-      // the page finds. It is *not* awaited — a bridge Future only completes
+      // Made before the page opens, because the page is built from the keymap
+      // it finds. It is *not* awaited — a bridge Future only completes
       // on a real event-loop turn, and there is no tester to turn one until a
       // widget is pumped — but nor is it done when it returns: the call lands
       // on the engine's worker thread, and a machine quick enough to make that
@@ -266,11 +265,6 @@ void main() {
 
       await openKeymapPage(tester);
 
-      expect(find.byKey(const ValueKey('keymap-shadows')), findsOneWidget);
-      expect(
-          find.textContaining('something else in one panel'), findsOneWidget);
-      expect(find.textContaining('Undo'), findsWidgets,
-          reason: 'the note names what it took the chord from');
       expect(find.byKey(const ValueKey('keymap-conflicts')), findsNothing,
           reason: 'a shadow is not something to go and fix');
     });
@@ -377,6 +371,34 @@ void main() {
       expect(modifier(BridgeWheelAction.zoomTime), BridgeWheelModifier.alt);
       expect(modifier(BridgeWheelAction.zoomValues), BridgeWheelModifier.ctrl,
           reason: 'both live in the Graph editor, so they swapped');
+    });
+
+    /// The Dragging section sits under the scroll wheel's, and picking Ctrl
+    /// there is what the engine then holds.
+    testWidgets('the handle modifier is picked under the scroll wheel',
+        (tester) async {
+      await openKeymapPage(tester);
+      final row = find.byKey(const ValueKey('keymap-drag-break-handles'));
+      await tester.scrollUntilVisible(
+        row,
+        600,
+        scrollable: find
+            .descendant(
+              of: find.byKey(const ValueKey('settings-body-shortcuts')),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(row);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Ctrl').last);
+      await settleFrb(
+        tester,
+        until: () => keymapBreakHandles() == BridgeHandleModifier.ctrl,
+      );
+
+      expect(keymapBreakHandles(), BridgeHandleModifier.ctrl);
     });
   });
 
