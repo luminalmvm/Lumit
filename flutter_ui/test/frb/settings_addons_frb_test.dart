@@ -121,7 +121,7 @@ void main() {
         expect(find.byKey(const ValueKey('settings-addons-none')),
             findsOneWidget);
       }
-      expect(find.text(l10n.settingsAddonsNotChecked), findsOneWidget,
+      expect(service.entries, isEmpty,
           reason: 'nothing is fetched until the button is pressed');
     });
 

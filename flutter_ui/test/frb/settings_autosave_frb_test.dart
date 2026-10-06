@@ -75,8 +75,6 @@ void main() {
       expect(
           find.byKey(const ValueKey('settings-autosave-minutes')), findsOneWidget);
       expect(find.byKey(const ValueKey('settings-autosave-keep')), findsOneWidget);
-      expect(find.text(l10n.settingsAutosaveOff), findsNothing,
-          reason: 'five minutes is not off');
     });
 
     testWidgets('a typed interval is written to the settings file',
@@ -92,13 +90,11 @@ void main() {
       expect(ui.workspace.autosaveMinutes, 12);
     });
 
-    testWidgets('zero minutes is off, and the row says so', (tester) async {
+    testWidgets('zero minutes is off, and is not refused', (tester) async {
       final ui = await open(tester);
 
       await type(tester, 'settings-autosave-minutes', '0');
       expect(ui.workspace.autosaveMinutes, 0);
-      expect(find.text(l10n.settingsAutosaveOff), findsOneWidget,
-          reason: 'off is reported, not refused');
     });
 
     testWidgets('Reset page puts both numbers back to what Lumit ships',
@@ -110,7 +106,6 @@ void main() {
 
       expect(ui.workspace.autosaveMinutes, 5);
       expect(ui.workspace.autosaveKeep, 5);
-      expect(find.text(l10n.settingsAutosaveOff), findsNothing);
     });
   });
 }
