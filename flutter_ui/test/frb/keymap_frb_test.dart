@@ -150,6 +150,34 @@ void main() {
           reason: 'the stored file is laid over the defaults, not swapped for '
               'them, so an action it never heard of keeps its key');
     });
+
+    /// The Dragging section sits under the scroll wheel's, and picking Ctrl
+    /// there is what the engine then holds.
+    testWidgets('the handle modifier is picked under the scroll wheel',
+        (tester) async {
+      await openKeymapPage(tester);
+      final row = find.byKey(const ValueKey('keymap-drag-break-handles'));
+      await tester.scrollUntilVisible(
+        row,
+        600,
+        scrollable: find
+            .descendant(
+              of: find.byKey(const ValueKey('settings-body-shortcuts')),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(row);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Ctrl').last);
+      await settleFrb(
+        tester,
+        until: () => keymapBreakHandles() == BridgeHandleModifier.ctrl,
+      );
+
+      expect(keymapBreakHandles(), BridgeHandleModifier.ctrl);
+    });
   });
 
   group('The scroll wheel (frb)', () {

@@ -184,6 +184,7 @@ class KeymapState extends ChangeNotifier {
   List<BridgeKeyConflict> _conflicts = const [];
   List<BridgeKeyShadow> _shadows = const [];
   List<BridgeWheelBinding> _wheel = const [];
+  BridgeHandleModifier _breakHandles = BridgeHandleModifier.alt;
 
   /// The whole table, grouped by where each binding is live.
   List<BridgeKeymapGroup> get groups => _groups;
@@ -221,6 +222,22 @@ class KeymapState extends ChangeNotifier {
   Future<void> setWheel(
       BridgeWheelAction action, BridgeWheelModifier modifier) async {
     _wheel = await keymapSetWheel(action: action, modifier: modifier);
+    _store();
+    notifyListeners();
+  }
+
+  /// The modifier that breaks or joins a keyframe's handles as a drag begins
+  /// in the Graph editor.
+  BridgeHandleModifier get breakHandles => _breakHandles;
+
+  /// Whether that modifier is held right now.
+  bool get breakHandlesHeld => switch (_breakHandles) {
+        BridgeHandleModifier.alt => altActuallyHeld(),
+        BridgeHandleModifier.ctrl => HardwareKeyboard.instance.isControlPressed,
+      };
+
+  Future<void> setBreakHandles(BridgeHandleModifier modifier) async {
+    _breakHandles = await keymapSetBreakHandles(modifier: modifier);
     _store();
     notifyListeners();
   }
@@ -290,12 +307,31 @@ class KeymapState extends ChangeNotifier {
     return null;
   }
 
+  Map<String, List<BridgeKeyBinding>> _byChord = const {};
+
+  /// Everything [chord] runs, in every context. The table shows one chord a
+  /// row, so the keyboard picture reads this to light a key for an action's
+  /// second chord too.
+  List<BridgeKeyBinding> bindingsFor(String chord) =>
+      _byChord[chord] ?? const [];
+
+  /// An empty search is every binding the engine holds.
+  void _indexChords() {
+    final byChord = <String, List<BridgeKeyBinding>>{};
+    for (final binding in keymapSearch(query: '')) {
+      (byChord[binding.chord] ??= []).add(binding);
+    }
+    _byChord = byChord;
+  }
+
   /// Re-read the table, the conflicts and the shadows from the engine.
   void refresh() {
     _groups = keymapGroups();
     _conflicts = keymapConflicts();
     _shadows = keymapShadows();
     _wheel = keymapWheel();
+    _breakHandles = keymapBreakHandles();
+    _indexChords();
     notifyListeners();
   }
 
@@ -304,6 +340,8 @@ class KeymapState extends ChangeNotifier {
     _conflicts = keymapConflicts();
     _shadows = keymapShadows();
     _wheel = keymapWheel();
+    _breakHandles = keymapBreakHandles();
+    _indexChords();
     _store();
     notifyListeners();
   }
@@ -349,6 +387,19 @@ class KeymapState extends ChangeNotifier {
       return null;
     } on AnyhowException catch (e) {
       return e.message;
+    }
+  }
+
+  /// Take the shortcuts from an After Effects shortcut file. Returns how many
+  /// actions took their keys from it, or null when the engine refused the
+  /// text and left the keymap alone.
+  Future<int?> importAfterEffects(String text) async {
+    try {
+      final result = await keymapImportAfterEffects(text: text);
+      _adopt(result.groups);
+      return result.actions;
+    } catch (_) {
+      return null;
     }
   }
 

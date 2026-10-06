@@ -1471,9 +1471,10 @@ impl CompositionReference {
         let comp = self.composition()?;
         let size = 72.0_f64;
         let text = "Text";
-        // The anchor sits on the estimated glyph bounds so the layer rotates
-        // and scales about its own middle rather than its top-left corner.
-        let estimated_width = text.chars().count() as f64 * size * 0.5;
+        // The anchor sits in the middle of the line as the engine lays it out,
+        // so the layer rotates and scales about itself.
+        #[allow(clippy::cast_possible_truncation)]
+        let line = lumit_text::line_layout(text, size as f32, false);
 
         let layer = crate::edits::base_layer(
             "Text".into(),
@@ -1491,8 +1492,8 @@ impl CompositionReference {
             },
             comp.duration.0,
             TransformGroup {
-                anchor_x: Property::fixed(estimated_width * 0.5),
-                anchor_y: Property::fixed(size * 0.5),
+                anchor_x: Property::fixed(f64::from(line.width) * 0.5),
+                anchor_y: Property::fixed(f64::from(line.height) * 0.5),
                 position_x: Property::fixed(f64::from(comp.width) * 0.5),
                 position_y: Property::fixed(f64::from(comp.height) * 0.5),
                 ..TransformGroup::default()
@@ -1571,7 +1572,10 @@ impl CompositionReference {
         use lumit_core::model::TransformGroup;
 
         let comp = self.composition()?;
-        let size = document.size;
+        // The point clicked is where the baseline starts, which for an empty
+        // line is where a capital letter would stand.
+        #[allow(clippy::cast_possible_truncation)]
+        let baseline = f64::from(lumit_text::line_layout("", document.size as f32, false).baseline);
         let layer = crate::edits::base_layer(
             "Text".into(),
             lumit_core::model::LayerKind::Text {
@@ -1585,7 +1589,7 @@ impl CompositionReference {
             comp.duration.0,
             TransformGroup {
                 anchor_x: Property::fixed(0.0),
-                anchor_y: Property::fixed(size),
+                anchor_y: Property::fixed(baseline),
                 position_x: Property::fixed(x),
                 position_y: Property::fixed(y),
                 ..TransformGroup::default()
@@ -2128,7 +2132,8 @@ impl CompositionReference {
     }
 
     /// The span end and natural pixel size a placed clip should take: the media's
-    /// own when it probes, the comp's when it does not.
+    /// own when it probes, the comp's when it does not. A still takes the
+    /// comp's length either way.
     #[frb(ignore)]
     fn footage_span_and_size(
         state: &LumitBridgeState,
@@ -2149,12 +2154,17 @@ impl CompositionReference {
             let Some(info) = crate::probe::ensure_probed(&src) else {
                 return fallback;
             };
-            let frames = (info.duration_seconds * comp.frame_rate.fps()).round() as i64;
-            let out = comp
-                .frame_rate
-                .time_of_frame(frames.max(1))
-                .map(|t| t.0)
-                .unwrap_or(comp.duration.0);
+            // A still has no length of its own, so it lasts as long as the comp
+            // does and is dragged shorter from there.
+            let out = if info.has_picture() && !info.runs_as_video() {
+                comp.duration.0
+            } else {
+                let frames = (info.duration_seconds * comp.frame_rate.fps()).round() as i64;
+                comp.frame_rate
+                    .time_of_frame(frames.max(1))
+                    .map(|t| t.0)
+                    .unwrap_or(comp.duration.0)
+            };
             // Audio-only media has no video stream at all, so it takes the comp's
             // size — there is no natural size to anchor on.
             let (nat_w, nat_h) = match &info.video {

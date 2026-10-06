@@ -2791,6 +2791,8 @@ fn the_queue_holds_its_items_until_it_is_started() {
 /// journal is the only record of work done since the last save.
 #[test]
 fn every_commit_is_journalled_and_a_save_clears_it() {
+    let journals = tempfile::tempdir().expect("temp dir");
+    let _journals = crate::api::state::journals_in(journals.path());
     let project = LumitBridgeState::new_project(None).expect("a new project");
 
     let journal = {
@@ -2840,6 +2842,50 @@ fn every_commit_is_journalled_and_a_save_clears_it() {
     assert!(journal.read().expect("journal read").is_empty());
 
     std::fs::remove_dir_all(&dir).ok();
+}
+
+/// A project that was never saved leaves nothing behind when it closes. The
+/// cache used to keep a journal folder for every project ever made.
+#[test]
+fn closing_a_never_saved_project_removes_its_journal() {
+    let journals = tempfile::tempdir().expect("temp dir");
+    let _journals = crate::api::state::journals_in(journals.path());
+    let held = || std::fs::read_dir(journals.path()).expect("listed").count();
+
+    let project = LumitBridgeState::new_project(None).expect("a new project");
+    project
+        .new_composition("Scene".into(), None)
+        .expect("an edit");
+    assert_eq!(held(), 1, "the edit was journalled");
+
+    project.close().expect("closed");
+    assert_eq!(held(), 0, "its journal and folders went with it");
+}
+
+/// A project with a file keeps its journal through a close, since recovery
+/// can still replay it onto that file.
+#[test]
+fn closing_a_saved_project_keeps_its_journal() {
+    let journals = tempfile::tempdir().expect("temp dir");
+    let _journals = crate::api::state::journals_in(journals.path());
+    let dir = tempfile::tempdir().expect("temp dir");
+    let target = dir.path().join("scene.lum").to_string_lossy().into_owned();
+
+    let project = LumitBridgeState::new_project(None).expect("a new project");
+    project.new_composition("Saved".into(), None).expect("comp");
+    project.save(target.clone()).expect("saved");
+    // A save switches the journal off, and recovery is what arms it again.
+    project.restore_journal(target).expect("restored");
+    project
+        .new_composition("Unsaved".into(), None)
+        .expect("an edit");
+
+    project.close().expect("closed");
+    assert_eq!(
+        std::fs::read_dir(journals.path()).expect("listed").count(),
+        1,
+        "the unsaved edit is still there to recover"
+    );
 }
 
 /// Two threads opening projects and editing them at once must not deadlock.
@@ -4881,6 +4927,26 @@ fn rebinding_a_row_answers_with_the_table_it_produced() {
         None,
         "the old chord stopped meaning it"
     );
+}
+
+/// The handle modifier set in Settings is in the file that gets stored, and a
+/// preset puts Alt back.
+#[test]
+fn the_handle_modifier_is_stored_with_the_keymap_and_reset_by_a_preset() {
+    use crate::api::keymap::*;
+    let _guard = keymap_test();
+
+    assert_eq!(keymap_break_handles(), BridgeHandleModifier::Alt);
+    assert_eq!(
+        keymap_set_break_handles(BridgeHandleModifier::Ctrl),
+        BridgeHandleModifier::Ctrl
+    );
+
+    let json = keymap_to_json();
+    keymap_load_preset(BridgeKeymapPreset::Lumit);
+    assert_eq!(keymap_break_handles(), BridgeHandleModifier::Alt);
+    keymap_from_json(json).expect("the stored file reads back");
+    assert_eq!(keymap_break_handles(), BridgeHandleModifier::Ctrl);
 }
 
 /// A corrupt stored blob, or somebody else's JSON, leaves the keymap alone

@@ -58,5 +58,57 @@ void main() {
           frames: 100);
       expect(left, (start: 10.0, span: 30.0));
     });
+
+    test('a pan can reach the padding at either end, as the scrollbar can', () {
+      // Fit-to-panel shows the whole comp and the padding either side, so the
+      // raw view runs from -overhang to frames + overhang.
+      expect(
+        navigatorDrag(
+            grab: NavigatorGrab.body,
+            frame: 0,
+            hold: 10,
+            start: 20,
+            end: 40,
+            frames: 100,
+            overhang: 1),
+        (start: -1.0, span: 20.0),
+      );
+      expect(
+        navigatorDrag(
+            grab: NavigatorGrab.body,
+            frame: 500,
+            hold: 10,
+            start: -1,
+            end: 101,
+            frames: 100,
+            overhang: 1),
+        (start: -1.0, span: 102.0),
+      );
+    });
+  });
+
+  group('the zoom a window asks for', () {
+    test('is the zoom that shows it, padding and all', () {
+      // Read the window off a zoomed scroll and ask for it back: the same zoom.
+      // `frames / span` came back a hair wider, and a pan asks on every move.
+      for (final zoom in [1.5, 4.0, 37.0]) {
+        const viewport = 612.0;
+        final w = navigatorWindow(
+            offset: 300,
+            viewport: viewport,
+            content: viewport * zoom,
+            frames: 100,
+            clamp: false);
+        expect(
+          navigatorZoom(span: w.end - w.start, frames: 100, viewport: viewport),
+          closeTo(zoom, 1e-9),
+        );
+      }
+    });
+
+    test('the whole comp is fit-to-panel', () {
+      expect(navigatorZoom(span: 100, frames: 100, viewport: 612), 1);
+      expect(navigatorZoom(span: 0, frames: 100, viewport: 612), 1);
+    });
   });
 }

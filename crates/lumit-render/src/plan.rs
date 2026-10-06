@@ -210,6 +210,44 @@ fn media_source(
     }
 }
 
+/// The neighbour frames a Precomp or adjustment layer's stack reads at layer
+/// time `lt`, each with whether a flow consumer wants motion measured against
+/// it. These layers have no decoded frames, so their picture is built again at
+/// each offset. The planner and the builder both ask here, so the footage one
+/// fetches is the footage the other draws. Empty for a stack that reads only
+/// its own frame.
+pub(crate) fn rebuild_offsets(
+    layer: &lumit_core::model::Layer,
+    lt: f64,
+    comp_dt: f64,
+) -> Vec<(i32, bool)> {
+    let fx_on = layer.switches.fx;
+    let flow = lumit_core::fx::stack_flow_neighbours(&layer.effects, fx_on);
+    let mut offsets = flow.clone();
+    if lumit_core::fx::stack_is_temporal(&layer.effects, fx_on) {
+        // Asked at the layer's frame, as a footage layer's window is.
+        offsets.extend(lumit_core::fx::stack_temporal_window(
+            &layer.effects,
+            fx_on,
+            lt / comp_dt,
+        ));
+    }
+    offsets.retain(|&o| o != 0);
+    offsets.sort_unstable();
+    offsets.dedup();
+    offsets
+        .into_iter()
+        .map(|o| (o, flow.contains(&o)))
+        .collect()
+}
+
+/// How far comp time `tau` is from the frame time `t`, in comp frames: the
+/// key a clip's picture at another moment is filed under and found by
+/// ([`CompLayerPixels::shutter`](crate::decode::CompLayerPixels::shutter)).
+pub(crate) fn moment_offset(tau: f64, t: f64, comp_dt: f64) -> f64 {
+    (tau - t) / comp_dt
+}
+
 /// Recursively collect the decode jobs comp `comp` needs at comp time `t`
 /// (docs/06-RENDER-PIPELINE.md: Precomp evaluation). Cycle-guarded through
 /// `visited`, which must already contain `comp.id`.
@@ -220,10 +258,15 @@ fn media_source(
 /// `spliced` says this comp is being spliced into its parent by a collapsed
 /// Precomp layer, where the occlusion cull does not apply — the same
 /// flag the draw builder takes, so the two skip exactly the same layers.
+///
+/// `moments` are the other times of this comp a temporal effect further up
+/// builds it again at ([`rebuild_offsets`]), so its footage is fetched at
+/// those too. Empty for every comp nothing temporal looks into.
 pub fn collect_comp_jobs(
     ctx: &PlanContext<'_>,
     comp: &Composition,
     t: f64,
+    moments: &[f64],
     jobs: &mut Vec<CompJob>,
     visited: &mut Vec<Uuid>,
     spliced: bool,
@@ -347,6 +390,29 @@ pub fn collect_comp_jobs(
     // frames. Empty everywhere in an ordinary comp.
     let shutter_offsets = lumit_core::fx::accumulation_shutter_offsets(&comp.layers, t);
     let comp_dt = 1.0 / comp.frame_rate.fps().max(1.0);
+    // The times each layer is built again at: the ones this comp was handed,
+    // and for a layer under an adjustment with a temporal stack, that
+    // adjustment's neighbours. The builder rebuilds the layers below at the
+    // same times (`adjustment_flow_below`). Empty everywhere in an ordinary
+    // comp.
+    let mut rebuilt = moments.to_vec();
+    let mut layer_moments = Vec::with_capacity(comp.layers.len());
+    for l in &comp.layers {
+        layer_moments.push(rebuilt.clone());
+        if l.is_adjustment()
+            && l.switches.visible
+            && !l.graph.out_unwired
+            && in_span(l)
+            && !(any_solo && !l.switches.solo)
+        {
+            let lt = lumit_core::time::layer_time(t, l.start_offset.0);
+            rebuilt.extend(
+                rebuild_offsets(l, lt, comp_dt)
+                    .into_iter()
+                    .map(|(o, _)| t + f64::from(o) * comp_dt),
+            );
+        }
+    }
     for (idx, layer) in comp.layers.iter().enumerate() {
         if !wanted.contains(&layer.id) || !in_span(layer) {
             continue;
@@ -449,14 +515,40 @@ pub fn collect_comp_jobs(
                         lumit_core::model::collapse_state(doc, comp, layer, lt),
                         lumit_core::model::CollapseState::Active
                     );
+                    // The other moments of the nested comp the builder asks
+                    // for: the ones this layer is itself rebuilt at, and its
+                    // own stack's neighbours. Each goes through the Retime
+                    // map the way `st` did. A Posterize-held layer keeps its
+                    // held footage.
+                    let mut nested_moments = Vec::new();
+                    if live {
+                        let nested_at = |tau: f64| {
+                            lumit_core::model::nested_source_time(
+                                layer,
+                                nested,
+                                lumit_core::time::layer_time(tau, layer.start_offset.0),
+                            )
+                        };
+                        nested_moments.extend(layer_moments[idx].iter().map(|&tau| nested_at(tau)));
+                        if !collapsed && !layer.is_adjustment() {
+                            nested_moments.extend(
+                                rebuild_offsets(layer, lt, comp_dt)
+                                    .into_iter()
+                                    .map(|(o, _)| nested_at(t + f64::from(o) * comp_dt)),
+                            );
+                        }
+                    }
+                    // A rebuild at another moment is made from pixels, so a
+                    // held frame only saves the decodes when there is none.
                     if live
                         && !collapsed
+                        && nested_moments.is_empty()
                         && held.is_some_and(|held| held(nested, st, layer.graph_inputs.as_ref()))
                     {
                         continue;
                     }
                     visited.push(*nested_id);
-                    collect_comp_jobs(ctx, nested, st, jobs, visited, collapsed);
+                    collect_comp_jobs(ctx, nested, st, &nested_moments, jobs, visited, collapsed);
                     visited.pop();
                 }
             }
@@ -580,7 +672,7 @@ pub fn collect_comp_jobs(
                 // its own settings: flow can tear on footage it cannot
                 // measure, and it runs only where the user switched it on.
                 // Empty for every layer no such adjustment covers.
-                let shutter: Vec<crate::decode::ShutterSample> = shutter_offsets[idx]
+                let mut shutter: Vec<crate::decode::ShutterSample> = shutter_offsets[idx]
                     .iter()
                     .map(|&off| {
                         let slt = lumit_core::time::layer_time(
@@ -597,6 +689,34 @@ pub fn collect_comp_jobs(
                         }
                     })
                     .collect();
+                // And the clip at each moment a temporal effect above builds
+                // it again at, so a neighbour of a Precomp or an adjustment
+                // layer shows the footage a frame away and not this one. One
+                // real frame each, picked the way a layer's own neighbours
+                // are. A Posterize-held clip stays held.
+                if sample_times[idx] == t {
+                    for &tau in &layer_moments[idx] {
+                        let offset = moment_offset(tau, t, comp_dt);
+                        if offset == 0.0
+                            || shutter
+                                .iter()
+                                .any(|s| s.offset.to_bits() == offset.to_bits())
+                        {
+                            continue;
+                        }
+                        let sst = layer.source_time_at(lumit_core::time::layer_time(
+                            tau,
+                            layer.start_offset.0,
+                        ));
+                        let (source_frame, _) =
+                            lumit_core::pixels::frame_pick(sst, fps, src_frames, false, None);
+                        shutter.push(crate::decode::ShutterSample {
+                            offset,
+                            source_frame,
+                            blend: None,
+                        });
+                    }
+                }
                 let shutter_flow = match &layer.interpolation {
                     Interpolation::Flow(p) if !shutter.is_empty() => Some(p.clone()),
                     _ => None,
@@ -699,7 +819,7 @@ fn collect_graph_jobs(
                     continue;
                 }
                 visited.push(*nested_id);
-                collect_comp_jobs(ctx, nested, t, jobs, visited, false);
+                collect_comp_jobs(ctx, nested, t, &[], jobs, visited, false);
                 visited.pop();
             }
             LayerKind::Footage { item } => {
@@ -797,7 +917,7 @@ fn nested_graph_jobs(
         Some(graph) => collect_graph_jobs(ctx, nested, graph, t, jobs, visited, true),
         // A comp with layers: the dangling reference the walk renders as a
         // passthrough, planned as the Precomp it looks like.
-        None => collect_comp_jobs(ctx, nested, t, jobs, visited, false),
+        None => collect_comp_jobs(ctx, nested, t, &[], jobs, visited, false),
     }
     visited.pop();
 }
@@ -833,7 +953,7 @@ pub fn plan_comp_frame_held(
     };
     let mut jobs = Vec::new();
     let mut visited = vec![comp.id];
-    collect_comp_jobs(&ctx, comp, t, &mut jobs, &mut visited, false);
+    collect_comp_jobs(&ctx, comp, t, &[], &mut jobs, &mut visited, false);
     jobs
 }
 

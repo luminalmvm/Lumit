@@ -14,7 +14,6 @@
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lumit_flutter/l10n/strings.dart';
 import 'package:lumit_flutter/main.dart' show LumitUiState;
 import 'package:lumit_flutter/shell/settings_window_frb.dart';
 import 'package:lumit_flutter/state/addons.dart';
@@ -74,7 +73,7 @@ void main() {
         expect(find.byKey(const ValueKey('settings-addons-none')),
             findsOneWidget);
       }
-      expect(find.text(l10n.settingsAddonsNotChecked), findsOneWidget,
+      expect(service.entries, isEmpty,
           reason: 'nothing is fetched until the button is pressed');
     });
   });

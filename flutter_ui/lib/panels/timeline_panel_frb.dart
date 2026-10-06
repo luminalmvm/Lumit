@@ -490,7 +490,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       source.field0.mediaInfo().then((info) {
         if (!mounted || info == null) return;
         setState(() {
-          _footageFrames[id] = frameOfTime(info.duration, fpsNum, fpsDen);
+          _footageFrames[id] = footageSourceFrames(info, fpsNum, fpsDen);
           // The answer changes the bounds, and the document has not moved:
           // forget the revision so the next build works them out again.
           _boundsRevision = null;
@@ -1148,6 +1148,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// Auto-fit: the graph frames its curves vertically by itself; toggled off,
   /// the wheel pans and `Alt`+wheel zooms the value axis (docs/07 §5.3).
   bool _graphAutoFit = true;
+
+  /// Break handles: a handle drag in the graph moves its own side only.
+  bool _graphBreakHandles = false;
 
   final GlobalKey<GraphEditorFrbState> _graphPane = GlobalKey();
 
@@ -3166,15 +3169,24 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// on stays exactly where it is while the span changes around it. The strip
   /// swaps the two ends over for the other handle by naming a different start.
   ///
-  /// A pan asks for the same span it already had, and a zoom that is not
-  /// changing does not notify — so there is no tick to carry the anchor into
-  /// layout, and the offset is jumped straight to the frame instead.
-  void _navigateTo(double start, double span) {
+  /// A pan only scrolls, so it can't change the zoom however many pointer
+  /// moves it is made of. A zoom that is not changing does not notify, so
+  /// there is no tick to carry the anchor into layout, and the offset is
+  /// jumped straight to the frame instead.
+  void _navigateTo(double start, double span, {required bool pan}) {
     if (_laneFrames <= 0 || span <= 0) return;
+    if (pan) {
+      _scrollFrameToLeftEdge(start);
+      return;
+    }
     _zoomAnchorFrame = start;
     _zoomAnchorViewportX = 0;
     _zoomAnchorHeld = true;
-    final want = (_laneFrames / span).clamp(1.0, _maxZoom);
+    final want = navigatorZoom(
+      span: span,
+      frames: _laneFrames,
+      viewport: positionOf(_hLane)?.viewportDimension ?? _laneViewport,
+    ).clamp(1.0, _maxZoom);
     if ((want - _zoomMotion.target).abs() > 1e-9) {
       _setZoom(want, fly: false);
     } else {
@@ -4145,6 +4157,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                 autoFit: _graphAutoFit,
                 onToggleAutoFit: () =>
                     setState(() => _graphAutoFit = !_graphAutoFit),
+                breakHandles: _graphBreakHandles,
+                onToggleBreakHandles: () => setState(
+                    () => _graphBreakHandles = !_graphBreakHandles),
                 onInterp: (side) => _applyInterp(side),
                 onTangentMode: _applyTangentMode,
                 onOpenEasing: _openEasing,
@@ -4305,6 +4320,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                     vegas: _vegas(context),
                                     penArmed:
                                         ui.tools.tool.group == ToolGroup.pen,
+                                    breakHandles: _graphBreakHandles,
                                     selectedKeys: _graphKeySelection,
                                     onSelectionChanged: () => setState(() {}),
                                     onChanged: ui.model.refresh,

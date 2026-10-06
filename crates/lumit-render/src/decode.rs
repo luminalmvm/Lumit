@@ -93,6 +93,10 @@ pub struct CompJob {
     /// the Blend policy picks: a moment that lands on a real frame is that
     /// frame alone, and one between two is a crossfade of both, or a flow
     /// synthesis of both when [`Self::shutter_flow`] says so.
+    ///
+    /// Also the whole frames a temporal effect on a Precomp or adjustment
+    /// layer above builds this clip again at, one real frame each, so that
+    /// effect's neighbours show the footage a frame away.
     pub shutter: Vec<ShutterSample>,
     /// The layer's own Flow settings when its Retime uses Flow, so its
     /// in-between moments are synthesised the way its retime is. `None`

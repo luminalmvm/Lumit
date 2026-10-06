@@ -59,7 +59,70 @@ pub type SharedJournal = Arc<Mutex<Option<JournalFile>>>;
 /// Arm a journal for `document`, if this platform gives us somewhere to put one.
 #[frb(ignore)]
 pub(crate) fn journal_for(document: &Document) -> SharedJournal {
-    Arc::new(Mutex::new(JournalFile::for_document(document.id)))
+    Arc::new(Mutex::new(journal_file(document.id)))
+}
+
+/// The journal file for a document, wherever this build keeps them.
+#[cfg(not(test))]
+#[frb(ignore)]
+pub(crate) fn journal_file(doc_id: Uuid) -> Option<JournalFile> {
+    JournalFile::for_document(doc_id)
+}
+
+// Tests must never write into the user's real cache folder, so a test's
+// projects have no journal unless it asks for one in a temporary folder.
+// Thread-local, the shape `lumit_render::media_index` uses: tests run in
+// parallel threads, and one test's folder must not be another's.
+#[cfg(test)]
+thread_local! {
+    static TEST_JOURNAL_DIR: std::cell::RefCell<Option<PathBuf>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+#[cfg(test)]
+pub(crate) fn journal_file(doc_id: Uuid) -> Option<JournalFile> {
+    let dir = TEST_JOURNAL_DIR.with(|dir| dir.borrow().clone())?;
+    Some(JournalFile::at_path(
+        dir.join(doc_id.to_string())
+            .join("journal")
+            .join("ops.jsonl"),
+    ))
+}
+
+/// Keeps this thread's journals under a folder until it drops (tests only).
+#[cfg(test)]
+pub(crate) struct TestJournals;
+
+#[cfg(test)]
+impl Drop for TestJournals {
+    fn drop(&mut self) {
+        TEST_JOURNAL_DIR.with(|slot| *slot.borrow_mut() = None);
+    }
+}
+
+/// Journal this thread's projects under `dir` (tests only).
+#[cfg(test)]
+pub(crate) fn journals_in(dir: &Path) -> TestJournals {
+    TEST_JOURNAL_DIR.with(|slot| *slot.borrow_mut() = Some(dir.to_path_buf()));
+    TestJournals
+}
+
+/// Throw away the journal of a project that was never saved.
+///
+/// Recovery replays a journal onto a saved file, so without a file nothing can
+/// read this one back, and leaving it is how the cache filled with a folder
+/// per project. Only a clean close or a replaced project gets here, a crash
+/// never does.
+#[frb(ignore)]
+pub(crate) fn discard_unsaved_journal(state: &LumitBridgeState) {
+    if state.path.is_some() {
+        return;
+    }
+    if let Ok(journal) = state.journal.lock() {
+        if let Some(file) = journal.as_ref() {
+            let _ = file.clear();
+        }
+    }
 }
 
 #[frb(non_opaque)]
@@ -889,6 +952,7 @@ pub(crate) fn adopt(
             // so a failed cache clear is not worth refusing the open over.
             if let Ok(mut e) = entry.write() {
                 e.media.clear();
+                discard_unsaved_journal(&e);
             }
         }
         // The waveform summaries are keyed by file path and shared between

@@ -13,7 +13,6 @@
 //! names.
 
 use flutter_rust_bridge::frb;
-use lumit_project::JournalFile;
 
 use crate::api::{project::ProjectReference, BridgeError};
 
@@ -216,7 +215,7 @@ impl ProjectReference {
         let (mut doc, _manifest) =
             lumit_project::open(&path).map_err(|_| BridgeError::ReadFailed)?;
 
-        let ops = JournalFile::for_document(doc.id)
+        let ops = crate::api::state::journal_file(doc.id)
             .and_then(|journal| journal.read().ok())
             .unwrap_or_default();
         let found = ops.len() as u32;
@@ -238,7 +237,7 @@ impl ProjectReference {
         // points at the wrong file — and every edit from here is journalled
         // against the recovered document or not at all.
         if let Ok(mut journal) = state.journal.lock() {
-            *journal = lumit_project::JournalFile::for_document(doc.id);
+            *journal = crate::api::state::journal_file(doc.id);
         }
         state.store.replace_document(doc);
         state.path = Some(path);

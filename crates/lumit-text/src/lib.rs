@@ -38,6 +38,109 @@ pub struct RasterText {
     pub rgba: Vec<u8>,
 }
 
+/// The measuring walk for a straight line: each glyph's pen position, and how
+/// far the glyphs reach above and below the baseline. Both rasterisers and
+/// [`line_layout`] read this one walk, so they can't disagree about where a
+/// letter is.
+struct Walk {
+    glyphs: Vec<(char, f32, fontdue::Metrics)>,
+    pen_x: f32,
+    min_y: f32,
+    max_y: f32,
+}
+
+/// `size` is already clamped by the caller. Metrics only, no bitmaps, so it's
+/// cheap enough to ask on every keystroke.
+fn walk(text: &str, size: f32) -> Walk {
+    let font = font();
+    let mut pen_x = 0.0f32;
+    let mut glyphs = Vec::new();
+    let (mut min_y, mut max_y) = (f32::MAX, f32::MIN);
+    for ch in text.chars() {
+        let metrics = font.metrics(ch, size);
+        #[allow(clippy::cast_precision_loss)]
+        let top = -(metrics.ymin as f32) - metrics.height as f32;
+        min_y = min_y.min(top);
+        #[allow(clippy::cast_precision_loss)]
+        let bottom = top + metrics.height as f32;
+        max_y = max_y.max(bottom);
+        glyphs.push((ch, pen_x, metrics));
+        pen_x += metrics.advance_width;
+    }
+    Walk {
+        glyphs,
+        pen_x,
+        min_y,
+        max_y,
+    }
+}
+
+/// Where a straight line's letters sit inside the layer the engine draws it
+/// into, in the layer's own pixels.
+///
+/// The Type tool places its caret and selection with it, and the Viewer draws
+/// its box from it. It's read off the same walk the rasteriser uses, so it
+/// isn't an estimate.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LineLayout {
+    /// The layer's size, the same as the raster [`rasterise_line_animated`] makes.
+    pub width: u32,
+    pub height: u32,
+    /// Where the baseline runs, measured down from the layer's top edge.
+    pub baseline: f32,
+    /// How far a caret reaches above and below the baseline. These are the
+    /// font's own ascender and descender, so the caret is the same height for
+    /// any line.
+    pub ascent: f32,
+    pub descent: f32,
+    /// The x of every gap between letters, one more than there are characters.
+    /// Index `i` is where the caret stands in front of character `i`.
+    pub carets: Vec<f32>,
+}
+
+/// The layout of `text` at `size`, drawn with or without animators (an
+/// animated line sits [`animator_margin`] in from every edge of a bigger box).
+///
+/// An empty line is drawn as one transparent pixel, and that is the size given
+/// back. Its baseline is where a capital letter would put it, so the caret in
+/// an empty layer stands where the first capital will.
+#[must_use]
+pub fn line_layout(text: &str, size: f32, animated: bool) -> LineLayout {
+    let size = size.clamp(4.0, 512.0);
+    let margin = if animated { animator_margin(size) } else { 0.0 };
+    let w = walk(text, size);
+    let (ascent, descent) = font()
+        .horizontal_line_metrics(size)
+        .map_or((size * 0.8, size * 0.2), |m| (m.ascent, -m.descent));
+    let mut carets: Vec<f32> = w.glyphs.iter().map(|g| g.1 + margin).collect();
+    carets.push(w.pen_x + margin);
+    if w.glyphs.is_empty() || w.min_y > w.max_y {
+        let capital = walk("H", size);
+        return LineLayout {
+            width: 1,
+            height: 1,
+            baseline: -capital.min_y + margin,
+            ascent,
+            descent,
+            carets,
+        };
+    }
+    // The same sums as `rasterise_line_animated`, and as `rasterise_line` when
+    // there is no margin. `layout_matches_the_raster` holds them together.
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let width = (w.pen_x.ceil().max(1.0) + 2.0 * margin).min(MAX_PATH_BOX_PX) as u32;
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let height = ((w.max_y - w.min_y).ceil().max(1.0) + 2.0 * margin).min(MAX_PATH_BOX_PX) as u32;
+    LineLayout {
+        width,
+        height,
+        baseline: -w.min_y + margin,
+        ascent,
+        descent,
+        carets,
+    }
+}
+
 /// Measure and rasterise a single line at `size` px with the given linear
 /// colour (encoded to sRGB bytes here; alpha carries the glyph coverage).
 pub fn rasterise_line(text: &str, size: f32, rgb8: [u8; 3]) -> RasterText {
@@ -45,17 +148,12 @@ pub fn rasterise_line(text: &str, size: f32, rgb8: [u8; 3]) -> RasterText {
     let size = size.clamp(4.0, 512.0);
 
     // First pass: measure.
-    let mut pen_x = 0.0f32;
-    let mut glyphs = Vec::new();
-    let (mut min_y, mut max_y) = (f32::MAX, f32::MIN);
-    for ch in text.chars() {
-        let (metrics, _) = font.rasterize(ch, size);
-        let top = -(metrics.ymin as f32) - metrics.height as f32;
-        min_y = min_y.min(top);
-        max_y = max_y.max(top + metrics.height as f32);
-        glyphs.push((ch, pen_x, metrics));
-        pen_x += metrics.advance_width;
-    }
+    let Walk {
+        glyphs,
+        pen_x,
+        min_y,
+        max_y,
+    } = walk(text, size);
     if glyphs.is_empty() || min_y > max_y {
         return RasterText {
             width: 1,
@@ -441,20 +539,12 @@ pub fn rasterise_line_animated(
 
     // The same measuring walk as `rasterise_line`, so the un-animated words
     // land in the same place inside the grown box.
-    let mut pen_x = 0.0f32;
-    let mut glyphs = Vec::new();
-    let (mut min_y, mut max_y) = (f32::MAX, f32::MIN);
-    for ch in text.chars() {
-        let (metrics, _) = font.rasterize(ch, size);
-        #[allow(clippy::cast_precision_loss)]
-        let top = -(metrics.ymin as f32) - metrics.height as f32;
-        min_y = min_y.min(top);
-        #[allow(clippy::cast_precision_loss)]
-        let bottom = top + metrics.height as f32;
-        max_y = max_y.max(bottom);
-        glyphs.push((ch, pen_x, metrics));
-        pen_x += metrics.advance_width;
-    }
+    let Walk {
+        glyphs,
+        pen_x,
+        min_y,
+        max_y,
+    } = walk(text, size);
     if glyphs.is_empty() || min_y > max_y {
         return RasterText {
             width: 1,
@@ -858,6 +948,28 @@ mod tests {
         let r = rasterise_line("", 48.0, [255, 0, 0]);
         assert_eq!((r.width, r.height), (1, 1));
         assert_eq!(r.rgba[3], 0);
+    }
+
+    /// One gap per character and one more, walking right, and the last one is
+    /// on the raster's right edge.
+    #[test]
+    fn carets_step_through_every_gap() {
+        let l = line_layout("Hello", 72.0, false);
+        assert_eq!(l.carets.len(), 6);
+        assert!(l.carets[0].abs() < f32::EPSILON);
+        assert!(l.carets.windows(2).all(|w| w[1] > w[0]));
+        let last = l.carets[5];
+        assert!(
+            (last.ceil() - l.width as f32).abs() < 1.0,
+            "{last} vs {}",
+            l.width
+        );
+        // Inter's "l" is far narrower than its "H".
+        let h = l.carets[1] - l.carets[0];
+        let el = l.carets[3] - l.carets[2];
+        assert!(el < h * 0.5, "l {el} vs H {h}");
+        // Counted in characters, not bytes.
+        assert_eq!(line_layout("é", 72.0, false).carets.len(), 2);
     }
 
     // ---- Text on a path --------------------------------------------------

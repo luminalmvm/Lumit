@@ -19,7 +19,10 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/panels/timeline_extras_frb.dart';
 import 'package:lumit_flutter/panels/timeline_panel_frb.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
+import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/state/comp_time.dart';
+import 'package:lumit_flutter/state/settings.dart' show effectiveUiScale;
+import 'package:lumit_flutter/widgets/ui_scale.dart';
 import 'package:uuid/uuid.dart';
 
 import 'frb_test_support.dart';
@@ -36,12 +39,16 @@ void main() {
       return (state: p.state, uiState: p.uiState, comp: comp);
     }
 
-    Future<void> mount(WidgetTester tester, dynamic p) async {
+    /// [scale] mounts the panel under the interface scale, as the application
+    /// does.
+    Future<void> mount(WidgetTester tester, dynamic p, {double? scale}) async {
       tester.view.physicalSize = const Size(1280, 600);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
       await tester.pumpWidget(hostPanel(
-        child: const TimelinePanelFrb(),
+        child: scale == null
+            ? const TimelinePanelFrb()
+            : UiScaleView(scale: scale, child: const TimelinePanelFrb()),
         state: p.state as LumitState,
         uiState: p.uiState as LumitUiState,
         size: const Size(1280, 600),
@@ -50,10 +57,13 @@ void main() {
     }
 
     /// What one frame is worth in pixels — measured off the ruler, which is
-    /// the whole axis.
-    double perFrameOf(WidgetTester tester, dynamic p) =>
+    /// the whole axis. [scale] is the one the panel was mounted under, since
+    /// the padding is drawn that much wider on screen.
+    double perFrameOf(WidgetTester tester, dynamic p, {double? scale}) =>
         (tester.getRect(find.byKey(const ValueKey('tl-ruler'))).width -
-            TimelineAxis.pad * 2) /
+            TimelineAxis.pad *
+                2 *
+                (scale == null ? 1 : effectiveUiScale(scale))) /
         (p.comp as CompositionReference).durationFrames();
 
     void markerAt(dynamic p, int frame, {String label = 'Beat'}) {
@@ -131,6 +141,64 @@ void main() {
     // -------------------------------------------------------------------
     // §4.5, §7 — a marker drag snaps and answers Escape.
     // -------------------------------------------------------------------
+
+    // -------------------------------------------------------------------
+    // A scaled interface: the flag and the edge stay under the pointer.
+    // -------------------------------------------------------------------
+
+    testWidgets('a marker follows the pointer when the interface is scaled',
+        (tester) async {
+      final p = withComp();
+      p.comp.addSolidLayer();
+      markerAt(p, 10);
+      await mount(tester, p, scale: 1.25);
+
+      final perFrame = perFrameOf(tester, p, scale: 1.25);
+      final id = markersOf(p.comp).single.id;
+      // Ctrl keeps the magnet out of it, so the landing is the pointer's own.
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      final gesture = await dragging(
+          tester,
+          tester.getCenter(find.byKey(ValueKey<String>('tl-marker-$id'))),
+          perFrame * 400);
+      await gesture.up();
+      await tester.pumpAndSettle();
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+
+      // The first of the eight moves is spent starting the drag, so the flag
+      // travels the other seven.
+      expect(p.comp.frameAtTime(time: markersOf(p.comp).single.time),
+          closeTo(360, 2),
+          reason: 'the flag moved as far as the pointer did');
+    });
+
+    testWidgets('a work-area edge follows the pointer when it is scaled',
+        (tester) async {
+      final p = withComp();
+      p.comp.addSolidLayer();
+      p.comp.setWorkArea(
+        span: BridgeSpan(
+          inPoint: p.comp.timeOfFrame(frame: 0),
+          outPoint: p.comp.timeOfFrame(frame: 1000),
+          startOffset: p.comp.timeOfFrame(frame: 0),
+        ),
+      );
+      await mount(tester, p, scale: 1.25);
+
+      final perFrame = perFrameOf(tester, p, scale: 1.25);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      final gesture = await dragging(
+          tester,
+          tester.getCenter(find.byKey(const ValueKey('tl-work-end'))),
+          -perFrame * 300);
+      await gesture.up();
+      await tester.pumpAndSettle();
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+
+      // An edge goes to the pointer itself, so all eight moves count.
+      expect(workAreaFrames(p.comp).end, closeTo(700, 2),
+          reason: 'the edge moved as far as the pointer did');
+    });
 
     // -------------------------------------------------------------------
     // §7 — the two double-clicks.

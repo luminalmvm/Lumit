@@ -14,6 +14,7 @@ import 'package:lumit_flutter/panels/graph_maths.dart';
 import 'package:lumit_flutter/panels/timeline_panel_frb.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
+import 'package:lumit_flutter/src/rust/api/keymap.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/state/dock.dart';
 import 'package:lumit_flutter/widgets/controls.dart';
@@ -433,6 +434,91 @@ void main() {
       final key = opacityKeys(p.layer)[1];
       expect(key.interpIn, isA<BridgeSideInterp_Bezier>());
       expect(key.interpOut, isA<BridgeSideInterp_Bezier>());
+    });
+
+    /// With Ctrl chosen in Settings, Ctrl breaks the pair and Alt no longer
+    /// does.
+    testWidgets('the pair breaks on whichever modifier is set',
+        (tester) async {
+      final p = withLayer();
+      animateOpacity(p.comp, p.layer, frames: [0, 50, 100]);
+      // A bridge future only lands on a real event-loop turn.
+      await tester.runAsync(() =>
+          keymapSetBreakHandles(modifier: BridgeHandleModifier.ctrl));
+      addTearDown(() => keymapLoadPreset(preset: BridgeKeymapPreset.lumit));
+      p.uiState.keymap.refresh();
+      await mountGraph(tester, p);
+
+      await tester.tap(find.byKey(ValueKey<String>(opacityKey(p.layer, 1))));
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.f9);
+      await tester.pumpAndSettle();
+
+      final base =
+          'graph-handle-${p.layer.internallayerId}/transform/opacity@opacity#1';
+      final inHandle = find.byKey(ValueKey<String>('$base-in'));
+      final outHandle = find.byKey(ValueKey<String>('$base-out'));
+
+      // How far the in handle travels while the out handle is dragged with
+      // [key] held.
+      Future<double> partnerTravel(LogicalKeyboardKey key) async {
+        final before = tester.getCenter(inHandle);
+        await tester.sendKeyDownEvent(key);
+        final gesture = await tester.startGesture(tester.getCenter(outHandle));
+        await tester.pump();
+        for (var i = 0; i < 6; i++) {
+          await gesture.moveBy(const Offset(-2, -8));
+          await tester.pump();
+        }
+        final travel = (tester.getCenter(inHandle) - before).distance;
+        await gesture.up();
+        await tester.sendKeyUpEvent(key);
+        await tester.pumpAndSettle();
+        return travel;
+      }
+
+      expect(await partnerTravel(LogicalKeyboardKey.altLeft), greaterThan(2),
+          reason: 'Alt no longer breaks the pair once Ctrl has the job');
+      expect(await partnerTravel(LogicalKeyboardKey.controlLeft), lessThan(2),
+          reason: 'the broken partner did not follow');
+    });
+
+    /// The strip's Break handles toggle does the same with no key held, for
+    /// anyone whose desktop keeps Alt for itself.
+    testWidgets('Break handles on the strip breaks the pair with no key held',
+        (tester) async {
+      final p = withLayer();
+      animateOpacity(p.comp, p.layer, frames: [0, 50, 100]);
+      await mountGraph(tester, p);
+
+      await tester.tap(find.byKey(ValueKey<String>(opacityKey(p.layer, 1))));
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.f9);
+      await tester.pumpAndSettle();
+
+      final toggle = find.byKey(const ValueKey('graph-break-handles'));
+      await tester.ensureVisible(toggle);
+      await tester.pump();
+      await tester.tap(toggle);
+      await tester.pump();
+
+      final base =
+          'graph-handle-${p.layer.internallayerId}/transform/opacity@opacity#1';
+      final inBefore =
+          tester.getCenter(find.byKey(ValueKey<String>('$base-in')));
+
+      final gesture = await tester.startGesture(
+          tester.getCenter(find.byKey(ValueKey<String>('$base-out'))));
+      await tester.pump();
+      for (var i = 0; i < 6; i++) {
+        await gesture.moveBy(const Offset(-2, -8));
+        await tester.pump();
+      }
+      final inMid = tester.getCenter(find.byKey(ValueKey<String>('$base-in')));
+      expect((inMid - inBefore).distance, lessThan(2),
+          reason: 'the partner did not follow');
+      await gesture.up();
+      await tester.pumpAndSettle();
     });
 
     /// The speed lens: each key is an in dot and an out dot that move
