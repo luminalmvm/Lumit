@@ -3912,6 +3912,10 @@
   "@graphAutoFit": {
     "description": "Graph editor button: keep the curves framed in the view."
   },
+  "graphBreakHandles": "Break handles",
+  "@graphBreakHandles": {
+    "description": "Graph editor button: while it is on, dragging one handle of a keyframe leaves the handle on its other side where it is."
+  },
   "graphEditorEmpty": "Select a property to see its curve — click its name in the outline; Ctrl/Shift-click adds more",
   "@graphEditorEmpty": {
     "description": "Empty state in the graph editor. Ctrl and Shift are key names and stay as they are."
@@ -6768,6 +6772,14 @@
   "tipBlendMode": "Blend mode",
   "@tipBlendMode": {
     "description": "Tooltip on the blend cell. One or two words."
+  },
+  "tipBreakHandlesOff": "Handles move together",
+  "@tipBreakHandlesOff": {
+    "description": "Tooltip on the graph editor's Break handles button, when it is off. Keep it short."
+  },
+  "tipBreakHandlesOn": "Handles move apart",
+  "@tipBreakHandlesOn": {
+    "description": "Tooltip on the graph editor's Break handles button, when it is on. Keep it short."
   },
   "tipBrushSize": "Brush size",
   "@tipBrushSize": {

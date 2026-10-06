@@ -1149,6 +1149,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// the wheel pans and `Alt`+wheel zooms the value axis (docs/07 §5.3).
   bool _graphAutoFit = true;
 
+  /// Break handles: a handle drag in the graph moves its own side only.
+  bool _graphBreakHandles = false;
+
   final GlobalKey<GraphEditorFrbState> _graphPane = GlobalKey();
 
   /// The property rows currently on screen, in display order — what a
@@ -4145,6 +4148,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                 autoFit: _graphAutoFit,
                 onToggleAutoFit: () =>
                     setState(() => _graphAutoFit = !_graphAutoFit),
+                breakHandles: _graphBreakHandles,
+                onToggleBreakHandles: () => setState(
+                    () => _graphBreakHandles = !_graphBreakHandles),
                 onInterp: (side) => _applyInterp(side),
                 onTangentMode: _applyTangentMode,
                 onOpenEasing: _openEasing,
@@ -4305,6 +4311,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                     vegas: _vegas(context),
                                     penArmed:
                                         ui.tools.tool.group == ToolGroup.pen,
+                                    breakHandles: _graphBreakHandles,
                                     selectedKeys: _graphKeySelection,
                                     onSelectionChanged: () => setState(() {}),
                                     onChanged: ui.model.refresh,

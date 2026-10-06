@@ -117,6 +117,10 @@ class GraphEditorFrb extends StatefulWidget {
   /// nobody has to hold a tool to edit a curve.
   final bool penArmed;
 
+  /// The strip's Break handles toggle. On, a handle drag moves its own side
+  /// and leaves the other where it was, with no modifier held.
+  final bool breakHandles;
+
   /// Settings ▸ Interface ▸ Editing ▸ *Retime opens to Velocity*.
   ///
   /// On, a **Retime** channel's speed view becomes the Vegas envelope: one
@@ -153,6 +157,7 @@ class GraphEditorFrb extends StatefulWidget {
     required this.autoFit,
     this.vegas = false,
     this.penArmed = false,
+    this.breakHandles = false,
     required this.selectedKeys,
     required this.onSelectionChanged,
     required this.onChanged,
@@ -1298,7 +1303,8 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
         channel: channel,
         index: index,
         isOut: isOut,
-        mirrored: hasOther && (alt ? !joined : joined),
+        mirrored:
+            hasOther && !widget.breakHandles && (alt ? !joined : joined),
         speed: speed,
         influence: sideInfluence(side),
         partnerSpeed: sideSpeedAtKey(keys, index, isOut: !isOut),

@@ -853,6 +853,44 @@ void main() {
       await tester.pumpAndSettle();
     });
 
+    /// The strip's Break handles toggle does the same with no key held, for
+    /// anyone whose desktop keeps Alt for itself.
+    testWidgets('Break handles on the strip breaks the pair with no key held',
+        (tester) async {
+      final p = withLayer();
+      animateOpacity(p.comp, p.layer, frames: [0, 50, 100]);
+      await mountGraph(tester, p);
+
+      await tester.tap(find.byKey(ValueKey<String>(opacityKey(p.layer, 1))));
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.f9);
+      await tester.pumpAndSettle();
+
+      final toggle = find.byKey(const ValueKey('graph-break-handles'));
+      await tester.ensureVisible(toggle);
+      await tester.pump();
+      await tester.tap(toggle);
+      await tester.pump();
+
+      final base =
+          'graph-handle-${p.layer.internallayerId}/transform/opacity@opacity#1';
+      final inBefore =
+          tester.getCenter(find.byKey(ValueKey<String>('$base-in')));
+
+      final gesture = await tester.startGesture(
+          tester.getCenter(find.byKey(ValueKey<String>('$base-out'))));
+      await tester.pump();
+      for (var i = 0; i < 6; i++) {
+        await gesture.moveBy(const Offset(-2, -8));
+        await tester.pump();
+      }
+      final inMid = tester.getCenter(find.byKey(ValueKey<String>('$base-in')));
+      expect((inMid - inBefore).distance, lessThan(2),
+          reason: 'the partner did not follow');
+      await gesture.up();
+      await tester.pumpAndSettle();
+    });
+
     /// The speed lens: each key is an in dot and an out dot that move
     /// independently (docs/07 §5.1).
     testWidgets('the speed lens shows independent in and out dots',
