@@ -1008,6 +1008,7 @@ Map<String, String> get _table => {
       "Delete the selection": l10n.keyDeleteTheSelection,
       "Open the command palette": l10n.keyOpenTheCommandPalette,
       "Open the FX console": l10n.keyOpenTheFxConsole,
+      "Open the flowchart": l10n.keyOpenTheFlowchart,
       "Add to the export queue": l10n.keyAddToTheExportQueue,
       "Composition settings": l10n.keyCompositionSettings,
       "Undo": l10n.keyUndo,
