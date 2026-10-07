@@ -92,6 +92,7 @@ impl ActionId {
             "edit.paste" => "Paste",
             "palette.open" => "Open the command palette",
             "console.open" => "Open the FX console",
+            "comp.flowchart" => "Open the flowchart",
             "export.queue.add" => "Add to the export queue",
             "comp.settings" => "Composition settings",
             "edit.undo" => "Undo",
@@ -792,6 +793,8 @@ pub fn default_keymap() -> Keymap {
         // The FX console: Video Copilot's own chord, and the one the
         // owner asked for.
         row(Global, "Mod+Space", "console.open"),
+        // The flowchart: After Effects' own key for its mini-flowchart.
+        row(Global, "Tab", "comp.flowchart"),
         row(Global, "Mod+M", "export.queue.add"),
         row(Global, "Mod+K", "comp.settings"),
         row(Global, "Mod+Z", "edit.undo"),
@@ -1072,6 +1075,20 @@ mod tests {
             "Hyper+A".parse::<Chord>(),
             Err(ChordError::UnknownModifier(_))
         ));
+    }
+
+    #[test]
+    fn tab_opens_the_flowchart_from_any_panel() {
+        let km = default_keymap();
+        let tab: Chord = "Tab".parse().unwrap();
+        for context in KeyContext::ALL {
+            assert_eq!(
+                km.lookup(context, &tab),
+                Some(&ActionId::from("comp.flowchart")),
+                "{context:?}"
+            );
+        }
+        assert!(km.conflicts().is_empty(), "the shipped map ships clean");
     }
 
     #[test]

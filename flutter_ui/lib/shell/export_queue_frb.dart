@@ -252,19 +252,7 @@ class _ExportQueueState extends State<_ExportQueue> {
               ),
             ),
             const SizedBox(width: 10),
-            Flexible(
-              flex: 2,
-              child: Text(
-                _status(item),
-                key: ValueKey<String>('export-queue-status-${item.id}'),
-                style: dialogMono(t).copyWith(
-                    color: item.state is BridgeExportQueueState_Failed
-                        ? t.warning
-                        : t.textMuted),
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.right,
-              ),
-            ),
+            Flexible(flex: 2, child: _statusFace(t, item)),
             const SizedBox(width: 8),
             LumitTooltip(
               message: item.state is BridgeExportQueueState_Running
@@ -300,6 +288,20 @@ class _ExportQueueState extends State<_ExportQueue> {
           ],
         ),
       );
+
+  /// How one item is getting on. An error is longer than the column, so a
+  /// failed item shows all of it on hover.
+  Widget _statusFace(LumitTheme t, BridgeExportQueueItem item) {
+    final failed = item.state is BridgeExportQueueState_Failed;
+    final text = Text(
+      _status(item),
+      key: ValueKey<String>('export-queue-status-${item.id}'),
+      style: dialogMono(t).copyWith(color: failed ? t.warning : t.textMuted),
+      overflow: TextOverflow.ellipsis,
+      textAlign: TextAlign.right,
+    );
+    return failed ? LumitTooltip(message: _status(item), child: text) : text;
+  }
 
   /// What one item is doing, in the engine's own words where it has any.
   String _status(BridgeExportQueueItem item) => switch (item.state) {

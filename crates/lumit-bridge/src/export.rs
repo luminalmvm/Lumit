@@ -263,6 +263,30 @@ fn export_format(codec: &str) -> Result<lumit_render::export::ExportFormat, Stri
     })
 }
 
+/// The chosen path, ending in its format's extension. FFmpeg picks the
+/// container from the file name and the Windows save dialogue hands back a
+/// typed name as it is, so a name without the extension would fail to open.
+#[cfg(feature = "media")]
+fn with_format_extension(out_path: &str, codec: &str) -> String {
+    let Ok(format) = export_format(codec) else {
+        return out_path.to_owned();
+    };
+    let ext = format.extension();
+    let has_it = std::path::Path::new(out_path)
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case(ext));
+    if has_it {
+        out_path.to_owned()
+    } else {
+        format!("{out_path}.{ext}")
+    }
+}
+
+#[cfg(not(feature = "media"))]
+fn with_format_extension(out_path: &str, _codec: &str) -> String {
+    out_path.to_owned()
+}
+
 #[cfg(feature = "media")]
 fn format_key(format: lumit_render::export::ExportFormat) -> &'static str {
     use lumit_media::encode::{ImageFormat, VideoCodec};
@@ -829,7 +853,7 @@ pub(crate) fn queue_move(id: u32, index: usize) -> Result<(), String> {
 }
 
 mod driving {
-    use super::{err_json, to_export_spec, BridgeExportSpec};
+    use super::{err_json, to_export_spec, with_format_extension, BridgeExportSpec};
     use lumit_render::export::{ExportEvent, ExportHandle};
     use serde_json::json;
     use std::sync::{Mutex, OnceLock};
@@ -933,7 +957,8 @@ mod driving {
             return err_json("an export is already running");
         }
 
-        match launch(&mut guard, &doc, comp, spec, out_path) {
+        let out_path = with_format_extension(out_path, &spec.codec);
+        match launch(&mut guard, &doc, comp, spec, &out_path) {
             Ok(()) => {
                 guard.current = None;
                 json!({ "ok": true }).to_string()
@@ -1016,7 +1041,7 @@ mod driving {
             doc,
             comp,
             spec: spec.clone(),
-            out_path: out_path.to_owned(),
+            out_path: with_format_extension(out_path, &spec.codec),
             state: ItemState::Waiting,
         });
         if start {

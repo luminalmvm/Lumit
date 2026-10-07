@@ -64,6 +64,7 @@ import 'ae_report_frb.dart';
 import 'command_palette_frb.dart';
 import 'comp_settings_frb.dart';
 import 'fx_console_context.dart';
+import 'flowchart_frb.dart';
 import 'fx_console_frb.dart';
 import 'history_dialog_frb.dart';
 import 'layer_settings_frb.dart';
@@ -1027,6 +1028,9 @@ List<MenuSection> lumitMenus(
             MenuEntry(l10n.compositionSettingsEllipsis,
                 comp == null ? null : () => _compSettings(context, app),
                 action: 'comp.settings'),
+            MenuEntry(l10n.menuFlowchart,
+                comp == null ? null : () => openFlowchartFrb(context, ui),
+                action: 'comp.flowchart'),
             // Make the comp be the stretch you marked, and the frame be the
             // rectangle you swept. Each is greyed until there is one: a comp with
             // no work area is already its own work area, and with no region there
