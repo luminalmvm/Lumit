@@ -62,6 +62,7 @@ fn scene() -> (Arc<Document>, Uuid, Uuid) {
         media: media("shot.mp4", ORIGINAL),
         extra: serde_json::Map::new(),
         colour_space: None,
+        source_layer: None,
     }));
     let layer = Layer {
         graph: Default::default(),
@@ -329,5 +330,44 @@ fn an_export_delivers_full_resolution_however_the_viewer_is_working() {
     assert!(
         lumit_render::export::apply_render_overrides(&Arc::new(already_off), &delivery).is_none(),
         "nor one whose master switch is already off"
+    );
+}
+
+/// A source layer is part of what a footage item shows, so it rides to the
+/// decoder and into the frame's name. A proxy stands in for the whole file and
+/// has no layers to pick from, so neither carries it then.
+#[test]
+fn a_source_layer_is_planned_and_named_with_the_original_only() {
+    let (plain, comp, item) = scene();
+    let reading = |layer: u32| {
+        let mut doc = Document::clone(&plain);
+        for i in &mut doc.items {
+            if let ProjectItem::Footage(f) = i {
+                f.source_layer = Some(layer);
+            }
+        }
+        Arc::new(doc)
+    };
+    let probes = probes(item, Some(video(30.0, 960, 540, 120)));
+    let planned = |doc: &Arc<Document>| {
+        let composition = doc.comp(comp).unwrap();
+        let jobs = plan_comp_frame(doc, composition, 1.0, Quality::default(), &probes);
+        let key = lumit_render::cache::frame_key(doc, composition, 30, Quality::default(), &probes);
+        (jobs[0].source.source_layer, key)
+    };
+
+    let (flat, flat_key) = planned(&plain);
+    let (third, third_key) = planned(&reading(3));
+    let (fourth, fourth_key) = planned(&reading(4));
+    assert_eq!((flat, third, fourth), (None, Some(3), Some(4)));
+    assert_ne!(third_key, flat_key, "a layer is not the flattened picture");
+    assert_ne!(third_key, fourth_key, "and two layers are two pictures");
+
+    let (proxied, proxied_key) = planned(&attach(&reading(3), item));
+    assert_eq!(proxied, None, "the proxy is read whole");
+    assert_eq!(
+        proxied_key,
+        planned(&attach(&reading(4), item)).1,
+        "so its frame is the same whichever layer the item names"
     );
 }

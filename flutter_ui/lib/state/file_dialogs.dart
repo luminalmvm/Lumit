@@ -38,6 +38,8 @@ const List<String> footageExtensions = [
   // Stills, mirroring the engine's STILL_EXTENSIONS
   'png', 'jpg', 'jpeg', 'tif', 'tiff', 'exr', 'tga', 'targa', 'dpx', 'bmp',
   'webp', 'ppm', 'pgm', 'pnm', 'pbm',
+  // Layered documents, which import as a composition of their layers
+  'psd',
   // Sound
   'wav', 'mp3', 'flac', 'aac', 'm4a', 'ogg', 'opus', 'aiff', 'aif', 'wma',
 ];

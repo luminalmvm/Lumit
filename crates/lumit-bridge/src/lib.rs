@@ -83,6 +83,8 @@ mod edits;
 mod export;
 mod faults;
 mod framecache;
+#[cfg(feature = "media")]
+mod layered;
 mod media;
 mod names;
 mod peaks;

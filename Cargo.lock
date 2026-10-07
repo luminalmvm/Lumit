@@ -1885,6 +1885,7 @@ dependencies = [
  "blake3",
  "exr",
  "lumit-ingress",
+ "miniz_oxide",
  "rsmpeg",
  "serde",
  "tempfile",

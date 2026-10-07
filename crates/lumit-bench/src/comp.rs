@@ -236,6 +236,7 @@ fn add_footage(doc: &mut Document, name: &str, path: &Path) -> Uuid {
         sequence: None,
         extra: serde_json::Map::new(),
         colour_space: None,
+        source_layer: None,
     }));
     item
 }

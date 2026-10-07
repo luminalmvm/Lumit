@@ -20,11 +20,12 @@ import 'package:lumit_flutter/panels/project_panel_frb.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart'
     show FootageReference, LumitMediaStatus;
 import 'package:lumit_flutter/src/rust/api/project_item.dart'
-    show ItemReference_Footage;
+    show ItemReference_Folder, ItemReference_Footage;
 import 'package:lumit_flutter/src/rust/api/layer.dart' show BridgeLayerKind;
 import 'package:lumit_flutter/state/dock.dart';
 import 'package:lumit_flutter/state/drag_payloads.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:lumit_flutter/l10n/strings.dart';
 import 'package:lumit_flutter/theme/theme.dart';
 import 'package:lumit_flutter/widgets/controls.dart'
     show HouseTextField, LumitTooltip;
@@ -656,6 +657,31 @@ void main() {
           reason: 'a comp you just made is the one you want to work on');
     });
 
+    /// A layered document is not footage: it arrives as a composition of its
+    /// layers, and the engine is the one that says which files those are.
+    testWidgets('a Photoshop document imports as a composition of its layers',
+        (tester) async {
+      final p = freshProject();
+      final dir = Directory.systemTemp.createTempSync('lumit-psd');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final file = File('${dir.path}/poster.psd')
+        ..writeAsBytesSync(_layeredPsd());
+
+      expect(await p.state.importFootagePaths([file.path]), isTrue);
+
+      // The roots: the Compositions folder and the folder of layer items.
+      final roots = p.state.project!.getItems();
+      expect(roots, hasLength(2));
+      expect(roots, everyElement(isA<ItemReference_Folder>()),
+          reason: 'the document itself is not filed as a footage item');
+      expect(p.state.notice.value?.message, l10n.importLayersLeftOut(1),
+          reason: 'the layer with no picture is counted, not dropped quietly');
+
+      p.state.project!.undo();
+      expect(p.state.project!.getItems(), isEmpty,
+          reason: 'one import, one undo step');
+    });
+
     /// Enter renames the lone selected item — the keyboard path that
     /// replaced the old second-click rename, live for every item kind.
     testWidgets('Enter renames the selected item', (tester) async {
@@ -1140,5 +1166,74 @@ Uint8List _tinyBmp() {
     out.add([20, 120, 220, 220, 120, 20]);
     out.add([0, 0]); // row padding
   }
+  return out.takeBytes();
+}
+
+/// A 4 by 4 Photoshop document, bottom layer first: two layers that hold a
+/// picture and, between them, one that holds none, which is what an adjustment
+/// layer looks like on disk.
+Uint8List _layeredPsd() {
+  const size = 4;
+  void u16(BytesBuilder b, int v) => b.add([(v >> 8) & 0xff, v & 0xff]);
+  void u32(BytesBuilder b, int v) {
+    u16(b, (v >> 16) & 0xffff);
+    u16(b, v & 0xffff);
+  }
+
+  final records = BytesBuilder();
+  final data = BytesBuilder();
+  void layer(String name, int side) {
+    // Top, left, bottom, right.
+    for (final edge in [0, 0, side, side]) {
+      u32(records, edge);
+    }
+    // Transparency (-1), then red, green and blue, each stored raw.
+    final channels = side == 0 ? const <int>[] : const [0xffff, 0, 1, 2];
+    u16(records, channels.length);
+    for (final id in channels) {
+      u16(records, id);
+      u32(records, 2 + side * side);
+      u16(data, 0);
+      data.add(List.filled(side * side, 255));
+    }
+    records.add('8BIMnorm'.codeUnits);
+    records.add([255, 0, 0, 0]); // opacity, clipping, flags, filler
+    // The name is a length byte and the text, padded to four bytes.
+    final padded = (name.length + 4) & ~3;
+    u32(records, 4 + 4 + padded);
+    u32(records, 0); // no mask
+    u32(records, 0); // no blending ranges
+    records.add([name.length, ...name.codeUnits]);
+    records.add(List.filled(padded - 1 - name.length, 0));
+  }
+
+  layer('Background', size);
+  layer('Levels', 0);
+  layer('Title', 2);
+  final info = BytesBuilder();
+  u16(info, 3);
+  info.add(records.takeBytes());
+  info.add(data.takeBytes());
+  if (info.length.isOdd) info.addByte(0);
+  final layers = info.takeBytes();
+
+  final out = BytesBuilder();
+  out.add('8BPS'.codeUnits);
+  u16(out, 1);
+  out.add(List.filled(6, 0));
+  u16(out, 3); // channels
+  u32(out, size);
+  u32(out, size);
+  u16(out, 8); // bits a channel
+  u16(out, 3); // RGB
+  u32(out, 0); // colour mode data
+  u32(out, 0); // image resources
+  u32(out, 4 + layers.length + 4);
+  u32(out, layers.length);
+  out.add(layers);
+  u32(out, 0); // global mask
+  // The flattened picture, raw, mid grey.
+  u16(out, 0);
+  out.add(List.filled(size * size * 3, 128));
   return out.takeBytes();
 }
