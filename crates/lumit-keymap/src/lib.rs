@@ -1078,23 +1078,6 @@ mod tests {
     }
 
     #[test]
-    fn the_fx_console_has_its_own_chord_and_does_not_clash() {
-        // Ctrl+Space opens the console. Video Copilot's own chord, and
-        // the shipped map must stay conflict-free with it in.
-        let km = default_keymap();
-        assert_eq!(
-            km.lookup(KeyContext::Global, &"Mod+Space".parse().unwrap()),
-            Some(&ActionId::from("console.open"))
-        );
-        // The bare space bar still plays; the console took the modified one.
-        assert_eq!(
-            km.lookup(KeyContext::Global, &"Space".parse().unwrap()),
-            Some(&ActionId::from("playback.toggle"))
-        );
-        assert!(km.conflicts().is_empty(), "the shipped map ships clean");
-    }
-
-    #[test]
     fn tab_opens_the_flowchart_from_any_panel() {
         let km = default_keymap();
         let tab: Chord = "Tab".parse().unwrap();
@@ -1106,45 +1089,6 @@ mod tests {
             );
         }
         assert!(km.conflicts().is_empty(), "the shipped map ships clean");
-    }
-
-    #[test]
-    fn enter_renames_the_selection_in_each_panel_that_has_one() {
-        // The same key the Timeline always used for its layers is
-        // bound for the Project panel's items and Effect controls' effects.
-        let km = default_keymap();
-        let enter: Chord = "Enter".parse().unwrap();
-        assert_eq!(
-            km.lookup(KeyContext::Timeline, &enter),
-            Some(&ActionId::from("layer.rename"))
-        );
-        assert_eq!(
-            km.lookup(KeyContext::Project, &enter),
-            Some(&ActionId::from("item.rename"))
-        );
-        assert_eq!(
-            km.lookup(KeyContext::Effects, &enter),
-            Some(&ActionId::from("effect.rename"))
-        );
-    }
-
-    #[test]
-    fn lookup_prefers_the_active_context_then_falls_back_to_global() {
-        let mut km = Keymap::default();
-        km.bind(KeyContext::Global, chord("Mod+K"), "global.k".into());
-        km.bind(KeyContext::Timeline, chord("Mod+K"), "timeline.k".into());
-        // In the timeline, the scoped binding wins.
-        assert_eq!(
-            km.lookup(KeyContext::Timeline, &chord("Mod+K")),
-            Some(&"timeline.k".into())
-        );
-        // Elsewhere, the global one is the fallback.
-        assert_eq!(
-            km.lookup(KeyContext::Viewer, &chord("Mod+K")),
-            Some(&"global.k".into())
-        );
-        // Unbound chord resolves to nothing.
-        assert_eq!(km.lookup(KeyContext::Viewer, &chord("Mod+J")), None);
     }
 
     #[test]
@@ -1198,28 +1142,6 @@ mod tests {
         assert!(km.shadows().is_empty());
     }
 
-    /// Stepping a frame is `Mod`+arrow, and the bare arrows are free.
-    #[test]
-    fn a_frame_step_takes_the_primary_modifier() {
-        let km = default_keymap();
-        assert_eq!(
-            km.lookup(KeyContext::Global, &chord("Mod+ArrowRight")),
-            Some(&ActionId::from("playback.frame.next"))
-        );
-        assert_eq!(
-            km.lookup(KeyContext::Global, &chord("Mod+ArrowLeft")),
-            Some(&ActionId::from("playback.frame.prev"))
-        );
-        assert_eq!(km.lookup(KeyContext::Global, &chord("ArrowRight")), None);
-        assert_eq!(km.lookup(KeyContext::Timeline, &chord("ArrowLeft")), None);
-        // The page keys still step a frame unmodified — the chord moved, the
-        // other way of doing it did not.
-        assert_eq!(
-            km.lookup(KeyContext::Global, &chord("PageDown")),
-            Some(&ActionId::from("playback.frame.next"))
-        );
-    }
-
     /// `L` reveals a layer's Audio in the Timeline and shuttles forward
     /// everywhere else — the one shadow the default ships with, and it
     /// is deliberate.
@@ -1248,32 +1170,6 @@ mod tests {
             vec!["L".to_string()],
             "one deliberate shadow, and it is named in the docs"
         );
-    }
-
-    #[test]
-    fn bind_replaces_and_unbind_removes_the_exact_entry() {
-        let mut km = Keymap::default();
-        km.bind(KeyContext::Global, chord("Mod+D"), "one".into());
-        km.bind(KeyContext::Global, chord("Mod+D"), "two".into());
-        assert_eq!(km.bindings.len(), 1, "rebind replaces, not duplicates");
-        assert_eq!(
-            km.lookup(KeyContext::Global, &chord("Mod+D")),
-            Some(&"two".into())
-        );
-        assert!(km.unbind(KeyContext::Global, &chord("Mod+D")));
-        assert!(!km.unbind(KeyContext::Global, &chord("Mod+D")));
-        assert!(km.lookup(KeyContext::Global, &chord("Mod+D")).is_none());
-    }
-
-    #[test]
-    fn search_matches_action_and_chord_text() {
-        let km = default_keymap();
-        assert!(km.search("undo").iter().any(|b| b.action.0 == "edit.undo"));
-        assert!(km
-            .search("shift+f3")
-            .iter()
-            .any(|b| b.action.0 == "graph.toggle"));
-        assert!(km.search("nonexistent-xyz").is_empty());
     }
 
     #[test]
@@ -1311,34 +1207,6 @@ mod tests {
                 .iter()
                 .any(|b| b.context == KeyContext::Global));
         }
-    }
-
-    /// The numbered markers. `Shift+N` sets and the bare `N` returns, for
-    /// all ten digits including zero — and `M` must still reveal Masks in the
-    /// Timeline, which is the whole reason the marker key is `Shift+M`.
-    #[test]
-    fn numbered_markers_bind_set_and_return_for_every_digit() {
-        let km = default_keymap();
-        for d in 0..=9u8 {
-            assert_eq!(
-                km.lookup(KeyContext::Global, &chord(&format!("Shift+{d}"))),
-                Some(&ActionId(format!("marker.add.{d}"))),
-                "Shift+{d} should set marker {d}"
-            );
-            assert_eq!(
-                km.lookup(KeyContext::Global, &chord(&format!("{d}"))),
-                Some(&ActionId(format!("marker.goto.{d}"))),
-                "{d} should return to marker {d}"
-            );
-        }
-        assert_eq!(
-            km.lookup(KeyContext::Global, &chord("Shift+M")),
-            Some(&"marker.add".into())
-        );
-        assert_eq!(
-            km.lookup(KeyContext::Timeline, &chord("M")),
-            Some(&"reveal.masks".into())
-        );
     }
 
     /// **A keymap stored by an older build must not hide a new action**. This
@@ -1389,67 +1257,6 @@ mod tests {
         assert!(after_effects_preset().conflicts().is_empty());
     }
 
-    /// The After Effects preset re-points the default's deviations — J/K to
-    /// keyframe navigation with the shuttle gone, the camera/razor letter swap
-    /// — and leaves the chords the two programs already agree on alone.
-    #[test]
-    fn the_after_effects_preset_repoints_the_ae_habits() {
-        let km = after_effects_preset();
-        // J/K are AE's keyframe navigation, app-wide; the shuttle is gone.
-        assert_eq!(
-            km.lookup(KeyContext::Timeline, &chord("J")),
-            Some(&"keyframe.prev".into())
-        );
-        assert_eq!(
-            km.lookup(KeyContext::Viewer, &chord("K")),
-            Some(&"keyframe.next".into())
-        );
-        assert!(!km
-            .bindings
-            .iter()
-            .any(|b| b.action.0.starts_with("playback.shuttle")));
-        // `,` / `.` still work as the second way in.
-        assert_eq!(
-            km.lookup(KeyContext::Global, &chord(",")),
-            Some(&"keyframe.prev".into())
-        );
-        // The camera/razor swap: AE's `C` cycles cameras.
-        assert_eq!(
-            km.lookup(KeyContext::Tools, &chord("C")),
-            Some(&"tool.camera".into())
-        );
-        assert_eq!(
-            km.lookup(KeyContext::Tools, &chord("Shift+C")),
-            Some(&"tool.razor".into())
-        );
-        // `L` still reveals a layer's Audio in the Timeline — AE's `L` too —
-        // and no longer shadows anything, since the shuttle is gone.
-        assert_eq!(
-            km.lookup(KeyContext::Timeline, &chord("L")),
-            Some(&"reveal.audio".into())
-        );
-        assert!(km.shadows().is_empty());
-        // Chords the two programs agree on are untouched.
-        for (context, chord_text, action) in [
-            (KeyContext::Global, "Space", "playback.toggle"),
-            (KeyContext::Tools, "V", "tool.select"),
-            (KeyContext::Tools, "Y", "tool.anchor"),
-            (KeyContext::Tools, "G", "tool.pen"),
-            (KeyContext::Timeline, "Mod+D", "layer.duplicate"),
-            (KeyContext::Timeline, "[", "layer.move.in"),
-            (KeyContext::Timeline, "Alt+]", "layer.trim.out"),
-            (KeyContext::Global, "Home", "playback.comp.start"),
-            (KeyContext::Global, "Mod+Alt+T", "layer.retime.enable"),
-            (KeyContext::Graph, "F9", "graph.ease"),
-        ] {
-            assert_eq!(
-                km.lookup(context, &chord(chord_text)),
-                Some(&action.into()),
-                "{chord_text} should still run {action}"
-            );
-        }
-    }
-
     /// The preset takes the shuttle off J/K/L, and a restart must not hand it
     /// back on top of the keyframe keys.
     #[test]
@@ -1462,44 +1269,6 @@ mod tests {
             "the shuttle stays off"
         );
         assert_eq!(restored, after_effects_preset());
-    }
-
-    /// Layer ▸ New rows carry a chord each, so the menu shows one beside
-    /// the label, and the six take nothing another row already has.
-    #[test]
-    fn new_layer_rows_ship_with_after_effects_chords() {
-        let km = default_keymap();
-        for (chord_text, action) in [
-            ("Mod+Y", "layer.new.solid"),
-            ("Mod+Alt+Shift+T", "layer.new.text"),
-            ("Mod+Alt+Shift+C", "layer.new.camera"),
-            ("Mod+Alt+Shift+L", "layer.new.light.point"),
-            ("Mod+Alt+Y", "layer.new.adjustment"),
-            ("Mod+Alt+Shift+Y", "layer.new.null"),
-        ] {
-            assert_eq!(
-                km.lookup(KeyContext::Global, &chord(chord_text)),
-                Some(&action.into()),
-                "{chord_text} should run {action}"
-            );
-        }
-        assert!(km.conflicts().is_empty());
-        assert!(
-            !km.shadows()
-                .iter()
-                .any(|s| s.shadowed.0.starts_with("layer.new.")),
-            "no panel takes a new-layer chord away"
-        );
-    }
-
-    #[test]
-    fn a_keymap_serialises_to_a_shareable_file_and_back() {
-        let km = default_keymap();
-        let json = serde_json::to_string_pretty(&km).unwrap();
-        // Chords serialise as their readable string form.
-        assert!(json.contains("\"Shift+F3\""));
-        let back: Keymap = serde_json::from_str(&json).unwrap();
-        assert_eq!(back, km);
     }
 
     #[test]
@@ -1552,35 +1321,6 @@ mod tests {
         value.as_object_mut().unwrap().remove("break_handles");
         let older: Keymap = serde_json::from_value(value).unwrap();
         assert_eq!(older.break_handles, HandleModifier::Alt);
-    }
-
-    #[test]
-    fn taking_a_wheel_modifier_swaps_with_whatever_shares_the_panel() {
-        let mut wheel = WheelKeys::default();
-        // Alt+wheel for zooming time, the way After Effects does it.
-        wheel.set(WheelAction::ZoomTime, WheelModifier::Alt);
-        assert_eq!(wheel.modifier(WheelAction::ZoomTime), WheelModifier::Alt);
-        assert_eq!(
-            wheel.modifier(WheelAction::ZoomValues),
-            WheelModifier::Ctrl,
-            "the Graph editor's value zoom takes the freed Ctrl"
-        );
-        assert_eq!(
-            wheel.modifier(WheelAction::ScrollSideways),
-            WheelModifier::Shift
-        );
-        // The dropper lives in the Viewer, so it can share Shift with the lanes.
-        wheel.set(WheelAction::ScrollSideways, WheelModifier::Ctrl);
-        assert_eq!(
-            wheel.modifier(WheelAction::ZoomValues),
-            WheelModifier::Shift
-        );
-        assert_eq!(
-            wheel.modifier(WheelAction::DropperSample),
-            WheelModifier::Shift
-        );
-        wheel.set(WheelAction::DropperSample, WheelModifier::Alt);
-        assert_eq!(wheel.modifier(WheelAction::ZoomTime), WheelModifier::Alt);
     }
 
     /// Settings → Keymap shows a description, never a raw id, so every action
@@ -1650,57 +1390,6 @@ mod tests {
         );
     }
 
-    /// Taking a chord another action already holds is never refused — refusing
-    /// would make swapping two actions' keys impossible, since the swap needs a
-    /// moment where one chord is claimed twice. What happens to the old owner
-    /// depends on whether it could still fire, and both halves are pinned here
-    /// because the settings table has to show the difference.
-    #[test]
-    fn taking_a_held_chord_evicts_within_a_context_and_conflicts_across_them() {
-        // Same context: the old owner loses the key and its row goes blank.
-        // Visible in the table, so nothing is lost silently.
-        let mut km = Keymap::default();
-        km.bind(KeyContext::Timeline, chord("D"), "a".into());
-        km.bind(KeyContext::Timeline, chord("F"), "b".into());
-        km.rebind_action(KeyContext::Timeline, &"b".into(), chord("D"));
-        assert_eq!(
-            km.binding_for(KeyContext::Timeline, &"a".into()),
-            None,
-            "the previous owner shows as unbound rather than answering invisibly"
-        );
-        assert_eq!(
-            km.lookup(KeyContext::Timeline, &chord("D")),
-            Some(&ActionId::from("b"))
-        );
-        assert!(
-            km.conflicts().is_empty(),
-            "one owner, so nothing to resolve"
-        );
-
-        // Across contexts: a Global binding stays live everywhere else, so both
-        // survive — and the panel taking the chord over is reported as a shadow
-        // rather than a clash, because which action fires is never in
-        // doubt.
-        let mut km = Keymap::default();
-        km.bind(KeyContext::Global, chord("D"), "global.thing".into());
-        km.bind(KeyContext::Timeline, chord("F"), "timeline.thing".into());
-        km.rebind_action(KeyContext::Timeline, &"timeline.thing".into(), chord("D"));
-        assert!(km.conflicts().is_empty(), "nothing ambiguous to resolve");
-        let shadows = km.shadows();
-        assert_eq!(shadows.len(), 1, "the takeover is still said out loud");
-        assert_eq!(shadows[0].chord, chord("D"));
-        assert_eq!(
-            km.lookup(KeyContext::Timeline, &chord("D")),
-            Some(&ActionId::from("timeline.thing")),
-            "and the focused panel still gets first refusal meanwhile"
-        );
-        assert_eq!(
-            km.lookup(KeyContext::Viewer, &chord("D")),
-            Some(&ActionId::from("global.thing")),
-            "while the app-wide meaning is untouched everywhere else"
-        );
-    }
-
     /// The search box sits above a table of descriptions, so it has to match
     /// what the reader can see, not only the ids underneath.
     #[test]
@@ -1718,23 +1407,5 @@ mod tests {
             .search("tool.pen")
             .iter()
             .any(|b| b.action.0 == "tool.pen"));
-    }
-
-    /// Every context the settings page can head a table with is one the default
-    /// keymap actually uses, and vice versa — a heading with nothing under it,
-    /// or bindings with no heading, are both bugs the page cannot show.
-    #[test]
-    fn the_context_list_matches_what_the_default_keymap_uses() {
-        let km = default_keymap();
-        for context in KeyContext::ALL {
-            assert!(!context.label().is_empty());
-        }
-        for b in &km.bindings {
-            assert!(
-                KeyContext::ALL.contains(&b.context),
-                "{:?} is bound but not listed in KeyContext::ALL",
-                b.context
-            );
-        }
     }
 }

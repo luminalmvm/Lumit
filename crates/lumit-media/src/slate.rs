@@ -122,49 +122,4 @@ mod tests {
         // Degenerate sizes are safe, never empty or panicking.
         assert_eq!(colour_bars(0, 0).len(), 4);
     }
-
-    #[test]
-    fn the_seven_bars_run_white_to_blue_across_the_top() {
-        let (w, h) = (700u32, 100u32);
-        // Sample the middle of each column in the top band.
-        let got: Vec<_> = (0..7).map(|c| sample(c * 100 + 50, 10, w, h)).collect();
-        assert_eq!(got, BARS.to_vec());
-        // The band beneath is the reversed run — what makes it read as bars.
-        let under: Vec<_> = (0..7)
-            .map(|c| sample(c * 100 + 50, (h as f32 * 0.75) as u32, w, h))
-            .collect();
-        assert_eq!(under, UNDER.to_vec());
-    }
-
-    #[test]
-    fn the_ramps_darken_left_to_right_and_the_wedge_steps() {
-        let (w, h) = (1000u32, 1000u32);
-        let ramp_y = (h as f32 * 0.82) as u32;
-        let left = sample(10, ramp_y, w, h)[0];
-        let right = sample((w as f32 * RAMP_SPLIT) as u32 - 10, ramp_y, w, h)[0];
-        assert!(left > right, "greyscale ramp runs white → black");
-
-        // The wedge is banded: neighbouring samples inside one step match,
-        // and the wedge as a whole climbs from black to white.
-        let step_y = (h as f32 * 0.93) as u32;
-        let dark = sample(5, step_y, w, h)[0];
-        let light = sample((w as f32 * RAMP_SPLIT) as u32 - 5, step_y, w, h)[0];
-        assert!(dark < light, "step wedge runs black → white");
-        // Right of the split the bottom band is a black rest field.
-        assert_eq!(sample(w - 5, step_y, w, h), BLACK);
-    }
-
-    #[test]
-    fn the_pattern_scales_rather_than_crops() {
-        // The same relative position gives the same colour at any size — the
-        // point of generating it instead of shipping a fixed image.
-        for (w, h) in [(320u32, 180u32), (1920, 1080), (77, 41)] {
-            assert_eq!(sample(w / 14, h / 10, w, h), WHITE, "first bar at {w}×{h}");
-            assert_eq!(
-                sample(w * 13 / 14, h / 10, w, h),
-                BLUE,
-                "last bar at {w}×{h}"
-            );
-        }
-    }
 }

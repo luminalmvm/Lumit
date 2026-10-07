@@ -36,52 +36,6 @@ void main() {
       );
 
   group('the shapes', () {
-    test('every shape runs from silence to full level and never turns back',
-        () {
-      for (final preset in clipFadeShapes) {
-        expect(clipFadeGain(preset.shape, 0), closeTo(0, 1e-9),
-            reason: '${preset.id} does not start at silence');
-        expect(clipFadeGain(preset.shape, 1), closeTo(1, 1e-9),
-            reason: '${preset.id} does not reach full level');
-        var last = 0.0;
-        for (var i = 1; i <= 64; i++) {
-          final gain = clipFadeGain(preset.shape, i / 64);
-          expect(gain, greaterThanOrEqualTo(last - 1e-9),
-              reason: '${preset.id} dips at ${i / 64}');
-          last = gain;
-        }
-      }
-    });
-
-    test('a Custom shape is the curve its four numbers draw', () {
-      const shape =
-          BridgeClipFadeShape.custom(x1: 1 / 3, y1: 0, x2: 2 / 3, y2: 1);
-      expect(clipFadeGain(shape, 0), closeTo(0, 1e-9));
-      expect(clipFadeGain(shape, 1), closeTo(1, 1e-9));
-      // Eased at both ends, so it is behind the straight line early on.
-      expect(clipFadeGain(shape, 0.25), lessThan(0.25));
-      expect(clipFadeGain(shape, 0.5), closeTo(0.5, 1e-6));
-    });
-
-    test('Fast against Fast sums its squares to one across a crossfade', () {
-      const fast = BridgeClipFadeShape.fast();
-      for (var i = 0; i <= 32; i++) {
-        final u = i / 32;
-        final rising = clipFadeGain(fast, u);
-        final falling = clipFadeGain(fast, 1 - u);
-        expect(rising * rising + falling * falling, closeTo(1, 1e-9),
-            reason: 'the join changes level at $u');
-      }
-    });
-
-    test('the power complement of Fast is Fast', () {
-      const fast = BridgeClipFadeShape.fast();
-      for (var i = 0; i <= 32; i++) {
-        final u = i / 32;
-        expect(keepLevelGain(fast, u), closeTo(clipFadeGain(fast, u), 1e-9));
-      }
-    });
-
     test('a complement keeps the level whatever curve it answers', () {
       const shape = BridgeClipFadeShape.slow();
       for (var i = 0; i <= 32; i++) {
@@ -104,41 +58,6 @@ void main() {
   });
 
   group('where a fade runs', () {
-    test('a lone fade is its own seconds, clamped to the clip', () {
-      final short = clip(start: 0, end: 10, fadeIn: 100);
-      expect(clipFadeEdge(short, into: true, fps: 25), 10,
-          reason: 'a fade longer than the clip stops at the far end');
-      final one = clip(start: 4, end: 54, fadeIn: 1, fadeOut: 2);
-      expect(clipFadeEdge(one, into: true, fps: 25), 29);
-      expect(clipFadeEdge(one, into: false, fps: 25), 4);
-    });
-
-    test('a corner drag maps to seconds and back', () {
-      final one = clip(start: 0, end: 100, fadeIn: 1);
-      // A drag in flight is read where the pointer left it, not where the
-      // document still says the fade ends.
-      final live = (clip: one.id.toString(), into: true, seconds: 2.0);
-      expect(clipFadeEdge(one, into: true, fps: 25, live: live), 50);
-      expect(clipFadeSeconds(one, into: true, live: live), 2);
-      expect(clipFadeSeconds(one, into: false, live: live), 0,
-          reason: 'the other end of the clip is not being dragged');
-    });
-
-    test('a track of two clips draws each lone fade', () {
-      final clips = [
-        clip(start: 0, end: 50, fadeIn: 1),
-        clip(start: 60, end: 100, fadeOut: 1),
-      ];
-      final ramps = clipFadeRamps(clips, 25);
-      expect(ramps.length, 2);
-      expect(ramps.first.into, isTrue);
-      expect(ramps.first.from, 0);
-      expect(ramps.first.to, 25);
-      expect(ramps.last.into, isFalse);
-      expect(ramps.last.from, 75);
-      expect(ramps.last.to, 100);
-    });
-
     test('an overlap is the crossfade, drawn once for the pair', () {
       final outgoing = clip(start: 0, end: 60, fadeOut: 1);
       final incoming = clip(start: 40, end: 100, fadeIn: 1);

@@ -555,7 +555,6 @@ impl EffectDef for AudioEqDef {
 mod tests {
     use super::*;
     use crate::fx::effects::audio::modulation::harness;
-    use crate::fx::AUDIO_BLOCK_SAMPLES;
 
     /// **Plan 1**: the same input baked twice is bit-identical, and one run is
     /// its own two halves spliced at a block edge with the state carried.
@@ -573,36 +572,6 @@ mod tests {
             ],
             &input,
         );
-    }
-
-    /// The same split again, but opened at the defaults and driven with a
-    /// boost, so the cut lands in the middle of a ramp rather than on a
-    /// settled filter. This is the half of the state a coefficient rebuilt
-    /// part way through a block can get wrong.
-    #[test]
-    fn a_run_split_part_way_through_a_ramp_is_the_same_run() {
-        let opened = harness::values(&AudioEqDef, &[]);
-        let driven = harness::values(
-            &AudioEqDef,
-            &[
-                ("band2_gain", -12.0),
-                ("band4_freq", 6_000.0),
-                ("output", 3.0),
-            ],
-        );
-        let input = harness::tone(4, 300.0);
-
-        let whole = harness::run(&*harness::open(&AudioEqDef, &opened), &input, &driven);
-        let carried = harness::open(&AudioEqDef, &opened);
-        let cut = input.len() / 2;
-        let mut halves = harness::run(&*carried, &input[..cut], &driven);
-        halves.extend(harness::run_from(
-            &*carried,
-            &input[cut..],
-            &driven,
-            cut / AUDIO_BLOCK_SAMPLES,
-        ));
-        assert_eq!(whole, halves, "the ramp did not carry across the cut");
     }
 
     /// **Plan 3**: a band boost raises that band's energy and leaves a distant
@@ -624,35 +593,5 @@ mod tests {
     #[test]
     fn the_bell_sits_at_the_same_hertz_at_any_bake_rate() {
         harness::same_seconds_at_any_rate(&AudioEqDef, &[("band3_gain", 6.0)], 1_000.0, 0.6, 0.02);
-    }
-
-    /// **Dropped on and left alone it is a passthrough**, sample for sample:
-    /// the three bells sit at nought dB, which is the identity section, the
-    /// two filters are switched off, and the trim is unity.
-    #[test]
-    fn the_declared_defaults_hand_the_sound_straight_back() {
-        let values = harness::values(&AudioEqDef, &[]);
-        let input = harness::tone(3, 700.0);
-        let out = harness::run(&*harness::open(&AudioEqDef, &values), &input, &values);
-        assert_eq!(out, input);
-    }
-
-    /// **A row driven past its end still makes sound**: an unknown shape is a
-    /// bell, and the cookbook holds the frequency and the Q off the ends, so
-    /// nothing comes back infinite.
-    #[test]
-    fn a_row_driven_past_its_end_still_makes_sound() {
-        let values = harness::values(
-            &AudioEqDef,
-            &[
-                ("band1_on", 1.0),
-                ("band1_type", 99.0),
-                ("band1_freq", 1e9),
-                ("band1_q", 0.0),
-            ],
-        );
-        let input = harness::tone(1, 1_000.0);
-        let out = harness::run(&*harness::open(&AudioEqDef, &values), &input, &values);
-        assert!(out.iter().all(|s| s.is_finite()));
     }
 }

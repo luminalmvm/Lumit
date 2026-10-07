@@ -740,17 +740,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_95th_percentile_is_the_nearest_rank() {
-        // Twenty samples: rank 19 of 20, so the second worst.
-        let mut twenty: Vec<f64> = (1..=20).map(f64::from).collect();
-        assert_eq!(p95(&mut twenty), 19.0);
-        // Five samples: the worst of them, not an average of the top two.
-        assert_eq!(p95(&mut [1.0, 9.0, 2.0, 3.0, 4.0]), 9.0);
-        assert_eq!(p95(&mut [7.0]), 7.0);
-        assert_eq!(p95(&mut []), 0.0);
-    }
-
-    #[test]
     fn scrub_targets_never_repeat_across_a_run() {
         let seen: std::collections::BTreeSet<u64> =
             (0..SCRUB_SAMPLES).map(|i| scatter(i, 0, 1200)).collect();

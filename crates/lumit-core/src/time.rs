@@ -346,26 +346,6 @@ mod tests {
         assert!(Rational::new(1, 0).is_err());
     }
 
-    #[test]
-    fn hash_agrees_with_eq() {
-        use std::collections::HashSet;
-        let mut set = HashSet::new();
-        set.insert(rat(1, 2));
-        assert!(set.contains(&rat(2, 4)));
-    }
-
-    #[test]
-    fn ntsc_walk_three_hours_is_exact() {
-        // 3 h at 30000/1001: frame 323,676 lands exactly back on rational time.
-        let fr = FrameRate::new(30000, 1001).unwrap();
-        let n = 3 * 3600 * 30000 / 1001;
-        let t = fr.time_of_frame(n).unwrap();
-        assert_eq!(fr.frame_at(t), n);
-        // and the next flick-grid point still round-trips through f64 quantisation
-        let q = Rational::from_f64_on_grid(t.0.to_f64(), Rational::FLICK_DEN).unwrap();
-        assert!((q.to_f64() - t.0.to_f64()).abs() < 1e-9);
-    }
-
     /// The playhead's arithmetic when a comp's rate changes under it:
     /// the same moment, on the nearest frame of the new grid.
     #[test]

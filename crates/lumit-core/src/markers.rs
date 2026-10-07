@@ -72,25 +72,6 @@ impl Marker {
     }
 }
 
-/// The nearest marker time to `time` within `threshold`, or `time` unchanged if
-/// none is close enough — the snap used when editing near markers. Distances
-/// are compared in f64; the returned time is the marker's exact rational.
-pub fn snap_time(time: Rational, markers: &[Marker], threshold: Rational) -> Rational {
-    let t = time.to_f64();
-    let th = threshold.to_f64().abs();
-    markers
-        .iter()
-        .map(|m| m.time.0)
-        .filter(|mt| (mt.to_f64() - t).abs() <= th)
-        .min_by(|a, b| {
-            (a.to_f64() - t)
-                .abs()
-                .partial_cmp(&(b.to_f64() - t).abs())
-                .unwrap_or(std::cmp::Ordering::Equal)
-        })
-        .unwrap_or(time)
-}
-
 /// Merge freshly-detected `beats` into `existing`, replacing only the previous
 /// Beat-kind markers (user and chapter markers are untouched), sorted by time
 /// (docs/impl/beat-detection.md §3, docs/03-DATA-MODEL.md §11).
@@ -119,21 +100,6 @@ mod tests {
             kind,
             extra: serde_json::Map::new(),
         }
-    }
-
-    #[test]
-    fn snap_picks_the_nearest_within_threshold() {
-        let markers = [
-            at(1, 1, MarkerKind::User),
-            at(2, 1, MarkerKind::Beat { confidence: 1.0 }),
-        ];
-        // 1.02s snaps to the 1s marker (within 50ms).
-        assert_eq!(snap_time(rat(51, 50), &markers, rat(1, 20)), rat(1, 1));
-        // 1.5s has nothing within 50ms → unchanged.
-        assert_eq!(snap_time(rat(3, 2), &markers, rat(1, 20)), rat(3, 2));
-        // Exactly between two markers with a wide threshold → the nearer wins
-        // deterministically (1.4 is closer to 1 than to 2).
-        assert_eq!(snap_time(rat(7, 5), &markers, rat(1, 1)), rat(1, 1));
     }
 
     #[test]

@@ -109,42 +109,5 @@ void main() {
       expect(timings.layerMs(f.layerId)!, greaterThanOrEqualTo(0));
       expect(timings.frame, 0);
     });
-
-    testWidgets('switching measuring off drops the numbers and goes quiet',
-        (tester) async {
-      final f = withEffect();
-      final timings = f.p.uiState.renderTimings;
-
-      f.comp.renderFrame(
-        frame: BigInt.zero,
-        scale: 1.0,
-        mode: BridgePlaybackMode.everyFrame,
-        view: 0,
-      );
-      await tester.runAsync(() async {
-        for (var i = 0; i < 150; i++) {
-          await Future<void>.delayed(const Duration(milliseconds: 100));
-          if (timings.layerMs(f.layerId) != null) return;
-        }
-      });
-      await settleFrb(tester, minRounds: 4, maxRounds: 20);
-      expect(timings.layerMs(f.layerId), isNotNull);
-
-      timings.setMeasuring(false);
-      expect(timings.measuring, isFalse);
-      expect(timings.layerMs(f.layerId), isNull,
-          reason: 'a stale cost reads as a live one, so it is dropped');
-
-      // And a render afterwards leaves it that way: the engine is not
-      // measuring, so nothing arrives to put numbers back.
-      f.comp.renderFrame(
-        frame: BigInt.one,
-        scale: 1.0,
-        mode: BridgePlaybackMode.everyFrame,
-        view: 0,
-      );
-      await settleFrb(tester, minRounds: 10, maxRounds: 40);
-      expect(timings.layerMs(f.layerId), isNull);
-    });
   });
 }

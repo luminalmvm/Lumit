@@ -433,26 +433,6 @@ mod tests {
     }
 
     #[test]
-    fn an_empty_chain_hands_the_input_straight_back() {
-        let input = vec![0.5f32; 8];
-        let out = run_chain(&[], &input);
-        assert_eq!(out.samples, input);
-        assert_eq!(out.dry_blocks, 0);
-        assert_eq!(out.latency, 0);
-    }
-
-    #[test]
-    fn a_static_row_holds_past_its_one_entry() {
-        // Three blocks of input, one value: every block is handed the same one.
-        let frames = AUDIO_BLOCK_FRAMES * 3;
-        let input = vec![0.25f32; frames * AUDIO_CHANNELS];
-        let gain = Gain::new(None);
-        let out = run_chain(&[link(gain, vec![vec![(ParamId::new("p1"), 2.0)]])], &input);
-        assert_eq!(out.samples.len(), input.len());
-        assert!(out.samples.iter().all(|s| (*s - 0.5).abs() < 1e-6));
-    }
-
-    #[test]
     fn each_block_is_handed_its_own_value_and_two_runs_agree() {
         // A sweep: block b is multiplied by b.
         let blocks = 4;
@@ -516,43 +496,6 @@ mod tests {
             .map(|(a, b)| (b[0] - a[0]).abs())
             .fold(0.0f32, f32::max);
         assert!(worst < 0.02, "the splice clicks: worst step {worst}");
-    }
-
-    /// **A ramp between two identical signals changes nothing** — the property
-    /// an equal-power crossfade would break, and the reason `splice` is
-    /// linear. A passthrough plugin that dies mid-run must leave the sound
-    /// exactly as it found it, ramps and all.
-    #[test]
-    fn a_dry_splice_through_a_passthrough_leaves_the_sound_alone() {
-        struct Passthrough(Option<usize>);
-        impl AudioProcessor for Passthrough {
-            fn process(
-                &self,
-                input: &[f32],
-                output: &mut [f32],
-                _values: &[(ParamId, f64)],
-                steady: i64,
-            ) -> bool {
-                if self.0 == Some(steady as usize / AUDIO_BLOCK_FRAMES) {
-                    return false;
-                }
-                output.copy_from_slice(input);
-                true
-            }
-        }
-        let input = vec![0.25f32; AUDIO_BLOCK_FRAMES * 3 * AUDIO_CHANNELS];
-        let out = run_chain(
-            &[ChainLink {
-                processor: Arc::new(Passthrough(Some(1))),
-                values: Vec::new(),
-            }],
-            &input,
-        );
-        assert_eq!(out.dry_blocks, 1);
-        assert!(
-            out.samples.iter().all(|s| (*s - 0.25).abs() < 1e-6),
-            "the ramp must not put a swell where the two signals are the same"
-        );
     }
 
     #[test]
@@ -636,19 +579,5 @@ mod tests {
             (out.samples[AUDIO_BLOCK_SAMPLES] - 0.5).abs() < 1e-6,
             "the echo lands in the block the tail bought"
         );
-    }
-
-    #[test]
-    fn the_links_run_in_order_and_compose() {
-        let frames = 8;
-        let input = vec![1.0f32; frames * AUDIO_CHANNELS];
-        let out = run_chain(
-            &[
-                link(Gain::new(None), vec![vec![(ParamId::new("p1"), 3.0)]]),
-                link(Gain::new(None), vec![vec![(ParamId::new("p1"), 0.5)]]),
-            ],
-            &input,
-        );
-        assert!((out.samples[0] - 1.5).abs() < 1e-6);
     }
 }

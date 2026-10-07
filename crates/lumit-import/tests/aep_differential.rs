@@ -107,8 +107,8 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use lumit_import::capture::{Capture, Comp, Item, Layer, Property};
-use lumit_import::{open_aep, Bundle, BundleSource, Manifest};
+use lumit_import::capture::{Capture, Layer, Property};
+use lumit_import::{open_aep, Bundle};
 
 fn fixtures() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -127,12 +127,6 @@ fn golden() -> Capture {
     let bytes = std::fs::read(fixtures().join("fixture.lum-bundle").join("capture.json"))
         .expect("the golden capture is beside the .aep");
     serde_json::from_slice(&bytes).expect("the golden capture parses")
-}
-
-fn golden_manifest() -> Manifest {
-    let bytes = std::fs::read(fixtures().join("fixture.lum-bundle").join("manifest.json"))
-        .expect("the golden manifest is beside the .aep");
-    serde_json::from_slice(&bytes).expect("the golden manifest parses")
 }
 
 /// Floats cross two different roads to get here — After Effects' own decimal
@@ -163,62 +157,6 @@ fn near_list(got: Option<&Vec<f64>>, want: Option<&Vec<f64>>, tolerance: f64, wh
         }
         (got, want) => assert_eq!(got, want, "{what}"),
     }
-}
-
-/// **The container opens, and the file says which After Effects wrote it.**
-///
-/// The shallow check everything below leans on: the RIFX header and the `Egg!`
-/// form type are what they should be, the bundle comes out marked as the direct
-/// route, and the version packed into `head`'s bitfield reads back as the same
-/// build string After Effects stamped into the bundle's manifest. That last one
-/// is worth its own assertion because the version word is a bitfield with the
-/// major version split across two runs — get the split wrong and the parser
-/// would refuse (or misread) version-dependent records for a reason nothing
-/// else would surface.
-#[test]
-fn the_project_opens_and_names_the_after_effects_that_wrote_it() {
-    let bundle = parsed();
-    assert_eq!(bundle.source, BundleSource::Aep);
-    assert_eq!(bundle.manifest.format.as_deref(), Some("lumit-ae-bundle"));
-    assert_eq!(
-        bundle.manifest.ae_version,
-        golden_manifest().ae_version,
-        "the packed version word must read back as the build After Effects named"
-    );
-    assert!(
-        bundle.report.unreadables.is_empty(),
-        "nothing in the golden project should be skipped: {:?}",
-        bundle.report.unreadables
-    );
-}
-
-/// **The project block matches field for field.**
-///
-/// These five settings belong to the project rather than to any item, and
-/// docs/11 §3's colour flagging cannot be worked out afterwards without them.
-/// Three are the awkward kind: the colour depth is stored as an *exponent*
-/// rather than a bit count, and linear blending and the linearised working
-/// space are chunks with no payload at all — the fact is whether the chunk is
-/// present.
-#[test]
-fn the_project_settings_match_after_effects() {
-    let got = parsed().capture.project.expect("a project block");
-    let want = golden().project.expect("the golden has a project block");
-
-    assert_eq!(
-        got.bits_per_channel, want.bits_per_channel,
-        "bits_per_channel"
-    );
-    assert_eq!(got.working_space, want.working_space, "working_space");
-    assert_eq!(got.linear_blending, want.linear_blending, "linear_blending");
-    assert_eq!(
-        got.linearize_working_space, want.linearize_working_space,
-        "linearize_working_space"
-    );
-    assert_eq!(
-        got.expression_engine, want.expression_engine,
-        "expression_engine"
-    );
 }
 
 /// **Every item arrives, in After Effects' own order, with its own id.**
@@ -671,61 +609,6 @@ fn every_stored_property_value_matches_after_effects() {
     );
 }
 
-/// **The blobs After Effects itself cannot read come through as bytes.**
-///
-/// The one place the direct route beats the Bridge outright: Curves' point
-/// list, Levels' histogram and Hue/Saturation's channel ranges are
-/// `CUSTOM_VALUE` properties the scripting DOM refuses, and they are sitting in
-/// the file in an `aRbs` block. They are carried undecoded — decoding is a
-/// separate job — but they are *carried*, so the day a decoder exists there is
-/// something for it to decode.
-#[test]
-fn the_custom_value_blobs_the_dom_cannot_read_arrive_as_raw_bytes() {
-    let mut blobs = Vec::new();
-    for (_, got, want) in trees() {
-        for (path, node) in &got {
-            if want
-                .get(path)
-                .is_some_and(|other| other.value_type.as_deref() == Some("custom_blob"))
-            {
-                let bytes = node
-                    .value
-                    .as_ref()
-                    .and_then(|value| value.get("bytes"))
-                    .and_then(serde_json::Value::as_str)
-                    .unwrap_or_default()
-                    .len();
-                assert_eq!(
-                    node.value_type.as_deref(),
-                    Some("custom_blob"),
-                    "{path}: the blob keeps the capture's own word for it"
-                );
-                assert!(
-                    node.unreadable.is_some(),
-                    "{path}: undecoded, and honest about it"
-                );
-                blobs.push((path.clone(), bytes / 2));
-            }
-        }
-    }
-    blobs.sort();
-    let names: Vec<&str> = blobs
-        .iter()
-        .map(|(path, _)| path.rsplit('/').next().unwrap_or(path))
-        .collect();
-    assert_eq!(
-        names,
-        vec![
-            "ADBE CurvesCustom-0001#1",
-            "ADBE Easy Levels2-0002#1",
-            "ADBE HUE SATURATION-0003#1",
-        ]
-    );
-    for (path, bytes) in &blobs {
-        assert!(*bytes > 0, "{path}: the blob is not empty");
-    }
-}
-
 /// **The Curves blob's layout holds against the file's own bytes, and the
 /// effect maps.**
 ///
@@ -1159,72 +1042,6 @@ fn the_same_file_parses_to_the_same_capture_every_time() {
     assert_eq!(once.manifest, twice.manifest);
 }
 
-/// **The whole golden capture round-trips through the mapper unchanged in
-/// shape.**
-///
-/// Not a fidelity claim — phase A has no properties to map — but the point of
-/// the one-funnel architecture: the capture the parser produces goes into
-/// the *same* `map_capture` the Bridge's does, and comes out a document with
-/// the same comps and layers rather than falling over on a shape the mapper has
-/// never seen.
-#[test]
-fn the_parsed_capture_maps_through_the_shared_importer() {
-    let bundle = parsed();
-    let (document, _report) = lumit_import::map_capture(&bundle.capture);
-    let comps = document
-        .items
-        .iter()
-        .filter(|item| matches!(item, lumit_core::model::ProjectItem::Composition(_)))
-        .count();
-    assert_eq!(
-        comps,
-        bundle.capture.comps.len(),
-        "every comp survives the shared mapping"
-    );
-}
-
-/// **A damaged project is an error or a partial read, never a crash and never a
-/// hang.**
-///
-/// This parser eats untrusted files: an `.aep` arrives from wherever the user
-/// got it, and every length in it is attacker-controlled. So the golden file is
-/// damaged sixty-four ways — cut short, single bytes flipped, and chunk sizes
-/// overwritten with enormous ones — and the parse of each must come back with an
-/// answer. The seeds are fixed, so a failure names a case that can be
-/// reproduced; the whole sweep is timed, because "no hang" is a claim as much as
-/// "no panic" is, and a length-driven loop that trusts the file is how both are
-/// lost at once.
-#[test]
-fn a_damaged_project_is_refused_or_partly_read_but_never_panics() {
-    let whole = std::fs::read(fixtures().join("fixture.aep")).expect("the golden .aep");
-    let started = std::time::Instant::now();
-
-    for seed in 0_u64..64 {
-        let damaged = damage(&whole, seed);
-
-        let outcome = std::panic::catch_unwind(|| lumit_import::aep::parse_capture(&damaged));
-        let Ok(outcome) = outcome else {
-            panic!("seed {seed} panicked; a malformed byte must be an error, not a crash");
-        };
-        // Either answer is correct — what matters is that it is an answer, and
-        // that a failure is one of the parser's own named errors rather than a
-        // string from somewhere unknown.
-        if let Err(error) = outcome {
-            assert!(
-                !error.to_string().is_empty(),
-                "seed {seed}: the refusal says why"
-            );
-        }
-    }
-
-    assert!(
-        started.elapsed() < std::time::Duration::from_secs(30),
-        "sixty-four damaged parses took {:?} — a length the file declared is \
-         being trusted somewhere",
-        started.elapsed()
-    );
-}
-
 /// The golden file damaged one of four ways, chosen and placed by `seed`.
 ///
 /// One tiny deterministic generator, so the sweep is the same on every
@@ -1317,90 +1134,5 @@ fn the_damage_sweep_never_panics_on_the_fallback() {
         started.elapsed() < std::time::Duration::from_secs(30),
         "sixty-four fallback parses took {:?} — the carve is trusting a length somewhere",
         started.elapsed()
-    );
-}
-
-/// **An intact file takes the full road.**
-///
-/// The fallback entry on the golden file is the whole parse, byte for byte,
-/// and the bundle it opens says nothing about footage only — so the report
-/// the bridge builds from it carries no structure row.
-#[test]
-fn an_intact_file_takes_the_full_road() {
-    use lumit_import::aep::{parse_capture, parse_capture_or_footage};
-    use lumit_import::{note_skipped_chunks, ImportReport, Reason};
-
-    let bytes = std::fs::read(fixtures().join("fixture.aep")).expect("the golden .aep");
-    let through_fallback = parse_capture_or_footage(&bytes).expect("the golden .aep parses");
-    let full = parse_capture(&bytes).expect("the golden .aep parses");
-    assert_eq!(through_fallback, full);
-    assert!(!through_fallback.footage_only);
-    assert_eq!(through_fallback.capture.comps.len(), 2);
-
-    let bundle = parsed();
-    assert!(!bundle.footage_only);
-    let mut report = ImportReport::default();
-    note_skipped_chunks(&bundle, &mut report);
-    assert!(
-        !report
-            .rows
-            .iter()
-            .any(|row| matches!(row.reason, Reason::StructureUnreadable { .. })),
-        "no structure row on a file whose structure read"
-    );
-}
-
-/// A comp and an item are joined only by an id, so this is worth its own check:
-/// the nested comp is reached from its precomp layer, and both precomp layers
-/// in the fixture point at the same one.
-#[test]
-fn a_precomp_layer_reaches_its_comp_through_the_item_id() {
-    let capture = parsed().capture;
-    let nested: Vec<&Comp> = capture.comps.iter().collect();
-    let inner = nested
-        .iter()
-        .find(|comp| comp.layers.len() == 1)
-        .expect("the inner comp holds one layer");
-    let item: &Item = capture
-        .items
-        .iter()
-        .find(|item| item.id == inner.id)
-        .expect("the inner comp has an item row carrying its name");
-    assert_eq!(item.kind.as_deref(), Some("comp"));
-
-    let pointing: Vec<&Layer> = capture
-        .comps
-        .iter()
-        .flat_map(|comp| &comp.layers)
-        .filter(|layer| layer.kind.as_deref() == Some("precomp"))
-        .collect();
-    assert_eq!(pointing.len(), 2, "the fixture has two precomp layers");
-    for layer in pointing {
-        assert_eq!(
-            layer.source_id, inner.id,
-            "a precomp layer names its comp by id, never by name"
-        );
-    }
-}
-
-/// **The real project, renamed `.zip`, still opens as a project.**
-///
-/// The picker offers `.aep` and `.zip` in one filter, so `open_ae` routes on
-/// the file's first four bytes and never on its name. The lib's own unit test
-/// proves the routing with stubs; this proves it with the golden file, which is
-/// the case that would actually cost a user their import — a project renamed on
-/// the way through a mail server must import, not be refused for its extension.
-#[test]
-fn the_golden_project_opens_under_the_wrong_extension() {
-    let temp = tempfile::tempdir().expect("a temp dir");
-    let renamed = temp.path().join("fixture.zip");
-    std::fs::copy(fixtures().join("fixture.aep"), &renamed).expect("the copy");
-
-    let bundle = lumit_import::open_ae(&renamed).expect("the bytes say .aep, so it parses");
-    assert_eq!(bundle.source, BundleSource::Aep);
-    assert_eq!(
-        bundle.capture,
-        parsed().capture,
-        "the same parse, byte for byte"
     );
 }

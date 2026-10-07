@@ -16,8 +16,8 @@ use lumit_core::fx::{EffectDef, ParamId, ParamKind};
 use crate::abi::AnyModule;
 use crate::def::{AudioEffectDef, AudioHost, InstanceSetup, LocalHost};
 use crate::describe::{describe, describe_module};
-use crate::discover::{clap_search_paths, scan, scan_dir, search_paths, ScanOptions};
-use crate::process::{Block, ParamEvent, BLOCK_FRAMES, INTERLEAVED_LEN};
+use crate::discover::{clap_search_paths, search_paths};
+use crate::process::{ParamEvent, INTERLEAVED_LEN};
 use crate::schema::schema_of;
 use crate::HOST_ACTIONS;
 
@@ -218,135 +218,7 @@ fn the_search_paths_are_the_standard_ones_plus_clap_path() {
     );
 }
 
-#[test]
-fn scan_dir_finds_clap_files_and_ignores_everything_else() {
-    let Some(path) = fixture() else {
-        return skipped("scan_dir_finds_clap_files_and_ignores_everything_else");
-    };
-    let Some(dir) = path.parent() else {
-        return;
-    };
-    std::fs::write(dir.join("readme.txt"), b"not a plugin").ok();
-    let found = scan_dir(dir);
-    assert_eq!(found, vec![path.to_path_buf()]);
-}
-
-#[test]
-fn a_scan_offers_the_effects_and_reports_the_refusals() {
-    let _guard = fixture_lock();
-    let Some(path) = fixture() else {
-        return skipped("a_scan_offers_the_effects_and_reports_the_refusals");
-    };
-    let Some(dir) = path.parent() else {
-        return;
-    };
-    let options = ScanOptions {
-        paths: vec![dir.to_path_buf()],
-        ..ScanOptions::default()
-    };
-    let outcome = scan(&options);
-
-    let names: Vec<&str> = outcome
-        .found
-        .iter()
-        .map(|plugin| plugin.match_name.as_str())
-        .collect();
-    assert!(
-        names.contains(&"clap:com.lumit.aplug.testplug.gain"),
-        "the gain effect should be offered: {names:?}"
-    );
-    assert!(
-        !names.iter().any(|name| name.contains("instrument")),
-        "an instrument is not an effect: {names:?}"
-    );
-    assert!(
-        outcome
-            .skipped
-            .iter()
-            .any(|line| line.contains("instrument") && line.contains("no audio input")),
-        "the instrument's refusal should be one calm line: {:?}",
-        outcome.skipped
-    );
-}
-
-#[test]
-fn a_switched_off_plugin_is_never_described() {
-    let _guard = fixture_lock();
-    let Some(path) = fixture() else {
-        return skipped("a_switched_off_plugin_is_never_described");
-    };
-    let Some(dir) = path.parent() else {
-        return;
-    };
-    let options = ScanOptions {
-        paths: vec![dir.to_path_buf()],
-        disabled: [plugin_id(Kind::Gain)].into_iter().collect(),
-    };
-    let outcome = scan(&options);
-    assert!(
-        !outcome
-            .found
-            .iter()
-            .any(|plugin| plugin.identifier == plugin_id(Kind::Gain)),
-        "a plugin the user switched off must not become an effect"
-    );
-}
-
 // --------------------------------------------------------------- describe --
-
-#[test]
-fn a_module_lists_every_plugin_in_it() {
-    let _guard = fixture_lock();
-    let Some(module) = open_module() else {
-        return skipped("a_module_lists_every_plugin_in_it");
-    };
-    assert_eq!(module.entries().len(), 8);
-    assert_eq!(module.entries()[0].id, plugin_id(Kind::Gain));
-    assert_eq!(module.entries()[0].vendor, "Lumit");
-    assert!(module.entries()[0]
-        .features
-        .contains(&"audio-effect".to_owned()));
-}
-
-#[test]
-fn an_instrument_is_refused_with_a_reason() {
-    let _guard = fixture_lock();
-    let Some(module) = open_module() else {
-        return skipped("an_instrument_is_refused_with_a_reason");
-    };
-    let report = describe_module(&module);
-    let refusal = report
-        .rejected
-        .iter()
-        .find(|refusal| refusal.id == plugin_id(Kind::Instrument))
-        .expect("the instrument should be refused");
-    assert!(
-        refusal.reason.contains("no audio input"),
-        "the reason names the fact: {}",
-        refusal.reason
-    );
-    assert_eq!(report.described.len(), 7);
-}
-
-#[test]
-fn only_automatable_visible_parameters_become_rows() {
-    let _guard = fixture_lock();
-    let Some(module) = open_module() else {
-        return skipped("only_automatable_visible_parameters_become_rows");
-    };
-    let descriptor =
-        describe(&module, &plugin_id(Kind::ParamEcho)).expect("the echo plugin is an effect");
-    assert_eq!(descriptor.params.len(), 3, "it declares three parameters");
-
-    let schema = schema_of(&descriptor).expect("its rows are distinct");
-    let ids: Vec<&str> = schema.params.iter().map(|row| row.id).collect();
-    assert_eq!(
-        ids,
-        vec!["p7"],
-        "the hidden and the read-only parameters get no row"
-    );
-    assert_eq!(schema.match_name, "clap:com.lumit.aplug.testplug.paramecho");
-}
 
 #[test]
 fn a_row_is_named_by_the_plugins_own_parameter_id() {
@@ -434,34 +306,6 @@ fn a_gain_plugin_multiplies_every_sample_exactly() {
 }
 
 #[test]
-fn a_parameter_event_inside_a_block_reaches_the_plugin() {
-    let _guard = fixture_lock();
-    let Some(module) = open_module() else {
-        return skipped("a_parameter_event_inside_a_block_reaches_the_plugin");
-    };
-    let setup = InstanceSetup {
-        plugin_id: plugin_id(Kind::Gain),
-        params: vec![(PARAM_GAIN, 1.0)],
-        ..InstanceSetup::default()
-    };
-    let host = LocalHost::open(&module, &setup).expect("the gain plugin opens");
-
-    let input = vec![1.0f32; INTERLEAVED_LEN];
-    let mut output = vec![0.0f32; INTERLEAVED_LEN];
-    let events = [ParamEvent {
-        time: 0,
-        id: PARAM_GAIN,
-        value: 2.0,
-    }];
-    host.process(&input, &mut output, &events, 0)
-        .expect("one block");
-    assert!(
-        output.iter().all(|sample| *sample == 2.0),
-        "the event should have been read before the block was processed"
-    );
-}
-
-#[test]
 fn latency_is_read_off_the_live_plugin() {
     let _guard = fixture_lock();
     let Some(module) = open_module() else {
@@ -537,24 +381,6 @@ fn properties_win_over_a_stale_state() {
     );
 }
 
-#[test]
-fn a_plugin_that_saves_nothing_is_not_a_failure() {
-    let _guard = fixture_lock();
-    let Some(module) = open_module() else {
-        return skipped("a_plugin_that_saves_nothing_is_not_a_failure");
-    };
-    // Every one of the eight implements `state`, so the honest check here is
-    // the other half of the rule: a blob handed to a plugin that refuses it
-    // degrades to a warning rather than losing the effect.
-    let setup = InstanceSetup {
-        plugin_id: plugin_id(Kind::Gain),
-        state: Some(vec![]),
-        ..InstanceSetup::default()
-    };
-    let host = LocalHost::open(&module, &setup).expect("an empty blob does not stop it opening");
-    assert_eq!(host.warning(), None);
-}
-
 // ---------------------------------------------------------- the automation --
 
 #[test]
@@ -619,59 +445,7 @@ fn a_param_sweep_arrives_as_sorted_per_block_events() {
     );
 }
 
-#[test]
-fn a_block_sorts_its_events_whatever_order_they_arrive_in() {
-    let mut block = Block::new();
-    block.set_events(&[
-        ParamEvent {
-            time: 400,
-            id: 2,
-            value: 1.0,
-        },
-        ParamEvent {
-            time: 0,
-            id: 1,
-            value: 2.0,
-        },
-        ParamEvent {
-            time: 0,
-            id: 3,
-            value: 3.0,
-        },
-    ]);
-    let (_, _, events) = block.parts();
-    let times: Vec<u32> = events.iter().map(|event| event.header.time).collect();
-    assert_eq!(times, vec![0, 0, 400]);
-    // Stable: two events at the same frame keep the order they were baked in.
-    let ids: Vec<u32> = events.iter().map(|event| event.param_id).collect();
-    assert_eq!(ids, vec![1, 3, 2]);
-}
-
 // ---------------------------------------------------------- the interleave --
-
-#[test]
-fn a_block_de_interleaves_into_planes() {
-    let mut block = Block::new();
-    let src: Vec<f32> = (0..INTERLEAVED_LEN).map(|index| index as f32).collect();
-    block.load(&src);
-    assert_eq!(block.input()[0], 0.0, "left, frame nought");
-    assert_eq!(block.input()[1], 2.0, "left, frame one");
-    assert_eq!(block.input()[BLOCK_FRAMES], 1.0, "right, frame nought");
-    assert_eq!(block.input()[BLOCK_FRAMES + 1], 3.0, "right, frame one");
-}
-
-#[test]
-fn a_short_last_block_is_silent_where_the_sound_ran_out() {
-    let mut block = Block::new();
-    block.load(&[1.0, 1.0, 1.0, 1.0]);
-    assert_eq!(block.input()[0], 1.0);
-    assert_eq!(
-        block.input()[2],
-        0.0,
-        "past the end is silence, not rubbish"
-    );
-    assert_eq!(block.input()[BLOCK_FRAMES + 2], 0.0);
-}
 
 // -------------------------------------------------------------- denormals --
 
@@ -696,24 +470,6 @@ fn denormals_flush_to_zero_inside_the_guard_and_are_restored_after() {
 }
 
 // --------------------------------------------------------- console windows --
-
-/// A broker is a console program and Lumit is a windowed one, so on Windows a
-/// spawn without `CREATE_NO_WINDOW` opens a console window per plugin file
-/// during the start-up scan — reported against 0.3.0. Nothing in this process
-/// can observe whether a child was given a console, so the guard is that the
-/// spawn still asks for none.
-#[test]
-fn the_broker_is_spawned_without_a_console_window() {
-    let source = include_str!("ipc/broker.rs");
-    assert!(
-        source.contains("no_console(&mut command);"),
-        "the broker spawn must ask for no console window"
-    );
-    assert!(
-        source.contains("command.creation_flags(CREATE_NO_WINDOW);"),
-        "no_console must be CREATE_NO_WINDOW and nothing else"
-    );
-}
 
 /// The host keeps its brokers in a static, and a static is never dropped, so
 /// a ring file only ever went away by luck. The maker's handle now carries

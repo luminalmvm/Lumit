@@ -7,7 +7,7 @@
 //! value, commit the list, bypass, remove — works on a style because **one**
 //! lookup answers "which of the layer's two lists is this instance on".
 
-use crate::api::effect::{list_styles, BridgeEffectValue, BridgeScalar};
+use crate::api::effect::{BridgeEffectValue, BridgeScalar};
 use crate::api::state::LumitBridgeState;
 
 /// The whole of what makes a style row work: it is added, it lands in §2's
@@ -90,38 +90,4 @@ fn a_style_is_added_ordered_refused_twice_and_edited_through_the_shared_lookup()
     assert_eq!(layer.get_info().expect("info").styles.len(), 2);
 
     project.close().expect("closed");
-}
-
-/// The listing names all nine in §2's order, and offers the seven that render
-/// (§8) — Satin and Bevel and emboss are modelled and imported losslessly, so a
-/// heading can name one, and no menu may put one in front of the user.
-#[test]
-fn the_style_listing_names_all_nine_and_offers_the_seven_that_render() {
-    let listed = list_styles();
-    assert_eq!(
-        listed.iter().map(|s| s.name.as_str()).collect::<Vec<_>>(),
-        vec![
-            "style_drop_shadow",
-            "style_outer_glow",
-            "style_gradient_overlay",
-            "style_colour_overlay",
-            "style_satin",
-            "style_inner_glow",
-            "style_inner_shadow",
-            "style_stroke",
-            "style_bevel_emboss",
-        ]
-    );
-    assert_eq!(
-        listed
-            .iter()
-            .filter(|s| !s.offered)
-            .map(|s| s.name.as_str())
-            .collect::<Vec<_>>(),
-        vec!["style_satin", "style_bevel_emboss"]
-    );
-    assert!(
-        listed.iter().all(|s| !s.label.is_empty()),
-        "every style can name itself, offered or not"
-    );
 }

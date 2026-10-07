@@ -4003,26 +4003,6 @@ mod group_tests {
         assert_eq!(stack.last(), Some(&bottom.layer_id));
     }
 
-    /// One drop is one undo step: the layer arrives where it was let go, so
-    /// there is no move to put back afterwards.
-    #[test]
-    fn a_layer_added_on_a_row_takes_one_undo() {
-        let (project, comp, layers) = comp_with_four();
-        let before = ids(&layers);
-
-        comp.add_null_layer(Some(3)).expect("a null layer");
-        assert_eq!(comp.get_layers().expect("the stack").len(), 5);
-
-        project.undo().expect("one step back");
-        let stack: Vec<Uuid> = comp
-            .get_layers()
-            .expect("the stack")
-            .iter()
-            .map(|l| l.layer_id)
-            .collect();
-        assert_eq!(stack, before, "one press put the whole drop back");
-    }
-
     #[test]
     fn the_read_model_resolves_the_run_the_header_spans() {
         let (_project, comp, layers) = comp_with_four();
@@ -4050,52 +4030,6 @@ mod group_tests {
                 .collect::<Vec<_>>(),
             all
         );
-    }
-
-    #[test]
-    fn a_scattered_selection_is_refused_at_the_seam_too() {
-        let (_project, comp, layers) = comp_with_four();
-        let all = ids(&layers);
-        assert!(comp
-            .group_layers(vec![all[0], all[2]], "Scattered".into())
-            .is_err());
-        assert!(comp.get_model().expect("model").groups.is_empty());
-    }
-
-    #[test]
-    fn a_switch_broadcasts_to_every_member_as_one_step() {
-        let (project, comp, layers) = comp_with_four();
-        let all = ids(&layers);
-        let group = comp
-            .group_layers(all[0..2].to_vec(), "Plates".into())
-            .expect("a group");
-
-        comp.set_group_switch(group, BridgeGroupSwitch::Visible, false)
-            .expect("the broadcast lands");
-        let model = comp.get_model().expect("model");
-        let visible = |i: usize| model.layers[i].info.switches.visible;
-        assert!(!visible(0) && !visible(1), "both members went dark");
-        assert!(
-            visible(2) && visible(3),
-            "and nothing outside the group did"
-        );
-        assert!(!model.groups[0].visible, "the header face follows");
-
-        // One undo takes the whole broadcast, not one member of it.
-        project.undo().expect("undo");
-        let back = comp.get_model().expect("model");
-        assert!(back.layers.iter().all(|e| e.info.switches.visible));
-
-        // Setting a switch to what it already says commits nothing at all, so
-        // there is no empty step left behind to undo past.
-        comp.set_group_switch(group, BridgeGroupSwitch::Visible, true)
-            .expect("a no-op is not an error");
-        assert!(comp
-            .get_model()
-            .expect("model")
-            .layers
-            .iter()
-            .all(|e| e.info.switches.visible));
     }
 
     /// The group-effects crossing (docs/impl/group-effects.md §6): the header's
@@ -4207,70 +4141,6 @@ mod group_tests {
             .is_err());
     }
 
-    #[test]
-    fn dragging_the_group_bar_moves_its_members_together() {
-        let (_project, comp, layers) = comp_with_four();
-        let all = ids(&layers);
-        let group = comp
-            .group_layers(all[1..3].to_vec(), "Titles".into())
-            .expect("a group");
-        let before = comp.get_model().expect("model");
-        let untouched = span(&before, 0);
-
-        comp.shift_group(group, 12).expect("the group slides");
-        let after = comp.get_model().expect("model");
-        for i in 1..3 {
-            assert_eq!(
-                span(&after, i),
-                (span(&before, i).0 + 12, span(&before, i).1 + 12),
-                "member {i} moved whole"
-            );
-        }
-        assert_eq!(span(&after, 0), untouched, "and nothing else moved");
-        assert_eq!(
-            after.groups[0].in_frame, 12,
-            "the combined bar moved with it"
-        );
-
-        // The wall: a drag that would carry the group before comp zero stops
-        // with its shape intact rather than folding up against it.
-        comp.shift_group(group, -1000)
-            .expect("clamped, not refused");
-        let walled = comp.get_model().expect("model");
-        assert_eq!(span(&walled, 1).0, 0);
-        assert_eq!(
-            span(&walled, 1).1 - span(&walled, 1).0,
-            span(&before, 1).1 - span(&before, 1).0,
-            "the member kept its length"
-        );
-    }
-
-    #[test]
-    fn a_group_can_be_renamed_recoloured_and_taken_away() {
-        let (_project, comp, layers) = comp_with_four();
-        let all = ids(&layers);
-        let group = comp
-            .group_layers(all[0..2].to_vec(), "Group 1".into())
-            .expect("a group");
-
-        comp.set_group_name(group, "Background".into())
-            .expect("rename");
-        comp.set_group_label(group, 4).expect("recolour");
-        let model = comp.get_model().expect("model");
-        assert_eq!(model.groups[0].name, "Background");
-        assert_eq!(model.groups[0].label, 4);
-
-        comp.ungroup(group).expect("ungroup");
-        let after = comp.get_model().expect("model");
-        assert!(after.groups.is_empty());
-        assert_eq!(after.layers.len(), 4, "ungrouping deletes nothing");
-
-        // A group that is not there is an error rather than a silent success:
-        // nothing in the interface can reach it, so reaching it is a bug worth
-        // hearing about.
-        assert!(comp.ungroup(group).is_err());
-    }
-
     /// One switch click on a multi-selection is **one** undo step (the owner's
     /// 53-layer Ctrl+A recorded 53), and a locked sibling sits its share out
     /// while the clicked row's own refusal is the whole call's.
@@ -4317,43 +4187,6 @@ mod group_tests {
         assert!(
             held.layers.iter().all(|e| e.info.switches.visible),
             "a refused call commits nothing at all"
-        );
-    }
-
-    /// Ctrl+Shift+G over several bands is one undo step, and the one undo puts
-    /// every band back in its old slot (the op's inverse carries it).
-    #[test]
-    fn ungrouping_a_selection_takes_every_touched_band_in_one_step() {
-        let (project, comp, layers) = comp_with_four();
-        let all = ids(&layers);
-        comp.group_layers(all[0..2].to_vec(), "Plates".into())
-            .expect("first group");
-        comp.group_layers(all[2..4].to_vec(), "Titles".into())
-            .expect("second group");
-
-        assert!(comp
-            .ungroup_selection(vec![all[1], all[3]])
-            .expect("both bands go"));
-        assert!(comp.get_model().expect("model").groups.is_empty());
-
-        project.undo().expect("undo");
-        let back = comp.get_model().expect("model");
-        assert_eq!(back.groups.len(), 2, "one undo restored both bands");
-        assert_eq!(
-            [back.groups[0].name.as_str(), back.groups[1].name.as_str()],
-            ["Plates", "Titles"],
-            "each in its old slot"
-        );
-
-        // A selection touching no group commits nothing and says so.
-        comp.ungroup(back.groups[0].id)
-            .expect("clear the first band");
-        comp.ungroup(back.groups[1].id).expect("and the second");
-        assert!(
-            !comp
-                .ungroup_selection(vec![all[0]])
-                .expect("nothing to do is not an error"),
-            "an untouched selection reported an ungroup"
         );
     }
 

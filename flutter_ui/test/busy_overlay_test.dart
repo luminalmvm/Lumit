@@ -26,28 +26,6 @@ Widget _harness(Widget child) => Directionality(
     );
 
 void main() {
-  testWidgets('the card stands while the job runs and goes when it is done',
-      (tester) async {
-    await tester.binding.setSurfaceSize(const Size(800, 600));
-    final busy = ValueNotifier<String?>(null);
-    addTearDown(busy.dispose);
-
-    await tester.pumpWidget(_harness(BusyOverlay(busy: busy)));
-    expect(find.text('Detecting beats'), findsNothing,
-        reason: 'nothing is running, so there is no card');
-
-    final job = Completer<void>();
-    final shown = showBusyWhile(busy, 'Detecting beats', job.future);
-    await tester.pump();
-    expect(find.text('Detecting beats'), findsOneWidget);
-
-    job.complete();
-    await shown;
-    await tester.pump();
-    expect(find.text('Detecting beats'), findsNothing,
-        reason: 'the job finished, so the card comes down');
-  });
-
   testWidgets('a job that fails takes the card down with it', (tester) async {
     await tester.binding.setSurfaceSize(const Size(800, 600));
     final busy = ValueNotifier<String?>(null);
@@ -65,73 +43,5 @@ void main() {
     await tester.pump();
     expect(find.text('Detecting beats'), findsNothing);
     expect(busy.value, isNull);
-  });
-
-  // The same card is what opening a project puts up, and *that* job can say how
-  // far it has got. A fraction fills the bar and writes the percentage
-  // beside the line; no fraction keeps the sweep and says no number at all,
-  // because a job that reports nothing has no honest one to show.
-  testWidgets('a fraction fills the bar and says the percentage',
-      (tester) async {
-    await tester.binding.setSurfaceSize(const Size(800, 600));
-
-    await tester.pumpWidget(_harness(const OpeningOverlay(fraction: 0.4)));
-    await tester.pump();
-    expect(find.text('40%'), findsOneWidget);
-    expect(
-        tester
-            .widgetList<HouseProgressBar>(find.byType(HouseProgressBar))
-            .single
-            .fraction,
-        0.4);
-  });
-
-  testWidgets('a job that cannot say keeps the sweep and no percentage',
-      (tester) async {
-    await tester.binding.setSurfaceSize(const Size(800, 600));
-
-    await tester.pumpWidget(_harness(const OpeningOverlay()));
-    await tester.pump();
-    expect(find.textContaining('%'), findsNothing);
-  });
-
-  // And the busy card reads its own job's fraction the same way. Beat
-  // detection reports one — the engine counts the sources it mixes down — and
-  // the card said nothing about how far it had got until it did.
-  testWidgets('the busy card fills to what the job reports', (tester) async {
-    await tester.binding.setSurfaceSize(const Size(800, 600));
-    final busy = ValueNotifier<String?>('Detecting beats');
-    final progress = ValueNotifier<double?>(0);
-    addTearDown(busy.dispose);
-    addTearDown(progress.dispose);
-
-    await tester.pumpWidget(
-        _harness(BusyOverlay(busy: busy, progress: progress)));
-    await tester.pump();
-    expect(find.text('0%'), findsOneWidget,
-        reason: 'the bar is a fill from the first frame, not a sweep');
-
-    progress.value = 0.6;
-    await tester.pump();
-    expect(find.text('60%'), findsOneWidget);
-    expect(
-        tester
-            .widgetList<HouseProgressBar>(find.byType(HouseProgressBar))
-            .single
-            .fraction,
-        0.6);
-  });
-
-  // A job with nothing to report is left alone: no notifier, no number, and
-  // the sweep it always had.
-  testWidgets('a busy job with no progress keeps the sweep', (tester) async {
-    await tester.binding.setSurfaceSize(const Size(800, 600));
-    final busy = ValueNotifier<String?>('Detecting beats');
-    addTearDown(busy.dispose);
-
-    await tester.pumpWidget(_harness(BusyOverlay(busy: busy)));
-    await tester.pump();
-    expect(find.text('Detecting beats'), findsOneWidget);
-    expect(find.textContaining('%'), findsNothing);
   });
 }

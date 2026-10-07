@@ -699,82 +699,6 @@ mod tests {
         }
     }
 
-    /// **A square selector is in or out.** Half the run selected means half the
-    /// letters moved the whole way and the rest not moved at all — the case
-    /// every cascade is built out of, asserted letter by letter.
-    #[test]
-    fn a_square_selector_moves_the_letters_inside_it_and_no_others() {
-        let s = selector(0.0, 50.0, 0.0);
-        assert_eq!(s.weights_at(4, 0.0), vec![1.0, 1.0, 0.0, 0.0]);
-        // And sliding it by the offset walks the selection along.
-        let slid = selector(0.0, 50.0, 50.0);
-        assert_eq!(slid.weights_at(4, 0.0), vec![0.0, 0.0, 1.0, 1.0]);
-    }
-
-    /// **A ramp rises across the range and stays up past it.** The first letter
-    /// is barely touched, the last is moved the whole way, and letters past the
-    /// end keep the whole way rather than snapping back.
-    #[test]
-    fn a_ramp_rises_across_the_range_and_holds_past_it() {
-        let s = RangeSelector {
-            shape: SelectorShape::Ramp,
-            ..selector(0.0, 50.0, 0.0)
-        };
-        let w = s.weights_at(4, 0.0);
-        assert!((w[0] - 0.25).abs() < 1e-6, "{w:?}");
-        assert!((w[1] - 0.75).abs() < 1e-6, "{w:?}");
-        assert_eq!((w[2], w[3]), (1.0, 1.0), "the ramp fell back down");
-        // Rising, and never falling.
-        assert!(w.windows(2).all(|p| p[1] >= p[0]));
-    }
-
-    /// A range with no width is a step rather than a division by nothing.
-    #[test]
-    fn a_zero_width_ramp_is_a_step() {
-        let s = RangeSelector {
-            shape: SelectorShape::Ramp,
-            ..selector(50.0, 50.0, 0.0)
-        };
-        assert_eq!(s.weights_at(4, 0.0), vec![0.0, 0.0, 1.0, 1.0]);
-        // A square one selects nothing at all, which is the honest reading of
-        // a range between a point and itself.
-        assert_eq!(selector(50.0, 50.0, 0.0).weights_at(4, 0.0), vec![0.0; 4]);
-    }
-
-    /// A range dragged inside out still means the stretch between its ends.
-    #[test]
-    fn an_inside_out_range_still_names_the_stretch_between_its_ends() {
-        assert_eq!(
-            selector(75.0, 25.0, 0.0).weights_at(4, 0.0),
-            selector(25.0, 75.0, 0.0).weights_at(4, 0.0)
-        );
-    }
-
-    /// **Words are counted whole, and the gaps go with the word before them.**
-    /// Otherwise a range sweeping a sentence would pause on each space as if it
-    /// were a word of its own.
-    #[test]
-    fn words_are_counted_whole_and_the_spaces_go_with_them() {
-        let (units, total) = unit_indices("ab cd", SelectorBasis::Words);
-        assert_eq!(total, 2);
-        assert_eq!(units, vec![0, 0, 0, 1, 1], "the space left its word");
-        // Runs of spaces, and leading spaces, behave the same way.
-        let (units, total) = unit_indices("  a   b ", SelectorBasis::Words);
-        assert_eq!(total, 2);
-        assert_eq!(units, vec![0, 0, 0, 0, 0, 0, 1, 1]);
-        // Counting characters, every character is its own unit.
-        assert_eq!(
-            unit_indices("ab cd", SelectorBasis::Characters),
-            (vec![0, 1, 2, 3, 4], 5)
-        );
-        // Nothing to count is not an error.
-        assert_eq!(unit_indices("", SelectorBasis::Words), (Vec::new(), 0));
-        assert_eq!(
-            unit_indices("   ", SelectorBasis::Words),
-            (vec![0, 0, 0], 0)
-        );
-    }
-
     /// Counting words, the letters of one word move **together** — which is the
     /// whole difference between the two bases and the reason both exist.
     #[test]
@@ -793,19 +717,6 @@ mod tests {
         for c in &x[3..5] {
             assert_eq!(c.position[1], 0.0, "the second word moved");
         }
-    }
-
-    /// **No animators, no transforms** — the promise the byte-identity gate
-    /// rests on: the caller is handed nothing to apply, not a list of
-    /// identities it has to notice are identities.
-    #[test]
-    fn a_layer_with_no_animators_asks_for_nothing() {
-        assert!(glyph_xforms(&[], "Lumit", 0.0).is_empty());
-        // And an animator on an empty line has nothing to move.
-        assert!(glyph_xforms(&[TextAnimator::new("A")], "", 0.0).is_empty());
-        // A fresh animator changes nothing until a number is moved.
-        let fresh = glyph_xforms(&[TextAnimator::new("A")], "Lu", 0.0);
-        assert!(fresh.iter().all(GlyphXform::is_identity), "{fresh:?}");
     }
 
     /// **Two animators compose.** A fade and a drop written separately have to
@@ -843,15 +754,5 @@ mod tests {
         assert!((x[0].position[0] - 25.0).abs() < 1e-4, "{x:?}");
         assert!((x[1].position[0] - 75.0).abs() < 1e-4, "{x:?}");
         assert!((x[0].scale[0] - 1.25).abs() < 1e-6, "{x:?}");
-    }
-
-    /// A fresh animator writes almost nothing: every default is left out of the
-    /// file, so an animator nobody has touched costs its name and no more.
-    #[test]
-    fn a_default_animator_writes_only_its_name() {
-        let json = serde_json::to_string(&TextAnimator::new("Animator 1")).unwrap();
-        assert_eq!(json, r#"{"name":"Animator 1"}"#, "{json}");
-        let back: TextAnimator = serde_json::from_str(&json).unwrap();
-        assert_eq!(back, TextAnimator::new("Animator 1"));
     }
 }

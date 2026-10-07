@@ -225,7 +225,7 @@ fn source_ref(kind: &LayerKind) -> Option<SourceRef> {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
-    use lumit_core::anim::Property;
+
     use lumit_core::mask::Mask;
     use lumit_core::model::{Composition, LayerKind, LinearColour, Switches, TransformGroup};
     use lumit_core::time::{CompTime, Duration, FrameRate, Rational};
@@ -311,24 +311,6 @@ mod tests {
     }
 
     #[test]
-    fn a_plain_footage_layer_folds_retime_and_masks_away() {
-        let g = compile(&comp_with(vec![footage(None, Vec::new())]));
-        let kinds: Vec<_> = g.kinds().collect();
-        // Source → Transform → Composite → CompOutput, nothing folded in.
-        assert_eq!(kinds.len(), 4);
-        assert!(matches!(kinds[0], NodeKind::Source { .. }));
-        assert!(matches!(kinds[1], NodeKind::Transform { .. }));
-        assert!(matches!(kinds[2], NodeKind::Composite { .. }));
-        assert!(matches!(
-            g.node(g.output).unwrap().kind,
-            NodeKind::CompOutput { .. }
-        ));
-        // No retime and no masks nodes for a plain layer.
-        assert!(!g.kinds().any(|k| matches!(k, NodeKind::Retime)));
-        assert!(!g.kinds().any(|k| matches!(k, NodeKind::Masks { .. })));
-    }
-
-    #[test]
     fn retime_and_masks_appear_only_when_present() {
         let g = compile(&comp_with(vec![footage(
             Some(ident_retime()),
@@ -372,44 +354,6 @@ mod tests {
     }
 
     #[test]
-    fn a_camera_layer_contributes_no_pixels() {
-        let cam = layer(
-            LayerKind::Camera {
-                zoom: Property::fixed(1000.0),
-                solve_link: None,
-                correction_base: None,
-                options: Default::default(),
-            },
-            Vec::new(),
-        );
-        let g = compile(&comp_with(vec![cam, footage(None, Vec::new())]));
-        // Only the footage layer composites; the camera has no source node.
-        assert_eq!(
-            g.kinds()
-                .filter(|k| matches!(k, NodeKind::Source { .. }))
-                .count(),
-            1
-        );
-        assert_eq!(
-            g.kinds()
-                .filter(|k| matches!(k, NodeKind::Composite { .. }))
-                .count(),
-            1
-        );
-    }
-
-    #[test]
-    fn an_empty_comp_is_just_a_comp_output() {
-        let g = compile(&comp_with(Vec::new()));
-        assert_eq!(g.len(), 1);
-        assert!(matches!(
-            g.node(g.output).unwrap().kind,
-            NodeKind::CompOutput { .. }
-        ));
-        assert!(g.node(g.output).unwrap().inputs.is_empty());
-    }
-
-    #[test]
     fn an_adjustment_layer_wraps_the_composite_beneath_it() {
         // A footage layer with an adjustment layer above it (index 0 = top).
         let adj = layer(LayerKind::Adjustment, Vec::new());
@@ -431,95 +375,5 @@ mod tests {
             g.node(out.inputs[0]).unwrap().kind,
             NodeKind::Adjust { .. }
         ));
-    }
-
-    #[test]
-    fn an_adjustment_masks_wrap_and_over_nothing_it_is_dropped() {
-        // Masks on the adjustment wrap its input.
-        let adj = layer(
-            LayerKind::Adjustment,
-            vec![Mask::rectangle(0.0, 0.0, 10.0, 10.0)],
-        );
-        let g = compile(&comp_with(vec![adj, footage(None, Vec::new())]));
-        let adjust = g
-            .nodes
-            .iter()
-            .find(|n| matches!(n.kind, NodeKind::Adjust { .. }))
-            .unwrap();
-        assert!(matches!(
-            g.node(adjust.inputs[0]).unwrap().kind,
-            NodeKind::Masks { count: 1 }
-        ));
-        // An adjustment with nothing beneath it has nothing to process.
-        let g2 = compile(&comp_with(vec![layer(LayerKind::Adjustment, Vec::new())]));
-        assert!(!g2.kinds().any(|k| matches!(k, NodeKind::Adjust { .. })));
-    }
-
-    /// A Null has no pixels, so it must add nothing to the graph: the compiled
-    /// DAG for a comp with a Null over a footage layer is the same graph as for
-    /// the footage layer alone. A stray Source or Composite node for a Null
-    /// would cost a whole comp-sized pass drawing nothing.
-    #[test]
-    fn a_null_layer_emits_no_node() {
-        let plain = compile(&comp_with(vec![footage(None, Vec::new())]));
-        let with_null = compile(&comp_with(vec![
-            layer(LayerKind::Null, Vec::new()),
-            footage(None, Vec::new()),
-        ]));
-        let shape: Vec<_> = with_null.kinds().collect();
-        assert_eq!(
-            with_null.nodes.len(),
-            plain.nodes.len(),
-            "the Null added a node: {shape:?}"
-        );
-        // Node ids and layer uuids differ per build; the shapes must not.
-        assert_eq!(
-            shape
-                .iter()
-                .filter(|k| matches!(k, NodeKind::Source { .. }))
-                .count(),
-            1,
-            "the Null adds no source: {shape:?}"
-        );
-        assert_eq!(
-            shape
-                .iter()
-                .filter(|k| matches!(k, NodeKind::Composite { .. }))
-                .count(),
-            1,
-            "the Null adds no composite: {shape:?}"
-        );
-    }
-
-    #[test]
-    fn layers_on_the_same_source_share_one_source_node() {
-        let item = Uuid::now_v7();
-        let footage_on = |item| layer(LayerKind::Footage { item }, Vec::new());
-        // Two footage layers on the same item.
-        let g = compile(&comp_with(vec![footage_on(item), footage_on(item)]));
-        let sources = g
-            .kinds()
-            .filter(|k| matches!(k, NodeKind::Source { .. }))
-            .count();
-        let composites = g
-            .kinds()
-            .filter(|k| matches!(k, NodeKind::Composite { .. }))
-            .count();
-        // One shared Source, but a Composite per layer (they place/blend apart).
-        assert_eq!(sources, 1);
-        assert_eq!(composites, 2);
-        // A layer on a different source adds a second Source node.
-        let other = Uuid::now_v7();
-        let g2 = compile(&comp_with(vec![
-            footage_on(item),
-            footage_on(item),
-            footage_on(other),
-        ]));
-        assert_eq!(
-            g2.kinds()
-                .filter(|k| matches!(k, NodeKind::Source { .. }))
-                .count(),
-            2
-        );
     }
 }

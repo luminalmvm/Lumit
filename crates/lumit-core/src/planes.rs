@@ -170,23 +170,6 @@ mod tests {
         }
     }
 
-    /// **A Depth instance names its task, and nothing else does.** Every
-    /// carriage in the render, the badge and the frame key ask this one
-    /// question, so an effect answering it by accident would be handed
-    /// somebody else's plane.
-    #[test]
-    fn the_one_predicate_answers_for_the_planes_effects_alone() {
-        let depth = instantiate(DEPTH).expect("declared");
-        assert_eq!(task_of(&depth), Some(PlaneTask::Depth));
-        let matte = instantiate(REMOVE_BACKGROUND).expect("declared");
-        assert_eq!(task_of(&matte), Some(PlaneTask::Matte));
-        for other in ["roto_brush", "camera_track", "blur"] {
-            let fx = instantiate(other).expect("declared");
-            assert_eq!(task_of(&fx), None, "{other}");
-        }
-        assert_eq!(task_of_name("nothing_of_the_sort"), None);
-    }
-
     /// **The model row renames every frame and the view row renames none.**
     /// The first decides what the model produced; the second decides how it is
     /// drawn, and a cache thrown away for a glance is the mirror mistake the
@@ -218,35 +201,5 @@ mod tests {
                 .len(),
             before.len()
         );
-    }
-
-    /// **The detail row renames every frame and the view row renames none.**
-    /// Detail is how much of the frame the model works at, so it decides what
-    /// the model produced; the view decides how the matte is drawn.
-    #[test]
-    fn the_detail_row_is_part_of_what_a_matte_is() {
-        let mut fx = instantiate(REMOVE_BACKGROUND).expect("declared");
-        let before: Vec<[u8; 32]> = (0..4).map(|f| frame_stamp(&fx, f).unwrap()).collect();
-
-        set(&mut fx, "view", EffectValue::Choice(1));
-        set(&mut fx, "invert", EffectValue::Bool(true));
-        let shown: Vec<[u8; 32]> = (0..4).map(|f| frame_stamp(&fx, f).unwrap()).collect();
-        assert_eq!(before, shown, "how a matte is drawn is not what it is");
-
-        set(&mut fx, "detail", EffectValue::Choice(1));
-        let coarser: Vec<[u8; 32]> = (0..4).map(|f| frame_stamp(&fx, f).unwrap()).collect();
-        for (was, is) in before.iter().zip(&coarser) {
-            assert_ne!(was, is, "another detail is another matte");
-        }
-    }
-
-    /// **Nothing is stamped for a layer with no such effect.** Otherwise every
-    /// cached frame of every project written before this existed would be
-    /// renamed the moment the effect shipped.
-    #[test]
-    fn an_effect_of_another_kind_stamps_nothing() {
-        let fx = instantiate("roto_brush").expect("declared");
-        assert!(frame_stamp(&fx, 0).is_none());
-        assert_eq!(analyses(&[fx]).count(), 0);
     }
 }

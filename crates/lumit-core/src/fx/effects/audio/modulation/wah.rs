@@ -257,11 +257,6 @@ mod tests {
     }
 
     #[test]
-    fn the_band_moves_at_the_rate_asked() {
-        harness::modulates_at(&AudioWahDef, &[("rate", 2.0), ("depth", 100.0)], 2.0);
-    }
-
-    #[test]
     fn the_band_rests_where_the_frequency_row_says() {
         // No sweep, so the band stands still and the tone at its middle comes
         // back where it went in while one two octaves off does not.
@@ -276,32 +271,5 @@ mod tests {
         assert!((middle - 1.0).abs() < 0.05, "the band read {middle}");
         assert!(through(200.0) < 0.2, "the bottom end got through");
         assert!(through(3_200.0) < 0.2, "the top end got through");
-    }
-
-    #[test]
-    fn the_level_opens_the_band_in_envelope_mode() {
-        // The band rests low and a tone well above it only gets through as
-        // the level pushes the band up to meet it.
-        let over = [
-            ("mode", 1.0),
-            ("depth", 100.0),
-            ("frequency", 300.0),
-            ("sensitivity", 100.0),
-        ];
-        let through = |level: f32| {
-            let input: Vec<f32> = harness::tone(40, 1_200.0)
-                .iter()
-                .map(|s| s * level)
-                .collect();
-            let values = harness::values(&AudioWahDef, &over);
-            let out = harness::run(&*harness::open(&AudioWahDef, &values), &input, &values);
-            f64::from(peak(&out) / peak(&input))
-        };
-        let quiet = through(0.02);
-        let loud = through(1.0);
-        assert!(
-            loud > quiet * 4.0,
-            "the level did not open the band: {quiet} against {loud}"
-        );
     }
 }

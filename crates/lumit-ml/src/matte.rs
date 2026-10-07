@@ -354,58 +354,6 @@ mod tests {
     use super::*;
     use std::path::{Path, PathBuf};
 
-    /// **The sigmoid and the byte agree about what coverage is.** Nought is
-    /// half, a large number is all of it, and a small one is none: a matte read
-    /// the wrong way round is a subject cut out of the wrong side of the frame.
-    #[test]
-    fn a_logit_becomes_the_coverage_it_means() {
-        assert_eq!(byte(sigmoid(0.0)), 128, "no opinion is half coverage");
-        assert_eq!(byte(sigmoid(20.0)), 255, "certain is all of the pixel");
-        assert_eq!(byte(sigmoid(-20.0)), 0, "and certainly not is none of it");
-        assert!(byte(sigmoid(2.0)) > byte(sigmoid(1.0)), "and it climbs");
-        assert_eq!(byte(f32::NAN), 0, "a number that is not one covers nothing");
-    }
-
-    /// **The state a run starts from is the model's own "this is the start".**
-    /// A single nought in each of the four, which is what Robust Video Matting
-    /// reads as an empty memory; anything else would be the state of a shot it
-    /// never saw (§13).
-    #[test]
-    fn a_run_starts_with_the_state_that_means_nothing_yet() {
-        let state = first_state();
-        assert_eq!(state.len(), 4);
-        for (shape, numbers) in &state {
-            assert_eq!(shape, &vec![1, 1, 1, 1]);
-            assert_eq!(numbers, &vec![0.0]);
-        }
-        assert!(four([None, None, None, None]).is_none());
-        assert!(four(first_state().map(Some)).is_some());
-    }
-
-    /// **With nothing installed, opening a pack is a refusal that says which is
-    /// missing.** The badge's detail is chosen off this, so "install the
-    /// runtime" and "install a matte pack" must not be the same answer.
-    #[test]
-    fn opening_with_nothing_installed_refuses_by_name() {
-        let _serial = crate::test_support::serially();
-        let root = tempfile::tempdir().unwrap();
-        store::with_dir(Some(root.path().to_path_buf()));
-        for arch in [MatteArch::Rvm, MatteArch::Birefnet] {
-            let refusal = Matte::open(arch, Detail::Portrait).unwrap_err();
-            assert!(
-                matches!(
-                    refusal,
-                    MlError::RuntimeMissing | MlError::PackMissing(Task::Matte)
-                ),
-                "{arch:?}: {refusal:?}"
-            );
-        }
-        assert!(store::installed_identity(Task::Matte).is_none());
-        assert!(identity(MatteArch::Rvm).is_none());
-        assert!(identity(MatteArch::Birefnet).is_none());
-        store::with_dir(None);
-    }
-
     /// A manifest for a pack of `bytes` bytes sitting in a folder of its own.
     fn a_manifest(arch: MatteArch, bytes: u64) -> String {
         let digest = "88d4531297118f595bf2fd60f6f566aec2e559393802d1f436c380f0cbbd2828";

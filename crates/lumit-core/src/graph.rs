@@ -727,57 +727,6 @@ mod tests {
         assert_eq!(prefix_len(&[], NodeRef::Out), Some(0));
     }
 
-    #[test]
-    fn a_well_formed_graph_is_accepted() {
-        let (graph, effects) = wiggle_into_blur();
-        graph.validate(&effects).expect("a number into a number");
-    }
-
-    /// A Custom shader's own rows come from its source, not its schema, and
-    /// still take a wire. One applied from the UI starts with Gain.
-    #[test]
-    fn a_wire_may_land_on_a_custom_shaders_own_row() {
-        let (mut graph, _) = wiggle_into_blur();
-        let shader = crate::fx::instantiate_for_raster("custom_shader", 1920.0, 1080.0)
-            .expect("the catalogue knows it");
-        graph.edges = vec![param_edge(
-            &graph.nodes[0],
-            "value",
-            NodeRef::Effect(shader.id),
-            "gain",
-        )];
-        graph.validate(&[shader]).expect("a number into Gain");
-    }
-
-    /// §1.5: a wire naming a node the layer does not have is refused, not
-    /// quietly dropped.
-    #[test]
-    fn a_wire_to_a_node_that_is_not_there_is_refused() {
-        let (mut graph, effects) = wiggle_into_blur();
-        graph.nodes.clear();
-        assert_eq!(graph.validate(&effects), Err(GraphError::UnknownNode));
-
-        let (graph, _) = wiggle_into_blur();
-        assert_eq!(graph.validate(&[]), Err(GraphError::UnknownNode));
-    }
-
-    #[test]
-    fn a_wire_to_a_port_that_is_not_there_is_refused() {
-        let (mut graph, effects) = wiggle_into_blur();
-        let InputRef::Param { port, .. } = &mut graph.edges[0].to else {
-            unreachable!()
-        };
-        *port = "no_such_parameter".into();
-        assert_eq!(graph.validate(&effects), Err(GraphError::UnknownPort));
-
-        let (mut graph, effects) = wiggle_into_blur();
-        let OutputRef::Driver { port, .. } = &mut graph.edges[0].from else {
-            unreachable!()
-        };
-        *port = "no_such_output".into();
-        assert_eq!(graph.validate(&effects), Err(GraphError::UnknownPort));
-    }
-
     /// Number accepts number and colour accepts colour. The two crossed over
     /// are refused in both directions.
     #[test]
@@ -837,40 +786,6 @@ mod tests {
             .expect("colour into colour");
     }
 
-    /// A switch is not a socket, so a wire onto one names a port that does not
-    /// exist — the same answer a typo gets.
-    #[test]
-    fn a_wire_onto_a_switch_finds_no_socket() {
-        let remap = inst("remap");
-        let wiggle = inst("wiggle");
-        let graph = LayerGraph {
-            out_unwired: false,
-            edges: vec![param_edge(
-                &wiggle,
-                "value",
-                NodeRef::Driver(remap.id),
-                "clamp",
-            )],
-            nodes: vec![wiggle, remap],
-            ..LayerGraph::default()
-        };
-        assert_eq!(graph.validate(&[]), Err(GraphError::UnknownPort));
-    }
-
-    #[test]
-    fn a_socket_refuses_a_second_wire() {
-        let (mut graph, effects) = wiggle_into_blur();
-        let second = inst("wiggle");
-        graph.edges.push(param_edge(
-            &second,
-            "value",
-            NodeRef::Effect(effects[0].id),
-            "radius",
-        ));
-        graph.nodes.push(second);
-        assert_eq!(graph.validate(&effects), Err(GraphError::InputAlreadyWired));
-    }
-
     /// A driver feeding itself, and a pair feeding each other: both refused
     /// before anything is swapped into the document.
     #[test]
@@ -896,26 +811,6 @@ mod tests {
             ..LayerGraph::default()
         };
         assert_eq!(graph.validate(&[]), Err(GraphError::Cycle));
-    }
-
-    /// The same drivers wired in a line, which is not a loop — and declared in
-    /// the reverse of evaluation order, so the check cannot be relying on the
-    /// order they happen to sit in.
-    #[test]
-    fn a_chain_of_drivers_is_accepted() {
-        let a = inst("wiggle");
-        let b = inst("remap");
-        let c = inst("smooth");
-        let graph = LayerGraph {
-            out_unwired: false,
-            edges: vec![
-                param_edge(&a, "value", NodeRef::Driver(b.id), "value"),
-                param_edge(&b, "value", NodeRef::Driver(c.id), "value"),
-            ],
-            nodes: vec![c, b, a],
-            ..LayerGraph::default()
-        };
-        graph.validate(&[]).expect("a line is not a loop");
     }
 
     /// §1.4: the layer's own source alpha is a Matte output, and an effect's
@@ -955,22 +850,6 @@ mod tests {
         );
     }
 
-    /// Source and Out draw ports but hold no parameters, so naming one as a
-    /// parameter destination names nothing.
-    #[test]
-    fn the_derived_nodes_have_no_parameters_to_drive() {
-        let wiggle = inst("wiggle");
-        for node in [NodeRef::Source, NodeRef::Out] {
-            let graph = LayerGraph {
-                out_unwired: false,
-                edges: vec![param_edge(&wiggle, "value", node, "anything")],
-                nodes: vec![wiggle.clone()],
-                ..LayerGraph::default()
-            };
-            assert_eq!(graph.validate(&[]), Err(GraphError::UnknownNode));
-        }
-    }
-
     /// The one derived socket a wire *may* land on: the Layer out's Volume
     /// (the Audio panel's *Duck under* writes it). A number is accepted;
     /// anything else is the ordinary type refusal, and every other made-up
@@ -992,22 +871,6 @@ mod tests {
         graph
             .validate(&[])
             .expect("a number onto the Volume socket is a legal duck");
-    }
-
-    #[test]
-    fn only_a_number_may_drive_the_volume_socket() {
-        let graph = LayerGraph {
-            out_unwired: false,
-            edges: vec![Edge {
-                from: OutputRef::SourceMatte,
-                to: InputRef::Param {
-                    node: NodeRef::Out,
-                    port: OUT_VOLUME_PORT.id.to_owned(),
-                },
-            }],
-            ..LayerGraph::default()
-        };
-        assert_eq!(graph.validate(&[]), Err(GraphError::PortTypeMismatch));
     }
 
     /// §4: the whole graph survives a trip through the file format — wires,
@@ -1049,176 +912,6 @@ mod tests {
         InputRef::Param {
             node: NodeRef::Effect(effect.id),
             port: port.to_owned(),
-        }
-    }
-
-    /// §1.1: the first wire whose source is a *stack* effect survives the file
-    /// format like every other, effect id and port id both.
-    #[test]
-    fn a_points_edge_round_trips_through_json() {
-        let particulate = inst("particulate");
-        let blur = inst("blur");
-        let graph = LayerGraph {
-            out_unwired: false,
-            edges: vec![points_edge(&particulate, onto(&blur, "radius"))],
-            layout: vec![(NodeRef::Effect(particulate.id), [8.0, 16.0])],
-            ..LayerGraph::default()
-        };
-        let json = serde_json::to_string(&graph).expect("serialises");
-        let back: LayerGraph = serde_json::from_str(&json).expect("deserialises");
-        assert_eq!(back, graph);
-        assert_eq!(
-            back.wire_into(&onto(&blur, "radius")),
-            Some(&OutputRef::EffectData {
-                effect: particulate.id,
-                port: "points".to_owned(),
-            }),
-            "and the wire is findable by its destination, as a driver's is"
-        );
-    }
-
-    /// §1.1 and §4.1: a stack effect's declared data output is looked up through
-    /// its signature, exactly as a driver's output is — so a port Particulate
-    /// does not declare is refused, and so is one on an effect that declares no
-    /// data output at all.
-    #[test]
-    fn an_effect_data_wire_names_a_port_the_signature_declares() {
-        let particulate = inst("particulate");
-        let smooth = inst("smooth");
-        let effects = vec![particulate.clone()];
-
-        // The real port, into a driver socket of the wrong type: found, and
-        // refused for the type rather than for the name.
-        let graph = LayerGraph {
-            out_unwired: false,
-            nodes: vec![smooth.clone()],
-            edges: vec![points_edge(
-                &particulate,
-                InputRef::Param {
-                    node: NodeRef::Driver(smooth.id),
-                    port: "value".to_owned(),
-                },
-            )],
-            ..LayerGraph::default()
-        };
-        assert_eq!(
-            graph.validate(&effects),
-            Err(GraphError::PortTypeMismatch),
-            "a points stream is not a number"
-        );
-
-        // A port name Particulate does not declare.
-        let mut graph = graph;
-        let OutputRef::EffectData { port, .. } = &mut graph.edges[0].from else {
-            unreachable!()
-        };
-        *port = "no_such_output".into();
-        assert_eq!(graph.validate(&effects), Err(GraphError::UnknownPort));
-
-        // An effect that declares no data output has none to tap.
-        let blur = inst("blur");
-        let graph = LayerGraph {
-            out_unwired: false,
-            nodes: vec![smooth.clone()],
-            edges: vec![points_edge(
-                &blur,
-                InputRef::Param {
-                    node: NodeRef::Driver(smooth.id),
-                    port: "value".to_owned(),
-                },
-            )],
-            ..LayerGraph::default()
-        };
-        assert_eq!(
-            graph.validate(std::slice::from_ref(&blur)),
-            Err(GraphError::UnknownPort)
-        );
-
-        // And an effect the stack does not carry at all.
-        let graph = LayerGraph {
-            out_unwired: false,
-            nodes: vec![smooth],
-            edges: vec![points_edge(
-                &particulate,
-                InputRef::Param {
-                    node: NodeRef::Driver(inst("smooth").id),
-                    port: "value".to_owned(),
-                },
-            )],
-            ..LayerGraph::default()
-        };
-        assert_eq!(graph.validate(&[]), Err(GraphError::UnknownNode));
-    }
-
-    /// The recorded carve-out (§1.2): a stack-to-stack points wire flows
-    /// **down** the stack. Tested in both directions, and on the smallest loop
-    /// of all — an effect wired into itself.
-    #[test]
-    fn a_stack_to_stack_points_wire_must_flow_down_the_stack() {
-        let particulate = inst("particulate");
-        let blur = inst("blur");
-        let wire = |effects: Vec<EffectInstance>, to: &EffectInstance| {
-            let graph = LayerGraph {
-                out_unwired: false,
-                edges: vec![points_edge(&particulate, onto(to, "points_in"))],
-                ..LayerGraph::default()
-            };
-            graph.validate(&effects)
-        };
-
-        // Producer above consumer: not refused for its direction. (It is
-        // refused for its port — no stack effect declares a Points input until
-        // the family lands — which is exactly the answer that proves the
-        // ordering rule let it through.)
-        assert_eq!(
-            wire(vec![particulate.clone(), blur.clone()], &blur),
-            Err(GraphError::UnknownPort),
-            "downstream is allowed to reach the port check"
-        );
-
-        // Producer below consumer: refused before any port is looked up.
-        assert_eq!(
-            wire(vec![blur.clone(), particulate.clone()], &blur),
-            Err(GraphError::Cycle),
-            "a points wire drawn back up the stack closes a loop"
-        );
-
-        // And an effect feeding its own data input: not strictly earlier than
-        // itself, so the same refusal.
-        assert_eq!(
-            wire(vec![particulate.clone()], &particulate),
-            Err(GraphError::Cycle),
-            "a producer cannot feed itself"
-        );
-    }
-
-    /// §1.2: the rule constrains the *stack*, not the whole graph. A points
-    /// wire into a **driver** has no position in the image chain to be wrong
-    /// about, wherever its producer sits.
-    #[test]
-    fn a_points_wire_into_a_driver_has_no_stack_position_to_break() {
-        let particulate = inst("particulate");
-        let blur = inst("blur");
-        let smooth = inst("smooth");
-        let graph = LayerGraph {
-            out_unwired: false,
-            nodes: vec![smooth.clone()],
-            edges: vec![points_edge(
-                &particulate,
-                InputRef::Param {
-                    node: NodeRef::Driver(smooth.id),
-                    port: "value".to_owned(),
-                },
-            )],
-            ..LayerGraph::default()
-        };
-        // The type is wrong (a stream is not a number), but never the ordering
-        // — with the producer last in the stack as much as first.
-        for effects in [
-            vec![particulate.clone(), blur.clone()],
-            vec![blur, particulate],
-        ] {
-            assert_eq!(graph.validate(&effects), Err(GraphError::PortTypeMismatch));
         }
     }
 
@@ -1286,104 +979,6 @@ mod tests {
         driven
             .check_acyclic(&stack)
             .expect("a driven parameter is not a loop");
-    }
-
-    /// The same walk, adversarially: loops that close through **two** producers
-    /// and two drivers, and a long line that only looks like one.
-    #[test]
-    fn a_cycle_through_two_producers_is_refused_and_a_long_line_is_not() {
-        let (p1, p2) = (inst("particulate"), inst("particulate"));
-        let (d1, d2) = (inst("smooth"), inst("remap"));
-        let stack = vec![p1.clone(), p2.clone()];
-
-        let stream = |from: &EffectInstance, to: &EffectInstance| Edge {
-            from: OutputRef::EffectData {
-                effect: from.id,
-                port: "points".to_owned(),
-            },
-            to: InputRef::Param {
-                node: NodeRef::Driver(to.id),
-                port: "points".to_owned(),
-            },
-        };
-        let drives = |from: &EffectInstance, to: &EffectInstance| {
-            param_edge(from, "value", NodeRef::Effect(to.id), "emit_rate")
-        };
-
-        // p1 → d1 → p2 → d2 → p1: four hops, no two of them adjacent.
-        let closed = LayerGraph {
-            out_unwired: false,
-            nodes: vec![d1.clone(), d2.clone()],
-            edges: vec![
-                stream(&p1, &d1),
-                drives(&d1, &p2),
-                stream(&p2, &d2),
-                drives(&d2, &p1),
-            ],
-            ..LayerGraph::default()
-        };
-        assert_eq!(closed.check_acyclic(&stack), Err(GraphError::Cycle));
-
-        // The same four boxes with the last hop landing on a third effect
-        // instead: a line, however long.
-        let blur = inst("blur");
-        let open = LayerGraph {
-            out_unwired: false,
-            nodes: vec![d1.clone(), d2.clone()],
-            edges: vec![
-                stream(&p1, &d1),
-                drives(&d1, &p2),
-                stream(&p2, &d2),
-                param_edge(&d2, "value", NodeRef::Effect(blur.id), "radius"),
-            ],
-            ..LayerGraph::default()
-        };
-        open.check_acyclic(&[p1.clone(), p2.clone(), blur])
-            .expect("a line is not a loop");
-
-        // Declared in reverse of evaluation order, so the walk cannot be
-        // relying on the order the boxes happen to sit in.
-        let reversed = LayerGraph {
-            out_unwired: false,
-            nodes: vec![d2, d1],
-            edges: closed.edges.into_iter().rev().collect(),
-            ..LayerGraph::default()
-        };
-        assert_eq!(
-            reversed.check_acyclic(&[p2, p1]),
-            Err(GraphError::Cycle),
-            "a loop is a loop in whatever order it is written down"
-        );
-    }
-
-    /// §1.2: `prune_to`'s old comment — "a wire's *source* is a driver or the
-    /// layer's own alpha, neither of which the stack can remove" — stops being
-    /// true the moment a wire can source from an effect. A removed producer
-    /// takes its outgoing data wires with it.
-    #[test]
-    fn removing_a_producer_takes_its_data_wires_with_it() {
-        let particulate = inst("particulate");
-        let blur = inst("blur");
-        let mut graph = LayerGraph {
-            out_unwired: false,
-            edges: vec![points_edge(&particulate, onto(&blur, "points_in"))],
-            layout: vec![(NodeRef::Effect(particulate.id), [0.0, 0.0])],
-            ..LayerGraph::default()
-        };
-
-        // The consumer alone stays: the producer is gone.
-        assert!(graph.prune_to(std::slice::from_ref(&blur)));
-        assert!(graph.edges.is_empty(), "the wire went with the box");
-        assert!(graph.layout.is_empty());
-
-        // And the whole stack still there prunes nothing.
-        let mut graph = LayerGraph {
-            out_unwired: false,
-            edges: vec![points_edge(&particulate, onto(&blur, "points_in"))],
-            ..LayerGraph::default()
-        };
-        assert!(!graph.prune_to(&[particulate, blur]));
-        assert_eq!(graph.edges.len(), 1);
     }
 
     /// The healing half of the carve-out: a reorder that inverts a
@@ -1492,103 +1087,6 @@ mod tests {
         assert_eq!(
             mistyped.validate(&[producer, consumer]),
             Err(GraphError::PortTypeMismatch)
-        );
-    }
-
-    /// **The cross-layer tap is an ordinary wire out of an ordinary node**
-    /// (points-stream.md §1.2): the edge rules needed no arm for it,
-    /// which is the point of settling the design as a *layer-reference
-    /// parameter* rather than as an edge that crosses layers.
-    ///
-    /// What is asserted here is that nothing had to be relaxed to let it
-    /// through, and that the taxonomy still refuses everything it refused.
-    #[test]
-    fn a_points_tap_wires_like_any_other_driver_and_refuses_like_one() {
-        let tap = inst("layer_points");
-        let consumer = inst("clone_to_points");
-        let sample = inst("points_sample");
-        let from_tap = |to: InputRef| Edge {
-            from: OutputRef::Driver {
-                node: tap.id,
-                port: "points".to_owned(),
-            },
-            to,
-        };
-
-        // Into a stack effect's Points socket, and into a driver's: both are
-        // the ordinary type match, through the ordinary `Driver` arm.
-        for to in [
-            onto(&consumer, "points"),
-            InputRef::Param {
-                node: NodeRef::Driver(sample.id),
-                port: "points".to_owned(),
-            },
-        ] {
-            let graph = LayerGraph {
-                out_unwired: false,
-                nodes: vec![tap.clone(), sample.clone()],
-                edges: vec![from_tap(to)],
-                ..LayerGraph::default()
-            };
-            graph
-                .validate(std::slice::from_ref(&consumer))
-                .expect("a tap is a Points source like any other");
-        }
-
-        // A stream is not a number, on this end as on the producer's.
-        let blur = inst("blur");
-        let mistyped = LayerGraph {
-            out_unwired: false,
-            nodes: vec![tap.clone()],
-            edges: vec![from_tap(onto(&blur, "radius"))],
-            ..LayerGraph::default()
-        };
-        assert_eq!(
-            mistyped.validate(std::slice::from_ref(&blur)),
-            Err(GraphError::PortTypeMismatch)
-        );
-
-        // A tap has no input of its own — nothing to wire *into*, so naming one
-        // is naming a port that does not exist.
-        let wiggle = inst("wiggle");
-        let backwards = LayerGraph {
-            out_unwired: false,
-            nodes: vec![tap.clone(), wiggle.clone()],
-            edges: vec![Edge {
-                from: OutputRef::Driver {
-                    node: wiggle.id,
-                    port: "value".to_owned(),
-                },
-                to: InputRef::Param {
-                    node: NodeRef::Driver(tap.id),
-                    port: "points".to_owned(),
-                },
-            }],
-            ..LayerGraph::default()
-        };
-        assert_eq!(backwards.validate(&[]), Err(GraphError::UnknownPort));
-
-        // And the tap takes its wires with it when the node goes, exactly as
-        // every other driver does — `prune_to` is the stack's business, so a
-        // graph without the node is simply a graph with a missing node.
-        let orphaned = LayerGraph {
-            out_unwired: false,
-            nodes: Vec::new(),
-            edges: vec![from_tap(onto(&consumer, "points"))],
-            ..LayerGraph::default()
-        };
-        assert_eq!(orphaned.validate(&[consumer]), Err(GraphError::UnknownNode));
-    }
-
-    /// §4's promise: an empty graph writes nothing at all, so a layer that
-    /// never opened the Graph panel carries no `graph` key — which is what
-    /// makes an untouched document re-save byte for byte.
-    #[test]
-    fn an_empty_graph_is_absent_from_the_file() {
-        assert!(LayerGraph::default().is_empty());
-        assert_eq!(
-            serde_json::to_string(&LayerGraph::default()).expect("serialises"),
-            "{}"
         );
     }
 

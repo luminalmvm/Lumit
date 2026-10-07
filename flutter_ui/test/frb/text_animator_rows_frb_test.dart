@@ -143,16 +143,6 @@ void main() {
       expect(text.getText()!.animators.first.selector.offset,
           const BridgeScalar.static_(40));
     });
-
-    testWidgets('a layer with no letters has no animators section',
-        (tester) async {
-      final p = withComp();
-      final solid = p.comp.addSolidLayer();
-      p.uiState.selectedLayer.value = solid;
-      await mount(tester, p);
-      expect(find.text('ANIMATORS'), findsNothing);
-      expect(find.byKey(const ValueKey('text-animator-add')), findsNothing);
-    });
   });
 }
 

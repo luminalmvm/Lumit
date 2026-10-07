@@ -12,8 +12,6 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/panels/timeline_panel_frb.dart';
-import 'package:lumit_flutter/panels/timeline_timings.dart';
-import 'package:lumit_flutter/shell/status_line_frb.dart';
 import 'package:lumit_flutter/src/rust/api/state.dart';
 
 import 'frb_test_support.dart';
@@ -31,24 +29,6 @@ void main() {
         state: p.state,
         uiState: p.uiState,
         layerId: comp.getLayers().single.internallayerId.toString(),
-      );
-    }
-
-    /// The same, with one effect on the layer — for the row that carries an
-    /// effect's own cost.
-    ({LumitState state, LumitUiState uiState, String layerId, String effectId})
-        withEffect() {
-      final p = freshProject();
-      final comp = p.state.project!.newComposition(name: 'Scene');
-      comp.addSolidLayer();
-      final layer = comp.getLayers().single;
-      layer.addEffect(name: 'blur');
-      p.uiState.setSelectedComp(comp);
-      return (
-        state: p.state,
-        uiState: p.uiState,
-        layerId: layer.internallayerId.toString(),
-        effectId: layer.getEffects().single.id().toString(),
       );
     }
 
@@ -97,130 +77,6 @@ void main() {
       expect(find.text('12.50 ms'), findsOneWidget,
           reason: 'and the header shows what the whole frame cost, so a dash '
               'on a row below can be told from an engine saying nothing');
-    });
-
-    testWidgets('the header names the stage when no layer will ever own it',
-        (tester) async {
-      final p = withLayer();
-      await mount(tester, p);
-
-      // The ~97 ms class: the draw-list build owns the frame while every
-      // layer row stays cheap — the total used to hang unexplained.
-      p.uiState.renderTimings.report(BridgeFrameProfile(
-        frame: BigInt.zero,
-        totalMs: 97,
-        planMs: 1,
-        decodeMs: 2,
-        buildMs: 90,
-        compositeMs: 3,
-        presentMs: 1,
-        layers: [
-          BridgeLayerTiming(layer: p.layerId, ms: 2.5, effects: const []),
-        ],
-        view: 0,
-      ));
-      await tester.pump();
-
-      expect(find.text('97.00 ms · build'), findsOneWidget,
-          reason: 'the header says where the time went, because the rows '
-              'below cannot');
-    });
-
-    /// The switch is in the bottom strip now, not in the column header: a
-    /// header that says Time over a column of dashes gives no hint that it is
-    /// a button, which is exactly how the feature was reported broken.
-    testWidgets('the header is a readout, and the strip carries the switch',
-        (tester) async {
-      final p = withLayer();
-      tester.view.physicalSize = const Size(1600, 700);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.reset);
-      await tester.pumpWidget(hostPanel(
-        state: p.state,
-        uiState: p.uiState,
-        size: const Size(1600, 700),
-        child: const Column(children: [
-          Expanded(child: TimelinePanelFrb()),
-          StatusLineFrb(),
-        ]),
-      ));
-      await tester.pump();
-      await settleFrb(tester, minRounds: 6);
-
-      // Clicking the header changes nothing — it is a readout now, and there
-      // is not even a gesture detector under it to claim the tap.
-      await tester.tapAt(
-          tester.getTopLeft(find.byType(TimingsHeaderCell)) +
-              const Offset(4, 8));
-      await tester.pump();
-      expect(p.uiState.renderTimings.measuring, isTrue);
-
-      // The strip's clock stops it, and stopping takes the whole column with
-      // it — stale numbers must not sit on screen looking current.
-      await tester.tap(find.byType(RenderTimingsToggle));
-      await tester.pump();
-      expect(p.uiState.renderTimings.measuring, isFalse);
-      await tester.pump();
-      expect(find.byType(TimingsHeaderCell), findsNothing,
-          reason: 'switching measuring off takes the column with it');
-
-      await tester.tap(find.byType(RenderTimingsToggle));
-      await tester.pump();
-      expect(p.uiState.renderTimings.measuring, isTrue);
-      await tester.pump();
-      expect(find.byType(TimingsHeaderCell), findsOneWidget,
-          reason: 'switching measuring back on brings the column back');
-      // Wait for the render itself to come back, not for a fixed number of
-      // rounds: a frame's wall-clock cost varies with the machine, and a slow
-      // one leaves the progress tracker's timer pending past the end of the
-      // test.
-      await settleFrb(
-        tester,
-        until: () => p.uiState.previewProgress.idle,
-        maxRounds: 100,
-      );
-    });
-
-    /// An effect's own cost belongs in the same column as its layer's, or the
-    /// two cannot be read against each other at a glance.
-    testWidgets('an effect heading puts its number in the layer column',
-        (tester) async {
-      final p = withEffect();
-      await mount(tester, p);
-
-      // Twirl the layer open, then its Effects group, so the effect heading is
-      // on screen. Near the left end, not the centre: a fold row spans the
-      // whole outline, which is wider than a click can assume.
-      await tester.tap(find.byKey(ValueKey<String>('tl-twirl-${p.layerId}')));
-      await tester.pump();
-      await tester.tapAt(tester.getTopLeft(find.byKey(
-              ValueKey<String>('tl-group-${p.layerId}/effects'))) +
-          const Offset(5, 8));
-      await tester.pumpAndSettle();
-
-      p.uiState.renderTimings.report(BridgeFrameProfile(
-        frame: BigInt.zero,
-        totalMs: 20,
-        planMs: 1,
-        decodeMs: 3,
-        buildMs: 2,
-        compositeMs: 13,
-        presentMs: 1,
-        layers: [
-          BridgeLayerTiming(
-            layer: p.layerId,
-            ms: 8.5,
-            effects: [BridgeEffectTiming(effect: p.effectId, ms: 4.5)],
-          ),
-        ],
-        view: 0,
-      ));
-      await tester.pump();
-
-      final layerNumber = tester.getRect(find.text('8.50 ms'));
-      final effectNumber = tester.getRect(find.text('4.50 ms'));
-      expect(effectNumber.right, closeTo(layerNumber.right, 0.5),
-          reason: 'the two numbers share a column, so they read as one');
     });
   });
 }

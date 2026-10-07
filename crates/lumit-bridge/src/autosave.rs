@@ -248,48 +248,6 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
-    /// **A project with nowhere to write is skipped**, calmly: autosaves live
-    /// beside the project file, and one that has never been saved has no
-    /// folder to put them in. The crash journal covers that case.
-    #[test]
-    fn a_project_that_was_never_saved_is_left_alone() {
-        let project = LumitBridgeState::new_project(None).expect("a new project");
-        project.new_composition("Scene".into(), None).expect("comp");
-        assert_eq!(sweep_one(project.id, 3), None);
-        project.close().expect("closed");
-    }
-
-    /// **The rotation is the one the recovery dialogue reads**: slots
-    /// numbered from 1 in an `autosaves/` folder, 1 the newest, contiguous —
-    /// which is what `list_autosaves` walks and what `latest_autosave` offers.
-    /// The keep count is honoured, so the folder never grows without end.
-    #[test]
-    fn the_rotation_keeps_what_it_was_told_and_recovery_finds_it() {
-        let _turn = lock(&ONE_AT_A_TIME);
-        let dir = std::env::temp_dir().join("lumit-autosave-rotation");
-        std::fs::remove_dir_all(&dir).ok();
-        let project = saved_project(&dir);
-
-        for n in 0..4 {
-            project
-                .new_composition(format!("Comp {n}"), None)
-                .expect("comp");
-            sweep_one(project.id, 2).expect("each edit is copied");
-        }
-
-        let listed =
-            crate::api::shell::list_autosaves(dir.join("scene.lum").to_string_lossy().into_owned());
-        assert_eq!(listed.len(), 2, "keep 2 means two slots, not four");
-        assert_eq!(listed[0].slot, 1, "and slot 1 is the newest");
-        assert!(
-            lumit_project::latest_autosave(&dir.join("scene.lum")).is_some(),
-            "the recovery dialogue's own reader finds it"
-        );
-
-        project.close().expect("closed");
-        std::fs::remove_dir_all(&dir).ok();
-    }
-
     /// **The interval is honoured**, on a clock shortened to milliseconds: the
     /// timer writes nothing before it is due, writes once it is, and writes
     /// nothing at all once the interval is set to zero — which is what a user

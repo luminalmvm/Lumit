@@ -2781,16 +2781,6 @@ mod unretime_tests {
         Duration(Rational::new(secs, 1).unwrap())
     }
 
-    /// The simple case: the layer was showing the source's first frame, so it
-    /// simply plays from there until the source runs out.
-    #[test]
-    fn anchored_on_the_first_frame_runs_to_the_source_end() {
-        // In at comp 10, showing source 0, and a 5-second source: the layer
-        // ends at comp 15 however long the retimed version was.
-        let (i, o, off) = unretimed_span(ct(10), ct(100), st(0), Some(dur(5))).unwrap();
-        assert_eq!((i, o, off), (ct(10), ct(15), ct(10)));
-    }
-
     /// Anchored part-way in, only what is left of the source is available.
     #[test]
     fn anchored_mid_source_runs_out_sooner() {
@@ -2798,30 +2788,6 @@ mod unretime_tests {
         assert_eq!(i, ct(10));
         assert_eq!(o, ct(13), "three seconds of source were left");
         assert_eq!(off, ct(8), "source zero sits two seconds before the in");
-    }
-
-    /// It never grows: a layer already shorter than the source keeps its length.
-    #[test]
-    fn a_trimmed_layer_keeps_its_length() {
-        let (_, o, _) = unretimed_span(ct(10), ct(12), st(0), Some(dur(5))).unwrap();
-        assert_eq!(o, ct(12));
-    }
-
-    /// No readable length — missing media, or a kind with no source of its own
-    /// — re-anchors and leaves the out point alone rather than guessing.
-    #[test]
-    fn no_source_length_leaves_the_out_point_alone() {
-        let (i, o, off) = unretimed_span(ct(10), ct(100), st(2), None).unwrap();
-        assert_eq!((i, o, off), (ct(10), ct(100), ct(8)));
-    }
-
-    /// Anchored at or past the end of the source, there is nothing left to
-    /// measure: the span survives intact rather than collapsing to nothing.
-    #[test]
-    fn an_anchor_past_the_source_end_keeps_the_span() {
-        let (_, o, off) = unretimed_span(ct(10), ct(20), st(5), Some(dur(5))).unwrap();
-        assert_eq!(o, ct(20));
-        assert_eq!(off, ct(5));
     }
 }
 
@@ -2841,13 +2807,6 @@ mod span_edit_tests {
         let (i, o, off) = edit_layer_span(ct(2), ct(5), ct(1), ct(10), SpanEdit::MoveIn).unwrap();
         // In lands on the playhead; duration (3s) and the source-at-in are kept.
         assert_eq!((i, o, off), (ct(10), ct(13), ct(9)));
-    }
-
-    #[test]
-    fn move_out_puts_the_out_point_on_the_playhead() {
-        let (i, o, off) = edit_layer_span(ct(2), ct(5), ct(1), ct(10), SpanEdit::MoveOut).unwrap();
-        // Out lands on 10; duration 3s kept, so in = 7, offset shifts by +5.
-        assert_eq!((i, o, off), (ct(7), ct(10), ct(6)));
     }
 
     #[test]

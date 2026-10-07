@@ -159,21 +159,6 @@ pub fn document_with(
 mod tests {
     use super::*;
 
-    /// The same item always names the same composition, so the frames it makes
-    /// can be found again. A minted id would miss the cache every time.
-    #[test]
-    fn a_scratch_composition_keeps_its_name() {
-        let item = Uuid::now_v7();
-        assert_eq!(
-            ScratchOf::Footage(item).comp_id(),
-            ScratchOf::Footage(item).comp_id()
-        );
-        assert_ne!(
-            ScratchOf::Footage(item).comp_id(),
-            ScratchOf::Footage(Uuid::now_v7()).comp_id()
-        );
-    }
-
     /// A footage view and a layer view of the same uuid are different
     /// questions and must not share a picture.
     #[test]

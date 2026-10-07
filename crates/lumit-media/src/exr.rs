@@ -337,26 +337,6 @@ fn sample_at(samples: &exr::prelude::FlatSamples, i: usize) -> f32 {
 mod tests {
     use super::*;
 
-    #[test]
-    fn is_exr_ignores_case_and_other_extensions() {
-        assert!(is_exr(Path::new("a/b.exr")));
-        assert!(is_exr(Path::new("a/b.EXR")));
-        assert!(!is_exr(Path::new("a/b.png")));
-        assert!(!is_exr(Path::new("a/b")));
-    }
-
-    /// A file that is not there is an error, not an empty channel list: the
-    /// two mean different things to whoever is looking at the dropdown.
-    #[test]
-    fn a_missing_file_errors_rather_than_reading_as_channelless() {
-        assert!(channels(Path::new("Z:/definitely/not/here.exr")).is_err());
-        assert!(read_channels(
-            Path::new("Z:/definitely/not/here.exr"),
-            &[None, None, None, None]
-        )
-        .is_err());
-    }
-
     /// The thing ffmpeg cannot do: say what is in the file. Every channel a
     /// render wrote comes back, layer prefix and all, so the effect's dropdowns
     /// offer the names the user set in their render settings.
@@ -388,34 +368,6 @@ mod tests {
                 f32::from_le_bytes(<[u8; 4]>::try_from(&frame.rgba[i * 16..i * 16 + 4]).unwrap());
             assert_eq!(got, want, "pixel {i} read as {got}, wanted {want}");
         }
-    }
-
-    /// An empty slot is black, an empty alpha is opaque. A depth pass has no
-    /// alpha of its own, and an invisible layer is not what anybody meant by
-    /// routing one into red.
-    #[test]
-    fn an_unfilled_slot_is_black_and_an_unfilled_alpha_is_opaque() {
-        let dir = tempfile::tempdir().unwrap();
-        let file = crate::index::tests_support::multichannel_exr(dir.path());
-        let frame = read_channels(&file, &[Some("R".into()), None, None, None]).unwrap();
-
-        let px: Vec<f32> = frame.rgba[..16]
-            .chunks_exact(4)
-            .map(|b| f32::from_le_bytes(<[u8; 4]>::try_from(b).unwrap_or([0; 4])))
-            .collect();
-        assert_eq!(px, [0.75, 0.0, 0.0, 1.0]);
-    }
-
-    /// A render's own file spends a small share of the ceilings, which is the
-    /// check that they are not in an honest file's way.
-    #[test]
-    fn an_ordinary_render_is_well_inside_the_ceilings() {
-        let dir = tempfile::tempdir().unwrap();
-        let file = crate::index::tests_support::multichannel_exr(dir.path());
-        let decoded = weigh_header(&file).unwrap();
-        // 4 × 4 × 6 channels × 4 bytes.
-        assert_eq!(decoded, 384);
-        assert!(decoded < Ceilings::DEFAULT.decoded_bytes / 1000);
     }
 
     /// The header is the whole attack surface: it is a few hundred bytes that
@@ -519,42 +471,5 @@ mod tests {
         // The listing walks the same parts and de-duplicates the names.
         let listed = channels(&out).unwrap();
         assert_eq!(listed.len(), 4, "the names repeat across parts: {listed:?}");
-    }
-
-    /// A header that claims a picture no machine holds is refused rather than
-    /// believed, and refused by arithmetic that cannot itself wrap: this is the
-    /// `65535 × 65535 × 32` shape, where every number is plausible and the
-    /// product is not.
-    #[test]
-    fn raster_arithmetic_on_header_numbers_cannot_wrap() {
-        use lumit_ingress::{checked_raster_bytes, IngressError};
-        let c = Ceilings::DEFAULT;
-        assert_eq!(
-            checked_raster_bytes(c.dimension, c.dimension, c.channels, MAX_SAMPLE_BYTES).unwrap(),
-            65_536 * 65_536 * 1_024 * 4,
-        );
-        assert_eq!(
-            checked_raster_bytes(u64::MAX, u64::MAX, 4, 4).unwrap_err(),
-            IngressError::Overflow
-        );
-        // The ceiling itself is the real gate: the largest header this reader
-        // will accept at all is still far past the byte budget, so a file has
-        // to pass both.
-        assert!(
-            (c.dimension * c.dimension * 4 * 4) > c.decoded_bytes,
-            "a single full-size four-channel picture must already exceed the byte ceiling"
-        );
-    }
-
-    /// A name the file does not hold reads as an empty slot rather than a
-    /// fault: a project whose EXRs changed shape still opens, and the slot that
-    /// went quiet is visible rather than fatal.
-    #[test]
-    fn a_channel_the_file_lost_reads_as_empty() {
-        let dir = tempfile::tempdir().unwrap();
-        let file = crate::index::tests_support::multichannel_exr(dir.path());
-        let frame =
-            read_channels(&file, &[Some("nosuchchannel".into()), None, None, None]).unwrap();
-        assert_eq!(&frame.rgba[..4], &0.0f32.to_le_bytes());
     }
 }

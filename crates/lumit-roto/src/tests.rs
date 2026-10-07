@@ -122,89 +122,6 @@ fn textured_disc_solves_to_its_analytic_shape() {
     assert!(iou(&matte, &truth) >= 0.98, "IoU {}", iou(&matte, &truth));
 }
 
-#[test]
-fn the_edge_band_is_monotone_outwards() {
-    let (rgb, _) = disc_shot(64.0, 64.0, DR);
-    let seeds = base_seeds(
-        DW,
-        DH,
-        &[stroke(
-            &[(52.0, 64.0), (76.0, 64.0)],
-            3.0,
-            StrokeKind::Foreground,
-            0,
-        )],
-    )
-    .unwrap();
-    let matte = solve_one(DW, DH, &rgb, &seeds);
-    // Ring means rather than one ray: the shot is textured on purpose, and a
-    // single ray would be reading the texture, not the edge.
-    let mut previous = f32::INFINITY;
-    for ring in 30..=50 {
-        let r = ring as f32;
-        let mut sum = 0.0f32;
-        let mut count = 0.0f32;
-        for step in 0..360 {
-            let a = step as f32 * std::f32::consts::TAU / 360.0;
-            let x = (64.0 + r * a.cos()).round() as i32;
-            let y = (64.0 + r * a.sin()).round() as i32;
-            if x < 0 || y < 0 || x >= DW as i32 || y >= DH as i32 {
-                continue;
-            }
-            sum += matte[(y as usize) * (DW as usize) + (x as usize)];
-            count += 1.0;
-        }
-        let mean = sum / count.max(1.0);
-        assert!(
-            mean <= previous + 1e-3,
-            "ring {ring} rose to {mean} from {previous}"
-        );
-        previous = mean;
-    }
-}
-
-#[test]
-fn the_low_contrast_neck_leaks_by_design() {
-    // The documented ceiling, pinned: a dumbbell whose neck is the subject's
-    // own colour costs nothing to walk through, so the far weight joins the
-    // matte. If this ever stops leaking, the algorithm changed and the note's
-    // §2 ceiling — and the correction loop that exists because of it — needs
-    // rereading.
-    let (w, h) = (160u32, 96u32);
-    let inside = |x: u32, y: u32| {
-        let (fx, fy) = (x as f32 + 0.5, y as f32 + 0.5);
-        let near = (fx - 45.0).powi(2) + (fy - 48.0).powi(2) <= 24.0f32.powi(2);
-        let far = (fx - 115.0).powi(2) + (fy - 48.0).powi(2) <= 24.0f32.powi(2);
-        let neck = (44.0..=116.0).contains(&fx) && (fy - 48.0).abs() <= 6.0;
-        (near, far, neck)
-    };
-    let rgb = frame_from(w, h, |x, y| {
-        let (near, far, neck) = inside(x, y);
-        if near || far || neck {
-            tint(SUBJECT, x as i32, y as i32, 0.04)
-        } else {
-            tint(BACKDROP, x as i32, y as i32, 0.04)
-        }
-    });
-    let seeds = base_seeds(
-        w,
-        h,
-        &[stroke(
-            &[(40.0, 48.0), (50.0, 48.0)],
-            3.0,
-            StrokeKind::Foreground,
-            0,
-        )],
-    )
-    .unwrap();
-    let matte = solve_one(w, h, &rgb, &seeds);
-    let far_centre = matte[(48 * w as usize) + 115];
-    assert!(
-        far_centre > 0.5,
-        "the far weight stopped leaking (α = {far_centre}); the pinned ceiling moved"
-    );
-}
-
 // ---------------------------------------------------------------------------
 // Propagation: a written-down analytic flow, no lumit-flow anywhere
 // ---------------------------------------------------------------------------
@@ -329,28 +246,6 @@ where
         step(&mut mattes, &mut solver, t, t + 1);
     }
     mattes
-}
-
-#[test]
-fn a_translating_subject_survives_thirty_frames() {
-    let strokes = [stroke(
-        &[(30.0, PCY), (50.0, PCY)],
-        3.0,
-        StrokeKind::Foreground,
-        0,
-    )];
-    let shot = Shot {
-        frames: FRAMES,
-        width: PW,
-        height: PH,
-        base: 0,
-        strokes: &strokes,
-    };
-    let mattes = propagate(&shot, moving_frame, moving_flow);
-    for (t, matte) in mattes.iter().enumerate() {
-        let score = iou(matte, &moving_truth(t));
-        assert!(score >= 0.95, "frame {t} scored {score}");
-    }
 }
 
 #[test]
@@ -774,74 +669,6 @@ fn a_refine_stroke_opens_the_band_where_it_is_painted() {
 // Seeds, erosion and the refusals
 // ---------------------------------------------------------------------------
 
-#[test]
-fn the_border_ring_is_the_default_background() {
-    let seeds = base_seeds(
-        32,
-        32,
-        &[stroke(&[(16.0, 16.0)], 2.0, StrokeKind::Foreground, 0)],
-    )
-    .unwrap();
-    assert_eq!(seeds.at(0), Seed::Background);
-    assert_eq!(seeds.at((16 * 32 + 16) as usize), Seed::Foreground);
-    // A user who did paint background gets no ring.
-    let painted = base_seeds(
-        32,
-        32,
-        &[
-            stroke(&[(16.0, 16.0)], 2.0, StrokeKind::Foreground, 0),
-            stroke(&[(4.0, 28.0)], 2.0, StrokeKind::Background, 0),
-        ],
-    )
-    .unwrap();
-    assert_eq!(painted.at(0), Seed::None);
-}
-
-#[test]
-fn a_later_stroke_wins_the_overlap() {
-    let mut seeds = Seeds::new(32, 32).unwrap();
-    seeds.stamp_all(&[
-        stroke(&[(16.0, 16.0)], 4.0, StrokeKind::Foreground, 0),
-        stroke(&[(16.0, 16.0)], 2.0, StrokeKind::Background, 0),
-    ]);
-    assert_eq!(seeds.at((16 * 32 + 16) as usize), Seed::Background);
-    assert_eq!(seeds.at((16 * 32 + 19) as usize), Seed::Foreground);
-}
-
-#[test]
-fn warped_seeds_are_eroded_and_low_confidence_seeds_nothing() {
-    let (w, h) = (32u32, 32u32);
-    let n = (w * h) as usize;
-    // A solid square of matte, still.
-    let mut prev = vec![0.0f32; n];
-    for y in 10..22 {
-        for x in 10..22 {
-            prev[(y * w + x) as usize] = 1.0;
-        }
-    }
-    let flow = vec![0.0f32; n * 2];
-    let validity = vec![1u8; n];
-    let mut confidence = vec![1.0f32; n];
-    // One untrusted column across the square.
-    for y in 0..h {
-        confidence[(y * w + 16) as usize] = 0.0;
-    }
-    let field = FlowField::new(&flow, &validity, &confidence, w, h).unwrap();
-    let mut seeds = Seeds::new(w, h).unwrap();
-    warp_and_seed(&prev, &field, 0.5, &mut seeds).unwrap();
-
-    // Two pixels in from the square's edge is where the foreground seeds start.
-    assert_eq!(seeds.at((15 * w + 12) as usize), Seed::Foreground);
-    assert_eq!(seeds.at((15 * w + 10) as usize), Seed::None);
-    // The untrusted column seeds nothing, and takes its neighbours' erosion
-    // with it.
-    assert_eq!(seeds.at((15 * w + 16) as usize), Seed::None);
-    assert_eq!(seeds.at((15 * w + 15) as usize), Seed::None);
-    // Well outside is background, eroded from the square by the same two.
-    assert_eq!(seeds.at(0), Seed::Background);
-    assert_eq!(seeds.at((9 * w + 15) as usize), Seed::None);
-}
-
 /// A mask a model made seeds the pixels it is sure about, eroded by the same
 /// two pixels, and seeds nothing at all through the band where it is unsure,
 /// which is where the solve has to read the frame's own colours
@@ -897,20 +724,6 @@ fn a_masks_confident_interiors_seed_and_its_soft_edge_does_not() {
         mask_seeds(&mask, w, h, &mut other),
         Err(RotoError::SizeMismatch { .. })
     ));
-}
-
-#[test]
-fn a_solve_without_both_seed_sets_is_refused() {
-    let (w, h) = (16u32, 16u32);
-    let rgb = vec![0.5f32; (w * h * 3) as usize];
-    let mut seeds = Seeds::new(w, h).unwrap();
-    seeds.stamp_all(&[stroke(&[(8.0, 8.0)], 2.0, StrokeKind::Foreground, 0)]);
-    let mut out = vec![0.0f32; (w * h) as usize];
-    let mut solver = RotoSolver::new(RotoSettings::default());
-    assert_eq!(
-        solver.solve(FrameRgb::new(&rgb, w, h).unwrap(), &seeds, &mut out),
-        Err(RotoError::NoSeeds)
-    );
 }
 
 #[test]

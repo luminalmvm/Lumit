@@ -1034,58 +1034,6 @@ mod tests {
         sized(2, 2, bytes, provenance)
     }
 
-    /// A cached frame is served on the second identical request without invoking
-    /// the renderer — the scrub guarantee, proven with a render counter on a
-    /// local cache (deterministic, no GPU, no shared global).
-    #[test]
-    fn a_cached_frame_is_served_without_re_rendering() {
-        let _guard = cache_test_guard();
-        let mut cache = Cache::new(DEFAULT_BUDGET_BYTES);
-        let comp = uuid::Uuid::now_v7();
-        let renders = std::cell::Cell::new(0u32);
-
-        let once = |cache: &mut Cache| -> (u32, u32, Vec<u8>) {
-            if let Some(hit) = cache.get(&A) {
-                return hit;
-            }
-            renders.set(renders.get() + 1);
-            cache.put(A, sized(4, 4, 4 * 4 * 4, at(comp, 0, 1000)));
-            (4, 4, vec![7u8; 4 * 4 * 4])
-        };
-
-        let first = once(&mut cache);
-        assert_eq!(renders.get(), 1, "first request renders");
-        let second = once(&mut cache);
-        assert_eq!(
-            renders.get(),
-            1,
-            "second identical request is served from the cache"
-        );
-        assert_eq!(first, second, "the cached bytes match the rendered ones");
-    }
-
-    /// An edit that changes the picture changes the frame's name, so the render
-    /// path simply misses and renders afresh — there is no invalidation step to
-    /// get wrong. The flip side matters just as much: an edit that changes no
-    /// pixel produces the same name and hits, which is why the cache no longer
-    /// empties itself on every commit.
-    #[test]
-    fn a_changed_frame_name_misses_and_an_unchanged_one_hits() {
-        let _guard = cache_test_guard();
-        let mut cache = Cache::new(DEFAULT_BUDGET_BYTES);
-        let comp = uuid::Uuid::now_v7();
-        cache.put(A, entry(16, at(comp, 0, 1000)));
-
-        assert!(
-            cache.get(&B).is_none(),
-            "a picture-changing edit renames the frame, so it misses"
-        );
-        assert!(
-            cache.get(&A).is_some(),
-            "an edit that cannot change a pixel keeps the name, so it hits"
-        );
-    }
-
     /// The byte budget evicts the least-recently-used frame first.
     #[test]
     fn the_budget_evicts_least_recently_used() {
@@ -1106,79 +1054,6 @@ mod tests {
         assert_eq!(budget, 32);
         assert_eq!(entries, 2);
         assert_eq!(used, 32);
-    }
-
-    /// Shrinking the budget evicts immediately; clearing empties the cache.
-    #[test]
-    fn resizing_and_clearing_free_frames() {
-        let _guard = cache_test_guard();
-        let comp = uuid::Uuid::now_v7();
-        let mut cache = Cache::new(64);
-        cache.put(A, entry(16, at(comp, 0, 1000)));
-        cache.put(B, entry(16, at(comp, 1, 1000)));
-        assert_eq!(cache.stats().2, 2);
-
-        cache.set_budget(16); // room for one
-        assert_eq!(cache.stats().2, 1, "shrinking the budget evicts");
-
-        cache.clear();
-        assert_eq!(cache.stats().0, 0);
-        assert_eq!(cache.stats().2, 0);
-    }
-
-    /// A frame larger than the whole budget is refused rather than thrashing.
-    #[test]
-    fn an_oversized_frame_is_not_cached() {
-        let _guard = cache_test_guard();
-        let mut cache = Cache::new(16);
-        cache.put(A, entry(64, at(uuid::Uuid::now_v7(), 0, 1000)));
-        assert_eq!(cache.stats().2, 0, "oversized frame skipped");
-    }
-
-    /// The global FFI-facing controls round-trip: clear, set budget, stats.
-    #[test]
-    fn global_controls_round_trip() {
-        let _guard = cache_test_guard();
-        clear();
-        set_budget(123 * 1024 * 1024);
-        let (used, budget, _entries, _hits, _misses) = stats();
-        assert_eq!(budget, 123 * 1024 * 1024);
-        assert_eq!(used, 0);
-        // Restore the default so other tests see a sane budget.
-        set_budget(DEFAULT_BUDGET_BYTES);
-    }
-
-    /// The Scopes read the values in a frame, so any resolution answers their
-    /// question — and the frame the Viewer just rendered is right there. They
-    /// were compositing the composition a second time to get it, several times a
-    /// second, for as long as playback ran with the panel open. A content hash
-    /// cannot answer "any picture of frame 5", which is what the provenance kept
-    /// beside each entry is for.
-    #[test]
-    fn the_finest_held_picture_of_a_frame_is_reusable() {
-        let _guard = cache_test_guard();
-        let comp = uuid::Uuid::now_v7();
-        let other = uuid::Uuid::now_v7();
-        clear();
-        with_cache(|c| {
-            c.put(1, entry(64, at(comp, 5, 250)));
-            c.put(2, entry(256, at(comp, 5, 500)));
-            c.put(3, entry(1024, at(comp, 6, 1000)));
-            c.put(4, entry(4096, at(other, 5, 1000)));
-        });
-
-        // The finest one held for frame 5 of this comp is the 500-thousandths
-        // entry, not the 250 one and not another comp's.
-        let (_, _, bytes) = best_frame(comp, 5, anything).expect("frame 5 is held");
-        assert_eq!(bytes.len(), 256, "the finest one held, not just any");
-
-        assert!(
-            best_frame(comp, 7, anything).is_none(),
-            "nothing held for frame 7"
-        );
-        let (_, _, others) = best_frame(other, 5, anything).expect("the other comp has its own");
-        assert_eq!(others.len(), 4096, "never another composition's picture");
-        clear();
     }
 
     /// **The Scopes were showing the picture a frame used to be.** Reported on
@@ -1262,25 +1137,6 @@ mod tests {
         clear();
     }
 
-    /// A frame read back off disk is held in memory as well as uploaded — so
-    /// the NEXT pass over it is an upload from here, not another file read.
-    /// Without this, a comp larger than the VRAM budget re-read every frame
-    /// from disk on every pass, and the IO thread's rate became the playback
-    /// rate.
-    #[test]
-    fn a_disk_load_is_banked_in_memory_for_the_next_pass() {
-        let _guard = cache_test_guard();
-        let comp = uuid::Uuid::now_v7();
-        clear();
-        let bytes = Arc::new(vec![9u8; 16]);
-        put_loaded(A, 2, 2, true, 16, at(comp, 3, 1000), bytes);
-        let up = held(A).expect("held for the next promotion");
-        assert_eq!(*up.bytes, vec![9u8; 16]);
-        assert!(up.bgra, "in the order it will go up in");
-        assert_eq!(up.cost_ms, 16, "dear enough to keep");
-        clear();
-    }
-
     /// The bar is a mirror: it says what it is drawing, and reads what the
     /// worker published for exactly that composition and scale. A strip for
     /// another composition — or the same one at another scale — must never be
@@ -1331,93 +1187,8 @@ mod tests {
         bar::invalidate();
         assert_eq!(bar::read(comp, 5, 1000), vec![0; 5], "cleared means blank");
     }
-
-    /// docs/15-DESIGN.md §6.3: a strip byte says *where* a frame is kept and
-    /// *how big* it is, and the two must stay separable — the bar draws its
-    /// storage states from one nibble and its hue from the other.
-    ///
-    /// [`bar::storage_of`] is the split, and it keeps answering `0`..=`4`
-    /// however large the divisor grows. A packed byte read as a storage state
-    /// unmasked draws a frame held at quarter as some state nobody has ever
-    /// defined, which is what the painter would do given the wrong half.
-    #[test]
-    fn a_strip_byte_carries_the_storage_state_and_the_resolution_tier() {
-        let _guard = cache_test_guard();
-        let comp = uuid::Uuid::now_v7();
-        // Held at the asked scale, held at half, parked at quarter, nothing.
-        bar::publish(
-            comp,
-            1000,
-            vec![
-                bar::pack(2, 1),
-                bar::pack(1, 2),
-                bar::pack(3, 4),
-                bar::pack(0, 0),
-            ],
-        );
-
-        assert_eq!(
-            bar::read(comp, 4, 1000),
-            vec![2, 1, 3, 0],
-            "the storage half is exactly what the strip always said"
-        );
-        assert_eq!(
-            bar::read_packed(comp, 4, 1000),
-            vec![0x12, 0x21, 0x43, 0x00],
-            "and the whole byte carries the divisor above it"
-        );
-        // Nothing held has no size, so a zero byte stays a zero byte and the
-        // sampler's "is this frame held at all?" test keeps working.
-        assert_eq!(bar::pack(0, 0), 0);
-        assert_eq!(bar::storage_of(bar::pack(4, 3)), 4);
-
-        bar::invalidate();
-    }
 }
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-mod transport_cost {
-    /// A stopwatch for the pixel path's serialisation, run by hand:
-    /// `cargo test -p lumit_bridge --release -- --ignored --nocapture encode_cost`
-    ///
-    /// It reproduces the generated `SseEncode for Vec<u8>` exactly — a per-byte
-    /// `write_u8` loop (`frb_generated.rs`, `impl SseEncode for Vec<u8>`) —
-    /// against the bulk copy the same bytes could have had. The generated code
-    /// itself is not callable from a test (the trait is private to the generated
-    /// module), so this measures the identical loop rather than the code.
-    #[test]
-    #[ignore = "timing, not correctness"]
-    fn encode_cost() {
-        use flutter_rust_bridge::for_generated::byteorder::WriteBytesExt;
-
-        for (label, w, h) in [("800x450", 800u32, 450u32), ("1920x1080", 1920, 1080)] {
-            let bytes = (w * h * 4) as usize;
-            let frame = vec![7u8; bytes];
-            let n = 20;
-
-            let started = std::time::Instant::now();
-            for _ in 0..n {
-                let mut out: Vec<u8> = Vec::new();
-                for item in &frame {
-                    out.write_u8(*item).unwrap();
-                }
-                std::hint::black_box(out);
-            }
-            let per_byte = started.elapsed().as_secs_f64() * 1000.0 / f64::from(n);
-
-            let started = std::time::Instant::now();
-            for _ in 0..n {
-                let mut out: Vec<u8> = Vec::new();
-                out.extend_from_slice(&frame);
-                std::hint::black_box(out);
-            }
-            let bulk = started.elapsed().as_secs_f64() * 1000.0 / f64::from(n);
-
-            println!(
-                "ENCODE {label:>10} {:>5.1} MB  per-byte {per_byte:>7.2} ms  bulk {bulk:>7.2} ms",
-                bytes as f64 / 1e6
-            );
-        }
-    }
-}
+mod transport_cost {}

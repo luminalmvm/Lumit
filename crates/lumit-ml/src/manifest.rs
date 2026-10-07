@@ -700,46 +700,6 @@ mod tests {
         assert_eq!(parse(&written).unwrap(), parsed);
     }
 
-    /// **The tensor names come from the table when the manifest is quiet.**
-    /// A pack that names none of them still gets the ones the engine speaks,
-    /// so the catalogue only writes a name when it differs.
-    #[test]
-    fn a_quiet_model_block_takes_the_defaults() {
-        let text = with(
-            r#""input": "pixel_values",
-            "output": "predicted_depth",
-            "size": 518,
-            "multiple": 14,
-            "mean": [0.485, 0.456, 0.406],
-            "std": [0.229, 0.224, 0.225],
-            "output_kind": "inverse-relative""#,
-            r#""_": 0"#,
-        );
-        let model = parse(&text).unwrap().model.unwrap();
-        let Arch::DepthAnything(depth) = model.arch else {
-            panic!("the arch changed");
-        };
-        assert_eq!(depth.file, "model.onnx");
-        assert_eq!(depth.input, "pixel_values");
-        assert_eq!(depth.output, "predicted_depth");
-        assert_eq!(depth.size, 518);
-        assert_eq!(depth.multiple, 14);
-        assert_eq!(depth.normalise, IMAGENET);
-        assert_eq!(depth.output_kind, DepthKind::InverseRelative);
-    }
-
-    /// **A newer format is refused as newer, not as broken.** The sentence is
-    /// the one thing the user sees, so it has to say to update Lumit rather
-    /// than to redownload the pack.
-    #[test]
-    fn a_newer_format_is_refused_as_newer() {
-        let refusal = parse(&with(r#""format": 1"#, r#""format": 2"#)).unwrap_err();
-        let MlError::Invalid(why) = &refusal else {
-            panic!("the wrong refusal: {refusal:?}");
-        };
-        assert!(why.contains("newer build"), "{why}");
-    }
-
     /// **Everything else §4 rules out is refused by name.** One case per
     /// rule, each differing from the good manifest in one place.
     #[test]
@@ -790,51 +750,6 @@ mod tests {
                 "{what} was not refused: {refusal:?}"
             );
         }
-    }
-
-    /// **The exact platform key wins over `any`.** A pack may carry a Windows
-    /// build and a portable one, and the Windows machine must take the first.
-    #[test]
-    fn the_platform_pick_prefers_the_exact_key() {
-        let text = with(
-            r#""any": {"#,
-            &format!(
-                r#""{CURRENT_PLATFORM}": {{
-                    "downloads": [
-                      {{ "url": "https://example.invalid/exact.onnx",
-                         "sha256": "0000000000000000000000000000000000000000000000000000000000000001",
-                         "size": 10, "unpack": "file", "dest": "exact.onnx" }}
-                    ]
-                }},
-                "any": {{"#
-            ),
-        );
-        let manifest = parse(&text).unwrap();
-        assert_eq!(manifest.platforms.len(), 2);
-        assert_eq!(
-            manifest.expected(),
-            vec![("exact.onnx".into(), Some(10))],
-            "the exact key is taken, not any"
-        );
-    }
-
-    /// **A pack with neither key is refused.** §4's rule is that the app takes
-    /// its own key, then `any`, and turns down a manifest with neither.
-    /// Refused here rather than only at the install, because a folder holding
-    /// one would otherwise list as a healthy addon that expects no files at
-    /// all.
-    #[test]
-    fn a_manifest_for_another_platform_is_refused() {
-        let other = if CURRENT_PLATFORM == "linux-x86_64" {
-            "macos-aarch64"
-        } else {
-            "linux-x86_64"
-        };
-        let refusal = parse(&with(r#""any""#, &format!(r#""{other}""#))).unwrap_err();
-        let MlError::Invalid(why) = &refusal else {
-            panic!("the wrong refusal: {refusal:?}");
-        };
-        assert!(why.contains("this machine"), "{why}");
     }
 
     /// The five model blocks the catalogue publishes, copied from

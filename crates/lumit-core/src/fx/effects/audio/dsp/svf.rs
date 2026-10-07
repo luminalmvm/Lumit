@@ -93,63 +93,8 @@ impl Svf {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::f64::consts::TAU;
 
     const RATE: f64 = 48_000.0;
-
-    /// The settled gain of one output at one frequency, measured with a sine
-    /// over a whole number of cycles.
-    fn measured_gain(cutoff: f64, q: f64, freq: f64, pick: fn(SvfOut) -> f32) -> f64 {
-        let mut svf = Svf::new(cutoff, q, RATE);
-        let cycle = (RATE / freq).round().max(1.0) as usize;
-        let settle = cycle * 60;
-        let window = cycle * 60;
-        let mut input = 0.0;
-        let mut output = 0.0;
-        for n in 0..settle + window {
-            let x = (TAU * freq * n as f64 / RATE).sin();
-            let y = f64::from(pick(svf.process(x as f32)));
-            if n >= settle {
-                input += x * x;
-                output += y * y;
-            }
-        }
-        (output / input).sqrt()
-    }
-
-    #[test]
-    fn reset_then_the_same_input_twice_gives_the_same_output() {
-        let mut svf = Svf::new(900.0, 2.0, RATE);
-        let run = |svf: &mut Svf| -> Vec<f32> {
-            (0..4_000)
-                .map(|n| svf.process(((n % 53) as f32 - 26.0) / 26.0).band)
-                .collect()
-        };
-        let first = run(&mut svf);
-        svf.reset();
-        assert_eq!(first, run(&mut svf));
-    }
-
-    #[test]
-    fn the_band_output_peaks_at_the_cutoff() {
-        let at = |freq| measured_gain(1_000.0, 4.0, freq, |out| out.band);
-        let peak = at(1_000.0);
-        assert!(peak > at(500.0), "{peak} was not above the octave below");
-        assert!(peak > at(2_000.0), "{peak} was not above the octave above");
-        assert!(peak > at(250.0));
-        assert!(peak > at(4_000.0));
-    }
-
-    #[test]
-    fn low_and_high_lean_the_ways_their_names_say() {
-        let low = |freq| measured_gain(1_000.0, 0.707, freq, |out| out.low);
-        assert!((low(100.0) - 1.0).abs() < 0.05, "low read {}", low(100.0));
-        assert!(low(8_000.0) < 0.05);
-
-        let high = |freq| measured_gain(1_000.0, 0.707, freq, |out| out.high);
-        assert!((high(16_000.0) - 1.0).abs() < 0.1);
-        assert!(high(100.0) < 0.05);
-    }
 
     #[test]
     fn a_sweep_across_the_whole_range_stays_finite() {

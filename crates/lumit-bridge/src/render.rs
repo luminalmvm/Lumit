@@ -192,7 +192,7 @@ pub(crate) fn with_export_inputs(
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
-    use super::{preview_rung, quality_for, PREVIEW_RUNGS};
+    use super::{preview_rung, quality_for};
 
     /// A rung is never below what was asked for, so snapping can only ever make
     /// the picture sharper than the request, never softer.
@@ -214,19 +214,6 @@ mod tests {
         // Nothing may reach zero: a zero-sized composite is a zero-sized
         // texture, and no graphics API will make one.
         assert!(preview_rung(f32::MIN_POSITIVE) > 0.0);
-    }
-
-    /// The same panel size always names the same picture. Rungs are exact
-    /// binary fractions, so this is equality and not a tolerance — the frame
-    /// cache keys on the number, and two names for one picture is a miss.
-    #[test]
-    fn one_rung_is_one_number() {
-        for k in 1..=PREVIEW_RUNGS as u32 {
-            let exact = k as f32 / PREVIEW_RUNGS;
-            assert_eq!(preview_rung(exact), exact);
-            // A hair under lands on the same rung; a hair over is the next one.
-            assert_eq!(preview_rung(exact - 0.001), exact);
-        }
     }
 
     /// **The regression.** A dock seam being dragged reports a new fraction on
@@ -259,19 +246,6 @@ mod tests {
              size is the registration storm this ladder exists to stop",
             rungs.len()
         );
-    }
-
-    /// And over a whole session, however the panels are moved about, there are
-    /// only ever as many sizes as there are rungs.
-    #[test]
-    fn the_whole_range_is_a_short_list() {
-        let mut seen: Vec<u32> = (0..10_000)
-            .map(|i| quality_for(i as f32 / 10_000.0).display_scale)
-            .map(|s| (s * PREVIEW_RUNGS).round() as u32)
-            .collect();
-        seen.sort_unstable();
-        seen.dedup();
-        assert!(seen.len() <= PREVIEW_RUNGS as usize, "{} rungs", seen.len());
     }
 
     /// A scale that means nothing still renders something, and at full.

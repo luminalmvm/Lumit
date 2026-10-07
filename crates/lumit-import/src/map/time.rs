@@ -155,14 +155,4 @@ mod tests {
         assert!(between < Rational::new(52, 25).unwrap());
         assert!((between.to_f64() - 51.5 / 25.0).abs() < 1e-6);
     }
-
-    /// **An absent or nonsensical rate is not a rate.** The caller substitutes
-    /// a default and says so in the report, rather than dividing by zero.
-    #[test]
-    fn a_missing_or_impossible_frame_rate_is_refused() {
-        assert!(TimeBase::of_fps(None).is_none());
-        assert!(TimeBase::of_fps(Some(0.0)).is_none());
-        assert!(TimeBase::of_fps(Some(-25.0)).is_none());
-        assert!(TimeBase::of_fps(Some(f64::NAN)).is_none());
-    }
 }

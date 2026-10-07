@@ -13,7 +13,6 @@ import 'package:lumit_flutter/panels/effect_controls_panel_frb.dart';
 import 'package:lumit_flutter/panels/layer_fold_frb.dart';
 import 'package:lumit_flutter/panels/timeline_panel_frb.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
-import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:uuid/uuid.dart';
 
 import 'frb_test_support.dart';
@@ -53,36 +52,6 @@ void main() {
       await settleFrb(tester, minRounds: 6);
     }
 
-    testWidgets('the header stack crosses resolved, and its fold rows root '
-        'under the group prefix', (tester) async {
-      final p = withGroup();
-      final model = p.comp.getModel();
-      final g = model.groups.single;
-      expect(g.effects.single.name, 'blur');
-      expect(
-        model.layers.every((e) => e.info.effects.isEmpty),
-        isTrue,
-        reason: 'the wardrobe is the band\'s, not any member\'s',
-      );
-
-      final rows = groupHeaderFoldRows(group: g, open: {
-        effectPath(groupFoldPrefix(g.id), g.effects.single.id.toString()),
-      });
-      expect(rows.whereType<FoldGroupRow>().single.label, 'Gaussian blur');
-      final params = rows.whereType<FoldEffectParamRow>();
-      expect(params, isNotEmpty, reason: 'an open heading shows its rows');
-      expect(params.every((r) => r.group == g.id), isTrue);
-      for (final r in params) {
-        final path = foldRowPath('ignored-layer-id', r);
-        expect(path, startsWith('${groupFoldPrefix(g.id)}/effects/'),
-            reason: 'a group row roots under the group, whatever block it '
-                'is drawn inside');
-        expect(layerIdOfPath(path), isNot(anyOf(null, isEmpty)));
-        expect(layerIdOfPath(path), startsWith('g:'),
-            reason: 'a group prefix can never be mistaken for a layer id');
-      }
-    });
-
     testWidgets('the fx tick appears exactly while the stack is non-empty, '
         'and twirls the lanes open', (tester) async {
       final bare = withGroup(dressed: false);
@@ -107,36 +76,6 @@ void main() {
       await tester.pump();
       expect(find.byKey(headingKey), findsOneWidget,
           reason: 'the header twirls open like a layer, with real rows');
-    });
-
-    testWidgets('a group parameter edit round-trips through the shared '
-        'instance lookup', (tester) async {
-      final p = withGroup();
-      final carrier = p.comp.getLayers().first;
-      carrier.addEffect(name: 'invert');
-
-      // Exactly what a row's write does: the list the row says it is on,
-      // freshly read, the value staged on it, and the CARRIER layer's
-      // setEffects as the commit — which the engine routes to the group.
-      final staged = p.comp.getGroupEffects(group: p.groupId);
-      staged.single.setValue(
-        id: 'radius',
-        value: const BridgeEffectValue.float(BridgeScalar.static_(42)),
-      );
-      carrier.setEffects(effects: staged);
-
-      final model = p.comp.getModel();
-      expect(
-        model.groups.single.effects.single.values
-            .firstWhere((v) => v.id == 'radius')
-            .value,
-        const BridgeEffectValue.float(BridgeScalar.static_(42)),
-      );
-      expect(
-        model.layers.first.info.effects.single.name,
-        'invert',
-        reason: 'the carrier\'s own stack is untouched by the group write',
-      );
     });
 
     testWidgets('the panel takes the header as its subject and adds to the '

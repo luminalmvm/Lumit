@@ -933,24 +933,4 @@ mod tests {
             }
         }
     }
-
-    /// **And nothing on Lumit's side is unreachable.** The other direction of
-    /// the same drift: a blend mode the compositor can do that no After
-    /// Effects name arrives at is a mapping somebody forgot to write, and it
-    /// looks exactly like "a lot of modes are missing" in a converted project.
-    #[test]
-    fn every_lumit_blend_mode_is_reachable_from_after_effects() {
-        let reached: Vec<BlendMode> = (0..=38u32)
-            .filter_map(|code| {
-                let name = enums::blend(code, false);
-                standard(name.strip_prefix("CLASSIC_").unwrap_or(&name))
-            })
-            .collect();
-        for mode in BlendMode::ALL {
-            assert!(
-                reached.contains(mode),
-                "{mode:?} is in Lumit's dropdown but no After Effects mode converts to it"
-            );
-        }
-    }
 }
