@@ -956,11 +956,4 @@ mod tests {
         assert_eq!(thread_cap(0, 0), 0);
         assert_eq!(thread_cap(-1, -1), 0);
     }
-
-    // ---- what a clip costs to decode (run by hand) ----------------------
-
-    #[cfg(not(windows))]
-    fn working_set() -> u64 {
-        0
-    }
 }

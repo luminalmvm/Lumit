@@ -1660,6 +1660,7 @@ fn audible_jobs(
 
 /// Sixteen-bit mono PCM, a tenth of a second of silence: enough of a file for
 /// a probe to find an audio stream in.
+#[cfg(feature = "media")]
 fn silent_wav() -> Vec<u8> {
     wav(44_100, &vec![0i16; 4_410])
 }
