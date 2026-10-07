@@ -55,6 +55,7 @@ import 'graph_panel.dart'
 import 'placeholder.dart';
 import 'shader_editor.dart'
     show InstanceHome, editExpressionOn, pressShaderButton;
+import 'shader_graph.dart' show ShaderGraphThumb;
 
 /// The box the panel is drawing: which instance it is, whether it lives in the
 /// graph's driver list rather than in the effect stack, and the read model it
@@ -629,7 +630,20 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     // dead: tying a pair is a write on the instance's `linkedPairs`, which is
     // the effect stack's own op, and a driver commits through `setGraph`. A
     // query point's two channels are a place, not a size — nothing here scales.
-    final rows = <Widget>[];
+    final rows = <Widget>[
+      // A Custom shader's inner graph, small, and the way into it.
+      if (picked.info.name == 'custom_shader' && !picked.graph && layer != null)
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          child: ShaderGraphThumb(
+            home: InstanceHome.layer(layer),
+            effect: id,
+            onOpen: () => ui.enterShaderGraph(layer, id,
+                effectName:
+                    picked.info.customName ?? engineLabel(picked.info.name)),
+          ),
+        ),
+    ];
     for (var i = 0; i < params.length; i++) {
       final param = params[i];
       final next = i + 1 < params.length ? params[i + 1] : null;

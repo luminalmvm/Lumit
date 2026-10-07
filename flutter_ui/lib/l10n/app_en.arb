@@ -12046,6 +12046,10 @@
   "@shaderCompiles": {
     "description": "Quiet line under the code box in the shader editor window, when the program the user has typed compiles. Replaced by the compiler's own message when it does not. A statement, not praise."
   },
+  "shaderGraphOpen": "Click to open",
+  "@shaderGraphOpen": {
+    "description": "Placeholder in the small preview box on a Custom shader effect, in Effect controls and the Node panel, when the shader has no node graph yet. Clicking the box opens the shader's node graph. Once the shader has a graph, a small drawing of it replaces these words."
+  },
   "shaderNodePicture": "Picture",
   "@shaderNodePicture": {
     "description": "Name of the 'Picture' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect) \u2014 the picture arriving at the effect. Also a row of the box search that adds one."

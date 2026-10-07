@@ -20,10 +20,12 @@ program is one WGSL function, `fn shade(uv: vec2<f32>) -> vec4<f32>`.
 Parameters the shader declares become ordinary rows in Effect controls, with sliders,
 keyframes and expressions like any built-in effect's.
 
-The effect also holds an inner **node graph**: double-click the effect — its box on the
-Graph panel or its heading in Effect controls, and it opens the way a precomp does. The
-panel draws three kinds of graph on the one canvas: a layer's stack, this inner graph, and
-a [node graph composition](/use/node-graphs/).
+The effect also holds an inner **node graph**. The effect's box on the Graph panel carries
+a small picture of it, and so does the Node panel, or **Click to open** when the shader has
+no graph yet. Click the picture and the graph opens the way a precomp does. In Effect
+controls, **Open graph** opens it. So does a double-click on the box, or on the effect's
+heading in Effect controls. The panel draws three kinds of graph on the one canvas: a
+layer's stack, this inner graph, and a [node graph composition](/use/node-graphs/).
 
 ## Parameters
 
