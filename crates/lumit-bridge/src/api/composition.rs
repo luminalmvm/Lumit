@@ -176,6 +176,27 @@ pub struct BridgeCompSize {
     pub height: u32,
 }
 
+/// What the flowchart draws round one composition: the comps that place it
+/// and the comps it places.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BridgeCompFlow {
+    /// The composition in the middle.
+    pub name: String,
+    pub used_by: Vec<BridgeCompFlowLink>,
+    pub uses: Vec<BridgeCompFlowLink>,
+}
+
+/// One neighbour in a [`BridgeCompFlow`].
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BridgeCompFlowLink {
+    pub comp: CompositionReference,
+    pub name: String,
+    /// Whether the nesting carries on past this comp, away from the middle.
+    pub more: bool,
+}
+
 /// One layer of the comp read model: the plain-data handle Dart
 /// addresses edits by, and everything the panels draw for it.
 #[frb(non_opaque)]
@@ -502,6 +523,39 @@ impl CompositionReference {
         Ok(comp
             .frame_rate
             .frame_at(lumit_core::time::CompTime(comp.duration.0)))
+    }
+
+    /// This composition's neighbours in the nesting, one step each way, for
+    /// the flowchart. Which comp places which is the engine's rule
+    /// ([`lumit_core::Document::comp_flow`]), the one the `in use` badge
+    /// follows, so the chart and the badge cannot disagree.
+    #[frb(sync)]
+    pub fn get_flow(&self) -> Result<BridgeCompFlow, BridgeError> {
+        let proj = self.project()?;
+        let proj = proj.read().map_err(|_| BridgeError::ReadFailed)?;
+        let doc = proj.store.snapshot();
+        let centre = doc.comp(self.id).ok_or(BridgeError::InvalidComp)?;
+        let links = |links: Vec<lumit_core::model::CompLink>| {
+            links
+                .into_iter()
+                .filter_map(|link| {
+                    Some(BridgeCompFlowLink {
+                        comp: CompositionReference {
+                            project: self.project,
+                            id: link.id,
+                        },
+                        name: doc.comp(link.id)?.name.clone(),
+                        more: link.more,
+                    })
+                })
+                .collect()
+        };
+        let flow = doc.comp_flow(self.id);
+        Ok(BridgeCompFlow {
+            name: centre.name.clone(),
+            used_by: links(flow.used_by),
+            uses: links(flow.uses),
+        })
     }
 
     /// The document's revision number: bumped once per committed change, undo,

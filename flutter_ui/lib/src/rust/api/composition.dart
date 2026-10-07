@@ -23,7 +23,7 @@ import 'state.dart';
 import 'wireframes.dart';
 
 // These functions are ignored because they are not marked as `pub`: `add_at`, `add_graph_group`, `bridge_marker`, `colour_view_pair`, `commit_slide`, `commit`, `composition`, `core_marker`, `core_markers`, `dispatch`, `document`, `footage_span_and_size`, `graph_of`, `has_picture`, `insert_row`, `layer_switch_op`, `place_footage`, `project`, `read_groups`, `runs_as_video`, `to_engine`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `id`, `new`, `project_id`
 
 /// Every blend mode, in the order the Timeline's dropdown shows them. The index
@@ -59,6 +59,60 @@ class BridgeAnimatedMaskPath {
           layer == other.layer &&
           mask == other.mask &&
           vertices == other.vertices;
+}
+
+/// What the flowchart draws round one composition: the comps that place it
+/// and the comps it places.
+class BridgeCompFlow {
+  /// The composition in the middle.
+  final String name;
+  final List<BridgeCompFlowLink> usedBy;
+  final List<BridgeCompFlowLink> uses;
+
+  const BridgeCompFlow({
+    required this.name,
+    required this.usedBy,
+    required this.uses,
+  });
+
+  @override
+  int get hashCode => name.hashCode ^ usedBy.hashCode ^ uses.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeCompFlow &&
+          runtimeType == other.runtimeType &&
+          name == other.name &&
+          usedBy == other.usedBy &&
+          uses == other.uses;
+}
+
+/// One neighbour in a [`BridgeCompFlow`].
+class BridgeCompFlowLink {
+  final CompositionReference comp;
+  final String name;
+
+  /// Whether the nesting carries on past this comp, away from the middle.
+  final bool more;
+
+  const BridgeCompFlowLink({
+    required this.comp,
+    required this.name,
+    required this.more,
+  });
+
+  @override
+  int get hashCode => comp.hashCode ^ name.hashCode ^ more.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeCompFlowLink &&
+          runtimeType == other.runtimeType &&
+          comp == other.comp &&
+          name == other.name &&
+          more == other.more;
 }
 
 /// The comp read model: what one `get_model` crossing carries. Dart
@@ -852,6 +906,15 @@ class CompositionReference {
   /// with a tempo has run — what the beat band numbers bars from.
   BridgeBeatGrid? getBeatGrid() =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceGetBeatGrid(
+        that: this,
+      );
+
+  /// This composition's neighbours in the nesting, one step each way, for
+  /// the flowchart. Which comp places which is the engine's rule
+  /// ([`lumit_core::Document::comp_flow`]), the one the `in use` badge
+  /// follows, so the chart and the badge cannot disagree.
+  BridgeCompFlow getFlow() =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceGetFlow(
         that: this,
       );
 

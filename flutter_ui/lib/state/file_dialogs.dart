@@ -93,7 +93,11 @@ Future<String?> pickExportSaveLocation(
     ],
     suggestedName: suggestedName,
   );
-  return location?.path;
+  final path = location?.path;
+  if (path == null) return null;
+  // The Windows dialogue hands back a typed name as it is, so the extension is
+  // added here and the Destination row shows the file that will be written.
+  return path.toLowerCase().endsWith('.$extension') ? path : '$path.$extension';
 }
 
 /// The `.lumfx` effect-preset type group, mirroring the egui Effects panel's

@@ -655,9 +655,25 @@ pub fn latest_autosave(project_path: &Path) -> Option<PathBuf> {
     slot1.is_file().then_some(slot1)
 }
 
+/// Lumit's own folders on this machine, which every path below is built from.
+///
+/// `LUMIT_USER_DIRS` moves all of them under one folder. `cargo test` sets it
+/// in `.cargo/config.toml`, so tests never write into the real ones.
+fn project_dirs() -> Option<directories::ProjectDirs> {
+    // This crate's own tests check the real layout and write nothing there.
+    let moved = std::env::var_os("LUMIT_USER_DIRS")
+        .map(PathBuf::from)
+        .filter(|root| root.is_absolute() && !cfg!(test));
+    match moved {
+        // Joining an absolute path replaces the platform's base folder.
+        Some(root) => directories::ProjectDirs::from_path(root),
+        None => directories::ProjectDirs::from("dev", "Lumit", "Lumit"),
+    }
+}
+
 /// Where a document's sidecar journal lives (docs/10-FILE-FORMAT.md §3–4).
 pub fn journal_path(doc_id: Uuid) -> Option<PathBuf> {
-    let dirs = directories::ProjectDirs::from("dev", "Lumit", "Lumit")?;
+    let dirs = project_dirs()?;
     Some(
         dirs.cache_dir()
             .join(doc_id.to_string())
@@ -698,14 +714,14 @@ pub fn journal_path(doc_id: Uuid) -> Option<PathBuf> {
 /// `None` only when the platform has no home directory; the caller then runs
 /// with no disk tier rather than failing.
 pub fn frame_cache_dir(doc_id: Uuid) -> Option<PathBuf> {
-    let dirs = directories::ProjectDirs::from("dev", "Lumit", "Lumit")?;
+    let dirs = project_dirs()?;
     Some(dirs.cache_dir().join("frames").join(doc_id.to_string()))
 }
 
 /// The application's own cache directory, the parent of every folder below,
 /// which unlike `/tmp` belongs to one user on every platform.
 pub fn cache_dir() -> Option<PathBuf> {
-    let dirs = directories::ProjectDirs::from("dev", "Lumit", "Lumit")?;
+    let dirs = project_dirs()?;
     Some(dirs.cache_dir().to_path_buf())
 }
 
@@ -719,7 +735,7 @@ pub fn cache_dir() -> Option<PathBuf> {
 /// its solves already there. Rebuildable and deletable at any time, like every
 /// tier under this root.
 pub fn track_cache_dir() -> Option<PathBuf> {
-    let dirs = directories::ProjectDirs::from("dev", "Lumit", "Lumit")?;
+    let dirs = project_dirs()?;
     Some(dirs.cache_dir().join("track"))
 }
 
@@ -732,7 +748,7 @@ pub fn track_cache_dir() -> Option<PathBuf> {
 /// happened to ask, so one shot's mattes serve every composition that cuts it.
 /// Rebuildable and deletable at any time, like every tier under this root.
 pub fn roto_cache_dir() -> Option<PathBuf> {
-    let dirs = directories::ProjectDirs::from("dev", "Lumit", "Lumit")?;
+    let dirs = project_dirs()?;
     Some(dirs.cache_dir().join("roto"))
 }
 
@@ -744,7 +760,7 @@ pub fn roto_cache_dir() -> Option<PathBuf> {
 /// rebuildable and deletable at any time the same way: throwing it away costs
 /// an Analyse and nothing else.
 pub fn planes_cache_dir() -> Option<PathBuf> {
-    let dirs = directories::ProjectDirs::from("dev", "Lumit", "Lumit")?;
+    let dirs = project_dirs()?;
     Some(dirs.cache_dir().join("planes"))
 }
 
@@ -770,14 +786,14 @@ pub fn planes_cache_dir() -> Option<PathBuf> {
 /// when the platform has no home directory; the Addons page then says so
 /// rather than failing.
 pub fn addons_dir() -> Option<PathBuf> {
-    let dirs = directories::ProjectDirs::from("dev", "Lumit", "Lumit")?;
+    let dirs = project_dirs()?;
     Some(dirs.data_local_dir().join("addons"))
 }
 
 /// Media frame-index cache directory (docs/10-FILE-FORMAT.md §3) — global,
 /// keyed by content fingerprint, so shared across projects and machines-safe.
 pub fn media_index_dir() -> Option<PathBuf> {
-    let dirs = directories::ProjectDirs::from("dev", "Lumit", "Lumit")?;
+    let dirs = project_dirs()?;
     Some(dirs.cache_dir().join("media-index"))
 }
 
@@ -787,7 +803,7 @@ pub fn media_index_dir() -> Option<PathBuf> {
 /// in the platform's roaming app-data area beside the config. `None` only when
 /// the platform has no home directory; callers create it lazily.
 pub fn presets_dir() -> Option<PathBuf> {
-    let dirs = directories::ProjectDirs::from("dev", "Lumit", "Lumit")?;
+    let dirs = project_dirs()?;
     Some(dirs.data_dir().join("presets"))
 }
 
@@ -801,7 +817,7 @@ pub fn presets_dir() -> Option<PathBuf> {
 /// platform has no home directory; the library then lives for the session and
 /// says so rather than failing.
 pub fn export_presets_path() -> Option<PathBuf> {
-    let dirs = directories::ProjectDirs::from("dev", "Lumit", "Lumit")?;
+    let dirs = project_dirs()?;
     Some(dirs.data_dir().join("export-presets.json"))
 }
 
@@ -815,7 +831,7 @@ pub fn export_presets_path() -> Option<PathBuf> {
 /// `.lum`. `None` only when the platform has no home directory, in which case
 /// the dialogue simply opens on its built-in defaults.
 pub fn export_defaults_path() -> Option<PathBuf> {
-    let dirs = directories::ProjectDirs::from("dev", "Lumit", "Lumit")?;
+    let dirs = project_dirs()?;
     Some(dirs.data_dir().join("export-defaults.json"))
 }
 
@@ -828,7 +844,7 @@ pub const EXPORT_DONE_SOUND: &str = "export-done.wav";
 /// one without touching an installed build. `None` when the platform has no
 /// home directory; the hook is then simply silent.
 pub fn export_done_sound_path() -> Option<PathBuf> {
-    let dirs = directories::ProjectDirs::from("dev", "Lumit", "Lumit")?;
+    let dirs = project_dirs()?;
     Some(dirs.data_dir().join("sounds").join(EXPORT_DONE_SOUND))
 }
 

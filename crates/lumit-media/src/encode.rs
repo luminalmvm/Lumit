@@ -517,7 +517,7 @@ impl ImageSequenceEncoder {
         let pattern = sequence_pattern(path);
         let cpath = CString::new(pattern.to_str().ok_or(MediaError::BadPath)?)
             .map_err(|_| MediaError::BadPath)?;
-        let mut output = AVFormatContextOutput::create(&cpath)?;
+        let mut output = AVFormatContextOutput::create(&cpath).map_err(at("opening the file"))?;
 
         let codec = AVCodec::find_encoder(format.codec_id()).ok_or_else(|| {
             MediaError::Ffmpeg(format!(
@@ -558,7 +558,7 @@ impl ImageSequenceEncoder {
             );
             options = Some(opts);
         }
-        ctx.open(options)?;
+        ctx.open(options).map_err(at("opening the image encoder"))?;
 
         {
             let mut stream = output.new_stream();
@@ -568,7 +568,9 @@ impl ImageSequenceEncoder {
                 den: fps_num,
             });
         }
-        output.write_header(&mut None)?;
+        output
+            .write_header(&mut None)
+            .map_err(at("writing the header"))?;
 
         Ok(Self {
             output,
@@ -636,7 +638,9 @@ impl ImageSequenceEncoder {
         self.finished = true;
         self.video.send_frame(None)?;
         drain_packets(&mut self.video, &mut self.output, 0, true)?;
-        self.output.write_trailer()?;
+        self.output
+            .write_trailer()
+            .map_err(at("finishing the file"))?;
         Ok(())
     }
 }
@@ -701,7 +705,7 @@ impl Encoder {
         }
         let cpath = CString::new(path.to_str().ok_or(MediaError::BadPath)?)
             .map_err(|_| MediaError::BadPath)?;
-        let mut output = AVFormatContextOutput::create(&cpath)?;
+        let mut output = AVFormatContextOutput::create(&cpath).map_err(at("opening the file"))?;
         let global_header = (output.oformat().flags & ffi::AVFMT_GLOBALHEADER as i32) != 0;
 
         let video_track = match video {
@@ -724,7 +728,9 @@ impl Encoder {
         let mut header_opts = global_header
             .then(|| dict_set(None, "movflags", "+faststart"))
             .flatten();
-        output.write_header(&mut header_opts)?;
+        output
+            .write_header(&mut header_opts)
+            .map_err(at("writing the header"))?;
 
         Ok(Self {
             output,
@@ -841,7 +847,9 @@ impl Encoder {
             track.ctx.send_frame(None)?;
             drain_packets(&mut track.ctx, output, track.stream_index, true)?;
         }
-        self.output.write_trailer()?;
+        self.output
+            .write_trailer()
+            .map_err(at("finishing the file"))?;
         Ok(())
     }
 }
@@ -1053,7 +1061,7 @@ fn open_audio(
     if global_header {
         ctx.set_flags(ctx.flags | ffi::AV_CODEC_FLAG_GLOBAL_HEADER as i32);
     }
-    ctx.open(None)?;
+    ctx.open(None).map_err(at("opening the audio encoder"))?;
     let frame_size = usize::try_from(ctx.frame_size).unwrap_or(0);
     let frame_size = if frame_size == 0 { 1024 } else { frame_size };
 
@@ -1190,7 +1198,9 @@ fn drain_packets(
                     .map(|s| s.time_base)
                     .ok_or_else(|| MediaError::Ffmpeg("output stream missing".into()))?;
                 packet.rescale_ts(ctx.time_base, stream_tb);
-                output.interleaved_write_frame(&mut packet)?;
+                output
+                    .interleaved_write_frame(&mut packet)
+                    .map_err(at("writing to the file"))?;
             }
             Err(rsmpeg::error::RsmpegError::EncoderDrainError) if !at_eof => return Ok(()),
             Err(rsmpeg::error::RsmpegError::EncoderDrainError)
@@ -1198,6 +1208,12 @@ fn drain_packets(
             Err(e) => return Err(e.into()),
         }
     }
+}
+
+/// Name the step an FFmpeg call failed at. The code alone reads the same for a
+/// bad file name, a refused header and a failed write.
+fn at(step: &'static str) -> impl Fn(rsmpeg::error::RsmpegError) -> MediaError {
+    move |e| MediaError::Ffmpeg(format!("{step}: {e}"))
 }
 
 /// Append `key = value` to an FFmpeg options dictionary (creating it on

@@ -115,6 +115,7 @@ Not interchangeable.
 | **Playhead** | The current time. Not *CTI* |
 | **Scopes** | Waveform, vectorscope, histogram |
 | **Easing panel** | One curve shape applied to selected keyframe spans |
+| **Flowchart** | A comp drawn between the comps that place it and the comps it places |
 
 ## 8. Extensibility
 
