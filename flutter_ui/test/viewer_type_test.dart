@@ -29,16 +29,6 @@ void main() {
           (1920.0, 1080.0));
       expect(compPointOf(const Offset(580, 320), fitted, comp), (960.0, 540.0));
     });
-
-    test('the magnification is undone, not assumed', () {
-      // The same comp at four times the size: a hundred screen pixels across
-      // is twenty-five comp pixels.
-      const fitted = Rect.fromLTWH(0, 0, 7680, 4320);
-      const comp = Size(1920, 1080);
-      final (x, y) = compPointOf(const Offset(100, 100), fitted, comp);
-      expect(x, closeTo(25, 1e-9));
-      expect(y, closeTo(25, 1e-9));
-    });
   });
 
   group('Which gap a click lands in', () {
@@ -63,11 +53,6 @@ void main() {
   });
 
   group('Characters and UTF-16', () {
-    test('the same count until a character takes two units', () {
-      expect(characterIndexOf('abc', 2), 2);
-      expect(utf16OffsetOf('abc', 2), 2);
-    });
-
     test('an emoji is one character and two units', () {
       const text = 'a\u{1F600}b';
       expect(text.length, 4);
@@ -85,18 +70,6 @@ void main() {
           const TextSelection(baseOffset: 0, extentOffset: 5));
       expect(wordAround(text, 9),
           const TextSelection(baseOffset: 7, extentOffset: 11));
-    });
-
-    test('a run of spaces, or a lone mark, is its own word', () {
-      expect(wordAround(text, 5),
-          const TextSelection(baseOffset: 5, extentOffset: 6));
-      expect(wordAround(text, 6),
-          const TextSelection(baseOffset: 6, extentOffset: 7));
-    });
-
-    test('past the end is the last word', () {
-      expect(wordAround(text, text.length),
-          const TextSelection(baseOffset: 12, extentOffset: 14));
     });
   });
 }

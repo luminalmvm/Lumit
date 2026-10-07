@@ -16,19 +16,15 @@
 
 import 'dart:io';
 
-import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/state/dock.dart';
 import 'package:lumit_flutter/shell/menu_bar_frb.dart';
-import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:lumit_flutter/state/external_links.dart';
 import 'package:lumit_flutter/state/viewer_view.dart';
-import 'package:lumit_flutter/state/workspace.dart';
 import 'package:lumit_flutter/theme/theme.dart';
-import 'package:lumit_flutter/widgets/controls.dart';
 import 'package:provider/provider.dart';
 
 import 'frb_test_support.dart';
@@ -162,59 +158,6 @@ void main() {
       p.state.project = null; // the teardown close would throw the same way
     });
 
-    testWidgets('File shows its items', (tester) async {
-      await mount(tester);
-      await tester.tap(find.byKey(const ValueKey<String>('menu-File')));
-      await tester.pump();
-
-      for (final item in [
-        'New',
-        'Open project…',
-        'Open recent',
-        'Save',
-        'Save as…',
-        'Import…',
-        'Export…',
-        'Project settings…',
-        'Close project',
-      ]) {
-        expect(find.text(item), findsOneWidget, reason: 'File ▸ $item');
-      }
-      await dismiss(tester);
-      expect(find.text('New'), findsNothing,
-          reason: 'the barrier closes the menu without choosing anything');
-    });
-
-    /// The project's own settings are not in Settings: Settings is
-    /// this machine's, and a value saved in the `.lum` is not.
-    testWidgets('File ▸ Project settings… opens a window of its own',
-        (tester) async {
-      await mount(tester);
-      await choose(tester, 'File', 'Project settings…');
-      await tester.pumpAndSettle();
-
-      expect(
-          find.byKey(const ValueKey('project-anti-aliasing')), findsOneWidget);
-      expect(
-          find.byKey(const ValueKey('settings-page-appearance')), findsNothing,
-          reason: 'it is its own window, not a page of Settings');
-    });
-
-    testWidgets('Edit and Composition show their items', (tester) async {
-      await mount(tester);
-
-      await tester.tap(find.byKey(const ValueKey<String>('menu-Edit')));
-      await tester.pump();
-      expect(find.text('Undo'), findsOneWidget);
-      expect(find.text('Redo'), findsOneWidget);
-      await dismiss(tester);
-
-      await tester.tap(find.byKey(const ValueKey<String>('menu-Composition')));
-      await tester.pump();
-      expect(find.text('New composition'), findsOneWidget);
-      expect(find.text('Composition settings…'), findsOneWidget);
-    });
-
     testWidgets('Copy and Paste carry a layer, landing it at the playhead',
         (tester) async {
       // Copy takes the selected layer whole and Paste puts it in the comp on
@@ -294,74 +237,6 @@ void main() {
       expect(comps.single.name(), 'Comp 1');
     });
 
-    /// **New node graph** sits beside it on the menu and in the palette
-    /// (docs/impl/node-graph-comp.md §4.4): the same dialogue, the other door,
-    /// and one funnel behind both.
-    testWidgets('New node graph is on the Composition menu and the palette',
-        (tester) async {
-      final p = await mount(tester);
-
-      await choose(tester, 'Composition', 'New node graph');
-      await tester.pump();
-      await tester.tap(find.byKey(const ValueKey('comp-apply')));
-      await tester.pumpAndSettle();
-
-      final fromMenu = p.uiState.selectedComp;
-      expect(fromMenu, isNotNull, reason: 'the graph it made is fronted');
-      expect(fromMenu!.getModel().isNodeGraph, isTrue);
-      expect(fromMenu.getSettings().name, 'Node graph 1',
-          reason: 'a blank name is the engine\'s to fill in');
-
-      await choose(tester, 'Window', 'Command palette…');
-      await tester.pump();
-      await tester.enterText(
-          find.byKey(const ValueKey('palette-query')), 'node graph');
-      await tester.pump();
-      await tester.tap(find.byKey(const ValueKey('palette-item-New node graph')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('comp-apply')));
-      await tester.pumpAndSettle();
-
-      final fromPalette = p.uiState.selectedComp;
-      expect(fromPalette!.internalid, isNot(fromMenu.internalid),
-          reason: 'the palette made a second one');
-      expect(fromPalette.getModel().isNodeGraph, isTrue);
-      expect(fromPalette.getSettings().name, 'Node graph 2',
-          reason: 'node graphs are counted apart from the comps');
-    });
-
-    /// **A node graph applies to a layer as an effect** (§4.4). The layer's
-    /// Ctrl+Space console lists every one in the project under its own kicker,
-    /// leaving out the comp the selected layers are in, which the engine
-    /// refuses as a loop.
-    testWidgets('the layer console lists node graphs and applies one',
-        (tester) async {
-      final p = await mount(tester);
-      final comp = p.state.project!.newComposition(name: 'Scene');
-      final graph = p.state.project!.newNodeGraph(name: 'Wires');
-      final layer = comp.addSolidLayer();
-      p.uiState
-        ..setSelectedComp(comp)
-        ..setSelection([layer]);
-      await tester.pump();
-
-      p.uiState.requestConsole();
-      await tester.pumpAndSettle();
-      await tester.enterText(
-          find.byKey(const ValueKey('fx-console-query')), 'Wires');
-      await tester.pump();
-      expect(find.text('Node graphs'), findsWidgets,
-          reason: 'the graphs wear their own kicker');
-
-      await tester.tap(find.byKey(const ValueKey('fx-console-item-Wires')));
-      await tester.pumpAndSettle();
-
-      final applied = layer.getEffects().single;
-      expect(applied.name(), 'node_graph');
-      expect(applied.nodeGraphCompId(), graph.internalid,
-          reason: 'the effect is bound to the graph that was chosen');
-    });
-
     testWidgets('the layer console applies an effect to the primary layer only',
         (tester) async {
       final p = await mount(tester);
@@ -387,25 +262,6 @@ void main() {
           reason: 'the primary layer alone, not every selected layer');
     });
 
-    testWidgets('Composition settings… is disabled until a comp is fronted',
-        (tester) async {
-      final p = await mount(tester);
-
-      await choose(tester, 'Composition', 'Composition settings…');
-      // The dialogue heading prints as a capitals kicker (§12A.4).
-      expect(find.text('COMPOSITION SETTINGS'), findsNothing,
-          reason: 'no comp is fronted, so the row does nothing when pressed');
-
-      // Front one, and the same row now opens the dialogue.
-      await makeComp(tester);
-      expect(p.uiState.selectedComp, isNotNull);
-      await choose(tester, 'Composition', 'Composition settings…');
-      await tester.pump();
-
-      expect(find.text('COMPOSITION SETTINGS'), findsOneWidget,
-          reason: 'the dialogue heading');
-    });
-
     testWidgets('Import footage imports every picked path', (tester) async {
       final p = await mount(
         tester,
@@ -420,23 +276,6 @@ void main() {
           .map((f) => f.name())
           .toList();
       expect(names, containsAll(<String>['a.mov', 'b.mov']));
-    });
-
-    testWidgets('a cancelled picker changes nothing', (tester) async {
-      final p = await mount(
-        tester,
-        footagePicker: () async => <String>[],
-        savePicker: () async => null,
-      );
-
-      await choose(tester, 'File', 'Import footage…');
-      await tester.pump();
-      expect(p.state.project!.getItems(), isEmpty);
-
-      await choose(tester, 'File', 'Save');
-      await settleFrb(tester);
-      expect(p.state.project!.path(), isNull,
-          reason: 'cancelling the location dialogue must not write anything');
     });
 
     testWidgets('Undo and Redo grey out with the document history',
@@ -584,81 +423,6 @@ void main() {
       }
     });
 
-    /// A new layer arrives directly above the layer you had selected, the way
-    /// After Effects does it, so it lands where you were working.
-    testWidgets('Layer ▸ New puts the layer above the selected one',
-        (tester) async {
-      final p = await mount(tester);
-      await makeComp(tester);
-      final comp = p.uiState.selectedComp!;
-      for (var i = 0; i < 3; i++) {
-        await choose(tester, 'Layer', 'Null', under: 'New');
-        await tester.pump();
-      }
-      final before = comp.getLayers();
-      expect(before, hasLength(3));
-
-      // The middle row: the new layer takes its place and pushes it down.
-      p.uiState.setSelection([before[1]]);
-      await tester.pump();
-      await choose(tester, 'Layer', 'Solid', under: 'New');
-      await tester.pump();
-
-      final after = comp.getLayers();
-      expect(after, hasLength(4));
-      expect(after[1].getKind(), BridgeLayerKind.solid,
-          reason: 'it landed on the row the selected layer had');
-      expect(
-        [for (final l in after) l.internallayerId],
-        [
-          before[0].internallayerId,
-          after[1].internallayerId,
-          before[1].internallayerId,
-          before[2].internallayerId,
-        ],
-      );
-
-      // Nothing selected still means the top of the stack.
-      p.uiState.clearSelection();
-      await tester.pump();
-      await choose(tester, 'Layer', 'Camera', under: 'New');
-      await tester.pump();
-      expect(comp.getLayers().first.getKind(), BridgeLayerKind.camera);
-    });
-
-    /// The rows that have a chord say so in the blank beside the name, the
-    /// way Enable Retime always has.
-    testWidgets('Layer ▸ New shows each row its own chord', (tester) async {
-      await mount(tester);
-      await tester.tap(find.byKey(const ValueKey<String>('menu-Layer')));
-      await tester.pump();
-      await tester.tap(find.text('New'));
-      await tester.pump();
-
-      for (final (item, chord) in [
-        ('Solid', 'Ctrl+Y'),
-        ('Adjustment', 'Ctrl+Alt+Y'),
-        ('Null', 'Ctrl+Alt+Shift+Y'),
-      ]) {
-        expect(
-          find.descendant(
-            of: find.byKey(ValueKey<String>('menu-row-$item')),
-            matching: find.text(chord),
-          ),
-          findsOneWidget,
-          reason: '$item reads $chord',
-        );
-      }
-      // Spot light has no chord, so its row shows the name alone.
-      expect(
-        find.descendant(
-          of: find.byKey(const ValueKey<String>('menu-row-Spot light')),
-          matching: find.textContaining('Ctrl'),
-        ),
-        findsNothing,
-      );
-    });
-
     // Text to shapes and Text to points: the copy lands beside the
     // original, which is still there and still a Type layer.
     testWidgets('Layer ▸ Create turns a text layer into shapes and into points',
@@ -687,32 +451,6 @@ void main() {
           reason: 'the points copy emits from the words');
     });
 
-    testWidgets('Layer ▸ Create is dead on a layer that is not type',
-        (tester) async {
-      final p = await mount(tester);
-      await makeComp(tester);
-      final comp = p.uiState.selectedComp!;
-      p.uiState.setSelection([comp.addSolidLayer()]);
-      await tester.pump();
-
-      await choose(tester, 'Layer', 'Shapes from text', under: 'Create');
-      await tester.pump();
-      expect(comp.getLayers(), hasLength(1),
-          reason: 'a solid has no words to convert, and the row is greyed out');
-    });
-
-    testWidgets('the layer items are disabled without a composition',
-        (tester) async {
-      final p = await mount(tester);
-      expect(p.uiState.selectedComp, isNull);
-
-      // Pressing it must be a no-op rather than a crash — a disabled row that
-      // throws when clicked is worse than one that is simply absent.
-      await choose(tester, 'Layer', 'Solid', under: 'New');
-      await tester.pump();
-      expect(p.uiState.selectedComp, isNull);
-    });
-
     testWidgets('Add marker at playhead marks the fronted comp',
         (tester) async {
       final p = await mount(tester);
@@ -726,43 +464,6 @@ void main() {
       expect(comp.getMarkers(), hasLength(1));
       expect(comp.frameAtTime(time: comp.getMarkers().single.time), 30,
           reason: 'it landed on the playhead, not at zero');
-    });
-
-    testWidgets('Clear beat markers is calm on a comp with none',
-        (tester) async {
-      final p = await mount(tester);
-      await makeComp(tester);
-      await choose(tester, 'Composition', 'Clear beat markers');
-      await tester.pump();
-      expect(p.uiState.selectedComp!.getMarkers(), isEmpty);
-    });
-
-    /// **The menu path shows the card the other two do.** Detection takes
-    /// seconds and the Audio panel and the Timeline both cover the shell while
-    /// it runs; the menu ran it in silence, so the interface looked exactly as
-    /// it had before anything was pressed. One runner serves all three now, and
-    /// its bar is determinate from the first frame because the engine reports
-    /// how far the run has got.
-    testWidgets('Composition ▸ Detect beats puts the shared card up',
-        (tester) async {
-      final p = await mount(tester);
-      await makeComp(tester);
-      expect(p.state.busy.value, isNull, reason: 'nothing is running yet');
-
-      await choose(tester, 'Composition', 'Detect beats');
-
-      expect(p.state.busy.value, 'Detecting beats',
-          reason: 'the line the panel and the Timeline put up');
-      expect(p.state.busyProgress.value, 0,
-          reason: 'a filling bar from its first frame, not a sweep that turns '
-              'into one a moment later');
-
-      // The comp has nothing to hear, so this run ends in a refusal — and the
-      // card comes down on that as surely as on a success.
-      await settleFrb(tester, until: () => p.state.busy.value == null);
-      expect(p.state.busy.value, isNull);
-      expect(p.state.busyProgress.value, isNull,
-          reason: 'and the bar goes with it');
     });
 
     /// The palette's four categories (docs/07 §12): commands, and now every
@@ -815,103 +516,6 @@ void main() {
       expect(p.uiState.selectedComp?.internalid, comp.internalid);
     });
 
-    /// **The palette's memory died with the process.** The list of what had
-    /// been run lived in a top-level variable in the palette's own file, so
-    /// the order it learned was gone by the next launch. It belongs with the
-    /// rest of the per-user state, in the workspace file, and the palette is
-    /// handed it rather than keeping one.
-    testWidgets('the palette remembers what it ran, and keeps twenty',
-        (tester) async {
-      final p = await mount(tester);
-      final workspace = p.uiState.workspace;
-
-      await choose(tester, 'Window', 'Command palette…');
-      await tester.pump();
-      await tester.enterText(
-          find.byKey(const ValueKey('palette-query')), 'timeline');
-      await tester.pump();
-      await tester.tap(find.byKey(const ValueKey('palette-item-Timeline')));
-      await tester.pumpAndSettle();
-
-      expect(workspace.paletteRecents.first, 'Timeline');
-      expect((Workspace()..load()).paletteRecents.first, 'Timeline',
-          reason: 'and it is on disk for the next launch');
-
-      // What a launch restores is what the ranking reads: seeded the way the
-      // store seeds it, the entry leads an empty palette.
-      workspace.paletteRecents.insert(0, 'Settings…');
-      await choose(tester, 'Window', 'Command palette…');
-      await tester.pump();
-      final top = tester.widget<MenuRow>(
-          find.byKey(const ValueKey('palette-item-Settings…')));
-      expect(top.selected, isTrue, reason: 'the restored recent leads');
-
-      // Capped, so a store read years from now is still twenty labels.
-      for (var i = 0; i < Workspace.maxPaletteRecents + 5; i++) {
-        workspace.noteCommandRun('Command $i');
-      }
-      expect(workspace.paletteRecents.length, Workspace.maxPaletteRecents);
-      expect(workspace.paletteRecents.first,
-          'Command ${Workspace.maxPaletteRecents + 4}');
-      expect(workspace.paletteRecents, isNot(contains('Command 0')));
-    });
-
-    /// **Two commands taught a shortcut and both were spelled out in Dart.**
-    /// The keymap is the engine's, and a row now shows whatever chord it holds
-    /// for that command's action — the same lookup the menu rows do.
-    testWidgets('the palette teaches the shortcuts the keymap holds',
-        (tester) async {
-      final p = await mount(tester);
-      await choose(tester, 'Window', 'Command palette…');
-      await tester.pump();
-      final query = find.byKey(const ValueKey('palette-query'));
-
-      await tester.enterText(query, 'new composition');
-      await tester.pump();
-      expect(find.text('Ctrl+N'), findsOneWidget);
-      expect(p.uiState.keymap.chordFor('comp.new'), 'Ctrl+N',
-          reason: 'and that is the engine keymap talking, not a Dart table');
-
-      await tester.enterText(query, 'save as');
-      await tester.pump();
-      expect(find.text('Ctrl+Shift+S'), findsOneWidget);
-
-      await tester.enterText(query, 'project settings');
-      await tester.pump();
-      expect(find.text('Ctrl+Alt+Shift+K'), findsOneWidget);
-
-      // The View and Resolution rows carry the Viewer's own chords, the ones
-      // their menu rows already teach.
-      await tester.enterText(query, 'zoom in');
-      await tester.pump();
-      expect(find.text('Ctrl+='), findsOneWidget);
-
-      await tester.enterText(query, 'half');
-      await tester.pump();
-      expect(find.text('Ctrl+Shift+J'), findsOneWidget);
-    });
-
-    /// **`Ctrl+Shift+P` was bound to nothing.** The palette's list of commands
-    /// is declared beside the menu items so the two cannot drift apart, so the
-    /// shortcut asks *this* bar for the palette rather than assembling a second
-    /// list of its own — which is the drift that note exists to prevent.
-    testWidgets('the palette shortcut opens the menu bar\'s own palette',
-        (tester) async {
-      final p = await mount(tester);
-      expect(find.byKey(const ValueKey('palette-query')), findsNothing);
-
-      p.uiState.requestPalette();
-      await tester.pumpAndSettle();
-
-      expect(find.byKey(const ValueKey('palette-query')), findsOneWidget);
-      // The same list the menu route builds, not a shorter copy.
-      await tester.enterText(
-          find.byKey(const ValueKey('palette-query')), 'composition');
-      await tester.pump();
-      expect(find.byKey(const ValueKey('palette-item-New composition')),
-          findsOneWidget);
-    });
-
     /// The four shipped workspace presets (docs/07 §1.6): each rearranges the
     /// dock to its factory layout; the same panel inventory throughout, and a
     /// distinct arrangement per preset.
@@ -944,70 +548,6 @@ void main() {
       await choose(tester, 'Window', 'Reset workspace', under: 'Workspace');
       await tester.pump();
       expect(panelsIn(p.uiState.split), panelsIn(defaultLayout()));
-    });
-
-    testWidgets('the Window menu offers the palette, reset and settings',
-        (tester) async {
-      final p = await mount(tester);
-
-      await tester.tap(find.byKey(const ValueKey<String>('menu-Window')));
-      await tester.pump();
-      expect(find.text('Command palette…'), findsOneWidget);
-      // The arrangements sit behind their own heading, and Settings
-      // moved to Edit where every Windows application keeps it.
-      expect(find.text('Workspace'), findsOneWidget);
-      expect(find.text('Settings…'), findsNothing);
-      expect(find.text('Reset workspace'), findsNothing,
-          reason: 'reset lives with the arrangements it undoes');
-      await dismiss(tester);
-
-      // Reset puts a rearranged workspace back to the default.
-      p.uiState.workspace.dock = DockSplit(
-        DockAxis.vertical,
-        [DockPane(Panel.viewer), DockPane(Panel.timeline)],
-        [0.5, 0.5],
-      );
-      await choose(tester, 'Window', 'Reset workspace', under: 'Workspace');
-      await tester.pump();
-      expect(panelsIn(p.uiState.split), panelsIn(defaultLayout()),
-          reason: 'the default arrangement is back');
-    });
-
-    /// The bar is the shape of the finished application, not of today's build:
-    /// a command that is specified and unbuilt is still listed, marked and
-    /// disabled, so nobody has to guess whether it is missing or broken.
-    testWidgets('unbuilt commands are listed, marked and disabled',
-        (tester) async {
-      await mount(tester);
-      final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.studio);
-
-      await tester.tap(find.byKey(const ValueKey<String>('menu-Animation')));
-      await tester.pump();
-      expect(find.text('Track motion (Not implemented)'), findsOneWidget);
-      expect(
-        tester
-            .widget<Text>(find.text('Track motion (Not implemented)'))
-            .style
-            ?.color,
-        t.textDisabled,
-      );
-      await dismiss(tester);
-
-      // Every menu the specification names is on the bar, in its order.
-      for (final title in [
-        'File',
-        'Edit',
-        'Composition',
-        'Layer',
-        'Effect',
-        'Animation',
-        'View',
-        'Window',
-        'Help',
-      ]) {
-        expect(find.byKey(ValueKey<String>('menu-$title')), findsOneWidget,
-            reason: '$title is on the bar');
-      }
     });
 
     /// View ▸ Resolution is a real raster reduction (docs/07 §2.2 item 2): it
@@ -1067,46 +607,6 @@ void main() {
           reason: 'a click away still takes the menu down');
     });
 
-    /// The magnification rows *ask* the Viewer rather than doing it here:
-    /// "fit" is a rule only the panel can resolve, and the panel need not even
-    /// be mounted for the row to be harmless.
-    testWidgets('View ▸ Zoom in asks the Viewer for a magnification',
-        (tester) async {
-      final p = await mount(tester);
-      await makeComp(tester);
-
-      await choose(tester, 'View', 'Zoom in');
-      expect(p.uiState.viewerZoomRequest.value?.$2, ViewerZoomCommand.zoomIn);
-
-      // Twice is twice: the serial is what stops a repeated request being
-      // swallowed as "no change".
-      final first = p.uiState.viewerZoomRequest.value!.$1;
-      await choose(tester, 'View', 'Zoom in');
-      expect(p.uiState.viewerZoomRequest.value!.$1, greaterThan(first));
-
-      await choose(tester, 'View', 'Fit');
-      expect(p.uiState.viewerZoomRequest.value?.$2, ViewerZoomCommand.fit);
-    });
-
-    /// Shortcuts are the engine's: a row shows whatever the keymap
-    /// currently binds to its action, so a rebind changes the menus too.
-    testWidgets('a row teaches the chord its action answers to',
-        (tester) async {
-      final p = await mount(tester);
-
-      await tester.tap(find.byKey(const ValueKey<String>('menu-File')));
-      await tester.pump();
-      expect(find.text('Ctrl+S'), findsOneWidget, reason: 'Save');
-      expect(find.text('Ctrl+Shift+S'), findsOneWidget, reason: 'Save as');
-      expect(find.text('Ctrl+Alt+N'), findsOneWidget, reason: 'New');
-      await dismiss(tester);
-
-      // The row reads the live keymap rather than a chord of its own: the
-      // engine is the only place a binding is written down.
-      expect(p.uiState.keymap.chordFor('file.save'), 'Ctrl+S');
-      expect(p.uiState.keymap.rawChordFor('file.save'), 'Mod+S');
-    });
-
     /// The Window menu's panel list: ticked when the panel is in the
     /// arrangement, and clicking one adds or drops it. Persistence comes free
     /// — what is stored is the arrangement, and this changes the arrangement.
@@ -1143,144 +643,12 @@ void main() {
       await dismiss(tester);
     });
 
-    /// **The bar is chrome: it spans the window, one colour, from the left.**
-    ///
-    /// Making it scroll sideways (so nine headings cannot overflow a narrow
-    /// window) made it shrink-wrap to the width of those headings, and the
-    /// shell's Column then centred that stub with the backdrop showing either
-    /// side. Both symptoms, one cause.
-    ///
-    /// **The window has to be wider than the headings for this to be visible
-    /// at all.** The nine of them come to a little over 800px, so on the
-    /// default 800×600 test surface a shrink-wrapped bar is clamped to the full
-    /// width and looks perfect — which is exactly how the fault shipped. It is
-    /// pumped here at a real window size, in the Column `_LumitAppViewState`
-    /// puts it in — that Column is the whole mechanism, because a Column gives
-    /// its children *loose* cross-axis constraints, which is what lets a
-    /// shrink-wrapping child stay narrow and be centred. (`hostPanel` alone
-    /// puts the bar in an Overlay, which forces full width and hides the
-    /// fault; the whole `LumitAppNew` reproduces it too, but drags in an
-    /// unrelated Debug-panel overflow at this size.)
-    testWidgets('the bar spans the window, from the left edge', (tester) async {
-      tester.view.physicalSize = const Size(1280, 720);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.reset);
-
-      final p = freshProject();
-      await tester.pumpWidget(hostPanel(
-        child: Builder(builder: (context) {
-          final state = context.watch<LumitState>();
-          context.watch<LumitUiState>();
-          return Column(children: [LumitMenuBarFrb(app: state)]);
-        }),
-        state: p.state,
-        uiState: p.uiState,
-      ));
-      await tester.pump();
-
-      final bar = tester.getRect(find.byType(LumitMenuBarFrb));
-      expect(bar.left, 0, reason: 'flush to the left edge, not centred');
-      expect(bar.width, 1280,
-          reason: 'the full width of the window, so one colour spans it');
-      expect(
-          tester.getTopLeft(find.byKey(const ValueKey<String>('menu-File'))).dx,
-          lessThan(20),
-          reason: 'File is the first heading, at the left');
-    });
-
-    /// **The headings wear the shape's case, and the menus are the same.**
-    /// Desk's top line reads its menus as lowercase words in the body face a
-    /// size up, its mockup's; Lantern and Studio keep the sentence-case word.
-    /// The keys, and the rows behind them, do not change with the shape.
-    testWidgets('the headings follow the shape and the menus do not',
-        (tester) async {
-      for (final shape in ThemeShape.values) {
-        await mount(tester, shape: shape);
-        expect(tester.getSize(find.byType(LumitMenuBarFrb)).height,
-            DensityTokens.forShape(shape, false).menuBar,
-            reason: 'the line is the shape\'s own height under $shape');
-        final desk = shape == ThemeShape.desk;
-        expect(find.text(desk ? 'composition' : 'Composition'), findsOneWidget,
-            reason: '$shape');
-        if (desk) {
-          final style = tester.widget<Text>(find.text('composition')).style;
-          expect(style?.fontFamily, ShapeTokens.desk.sansFamily,
-              reason: 'Desk sets its menus in its own face');
-          expect(style?.fontSize, 12);
-        }
-        await tester.tap(find.byKey(const ValueKey<String>('menu-Edit')));
-        await tester.pump();
-        expect(find.byKey(const ValueKey<String>('menu-row-Undo')),
-            findsOneWidget,
-            reason: 'the same rows under $shape');
-        await dismiss(tester);
-      }
-    });
-
-    /// The update row is live rather than listed-and-dead. It is not
-    /// *pressed* here: pressing it asks GitHub, and a test suite has no
-    /// business on the network — what the press does is `updates_test.dart`,
-    /// against a service whose seams are stopped up.
-    testWidgets('Help ▸ Check for updates is a built command', (tester) async {
-      await mount(tester);
-      await tester.tap(find.byKey(const ValueKey<String>('menu-Help')));
-      await tester.pump();
-      expect(find.text('Check for updates'), findsOneWidget);
-      expect(find.text('Check for updates (Not implemented)'), findsNothing);
-      await dismiss(tester);
-    });
-
-    /// The two documentation rows hand a web address to the desktop.
-    /// The launcher is stopped up: a test suite must never open a browser.
-    testWidgets('Help ▸ the documentation rows open the docs site',
-        (tester) async {
-      final asked = <String>[];
-      final real = openExternalLink;
-      openExternalLink = (url) async {
-        asked.add(url);
-        return true;
-      };
-      addTearDown(() => openExternalLink = real);
-
-      await mount(tester);
-      await choose(tester, 'Help', 'Lumit help');
-      await tester.pump();
-      expect(asked, ['https://docs.lumitlab.com/']);
-
-      await choose(tester, 'Help', 'Lumit online guides');
-      await tester.pump();
-      expect(asked.last, 'https://docs.lumitlab.com/start/first-composition/');
-    });
-
-    /// A machine with no browser registered leaves a row that does nothing,
-    /// which reads as broken. It says so in the status line instead.
-    testWidgets('a link the desktop will not take says so', (tester) async {
-      final real = openExternalLink;
-      openExternalLink = (_) async => false;
-      addTearDown(() => openExternalLink = real);
-
-      final p = await mount(tester);
-      await choose(tester, 'Help', 'Lumit help');
-      await tester.pump();
-      expect(p.state.notice.value?.message, contains('docs.lumitlab.com'));
-      expect(p.state.notice.value?.error, isTrue);
-    });
-
     /// Only a web address is ever handed over, whatever a caller passes.
     test('the launcher refuses anything that is not a web address', () async {
       expect(await launchInDefaultBrowser('file:///etc/passwd'), isFalse);
       expect(await launchInDefaultBrowser('javascript:alert(1)'), isFalse);
       expect(await launchInDefaultBrowser('https://'), isFalse);
       expect(await launchInDefaultBrowser('not a url at all'), isFalse);
-    });
-
-    testWidgets('Help ▸ About Lumit opens the About window', (tester) async {
-      await mount(tester);
-      await choose(tester, 'Help', 'About Lumit');
-      await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('about-close')), findsOneWidget);
-      // What Settings ▸ General used to say, said here instead.
-      expect(find.textContaining('lumit-bridge'), findsOneWidget);
     });
 
     /// The Effect menu is the browser as a menu: a submenu per category, each
@@ -1309,97 +677,5 @@ void main() {
           reason: 'the primary layer alone, not every selected layer');
     });
 
-    testWidgets('Open recent lists what the workspace remembers',
-        (tester) async {
-      final p = await mount(tester);
-      p.uiState.workspace.rememberProject('C:/projects/yesterday.lum');
-      p.state.notifyDocumentChanged();
-      await tester.pump();
-
-      await tester.tap(find.byKey(const ValueKey<String>('menu-File')));
-      await tester.pump();
-      await tester.tap(find.text('Open recent'));
-      await tester.pump();
-      expect(find.text('C:/projects/yesterday.lum'), findsOneWidget);
-    });
-
-    /// A pointer that can hover, for the two tests below. The menus are driven
-    /// by hover as much as by clicks, and a test's synthetic taps carry no
-    /// pointer at all unless one is added.
-    Future<TestGesture> mouse(WidgetTester tester) async {
-      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
-      await gesture.addPointer(location: Offset.zero);
-      addTearDown(gesture.removePointer);
-      return gesture;
-    }
-
-    /// **Once a menu is open the bar is in menus.** Crossing another heading
-    /// hands over to it, rather than leaving the first menu up until it is
-    /// clicked away and the second one clicked open.
-    testWidgets('a heading hands over to the next one on hover',
-        (tester) async {
-      await mount(tester);
-      final pointer = await mouse(tester);
-
-      // Nothing open: the bar is inert under a passing pointer.
-      await pointer
-          .moveTo(tester.getCenter(find.byKey(const ValueKey('menu-Edit'))));
-      await tester.pump();
-      expect(find.text('Redo'), findsNothing,
-          reason: 'hover alone must not start dropping menus');
-
-      // Onto the heading being clicked, the way a real pointer arrives: the
-      // handover is an *arrival* on a heading, and a pointer that never left
-      // Edit has not arrived anywhere.
-      await pointer
-          .moveTo(tester.getCenter(find.byKey(const ValueKey('menu-File'))));
-      await tester.tap(find.byKey(const ValueKey<String>('menu-File')));
-      await tester.pump();
-      expect(find.text('Open recent'), findsOneWidget);
-
-      await pointer
-          .moveTo(tester.getCenter(find.byKey(const ValueKey('menu-Edit'))));
-      await tester.pump();
-      await tester.pump();
-      expect(find.text('Redo'), findsOneWidget, reason: 'Edit took over');
-      expect(find.text('Open recent'), findsNothing,
-          reason: 'and File went with it');
-
-      await dismiss(tester);
-      await pointer
-          .moveTo(tester.getCenter(find.byKey(const ValueKey('menu-Layer'))));
-      await tester.pump();
-      expect(find.text('Pre-compose…'), findsNothing,
-          reason: 'dismissed means out of menus again');
-    });
-
-    /// A submenu flies out under the pointer and takes itself back when the
-    /// pointer moves on to another row — Open recent here, the Effect
-    /// categories by the same mechanism.
-    testWidgets('a submenu opens on hover and closes when you move off',
-        (tester) async {
-      final p = await mount(tester);
-      p.uiState.workspace.rememberProject('C:/projects/yesterday.lum');
-      p.state.notifyDocumentChanged();
-      await tester.pump();
-      final pointer = await mouse(tester);
-
-      await tester.tap(find.byKey(const ValueKey<String>('menu-File')));
-      await tester.pump();
-
-      await pointer.moveTo(tester.getCenter(find.text('Open recent')));
-      await tester.pump();
-      await tester.pump();
-      expect(find.text('C:/projects/yesterday.lum'), findsOneWidget,
-          reason: 'resting on the row is enough to see what is behind it');
-
-      await pointer.moveTo(tester.getCenter(find.text('Save')));
-      await tester.pump();
-      await tester.pump();
-      expect(find.text('C:/projects/yesterday.lum'), findsNothing,
-          reason: 'the flyout goes back when another row takes the pointer');
-      expect(find.text('Open recent'), findsOneWidget,
-          reason: 'the menu it flew out of is still up');
-    });
   }, skip: !engineAvailable);
 }

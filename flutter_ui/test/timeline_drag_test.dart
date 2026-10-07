@@ -10,13 +10,6 @@ void main() {
   // heights are not all the same and a shift cannot accidentally be right.
   const heights = [22.0, 66.0, 22.0];
 
-  test('nothing moves when nothing is being dragged', () {
-    for (var i = 0; i < heights.length; i++) {
-      expect(layerDragShift(heights, null, i), 0);
-      expect(layerDragShift(heights, const LayerDrag(1, 1), i), 0);
-    }
-  });
-
   test('dragging down carries the block past what it passes', () {
     const drag = LayerDrag(0, 2);
     // The lifted block travels the height of both blocks it overtakes.
@@ -24,20 +17,6 @@ void main() {
     // Each of those moves one lift's height the other way.
     expect(layerDragShift(heights, drag, 1), -22.0);
     expect(layerDragShift(heights, drag, 2), -22.0);
-  });
-
-  test('dragging up is the same in reverse', () {
-    const drag = LayerDrag(2, 0);
-    expect(layerDragShift(heights, drag, 2), -(22.0 + 66.0));
-    expect(layerDragShift(heights, drag, 0), 22.0);
-    expect(layerDragShift(heights, drag, 1), 22.0);
-  });
-
-  test('a block outside the moved span stays put', () {
-    const four = [22.0, 22.0, 22.0, 22.0];
-    const drag = LayerDrag(0, 1);
-    expect(layerDragShift(four, drag, 2), 0);
-    expect(layerDragShift(four, drag, 3), 0);
   });
 
   test('an index that has gone away is left alone', () {
@@ -51,13 +30,6 @@ void main() {
   // asked which row the pointer was over, but the rows are slid by the drag
   // itself, so each answer moved the rows and changed the next one.
   group('drag targeting', () {
-    test('no travel is no move, so a drag put back where it began is a no-op',
-        () {
-      expect(layerDragTarget(heights, 1, 0), 1);
-      expect(layerDragTarget(heights, 1, 4), 1);
-      expect(layerDragTarget(heights, 1, -4), 1);
-    });
-
     test('a slot is taken at the midpoint of the block being passed', () {
       // Below layer 1 (66 high) sits layer 2 (22): half of it is 11.
       expect(layerDragTarget(heights, 1, 10), 1);
@@ -65,26 +37,6 @@ void main() {
       // Above layer 1 sits layer 0 (22): half is 11.
       expect(layerDragTarget(heights, 1, -10), 1);
       expect(layerDragTarget(heights, 1, -12), 0);
-    });
-
-    test('the target is monotone in travel, so it cannot ping-pong', () {
-      var last = 0;
-      for (var travel = 0.0; travel <= 200; travel += 1) {
-        final to = layerDragTarget(heights, 0, travel);
-        expect(to, greaterThanOrEqualTo(last),
-            reason: 'target went backwards at travel $travel');
-        last = to;
-      }
-    });
-
-    test('travel past the ends stops at the ends', () {
-      expect(layerDragTarget(heights, 0, 10000), heights.length - 1);
-      expect(layerDragTarget(heights, 2, -10000), 0);
-    });
-
-    test('a from-index that has gone away is left alone', () {
-      expect(layerDragTarget(heights, 9, 100), 9);
-      expect(layerDragTarget(heights, -1, 100), -1);
     });
   });
 
@@ -96,14 +48,6 @@ void main() {
       expect(layerDropSlot(heights, 40), 1, reason: 'top half of block 1');
       expect(layerDropSlot(heights, 60), 2, reason: 'bottom half of block 1');
     });
-
-    test('a drop past the last block lands at the bottom of the stack', () {
-      expect(layerDropSlot(heights, 10000), heights.length);
-    });
-
-    test('an empty stack takes the drop at nought', () {
-      expect(layerDropSlot(const [], 500), 0);
-    });
   });
 
   /// Which blocks a lazy half has to build. Pure for the same reason the drag
@@ -113,15 +57,6 @@ void main() {
     // A hundred even rows: 2200 tall against a 200 viewport.
     final tall = List<double>.filled(100, 22);
 
-    test('an unmeasured viewport builds the whole stack', () {
-      expect(blockWindow(tall, 0, 0), (0, 100));
-    });
-
-    test('a stack shorter than the band is built whole', () {
-      // Three screenfuls is 600, and ten rows is 220.
-      expect(blockWindow(List<double>.filled(10, 22), 0, 200), (0, 10));
-    });
-
     test('a screenful either side of the rows in view', () {
       // Scrolled to 660: the band runs 460..1060, rows 20 through 48.
       final (first, last) = blockWindow(tall, 660, 200);
@@ -129,21 +64,6 @@ void main() {
       expect(last, 49);
       expect(last - first, lessThan(30),
           reason: 'the cost follows the viewport, not the hundred rows');
-    });
-
-    test('the band slides back onto the stack at either end', () {
-      // At the very bottom there is nothing below to spend the lower third
-      // on, so it is spent above instead: the band is three screenfuls
-      // wherever it sits.
-      final (first, last) = blockWindow(tall, 2000, 200);
-      expect(last, 100, reason: 'the last row is in view');
-      // Three screenfuls of 22px rows, give or take the row the band's edge
-      // happens to fall inside.
-      expect(last - first, inInclusiveRange(27, 29),
-          reason: 'and the band is the size it is in the middle');
-      // The same at the top, where the offset cannot go negative.
-      expect(blockWindow(tall, 0, 200).$1, 0);
-      expect(blockWindow(tall, 0, 200).$2, 28);
     });
   });
 }

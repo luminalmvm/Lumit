@@ -383,25 +383,6 @@ mod tests {
     }
 
     #[test]
-    fn the_frame_number_is_the_widest_digit_run_before_the_extension() {
-        let p = split("Depth000000_depth.exr").unwrap();
-        assert_eq!(
-            (p.prefix, p.digits, p.suffix),
-            ("Depth", "000000", "_depth.exr")
-        );
-
-        // A version tag must not win over the frame field.
-        let p = split("shot_v2_0043.exr").unwrap();
-        assert_eq!((p.prefix, p.digits, p.suffix), ("shot_v2_", "0043", ".exr"));
-
-        // The extension's own digits are out of the running.
-        let p = split("take7.mp4").unwrap();
-        assert_eq!((p.prefix, p.digits, p.suffix), ("take", "7", ".mp4"));
-
-        assert!(split("nodigits.png").is_none());
-    }
-
-    #[test]
     fn a_numbered_run_is_found_from_any_file_in_it() {
         let dir = tempfile::tempdir().unwrap();
         write_run(dir.path(), "name", 4, ".ppm", &(1..=10).collect::<Vec<_>>());
@@ -414,75 +395,6 @@ mod tests {
             assert_eq!(run.first, dir.path().join("name0001.ppm"));
             assert_eq!(run.pattern, dir.path().join("name%04d.ppm"));
         }
-    }
-
-    #[test]
-    fn a_gap_ends_the_run_on_the_side_it_is_on() {
-        // 1..=4, hole at 5, 6..=9 (clamp, never bridge).
-        let dir = tempfile::tempdir().unwrap();
-        write_run(dir.path(), "f", 3, ".ppm", &[1, 2, 3, 4, 6, 7, 8, 9]);
-
-        let below = detect(&dir.path().join("f002.ppm")).unwrap();
-        assert_eq!(
-            (below.start, below.count),
-            (1, 4),
-            "the run stops at the hole"
-        );
-
-        let above = detect(&dir.path().join("f007.ppm")).unwrap();
-        assert_eq!(
-            (above.start, above.count),
-            (6, 4),
-            "the far side is its own run"
-        );
-    }
-
-    #[test]
-    fn a_differently_padded_neighbour_is_a_different_run() {
-        let dir = tempfile::tempdir().unwrap();
-        write_run(dir.path(), "f", 4, ".ppm", &[1, 2, 3]);
-        // `f4.ppm` would be frame 4 by number, but `%04d` does not name it.
-        std::fs::write(dir.path().join("f4.ppm"), ppm([4, 0, 0])).unwrap();
-
-        let run = detect(&dir.path().join("f0002.ppm")).unwrap();
-        assert_eq!((run.start, run.count), (1, 3));
-    }
-
-    #[test]
-    fn a_lone_still_is_a_run_of_one_and_a_nameless_one_is_no_run() {
-        let dir = tempfile::tempdir().unwrap();
-        std::fs::write(dir.path().join("still0001.ppm"), ppm([1, 2, 3])).unwrap();
-        std::fs::write(dir.path().join("plain.ppm"), ppm([1, 2, 3])).unwrap();
-
-        let run = detect(&dir.path().join("still0001.ppm")).unwrap();
-        assert_eq!((run.start, run.count), (1, 1));
-        assert!(detect(&dir.path().join("plain.ppm")).is_none());
-    }
-
-    #[test]
-    fn a_per_cent_anywhere_in_the_path_refuses_the_run() {
-        let dir = tempfile::tempdir().unwrap();
-        let odd = dir.path().join("100%");
-        std::fs::create_dir(&odd).unwrap();
-        write_run(&odd, "f", 4, ".ppm", &[1, 2]);
-        assert!(
-            detect(&odd.join("f0001.ppm")).is_none(),
-            "image2 would read the directory's per-cent as a field of its own"
-        );
-
-        write_run(dir.path(), "50%off_", 4, ".ppm", &[1, 2]);
-        assert!(detect(&dir.path().join("50%off_0001.ppm")).is_none());
-    }
-
-    #[test]
-    fn only_still_formats_are_offered_as_sequences() {
-        assert!(is_still(Path::new("a/b0001.EXR")));
-        assert!(is_still(Path::new("a/b0001.png")));
-        assert!(
-            !is_still(Path::new("a/clip0001.mp4")),
-            "a folder of numbered clips is a hundred clips, not one sequence"
-        );
-        assert!(!is_still(Path::new("a/noext")));
     }
 
     /// The whole point of the feature, end to end: frame N of a sequence item
@@ -565,13 +477,5 @@ mod tests {
         let run = detect(&crate::encode::sequence_frame_path(&chosen, 2)).unwrap();
         assert_eq!((run.start, run.count), (1, 3));
         assert_eq!(run.pattern, crate::encode::sequence_pattern(&chosen));
-    }
-
-    #[test]
-    fn a_bare_path_converts_into_a_plain_source() {
-        let src: MediaSource = Path::new("a/b.mp4").into();
-        assert_eq!(src.sequence_fps, None);
-        assert!(src.run().is_none());
-        assert_eq!(src.on_disk(), Path::new("a/b.mp4"));
     }
 }

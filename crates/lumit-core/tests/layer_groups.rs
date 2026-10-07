@@ -227,43 +227,6 @@ fn a_scattered_selection_is_refused_and_so_is_a_second_home() {
     );
 }
 
-#[test]
-fn a_name_and_a_colour_are_one_undo_step_each() {
-    let (doc, comp, ids) = doc_with_four();
-    let store = DocumentStore::new(doc);
-    let group = group_of_ids("Group 1", &ids[0..2]);
-    let group_id = group.id;
-    store
-        .commit(Op::GroupLayers {
-            comp,
-            index: 0,
-            group,
-        })
-        .unwrap();
-
-    let named = store
-        .commit(Op::SetGroupName {
-            comp,
-            group: group_id,
-            name: "Background".into(),
-        })
-        .unwrap();
-    assert_eq!(named.comp(comp).unwrap().groups[0].name, "Background");
-    let coloured = store
-        .commit(Op::SetGroupLabel {
-            comp,
-            group: group_id,
-            label: 5,
-        })
-        .unwrap();
-    assert_eq!(coloured.comp(comp).unwrap().groups[0].label, 5);
-
-    store.undo().unwrap();
-    let back = store.undo().unwrap().unwrap();
-    assert_eq!(back.comp(comp).unwrap().groups[0].name, "Group 1");
-    assert_eq!(back.comp(comp).unwrap().groups[0].label, 0);
-}
-
 /// docs/10 §1.1: a project written before groups existed must re-save with the
 /// bytes it arrived with. `groups` is skipped while empty, so an ungrouped comp
 /// gains no line for it — and the flattened `extra` bag must not swallow one

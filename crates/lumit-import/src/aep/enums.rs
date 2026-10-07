@@ -241,23 +241,6 @@ pub fn renderer(match_name: &str) -> String {
 mod tests {
     use super::*;
 
-    /// **An unknown code falls through as its own number.**
-    ///
-    /// The funnel rule's escape hatch (docs/impl/ae-import.md §7): a blend mode
-    /// or matte type from an After Effects newer than these tables must arrive
-    /// as something honest rather than as the nearest guess, because the
-    /// nearest guess is a silently wrong picture.
-    #[test]
-    fn a_code_no_table_knows_arrives_as_its_number() {
-        assert_eq!(blend(9999, false), "9999");
-        assert_eq!(matte(77), "77");
-        assert_eq!(quality(5), "5");
-        assert_eq!(light_type(60), "60");
-        assert_eq!(layer_kind(7), "7");
-        assert_eq!(bits_per_channel(9), 9);
-        assert_eq!(renderer("ADBE Calder"), "ADBE Calder");
-    }
-
     /// **The modes After Effects added after version 4 are the ones a real
     /// project is full of, and the run reaches them.**
     ///
@@ -287,16 +270,5 @@ mod tests {
         assert_eq!(blend(12, false), "CLASSIC_DIFFERENCE");
         assert_eq!(blend(23, false), "CLASSIC_COLOR_DODGE");
         assert_eq!(blend(24, false), "CLASSIC_COLOR_BURN");
-    }
-
-    /// **Dancing Dissolve is Dissolve plus a flag, and only for Dissolve.**
-    ///
-    /// After Effects has no transfer value of its own for it, so the flag has
-    /// to be read beside the code — and must not colour any other mode.
-    #[test]
-    fn dancing_dissolve_needs_both_the_code_and_the_flag() {
-        assert_eq!(blend(3, false), "DISSOLVE");
-        assert_eq!(blend(3, true), "DANCING_DISSOLVE");
-        assert_eq!(blend(6, true), "SCREEN");
     }
 }

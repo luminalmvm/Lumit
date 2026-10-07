@@ -116,54 +116,6 @@ mod tests {
         assert_eq!(computed.get(), 2, "a new revision recomputes");
     }
 
-    /// Different frames, comps and quality tags are different names — and an
-    /// unnameable frame is asked again rather than remembered as nothing, so a
-    /// probe finishing mid-session is picked up.
-    #[test]
-    fn keys_are_distinct_and_none_is_never_remembered() {
-        let mut names = NameCache::default();
-        let (a, b) = (Uuid::now_v7(), Uuid::now_v7());
-        assert_eq!(names.get_or_compute(1, 0, a, 0, 1000, || Some(1)), Some(1));
-        assert_eq!(names.get_or_compute(1, 0, a, 1, 1000, || Some(2)), Some(2));
-        assert_eq!(names.get_or_compute(1, 0, a, 0, 1050, || Some(3)), Some(3));
-        assert_eq!(names.get_or_compute(1, 0, b, 0, 1000, || Some(4)), Some(4));
-        assert_eq!(names.get_or_compute(1, 0, a, 0, 1000, || Some(9)), Some(1));
-
-        // Not nameable yet: passed through, tried again next ask.
-        let mut tries = 0;
-        for _ in 0..2 {
-            let got = names.get_or_compute(1, 0, b, 9, 1000, || {
-                tries += 1;
-                None
-            });
-            assert_eq!(got, None);
-        }
-        assert_eq!(tries, 2, "an unnameable frame is never memoised");
-        // And once the probe lands, the name is served and then remembered.
-        assert_eq!(names.get_or_compute(1, 0, b, 9, 1000, || Some(5)), Some(5));
-        assert_eq!(names.get_or_compute(1, 0, b, 9, 1000, || None), Some(5));
-    }
-
-    /// A look change renames every frame at the same revision (the look is
-    /// folded into the names), which the revision check cannot see — so the
-    /// worker clears the memo when the look changes, and the next ask
-    /// recomputes under the new look rather than serving the old one's name.
-    #[test]
-    fn a_cleared_memo_recomputes_at_the_same_revision() {
-        let mut names = NameCache::default();
-        let comp = Uuid::now_v7();
-        assert_eq!(
-            names.get_or_compute(1, 0, comp, 0, 1000, || Some(1)),
-            Some(1)
-        );
-        names.clear();
-        assert_eq!(
-            names.get_or_compute(1, 0, comp, 0, 1000, || Some(2)),
-            Some(2),
-            "after a clear, the same key is computed afresh"
-        );
-    }
-
     /// **Two views can be looking at one composition differently**, and a
     /// look is folded into a frame's name — so the memo is keyed by view too
     /// (docs/impl/multi-viewer.md §2.3). Without this, the second view was

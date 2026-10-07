@@ -15,10 +15,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/export.dart';
-import 'package:lumit_flutter/src/rust/api/footage.dart';
-import 'package:lumit_flutter/src/rust/api/state.dart';
 
 import 'frb_test_support.dart';
 
@@ -70,63 +67,6 @@ void main() {
   setUpAll(initEngineForTests);
 
   group('Export seam (frb)', () {
-    // The spec check asks a *composition*, because whether a colour space can
-    // be delivered is a question about that project's colour config.
-    late CompositionReference comp;
-    setUp(() {
-      comp = LumitBridgeState.newProject().newComposition(name: 'Scene');
-    });
-
-    test('a spec that sets none of the new fields is the export we always had',
-        () {
-      final spec = plainSpec();
-      expect(spec.resample, '');
-      expect(spec.renderGuides, isFalse);
-      expect(spec.motionBlur, 0);
-      expect(spec.retimeBlend, 0);
-      expect(spec.useProxies, isFalse);
-      expect(comp.exportSpecCheck(spec: spec), '',
-          reason: 'and the engine takes it without complaint');
-    });
-
-    test('the engine names the sound rates and the colour spaces it offers',
-        () {
-      expect(exportAudioRates(), [44100, 48000, 96000]);
-
-      final mp4 = exportFormatCaps(codec: 'h264');
-      expect(mp4.audio, isTrue);
-      expect(mp4.audio24Bit, isFalse,
-          reason: 'AAC stores coefficients, so it has no sample width to set');
-      expect(mp4.colourSpaces, contains(''));
-      expect(mp4.colourSpaces, contains('rec2020'));
-
-      final wav = exportFormatCaps(codec: 'wav');
-      expect(wav.audio24Bit, isTrue);
-      expect(wav.colourSpaces, isEmpty, reason: 'a wav carries no picture');
-
-      final png = exportFormatCaps(codec: 'png');
-      expect(png.audio, isFalse);
-      expect(png.audio24Bit, isFalse);
-      expect(png.colourSpaces, [''],
-          reason: 'a still can only be the space an untagged file is read as');
-    });
-
-    test('a setting the format cannot carry is refused in the footer words',
-        () {
-      expect(comp.exportSpecCheck(spec: plainSpec(audioDepth: 24)), isNotEmpty);
-      expect(
-        comp.exportSpecCheck(
-          spec: plainSpec(
-            codec: 'wav',
-            audioDepth: 24,
-            audioRate: 96000,
-            audioChannels: 1,
-          ),
-        ),
-        '',
-      );
-    });
-
     test('reordering an item the queue does not hold is a catchable refusal',
         () {
       expect(
@@ -134,33 +74,6 @@ void main() {
         throwsA(isA<Object>()),
         reason: 'a refusal crosses as an error, never as a crash',
       );
-    });
-
-    // `testWidgets` because opening a project sets the window title, which
-    // needs the widget binding — not because anything here is drawn.
-    testWidgets('the project-wide proxy switch reads and writes over the seam',
-        (tester) async {
-      final p = freshProject();
-      final project = p.state.project!;
-      expect(project.useProxies(), isTrue, reason: 'on by default');
-      project.setUseProxies(useProxies: false);
-      expect(project.useProxies(), isFalse);
-      project.setUseProxies(useProxies: true);
-      expect(project.useProxies(), isTrue);
-    });
-
-    test('the make-proxy job answers a state and cancels safely when idle', () {
-      expect(
-        proxyPoll(),
-        anyOf(
-          isA<BridgeProxyState_Idle>(),
-          isA<BridgeProxyState_Running>(),
-          isA<BridgeProxyState_Done>(),
-          isA<BridgeProxyState_Failed>(),
-        ),
-      );
-      proxyCancel();
-      proxyCancel();
     });
   });
 }

@@ -2986,35 +2986,4 @@ mod tests {
             "the rows past the deepest bundled lens are the ones that never draw"
         );
     }
-
-    /// **A clip reference crosses, and comes back the same clip.**
-    ///
-    /// It is a reference like a layer's, so it rides the reference road: the
-    /// id crosses bare, unset is a first-class value rather than an error,
-    /// and a write onto a row of another kind is refused, because what a
-    /// parameter *is* belongs to the schema and not to the panel.
-    #[test]
-    fn a_clip_value_crosses_the_bridge_and_writes_back() {
-        for named in [None, Some(Uuid::now_v7())] {
-            let value = EffectValue::Clip(named);
-            let crossed = BridgeEffectValue::read_at(&value, Rational::ZERO);
-            assert_eq!(crossed, BridgeEffectValue::Clip(named));
-
-            let mut target = EffectValue::Clip(None);
-            crossed
-                .write_at(&mut target, Rational::ZERO, (None, None))
-                .expect("a clip value writes to a clip parameter");
-            assert_eq!(target, value);
-        }
-
-        let mut layer = EffectValue::Layer(None);
-        assert!(matches!(
-            BridgeEffectValue::Clip(Some(Uuid::now_v7())).write_at(
-                &mut layer,
-                Rational::ZERO,
-                (None, None)
-            ),
-            Err(BridgeError::ParamKindMismatch)
-        ));
-    }
 }

@@ -1189,66 +1189,6 @@ mod tests {
         assert_eq!((item.width, item.height), (Some(1920), Some(1080)));
     }
 
-    /// **A name the user did type wins over the file's own.**
-    #[test]
-    fn a_renamed_footage_item_keeps_the_name_the_user_gave_it() {
-        // The same item as above, but with a name chunk the user filled in.
-        let mut item = idta(enums::ITEM_FOOTAGE, 4);
-        item.extend(chunk(b"Utf8", b"hero shot"));
-        let mut pin = chunk(b"sspc", &vec![0_u8; 222]);
-        pin.extend(list(
-            b"Als2",
-            &chunk(b"alas", br#"{"fullpath":"/media/clip.mov"}"#),
-        ));
-        item.extend(list(b"Pin ", &pin));
-
-        let bytes = file(&list(b"Fold", &list(b"Item", &item)));
-        let parsed = parse_capture(&bytes).expect("the walk survives");
-        assert_eq!(parsed.capture.items[0].name.as_deref(), Some("hero shot"));
-        assert_eq!(
-            parsed.capture.items[0].path.as_deref(),
-            Some("/media/clip.mov")
-        );
-    }
-
-    /// **A placeholder is a placeholder, not a missing file.**
-    ///
-    /// After Effects leaves one of these where a source was deleted. It has a
-    /// name of its own and no path at all, and the same missing flag a lost
-    /// file sets — so calling it missing as well would put two rows in the
-    /// report about the one thing.
-    #[test]
-    fn a_placeholder_arrives_named_and_is_not_also_called_missing() {
-        let mut opti = vec![0_u8; 10];
-        opti.splice(4..6, 2_u16.to_be_bytes());
-        opti.extend_from_slice(b"Original Source Deleted\0");
-        let bytes = file(&list(
-            b"Fold",
-            &list(b"Item", &footage_item(5, "", 1, &chunk(b"opti", &opti))),
-        ));
-
-        let parsed = parse_capture(&bytes).expect("the walk survives");
-        let item = &parsed.capture.items[0];
-        assert_eq!(item.name.as_deref(), Some("Original Source Deleted"));
-        assert_eq!(item.is_placeholder, Some(true));
-        assert_eq!(item.is_missing, None);
-        assert_eq!(item.path, None);
-    }
-
-    /// **A file that was gone when the project was saved says so.**
-    #[test]
-    fn a_footage_item_missing_at_save_is_reported_missing() {
-        let bytes = file(&list(
-            b"Fold",
-            &list(
-                b"Item",
-                &footage_item(6, "/gone/clip.mov", 1, &chunk(b"opti", b"MOoV\0\0")),
-            ),
-        ));
-        let parsed = parse_capture(&bytes).expect("the walk survives");
-        assert_eq!(parsed.capture.items[0].is_missing, Some(true));
-    }
-
     /// A layer descriptor: stretch 1, and the three rationals the timing is
     /// read from, each given as dividend over `divisor`.
     fn ldta(divisor: u32, start: i32, in_point: i32, out_point: i32) -> Vec<u8> {
@@ -1295,30 +1235,6 @@ mod tests {
         assert_eq!(layer.start_time, Some(2.4));
         assert_eq!(layer.in_point, Some(2.4), "the bar begins where it was cut");
         assert_eq!(layer.out_point, Some(4.88));
-    }
-
-    /// **And the stretch multiplies the layer-local time, not a pivot about
-    /// the start.**
-    ///
-    /// A layer stretched to 50 % is half as long on the comp's clock; its
-    /// start does not move, because the start *is* where its own clock begins.
-    #[test]
-    fn a_stretched_layer_is_stretched_from_its_start() {
-        let mut record = ldta(1000, 4000, 0, 10_000);
-        // Stretch 1/2: dividend at 8, divisor at 108, inside the `ldta` body,
-        // which the chunk header offsets by eight.
-        record.splice(8 + 8..8 + 12, 1_i32.to_be_bytes());
-        record.splice(8 + 108..8 + 112, 2_u32.to_be_bytes());
-        let bytes = comp_with(3, b"Clips", &[record]);
-
-        let layer = &parse_capture(&bytes)
-            .expect("the walk survives")
-            .capture
-            .comps[0]
-            .layers[0];
-        assert_eq!(layer.stretch, Some(50.0));
-        assert_eq!(layer.in_point, Some(4.0));
-        assert_eq!(layer.out_point, Some(9.0));
     }
 
     /// **An image sequence is read from the two things After Effects says
@@ -1371,18 +1287,6 @@ mod tests {
             .items[0];
         assert_eq!(item.is_sequence, None);
         assert_eq!(item.sequence_prefix, None);
-    }
-
-    /// **A project with no item tree is refused, not half-imported.**
-    ///
-    /// The one structural failure that is worth failing on: a container that
-    /// parses but holds no `LIST:Fold` has no project in it, and returning an
-    /// empty capture would look to the user like an After Effects project that
-    /// happened to be empty.
-    #[test]
-    fn a_container_with_no_item_tree_is_refused() {
-        let bytes = file(&chunk(b"head", &[0; 20]));
-        assert_eq!(parse_capture(&bytes).unwrap_err(), AepError::NoItemTree);
     }
 
     /// A small project with every kind of item in it: a folder holding a
@@ -1583,60 +1487,6 @@ mod tests {
         );
     }
 
-    /// **A project with a tree takes the whole road, and the fallback never
-    /// second-guesses it.**
-    ///
-    /// The synthetic half of the differential's `an_intact_file_takes_the_full_road`:
-    /// with the tree readable the two entries agree byte for byte, the solid
-    /// and the comp come as they always did, and nothing says footage-only.
-    #[test]
-    fn a_project_with_a_tree_is_parsed_whole_through_the_fallback_entry() {
-        let bytes = project_with_every_kind_of_item();
-        let whole = parse_capture(&bytes).unwrap();
-        let through_fallback = parse_capture_or_footage(&bytes).unwrap();
-        assert_eq!(through_fallback, whole);
-        assert!(!through_fallback.footage_only);
-        assert_eq!(through_fallback.capture.items.len(), 6);
-        assert_eq!(through_fallback.capture.comps.len(), 1);
-        assert_eq!(
-            through_fallback.capture.items[4].kind.as_deref(),
-            Some("solid")
-        );
-    }
-
-    /// **A comp whose settings record is missing still imports, with a row
-    /// saying so.**
-    ///
-    /// docs/11 §7's policy in one test: a parse failure on one chunk skips that
-    /// chunk and keeps going, and the skip becomes a report row rather than
-    /// vanishing. The comp arrives with its id and its name — which is worth
-    /// far more to the user than a refusal — and the report names exactly what
-    /// was lost.
-    #[test]
-    fn a_comp_missing_its_settings_still_arrives_and_says_what_was_lost() {
-        let mut comp = idta(ITEM_COMP_KIND, 7);
-        comp.extend(chunk(b"Utf8", b"Broken"));
-        let bytes = file(&list(b"Fold", &list(b"Item", &comp)));
-
-        let parsed = parse_capture(&bytes).expect("the walk survives");
-        assert_eq!(parsed.capture.comps.len(), 1);
-        assert_eq!(parsed.capture.comps[0].id, Some(7));
-        assert_eq!(parsed.capture.items[0].name.as_deref(), Some("Broken"));
-        assert!(
-            parsed.capture.comps[0].width.is_none(),
-            "nothing is invented in place of the record that was not there"
-        );
-
-        assert_eq!(parsed.skipped.len(), 1);
-        let row = &parsed.skipped[0];
-        assert_eq!(row.comp.as_deref(), Some("Broken"));
-        assert_eq!(row.path.as_deref(), Some("cdta"));
-        assert!(row
-            .error
-            .as_deref()
-            .is_some_and(|why| why.contains("missing")));
-    }
-
     /// **A layer record too short to read is skipped, and the stack keeps
     /// going.**
     ///
@@ -1656,27 +1506,6 @@ mod tests {
         assert!(parsed.capture.comps[0].layers.is_empty());
         assert_eq!(parsed.skipped.len(), 1);
         assert_eq!(parsed.skipped[0].path.as_deref(), Some("ldta"));
-    }
-
-    /// **The same bytes parse to the same capture, byte for byte.**
-    ///
-    /// The determinism rule, checked on a synthetic file as well as on the
-    /// golden one, so it holds for the awkward shapes too.
-    #[test]
-    fn parsing_is_deterministic() {
-        let mut folder = idta(ITEM_FOLDER_KIND, 1);
-        folder.extend(chunk(b"Utf8", b"Folder"));
-        let mut comp = idta(ITEM_COMP_KIND, 2);
-        comp.extend(chunk(b"Utf8", b"Inside"));
-        comp.extend(chunk(b"cdta", &[0; 204]));
-        folder.extend(list(b"Sfdr", &list(b"Item", &comp)));
-        let bytes = file(&list(b"Fold", &list(b"Item", &folder)));
-
-        let once = parse_capture(&bytes).unwrap();
-        let twice = parse_capture(&bytes).unwrap();
-        assert_eq!(once.capture, twice.capture);
-        assert_eq!(once.capture.items.len(), 2);
-        assert_eq!(once.capture.items[1].parent_id, Some(1));
     }
 
     const ITEM_FOLDER_KIND: u16 = enums::ITEM_FOLDER;

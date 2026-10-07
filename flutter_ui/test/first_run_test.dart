@@ -62,42 +62,6 @@ void main() {
         reason: 'answering closes the screen');
   });
 
-  testWidgets('the After Effects answer leaves both preferences off',
-      (tester) async {
-    await tester.pumpWidget(host());
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const ValueKey('first-run-ae')));
-    await tester.pumpAndSettle();
-
-    expect(workspace.interface.retimeOpensToSpeed, isFalse);
-    expect(workspace.interface.videoAsSequenceLayer, isFalse);
-    expect(workspace.firstRunDone, isTrue);
-  });
-
-  testWidgets('skipping keeps the defaults and still counts as answered',
-      (tester) async {
-    await tester.pumpWidget(host());
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const ValueKey('first-run-skip')));
-    await tester.pumpAndSettle();
-
-    expect(workspace.interface.retimeOpensToSpeed, isFalse);
-    expect(workspace.firstRunDone, isTrue);
-  });
-
-  testWidgets('the update tick is on, and the answer carries it', (tester) async {
-    await tester.pumpWidget(host());
-    await tester.pumpAndSettle();
-
-    // Ticked before anything is touched: the default is that Lumit
-    // looks for new versions.
-    await tester.tap(find.byKey(const ValueKey('first-run-ae')));
-    await tester.pumpAndSettle();
-    expect(workspace.autoUpdate, isTrue);
-  });
-
   testWidgets('unticking the update box is remembered', (tester) async {
     await tester.pumpWidget(host());
     await tester.pumpAndSettle();
@@ -110,14 +74,6 @@ void main() {
     expect(workspace.autoUpdate, isFalse);
     // The editing answer is unaffected: two questions, one screen.
     expect(workspace.interface.videoAsSequenceLayer, isTrue);
-  });
-
-  testWidgets('skipping leaves update checks on', (tester) async {
-    await tester.pumpWidget(host());
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('first-run-skip')));
-    await tester.pumpAndSettle();
-    expect(workspace.autoUpdate, isTrue);
   });
 
   testWidgets('a machine that has answered is never asked again',

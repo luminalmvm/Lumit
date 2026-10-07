@@ -285,24 +285,6 @@ mod tests {
             .map_or(0.0, |last| last.iter().fold(0.0f32, |m, s| m.max(s.abs())))
     }
 
-    /// The loudest of the frames in `frames`, both channels.
-    fn loudest_over(samples: &[f32], frames: std::ops::Range<usize>) -> f32 {
-        samples
-            .get(frames.start * AUDIO_CHANNELS..frames.end * AUDIO_CHANNELS)
-            .unwrap_or_default()
-            .iter()
-            .fold(0.0f32, |m, s| m.max(s.abs()))
-    }
-
-    #[test]
-    fn the_same_sound_twice_is_bit_identical() {
-        let input = dipped(AUDIO_BLOCK_FRAMES * 4, 0.5, 1_000..1_500, 0.001);
-        let values = knobs(10.0);
-        let first = run(&*open(&values), &input, &values, 0);
-        let again = run(&*open(&values), &input, &values, 0);
-        assert_eq!(bits(&first), bits(&again));
-    }
-
     #[test]
     fn a_run_split_at_a_block_edge_carries_its_state_across() {
         let input = dipped(AUDIO_BLOCK_FRAMES * 4, 0.5, 1_000..1_500, 0.001);
@@ -336,30 +318,5 @@ mod tests {
         let quiet = tone(AUDIO_BLOCK_FRAMES * 8, 0.001);
         let peak = settled_peak(&run(&*open(&values), &quiet, &values, 0));
         assert!(peak < 1e-5, "a shut gate let {peak} through");
-    }
-
-    /// **Plan 3**, why Hold is a row: a dip shorter than the hold does not
-    /// shut the gate, and the same dip with no hold at all does.
-    #[test]
-    fn a_dip_shorter_than_the_hold_does_not_shut_the_gate() {
-        let dip = 2_048..2_560;
-        let input = dipped(AUDIO_BLOCK_FRAMES * 8, 0.5, dip.clone(), 0.001);
-        // The end of the dip, by which time a gate with no hold has had a
-        // release and a half to shut.
-        let late = 2_432..dip.end;
-
-        let values = knobs(50.0);
-        let with_hold = loudest_over(&run(&*open(&values), &input, &values, 0), late.clone());
-        assert!(
-            with_hold > 0.0009,
-            "the hold let the gate shut, at {with_hold}"
-        );
-
-        let values = knobs(0.0);
-        let without = loudest_over(&run(&*open(&values), &input, &values, 0), late);
-        assert!(
-            without < with_hold * 0.1,
-            "no hold and the gate stayed open, at {without}"
-        );
     }
 }

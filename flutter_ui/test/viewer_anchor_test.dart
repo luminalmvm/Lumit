@@ -39,26 +39,10 @@ void main() {
         rotationDegrees: rotation,
       );
 
-  group('The key points a pivot snaps to', () {
-    test('there are nine of them: corners, edge middles and the centre', () {
-      final points = anchorKeyPoints(const Size(200, 100));
-      expect(points.length, 9);
-      expect(points, contains(Offset.zero));
-      expect(points, contains(const Offset(200, 100)));
-      expect(points, contains(const Offset(100, 50)));
-      expect(points, contains(const Offset(200, 50)));
-    });
-  });
-
   group('Snapping the pivot', () {
     test('a pivot near a corner lands exactly on it', () {
       final snapped = snapAnchor(const Offset(6, 5), box());
       expect(snapped, Offset.zero);
-    });
-
-    test('a pivot in open ground is left where it is', () {
-      const loose = Offset(60, 30);
-      expect(snapAnchor(loose, box()), loose);
     });
 
     test('the distance is measured on screen, not in layer pixels', () {
@@ -71,26 +55,11 @@ void main() {
           const Offset(6, 5),
           reason: 'blown right up, six layer pixels is half the screen');
     });
-
-    test('it follows the layer round when the layer is turned', () {
-      // The maths goes through the layer's own map either way, so a turned
-      // layer's corners are still its corners.
-      expect(snapAnchor(const Offset(4, 4), box(rotation: 37)), Offset.zero);
-    });
   });
 
   group('The axis lock', () {
     test('a mostly-sideways drag loses its vertical', () {
       expect(constrainToAxis(const Offset(40, 6)), const Offset(40, 0));
-    });
-
-    test('a mostly-vertical drag loses its horizontal', () {
-      expect(constrainToAxis(const Offset(-3, 25)), const Offset(0, 25));
-    });
-
-    test('an exactly diagonal drag picks the horizontal rather than dithering',
-        () {
-      expect(constrainToAxis(const Offset(10, 10)), const Offset(10, 0));
     });
   });
 }

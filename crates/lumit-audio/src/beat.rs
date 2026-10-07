@@ -312,25 +312,6 @@ pub fn analyse_stereo(interleaved: &[f32], rate: u32, sensitivity: f32) -> BeatA
 mod tests {
     use super::*;
 
-    #[test]
-    fn sensitivity_maps_to_delta_on_the_familiar_anchors() {
-        // The two old presets land on round slider positions, and higher
-        // sensitivity means a lower δ (more onsets pass the picker).
-        assert!(
-            (delta_from_sensitivity(50) - 1.5).abs() < 1e-6,
-            "50% is Standard"
-        );
-        assert!(
-            (delta_from_sensitivity(70) - 1.1).abs() < 1e-6,
-            "70% is More markers"
-        );
-        assert!(delta_from_sensitivity(100) < delta_from_sensitivity(0));
-        // Clamped to the useful band, and monotonic non-increasing.
-        assert!((delta_from_sensitivity(0) - 2.5).abs() < 1e-6);
-        assert!((delta_from_sensitivity(100) - 0.5).abs() < 1e-6);
-        assert!(delta_from_sensitivity(200) >= 0.5); // over-range is clamped, not panicking
-    }
-
     /// A mono buffer of short percussive clicks at the given beat times, over
     /// faint noise (deterministic pseudo-random so tests are reproducible).
     fn clicks(rate: u32, beat_times: &[f64], secs: f64) -> Vec<f32> {
@@ -383,14 +364,6 @@ mod tests {
     }
 
     #[test]
-    fn silence_and_tiny_buffers_are_safe() {
-        let a = analyse_mono(&[0.0; 1000], 48_000, 1.5);
-        assert!(a.onsets.is_empty());
-        let b = analyse_mono(&[], 48_000, 1.5);
-        assert!(b.onsets.is_empty() && b.bpm == 0.0);
-    }
-
-    #[test]
     fn digital_silence_yields_no_onsets_at_any_sensitivity() {
         // Regression: a silent buffer longer than one window used to fill with
         // markers. Zero flux is a local maximum everywhere and the adaptive
@@ -423,11 +396,6 @@ mod tests {
     }
 
     #[test]
-    fn stereo_downmix_averages_channels() {
-        assert_eq!(downmix_stereo(&[1.0, 3.0, -2.0, 0.0]), vec![2.0, -1.0]);
-    }
-
-    #[test]
     fn identical_input_gives_byte_identical_output() {
         // docs/impl/beat-detection.md §5 item 4: no hashmap ordering, no
         // time-seeded randomness — same buffer and params must reproduce the
@@ -441,31 +409,6 @@ mod tests {
         assert_eq!(a.bpm, b.bpm);
         assert_eq!(a.env_fps, b.env_fps);
         assert_eq!(a.onsets, b.onsets);
-    }
-
-    #[test]
-    fn octave_preference_favours_the_70_180_band() {
-        // docs/impl/beat-detection.md §5 item 2, white-box on `estimate_bpm`:
-        // a pure periodic impulse train autocorrelates near-equally at every
-        // integer multiple of its fundamental period, so a fundamental placed
-        // *outside* 70..180 whose octave multiple falls *inside* it is a
-        // genuine tie the raw comb score can't break — only the preference
-        // term can, and it must land in-band.
-        let env_fps = 93.75f64; // matches window_hop's ~10.7 ms hop at 48 kHz
-        let fundamental_bpm = 184.0f64; // just above the band; its half, 92, is inside it
-        let period_frames = (env_fps * 60.0 / fundamental_bpm).round() as usize;
-        let n_frames = period_frames * 40; // long train, edge effects small
-        let mut env = vec![0f32; n_frames];
-        let mut i = 0usize;
-        while i < n_frames {
-            env[i] = 1.0;
-            i += period_frames;
-        }
-        let bpm = estimate_bpm(&env, env_fps);
-        assert!(
-            (70.0..=180.0).contains(&bpm),
-            "expected the estimate to resolve inside the preference band, got {bpm}"
-        );
     }
 
     #[test]

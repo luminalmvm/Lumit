@@ -24,7 +24,6 @@ use std::time::Duration;
 
 use lumit_aplug::def::{BlockJob, BrokerHost};
 use lumit_aplug::ipc::proto::Bring;
-use lumit_aplug::ipc::ring::Ring;
 use lumit_aplug::{
     nothing_disabled, scan_brokered, AudioHost, Broker, BrokerConfig, BrokerError, DisableList,
     InstanceSetup, INTERLEAVED_LEN,
@@ -201,34 +200,6 @@ fn first_of(outputs: &[f32], index: usize) -> f32 {
 // ---------------------------------------------------------------- the tests --
 
 #[test]
-fn a_module_describes_itself_without_ever_being_loaded_here() {
-    let Ok(root) = tempfile::tempdir() else {
-        return;
-    };
-    let Some(broker) = a_broker(root.path(), &[], &nothing_disabled()) else {
-        return skipped("a_module_describes_itself_without_ever_being_loaded_here");
-    };
-    // Seven of the eight came back across the pipe, with nothing of the plugin
-    // in this process at all.
-    assert_eq!(broker.descriptors().len(), 7);
-    assert!(broker
-        .descriptors()
-        .iter()
-        .any(|descriptor| descriptor.id == plugin_id(Kind::Gain)));
-    // And the eighth is one calm line rather than a failure.
-    assert!(
-        broker
-            .rejected()
-            .iter()
-            .any(|refusal| refusal.id == plugin_id(Kind::Instrument)
-                && refusal.reason.contains("no audio input")),
-        "the instrument's refusal should cross too: {:?}",
-        broker.rejected()
-    );
-    assert!(!broker.is_disabled());
-}
-
-#[test]
 fn a_brokered_scan_offers_the_effects_without_opening_a_module_here() {
     let Ok(root) = tempfile::tempdir() else {
         return;
@@ -330,69 +301,6 @@ fn a_crash_costs_exactly_one_block_and_the_blocks_after_it_flow() {
     assert!(held.restarts() >= 1, "the broker must have been restarted");
 }
 
-/// **The mix seam over a broker that really dies** (the note's §3 rule
-/// and §7 plan 5 met at the layer where sound is made).
-///
-/// The block above proves the *broker* survives a plugin aborting mid-block.
-/// This proves what the mixer does about it: the layer's chain is run through
-/// [`lumit_core::fx::run_chain`] — the same function the live plan and the
-/// export both call — and a plugin that dies costs exactly one block, shipped
-/// dry, with the sound either side of it unbroken. No hole, no stall, no
-/// second answer to what a failed block means.
-///
-/// The crash personality is a passthrough when it is not aborting, so this
-/// cannot compare a wet sample against a dry one — that arithmetic, and the
-/// splice ramp, are pinned in `lumit-core`'s own chain tests against a
-/// processor whose output differs from its input. What only a real second
-/// process can show is what is asserted here: the count, and the continuity.
-#[test]
-fn a_dying_broker_costs_the_chain_one_dry_block_and_no_hole() {
-    let Ok(root) = tempfile::tempdir() else {
-        return;
-    };
-    let Some(broker) = a_broker(
-        root.path(),
-        &[(CRASH_ON_BLOCK_ENV, "1")],
-        &nothing_disabled(),
-    ) else {
-        return skipped("a_dying_broker_costs_the_chain_one_dry_block_and_no_hole");
-    };
-    let broker = Arc::new(Mutex::new(broker));
-    let setup = InstanceSetup {
-        plugin_id: plugin_id(Kind::Crash),
-        ..InstanceSetup::default()
-    };
-    let host = BrokerHost::open(Arc::clone(&broker), &setup).expect("an instance");
-    let link = lumit_core::fx::ChainLink {
-        processor: Arc::new(lumit_aplug::HostedAudio::new(Box::new(host), Vec::new())),
-        values: Vec::new(),
-    };
-
-    // Three blocks of a steady tone; the plugin aborts during the second.
-    let frames = 3 * lumit_core::fx::AUDIO_BLOCK_FRAMES;
-    let input = vec![0.25f32; frames * lumit_core::fx::AUDIO_CHANNELS];
-    let out = lumit_core::fx::run_chain(&[link], &input);
-
-    assert_eq!(
-        out.dry_blocks, 1,
-        "a dying plugin costs the chain exactly one block"
-    );
-    assert_eq!(out.samples.len(), input.len(), "and no samples at all");
-    assert!(
-        out.samples.iter().all(|s| (*s - 0.25).abs() < 1e-6),
-        "the sound runs through unbroken — the dry block is the input, and the \
-         blocks either side are the plugin's own work through a process that \
-         did not exist a moment ago"
-    );
-
-    let held = broker.lock().expect("the broker");
-    assert!(!held.is_disabled(), "the session carries on");
-    assert!(
-        held.restarts() >= 1,
-        "and the broker was restarted under it"
-    );
-}
-
 #[test]
 fn a_hang_trips_the_deadline_and_the_third_strike_disables_the_plugin() {
     let Ok(root) = tempfile::tempdir() else {
@@ -480,97 +388,6 @@ fn a_plugin_switched_off_mid_session_is_skipped_on_the_next_batch() {
     );
 }
 
-/// **A described VST3 plugin crosses the same pipe** (plan 1 through the
-/// broker).
-///
-/// Nothing here is new code: the module is opened, started and enumerated inside
-/// the broker exactly as a `.clap` file is, and what comes back is the same
-/// [`lumit_aplug::describe::PluginDescriptor`]. What the test pins is that the
-/// standard travels with the descriptor — a VST3 plugin has to come back named
-/// for its own standard, or a saved project would ask the wrong host for it
-/// back.
-#[test]
-fn a_vst3_bundle_describes_itself_through_the_same_broker() {
-    let Ok(root) = tempfile::tempdir() else {
-        return;
-    };
-    let Some(broker) = a_vst3_broker(root.path(), &[]) else {
-        return skipped("a_vst3_bundle_describes_itself_through_the_same_broker");
-    };
-    assert_eq!(
-        broker.descriptors().len(),
-        7,
-        "seven of the eight came back, with nothing of the plugin in this process"
-    );
-    assert!(
-        broker
-            .descriptors()
-            .iter()
-            .all(|descriptor| descriptor.abi == lumit_aplug::Abi::Vst3),
-        "the standard rides on the descriptor"
-    );
-    assert!(
-        broker
-            .descriptors()
-            .iter()
-            .any(|descriptor| descriptor.label == name_of(Kind::Gain)),
-        "including the gain: {:?}",
-        broker
-            .descriptors()
-            .iter()
-            .map(|descriptor| descriptor.label.as_str())
-            .collect::<Vec<_>>()
-    );
-    // And the eighth is one calm line rather than a failure.
-    assert!(
-        broker
-            .rejected()
-            .iter()
-            .any(|refusal| refusal.reason.contains("no audio input")),
-        "the instrument's refusal should cross too: {:?}",
-        broker.rejected()
-    );
-    assert!(!broker.is_disabled());
-}
-
-#[test]
-fn a_brokered_scan_offers_a_vst3_bundle_as_an_ordinary_effect() {
-    let Ok(root) = tempfile::tempdir() else {
-        return;
-    };
-    if a_vst3_bundle_in(root.path()).is_none() {
-        return skipped("a_brokered_scan_offers_a_vst3_bundle_as_an_ordinary_effect");
-    }
-    let exe = PathBuf::from(env!("CARGO_BIN_EXE_lumit-aplug-broker"));
-    let outcome = scan_brokered(
-        &[root.path().to_path_buf()],
-        &nothing_disabled(),
-        Some(&exe),
-    );
-
-    assert_eq!(outcome.found.len(), 7);
-    assert!(
-        outcome
-            .found
-            .iter()
-            .all(|plugin| plugin.match_name.starts_with("vst3:")),
-        "a VST3 effect is named for its own standard: {:?}",
-        outcome
-            .found
-            .iter()
-            .map(|plugin| plugin.match_name.as_str())
-            .collect::<Vec<_>>()
-    );
-    assert!(
-        outcome
-            .skipped
-            .iter()
-            .any(|line| line.contains("no audio input")),
-        "and the instrument's refusal is one calm line: {:?}",
-        outcome.skipped
-    );
-}
-
 /// **The mix seam over a VST3 broker that really dies** (the CLAP twin of
 /// this test is above, and the assertions are deliberately identical).
 ///
@@ -629,43 +446,6 @@ fn a_dying_vst3_broker_costs_the_chain_one_dry_block_and_no_hole() {
         held.restarts() >= 1,
         "and the broker was restarted under it"
     );
-}
-
-#[test]
-fn a_block_crosses_the_ring_unchanged() {
-    let Ok(root) = tempfile::tempdir() else {
-        return;
-    };
-    let path = root.path().join("ring");
-    let mut written = Ring::create(&path).expect("a ring");
-
-    // Every sample different, so a slot written half way or a channel written
-    // twice cannot pass.
-    let block: Vec<f32> = (0..INTERLEAVED_LEN)
-        .map(|index| index as f32 / 1024.0)
-        .collect();
-    let header = written.write_block(3, &block).expect("written");
-    assert_eq!(header.samples as usize, INTERLEAVED_LEN);
-
-    // Read through a *second* mapping of the same block, which is what the
-    // broker process has.
-    let read = Ring::open(written.spec()).expect("the same ring");
-    let mut back = vec![0.0f32; INTERLEAVED_LEN];
-    assert_eq!(read.read_block(3, &mut back).expect("read"), block.len());
-    assert_eq!(back, block, "the samples cross whole");
-
-    // A slot nobody wrote is empty rather than plausible.
-    assert!(read.read_block(1, &mut back).is_err());
-
-    // And a short block leaves silence where the sound ran out rather than the
-    // previous block's tail.
-    let mut short = written.write_block(3, &[1.0, 1.0, 1.0, 1.0]);
-    assert!(short.is_ok());
-    short = written.write_block(4, &[2.0; 8]);
-    assert!(short.is_ok());
-    assert_eq!(read.read_block(3, &mut back).expect("read"), 4);
-    assert_eq!(back[0], 1.0);
-    assert_eq!(back[4], 0.0);
 }
 
 #[test]

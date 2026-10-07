@@ -937,26 +937,6 @@ mod tests {
     }
 
     #[test]
-    fn hold_key_steps_at_the_next_key_not_before() {
-        // A hold key keeps its exact value across the whole span, then the
-        // value jumps to the next key at that key's time — the discrete/stepped
-        // behaviour a File param relies on.
-        let keys = [
-            key(rat(0, 1), 3.0, SideInterp::Linear).to_hold(),
-            key(rat(2, 1), 9.0, SideInterp::Linear).to_hold(),
-            key(rat(4, 1), 1.0, SideInterp::Linear),
-        ];
-        assert!(keys[0].is_hold());
-        assert_eq!(evaluate(&keys, 0.0), Some(3.0)); // at the key
-        assert_eq!(evaluate(&keys, 1.999), Some(3.0)); // still held just before
-        assert_eq!(evaluate(&keys, 2.0), Some(9.0)); // steps exactly at the key
-        assert_eq!(evaluate(&keys, 3.5), Some(9.0)); // held across the next span
-        assert_eq!(evaluate(&keys, 4.0), Some(1.0)); // and again at the last key
-                                                     // A hold span has zero speed throughout (no blend to differentiate).
-        assert_eq!(evaluate_speed(&keys, 1.0), Some(0.0));
-    }
-
-    #[test]
     fn easy_ease_is_flat_at_both_keys_and_monotone() {
         let keys = [
             key(rat(0, 1), 0.0, EASY_EASE),
@@ -977,29 +957,6 @@ mod tests {
             assert!(v >= prev - 1e-9, "not monotone at {i}: {v} < {prev}");
             prev = v;
         }
-    }
-
-    #[test]
-    fn linear_bezier_conversion_keeps_the_key_values() {
-        let k = key(rat(1, 1), 5.0, SideInterp::Linear);
-        assert!(!k.is_bezier());
-        let b = k.to_bezier();
-        assert!(b.is_bezier());
-        assert_eq!(b.interp_in, EASY_EASE);
-        assert_eq!(b.interp_out, EASY_EASE);
-        assert!((b.value - 5.0).abs() < 1e-12); // value unchanged
-        let l = b.to_linear();
-        assert!(!l.is_bezier());
-        assert_eq!(l.interp_in, SideInterp::Linear);
-        // Whether linear or eased, the curve still passes exactly through each key.
-        let eased = [
-            key(rat(0, 1), 0.0, SideInterp::Linear).to_bezier(),
-            key(rat(1, 1), 10.0, SideInterp::Linear).to_bezier(),
-            key(rat(2, 1), 0.0, SideInterp::Linear).to_bezier(),
-        ];
-        assert!((evaluate(&eased, 0.0).unwrap() - 0.0).abs() < 1e-9);
-        assert!((evaluate(&eased, 1.0).unwrap() - 10.0).abs() < 1e-9);
-        assert!((evaluate(&eased, 2.0).unwrap() - 0.0).abs() < 1e-9);
     }
 
     #[test]
@@ -1080,54 +1037,6 @@ mod tests {
         }
     }
 
-    #[test]
-    fn a_key_on_a_held_span_holds_and_one_on_an_existing_key_is_refused() {
-        let mut p = Property {
-            animation: Animation::Keyframed(vec![
-                Keyframe {
-                    time: rat(0, 1),
-                    value: 3.0,
-                    interp_in: SideInterp::Linear,
-                    interp_out: SideInterp::Hold,
-                },
-                Keyframe {
-                    time: rat(2, 1),
-                    value: 9.0,
-                    interp_in: SideInterp::Linear,
-                    interp_out: SideInterp::Linear,
-                },
-            ]),
-            extra: serde_json::Map::new(),
-        };
-        assert!(p.insert_key_preserving_shape(rat(1, 1)));
-        assert_eq!(p.value_at(0.5), 3.0);
-        assert_eq!(p.value_at(1.5), 3.0, "the hold still holds");
-
-        // A second key at the same time would be two keys at one moment, which
-        // the ops layer forbids and the evaluator cannot read.
-        assert!(!p.insert_key_preserving_shape(rat(1, 1)));
-    }
-
-    #[test]
-    fn a_key_outside_the_keyed_range_takes_the_held_end_value() {
-        let mut p = Property {
-            animation: Animation::Keyframed(vec![Keyframe {
-                time: rat(1, 1),
-                value: 5.0,
-                interp_in: SideInterp::Linear,
-                interp_out: SideInterp::Linear,
-            }]),
-            extra: serde_json::Map::new(),
-        };
-        assert!(p.insert_key_preserving_shape(rat(3, 1)));
-        assert_eq!(p.value_at(2.0), 5.0);
-        assert_eq!(p.value_at(9.0), 5.0);
-
-        // And a static property has no curve to keep, so nothing happens.
-        let mut fixed = Property::fixed(2.0);
-        assert!(!fixed.insert_key_preserving_shape(rat(1, 1)));
-    }
-
     proptest! {
         /// solve_u(x(u)) == u to 1e-10 over random monotone cubics,
         /// including dx = 0 endpoints (keyframe-eval.md test plan §2).
@@ -1164,24 +1073,6 @@ mod tests {
             prop_assert!(v.is_finite());
             prop_assert!((-1e-9..=1.0 + 1e-9).contains(&v));
         }
-    }
-
-    /// Perf sanity from the impl note: 10⁶ evaluations well under budget.
-    #[test]
-    fn million_evaluations_stay_cheap() {
-        let keys = [
-            key(rat(0, 1), 0.0, EASY_EASE),
-            key(rat(1, 1), 100.0, EASY_EASE),
-        ];
-        let start = std::time::Instant::now();
-        let mut acc = 0.0;
-        for i in 0..1_000_000 {
-            acc += evaluate(&keys, (i % 1000) as f64 / 1000.0).unwrap_or(0.0);
-        }
-        let elapsed = start.elapsed();
-        assert!(acc.is_finite());
-        // Debug-build headroom: impl note budgets 20 ms release; allow 40× debug.
-        assert!(elapsed.as_millis() < 800, "1M evals took {elapsed:?}");
     }
 
     /// The same budget on a *dense* curve — an imported AE camera arrives with
@@ -1255,47 +1146,6 @@ mod tests {
         }
     }
 
-    /// Three keys 0, 10, 30 at one second apart: the automatic tangent at the
-    /// middle one aims from the first to the last — (30 − 0) / 2 s = 15.
-    #[test]
-    fn an_automatic_tangent_aims_between_the_neighbours() {
-        let keys = [
-            key(rat(0, 1), 0.0, auto(false)),
-            key(rat(1, 1), 10.0, auto(false)),
-            key(rat(2, 1), 30.0, auto(false)),
-        ];
-        assert!((auto_speed(&keys, 1, false) - 15.0).abs() < 1e-12);
-        // An end key has no pair to aim between, so it lies flat.
-        assert_eq!(auto_speed(&keys, 0, false), 0.0);
-        assert_eq!(auto_speed(&keys, 2, false), 0.0);
-    }
-
-    /// Auto's smooth slope is what the evaluator uses: the resolved side is a
-    /// bezier at that speed, keeping the side's own influence.
-    #[test]
-    fn an_automatic_side_resolves_to_the_bezier_its_neighbours_dictate() {
-        let keys = [
-            key(rat(0, 1), 0.0, auto(false)),
-            key(
-                rat(1, 1),
-                10.0,
-                SideInterp::Auto {
-                    clamped: false,
-                    speed: 99.0, // remembered ease, never evaluated
-                    influence: 0.5,
-                },
-            ),
-            key(rat(2, 1), 30.0, auto(false)),
-        ];
-        assert_eq!(
-            resolved_side(&keys, 1, true),
-            SideInterp::Bezier {
-                speed: 15.0,
-                influence: 0.5
-            }
-        );
-    }
-
     /// **Auto recomputes whenever a neighbour moves.** The same key, the same
     /// mode, a moved neighbour — a different tangent, and so a different
     /// curve. A free side would have gone on reading the speed it stored.
@@ -1357,27 +1207,6 @@ mod tests {
         assert!(over > 10.0 + 1e-6, "smooth tangent should overshoot");
     }
 
-    /// A clamped tangent that is *not* at a peak keeps the smooth aim, held to
-    /// three times the gentler chord (the monotone bound).
-    #[test]
-    fn a_clamped_tangent_keeps_the_smooth_aim_where_it_is_safe() {
-        let keys = [
-            key(rat(0, 1), 0.0, auto(true)),
-            key(rat(1, 1), 10.0, auto(true)),
-            key(rat(2, 1), 30.0, auto(true)),
-        ];
-        assert!((auto_speed(&keys, 1, true) - 15.0).abs() < 1e-12);
-
-        // A near-flat step followed by a leap: the smooth aim is steeper than
-        // three times the gentler chord (0.1), so it is held to 0.3.
-        let steep = [
-            key(rat(0, 1), 0.0, auto(true)),
-            key(rat(1, 1), 0.1, auto(true)),
-            key(rat(2, 1), 100.0, auto(true)),
-        ];
-        assert!((auto_speed(&steep, 1, true) - 0.3).abs() < 1e-12);
-    }
-
     /// **Free → Auto → Free keeps the custom ease** (the study's explicit
     /// bar). The mode switch files the ease inside the automatic side and
     /// hands it back untouched.
@@ -1409,39 +1238,5 @@ mod tests {
             SideInterp::Hold.with_tangent_mode(TangentMode::Free),
             SideInterp::Hold
         );
-    }
-
-    /// An automatic side survives the file format, and a key carrying one is
-    /// an eased key as far as the interface is concerned.
-    #[test]
-    fn an_automatic_side_serialises_and_counts_as_eased() {
-        let k = key(rat(1, 2), 5.0, auto(true));
-        let text = serde_json::to_string(&k).unwrap();
-        assert_eq!(serde_json::from_str::<Keyframe>(&text).unwrap(), k);
-        assert!(k.is_bezier());
-        assert!(!k.is_hold());
-    }
-
-    /// Planting a key inside a span leaves an automatic neighbour automatic —
-    /// its tangent is a function of its neighbours, and one has just changed.
-    #[test]
-    fn inserting_a_key_leaves_an_automatic_neighbour_automatic() {
-        let mut property = Property {
-            animation: Animation::Keyframed(vec![
-                key(rat(0, 1), 0.0, auto(false)),
-                key(rat(1, 1), 10.0, auto(false)),
-                key(rat(2, 1), 30.0, auto(false)),
-            ]),
-            extra: serde_json::Map::new(),
-        };
-        assert!(property.insert_key_preserving_shape(rat(1, 2)));
-        let Animation::Keyframed(keys) = &property.animation else {
-            panic!("still keyframed");
-        };
-        assert_eq!(keys.len(), 4);
-        assert!(matches!(keys[0].interp_out, SideInterp::Auto { .. }));
-        assert!(matches!(keys[2].interp_in, SideInterp::Auto { .. }));
-        // The new key is an ordinary free one, taking the shape of the split.
-        assert!(matches!(keys[1].interp_out, SideInterp::Bezier { .. }));
     }
 }

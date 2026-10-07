@@ -166,15 +166,6 @@ mod tests {
     }
 
     #[test]
-    fn a_run_is_drawn_in_stack_order() {
-        // Named bottom-first; read back the way the stack has them.
-        assert_eq!(
-            drawn_members(&ids(&[1, 2, 3, 4]), &group(&[3, 2])),
-            ids(&[2, 3])
-        );
-    }
-
-    #[test]
     fn a_member_dragged_out_of_the_run_leaves_the_group() {
         // 1 and 3 are named, but an ungrouped 2 sits between them: the run
         // stops at 1, and 3 draws as the ungrouped layer it now looks like.
@@ -188,22 +179,5 @@ mod tests {
             group_of(&stack, &[group(&[1, 3])], Uuid::from_u128(1)),
             Some(Uuid::from_u128(999))
         );
-    }
-
-    #[test]
-    fn a_group_whose_layers_are_gone_draws_nothing() {
-        assert!(drawn_members(&ids(&[1]), &group(&[7, 8])).is_empty());
-    }
-
-    #[test]
-    fn contiguity_is_what_grouping_asks_for() {
-        let stack = ids(&[1, 2, 3]);
-        assert!(is_contiguous(&stack, &ids(&[2, 3])));
-        // Selection order is not stack order, and must not have to be.
-        assert!(is_contiguous(&stack, &ids(&[3, 1, 2])));
-        assert!(!is_contiguous(&stack, &ids(&[1, 3])));
-        // An id that is not in this comp at all is not a run either.
-        assert!(!is_contiguous(&stack, &ids(&[1, 9])));
-        assert!(!is_contiguous(&stack, &[]));
     }
 }

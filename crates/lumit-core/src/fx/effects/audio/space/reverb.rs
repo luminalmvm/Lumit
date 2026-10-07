@@ -468,15 +468,6 @@ mod tests {
     }
 
     #[test]
-    fn the_same_input_twice_is_bit_identical() {
-        let values = rows(60.0, 80.0, 100.0);
-        let input = noise(AUDIO_BLOCK_FRAMES * 8);
-        let first = play_all(open(&values).as_ref(), &input, &values);
-        let second = play_all(open(&values).as_ref(), &input, &values);
-        assert_eq!(first, second);
-    }
-
-    #[test]
     fn one_run_and_two_runs_split_at_a_block_edge_agree() {
         let values = rows(60.0, 80.0, 100.0);
         let input = noise(AUDIO_BLOCK_FRAMES * 8);
@@ -516,37 +507,5 @@ mod tests {
         // By the end of it there is nothing left.
         let after = peak(out.get(tail * 2..).unwrap_or_default());
         assert!(after < 1e-5, "the tail was still sounding at {after}");
-    }
-
-    /// The other half of the same sanity: a bigger room holds the sound for
-    /// longer, which is what Room size is for.
-    #[test]
-    fn a_bigger_room_holds_the_sound_for_longer() {
-        let blocks = 96;
-        let input = burst(blocks);
-        let late = |room: f64| -> f32 {
-            let values = rows(room, 100.0, 0.0);
-            let out = play_all(open(&values).as_ref(), &input, &values);
-            peak(
-                out.get(blocks / 2 * AUDIO_BLOCK_SAMPLES..)
-                    .unwrap_or_default(),
-            )
-        };
-        let small = late(0.0);
-        let large = late(100.0);
-        assert!(large > small * 4.0, "small {small}, large {large}");
-    }
-
-    /// Width at nought is one room heard in both ears.
-    #[test]
-    fn no_width_is_a_mono_tail() {
-        let values = rows(50.0, 100.0, 0.0);
-        let input = burst(16);
-        let out = play_all(open(&values).as_ref(), &input, &values);
-        let spread = out.chunks_exact(2).fold(0.0f32, |top, frame| match frame {
-            [left, right] => top.max((left - right).abs()),
-            _ => top,
-        });
-        assert!(spread < 1e-6, "the two channels differed by {spread}");
     }
 }

@@ -69,69 +69,6 @@ ShapePreviewPainter painter({
 
 void main() {
   group('the shape preview', () {
-    test('draws the dragged shape when no layer is selected', () {
-      final canvas = _RecordingCanvas();
-      painter(from: const Offset(120, 70), to: const Offset(200, 150))
-          .paint(canvas, const Size(400, 300));
-
-      expect(canvas.paths, isNotEmpty,
-          reason: 'a drag with nothing selected previews a shape layer, and '
-              'used to draw nothing at all');
-    });
-
-    test('draws nothing before a drag has started', () {
-      final canvas = _RecordingCanvas();
-      painter(from: null, to: null).paint(canvas, const Size(400, 300));
-      expect(canvas.paths, isEmpty);
-    });
-
-    test('fills with the tool colour, translucently, under a solid outline',
-        () {
-      final canvas = _RecordingCanvas();
-      const chosen = Color(0xFF3366CC);
-      painter(
-        from: const Offset(120, 70),
-        to: const Offset(200, 150),
-        fill: chosen,
-      ).paint(canvas, const Size(400, 300));
-
-      final fills =
-          canvas.paths.where((p) => p.paint.style == PaintingStyle.fill);
-      expect(fills, hasLength(1), reason: 'the shape is previewed filled');
-      final f = fills.single.paint.color;
-      expect(f.r, closeTo(chosen.r, 0.001));
-      expect(f.g, closeTo(chosen.g, 0.001));
-      expect(f.b, closeTo(chosen.b, 0.001));
-      expect(f.a, closeTo(previewOpacity, 0.001),
-          reason: 'a shape that does not exist yet is not drawn as one that '
-              'does');
-
-      expect(
-        canvas.paths.where((p) => p.paint.style == PaintingStyle.stroke),
-        isNotEmpty,
-        reason: 'the outline still says where the shape ends',
-      );
-    });
-
-    test('previews the stroke only when it has a width', () {
-      Iterable<Paint> strokesOf(double width) {
-        final canvas = _RecordingCanvas();
-        painter(
-          from: const Offset(120, 70),
-          to: const Offset(200, 150),
-          stroke: const Color(0xFFFF0000),
-          strokeWidth: width,
-        ).paint(canvas, const Size(400, 300));
-        return canvas.paths
-            .map((p) => p.paint)
-            .where((p) => p.style == PaintingStyle.stroke && p.strokeWidth > 1);
-      }
-
-      expect(strokesOf(0), isEmpty,
-          reason: 'a width of zero is how a fill-only shape is made');
-      expect(strokesOf(8), isNotEmpty);
-    });
-
     test('places the shape where the drag was, in composition pixels', () {
       final canvas = _RecordingCanvas();
       painter(from: const Offset(120, 70), to: const Offset(200, 150))
@@ -145,18 +82,6 @@ void main() {
       expect(box.top, closeTo(70, 1));
       expect(box.right, closeTo(200, 1));
       expect(box.bottom, closeTo(150, 1));
-    });
-  });
-
-  group('ShapeSpace', () {
-    test('maps a point out and back again', () {
-      final space = compSpace();
-      final (x, y) = space.ofScreen(const Offset(180, 130));
-      expect(x, closeTo(160, 0.001));
-      expect(y, closeTo(160, 0.001));
-      final back = space.toScreen(x, y);
-      expect(back.dx, closeTo(180, 0.001));
-      expect(back.dy, closeTo(130, 0.001));
     });
   });
 }

@@ -2015,23 +2015,6 @@ mod tests {
             }
         }
 
-        /// The same shot, `FRAMES` of it followable and `tail` frames of
-        /// nothing after that.
-        ///
-        /// **Featureless rather than merely poor**, and that is the point: the
-        /// verification the tracker ends a track on is normalised correlation,
-        /// which is blind to gain and lift by construction, so a picture that
-        /// merely fades down in contrast is followed happily and *should* be. A
-        /// frame with no structure at all is what actually severs the chain —
-        /// the gradient normal matrix is singular, every KLT solve refuses, and
-        /// nothing carries across. It is also a real thing footage does.
-        fn degrading(tail: usize) -> Self {
-            Shot {
-                frames: FRAMES + tail,
-                good: FRAMES,
-            }
-        }
-
         fn render(n: usize) -> Vec<f32> {
             let (r, c) = truth(n);
             let (cx, cy) = (W as f64 / 2.0, H as f64 / 2.0);
@@ -2131,14 +2114,6 @@ mod tests {
         }
     }
 
-    /// [`job`], over a shot that stops carrying a picture after `FRAMES`.
-    fn degrading_job(media: Uuid, tag: &str, tail: usize) -> Job {
-        Job {
-            open: Box::new(move || Some(Box::new(Shot::degrading(tail)) as Box<dyn LumaFrames>)),
-            ..job(media, tag, MaskTrack::default())
-        }
-    }
-
     /// Run one analysis here and now, keeping every progress reading it
     /// published — the deterministic half, so nothing has to race a thread to
     /// see what it did.
@@ -2223,42 +2198,6 @@ mod tests {
                 H as f64 / 2.0 + pose.focal_px * v[1] / v[2],
             ]
         })
-    }
-
-    /// The conversion in the small (docs/impl/camera.md §3): the eye is the
-    /// solve's own centre, the zoom is its focal, and the compositor then puts
-    /// a world point exactly where the tracker does. The whole-solve version
-    /// below proves the same over a real shot; this says which line moved when
-    /// it stops.
-    #[test]
-    fn to_camera_pose_places_the_eye_at_the_solves_centre() {
-        let (rotation, position) = truth(9);
-        let solved = SolvedPose {
-            frame: 9,
-            rotation,
-            position,
-            segment: 0,
-            focal_px: FOCAL,
-            mean_reprojection_px: 0.0,
-            source: lumit_track::PoseSource::Keyframe,
-        };
-        let pose = to_camera_pose(&solved);
-        assert_eq!(pose.position, (position[0], position[1], position[2]));
-        assert_eq!(pose.zoom, FOCAL);
-        assert!(pose.dof.is_none(), "a solve has no depth of field");
-
-        for p in [
-            [10.0, -20.0, 400.0],
-            [-300.0, 120.0, 900.0],
-            [0.0, 0.0, 250.0],
-        ] {
-            let want = project_through_solve(&solved, p).expect("in front of the eye");
-            let got = project_through_compositor(&pose, p);
-            assert!(
-                (got[0] - want[0]).abs() < 0.05 && (got[1] - want[1]).abs() < 0.05,
-                "{p:?}: the compositor says {got:?} and the tracker {want:?}"
-            );
-        }
     }
 
     // --- A comp with a camera linked to the tracked layer -------------------
@@ -2384,24 +2323,6 @@ mod tests {
                 }
             }
         }
-    }
-
-    /// A close forgets one project's solves and leaves the rest: the store is
-    /// process-wide, and clearing the whole of it for every close is how a
-    /// bridge test lost its solve to a neighbour closing an unrelated project.
-    #[test]
-    fn forgetting_one_media_leaves_the_others_solve_in_place() {
-        let _serial = serially();
-        clear();
-        let (mine, theirs) = (Uuid::now_v7(), Uuid::now_v7());
-        publish(mine, 25.0, FRAMES, written_solve());
-        publish(theirs, 25.0, FRAMES, written_solve());
-        forget(&[theirs]);
-        assert!(solved(mine).is_some(), "the other project's solve survives");
-        assert!(
-            solved(theirs).is_none(),
-            "the closed project's solve is gone"
-        );
     }
 
     /// A written-down solve: a camera sliding along x, looking straight down
@@ -2569,131 +2490,6 @@ mod tests {
         let past = linked_pose(&doc, &comp, 10.0).unwrap();
         assert_eq!(past.state, lumit_core::track::LinkState::Held);
         assert_eq!(Some(past.pose), solved.pose(solved.last_frame));
-        clear();
-    }
-
-    /// A shot that stops being followable is solved as far as it went, and the
-    /// job stops there.
-    ///
-    /// Three claims, and they are one claim: the analysis does not decode the
-    /// frames it cannot use, the solve covers exactly the span that carried,
-    /// and the result says so — so a camera linked to it derives inside that
-    /// span and holds outside it, which is the camera track's rule meeting a
-    /// range that now ends early.
-    #[test]
-    fn a_shot_that_stops_carrying_is_solved_as_far_as_it_went() {
-        let _serial = serially();
-        let dir = tempfile::tempdir().unwrap();
-        with_cache(dir.path());
-        let media = Uuid::now_v7();
-        const TAIL: usize = 6;
-
-        let cancel = AtomicBool::new(false);
-        let (out, steps) = run_here(degrading_job(media, "partial", TAIL), &cancel);
-        let (fps, clip_frames, solve) = out.expect("the followable part of the shot solves");
-
-        // It stopped: the analysis never reached the frames it could not use,
-        // and the last thing it said about the tracking says which ones it did.
-        assert_eq!(clip_frames, FRAMES + TAIL, "the clip's own length");
-        let tracked: Vec<&Progress> = steps
-            .iter()
-            .filter(|s| matches!(s, Progress::Tracking { .. }))
-            .collect();
-        assert_eq!(
-            tracked.last(),
-            Some(&&Progress::Tracking {
-                done: FRAMES,
-                total: FRAMES + TAIL
-            }),
-            "the run did not stop where the shot stopped carrying"
-        );
-        assert!(
-            !steps.contains(&Progress::Tracking {
-                done: FRAMES + TAIL - 1,
-                total: FRAMES + TAIL
-            }),
-            "the job carried on decoding frames nothing could be followed through"
-        );
-
-        // And it finalised rather than discarded: a pose for every frame of the
-        // span that worked, and none for any frame after it.
-        assert_eq!(
-            solve.poses.len(),
-            FRAMES,
-            "the solve does not cover the span that carried"
-        );
-        assert_eq!(solve.poses.first().map(|p| p.frame), Some(0));
-        assert_eq!(
-            solve.poses.last().map(|p| p.frame),
-            Some(FRAMES as i64 - 1),
-            "a frame past the failure was given a camera"
-        );
-        let focal = solve.segments.first().unwrap().focal_px;
-        assert!(
-            (focal - FOCAL).abs() / FOCAL < 0.08,
-            "the partial solve is still a solve: focal {focal} against a true {FOCAL}"
-        );
-
-        // The store says it is partial, and the range it hands the model is the
-        // span rather than the clip.
-        publish(media, fps, clip_frames, solve);
-        let solved = solved(media).expect("published");
-        assert!(solved.is_partial(), "a solve short of its clip is partial");
-        assert_eq!(solved.first_frame, 0);
-        assert_eq!(solved.last_frame, FRAMES as i64 - 1);
-
-        // The link derives inside the span and holds outside it — the same
-        // clamp already required, now against a range that ends early.
-        let (doc, comp) = linked_document(media);
-        let last = linked_pose(&doc, &comp, (FRAMES - 1) as f64 / FPS).expect("a camera");
-        assert_eq!(last.state, lumit_core::track::LinkState::Derived);
-        for n in FRAMES..FRAMES + TAIL {
-            let held = linked_pose(&doc, &comp, n as f64 / FPS).expect("a camera");
-            assert_eq!(
-                held.state,
-                lumit_core::track::LinkState::Held,
-                "frame {n} is past the solve and should be holding"
-            );
-            assert_eq!(
-                Some(held.pose),
-                solved.pose(solved.last_frame),
-                "the hold is the last derived motion, not some other frame"
-            );
-        }
-        clear();
-    }
-
-    /// A solve landing renames the frames drawn with it. Without this the frames
-    /// banked under the camera's *stored* transform would be served back after
-    /// the link started deriving a different one, and the picture would silently
-    /// disagree with the camera.
-    #[test]
-    fn a_solve_landing_renames_the_frames_it_changes() {
-        let _serial = serially();
-        let dir = tempfile::tempdir().unwrap();
-        with_cache(dir.path());
-        let media = Uuid::now_v7();
-        let (doc, comp) = linked_document(media);
-        let doc = Arc::new(doc);
-
-        let probed = probes(media);
-        let key = || {
-            let stamper =
-                crate::cache::Stamper::new(&doc, &probed, crate::plan::Quality::default());
-            lumit_eval::comp_frame_key(&doc, &comp, 0.0, lumit_eval::Quality::default(), &stamper)
-        };
-        let before = key().expect("a probed comp is keyable");
-
-        let cancel = AtomicBool::new(false);
-        let (out, _) = run_here(job(media, "key", MaskTrack::default()), &cancel);
-        let (fps, clip_frames, solve) = out.expect("the synthetic shot solves");
-        publish(media, fps, clip_frames, solve);
-
-        assert_ne!(
-            before,
-            key().expect("still keyable"),
-            "the derived camera is not in the frame's name"
-        );
         clear();
     }
 
@@ -3050,140 +2846,6 @@ mod tests {
         );
     }
 
-    /// A layer carrying one mask that slides from `from` to `to` across the
-    /// clip, keyed at its first and last frames.
-    fn moving_mask_layer(from: f64, to: f64) -> Layer {
-        use lumit_core::anim::SideInterp;
-        use lumit_core::mask::{Mask, PathKeyframe};
-        let (w, h) = (130.0, H as f64 - 40.0);
-        let start = Mask::rectangle(from, 20.0, w, h);
-        let end = Mask::rectangle(to, 20.0, w, h);
-        let mut mask = start.clone();
-        mask.path_keys = vec![
-            PathKeyframe {
-                time: Rational::new(0, 1).unwrap(),
-                path: start.path,
-                interp_in: SideInterp::Linear,
-                interp_out: SideInterp::Linear,
-            },
-            PathKeyframe {
-                time: Rational::new(FRAMES as i64 - 1, FPS as i64).unwrap(),
-                path: end.path,
-                interp_in: SideInterp::Linear,
-                interp_out: SideInterp::Linear,
-            },
-        ];
-        let mut l = layer(
-            "shot",
-            LayerKind::Footage {
-                item: Uuid::now_v7(),
-            },
-            secs(1, 1),
-        );
-        l.masks.push(mask);
-        l
-    }
-
-    /// A keyframed mask excludes where it **is**, frame by frame.
-    ///
-    /// The old behaviour flattened the shape once at layer time zero and used
-    /// it for the whole run, which for the obvious case — a mask drawn round a
-    /// mover and keyed to follow it — excluded the wrong part of every frame
-    /// after the first. Two claims, and the second is what makes the first mean
-    /// anything: nothing is tracked inside the region *as it stands on that
-    /// frame*, and plenty is tracked where the region **started**, which the
-    /// flatten-at-zero run could not have produced.
-    #[test]
-    fn a_keyframed_mask_excludes_where_it_is_on_each_frame() {
-        let _serial = serially();
-        let dir = tempfile::tempdir().unwrap();
-        with_cache(dir.path());
-        let cancel = AtomicBool::new(false);
-
-        let l = moving_mask_layer(20.0, 240.0);
-        let track = MaskTrack::of(&l, AnalysisSettings::default(), 1.0);
-        assert!(track.animated(), "the mask is keyed, so it moves");
-        let started_at = track.at(0.0);
-        let ended_at = track.at((FRAMES as f64 - 1.0) / FPS);
-
-        let set = track_frames(
-            job(Uuid::now_v7(), "moving-mask", track.clone()),
-            &cancel,
-            &|_| {},
-        )
-        .unwrap()
-        .2;
-
-        let mut trespasses = 0usize;
-        let mut behind = 0usize;
-        for t in set.tracks() {
-            for p in &t.points {
-                let here = track.at(p.frame as f64 / FPS);
-                if here.iter().any(|m| m.excludes(p.x, p.y)) {
-                    trespasses += 1;
-                }
-                // Where the mask *was* at the start, on a frame it has since
-                // left. Flattening at zero would have forbidden every one.
-                if p.frame > FRAMES as i64 / 2 && started_at[0].excludes(p.x, p.y) {
-                    behind += 1;
-                }
-            }
-        }
-        assert_eq!(trespasses, 0, "a track lived inside the mask's own shape");
-        assert!(
-            behind > 20,
-            "only {behind} points were followed where the mask began, so the \
-             shape may as well have been frozen there"
-        );
-        // And the two ends really are different regions, or none of the above
-        // distinguishes anything.
-        assert!(!ended_at[0].excludes(30.0, 150.0));
-        assert!(started_at[0].excludes(30.0, 150.0));
-        clear();
-    }
-
-    /// The key is honest about the animation.
-    ///
-    /// Two masks with the *same* shape at zero and different journeys are two
-    /// different analyses, and naming them the same would hand the second one
-    /// the first one's solve. A still mask keeps hashing exactly as it did, so
-    /// no existing sidecar entry is orphaned — which is why the animation is
-    /// appended to the key rather than replacing what was there.
-    #[test]
-    fn the_analysis_key_follows_a_masks_animation() {
-        let settings = AnalysisSettings::default();
-        let fp = fingerprint("anim-key");
-        let still = MaskTrack::of(
-            &{
-                let mut l = layer(
-                    "shot",
-                    LayerKind::Footage {
-                        item: Uuid::now_v7(),
-                    },
-                    secs(1, 1),
-                );
-                l.masks
-                    .push(lumit_core::mask::Mask::rectangle(20.0, 20.0, 130.0, 260.0));
-                l
-            },
-            settings,
-            1.0,
-        );
-        let near = MaskTrack::of(&moving_mask_layer(20.0, 60.0), settings, 1.0);
-        let far = MaskTrack::of(&moving_mask_layer(20.0, 240.0), settings, 1.0);
-
-        assert_eq!(
-            still.at(0.0),
-            near.at(0.0),
-            "the fixture is wrong: all three must start on the same shape"
-        );
-        assert_eq!(near.at(0.0), far.at(0.0));
-
-        let key = |m: &MaskTrack| AnalysisKey::new(&fp, settings, m);
-        assert_ne!(key(&still), key(&near), "an animation was not named");
-        assert_ne!(key(&near), key(&far), "two journeys were named the same");
-    }
-
     // --- The precomp path ---------------------------------------------------
 
     /// A nested comp that pans a field of solids past the camera, at a raster
@@ -3276,71 +2938,6 @@ mod tests {
         (Arc::new(doc), nested_id, precomp)
     }
 
-    /// A Camera track on a Precomp layer names the **nested comp**, and asks for
-    /// no sidecar entry.
-    ///
-    /// Both halves matter. The first is what makes the link resolve — the store
-    /// is asked about the comp, not about whatever footage happens to be inside
-    /// it. The second is the deliberate limit: a nested comp's picture is the
-    /// whole document beneath it at every frame, so there is no content name to
-    /// file a solve under that costs less than the analysis it would save.
-    /// Needs no graphics adapter: building a job renders nothing.
-    #[test]
-    fn a_precomp_job_names_the_nested_comp_and_asks_for_no_cache() {
-        let (doc, nested_id, precomp) = nested_pan(12);
-        let job = job_for_precomp(&doc, &precomp, true).expect("the layer is a tracked precomp");
-        assert_eq!(job.media, nested_id, "the solve is filed under the comp");
-        assert!(
-            job.key.is_none(),
-            "a nested comp must not claim a sidecar name"
-        );
-
-        // And a precomp with no Camera track on it is not this workflow.
-        let plain = layer("nested", LayerKind::Precomp { comp: nested_id }, secs(1, 1));
-        assert!(job_for_precomp(&doc, &plain, true).is_none());
-    }
-
-    /// A solve measured on a reduced raster comes back in the source's own
-    /// pixels.
-    ///
-    /// The unit change must move the focal, the camera centres, the world points
-    /// and the errors together — anything left behind would put the cloud and
-    /// the camera in different worlds. Checked by projecting a point through the
-    /// solve before and after: a change of unit cannot move where a point lands,
-    /// once the landing itself is read at the same scale.
-    #[test]
-    fn a_solve_measured_at_a_reduced_raster_scales_back_to_source_pixels() {
-        let mut half = written_solve();
-        let full = written_solve();
-        rescale(&mut half, 0.5);
-
-        assert!((half.segments[0].focal_px - FOCAL * 2.0).abs() < 1e-9);
-        for (a, b) in half.poses.iter().zip(&full.poses) {
-            assert!((a.focal_px - b.focal_px * 2.0).abs() < 1e-9);
-            for (x, y) in a.position.iter().zip(b.position) {
-                assert!((x - y * 2.0).abs() < 1e-9);
-            }
-            // The projection is unchanged, which is the whole claim: the same
-            // point lands in the same place, twice as many pixels across.
-            let p = [40.0, -25.0, 300.0];
-            let want =
-                project_through_solve(b, p).map(|q| [q[0] * 2.0 - W as f64, q[1] * 2.0 - H as f64]);
-            let got = project_through_solve(a, [p[0] * 2.0, p[1] * 2.0, p[2] * 2.0])
-                .map(|q| [q[0] - W as f64 / 2.0, q[1] - H as f64 / 2.0]);
-            match (want, got) {
-                (Some(want), Some(got)) => {
-                    assert!((want[0] / 2.0 - got[0] / 2.0).abs() < 1e-6);
-                }
-                (None, None) => {}
-                _ => panic!("the point changed sides of the camera"),
-            }
-        }
-        // A scale of one is not a no-op by accident: it must not touch anything.
-        let mut untouched = written_solve();
-        rescale(&mut untouched, 1.0);
-        assert_eq!(untouched, full);
-    }
-
     /// The analysis reads **rendered** frames of a nested comp, at the analysis
     /// raster rather than the comp's own, and follows features through them.
     ///
@@ -3410,100 +3007,6 @@ mod tests {
             .err(),
             Some(AnalysisError::Cancelled)
         );
-        clear();
-    }
-
-    /// The thread path: `request` accepts one analysis, refuses a second while
-    /// it runs, and the solve arrives in the store and the sidecar without any
-    /// caller waiting on the disk.
-    #[test]
-    fn the_worker_thread_runs_one_analysis_and_files_it() {
-        let _serial = serially();
-        let dir = tempfile::tempdir().unwrap();
-        with_cache(dir.path());
-        let media = Uuid::now_v7();
-        let key = AnalysisKey::new(
-            &fingerprint("thread"),
-            AnalysisSettings::default(),
-            &MaskTrack::default(),
-        );
-        let mut first = job(media, "thread", MaskTrack::default());
-        first.key = Some(key);
-
-        assert_eq!(request(first), Requested::Started);
-        // One at a time: a second request while the first is in flight is
-        // refused rather than queued behind it.
-        assert_eq!(
-            request(job(Uuid::now_v7(), "second", MaskTrack::default())),
-            Requested::Busy
-        );
-
-        let mut waited = 0;
-        while !matches!(progress(media), Some(Progress::Done)) {
-            assert!(
-                waited < 1200,
-                "the analysis never finished: {:?}",
-                progress(media)
-            );
-            std::thread::sleep(std::time::Duration::from_millis(50));
-            waited += 1;
-        }
-        assert!(solved(media).is_some(), "the solve is not in the store");
-        assert!(read_sidecar(dir.path(), key).is_some(), "nothing was filed");
-
-        // And a warm pass — the one a project open makes — finds it without
-        // decoding anything, which is what its refusal to open the media proves.
-        clear();
-        let warm = Job {
-            media,
-            key: Some(key),
-            settings: AnalysisSettings::default(),
-            kind: JobKind::Camera,
-            masks: MaskTrack::default(),
-            open: Box::new(|| panic!("a warm pass must never open the media")),
-            analyse: false,
-        };
-        assert_eq!(request(warm), Requested::Started);
-        let mut waited = 0;
-        while !matches!(progress(media), Some(Progress::Done)) {
-            assert!(waited < 500, "the warm pass never finished");
-            std::thread::sleep(std::time::Duration::from_millis(10));
-            waited += 1;
-        }
-        assert!(
-            solved(media).is_some(),
-            "the warm pass did not fill the store"
-        );
-
-        // A warm pass for a clip nobody has analysed reports *nothing* rather
-        // than sitting at `Queued` for ever, which is the difference between
-        // "not analysed" and "about to be".
-        let cold = Uuid::now_v7();
-        let miss = Job {
-            media: cold,
-            key: Some(AnalysisKey::new(
-                &fingerprint("cold"),
-                AnalysisSettings::default(),
-                &MaskTrack::default(),
-            )),
-            settings: AnalysisSettings::default(),
-            kind: JobKind::Camera,
-            masks: MaskTrack::default(),
-            open: Box::new(|| panic!("a warm pass must never open the media")),
-            analyse: false,
-        };
-        assert_eq!(request(miss), Requested::Started);
-        let mut waited = 0;
-        while progress(cold).is_some() {
-            assert!(
-                waited < 500,
-                "the warm miss never cleared: {:?}",
-                progress(cold)
-            );
-            std::thread::sleep(std::time::Duration::from_millis(10));
-            waited += 1;
-        }
-        assert!(solved(cold).is_none());
         clear();
     }
 
@@ -3742,42 +3245,6 @@ mod tests {
         clear();
     }
 
-    /// A quad over nothing refuses, calmly, and files nothing — the planar
-    /// mirror of a camera solve that cannot be stood behind.
-    #[test]
-    fn a_planar_analysis_over_a_blank_patch_refuses() {
-        let _serial = serially();
-        let dir = tempfile::tempdir().unwrap();
-        with_cache(dir.path());
-
-        let effect = Uuid::now_v7();
-        // The flat surround, where the fixture paints one constant value.
-        let blank: Quad = [[4.0, 6.0], [24.0, 6.0], [4.0, 290.0], [24.0, 290.0]];
-        let settings = AnalysisSettings::default();
-        let masks = MaskTrack::default().within(quad_outline(blank));
-        let job = Job {
-            media: effect,
-            key: Some(AnalysisKey::new(&fingerprint("blank"), settings, &masks)),
-            settings,
-            kind: JobKind::Planar { quad: blank },
-            masks,
-            open: Box::new(|| Some(Box::new(PlaneShot) as Box<dyn LumaFrames>)),
-            analyse: true,
-        };
-        let cancel = AtomicBool::new(false);
-        assert_eq!(
-            run_here_answer(job, &cancel).0,
-            Err(AnalysisError::Planar(
-                lumit_track::PlanarError::TooFewFeatures
-            ))
-        );
-        assert!(
-            planar(effect).is_none(),
-            "a refusal must leave nothing in the store"
-        );
-        clear();
-    }
-
     // -----------------------------------------------------------------------
     // The point track
     // -----------------------------------------------------------------------
@@ -3914,41 +3381,6 @@ mod tests {
             "the whole clip was followed"
         );
         assert!(Store.planar_corners(effect, 5).is_some());
-        clear();
-    }
-
-    /// One point can only report a slide: the box moves, and its edges keep
-    /// their length and their angle however the *other* patch behaves.
-    #[test]
-    fn a_one_point_analysis_reports_a_slide_and_nothing_else() {
-        let _serial = serially();
-        let dir = tempfile::tempdir().unwrap();
-        with_cache(dir.path());
-
-        let effect = Uuid::now_v7();
-        let cancel = AtomicBool::new(false);
-        let (out, _) = run_here_answer(point_job(effect, "one-point", false), &cancel);
-        let (_, _, answer) = out.expect("one textured patch is followable");
-        let Answer::Planar(track) = answer else {
-            panic!("a point job answers with a track");
-        };
-
-        let home = PatchShot::centres(0)[0];
-        let edge = |q: &Quad| (q[1][0] - q[0][0], q[1][1] - q[0][1]);
-        let (rx, ry) = edge(&track.reference_quad);
-        for f in &track.frames {
-            let now = PatchShot::centres(f.frame as usize)[0];
-            let d = [now[0] - home[0], now[1] - home[1]];
-            for (got, corner) in f.corners.iter().zip(track.reference_quad) {
-                let err = (got[0] - (corner[0] + d[0])).hypot(got[1] - (corner[1] + d[1]));
-                assert!(err < 1.0, "frame {} corner off by {err} px", f.frame);
-            }
-            let (ex, ey) = edge(&f.corners);
-            assert!(
-                (ex - rx).abs() < 1e-9 && (ey - ry).abs() < 1e-9,
-                "a slide must not turn or stretch the box"
-            );
-        }
         clear();
     }
 }

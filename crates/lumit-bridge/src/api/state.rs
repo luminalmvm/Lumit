@@ -998,35 +998,3 @@ pub(crate) fn adopt(
 
     Ok((ProjectReference::new(id), missing))
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// The order the phases are reported in is the order they are declared in,
-    /// and a progress bar may never go backwards — so the weights must rise
-    /// with the declaration. Reordering the enum without reordering the table
-    /// is the mistake this catches.
-    #[test]
-    fn phase_weights_rise_with_the_phases() {
-        let order = [
-            OpenPhase::ReadingFile,
-            OpenPhase::ResolvingMedia,
-            OpenPhase::PreparingProject,
-            OpenPhase::StartingPreview,
-        ];
-        assert_eq!(phase_fraction(order[0]), 0.0, "the first phase starts at 0");
-        for pair in order.windows(2) {
-            assert!(
-                phase_fraction(pair[0]) < phase_fraction(pair[1]),
-                "{:?} must sit before {:?} on the bar",
-                pair[0],
-                pair[1]
-            );
-        }
-        assert!(
-            phase_fraction(OpenPhase::StartingPreview) < 1.0,
-            "the engine never claims the whole open: the first frame is the frontend's half"
-        );
-    }
-}

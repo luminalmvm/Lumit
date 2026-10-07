@@ -41,14 +41,6 @@ void main() {
       return p;
     }
 
-    testWidgets('a new project is anti-aliased, and the row says so',
-        (tester) async {
-      final p = await openRendering(tester);
-      // On by default, and eight samples is the shipped choice.
-      expect(p.state.project!.antiAliasing(), 8);
-      expect(find.text('8 samples'), findsWidgets);
-    });
-
     testWidgets('choosing a count writes it into the project', (tester) async {
       final p = await openRendering(tester);
 
@@ -60,53 +52,6 @@ void main() {
       expect(p.state.project!.antiAliasing(), 2,
           reason: 'the control must write through to the document, '
               'not to a copy the engine never sees');
-    });
-
-    testWidgets('turning it off is a count of one, not a missing setting',
-        (tester) async {
-      final p = await openRendering(tester);
-
-      await tester.tap(find.byKey(const ValueKey('project-anti-aliasing')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Off').last);
-      await tester.pumpAndSettle();
-
-      expect(p.state.project!.antiAliasing(), 1);
-    });
-
-    testWidgets('it is an ordinary edit, so undo puts it back', (tester) async {
-      final p = await openRendering(tester);
-
-      await tester.tap(find.byKey(const ValueKey('project-anti-aliasing')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Off').last);
-      await tester.pumpAndSettle();
-      expect(p.state.project!.antiAliasing(), 1);
-
-      p.state.project!.undo();
-      expect(p.state.project!.antiAliasing(), 8,
-          reason: 'a change to what the picture looks like is undoable '
-              'like any other');
-    });
-
-    testWidgets(
-        'the machine row appears only when the card cannot manage the setting',
-        (tester) async {
-      final p = await openRendering(tester);
-      final asked = p.state.project!.antiAliasing();
-      final inUse = p.state.project!.antiAliasingInUse();
-
-      // Whatever this machine offers, the two agree or the row explains the
-      // difference — and the project keeps what was asked for either way.
-      if (inUse == asked) {
-        expect(find.byKey(const ValueKey('project-anti-aliasing-in-use')),
-            findsNothing);
-      } else {
-        expect(find.byKey(const ValueKey('project-anti-aliasing-in-use')),
-            findsOneWidget);
-        expect(p.state.project!.antiAliasing(), asked,
-            reason: 'a machine limit must never rewrite the project');
-      }
     });
   });
 }

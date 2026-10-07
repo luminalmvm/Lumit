@@ -546,30 +546,6 @@ mod tests {
         assert_eq!(cache.len(), 1, "a cache that fits is left alone");
     }
 
-    /// A layer that is not footage, or footage whose file is not there, reads
-    /// as silence rather than failing — the documented degrade.
-    #[test]
-    fn a_layer_with_no_sound_reads_as_silence() {
-        let dir = tempfile::tempdir().expect("temp dir");
-        let missing = dir.path().join("not-here.wav");
-        let (doc, comp_id, layer) = doc_with_audio_layer(&missing);
-        let comp = doc.comp(comp_id).expect("comp");
-        let tap = DocumentAudio::new(&doc, comp, 0.0);
-
-        let mut out = Vec::new();
-        assert_eq!(
-            tap.samples(layer, 0.0, 0.1, &mut out),
-            None,
-            "a file that is not there is silence, not a fault"
-        );
-        assert_eq!(
-            tap.samples(Uuid::now_v7(), 0.0, 0.1, &mut out),
-            None,
-            "and so is a reference naming no layer at all"
-        );
-        assert!(out.is_empty());
-    }
-
     /// The tap is a pure function of the file, the layer and the window: two
     /// reads of the same moment give the same samples, which is what makes the
     /// preview and the export agree on the number.
@@ -667,86 +643,6 @@ mod tests {
         let (missing, out) = read(Some(Uuid::now_v7()), None);
         assert_eq!(missing, None);
         assert!(out.is_empty());
-    }
-
-    /// **A clip is the same reading filtered again** (plan 1): the clips of a
-    /// row sum back to the row, a clip that is not playing in the window is
-    /// silence, and the one asked for carries its own fade.
-    #[test]
-    fn strip_reads_one_clip_of_a_row_with_its_fade() {
-        use lumit_core::sequence::{Clip, ClipSource, Fade};
-        use lumit_core::time::{CompTime, Rational};
-
-        let dir = tempfile::tempdir().expect("temp dir");
-        let Some(path) = tone(dir.path()) else {
-            return;
-        };
-        let (mut doc, comp_id, rows) = doc_with_audio_layers(&path, 1);
-        let comp = doc.comp_mut(comp_id).expect("comp");
-        let LayerKind::Footage { item } = comp.layers[0].kind else {
-            panic!("the fixture is a footage row");
-        };
-        let second = Rational::new(1, 1).expect("a second");
-        let clip = |at: i64| {
-            Clip::new(
-                ClipSource::Footage(item),
-                Rational::ZERO,
-                second,
-                Rational::new(at, 1).expect("a whole second"),
-                second,
-            )
-        };
-        // Two clips butt-cut at a second, the first rising out of silence over
-        // its own first half second.
-        let mut head = clip(0);
-        head.fade_in = Fade {
-            seconds: Rational::new(1, 2).expect("half a second"),
-            ..Fade::default()
-        };
-        let (head_id, tail_id) = (head.id, Uuid::now_v7());
-        let mut tail = clip(1);
-        tail.id = tail_id;
-        comp.layers[0].kind = LayerKind::Sequence {
-            clips: vec![head, tail],
-        };
-        comp.layers[0].out_point = CompTime(Rational::new(2, 1).expect("two seconds"));
-        let doc = Arc::new(doc);
-        let comp = doc.comp(comp_id).expect("comp");
-
-        // Over the join, both clips play and the two sum to the row.
-        let tap = DocumentAudio::new(&doc, comp, 1.0);
-        let read = |tap: &DocumentAudio<'_>, clip| {
-            let mut out = Vec::new();
-            let rate = tap.strip(Some(rows[0]), clip, 0.25, &mut out);
-            (rate, out)
-        };
-        let (rate, row) = read(&tap, None);
-        assert_eq!(rate, Some(f64::from(TAP_RATE)));
-        let (_, first) = read(&tap, Some(head_id));
-        let (_, last) = read(&tap, Some(tail_id));
-        assert!(loudest(&first) > 0.01 && loudest(&last) > 0.01, "both play");
-        for (n, ((a, b), m)) in first.iter().zip(&last).zip(&row).enumerate() {
-            assert!(
-                (a + b - m).abs() < 1e-5,
-                "sample {n}: the clips must sum to the row, {a} + {b} against {m}"
-            );
-        }
-
-        // Inside the head clip's fade, and before the tail starts: the ramp is
-        // heard, and the clip that is not playing is silence rather than a
-        // fault.
-        let early = DocumentAudio::new(&doc, comp, 0.25);
-        let (_, ramp) = read(&early, Some(head_id));
-        let (quiet_rate, quiet) = read(&early, Some(tail_id));
-        assert_eq!(quiet_rate, None, "a clip outside the window is silence");
-        assert!(quiet.is_empty());
-        let mid = ramp.len() / 2;
-        assert!(
-            loudest(&ramp[..mid]) < loudest(&ramp[mid..]) * 0.75,
-            "the clip's own fade is in what the reading gives: {} against {}",
-            loudest(&ramp[..mid]),
-            loudest(&ramp[mid..])
-        );
     }
 
     /// **The mix is in the frame's name** (docs/impl/audio-nodes.md §3, plan

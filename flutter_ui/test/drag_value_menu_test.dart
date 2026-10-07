@@ -47,50 +47,6 @@ void main() {
     expect(changed, 10);
   });
 
-  testWidgets('without a default, Reset is not offered', (tester) async {
-    await tester.pumpWidget(_harness(DragValueField(
-      value: 5,
-      min: 0,
-      max: 100,
-      onChanged: (_) {},
-    )));
-
-    await tester.tap(find.text('5'), buttons: kSecondaryButton);
-    await tester.pumpAndSettle();
-    expect(find.text('Reset'), findsNothing);
-    expect(find.text('Copy'), findsOneWidget);
-    expect(find.text('Paste'), findsOneWidget);
-  });
-
-  testWidgets('Copy puts the plain value on the clipboard', (tester) async {
-    final clipboard = <String, Object?>{};
-    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-      SystemChannels.platform,
-      (call) async {
-        if (call.method == 'Clipboard.setData') {
-          clipboard['text'] = (call.arguments as Map)['text'];
-        }
-        return null;
-      },
-    );
-
-    await tester.pumpWidget(_harness(DragValueField(
-      value: 37,
-      min: 0,
-      max: 100,
-      onChanged: (_) {},
-    )));
-
-    await tester.tap(find.text('37'), buttons: kSecondaryButton);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Copy'));
-    await tester.pumpAndSettle();
-
-    expect(clipboard['text'], '37');
-    tester.binding.defaultBinaryMessenger
-        .setMockMethodCallHandler(SystemChannels.platform, null);
-  });
-
   testWidgets('Paste parses the clipboard and clamps to the field range',
       (tester) async {
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(

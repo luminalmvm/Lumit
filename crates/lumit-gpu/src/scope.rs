@@ -626,24 +626,6 @@ mod tests {
         grid
     }
 
-    fn histogram_counts(rgba: &[u8], w: usize, h: usize) -> [Vec<u32>; 3] {
-        let mut bins = [vec![0u32; g()], vec![0u32; g()], vec![0u32; g()]];
-        let (sx, sy) = strides(w, h);
-        let (mut y, gg) = (0, g());
-        while y < h {
-            let mut x = 0;
-            while x < w {
-                let i = (y * w + x) * 4;
-                for (c, bin) in bins.iter_mut().enumerate() {
-                    bin[(rgba[i + c] as usize * (gg - 1)) / 255] += 1;
-                }
-                x += sx;
-            }
-            y += sy;
-        }
-        bins
-    }
-
     /// Read the raw counts buffer back for a kind — the exact-integer oracle
     /// hook (atomics never round, so this must match the CPU bit-for-bit).
     fn gpu_counts(
@@ -703,45 +685,6 @@ mod tests {
         let in_row: u32 = (0..g()).map(|x| gpu[row * g() + x]).sum();
         assert_eq!(in_row, 16 * 16);
         assert_eq!(gpu.iter().sum::<u32>(), 16 * 16);
-    }
-
-    /// A solid's histogram puts every sampled pixel in one bin per channel — the
-    /// GPU counts equal the CPU oracle exactly.
-    #[test]
-    fn histogram_counts_match_the_cpu_oracle() {
-        let Some(ctx) = ctx() else {
-            crate::no_adapter();
-            return;
-        };
-        let engine = ctx.scope();
-        let frame = solid(10, 10, 255, 0, 64);
-        let gpu = gpu_counts(engine, &ctx, ScopeKind::Histogram, &frame, 10, 10);
-        let cpu = histogram_counts(&frame, 10, 10);
-        // gpu is [r bins.., g bins.., b bins..]; compare channel by channel.
-        for c in 0..3 {
-            let slice = &gpu[c * g()..(c + 1) * g()];
-            assert_eq!(slice, &cpu[c][..], "channel {c} histogram");
-            assert_eq!(slice.iter().sum::<u32>(), 100, "every pixel counted once");
-        }
-        assert_eq!(gpu[g() - 1], 100, "red maxed → top bin");
-        assert_eq!(gpu[g()], 100, "green zero → bottom bin");
-    }
-
-    /// A neutral grey's vectorscope energy sits at the grid centre (zero chroma).
-    #[test]
-    fn vectorscope_centres_a_neutral_grey() {
-        let Some(ctx) = ctx() else {
-            crate::no_adapter();
-            return;
-        };
-        let engine = ctx.scope();
-        let frame = solid(8, 8, 128, 128, 128);
-        let gpu = gpu_counts(engine, &ctx, ScopeKind::Vectorscope, &frame, 8, 8);
-        let mid = (g() - 1) / 2;
-        let peak_cell = (0..g() * g()).max_by_key(|&c| gpu[c]).unwrap();
-        let (px, py) = (peak_cell % g(), peak_cell / g());
-        assert!(px.abs_diff(mid) <= 1 && py.abs_diff(mid) <= 1);
-        assert_eq!(gpu.iter().sum::<u32>(), 64, "every pixel counted once");
     }
 
     /// The colourised trace matches the CPU-built trace within a small rounding

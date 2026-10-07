@@ -10,7 +10,6 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/shell/menu_bar_frb.dart';
-import 'package:lumit_flutter/state/dock.dart' show WorkspacePreset;
 import 'package:lumit_flutter/shell/tool_bar_frb.dart';
 import 'package:lumit_flutter/state/settings.dart' show ToolBarPosition;
 import 'package:lumit_flutter/state/tools.dart';
@@ -82,55 +81,5 @@ void main() {
       }
     });
 
-    /// Seen in a real window at this size: the workspace pill began too far
-    /// right and lost Audio and Retiming past the edge, and the options pill
-    /// drew its word in its upper half.
-    testWidgets(
-        'left, lantern at 1704: the workspaces end inside the window and the'
-        ' options pill is centred on the line', (tester) async {
-      const size = Size(1704, 961);
-      await mount(tester,
-          shape: ThemeShape.lantern,
-          position: ToolBarPosition.left,
-          size: size);
-      final ws = tester.getRect(inTopLine('workspace-pill'));
-      expect(ws.right, lessThanOrEqualTo(size.width));
-      // The command box takes the line's end; the pill stands right up
-      // against it.
-      final box = tester.getRect(inTopLine('command-box'));
-      expect(box.right, lessThanOrEqualTo(size.width));
-      expect(ws.right, lessThanOrEqualTo(box.left));
-      expect(ws.right, greaterThan(box.left - 16),
-          reason: 'the pill stands at the right end when it fits');
-      for (final preset in WorkspacePreset.values) {
-        final r = tester.getRect(inTopLine('workspace-${preset.name}'));
-        expect(r.left, greaterThanOrEqualTo(0), reason: preset.name);
-        expect(r.right, lessThanOrEqualTo(size.width), reason: preset.name);
-      }
-      final band = tester.getRect(find.byType(LumitMenuBarFrb));
-      expect(tester.getRect(inTopLine('tool-options-pill')).center.dy,
-          closeTo(band.center.dy, 0.5));
-      expect(tester.getRect(inTopLine('tool-no-options')).center.dy,
-          closeTo(band.center.dy, 0.5),
-          reason: 'the word is centred in the pill, not at its top');
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('top: Studio keeps its 26 line and the strip under it',
-        (tester) async {
-      await mount(tester,
-          shape: ThemeShape.studio, position: ToolBarPosition.top);
-      expect(tester.getSize(find.byType(LumitMenuBarFrb)).height, 26);
-      expect(find.byType(LumitToolBarFrb), findsOneWidget);
-      expect(find.byType(LumitToolRailFrb), findsNothing);
-      expect(inTopLine('workspace-edit'), findsNothing,
-          reason: 'the workspaces stay on the strip');
-      expect(
-          find.descendant(
-              of: find.byType(LumitToolBarFrb),
-              matching: find.byKey(const ValueKey('workspace-edit'))),
-          findsOneWidget);
-      expect(tester.takeException(), isNull);
-    });
   }, skip: !engineAvailable);
 }

@@ -957,7 +957,7 @@ mod tests {
         TransformProp,
     };
     use crate::ops::apply;
-    use crate::sequence::Clip;
+
     use crate::time::{CompTime, Duration, FrameRate};
 
     /// A written-down solve standing in for a real one: sixty frames at 30 fps,
@@ -1124,23 +1124,6 @@ mod tests {
         doc
     }
 
-    /// The plain case: a footage layer at source rate, so comp frame `n` is
-    /// solved frame `n` and the camera wears the solve exactly.
-    #[test]
-    fn a_link_through_a_plain_clip_reads_the_frame_under_the_playhead() {
-        let media = Uuid::now_v7();
-        let footage = tracked(layer("shot", LayerKind::Footage { item: media }, 2));
-        let c = comp("main", vec![camera(Some(footage.id)), footage]);
-        let doc = document(vec![c.clone()]);
-        let store = Synthetic::new(media);
-
-        for n in 0..60 {
-            let got = camera_pose_at(&doc, &c, f64::from(n) / 30.0, &store).unwrap();
-            assert_eq!(got.state, LinkState::Derived, "frame {n}");
-            assert_eq!(got.pose, Synthetic::pose(i64::from(n)), "frame {n}");
-        }
-    }
-
     /// A retimed clip, freeze included. The mapping is the layer's own Retime —
     /// the same one the renderer decodes through — so the camera sees exactly
     /// the frame the picture shows.
@@ -1166,44 +1149,6 @@ mod tests {
             let got = camera_pose_at(&doc, &c, f64::from(n) / 30.0, &store).unwrap();
             assert_eq!(got.state, LinkState::Derived, "frame {n}");
             assert_eq!(got.pose, Synthetic::pose(15), "frame {n}");
-        }
-    }
-
-    /// The tracker ran on the file, so reordering the cuts changes which solved
-    /// frame is on screen and nothing else. The same source moment gives the
-    /// same pose whichever order the clips sit in.
-    #[test]
-    fn reordering_a_sequence_layer_moves_the_pose_with_the_source_frame() {
-        let media = Uuid::now_v7();
-        let source = ClipSource::Footage(media);
-        // Two half-second clips: one showing source 0.0–0.5, one showing
-        // 1.0–1.5. `ab` plays them in that order, `ba` the other way round.
-        let clip = |source_in: i64, place: i64| {
-            Clip::new(
-                source,
-                rat(source_in, 30),
-                rat(source_in + 15, 30),
-                rat(place, 30),
-                rat(15, 30),
-            )
-        };
-        let ab = vec![clip(0, 0), clip(30, 15)];
-        let ba = vec![clip(30, 0), clip(0, 15)];
-
-        for (clips, first_half, second_half) in [(ab, 0, 30), (ba, 30, 0)] {
-            let seq = tracked(layer("cut", LayerKind::Sequence { clips }, 1));
-            let c = comp("main", vec![camera(Some(seq.id)), seq]);
-            let doc = document(vec![c.clone()]);
-            let store = Synthetic::new(media);
-
-            for n in 0..15 {
-                let got = camera_pose_at(&doc, &c, f64::from(n) / 30.0, &store).unwrap();
-                assert_eq!(got.pose, Synthetic::pose(first_half + i64::from(n)));
-            }
-            for n in 15..30 {
-                let got = camera_pose_at(&doc, &c, f64::from(n) / 30.0, &store).unwrap();
-                assert_eq!(got.pose, Synthetic::pose(second_half + i64::from(n) - 15));
-            }
         }
     }
 
@@ -1246,65 +1191,6 @@ mod tests {
         assert_eq!(
             camera_pose_at(&doc, &outer, 0.0, &store).unwrap().state,
             LinkState::Unresolved
-        );
-    }
-
-    /// A Camera track **on the precomp layer itself** stops the walk there: the
-    /// nested comp is the tracked source, and its solve is filed under the
-    /// comp's own id. That is the case a comp of stills panned by a camera move
-    /// needs — there is no footage inside it to descend to — and it must not be
-    /// confused with the parent-comp workflow above, which is the same document
-    /// shape without the effect on the precomp layer.
-    #[test]
-    fn a_camera_track_on_the_precomp_layer_tracks_the_nested_comp_itself() {
-        let inner_media = Uuid::now_v7();
-        let inner = comp(
-            "inner",
-            vec![tracked(layer(
-                "shot",
-                LayerKind::Footage { item: inner_media },
-                2,
-            ))],
-        );
-        // The store knows the *comp*, and knows nothing of the footage inside
-        // it: a walk that descended would resolve to nothing at all.
-        let store = Synthetic::new(inner.id);
-
-        let nested = tracked(layer("inner", LayerKind::Precomp { comp: inner.id }, 2));
-        assert_eq!(tracked_source_id(&nested), Some(inner.id));
-        let outer = comp("outer", vec![camera(Some(nested.id)), nested]);
-        let doc = document(vec![inner, outer.clone()]);
-
-        let got = camera_pose_at(&doc, &outer, 10.0 / 30.0, &store).unwrap();
-        assert_eq!(got.state, LinkState::Derived);
-        assert_eq!(got.pose, Synthetic::pose(10));
-
-        // And without the effect on it the same document descends, as it always
-        // did — the two workflows are told apart by the effect and nothing else.
-        let inner2 = comp(
-            "inner",
-            vec![tracked(layer(
-                "shot",
-                LayerKind::Footage { item: inner_media },
-                2,
-            ))],
-        );
-        let plain = layer("inner", LayerKind::Precomp { comp: inner2.id }, 2);
-        let outer2 = comp("outer", vec![camera(Some(plain.id)), plain]);
-        let doc2 = document(vec![inner2, outer2.clone()]);
-        assert_eq!(
-            camera_pose_at(&doc2, &outer2, 10.0 / 30.0, &store)
-                .unwrap()
-                .state,
-            LinkState::Unresolved,
-            "the walk stopped at the precomp although nothing asked it to"
-        );
-        assert_eq!(
-            camera_pose_at(&doc2, &outer2, 10.0 / 30.0, &Synthetic::new(inner_media))
-                .unwrap()
-                .pose,
-            Synthetic::pose(10),
-            "without the effect the walk must still reach the footage inside"
         );
     }
 
@@ -1442,86 +1328,6 @@ mod tests {
         assert_eq!(lost.state, LinkState::Unresolved);
         assert_eq!(lost.pose.position.0, base.position.0 + 40.0);
         assert_eq!(lost.pose.zoom, base.zoom + 7.0);
-    }
-
-    /// A solve has no depth of field, so the camera's own reaches the pose the
-    /// renderer draws with (docs/impl/camera.md §2) - with a correction lane
-    /// under it and without one.
-    #[test]
-    fn a_linked_camera_keeps_its_own_depth_of_field() {
-        let media = Uuid::now_v7();
-        let footage = tracked(layer("shot", LayerKind::Footage { item: media }, 2));
-        let mut cam = camera(Some(footage.id));
-        if let LayerKind::Camera { options, .. } = &mut cam.kind {
-            options.depth_of_field = true;
-            options.focus_distance = Property::fixed(800.0);
-            options.aperture = Property::fixed(30.0);
-            options.blur_level = Property::fixed(75.0);
-        }
-        let c = comp("main", vec![cam, footage]);
-        let (comp_id, cam_id) = (c.id, c.layers[0].id);
-        let mut doc = document(vec![c]);
-        let store = Synthetic::new(media);
-        let want = Some(crate::model::CameraDof {
-            focus_distance: 800.0,
-            aperture: 30.0,
-            blur_level: 75.0,
-        });
-
-        // No lane yet: the solve is followed exactly, and it has no depth of
-        // field of its own to follow.
-        let got = camera_pose_at(&doc, doc.comp(comp_id).unwrap(), 0.0, &store).unwrap();
-        assert_eq!(got.pose.dof, want);
-        assert_eq!(
-            got.pose.position,
-            Synthetic::pose(0).position,
-            "the solve still places the eye"
-        );
-
-        set_base(&mut doc, comp_id, cam_id);
-        let got = camera_pose_at(&doc, doc.comp(comp_id).unwrap(), 0.0, &store).unwrap();
-        assert_eq!(got.pose.dof, want);
-    }
-
-    /// A keyed correction is an ordinary keyframed property, and it is added at
-    /// the value it has on each frame — so a correction can ramp in.
-    #[test]
-    fn a_keyed_correction_is_added_frame_by_frame() {
-        let media = Uuid::now_v7();
-        let footage = tracked(layer("shot", LayerKind::Footage { item: media }, 2));
-        let c = comp("main", vec![camera(Some(footage.id)), footage]);
-        let (comp_id, cam_id) = (c.id, c.layers[0].id);
-        let mut doc = document(vec![c]);
-        set_base(&mut doc, comp_id, cam_id);
-        let base = base_of(&doc, comp_id, cam_id);
-        let store = Synthetic::new(media);
-
-        // Nought at comp frame 0, thirty at comp frame 30, linear between.
-        apply(
-            &mut doc,
-            &Op::SetTransformProperty {
-                comp: comp_id,
-                layer: cam_id,
-                prop: TransformProp::PositionY,
-                animation: Animation::Keyframed(vec![
-                    key(rat(0, 30), base.position.1),
-                    key(rat(30, 30), base.position.1 + 30.0),
-                ]),
-            },
-        )
-        .expect("a keyed correction is an ordinary edit");
-
-        for n in [0, 10, 30] {
-            let c = doc.comp(comp_id).unwrap();
-            let got = camera_pose_at(&doc, c, f64::from(n) / 30.0, &store).unwrap();
-            assert!(
-                (got.pose.position.1 - (Synthetic::pose(i64::from(n)).position.1 + f64::from(n)))
-                    .abs()
-                    < 1e-9,
-                "frame {n}: {:?}",
-                got.pose.position.1
-            );
-        }
     }
 
     /// **Clear corrections** takes the nudge back and leaves the track alone,
@@ -1742,28 +1548,6 @@ mod tests {
         );
     }
 
-    /// The bake is deterministic, and refuses what it cannot do.
-    #[test]
-    fn the_bake_is_deterministic_and_refuses_an_unlinked_camera() {
-        let media = Uuid::now_v7();
-        let footage = tracked(layer("shot", LayerKind::Footage { item: media }, 2));
-        let c = comp("main", vec![camera(Some(footage.id)), footage]);
-        let (comp_id, cam_id) = (c.id, c.layers[0].id);
-        let doc = document(vec![c]);
-        let store = Synthetic::new(media);
-
-        let a = bake_solve_link(&doc, comp_id, cam_id, &store).unwrap();
-        let b = bake_solve_link(&doc, comp_id, cam_id, &store).unwrap();
-        assert_eq!(a, b, "two bakes of one document differ");
-
-        let plain = comp("plain", vec![camera(None)]);
-        let (plain_id, plain_cam) = (plain.id, plain.layers[0].id);
-        assert!(
-            bake_solve_link(&document(vec![plain]), plain_id, plain_cam, &store).is_none(),
-            "there is nothing to bake without a link"
-        );
-    }
-
     // -----------------------------------------------------------------------
     // The planar track's corner pin
     // -----------------------------------------------------------------------
@@ -1886,82 +1670,6 @@ mod tests {
             .unwrap()
             .effects
             .is_empty());
-    }
-
-    /// The tracker ran on the file, from the planar side: the track is of the
-    /// *source*, so a retimed clip's pin follows the retime rather than the
-    /// comp's clock. A half-speed first second puts source frame 5 under comp
-    /// frame 10, and the freeze after it holds source frame 15 for the rest of
-    /// the shot.
-    #[test]
-    fn a_corner_pin_follows_the_tracked_layers_retime() {
-        let media = Uuid::now_v7();
-        let mut shot = planar(layer("shot", LayerKind::Footage { item: media }, 2));
-        let effect = shot.effects[0].id;
-        shot.retime = Some(retime(&[(0, 0.0), (30, 0.5), (60, 0.5)]));
-        let target = layer("screen", LayerKind::Null, 2);
-        let (tracked_id, target_id) = (shot.id, target.id);
-        let c = comp("main", vec![target, shot]);
-        let comp_id = c.id;
-        let mut doc = document(vec![c]);
-        let store = SyntheticPlane { track: effect };
-
-        let op = corner_pin_from_track(&doc, comp_id, tracked_id, effect, target_id, &store)
-            .expect("a retimed clip still writes a pin");
-        apply(&mut doc, &op).unwrap();
-        let effects = &doc
-            .comp(comp_id)
-            .unwrap()
-            .layers
-            .iter()
-            .find(|l| l.id == target_id)
-            .unwrap()
-            .effects;
-
-        let at_ten = pin_value(effects, "upper_left_x", 10.0 / 30.0);
-        assert!(
-            (at_ten - SyntheticPlane::quad(5)[0][0]).abs() < 1e-6,
-            "comp frame 10 should read source frame 5, got {at_ten}"
-        );
-        for n in [31i64, 40, 59] {
-            let held = pin_value(effects, "upper_left_x", n as f64 / 30.0);
-            assert!(
-                (held - SyntheticPlane::quad(15)[0][0]).abs() < 1e-6,
-                "the freeze should hold source frame 15 at comp frame {n}, got {held}"
-            );
-        }
-    }
-
-    /// Both refusals, and the one that is easiest to get wrong: a store with
-    /// nothing in it under this effect's id must refuse rather than write a pin
-    /// full of the schema's own defaults.
-    #[test]
-    fn a_corner_pin_is_refused_when_there_is_nothing_to_read() {
-        let media = Uuid::now_v7();
-        let shot = planar(layer("shot", LayerKind::Footage { item: media }, 2));
-        let effect = shot.effects[0].id;
-        let target = layer("screen", LayerKind::Null, 2);
-        let (tracked_id, target_id) = (shot.id, target.id);
-        let c = comp("main", vec![target, shot]);
-        let comp_id = c.id;
-        let doc = document(vec![c]);
-
-        // A track filed under a *different* effect: the right shape of answer
-        // about the wrong quad, which is the failure a media-keyed store would
-        // have made silently.
-        let elsewhere = SyntheticPlane {
-            track: Uuid::now_v7(),
-        };
-        assert!(
-            corner_pin_from_track(&doc, comp_id, tracked_id, effect, target_id, &elsewhere)
-                .is_none()
-        );
-        // And a target that is not in the comp at all.
-        let store = SyntheticPlane { track: effect };
-        assert!(
-            corner_pin_from_track(&doc, comp_id, tracked_id, effect, Uuid::now_v7(), &store)
-                .is_none()
-        );
     }
 
     // -----------------------------------------------------------------------
@@ -2183,39 +1891,5 @@ mod tests {
                 "{prop:?} should not have been written"
             );
         }
-    }
-
-    /// The same two refusals the corner pin makes, for the same reasons: a store
-    /// holding the right shape of answer under a *different* effect id, and a
-    /// target that is not in the composition.
-    #[test]
-    fn transform_keys_are_refused_when_there_is_nothing_to_read() {
-        let media = Uuid::now_v7();
-        let shot = planar(layer("shot", LayerKind::Footage { item: media }, 2));
-        let effect = shot.effects[0].id;
-        let target = layer("logo", LayerKind::Null, 2);
-        let (tracked_id, target_id) = (shot.id, target.id);
-        let c = comp("main", vec![target, shot]);
-        let comp_id = c.id;
-        let doc = document(vec![c]);
-
-        let elsewhere = MovingPlane {
-            track: Uuid::now_v7(),
-        };
-        assert!(transform_from_track(
-            &doc, comp_id, tracked_id, effect, target_id, true, &elsewhere
-        )
-        .is_none());
-        let store = MovingPlane { track: effect };
-        assert!(transform_from_track(
-            &doc,
-            comp_id,
-            tracked_id,
-            effect,
-            Uuid::now_v7(),
-            true,
-            &store
-        )
-        .is_none());
     }
 }

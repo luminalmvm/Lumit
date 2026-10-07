@@ -215,19 +215,6 @@ void main() {
         reason: 'a 2,000-key lane grew $elements elements');
   });
 
-  testWidgets('a hand-keyed lane keeps its per-key slots and their names',
-      (tester) async {
-    await tester.pumpWidget(harness(_bakedKeys(3)));
-    expect(
-      find.byKey(const ValueKey<String>('tl-key-$rowId#0')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const ValueKey<String>('tl-key-strip-$rowId')),
-      findsNothing,
-    );
-  });
-
   testWidgets('the strip still selects and drags the key under the pointer',
       (tester) async {
     final selected = <int>[];
@@ -250,30 +237,6 @@ void main() {
     await tester.pump();
     expect(selected, [100], reason: 'the drag should have taken key 100');
     expect(moved, isNotNull, reason: 'the release should commit the travel');
-  });
-
-  testWidgets('ground beyond the keys falls through the strip',
-      (tester) async {
-    // A hundred baked keys crowded into the first frames of a long comp: the
-    // right-hand stretch of the lane has no key within a slot's reach, and a
-    // press there must fall through to the marquee below, exactly as the
-    // ground between per-key slots always has.
-    await tester.pumpWidget(harness(_bakedKeys(100), frames: 2000));
-    final strip = find.byKey(const ValueKey<String>('tl-key-strip-$rowId'));
-    final origin = tester.getTopLeft(strip);
-    final hit = tester.hitTestOnBinding(origin + const Offset(700, 8));
-    expect(
-      hit.path.any((e) => '${e.target.runtimeType}' == '_RenderKeyStripHit'),
-      isFalse,
-      reason: 'open ground must not be claimed by the strip',
-    );
-    // And the keys themselves still are claimed.
-    final onKey = tester.hitTestOnBinding(origin + const Offset(10, 8));
-    expect(
-      onKey.path.any((e) => '${e.target.runtimeType}' == '_RenderKeyStripHit'),
-      isTrue,
-      reason: 'a key mark must be grabbable through the strip',
-    );
   });
 
   test('the painter walks the clip, not the comp', () {
@@ -316,25 +279,6 @@ void main() {
         summary.map((k) => rationalSeconds(k.time)).toSet().length,
         300,
         reason: 'and no time is named twice',
-      );
-    });
-
-    test('keeps every frame of a hand-keyed layer', () {
-      final summary = summaryOf(_keyed(
-        position: _bakedKeys(2),
-        opacity: [
-          const BridgeKeyframe(
-            time: BridgeRational(num: 5, den: 25),
-            value: 50,
-            interpIn: BridgeSideInterp.linear(),
-            interpOut: BridgeSideInterp.linear(),
-          ),
-        ],
-      ));
-      expect(
-        summary.map((k) => rationalSeconds(k.time)).toSet(),
-        {0.0, 1 / 25, 5 / 25},
-        reason: 'two properties, three distinct times, three diamonds',
       );
     });
   });

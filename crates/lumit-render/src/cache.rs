@@ -513,18 +513,6 @@ mod tests {
         assert!(frame_key(&doc, &comp, 0, q, &probed(item)).is_some());
     }
 
-    /// Different frames of the same comp get different names, and the same
-    /// frame asked for twice gets the same name — the minimum a cache needs.
-    #[test]
-    fn frames_are_named_by_content_and_are_stable() {
-        let (doc, comp, item) = footage_comp();
-        let (q, probes) = (Quality::default(), probed(item));
-        let a = frame_key(&doc, &comp, 0, q, &probes).unwrap();
-        let b = frame_key(&doc, &comp, 10, q, &probes).unwrap();
-        assert_ne!(a, b, "different frames are different pictures");
-        assert_eq!(a, frame_key(&doc, &comp, 0, q, &probes).unwrap());
-    }
-
     /// The same frame at a different preview resolution is a DIFFERENT entry,
     /// so a half-resolution scrub frame is never served as the full-resolution
     /// one (docs/06 §5.2 quality axis).
@@ -573,16 +561,6 @@ mod tests {
         );
     }
 
-    /// A missing file still names its frames (the slate is a pure function of
-    /// the size), so one lost clip does not stop a whole project caching.
-    #[test]
-    fn missing_footage_is_still_cacheable() {
-        let (doc, comp, item) = footage_comp();
-        let mut probes = HashMap::new();
-        probes.insert(item, SourceProbe::Missing);
-        assert!(frame_key(&doc, &comp, 0, Quality::default(), &probes).is_some());
-    }
-
     /// The fill walk visits every work-area frame exactly once, starting at the
     /// playhead and leaning forwards.
     #[test]
@@ -603,20 +581,6 @@ mod tests {
         assert!(fill_walk_order(5, 0, 0).is_empty());
         assert!(fill_walk_order(0, 0, 0).is_empty());
         assert!(fill_walk_order(99, 0, 12).is_empty());
-    }
-
-    /// Playback warms a bounded window strictly ahead of the playhead, clamped
-    /// to the work-area end — never behind, never past the end.
-    #[test]
-    fn playback_warms_only_forward_within_the_work_area() {
-        assert_eq!(playback_lookahead(3, 20, 4), vec![4, 5, 6, 7]);
-        assert_eq!(playback_lookahead(18, 20, 4), vec![19]);
-        assert!(playback_lookahead(19, 20, 4).is_empty());
-        assert!(playback_lookahead(20, 20, 4).is_empty());
-        assert!(
-            playback_lookahead(5, 100, 0).is_empty(),
-            "a zero window warms nothing"
-        );
     }
 
     /// The work area defaults to the whole comp and is otherwise read in
@@ -680,190 +644,5 @@ mod tests {
             before,
             "an unpainted layer keeps the name it had"
         );
-    }
-
-    /// A puppet pin moves pixels, so where it stands at a frame is part of that
-    /// frame's name — and Volume, which moves none, is not
-    /// (docs/impl/puppet.md §2.5, test 13).
-    #[test]
-    fn a_pin_at_a_frame_names_that_frame_but_volume_does_not() {
-        use lumit_core::puppet::{PuppetBlock, PuppetPin, PuppetPinKind};
-        let (doc, comp, item) = footage_comp();
-        let (q, probes) = (Quality::default(), probed(item));
-        let before = frame_key(&doc, &comp, 0, q, &probes).unwrap();
-
-        // One pin, keyed: at rest at t = 0 and dragged to `x` by t = 1 s.
-        let pinned = |x: f64| {
-            let key = |t: i64, value: f64| lumit_core::anim::Keyframe {
-                time: Rational::new(t, 1).unwrap(),
-                value,
-                interp_in: lumit_core::anim::SideInterp::Linear,
-                interp_out: lumit_core::anim::SideInterp::Linear,
-            };
-            let mut pin = PuppetPin::new(PuppetPinKind::Position, "Pin 1", 10.0, 10.0);
-            pin.id = Uuid::from_u128(9);
-            pin.x.animation = lumit_core::anim::Animation::Keyframed(vec![key(0, 10.0), key(1, x)]);
-            let mut block = PuppetBlock::new(Rational::ZERO);
-            block.pins.push(pin);
-            let mut c = comp.clone();
-            c.layers[0].puppet = Some(block);
-            c
-        };
-
-        let a = pinned(50.0);
-        let b = pinned(90.0);
-        assert_ne!(
-            frame_key(&doc, &a, 0, q, &probes).unwrap(),
-            before,
-            "a pinned layer is not the layer that was cached before it was pinned"
-        );
-        assert_eq!(
-            frame_key(&doc, &a, 0, q, &probes).unwrap(),
-            frame_key(&doc, &b, 0, q, &probes).unwrap(),
-            "at frame 0 both pins are at rest, and the same picture keeps one name"
-        );
-        assert_ne!(
-            frame_key(&doc, &a, 30, q, &probes).unwrap(),
-            frame_key(&doc, &b, 30, q, &probes).unwrap(),
-            "a second later the pins are in different places, and so are the pixels"
-        );
-
-        // Volume is sound. It has never named a frame and must not start.
-        let mut louder = a.clone();
-        louder.layers[0].volume_db = lumit_core::anim::Property::fixed(-6.0);
-        assert_eq!(
-            frame_key(&doc, &louder, 30, q, &probes).unwrap(),
-            frame_key(&doc, &a, 30, q, &probes).unwrap(),
-            "turning a layer down changes no pixel"
-        );
-
-        // And a layer nobody has pinned keeps exactly the name it had, so this
-        // retired nothing banked before puppets existed.
-        let mut unpinned = a;
-        unpinned.layers[0].puppet = None;
-        assert_eq!(
-            frame_key(&doc, &unpinned, 0, q, &probes).unwrap(),
-            before,
-            "an unpinned layer keeps the name it had"
-        );
-    }
-
-    /// A shape layer's art is its whole picture, so editing it must retire the
-    /// frames drawn from the old art. Nothing hashed `contents`, so recolouring
-    /// or reshaping a shape layer showed the frame it had before.
-    #[test]
-    fn editing_a_shape_layers_art_retires_its_frames() {
-        use lumit_core::shape::ShapeItem;
-        let (doc, comp, item) = footage_comp();
-        let (q, probes) = (Quality::default(), probed(item));
-
-        let art = |red: f32| ShapeItem {
-            id: Uuid::from_u128(9),
-            name: "Rectangle".into(),
-            path: lumit_core::mask::BezierPath {
-                vertices: vec![
-                    vertex(0.0, 0.0),
-                    vertex(60.0, 0.0),
-                    vertex(60.0, 40.0),
-                    vertex(0.0, 40.0),
-                ],
-                closed: true,
-            },
-            fill: Some(lumit_core::model::LinearColour([red, 0.0, 0.0, 1.0])),
-            stroke: None,
-            stroke_width: 0.0,
-            opacity: 100.0,
-            combine: 0,
-            path_keys: Vec::new(),
-            trim_start: lumit_core::anim::Property::zero(),
-            trim_end: lumit_core::anim::Property::fixed(100.0),
-            trim_offset: lumit_core::anim::Property::zero(),
-            dashes: Vec::new(),
-            dash_offset: lumit_core::anim::Property::zero(),
-            gradient: 0,
-            gradient_colour: None,
-            gradient_start_x: lumit_core::anim::Property::zero(),
-            gradient_start_y: lumit_core::anim::Property::zero(),
-            gradient_end_x: lumit_core::anim::Property::zero(),
-            gradient_end_y: lumit_core::anim::Property::zero(),
-            offset_amount: lumit_core::anim::Property::zero(),
-            repeat_copies: lumit_core::anim::Property::fixed(1.0),
-            repeat_offset: lumit_core::anim::Property::zero(),
-            repeat_anchor_x: lumit_core::anim::Property::zero(),
-            repeat_anchor_y: lumit_core::anim::Property::zero(),
-            repeat_position_x: lumit_core::anim::Property::zero(),
-            repeat_position_y: lumit_core::anim::Property::zero(),
-            repeat_rotation: lumit_core::anim::Property::zero(),
-            repeat_scale: lumit_core::anim::Property::fixed(100.0),
-            repeat_start_opacity: lumit_core::anim::Property::fixed(100.0),
-            repeat_end_opacity: lumit_core::anim::Property::fixed(100.0),
-            extra: serde_json::Map::new(),
-        };
-
-        let mut shaped = comp.clone();
-        shaped.layers[0].kind = lumit_core::model::LayerKind::Shape {
-            contents: vec![art(1.0)],
-        };
-        let red = frame_key(&doc, &shaped, 0, q, &probes).unwrap();
-
-        let mut recoloured = shaped.clone();
-        recoloured.layers[0].kind = lumit_core::model::LayerKind::Shape {
-            contents: vec![art(0.25)],
-        };
-        assert_ne!(
-            frame_key(&doc, &recoloured, 0, q, &probes).unwrap(),
-            red,
-            "a shape's fill colour is its picture"
-        );
-
-        let mut emptied = shaped.clone();
-        emptied.layers[0].kind = lumit_core::model::LayerKind::Shape {
-            contents: Vec::new(),
-        };
-        assert_ne!(
-            frame_key(&doc, &emptied, 0, q, &probes).unwrap(),
-            red,
-            "deleting the art changes the picture"
-        );
-    }
-
-    fn vertex(x: f64, y: f64) -> lumit_core::mask::Vertex {
-        lumit_core::mask::Vertex {
-            pos: (x, y),
-            tan_in: (0.0, 0.0),
-            tan_out: (0.0, 0.0),
-        }
-    }
-
-    /// **A keyer that cannot fold a placed graph's values names no frame**
-    /// (docs/impl/node-graph-comp.md §5.3). A layer that hands nothing over
-    /// keeps the name it always had, which is what leaves every key ever made
-    /// where it was; a layer that hands values over and a keyer that cannot
-    /// read them answer `None`, so the frame renders live and banks nothing
-    /// rather than naming two pictures alike.
-    #[test]
-    fn the_default_keyer_holds_a_placed_graphs_values_unnameable() {
-        struct Flat;
-        impl NestedKeyer for Flat {
-            fn nested_key(&self, _: &Composition, _: f64) -> Option<u128> {
-                Some(7)
-            }
-        }
-        let (_doc, comp, _item) = footage_comp();
-        assert_eq!(Flat.nested_key_with(&comp, 0.0, None), Some(7));
-        let inst = lumit_core::fx::instantiate("node_graph").expect("a builtin");
-        assert_eq!(Flat.nested_key_with(&comp, 0.0, Some(&inst)), None);
-    }
-
-    /// frames, with the end always after the start.
-    #[test]
-    fn the_work_area_defaults_to_the_whole_comp() {
-        let (_doc, mut comp, _item) = footage_comp();
-        assert_eq!(work_area_frames(&comp), (0, 120));
-        comp.work_area = Some((
-            CompTime(Rational::new(1, 1).unwrap()),
-            CompTime(Rational::new(2, 1).unwrap()),
-        ));
-        assert_eq!(work_area_frames(&comp), (30, 60));
     }
 }

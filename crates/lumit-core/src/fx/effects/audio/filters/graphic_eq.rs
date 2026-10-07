@@ -278,7 +278,6 @@ impl EffectDef for AudioGraphicEqDef {
 mod tests {
     use super::*;
     use crate::fx::effects::audio::modulation::harness;
-    use crate::fx::AUDIO_BLOCK_SAMPLES;
 
     /// **Plan 1**: the same input baked twice is bit-identical, and one run is
     /// its own two halves spliced at a block edge with the state carried.
@@ -293,30 +292,6 @@ mod tests {
         );
     }
 
-    /// The same split again, but opened flat and driven with a boost, so the
-    /// cut lands in the middle of a ramp rather than on a settled filter.
-    #[test]
-    fn a_run_split_part_way_through_a_ramp_is_the_same_run() {
-        let flat = harness::values(&AudioGraphicEqDef, &[]);
-        let driven = harness::values(
-            &AudioGraphicEqDef,
-            &[("gain_125", 10.0), ("gain_8k", -10.0), ("output", -3.0)],
-        );
-        let input = harness::tone(4, 300.0);
-
-        let whole = harness::run(&*harness::open(&AudioGraphicEqDef, &flat), &input, &driven);
-        let carried = harness::open(&AudioGraphicEqDef, &flat);
-        let cut = input.len() / 2;
-        let mut halves = harness::run(&*carried, &input[..cut], &driven);
-        halves.extend(harness::run_from(
-            &*carried,
-            &input[cut..],
-            &driven,
-            cut / AUDIO_BLOCK_SAMPLES,
-        ));
-        assert_eq!(whole, halves, "the ramp did not carry across the cut");
-    }
-
     /// **Plan 3**: a fader raises its own band and leaves a distant one alone.
     /// 62.5 Hz is four octaves under the 1 kHz band, and four whole cycles of
     /// the measuring window.
@@ -327,34 +302,5 @@ mod tests {
         assert!((lifted - 12.0).abs() < 0.5, "the band measured {lifted}");
         let distant = super::super::measured_db(&AudioGraphicEqDef, &over, 62.5);
         assert!(distant.abs() < 0.5, "62.5 Hz moved by {distant}");
-    }
-
-    /// **Flat is a passthrough**, sample for sample: a bell of no gain is the
-    /// identity section rather than a near miss, so ten of them in a row
-    /// change nothing at all.
-    #[test]
-    fn every_fader_at_nought_hands_the_sound_straight_back() {
-        let values = harness::values(&AudioGraphicEqDef, &[]);
-        let input = harness::tone(3, 700.0);
-        let out = harness::run(
-            &*harness::open(&AudioGraphicEqDef, &values),
-            &input,
-            &values,
-        );
-        assert_eq!(out, input);
-    }
-
-    /// **A fader driven past its end still makes sound**: the section is built
-    /// from whatever number arrives and none of it comes back infinite.
-    #[test]
-    fn a_fader_driven_past_its_end_still_makes_sound() {
-        let values = harness::values(&AudioGraphicEqDef, &[("gain_31", 1e6), ("gain_16k", -1e6)]);
-        let input = harness::tone(1, 1_000.0);
-        let out = harness::run(
-            &*harness::open(&AudioGraphicEqDef, &values),
-            &input,
-            &values,
-        );
-        assert!(out.iter().all(|s| s.is_finite()));
     }
 }

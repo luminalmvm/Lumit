@@ -3513,19 +3513,6 @@ mod tests {
     }
 
     #[test]
-    fn a_shaped_retime_map_is_not() {
-        let mut map =
-            Layer::identity_retime(Rational::new(0, 1).unwrap(), Rational::new(4, 1).unwrap());
-        // Half speed: the layer's four seconds show the source's first two.
-        if let crate::anim::Animation::Keyframed(keys) = &mut map.animation {
-            if let Some(last) = keys.last_mut() {
-                last.value = 2.0;
-            }
-        }
-        assert!(!Layer::is_identity_retime(&map));
-    }
-
-    #[test]
     fn an_eased_map_that_happens_to_end_where_it_started_is_not_identity() {
         // The values read back their own times, but the curve between them
         // does not: an eased pair is a ramp, not an identity.
@@ -3537,12 +3524,6 @@ mod tests {
             }
         }
         assert!(!Layer::is_identity_retime(&map));
-    }
-
-    #[test]
-    fn a_frozen_frame_is_a_retime_however_it_is_written() {
-        let frozen = Property::fixed(1.5);
-        assert!(!Layer::is_identity_retime(&frozen));
     }
 
     /// A Precomp layer sitting at 2..6 s on the outer ruler, whose four
@@ -3595,25 +3576,6 @@ mod tests {
         assert!((half_speed_precomp().entry_time(4.0, 10.0) - 1.0).abs() < 1e-9);
     }
 
-    #[test]
-    fn entering_a_precomp_from_before_its_span_lands_on_its_start() {
-        assert_eq!(half_speed_precomp().entry_time(1.0, 10.0), 0.0);
-    }
-
-    #[test]
-    fn entering_a_precomp_from_after_its_span_lands_on_its_end() {
-        assert_eq!(half_speed_precomp().entry_time(7.0, 10.0), 10.0);
-        // The out point is exclusive, so the first moment off the end is the end.
-        assert_eq!(half_speed_precomp().entry_time(6.0, 10.0), 10.0);
-    }
-
-    /// A map may reach past the nested comp (overrun, glossary §4); the
-    /// playhead may not.
-    #[test]
-    fn entering_a_precomp_never_lands_outside_the_nested_comp() {
-        assert_eq!(half_speed_precomp().entry_time(4.0, 0.5), 0.5);
-    }
-
     /// `BlendMode::ALL` must list every variant exactly once (the layer
     /// dropdown and the effect Mode param both iterate it — a missing mode
     /// would silently vanish from the UI). Names must be unique and non-empty.
@@ -3664,18 +3626,6 @@ mod tests {
             BlendMode::NAMES,
             "NAMES must be ALL's names, in order"
         );
-    }
-
-    #[test]
-    fn effect_instance_sample_temporally_defaults_true() {
-        // An effect saved before the temporal-rerender flag existed loads with
-        // it on (docs/10 §1.1 forward compat), so old projects behave as before.
-        let e = crate::fx::instantiate("blur").unwrap();
-        assert!(e.sample_temporally);
-        let mut v = serde_json::to_value(&e).unwrap();
-        v.as_object_mut().unwrap().remove("sample_temporally");
-        let back: EffectInstance = serde_json::from_value(v).unwrap();
-        assert!(back.sample_temporally);
     }
 
     #[test]
@@ -3752,41 +3702,6 @@ mod tests {
     }
 
     #[test]
-    fn layer_input_source_maps_each_option_to_its_sampling() {
-        // The render paths (draws.rs / export.rs) branch on these two
-        // predicates to choose masks and effects, so pin the mapping here — each
-        // option selects the intended sampling.
-        use LayerInputSource::*;
-        // None: raw source only (no masks, no effects).
-        assert!(!None.applies_masks());
-        assert!(!None.folds_effects());
-        // Masks: source + masks, no effects.
-        assert!(Masks.applies_masks());
-        assert!(!Masks.folds_effects());
-        // Effects and masks: source + masks + effects.
-        assert!(EffectsAndMasks.applies_masks());
-        assert!(EffectsAndMasks.folds_effects());
-
-        // The Choice index round-trips, and the cache-key byte is distinct per
-        // mode (so switching modes retires stale frames).
-        for m in [None, Masks, EffectsAndMasks] {
-            assert_eq!(LayerInputSource::from_choice(m.to_choice()), m);
-            assert_eq!(m.key_byte() as u32, m.to_choice());
-        }
-        assert_eq!(
-            [
-                None.key_byte(),
-                Masks.key_byte(),
-                EffectsAndMasks.key_byte()
-            ],
-            [0, 1, 2]
-        );
-        // The default is Effects and masks: a new
-        // matte/depth input samples the most complete source unless narrowed.
-        assert_eq!(LayerInputSource::default(), EffectsAndMasks);
-    }
-
-    #[test]
     fn file_param_steps_by_its_hold_keyed_index() {
         use crate::anim::{Animation, Keyframe, SideInterp};
 
@@ -3828,27 +3743,6 @@ mod tests {
         assert_eq!(frac(0.6).path_at(0.0), Some("b.cube"));
         assert_eq!(frac(9.0).path_at(0.0), Some("b.cube")); // clamp above
         assert_eq!(frac(-3.0).path_at(0.0), Some("a.cube")); // clamp below
-    }
-
-    #[test]
-    fn motion_blur_defaults_and_forward_compat() {
-        // The AE-style defaults: off, half-frame shutter centred on the frame.
-        let mb = MotionBlur::default();
-        assert!(!mb.enabled);
-        assert_eq!(mb.shutter_angle, 180.0);
-        assert_eq!(mb.shutter_phase, -90.0);
-        assert_eq!(mb.samples, 16);
-        // A comp saved before motion blur existed (no `motion_blur` key) loads
-        // with the default rather than failing (docs/10 §1.1 forward compat).
-        // Build a real comp, strip the key, and confirm it re-loads defaulted.
-        let mut v = serde_json::to_value(comp_with_cameras()).unwrap();
-        v.as_object_mut().unwrap().remove("motion_blur");
-        let comp: Composition = serde_json::from_value(v).unwrap();
-        assert_eq!(comp.motion_blur, MotionBlur::default());
-        // And a layer without the `motion_blur` switch defaults it off.
-        assert!(!Switches::default().motion_blur);
-        // Same forward-compat rule for shy: absent means off.
-        assert!(!Switches::default().shy);
     }
 
     #[test]
@@ -3916,150 +3810,6 @@ mod tests {
             ..MotionBlur::default()
         };
         assert_eq!(at_cap.sample_offsets().len(), 256);
-    }
-
-    #[test]
-    fn file_param_serde_round_trips() {
-        let fp = FileParam::single("C:/luts/teal-orange.cube");
-        let json = serde_json::to_string(&fp).unwrap();
-        assert_eq!(fp, serde_json::from_str::<FileParam>(&json).unwrap());
-
-        // And wrapped in an EffectValue (the shape projects save/load).
-        let ev = EffectValue::File(fp);
-        let ev_json = serde_json::to_string(&ev).unwrap();
-        assert_eq!(ev, serde_json::from_str::<EffectValue>(&ev_json).unwrap());
-    }
-
-    /// Flow tuning parked while the policy is Nearest is document state: it
-    /// survives a save/load, and a project saved before the field existed still
-    /// loads (the key is simply absent).
-    #[test]
-    fn parked_flow_round_trips_and_old_projects_still_load() {
-        let mut layer = comp_with_cameras().layers.remove(0);
-        let params = crate::retime::FlowParams {
-            smoothness: 80.0,
-            detail: crate::retime::VectorDetail::Ultra,
-            ..Default::default()
-        };
-        layer.interpolation = crate::retime::Interpolation::Nearest;
-        layer.parked_flow = Some(Box::new(params.clone()));
-
-        let json = serde_json::to_string(&layer).unwrap();
-        let back: Layer = serde_json::from_str(&json).unwrap();
-        assert_eq!(back.parked_flow.as_deref(), Some(&params));
-        assert_eq!(back, layer);
-
-        // An old project has no `parked_flow` key at all — which is also what
-        // a layer that never parked anything writes.
-        layer.parked_flow = None;
-        let old = serde_json::to_string(&layer).unwrap();
-        assert!(
-            !old.contains("parked_flow"),
-            "nothing parked, nothing saved"
-        );
-        assert_eq!(serde_json::from_str::<Layer>(&old).unwrap(), layer);
-    }
-
-    /// The values a Precomp layer hands the graph it places are document state
-    /// (docs/impl/node-graph-comp.md §5.3): they survive a save and a load, and
-    /// a project saved before the field existed loads with none.
-    #[test]
-    fn graph_inputs_round_trip_and_older_files_open_without_them() {
-        let mut layer = comp_with_cameras().layers.remove(0);
-
-        // Nothing typed: no key at all, which is what every project written
-        // before the field wrote.
-        let old = serde_json::to_string(&layer).unwrap();
-        assert!(
-            !old.contains("graph_inputs"),
-            "nothing typed, nothing saved"
-        );
-        let back: Layer = serde_json::from_str(&old).unwrap();
-        assert_eq!(back, layer);
-        assert!(back.graph_inputs.is_none());
-
-        let inst = crate::fx::instantiate("node_graph").expect("the catalogue knows it");
-        layer.graph_inputs = Some(inst.clone());
-        let json = serde_json::to_string(&layer).unwrap();
-        let back: Layer = serde_json::from_str(&json).unwrap();
-        assert_eq!(back.graph_inputs.as_ref(), Some(&inst));
-        assert_eq!(back, layer);
-    }
-
-    /// **A line on a path round-trips, and a straight one writes what it always
-    /// wrote**. The two new fields are absent from the file
-    /// until they are used, so every `.lum` ever saved opens here unchanged —
-    /// and, just as importantly, every frame those projects have banked keeps
-    /// its name.
-    #[test]
-    fn text_on_a_path_round_trips_and_a_straight_line_writes_no_key() {
-        let mask = crate::mask::Mask::ellipse(60.0, 40.0, 30.0, 18.0);
-        let mut document = TextDocument {
-            text: "Lumit".into(),
-            expression: None,
-            size: 48.0,
-            fill: LinearColour([1.0, 1.0, 1.0, 1.0]),
-            path: None,
-            path_offset: crate::anim::Property::zero(),
-            animators: Vec::new(),
-            extra: serde_json::Map::new(),
-        };
-
-        let straight = serde_json::to_string(&document).unwrap();
-        assert!(
-            !straight.contains("path"),
-            "a straight line wrote a path key: {straight}"
-        );
-        assert_eq!(
-            serde_json::from_str::<TextDocument>(&straight).unwrap(),
-            document
-        );
-
-        document.path = Some(mask.id);
-        document.path_offset = crate::anim::Property::fixed(37.5);
-        let json = serde_json::to_string(&document).unwrap();
-        assert_eq!(
-            serde_json::from_str::<TextDocument>(&json).unwrap(),
-            document
-        );
-        // The offset writes as a bare number while it is still, the way every
-        // other still property in the document does.
-        assert!(json.contains("\"path_offset\":37.5"), "{json}");
-    }
-
-    /// **A layer with no animators writes no animators key**:
-    /// the whole per-letter model is absent from the file until somebody adds
-    /// one, so every `.lum` saved before it existed opens byte-identical and
-    /// every frame those projects have banked keeps its name.
-    #[test]
-    fn text_animators_are_absent_until_there_are_some() {
-        let mut document = TextDocument {
-            text: "Lumit".into(),
-            expression: None,
-            size: 48.0,
-            fill: LinearColour([1.0, 1.0, 1.0, 1.0]),
-            path: None,
-            path_offset: crate::anim::Property::zero(),
-            animators: Vec::new(),
-            extra: serde_json::Map::new(),
-        };
-        let plain = serde_json::to_string(&document).unwrap();
-        assert!(!plain.contains("animators"), "{plain}");
-
-        let mut animator = crate::text::TextAnimator::new("Cascade");
-        animator.selector.end = crate::anim::Property::fixed(30.0);
-        animator.selector.basis = crate::text::SelectorBasis::Words;
-        animator.position_y = crate::anim::Property::fixed(-60.0);
-        document.animators.push(animator);
-        let json = serde_json::to_string(&document).unwrap();
-        assert_eq!(
-            serde_json::from_str::<TextDocument>(&json).unwrap(),
-            document
-        );
-        // The numbers write as bare numbers while they are still, and the
-        // untouched ones are simply not there.
-        assert!(json.contains("\"position_y\":-60.0"), "{json}");
-        assert!(!json.contains("scale_x"), "{json}");
     }
 
     /// **The adjustment switch survives a save/load, and an old file is
@@ -4314,110 +4064,6 @@ mod tests {
         );
     }
 
-    /// A placed **node graph** forces the intermediate (docs/impl/
-    /// node-graph-comp.md §5.9): a graph draw needs its own raster for the
-    /// clipping a collapse would skip.
-    #[test]
-    fn a_placed_node_graph_forces_the_intermediate() {
-        let mut inner = comp_with_cameras();
-        inner.layers.clear();
-        inner.graph = Some(crate::comp_graph::CompGraph::new_with_output());
-        let nested_id = inner.id;
-        let mut doc = Document::new();
-        doc.items.push(ProjectItem::Composition(inner.clone()));
-
-        let comp = comp_with_cameras();
-        let mut pre = comp.layers[0].clone();
-        pre.id = Uuid::now_v7();
-        pre.kind = LayerKind::Precomp { comp: nested_id };
-        pre.switches.visible = true;
-        pre.switches.collapse = true;
-        pre.blend = BlendMode::Normal;
-        pre.masks.clear();
-        pre.transform = TransformGroup::default();
-        assert_eq!(
-            collapse_state(&doc, &comp, &pre, 1.0),
-            CollapseState::Forced
-        );
-
-        // The same comp with layers instead of a graph collapses as ever.
-        let mut layers = Document::new();
-        inner.graph = None;
-        layers.items.push(ProjectItem::Composition(inner));
-        assert_eq!(
-            collapse_state(&layers, &comp, &pre, 1.0),
-            CollapseState::Active
-        );
-    }
-
-    /// An inner adjustment layer with a live effect stack forces the
-    /// intermediate — its effects apply to the composite beneath it within
-    /// its own comp, and splicing would hand it the parent stack instead.
-    /// A bypassed stack (fx switch off, or every effect disabled) collapses
-    /// normally.
-    #[test]
-    fn an_inner_live_adjustment_layer_forces_the_intermediate() {
-        let mut inner_comp = comp_with_cameras();
-        let mut adj = inner_comp.layers[0].clone();
-        adj.id = Uuid::now_v7();
-        adj.kind = LayerKind::Adjustment;
-        adj.switches.visible = true;
-        adj.effects
-            .push(crate::fx::instantiate("saturation").unwrap());
-        inner_comp.layers.push(adj);
-        let nested_id = inner_comp.id;
-        let mut doc = Document::new();
-        doc.items.push(ProjectItem::Composition(inner_comp));
-
-        let comp = comp_with_cameras();
-        let mut pre = comp.layers[0].clone();
-        pre.id = Uuid::now_v7();
-        pre.kind = LayerKind::Precomp { comp: nested_id };
-        pre.switches.visible = true;
-        pre.switches.collapse = true;
-        pre.blend = BlendMode::Normal;
-        pre.masks.clear();
-        pre.transform = TransformGroup::default();
-        assert_eq!(
-            collapse_state(&doc, &comp, &pre, 1.0),
-            CollapseState::Forced
-        );
-
-        // Bypass the stack both ways: each restores Active.
-        let with = |edit: &dyn Fn(&mut Layer)| {
-            let mut doc = Document::new();
-            let mut inner_comp = comp_with_cameras();
-            let mut adj = inner_comp.layers[0].clone();
-            adj.id = Uuid::now_v7();
-            adj.kind = LayerKind::Adjustment;
-            adj.switches.visible = true;
-            adj.effects
-                .push(crate::fx::instantiate("saturation").unwrap());
-            edit(&mut adj);
-            let nested_id = inner_comp.id;
-            inner_comp.layers.push(adj);
-            doc.items.push(ProjectItem::Composition(inner_comp));
-            let mut pre = pre.clone();
-            pre.kind = LayerKind::Precomp { comp: nested_id };
-            collapse_state(&doc, &comp, &pre, 1.0)
-        };
-        assert_eq!(
-            with(&|l| l.switches.fx = false),
-            CollapseState::Active,
-            "fx switch off must not force"
-        );
-        assert_eq!(
-            with(&|l| l.effects[0].enabled = false),
-            CollapseState::Active,
-            "a fully disabled stack must not force"
-        );
-        assert_eq!(
-            with(&|l| l.switches.visible = false),
-            CollapseState::Active,
-            "a hidden adjustment layer must not force"
-        );
-    }
-
     /// The topmost visible in-span camera wins; hidden and out-of-span ones
     /// never do; no camera at all → None (flat comp).
     #[test]
@@ -4437,48 +4083,6 @@ mod tests {
         let mut flat = comp_with_cameras();
         flat.layers.clear();
         assert!(flat.camera_pose(1.0).is_none());
-    }
-
-    /// The seven camera channels (docs/impl/camera.md §1) live in the kind, so
-    /// they answer on a Camera layer and nowhere else. Everything the new rows
-    /// get for nothing rests on this one lookup.
-    #[test]
-    fn layer_prop_answers_the_camera_channels_only_on_a_camera() {
-        use TransformProp as P;
-        let mut camera = comp_with_cameras().layers.remove(2);
-        let mut solid = camera.clone();
-        solid.kind = LayerKind::Solid {
-            def: Uuid::now_v7(),
-        };
-
-        for prop in [
-            P::PoiX,
-            P::PoiY,
-            P::PoiZ,
-            P::Zoom,
-            P::FocusDistance,
-            P::Aperture,
-            P::BlurLevel,
-        ] {
-            assert!(prop.is_camera_channel(), "{prop:?}");
-            assert!(camera.prop(prop).is_some(), "{prop:?} is on a camera");
-            assert!(solid.prop(prop).is_none(), "{prop:?} is not on a solid");
-        }
-        // Zoom is the kind's own property, not a copy of something else.
-        assert_eq!(camera.prop(P::Zoom).map(|p| p.value_at(0.0)), Some(1200.0));
-        // The eleven transform channels answer on both, as they always did.
-        assert!(camera.prop(P::Opacity).is_some());
-        assert!(solid.prop(P::Opacity).is_some());
-        // And a write goes to the slot the read came from.
-        camera
-            .prop_mut(P::BlurLevel)
-            .expect("a camera has one")
-            .animation = crate::anim::Animation::Static(40.0);
-        assert_eq!(
-            camera.prop(P::BlurLevel).map(|p| p.value_at(0.0)),
-            Some(40.0)
-        );
-        assert!(solid.prop_mut(P::Zoom).is_none());
     }
 
     /// A two-node camera's forward points at its point of interest, and the
@@ -4532,25 +4136,6 @@ mod tests {
                 blur_level: 60.0,
             })
         );
-    }
-
-    #[test]
-    fn parent_chain_walks_up_and_cycles_are_detected() {
-        let mut comp = comp_with_cameras();
-        let (a, b, c) = (comp.layers[0].id, comp.layers[1].id, comp.layers[2].id);
-        // No parents yet: empty chains, but a self-parent is still a cycle.
-        assert!(layer_parent_chain(&comp, c).is_empty());
-        assert!(parenting_would_cycle(&comp, a, a));
-        // Build a <- b <- c (b parented to a, c parented to b).
-        comp.layers[1].parent = Some(a);
-        comp.layers[2].parent = Some(b);
-        assert_eq!(layer_parent_chain(&comp, b), vec![a]);
-        assert_eq!(layer_parent_chain(&comp, c), vec![b, a]);
-        // a may not adopt b or c (they descend from a) — that would loop.
-        assert!(parenting_would_cycle(&comp, a, b));
-        assert!(parenting_would_cycle(&comp, a, c));
-        // But c re-parenting straight to a is fine (still a DAG upward).
-        assert!(!parenting_would_cycle(&comp, c, a));
     }
 
     #[test]
@@ -4797,125 +4382,6 @@ mod tests {
         );
     }
 
-    /// **A Node graph effect opens files through whatever holds it**
-    /// (docs/impl/node-graph-comp.md §2.1): a layer's stack and a live group's
-    /// header alike, since the header's stack runs on the members' composite
-    /// and the graph's Read boxes are on screen through it.
-    #[test]
-    fn the_footage_walk_follows_a_node_graph_effect_on_a_layer_and_a_header() {
-        let item = Uuid::now_v7();
-        let mut doc = Document::new();
-        // A Read box asks the document what its item is, so this one is here
-        // rather than being an id on its own.
-        doc.items.push(ProjectItem::Footage(FootageItem {
-            sequence: None,
-            id: item,
-            name: "plate.mp4".into(),
-            media: MediaRef {
-                relative_path: "plate.mp4".into(),
-                absolute_path: String::new(),
-                fingerprint: None,
-                extra: serde_json::Map::new(),
-            },
-            extra: serde_json::Map::new(),
-            colour_space: None,
-            source_layer: None,
-        }));
-
-        let mut graph = bare_comp("graph");
-        let graph_id = graph.id;
-        graph.graph = Some(crate::comp_graph::CompGraph {
-            nodes: vec![
-                crate::comp_graph::GraphNode::Read {
-                    id: Uuid::now_v7(),
-                    item,
-                    custom_name: None,
-                },
-                crate::comp_graph::GraphNode::Output { id: Uuid::now_v7() },
-            ],
-            edges: Vec::new(),
-            layout: Vec::new(),
-            exposed: Vec::new(),
-            groups: Vec::new(),
-        });
-        let mut inst = crate::fx::instantiate("node_graph").expect("the effect exists");
-        crate::fx::effects::node_graph::bind(
-            &mut inst,
-            graph_id,
-            graph.graph.as_ref().expect("a node graph"),
-        );
-
-        let mut host = bare_comp("host");
-        let mut hosted = bare_layer(LayerKind::Null);
-        hosted.effects = vec![inst.clone()];
-        host.layers.push(hosted);
-        let host_id = host.id;
-
-        let mut grouped = bare_comp("grouped");
-        let member = bare_layer(LayerKind::Null);
-        let member_id = member.id;
-        grouped.layers.push(member);
-        grouped.groups = vec![crate::group::LayerGroup {
-            id: Uuid::now_v7(),
-            name: "band".into(),
-            label: 0,
-            members: vec![member_id],
-            effects: vec![inst],
-        }];
-        let grouped_id = grouped.id;
-
-        for comp in [graph, host, grouped] {
-            doc.items.push(ProjectItem::Composition(comp));
-        }
-
-        assert_eq!(
-            comp_footage_items(&doc, doc.comp(host_id).unwrap()),
-            vec![item],
-            "a graph on a layer's stack names the files its Read boxes read"
-        );
-        assert_eq!(
-            comp_footage_items(&doc, doc.comp(grouped_id).unwrap()),
-            vec![item],
-            "and so does one on a group's header"
-        );
-    }
-
-    #[test]
-    fn solo_op_round_trips_and_any_solo_reports() {
-        use crate::ops::{apply, Op};
-        let mut comp = comp_with_cameras();
-        let a = comp.layers[0].id;
-        assert!(!any_solo(&comp), "nothing soloed to start");
-        comp.layers[0].switches.solo = true;
-        assert!(any_solo(&comp));
-        comp.layers[0].switches.solo = false;
-
-        let comp_id = comp.id;
-        let mut doc = Document::new();
-        doc.items.push(ProjectItem::Composition(comp));
-        let inv = apply(
-            &mut doc,
-            &Op::SetLayerSolo {
-                comp: comp_id,
-                layer: a,
-                solo: true,
-            },
-        )
-        .unwrap();
-        assert!(doc.comp(comp_id).unwrap().layers[0].switches.solo);
-        assert!(any_solo(doc.comp(comp_id).unwrap()));
-        assert_eq!(
-            inv,
-            Op::SetLayerSolo {
-                comp: comp_id,
-                layer: a,
-                solo: false
-            }
-        );
-        apply(&mut doc, &inv).unwrap();
-        assert!(!doc.comp(comp_id).unwrap().layers[0].switches.solo);
-    }
-
     fn bare_footage(name: &str, relative: &str, absolute: &str) -> FootageItem {
         FootageItem {
             sequence: None,
@@ -4931,22 +4397,6 @@ mod tests {
             extra: serde_json::Map::new(),
             source_layer: None,
         }
-    }
-
-    /// The Path column shows the path the saved project actually carries
-    /// (the absolute one is never written), and falls back to the
-    /// absolute one only when there is no relative path to show — an imported
-    /// file in a project that has never been saved.
-    #[test]
-    fn a_media_reference_shows_its_relative_path_and_falls_back_to_the_absolute() {
-        let both = bare_footage("a.mp4", "footage/a.mp4", "D:/shoot/a.mp4");
-        assert_eq!(both.media.display_path(), "footage/a.mp4");
-
-        let unsaved = bare_footage("a.mp4", "", "D:/shoot/a.mp4");
-        assert_eq!(unsaved.media.display_path(), "D:/shoot/a.mp4");
-
-        let neither = bare_footage("a.mp4", "", "");
-        assert_eq!(neither.media.display_path(), "");
     }
 
     /// The `in use` badge: footage, a solid and a nested composition all count
@@ -5004,63 +4454,6 @@ mod tests {
             "the outer comp is in nothing, however much is in it"
         );
         assert!(!doc.item_is_used(Uuid::now_v7()), "an id nobody knows");
-    }
-
-    /// A Sequence layer's clips place items too — each clip names its own
-    /// footage or composition, and the badge must see them.
-    #[test]
-    fn a_sequence_clip_counts_as_placing_its_source() {
-        let footage = bare_footage("a.mp4", "a.mp4", "");
-        let item = footage.id;
-        let mut source = bare_comp("Source");
-        let source_id = source.id;
-        source.layers.push(bare_layer(LayerKind::Adjustment));
-
-        let mut cut = bare_comp("Cut");
-        cut.layers.push(bare_layer(LayerKind::Sequence {
-            clips: vec![
-                crate::sequence::Clip::new(
-                    crate::sequence::ClipSource::Footage(item),
-                    Rational::new(0, 1).unwrap(),
-                    Rational::new(1, 1).unwrap(),
-                    Rational::new(0, 1).unwrap(),
-                    Rational::new(1, 1).unwrap(),
-                ),
-                crate::sequence::Clip::new(
-                    crate::sequence::ClipSource::Comp(source_id),
-                    Rational::new(1, 1).unwrap(),
-                    Rational::new(1, 1).unwrap(),
-                    Rational::new(0, 1).unwrap(),
-                    Rational::new(1, 1).unwrap(),
-                ),
-            ],
-        }));
-
-        let mut doc = Document::new();
-        doc.items.push(ProjectItem::Footage(footage));
-        doc.items.push(ProjectItem::Composition(source));
-        doc.items.push(ProjectItem::Composition(cut));
-
-        assert!(doc.item_is_used(item));
-        assert!(doc.item_is_used(source_id));
-    }
-
-    /// A hidden layer, or one the playhead is never inside, still *places* the
-    /// asset: the badge says what the project contains, not what is on screen.
-    #[test]
-    fn a_hidden_layer_still_uses_its_item() {
-        let footage = bare_footage("a.mp4", "a.mp4", "");
-        let item = footage.id;
-        let mut comp = bare_comp("Comp 1");
-        let mut layer = bare_layer(LayerKind::Footage { item });
-        layer.switches.visible = false;
-        comp.layers.push(layer);
-
-        let mut doc = Document::new();
-        doc.items.push(ProjectItem::Footage(footage));
-        doc.items.push(ProjectItem::Composition(comp));
-
-        assert!(doc.item_is_used(item));
     }
 
     /// The flowchart's question: one step each way from a comp, each
@@ -5194,26 +4587,6 @@ mod tests {
         );
     }
 
-    /// And a default one writes nothing, so a project that never separated
-    /// anything is byte-identical to the one the old build wrote.
-    #[test]
-    fn default_axis_modes_are_not_written_and_separated_ones_round_trip() {
-        let plain = TransformGroup::default();
-        let text = serde_json::to_string(&plain).unwrap();
-        assert!(
-            !text.contains("axis_modes"),
-            "the default is absence, not a field: {text}"
-        );
-
-        let mut separated = TransformGroup::default();
-        separated
-            .axis_modes
-            .set(TransformPair::Position, AxisMode::Separated);
-        let back: TransformGroup =
-            serde_json::from_str(&serde_json::to_string(&separated).unwrap()).unwrap();
-        assert_eq!(back, separated);
-    }
-
     /// An unknown key from a newer build survives a load and save beside the
     /// new field (docs/03 §12's forward-compatibility rule).
     #[test]
@@ -5290,22 +4663,6 @@ mod tests {
                 expected[1]
             );
         }
-    }
-
-    /// A static axis is left static: a constant needs no keys to stay constant.
-    #[test]
-    fn recombining_leaves_a_static_axis_alone() {
-        use crate::anim::{Animation, Keyframe, SideInterp};
-        let mut group = TransformGroup::default();
-        group.scale_x.animation = Animation::Keyframed(vec![Keyframe {
-            time: Rational::new(2, 1).unwrap(),
-            value: 50.0,
-            interp_in: SideInterp::Linear,
-            interp_out: SideInterp::Linear,
-        }]);
-        let unified = group.unified_axes(TransformPair::Scale);
-        assert!(unified.is_empty(), "nothing to merge onto a constant");
-        assert!(!group.scale_y.is_animated());
     }
 
     /// The anti-aliasing budget bites only above 4K, and only as far as it

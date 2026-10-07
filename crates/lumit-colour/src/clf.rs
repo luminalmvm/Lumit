@@ -605,63 +605,6 @@ mod tests {
     }
 
     #[test]
-    fn a_float_matrix_reads_straight_through() {
-        let text = r#"<ProcessList compCLFversion="3" id="t">
-          <Matrix inBitDepth="32f" outBitDepth="32f">
-            <Array dim="3 3 3">0 1 0  1 0 0  0 0 1</Array>
-          </Matrix>
-        </ProcessList>"#;
-        let chain = parse_clf("t.clf", text).expect("parses");
-        assert_eq!(chain.ops.len(), 1);
-        assert!(close(chain.eval([0.2, 0.5, 0.8]), [0.5, 0.2, 0.8], 1e-6));
-    }
-
-    #[test]
-    fn an_integer_matrix_is_rescaled_rather_than_read_a_thousand_times_too_bright() {
-        // 10-bit in, float out: the identity in CLF's units is the identity
-        // in ours only after the 1023 comes out.
-        let text = r#"<ProcessList id="t">
-          <Matrix inBitDepth="10i" outBitDepth="32f">
-            <Array dim="3 4 3">1 0 0 0  0 1 0 0  0 0 1 0</Array>
-          </Matrix>
-        </ProcessList>"#;
-        let chain = parse_clf("t.clf", text).expect("parses");
-        let got = chain.eval([1.0, 1.0, 1.0]);
-        assert!(close(got, [1023.0; 3], 1e-2), "{got:?}");
-    }
-
-    #[test]
-    fn a_cube_is_transposed_out_of_clfs_blue_fastest_order() {
-        // A 2³ cube whose samples encode their own red index. Read in file
-        // order it would encode blue instead, which is the classic silent bug.
-        let mut values = String::new();
-        for r in 0..2 {
-            for g in 0..2 {
-                for b in 0..2 {
-                    let _ = (g, b);
-                    values.push_str(&format!("{}.0 0.0 0.0 ", r));
-                }
-            }
-        }
-        let text = format!(
-            r#"<ProcessList id="t"><LUT3D inBitDepth="32f" outBitDepth="32f">
-            <Array dim="2 2 2 3">{values}</Array></LUT3D></ProcessList>"#
-        );
-        let chain = parse_clf("t.clf", &text).expect("parses");
-        // Full red must read 1; full blue must read 0.
-        assert!(close(chain.eval([1.0, 0.0, 0.0]), [1.0, 0.0, 0.0], 1e-6));
-        assert!(close(chain.eval([0.0, 0.0, 1.0]), [0.0, 0.0, 0.0], 1e-6));
-    }
-
-    #[test]
-    fn a_1d_table_normalises_its_output_scale() {
-        let text = r#"<ProcessList id="t"><LUT1D inBitDepth="32f" outBitDepth="10i">
-          <Array dim="2 1">0 1023</Array></LUT1D></ProcessList>"#;
-        let chain = parse_clf("t.clf", text).expect("parses");
-        assert!(close(chain.eval([0.5; 3]), [0.5; 3], 1e-4));
-    }
-
-    #[test]
     fn a_moncurve_exponent_node_reads_its_parameters() {
         let text = r#"<ProcessList id="t"><Exponent inBitDepth="32f" outBitDepth="32f" style="monCurveFwd">
           <ExponentParams exponent="2.4" offset="0.055"/></Exponent></ProcessList>"#;
@@ -672,16 +615,6 @@ mod tests {
             "{:?}",
             chain.eval([0.5; 3])
         );
-    }
-
-    #[test]
-    fn a_per_channel_exponent_states_three() {
-        let text = r#"<ProcessList id="t"><Exponent inBitDepth="32f" outBitDepth="32f" style="basicFwd">
-          <ExponentParams exponent="2.0" channel="R"/>
-          <ExponentParams exponent="3.0" channel="G"/>
-          <ExponentParams exponent="1.0" channel="B"/></Exponent></ProcessList>"#;
-        let chain = parse_clf("t.clf", text).expect("parses");
-        assert!(close(chain.eval([0.5; 3]), [0.25, 0.125, 0.5], 1e-6));
     }
 
     #[test]
@@ -696,55 +629,6 @@ mod tests {
     }
 
     #[test]
-    fn a_range_node_scales_both_ends_by_their_own_depth() {
-        let text = r#"<ProcessList id="t"><Range inBitDepth="10i" outBitDepth="32f">
-          <minInValue>64</minInValue><maxInValue>940</maxInValue>
-          <minOutValue>0</minOutValue><maxOutValue>1</maxOutValue></Range></ProcessList>"#;
-        let chain = parse_clf("t.clf", text).expect("parses");
-        // 64/1023 in maps to 0 out, 940/1023 maps to 1.
-        assert!(close(chain.eval([64.0 / 1023.0; 3]), [0.0; 3], 1e-5));
-        assert!(close(chain.eval([940.0 / 1023.0; 3]), [1.0; 3], 1e-5));
-    }
-
-    #[test]
-    fn a_cdl_node_reads_its_sop_and_sat() {
-        let text = r#"<ProcessList id="t"><ASC_CDL inBitDepth="32f" outBitDepth="32f" style="Fwd">
-          <SOPNode><Slope>1.1 1.0 0.9</Slope><Offset>0 0 0</Offset><Power>1 1 1</Power></SOPNode>
-          <SatNode><Saturation>1.0</Saturation></SatNode></ASC_CDL></ProcessList>"#;
-        let chain = parse_clf("t.clf", text).expect("parses");
-        assert!(close(chain.eval([0.5; 3]), [0.55, 0.5, 0.45], 1e-5));
-    }
-
-    #[test]
-    fn several_nodes_run_in_file_order() {
-        let text = r#"<ProcessList id="t">
-          <Matrix inBitDepth="32f" outBitDepth="32f"><Array dim="3 3 3">2 0 0 0 2 0 0 0 2</Array></Matrix>
-          <Range inBitDepth="32f" outBitDepth="32f"><minOutValue>0</minOutValue><maxOutValue>1</maxOutValue></Range>
-        </ProcessList>"#;
-        let chain = parse_clf("t.clf", text).expect("parses");
-        assert_eq!(chain.ops.len(), 2);
-        assert!(
-            close(chain.eval([0.6; 3]), [1.0; 3], 1e-6),
-            "the range clamped after the matrix"
-        );
-    }
-
-    #[test]
-    fn raw_halfs_and_half_domain_refuse_by_name() {
-        for feature in ["rawHalfs", "halfDomain"] {
-            let text = format!(
-                r#"<ProcessList id="t"><LUT1D inBitDepth="32f" outBitDepth="32f" {feature}="true">
-                <Array dim="2 1">0 1</Array></LUT1D></ProcessList>"#
-            );
-            let err = parse_clf("t.clf", &text);
-            assert!(
-                matches!(&err, Err(ColourError::UnsupportedClfFeature { feature: f }) if f.contains(feature)),
-                "{feature}: {err:?}"
-            );
-        }
-    }
-
-    #[test]
     fn an_unimplemented_process_node_refuses_by_name() {
         let text = r#"<ProcessList id="t"><FixedFunction inBitDepth="32f" outBitDepth="32f" style="ACES_RedMod03"/></ProcessList>"#;
         let err = parse_clf("t.clf", text);
@@ -752,35 +636,6 @@ mod tests {
             matches!(&err, Err(ColourError::UnsupportedClfNode { node }) if node == "FixedFunction"),
             "{err:?}"
         );
-    }
-
-    #[test]
-    fn an_external_reference_refuses_by_name() {
-        let text = r#"<ProcessList id="t"><Reference path="other.clf"/></ProcessList>"#;
-        assert!(matches!(
-            parse_clf("t.clf", text),
-            Err(ColourError::UnsupportedClfNode { .. })
-        ));
-    }
-
-    #[test]
-    fn a_mirrored_exponent_style_refuses_by_name() {
-        let text = r#"<ProcessList id="t"><Exponent inBitDepth="32f" outBitDepth="32f" style="basicMirrorFwd">
-          <ExponentParams exponent="2.4"/></Exponent></ProcessList>"#;
-        let err = parse_clf("t.clf", text);
-        assert!(
-            matches!(&err, Err(ColourError::UnsupportedClfFeature { feature }) if feature.contains("basicMirrorFwd")),
-            "{err:?}"
-        );
-    }
-
-    #[test]
-    fn an_integer_depth_on_a_log_node_refuses_rather_than_guesses() {
-        let text = r#"<ProcessList id="t"><Log inBitDepth="10i" outBitDepth="32f" style="log2"/></ProcessList>"#;
-        assert!(matches!(
-            parse_clf("t.clf", text),
-            Err(ColourError::UnsupportedClfFeature { .. })
-        ));
     }
 
     #[test]

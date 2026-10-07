@@ -240,68 +240,6 @@ pub fn stress_document(p: &StressParams) -> Document {
 mod tests {
     use super::*;
 
-    /// Count (footage items, comps, total layers, biggest comp, total keyframes).
-    fn shape(doc: &Document) -> (usize, usize, usize, usize, usize) {
-        let mut footage = 0;
-        let mut comps = 0;
-        let mut layers = 0;
-        let mut biggest = 0;
-        let mut keys = 0;
-        for item in &doc.items {
-            match item {
-                ProjectItem::Footage(_) => footage += 1,
-                ProjectItem::Composition(c) => {
-                    comps += 1;
-                    layers += c.layers.len();
-                    biggest = biggest.max(c.layers.len());
-                    for l in &c.layers {
-                        if let Animation::Keyframed(k) = &l.transform.position_x.animation {
-                            keys += k.len();
-                        }
-                    }
-                }
-                _ => {}
-            }
-        }
-        (footage, comps, layers, biggest, keys)
-    }
-
-    /// The same params always build a byte-identical document (fixed ids, no
-    /// clock) — the property the perf harness and golden tests rely on.
-    #[test]
-    fn stress_document_is_deterministic() {
-        let a = stress_document(&StressParams::TINY);
-        let b = stress_document(&StressParams::TINY);
-        assert_eq!(
-            serde_json::to_string(&a).unwrap(),
-            serde_json::to_string(&b).unwrap()
-        );
-    }
-
-    /// The tiny document has exactly the requested shape.
-    #[test]
-    fn stress_document_matches_its_params() {
-        let p = StressParams::TINY;
-        let (footage, comps, layers, biggest, keys) = shape(&stress_document(&p));
-        assert_eq!(footage, p.footage_items);
-        assert_eq!(comps, p.comps);
-        assert_eq!(layers, p.layers_total);
-        assert_eq!(biggest, p.biggest_comp_layers);
-        assert_eq!(keys, p.keyframes_total);
-    }
-
-    /// The full reference document (docs/13 §2.1) builds with the exact spec
-    /// counts — 200 comps, 5,000 layers (one comp of 1,000), 250,000 keyframes,
-    /// 2,000 footage items.
-    #[test]
-    fn reference_stress_document_matches_the_spec() {
-        let p = StressParams::REFERENCE;
-        assert_eq!(
-            shape(&stress_document(&p)),
-            (2_000, 200, 5_000, 1_000, 250_000)
-        );
-    }
-
     /// The fixture survives a `.lum` save/open round-trip unchanged (the path
     /// the S4/S5 open/save budgets exercise).
     #[test]

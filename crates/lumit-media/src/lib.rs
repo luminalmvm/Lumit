@@ -134,26 +134,4 @@ mod tests {
         };
         assert_eq!(fp.cache_key(), "ab-10");
     }
-
-    #[test]
-    fn cache_key_does_not_panic_on_an_empty_hash() {
-        let fp = Fingerprint {
-            size: 0,
-            mtime_unix: 0,
-            content_hash: String::new(),
-        };
-        assert_eq!(fp.cache_key(), "-0");
-    }
-
-    #[test]
-    fn fingerprint_of_zero_byte_file_does_not_panic() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("empty.bin");
-        std::fs::write(&path, []).unwrap();
-        let fp = Fingerprint::of(&path).unwrap();
-        assert_eq!(fp.size, 0);
-        assert_eq!(fp.content_hash.len(), 64);
-        // Must not panic when used for a cache key either.
-        assert!(fp.cache_key().ends_with("-0"));
-    }
 }

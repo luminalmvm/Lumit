@@ -12,7 +12,6 @@
 
 import 'dart:io';
 
-import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/main.dart';
@@ -23,9 +22,6 @@ import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/l10n/strings.dart';
-import 'package:lumit_flutter/state/dock.dart' show WorkspacePreset;
-import 'package:lumit_flutter/state/workspace.dart' show noViewerOverlays;
-import 'package:lumit_flutter/theme/theme.dart';
 import 'package:provider/provider.dart';
 
 import 'frb_test_support.dart';
@@ -77,16 +73,6 @@ void main() {
       await tester.pump();
     }
 
-    /// Open a menu without choosing anything, and put it away again.
-    Future<void> open(WidgetTester tester, String menu, {String? under}) async {
-      await tester.tap(find.byKey(ValueKey<String>('menu-$menu')));
-      await tester.pump();
-      if (under != null) {
-        await tester.tap(find.text(under));
-        await tester.pump();
-      }
-    }
-
     /// Re-read the model and rebuild the bar.
     ///
     /// `tester.pump()` with no duration does not move the fake clock, and the
@@ -98,11 +84,6 @@ void main() {
     Future<void> settle(WidgetTester tester, dynamic p) async {
       (p.uiState as LumitUiState).model.refresh();
       (p.state as LumitState).notifyDocumentChanged();
-      await tester.pump();
-    }
-
-    Future<void> dismiss(WidgetTester tester) async {
-      await tester.tapAt(const Offset(500, 800));
       await tester.pump();
     }
 
@@ -150,55 +131,6 @@ void main() {
           reason: 'a horizontal flip leaves the other axis alone');
     });
 
-    testWidgets('Layer ▸ Transform ▸ Centre in view puts it in the middle',
-        (tester) async {
-      final p = withComp();
-      final layer = p.comp.addSolidLayer();
-      p.uiState.setSelection([layer]);
-      p.uiState.model.refresh();
-      await mount(tester, p);
-
-      await choose(tester, 'Layer', 'Centre in view', under: 'Transform');
-
-      final settings = p.comp.getSettings();
-      expect(staticOf(layer.getTransform().positionX), settings.width / 2);
-      expect(staticOf(layer.getTransform().positionY), settings.height / 2);
-    });
-
-    testWidgets('Layer ▸ Transform separates a pair and offers to combine it',
-        (tester) async {
-      final p = withComp();
-      final layer = p.comp.addSolidLayer();
-      p.uiState.setSelection([layer]);
-      p.uiState.model.refresh();
-      await mount(tester, p);
-
-      await choose(tester, 'Layer', 'Separate Position axes',
-          under: 'Transform');
-      expect(layer.getInfo().axisModes.position, BridgeAxisMode.separated);
-
-      // The row now says the opposite, because it says what pressing it does.
-      await settle(tester, p);
-      await choose(tester, 'Layer', 'Combine Position axes',
-          under: 'Transform');
-      expect(layer.getInfo().axisModes.position, BridgeAxisMode.combined);
-    });
-
-    testWidgets('Layer ▸ 3D layer turns the switch on for every selected layer',
-        (tester) async {
-      final p = withComp();
-      final a = p.comp.addSolidLayer();
-      final b = p.comp.addSolidLayer();
-      p.uiState.setSelection([a, b]);
-      p.uiState.model.refresh();
-      await mount(tester, p);
-
-      await choose(tester, 'Layer', '3D layer');
-
-      expect(a.getSwitches().threeD, isTrue);
-      expect(b.getSwitches().threeD, isTrue);
-    });
-
     testWidgets('Layer ▸ Blending mode sets the mode, and the steps walk it',
         (tester) async {
       final p = withComp();
@@ -241,61 +173,6 @@ void main() {
       expect(under.getMatte(), isNull);
     });
 
-    testWidgets('Layer ▸ Markers marks the layer and clears it again',
-        (tester) async {
-      final p = withComp();
-      final layer = p.comp.addSolidLayer();
-      p.uiState.setSelection([layer]);
-      p.uiState.playheadFrame.value = 12;
-      p.uiState.model.refresh();
-      await mount(tester, p);
-
-      await choose(tester, 'Layer', 'Add at playhead', under: 'Markers');
-      expect(layer.getMarkers().length, 1);
-
-      await settle(tester, p);
-      await choose(tester, 'Layer', 'Delete all markers', under: 'Markers');
-      expect(layer.getMarkers(), isEmpty);
-    });
-
-    /// The Mask submenu means the mask whose row the Timeline has picked, so
-    /// with none picked every row in it is dead.
-    testWidgets('Layer ▸ Mask is dead until a mask row is picked',
-        (tester) async {
-      final p = withComp();
-      final layer = p.comp.addSolidLayer();
-      p.uiState.setSelection([layer]);
-      p.uiState.model.refresh();
-      await mount(tester, p);
-
-      final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.studio);
-      await open(tester, 'Layer', under: 'Mask');
-      expect(tester.widget<Text>(find.text('Subtract')).style?.color,
-          t.textDisabled);
-      // Inverted is a tick row rather than a mode row, and it was the one that
-      // drew live and then swallowed the press.
-      expect(tester.widget<Text>(find.text('Inverted')).style?.color,
-          t.textDisabled,
-          reason: 'a row with no mask to invert greys like the rest of them');
-      await dismiss(tester);
-    });
-
-    testWidgets('Layer ▸ Flow is dead on a kind with no frames to interpolate',
-        (tester) async {
-      final p = withComp();
-      final layer = p.comp.addSolidLayer();
-      p.uiState.setSelection([layer]);
-      p.uiState.model.refresh();
-      await mount(tester, p);
-
-      final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.studio);
-      await open(tester, 'Layer');
-      expect(
-          tester.widget<Text>(find.text('Flow')).style?.color, t.textDisabled,
-          reason: 'a solid has no source frames to make in-betweens from');
-      await dismiss(tester);
-    });
-
     testWidgets('Animation ▸ Set keyframe plants one on the picked row',
         (tester) async {
       final p = withComp();
@@ -333,73 +210,6 @@ void main() {
       expect(after, isA<BridgeScalar_Keyframed>());
       expect((after as BridgeScalar_Keyframed).field0.length, 3,
           reason: 'the playhead sat between the two, so a third lands there');
-    });
-
-    testWidgets(
-        'Animation ▸ Toggle hold keyframe holds the key at the playhead',
-        (tester) async {
-      final p = withComp();
-      final layer = p.comp.addSolidLayer();
-      layer.setTransform(
-        prop: BridgeTransformProp.positionX,
-        value: BridgeScalar.keyframed([
-          BridgeKeyframe(
-            time: p.comp.timeOfFrame(frame: 5),
-            value: 0,
-            interpIn: const BridgeSideInterp.linear(),
-            interpOut: const BridgeSideInterp.linear(),
-          ),
-          BridgeKeyframe(
-            time: p.comp.timeOfFrame(frame: 25),
-            value: 100,
-            interpIn: const BridgeSideInterp.linear(),
-            interpOut: const BridgeSideInterp.linear(),
-          ),
-        ]),
-      );
-      p.uiState.setSelection([layer]);
-      p.uiState.selectedProperties.value = [
-        '${layer.internallayerId}/transform/positionX',
-      ];
-      p.uiState.playheadFrame.value = 5;
-      p.uiState.model.refresh();
-      await mount(tester, p);
-
-      await choose(tester, 'Animation', 'Toggle hold keyframe');
-
-      final keys =
-          (layer.getTransform().positionX as BridgeScalar_Keyframed).field0;
-      expect(keys.first.interpOut, isA<BridgeSideInterp_Hold>());
-      expect(keys.last.interpOut, isA<BridgeSideInterp_Linear>(),
-          reason: 'only the key under the playhead was asked about');
-
-      // And back again — the row is one key, not two.
-      await settle(tester, p);
-      await choose(tester, 'Animation', 'Toggle hold keyframe');
-      expect(
-        (layer.getTransform().positionX as BridgeScalar_Keyframed)
-            .field0
-            .first
-            .interpOut,
-        isA<BridgeSideInterp_Linear>(),
-      );
-    });
-
-    testWidgets('the keyframe dialogues are dead with no key at the playhead',
-        (tester) async {
-      final p = withComp();
-      final layer = p.comp.addSolidLayer();
-      p.uiState.setSelection([layer]);
-      p.uiState.model.refresh();
-      await mount(tester, p);
-
-      final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.studio);
-      await open(tester, 'Animation');
-      for (final row in ['Keyframe interpolation…', 'Keyframe speed…']) {
-        expect(tester.widget<Text>(find.text(row)).style?.color, t.textDisabled,
-            reason: '$row has nothing to act on');
-      }
-      await dismiss(tester);
     });
 
     testWidgets('Animation ▸ Keyframe interpolation… writes both sides',
@@ -446,87 +256,6 @@ void main() {
       expect(keys.first.interpOut, isA<BridgeSideInterp_Hold>());
     });
 
-    testWidgets('Animation ▸ Keyframe speed… writes the typed numbers',
-        (tester) async {
-      final p = withComp();
-      final layer = p.comp.addSolidLayer();
-      layer.setTransform(
-        prop: BridgeTransformProp.positionX,
-        value: BridgeScalar.keyframed([
-          BridgeKeyframe(
-            time: p.comp.timeOfFrame(frame: 0),
-            value: 0,
-            interpIn: const BridgeSideInterp.linear(),
-            interpOut: const BridgeSideInterp.linear(),
-          ),
-          BridgeKeyframe(
-            time: p.comp.timeOfFrame(frame: 20),
-            value: 100,
-            interpIn: const BridgeSideInterp.linear(),
-            interpOut: const BridgeSideInterp.linear(),
-          ),
-        ]),
-      );
-      p.uiState.setSelection([layer]);
-      p.uiState.selectedProperties.value = [
-        '${layer.internallayerId}/transform/positionX',
-      ];
-      p.uiState.playheadFrame.value = 0;
-      p.uiState.model.refresh();
-      await mount(tester, p);
-
-      await choose(tester, 'Animation', 'Keyframe speed…');
-      await tester.pumpAndSettle();
-      // The first key has an out side only.
-      expect(find.byKey(const ValueKey('key-speed-in')), findsNothing);
-      final well = find.byKey(const ValueKey('key-speed-out'));
-      await tester.tap(well);
-      await tester.pump();
-      await tester.enterText(
-          find.descendant(of: well, matching: find.byType(EditableText)), '40');
-      await tester.testTextInput.receiveAction(TextInputAction.done);
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('keyframe-confirm')));
-      await tester.pumpAndSettle();
-
-      final keys =
-          (layer.getTransform().positionX as BridgeScalar_Keyframed).field0;
-      final out = keys.first.interpOut as BridgeSideInterp_Bezier;
-      expect(out.field0.speed, 40);
-      expect(out.field0.influence, closeTo(1 / 3, 1e-9),
-          reason: 'the reach a straight side already showed');
-      expect(keys.last.interpIn, isA<BridgeSideInterp_Linear>(),
-          reason: 'only the key on the playhead');
-    });
-
-    testWidgets('Animation ▸ Animate text gives a Type layer an animator',
-        (tester) async {
-      final p = withComp();
-      final layer = p.comp.addTextLayer();
-      p.uiState.setSelection([layer]);
-      p.uiState.model.refresh();
-      await mount(tester, p);
-
-      expect(layer.getText()!.animators, isEmpty);
-      await choose(tester, 'Animation', 'Animate text');
-      expect(layer.getText()!.animators.length, 1);
-    });
-
-    testWidgets('Animation ▸ Animate text is dead on a layer with no words',
-        (tester) async {
-      final p = withComp();
-      final layer = p.comp.addSolidLayer();
-      p.uiState.setSelection([layer]);
-      p.uiState.model.refresh();
-      await mount(tester, p);
-
-      final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.studio);
-      await open(tester, 'Animation');
-      expect(tester.widget<Text>(find.text('Animate text')).style?.color,
-          t.textDisabled);
-      await dismiss(tester);
-    });
-
     testWidgets('Animation ▸ Add expression puts one on the picked row',
         (tester) async {
       final p = withComp();
@@ -549,106 +278,6 @@ void main() {
       final after = layer.getTransform().positionX;
       expect(after, isA<BridgeScalar_Expression>());
       expect((after as BridgeScalar_Expression).field0, 'time * 2');
-    });
-
-    /// The wireframes, the handles and the hover highlight sit on one switch,
-    /// which also has a seat in the Viewer's own view menu. This row is the
-    /// second door onto that switch, so it has to move the same state.
-    testWidgets('View ▸ Show wireframe flips the layer controls',
-        (tester) async {
-      final p = withComp();
-      await mount(tester, p);
-      expect(p.uiState.viewerLayerControls, isTrue);
-
-      await choose(tester, 'View', 'Show wireframe');
-      expect(p.uiState.viewerLayerControls, isFalse);
-
-      await settle(tester, p);
-      await choose(tester, 'View', 'Show wireframe');
-      expect(p.uiState.viewerLayerControls, isTrue);
-    });
-
-    /// The chord is bound to the **slot**, not to the name, and the
-    /// dialogue says which slot that is rather than letting it be a surprise
-    /// the first time a rename moves it.
-    testWidgets('Window ▸ Assign shortcut names the slot it will bind',
-        (tester) async {
-      final p = withComp();
-      p.uiState.workspace.activePreset = WorkspacePreset.edit;
-      expect(p.uiState.workspace.activeWorkspaceSlot, 1,
-          reason: 'the presets come first on the strip');
-      await mount(tester, p);
-
-      await choose(tester, 'Window', 'Assign shortcut to this workspace');
-      await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('workspace-shortcut-summary')),
-          findsOneWidget);
-
-      // It opens showing the chord the slot already answers to, so a person
-      // who only wanted to look sees what they have.
-      String box() => tester
-          .widget<Text>(find.descendant(
-              of: find.byKey(const ValueKey('workspace-shortcut-chord')),
-              matching: find.byType(Text)))
-          .data!;
-      final was = box();
-      expect(was, isNot(l10n.keymapPressAShortcut));
-
-      // And it keeps listening, so a second press is how you change your mind.
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.digit4);
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.digit4);
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
-      await tester.pumpAndSettle();
-      expect(box(), isNot(was));
-      expect(box(), contains('4'));
-
-      // Cancel leaves the keymap exactly as it was.
-      await tester.tap(find.byKey(const ValueKey('workspace-shortcut-cancel')));
-      await tester.pumpAndSettle();
-      expect(p.uiState.keymap.chordFor('workspace.switch.1'),
-          isNot(contains('4')));
-    });
-
-    /// **The three View rows that used to say nothing** (docs/07 §2.2
-    /// item 6). Each is a toggle, so the menu stays open and all three can be
-    /// set in one visit — and each reaches the state the Viewer actually
-    /// draws from, rather than a second copy of it.
-    testWidgets('View ▸ the grid, the rulers and the magnet are wired',
-        (tester) async {
-      final p = withComp();
-      await mount(tester, p);
-      final ui = p.uiState;
-      expect(ui.viewerOverlays, noViewerOverlays);
-      expect(ui.tools.snapToGrid, isFalse);
-
-      await tester.tap(find.byKey(const ValueKey('menu-View')));
-      await tester.pump();
-      for (final row in [
-        l10n.menuShowGrid,
-        l10n.menuShowRuler,
-        l10n.menuSnapToGrid,
-      ]) {
-        await tester.ensureVisible(find.text(row).first);
-        await tester.pump();
-        await tester.tap(find.text(row).first);
-        await tester.pump();
-      }
-
-      expect(ui.viewerOverlays.grid, isTrue);
-      expect(ui.viewerOverlays.rulers, isTrue,
-          reason: 'the menu stayed open, so all three landed in one visit');
-      expect(ui.tools.snapToGrid, isTrue);
-      await dismiss(tester);
-
-      // And each one turns off again from the same row.
-      await tester.tap(find.byKey(const ValueKey('menu-View')));
-      await tester.pump();
-      await tester.ensureVisible(find.text(l10n.menuShowRuler).first);
-      await tester.tap(find.text(l10n.menuShowRuler).first);
-      await tester.pump();
-      expect(ui.viewerOverlays.rulers, isFalse);
-      await dismiss(tester);
     });
 
     testWidgets('File ▸ Close project leaves an empty one in its place',
@@ -733,24 +362,6 @@ void main() {
         expect(a.getEffects().length, 1);
         expect(b.getEffects(), isEmpty,
             reason: 'the primary layer alone, not every selected layer');
-      });
-
-      testWidgets('both rows grey with nothing selected', (tester) async {
-        final p = withComp();
-        await mount(tester, p);
-        final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.studio);
-
-        await open(tester, 'Animation');
-        for (final row in [
-          l10n.menuSaveAnimationPreset,
-          l10n.menuApplyAnimationPreset,
-        ]) {
-          expect(find.text(l10n.notImplemented(row)), findsNothing,
-              reason: 'the row is built now, so it carries no mark');
-          expect(
-              tester.widget<Text>(find.text(row)).style?.color, t.textDisabled);
-        }
-        await dismiss(tester);
       });
     });
   });

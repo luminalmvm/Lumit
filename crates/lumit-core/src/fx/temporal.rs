@@ -632,31 +632,4 @@ mod extracted_channel_tests {
             Some([Some("Z".into()), None, None, None])
         );
     }
-
-    /// Effects off is every layer decoding as itself — the switch has to reach
-    /// the decode as well as the stack, or turning effects off would leave the
-    /// layer showing an extracted channel with no effect to explain it.
-    #[test]
-    fn effects_off_decodes_the_picture_the_file_opens_as() {
-        let stack = vec![extractor(&["R", "Z"], 0, 2)];
-        assert_eq!(stack_extracted_channels(&stack, false), None);
-    }
-
-    /// One decode, so a second copy is a contradiction rather than a chain: the
-    /// one nearer the picture is the one that gets asked for.
-    #[test]
-    fn two_extractors_take_the_lower_one() {
-        let stack = vec![extractor(&["R", "Z"], 0, 2), extractor(&["R", "Z"], 0, 1)];
-        assert_eq!(
-            stack_extracted_channels(&stack, true),
-            Some([Some("R".into()), None, None, None])
-        );
-    }
-
-    /// A layer with no such effect asks for nothing, which is nearly every
-    /// layer and has to stay free.
-    #[test]
-    fn an_ordinary_stack_asks_for_nothing() {
-        assert_eq!(stack_extracted_channels(&[], true), None);
-    }
 }

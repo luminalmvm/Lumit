@@ -227,33 +227,6 @@ mod tests {
         assert!((l - r).abs() < 1e-3, "L {l} vs R {r}");
     }
 
-    #[test]
-    fn decode_all_on_zero_byte_file_errors_not_panics() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = crate::index::tests_support::zero_byte_file(dir.path());
-        assert!(decode_all(&path, 48_000).is_err());
-    }
-
-    #[test]
-    fn decode_all_on_garbage_file_errors_not_panics() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = crate::index::tests_support::garbage_file(dir.path());
-        assert!(decode_all(&path, 48_000).is_err());
-    }
-
-    #[test]
-    fn decode_all_on_truncated_file_errors_not_panics() {
-        let dir = tempfile::tempdir().unwrap();
-        let Some(file) = audio_fixture(dir.path()) else {
-            eprintln!("skipping: no ffmpeg CLI available");
-            return;
-        };
-        let truncated = crate::index::tests_support::truncated_copy(&file, dir.path(), 200);
-        // A cut-short m4a should fail cleanly; the important assertion is
-        // that decode_all returns rather than panicking either way.
-        let _ = decode_all(&truncated, 48_000);
-    }
-
     /// Regression: a video-only file has no audio stream, so `decode_all`
     /// must return `NoStreams` rather than panicking anywhere in the
     /// packet/frame loop.

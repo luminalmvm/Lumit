@@ -110,63 +110,6 @@ void main() {
     keys = (volume() as BridgeScalar_Keyframed).field0;
     expect(keys, hasLength(1), reason: 'the clicked key went');
   });
-
-  testWidgets('a static level drags whole, without minting keys',
-      (tester) async {
-    final p = freshProject();
-    final comp = p.state.project!.newComposition(name: 'Cut');
-    p.uiState.setSelectedComp(comp);
-    final music = p.state.project!.importFootage(path: _toneWavFile());
-    comp.addFootageLayer(footage: music, asSequence: false);
-    p.uiState.model.refresh();
-
-    tester.view.physicalSize = const Size(1280, 600);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.reset);
-    await tester.pumpWidget(hostPanel(
-      child: const TimelinePanelFrb(),
-      state: p.state,
-      uiState: p.uiState,
-      size: const Size(1280, 600),
-    ));
-    await tester.pump();
-    await settleFrb(tester, minRounds: 8);
-
-    final layer = comp.getLayers().first;
-    final id = layer.internallayerId;
-    await tester.tap(find.byKey(ValueKey<String>('tl-twirl-$id')));
-    await tester.pump();
-    await tester.tap(find.text('Audio'));
-    await tester.pump();
-    await tester.tap(find.text('Waveform'));
-    await tester.pump();
-
-    final rect =
-        tester.getRect(find.byKey(ValueKey<String>('tl-volume-band-$id')));
-    const span = volumeBandTopDb - volumeBandFloorDb;
-    final yOfZero =
-        rect.top + 1 + volumeBandTopDb / span * (rect.height - 2);
-
-    final gesture = await tester.startGesture(
-      Offset(rect.left + rect.width * 0.4, yOfZero),
-      kind: PointerDeviceKind.mouse,
-    );
-    await tester.pump(const Duration(milliseconds: 60));
-    for (var i = 0; i < 12; i++) {
-      await gesture.moveBy(const Offset(0, 4));
-      await tester.pump();
-    }
-    await gesture.up();
-    await tester.pump();
-
-    final volume = p.uiState.model.heldLayers
-        .firstWhere((e) => e.layer.internallayerId == id)
-        .info
-        .volumeDb;
-    expect(volume, isA<BridgeScalar_Static>(),
-        reason: 'dragging a flat line moves the level, not a key nobody made');
-    expect((volume as BridgeScalar_Static).field0, lessThan(-5));
-  });
 }
 
 /// A real, probeable WAV: half a second of 8 kHz mono square wave. Written

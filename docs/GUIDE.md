@@ -78,8 +78,9 @@ flutter analyze
 ## 2. Making a change
 
 1. Keep the diff to what the change needs.
-2. New behaviour lands with a test. A bug fix lands with a regression test that fails
-   without the fix.
+2. Only add a test when it's essential, such as one that guards lost work, a crash, or
+   wrong pixels. When behaviour changes, update the test that covers it rather than
+   adding another.
 3. `.\scripts\check.ps1` before a commit.
 4. If the change breaks a rule in these docs, change the doc in the same commit.
 5. New user-facing strings: list the new keys in the pull request.

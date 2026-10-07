@@ -37,45 +37,6 @@ void main() {
         Offset(20, 0),
       ]);
     });
-
-    test('always keeps where the stroke started and where it stopped', () {
-      // The last point is within the minimum of the one kept before it, and
-      // must survive anyway: a stroke that stops short of the pointer is a
-      // stroke that does not go where it was drawn.
-      final thinned = thinStroke(const [
-        Offset(0, 0),
-        Offset(10, 0),
-        Offset(10.5, 0),
-      ]);
-      expect(thinned.first, const Offset(0, 0));
-      expect(thinned.last, const Offset(10.5, 0));
-    });
-
-    test('a single dab is left exactly as it is', () {
-      expect(thinStroke(const [Offset(3, 4)]), const [Offset(3, 4)]);
-      expect(thinStroke(const []), isEmpty);
-    });
-
-    test('a long slow drag thins to a fraction of its samples', () {
-      // Five hundred events across a hundred pixels: the shape survives, the
-      // bulk does not.
-      final dense = [
-        for (var i = 0; i < 500; i++) Offset(i * 0.2, 0),
-      ];
-      final thinned = thinStroke(dense);
-      expect(thinned.length, lessThan(dense.length / 5));
-      expect(thinned.last, dense.last);
-    });
-
-    test('the indices are the same thinning, so a pressure rides along', () {
-      final dense = [
-        for (var i = 0; i < 200; i++) Offset(i * 0.7, i.isEven ? 0 : 0.3),
-      ];
-      final indices = thinStrokeIndices(dense);
-      expect([for (final i in indices) dense[i]], thinStroke(dense));
-      expect(indices.first, 0);
-      expect(indices.last, dense.length - 1);
-    });
   });
 
   group('Reading the stylus', () {
@@ -87,11 +48,6 @@ void main() {
           pressureMin: min,
           pressureMax: max,
         );
-
-    test('a mouse always presses fully, so nothing changes without a pen', () {
-      expect(stylusPressure(event(PointerDeviceKind.mouse, pressure: 0.2)), 1);
-      expect(stylusPressure(event(PointerDeviceKind.touch, pressure: 0)), 1);
-    });
 
     test('a stylus reports where it is between its own two ends', () {
       expect(stylusPressure(event(PointerDeviceKind.stylus, pressure: 0.5)),

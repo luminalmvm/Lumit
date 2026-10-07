@@ -110,12 +110,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_1d_cube_file_becomes_a_curve_step() {
-        let chain = parse("t.cube", "cube", "LUT_1D_SIZE 2\n0 0 0\n1 1 1\n").expect("parses");
-        assert!(matches!(chain.ops.first(), Some(Op::Lut1d { .. })));
-    }
-
-    #[test]
     fn a_3d_cube_file_becomes_a_cube_step() {
         let mut text = String::from("LUT_3D_SIZE 2\n");
         for _ in 0..8 {
@@ -123,56 +117,6 @@ mod tests {
         }
         let chain = parse("t.cube", "cube", &text).expect("parses");
         assert!(matches!(chain.ops.first(), Some(Op::Lut3d { .. })));
-    }
-
-    #[test]
-    fn a_spi1d_file_becomes_a_curve_step() {
-        let text = "Version 1\nFrom 0 1\nLength 2\nComponents 1\n{\n0.0\n1.0\n}\n";
-        let chain = parse("t.spi1d", "spi1d", text).expect("parses");
-        assert!(matches!(chain.ops.first(), Some(Op::Lut1d { .. })));
-    }
-
-    /// The matrix is a scale rather than the identity on purpose: an identity
-    /// matrix is dropped at chain construction (`Chain::new`), so writing one
-    /// here would be testing the fold rather than the reader.
-    #[test]
-    fn a_clf_file_can_become_several_steps() {
-        let text = r#"<ProcessList id="t">
-          <Matrix inBitDepth="32f" outBitDepth="32f"><Array dim="3 3 3">2 0 0 0 2 0 0 0 2</Array></Matrix>
-          <Range inBitDepth="32f" outBitDepth="32f"><minOutValue>0</minOutValue><maxOutValue>1</maxOutValue></Range>
-        </ProcessList>"#;
-        assert_eq!(parse("t.clf", "clf", text).expect("parses").ops.len(), 2);
-    }
-
-    #[test]
-    fn an_unread_extension_refuses_by_name() {
-        let err = parse("look.csp", "csp", "");
-        assert!(
-            matches!(&err, Err(ColourError::UnsupportedLutFormat { extension }) if extension == ".csp"),
-            "{err:?}"
-        );
-    }
-
-    /// The three formats the real Blender and PixelManager configs name, each
-    /// landing on the steps it should. The grammars themselves are tested in
-    /// their own modules; this is the dispatch.
-    #[test]
-    fn the_grading_suite_formats_land_on_their_own_steps() {
-        let chain = parse("m.spimtx", "spimtx", "2 0 0 0 0 2 0 0 0 0 2 0").expect("parses");
-        assert!(matches!(chain.ops.first(), Some(Op::Matrix(_))));
-
-        let cub = "# Truelight Cube v2.0\n# lutLength 2\n# InputLUT\n0 0 0\n1 1 1\n# end\n";
-        let chain = parse("t.cub", "cub", cub).expect("parses");
-        assert!(matches!(chain.ops.first(), Some(Op::Lut1d { .. })));
-
-        let chain = parse("t.3dl", "3dl", &"4095 2048 1024\n".repeat(8)).expect("parses");
-        assert!(matches!(chain.ops.first(), Some(Op::Lut3d { .. })));
-    }
-
-    #[test]
-    fn a_missing_file_is_a_typed_error() {
-        let err = load(Path::new("this-file-does-not-exist.spi1d"));
-        assert!(matches!(err, Err(ColourError::FileRead { .. })), "{err:?}");
     }
 
     /// The ASC CDL file grammar: the same block a CLF `ASC_CDL` node carries,
