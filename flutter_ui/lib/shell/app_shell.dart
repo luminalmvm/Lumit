@@ -11,6 +11,7 @@ import 'package:lumit_flutter/panels/timeline_group_row_frb.dart';
 import 'package:lumit_flutter/shell/precompose_dialog_frb.dart';
 import 'package:lumit_flutter/shell/dock_widget.dart';
 import 'package:lumit_flutter/shell/first_run_frb.dart';
+import 'package:lumit_flutter/shell/flowchart_frb.dart';
 import 'package:lumit_flutter/shell/fx_console_frb.dart'
     show lastKnownPointerPosition;
 import 'package:lumit_flutter/shell/menu_bar_frb.dart';
@@ -62,6 +63,11 @@ class LumitAppNew extends StatelessWidget {
       locale: uiState.locale,
       localizationsDelegates: Strings.localizationsDelegates,
       supportedLocales: Strings.supportedLocales,
+      actions: {
+        ...WidgetsApp.defaultActions,
+        NextFocusIntent: _TabOnwards(),
+        PreviousFocusIntent: _TabBack(),
+      },
       home: ChangeNotifierProvider.value(
         value: state,
         child: ChangeNotifierProvider.value(
@@ -101,6 +107,24 @@ class LumitAppNew extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Whether Tab has somewhere to move on from: a control holding the focus, or
+/// a window that is up. With neither it would pick the first control in the
+/// application, the File menu, and a focused control keeps every shortcut.
+bool get _tabMovesFocus {
+  final focus = FocusManager.instance.primaryFocus;
+  return lumitModalOpen || (focus != null && focus is! FocusScopeNode);
+}
+
+class _TabOnwards extends NextFocusAction {
+  @override
+  bool isEnabled(NextFocusIntent intent) => _tabMovesFocus;
+}
+
+class _TabBack extends PreviousFocusAction {
+  @override
+  bool isEnabled(PreviousFocusIntent intent) => _tabMovesFocus;
 }
 
 /// The boot splash, the welcome screen, and the shell behind them once both are
@@ -605,6 +629,13 @@ class _LumitAppViewState extends State<LumitAppView> {
         // The menu bar owns the console's lists too, so the key asks for it
         // rather than assembling a second one.
         ui.requestConsole();
+      case 'comp.flowchart':
+        // Only with nothing focused, since a graph canvas holding the focus
+        // has a Tab of its own. Not on a held key either, which would reopen
+        // the chart Tab had just shut.
+        handled = event is KeyDownEvent &&
+            FocusManager.instance.primaryFocus is FocusScopeNode &&
+            openFlowchartFrb(context, ui);
       case 'palette.open':
         // The menu bar owns the palette's list of commands, so the key asks
         // for it rather than assembling a second one (docs/07 §12).

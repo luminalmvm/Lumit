@@ -117,6 +117,7 @@ Not interchangeable.
 | **Text panel** | Sets a text layer's font, size, spacing and outline |
 | **Paragraph panel** | Sets how a text layer's lines are aligned and spaced |
 | **Stack** (of panels) | A panel group drawn as twirled panels one above another, not as tabs |
+| **Flowchart** | A comp drawn between the comps that place it and the comps it places |
 
 ## 8. Extensibility
 

@@ -2782,6 +2782,47 @@ fn descend_into_comp(doc: &Document, id: Uuid, found: &mut Vec<Uuid>, walked: &m
     collect_comp_footage(doc, nested, found, walked);
 }
 
+/// A composition's neighbours in the nesting, one step each way
+/// ([`Document::comp_flow`]).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct CompFlow {
+    /// The comps that place this one.
+    pub used_by: Vec<CompLink>,
+    /// The comps this one places.
+    pub uses: Vec<CompLink>,
+}
+
+/// One neighbour in a [`CompFlow`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CompLink {
+    pub id: Uuid,
+    /// Whether the nesting carries on past this comp, away from the centre.
+    pub more: bool,
+}
+
+/// Whether `comp` places project item `id`: one comp's contribution to
+/// [`Document::item_is_used`].
+///
+/// A node graph places its items in Read boxes rather than layers, and a node
+/// graph is placed by the effect that applies it as much as by a layer, so
+/// this asks every list and a graph cannot under-report.
+fn comp_places(comp: &Composition, id: Uuid) -> bool {
+    comp.layers
+        .iter()
+        .any(|l| layer_names_item(l, id) || effects_apply_graph(&l.effects, id))
+        || comp
+            .groups
+            .iter()
+            .any(|g| effects_apply_graph(&g.effects, id))
+        || comp.graph.as_ref().is_some_and(|g| {
+            g.read_names_item(id)
+                || g.nodes.iter().any(|n| {
+                    matches!(n, crate::comp_graph::GraphNode::Fx(inst)
+                        if applies_graph(inst, id))
+                })
+        })
+}
+
 /// Whether `layer` names project item `id` as its source — one layer's
 /// contribution to [`Document::item_is_used`].
 ///
@@ -3386,26 +3427,53 @@ impl Document {
     /// a cache would be machinery bought with nothing.
     #[must_use]
     pub fn item_is_used(&self, id: Uuid) -> bool {
-        self.items.iter().any(|item| match item {
-            // A node graph places its items in Read boxes rather than layers,
-            // and a node graph is placed by the effect that applies it as
-            // much as by a layer, so the badge asks every list and a graph
-            // cannot under-report.
-            ProjectItem::Composition(c) => {
-                c.layers
-                    .iter()
-                    .any(|l| layer_names_item(l, id) || effects_apply_graph(&l.effects, id))
-                    || c.groups.iter().any(|g| effects_apply_graph(&g.effects, id))
-                    || c.graph.as_ref().is_some_and(|g| {
-                        g.read_names_item(id)
-                            || g.nodes.iter().any(|n| {
-                                matches!(n, crate::comp_graph::GraphNode::Fx(inst)
-                                    if applies_graph(inst, id))
-                            })
-                    })
-            }
-            _ => false,
+        self.comps().any(|c| comp_places(c, id))
+    }
+
+    /// Every composition, in project order.
+    fn comps(&self) -> impl Iterator<Item = &Composition> {
+        self.items.iter().filter_map(|item| match item {
+            ProjectItem::Composition(c) => Some(c),
+            _ => None,
         })
+    }
+
+    /// The compositions either side of `id` in the nesting: the ones that
+    /// place it and the ones it places, each in project order. The flowchart
+    /// draws this.
+    ///
+    /// Placing is the `in use` badge's rule ([`Self::item_is_used`]), so the
+    /// two cannot disagree about whether a comp is nested anywhere. One step
+    /// each way, which is also what keeps a nesting cycle from mattering. A
+    /// comp is never its own neighbour, and an `id` that is not a comp has
+    /// none.
+    #[must_use]
+    pub fn comp_flow(&self, id: Uuid) -> CompFlow {
+        let Some(centre) = self.comp(id) else {
+            return CompFlow::default();
+        };
+        let others = || self.comps().filter(move |c| c.id != id);
+        let link = |c: &Composition, upstream: bool| CompLink {
+            id: c.id,
+            more: self.comps().any(|other| {
+                other.id != c.id
+                    && if upstream {
+                        comp_places(other, c.id)
+                    } else {
+                        comp_places(c, other.id)
+                    }
+            }),
+        };
+        CompFlow {
+            used_by: others()
+                .filter(|c| comp_places(c, id))
+                .map(|c| link(c, true))
+                .collect(),
+            uses: others()
+                .filter(|c| comp_places(centre, c.id))
+                .map(|c| link(c, false))
+                .collect(),
+        }
     }
 
     /// Ids that sit at the Project panel root: every item not referenced as
@@ -5005,6 +5073,73 @@ mod tests {
         doc.items.push(ProjectItem::Composition(comp));
 
         assert!(doc.item_is_used(item));
+    }
+
+    /// The flowchart's question: one step each way from a comp, each
+    /// neighbour once, with a mark where the nesting carries on.
+    #[test]
+    fn a_comps_flow_is_what_places_it_and_what_it_places() {
+        let clip = |comp: Uuid| LayerKind::Sequence {
+            clips: vec![crate::sequence::Clip::new(
+                crate::sequence::ClipSource::Comp(comp),
+                Rational::new(0, 1).unwrap(),
+                Rational::new(1, 1).unwrap(),
+                Rational::new(0, 1).unwrap(),
+                Rational::new(1, 1).unwrap(),
+            )],
+        };
+        let leaf = bare_comp("leaf");
+        let mut deep = bare_comp("deep");
+        deep.layers
+            .push(bare_layer(LayerKind::Precomp { comp: leaf.id }));
+        let cut = bare_comp("cut");
+        let mut centre = bare_comp("centre");
+        // Placed twice, listed once. A clip places a comp as a layer does. A
+        // comp that has gone, and the comp itself, are nobody's neighbour.
+        for kind in [
+            LayerKind::Precomp { comp: deep.id },
+            LayerKind::Precomp { comp: deep.id },
+            clip(cut.id),
+            LayerKind::Precomp {
+                comp: Uuid::now_v7(),
+            },
+            LayerKind::Precomp { comp: centre.id },
+        ] {
+            centre.layers.push(bare_layer(kind));
+        }
+        let mut shot = bare_comp("shot");
+        shot.layers
+            .push(bare_layer(LayerKind::Precomp { comp: centre.id }));
+        let mut film = bare_comp("film");
+        film.layers
+            .push(bare_layer(LayerKind::Precomp { comp: shot.id }));
+        let mut reel = bare_comp("reel");
+        reel.layers.push(bare_layer(clip(centre.id)));
+        let aside = bare_comp("aside");
+
+        let ids = (centre.id, shot.id, reel.id, deep.id, cut.id, leaf.id);
+        let (centre_id, shot_id, reel_id, deep_id, cut_id, leaf_id) = ids;
+        let mut doc = Document::new();
+        for comp in [leaf, deep, cut, centre, shot, film, reel, aside] {
+            doc.items.push(ProjectItem::Composition(comp));
+        }
+
+        let link = |id, more| CompLink { id, more };
+        assert_eq!(
+            doc.comp_flow(centre_id),
+            CompFlow {
+                used_by: vec![link(shot_id, true), link(reel_id, false)],
+                uses: vec![link(deep_id, true), link(cut_id, false)],
+            }
+        );
+        assert_eq!(
+            doc.comp_flow(leaf_id),
+            CompFlow {
+                used_by: vec![link(deep_id, true)],
+                uses: Vec::new(),
+            }
+        );
+        assert_eq!(doc.comp_flow(Uuid::now_v7()), CompFlow::default());
     }
 
     /// The measurement behind [`Document::item_is_used`] having no cache: a
