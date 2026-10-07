@@ -386,6 +386,18 @@ pub trait EffectDef: Sync + Send + 'static {
         }
     }
 
+    /// The choice parameter that is this effect's **view menu**, by id: the
+    /// dropdown that picks between the finished picture and the effect's own
+    /// working pictures, as Depth of field's Display does.
+    ///
+    /// Declaring it gives the effect's box in a node graph an output socket for
+    /// each option, so two views can be wired at once
+    /// ([`crate::comp_graph::view_ports`]). On a layer nothing changes: the
+    /// dropdown is the only way to pick. `None` is every effect without one.
+    fn view(&self) -> Option<&'static str> {
+        None
+    }
+
     /// Compute a driver's outputs, pushing `(port id, value)` for each one it
     /// declares. Every image effect pushes nothing, which is the default.
     ///

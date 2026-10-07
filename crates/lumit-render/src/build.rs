@@ -3140,7 +3140,7 @@ fn graph_comp_draw(
 
 /// Where one output socket of a box landed in a graph's plan: the box, the
 /// socket, and the step, `None` where it reads transparent.
-type Landed = (Uuid, &'static str, Option<usize>);
+type Landed = (Uuid, std::borrow::Cow<'static, str>, Option<usize>);
 
 /// What the node graph lowering carries, unchanged at every depth: the
 /// project, the comp being walked, the frame, and the fetch the draw builder
@@ -3232,13 +3232,14 @@ impl GraphLower<'_> {
         let diag = ((plan.width as f32).powi(2) + (plan.height as f32).powi(2)).sqrt();
 
         // Which step each box's output landed on, in the order they were
-        // lowered. Keyed by socket too, since a Split channels box has four.
+        // lowered. Keyed by socket too, since a Split channels box has four
+        // and a box with a view menu has one per view.
         let mut steps: Vec<Landed> = Vec::with_capacity(order.len());
         let wired = |steps: &[Landed], node: Uuid, port: &str| -> Option<usize> {
             let (from, from_port) = graph.wire_into(node, port)?;
             steps
                 .iter()
-                .find(|(id, out, _)| id == from && *out == from_port)
+                .find(|(id, out, _)| id == from && out == from_port)
                 .and_then(|(_, _, step)| *step)
         };
         // One Set channels pass over `input` with `source` on its Source row,
@@ -3344,7 +3345,7 @@ impl GraphLower<'_> {
                     // bypassed box hands on its main picture here, which is
                     // where a bypassed ordinary box lands anyway. A Switch's
                     // own picture is its first socket, and a Split hands its
-                    // input on at every output.
+                    // input on at every output, as a box with views does.
                     if !inst.enabled {
                         let main = if inst.effect.match_name == lumit_core::comp_graph::SWITCH {
                             wired(&steps, id, "in0")
@@ -3356,7 +3357,12 @@ impl GraphLower<'_> {
                         } else {
                             &[OUTPUT_PORT.id]
                         };
-                        steps.extend(outs.iter().map(|port| (id, *port, main)));
+                        steps.extend(outs.iter().map(|port| (id, (*port).into(), main)));
+                        steps.extend(
+                            lumit_core::comp_graph::view_ports(inst)
+                                .into_iter()
+                                .map(|port| (id, port.id.into(), main)),
+                        );
                         continue;
                     }
                     match inst.effect.match_name.as_str() {
@@ -3441,7 +3447,7 @@ impl GraphLower<'_> {
                                 if port == OUTPUT_PORT.id {
                                     red = step;
                                 } else {
-                                    steps.push((id, port, step));
+                                    steps.push((id, port.into(), step));
                                 }
                             }
                             red
@@ -3504,22 +3510,23 @@ impl GraphLower<'_> {
                         NODE_GRAPH => self
                             .nested_step(inst, graph, id, input, &steps, &drivers, visited, plan),
                         _ => {
-                            let (fx_ids, ops) = lumit_core::fx::resolve_stack_temporal_named(
-                                std::slice::from_ref(inst),
-                                &drivers,
-                                self.t,
-                                self.frame_t,
-                                diag,
-                                1.0,
-                                &markers,
-                                context.clone(),
-                            );
-                            // A bypassed box, an entry this build does not
-                            // know, an orchestration-only effect: no op, so
-                            // the box hands on what it was given.
-                            if ops.is_empty() {
-                                input
-                            } else {
+                            let mut run = |inst: &lumit_core::model::EffectInstance| {
+                                let (fx_ids, ops) = lumit_core::fx::resolve_stack_temporal_named(
+                                    std::slice::from_ref(inst),
+                                    &drivers,
+                                    self.t,
+                                    self.frame_t,
+                                    diag,
+                                    1.0,
+                                    &markers,
+                                    context.clone(),
+                                );
+                                // A bypassed box, an entry this build does not
+                                // know, an orchestration-only effect: no op, so
+                                // the box hands on what it was given.
+                                if ops.is_empty() {
+                                    return input;
+                                }
                                 let picture = lumit_core::fx::def(&inst.effect.match_name)
                                     .and_then(|d| d.schema().layer_input())
                                     .and_then(|param| wired(&steps, id, param));
@@ -3539,12 +3546,36 @@ impl GraphLower<'_> {
                                     ),
                                 });
                                 Some(plan.steps.len() - 1)
+                            };
+                            // A box with a view menu draws once per socket
+                            // something in the cone reads: each view with the
+                            // menu held on its option, and `output` as the
+                            // dropdown has it. Every other box draws once.
+                            let views = lumit_core::comp_graph::view_ports(inst);
+                            let read = |port: &str| {
+                                graph.edges.iter().any(|e| {
+                                    e.from == id && e.from_port == port && order.contains(&e.to)
+                                })
+                            };
+                            let mut landed = Vec::new();
+                            for port in views.iter().filter(|port| read(&port.id)) {
+                                let held = lumit_core::comp_graph::held_on_view(inst, &port.id);
+                                if let Some(held) = held {
+                                    landed.push((id, port.id.clone().into(), run(&held)));
+                                }
                             }
+                            let main = if views.is_empty() || read(OUTPUT_PORT.id) {
+                                run(inst)
+                            } else {
+                                None
+                            };
+                            steps.extend(landed);
+                            main
                         }
                     }
                 }
             };
-            steps.push((id, OUTPUT_PORT.id, step));
+            steps.push((id, OUTPUT_PORT.id.into(), step));
         }
         wired(&steps, output, INPUT_PORT.id)
     }
@@ -3676,7 +3707,7 @@ impl GraphLower<'_> {
             let (from, from_port) = graph.wire_into(id, port)?;
             steps
                 .iter()
-                .find(|(node, out, _)| node == from && *out == from_port)
+                .find(|(node, out, _)| node == from && out == from_port)
                 .and_then(|(_, _, step)| *step)
         };
         // The box's own sockets, in the inner Inputs' order: the first picture
