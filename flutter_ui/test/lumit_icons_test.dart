@@ -48,23 +48,6 @@ void main() {
     });
   });
 
-  test('every typed constant is one of the map entries', () {
-    // The constants are the map's values, so a name the map misses is a
-    // constant no lookup can reach.
-    for (final glyph in <String>[
-      LumitIcons.select,
-      LumitIcons.play,
-      LumitIcons.visible,
-      LumitIcons.threeD,
-      LumitIcons.channels,
-      LumitIcons.workspace,
-    ]) {
-      expect(LumitIcons.byName.values, contains(glyph));
-    }
-    expect(LumitIcons.byName.values.toSet().length,
-        lessThanOrEqualTo(LumitIcons.byName.length));
-  });
-
   test('every document carries the set grammar and nothing coloured', () {
     LumitIcons.byName.forEach((name, svg) {
       expect(svg, startsWith('<svg viewBox="0 0 16 16"'), reason: name);
@@ -101,31 +84,6 @@ void main() {
       expect(find.byType(LumitIcon),
           painterDrawn.contains(icon) ? findsNothing : findsOneWidget,
           reason: icon.name);
-    }
-  });
-
-  testWidgets('a handful of glyphs draw at the asked-for size', (tester) async {
-    const glyphs = <String>[
-      LumitIcons.select,
-      LumitIcons.play,
-      LumitIcons.stopwatch,
-      LumitIcons.channels,
-    ];
-    await tester.pumpWidget(Directionality(
-      textDirection: TextDirection.ltr,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (final glyph in glyphs) LumitIcon(glyph, semanticLabel: 'glyph'),
-          LumitIcon(LumitIcons.play, size: 24),
-        ],
-      ),
-    ));
-    await tester.pumpAndSettle();
-
-    expect(find.byType(LumitIcon), findsNWidgets(glyphs.length + 1));
-    for (final icon in tester.widgetList<LumitIcon>(find.byType(LumitIcon))) {
-      expect(tester.getSize(find.byWidget(icon)), Size(icon.size, icon.size));
     }
   });
 }

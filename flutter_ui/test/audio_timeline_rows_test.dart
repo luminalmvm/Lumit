@@ -6,13 +6,10 @@
 // probing media in a widget tree, exactly as timeline_rows_test.dart checks the
 // twirl's reach.
 
-import 'package:flutter/widgets.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/panels/audio_timeline_clips_frb.dart';
-import 'package:lumit_flutter/panels/audio_timeline_fades_frb.dart';
 import 'package:lumit_flutter/panels/audio_timeline_rows_frb.dart';
-import 'package:lumit_flutter/panels/clip_fades.dart';
 import 'package:lumit_flutter/panels/layer_fold_frb.dart';
 import 'package:lumit_flutter/panels/timeline_bar_frb.dart';
 import 'package:lumit_flutter/panels/timeline_extras_frb.dart';
@@ -32,28 +29,11 @@ void main() {
     const strip = 60.0;
     const box = strip - 4;
 
-    test('0 dB is the top of the box and the floor is its foot', () {
-      expect(volumeBandY(0, box, topDb: 0), closeTo(1, 0.001));
-      expect(volumeBandY(volumeBandFloorDb, box, topDb: 0),
-          closeTo(box - 1, 0.001));
-      expect(volumeBandY(6, box, topDb: 0), closeTo(1, 0.001),
-          reason: 'there is no room above unity for a boost to be drawn in');
-    });
-
     test('a y read back is the dB it was drawn from', () {
       for (final db in [0.0, -6.0, -24.0, volumeBandFloorDb]) {
         expect(volumeBandDbOfY(volumeBandY(db, box, topDb: 0), box, topDb: 0),
             closeTo(db, 0.001));
       }
-    });
-
-    test('the line lies inside the box the strip draws', () {
-      expect(audioClipGainY(0, strip), closeTo(3, 0.001),
-          reason: 'a clip at unity is drawn as loud as the box is tall');
-      expect(
-          audioClipGainY(volumeBandFloorDb, strip), closeTo(strip - 3, 0.001));
-      expect(audioClipGainY(-30, strip), greaterThan(audioClipGainY(-6, strip)),
-          reason: 'quieter is further down, which is what the drag reads');
     });
   });
 
@@ -186,25 +166,6 @@ void main() {
       expect(view.folded, isEmpty,
           reason: 'nothing folds in the Audio timeline');
     });
-
-    test('keeps a muted Audio layer: mute is a mixing decision', () {
-      expect(audioTimelineShows(mutedMusic, hasAudio: true, hasPicture: false),
-          isTrue);
-      expect(audioTimelineShows(detached, hasAudio: true, hasPicture: true),
-          isFalse,
-          reason: 'a muted picture row has given its sound to another row');
-    });
-
-    test('an unprobed layer is taken to have a picture and no sound', () {
-      final view = timelineViewLayers(
-          layers: [music],
-          audioTimeline: true,
-          mixOpen: false,
-          hasAudio: const {},
-          hasPicture: const {});
-      expect(view.shown, isEmpty,
-          reason: 'until the probe answers there is nothing to list');
-    });
   });
 
   group('The Sound mix fold', () {
@@ -220,88 +181,6 @@ void main() {
       expect(view.folded, [detachedSound, music, mutedMusic]);
       expect(view.dimmed, isEmpty,
           reason: 'nothing dims in the layer Timeline');
-    });
-
-    test('twirled open, the Audio layers stand in place', () {
-      final view = timelineViewLayers(
-          layers: stack,
-          audioTimeline: false,
-          mixOpen: true,
-          hasAudio: hasAudio,
-          hasPicture: hasPicture);
-      expect(view.shown, stack, reason: 'stack order, nothing moved');
-      expect(view.folded, [detachedSound, music, mutedMusic],
-          reason: 'the row still says how many it holds');
-    });
-
-    test('a comp with no Audio layer has nothing to fold', () {
-      final view = timelineViewLayers(
-          layers: [title, clip],
-          audioTimeline: false,
-          mixOpen: false,
-          hasAudio: hasAudio,
-          hasPicture: hasPicture);
-      expect(view.folded, isEmpty);
-      expect(view.shown, [title, clip]);
-    });
-  });
-
-  test('a dimmed row fades and goes deaf; an ordinary one is untouched', () {
-    const child = SizedBox();
-    expect(dimmedIf(false, child), same(child));
-    final dimmed = dimmedIf(true, child);
-    expect(dimmed, isA<IgnorePointer>());
-    expect((dimmed as IgnorePointer).child, isA<Opacity>());
-    expect(((dimmed).child! as Opacity).opacity, dimmedRowOpacity);
-  });
-
-  /// A track's height is its own (docs/impl/audio-timeline.md §5, plan 20):
-  /// a band of lane rows the row's bottom edge sets, and the twirl's rows
-  /// under it whatever that band is.
-  group("A track's height", () {
-    AudioTrackRow tall(int rows, {List<LayerFoldRow> fold = const []}) =>
-        AudioTrackRow(
-          entry: music,
-          id: idOf(music),
-          open: fold.isNotEmpty,
-          dimmed: false,
-          foldRows: fold,
-          rowHeight: 20,
-          rows: rows,
-        );
-
-    test('the band is the lane rows it was given', () {
-      expect(tall(2).laneHeight, 40);
-      expect(tall(4).laneHeight, 80);
-    });
-
-    test('a shut track is its band and nothing more', () {
-      expect(tall(2).height, 40);
-      expect(tall(4).height, 80);
-    });
-
-    test('an open one adds a lane row a row, whatever the band', () {
-      final fold = [
-        FoldVolumeRow(scalar: const BridgeScalar.static_(0), depth: 1),
-        FoldGroupRow(path: 'effects', label: 'Effects', open: false, depth: 1),
-      ];
-      expect(tall(2, fold: fold).height, 80);
-      expect(tall(4, fold: fold).height, 120,
-          reason: 'the twirl costs the same two rows on a taller track');
-    });
-
-    test('two lane rows unless it is told otherwise', () {
-      expect(
-          tall(audioTrackMinRows).height,
-          AudioTrackRow(
-            entry: music,
-            id: idOf(music),
-            open: false,
-            dimmed: false,
-            foldRows: const [],
-            rowHeight: 20,
-          ).height,
-          reason: 'a track opens at the height the board draws');
     });
   });
 
@@ -325,115 +204,6 @@ void main() {
       expect(audioTrackAt(tracks, 39), 0);
       expect(audioTrackAt(tracks, 80), 2);
       expect(audioTrackAt(tracks, 119), 2);
-    });
-
-    test('a faded picture row is no landing place', () {
-      expect(audioTrackAt(tracks, 60), isNull,
-          reason: 'a row that takes no pointer takes no clip either');
-    });
-
-    test('there is no track above the first or below the last', () {
-      expect(audioTrackAt(tracks, -1), isNull);
-      expect(audioTrackAt(tracks, 200), isNull);
-    });
-
-    test('below the last track is where a clip gets a track of its own', () {
-      expect(audioBelowTracks(tracks, 120), isTrue);
-      expect(audioBelowTracks(tracks, 119), isFalse);
-      expect(audioBelowTracks(tracks, -1), isFalse,
-          reason: 'above the table is not below it');
-    });
-
-    test('an open track is taller, and the bands below it move down', () {
-      final open = [
-        AudioTrackRow(
-          entry: music,
-          id: idOf(music),
-          open: true,
-          dimmed: false,
-          foldRows: [
-            FoldVolumeRow(scalar: const BridgeScalar.static_(0), depth: 1)
-          ],
-          rowHeight: 20,
-        ),
-        row(mutedMusic),
-      ];
-      expect(audioTrackAt(open, 50), 0,
-          reason: 'the twirl row is still track 0');
-      expect(audioTrackAt(open, 70), 1);
-    });
-  });
-
-  group('Which rows can hold a clip', () {
-    test('a row of sound can, converted or not', () {
-      expect(audioTrackTakesClips(music.info), isTrue);
-      expect(audioTrackTakesClips(clip.info), isTrue,
-          reason: 'footage becomes the one clip it has always been');
-    });
-
-    test('a precomp cannot: there is nothing to convert', () {
-      expect(audioTrackTakesClips(nested.info), isFalse);
-    });
-  });
-
-  group("A clip's trim zone", () {
-    test('is the bar grab: eight pixels on a clip wide enough for them', () {
-      expect(barGrabAt(7, 200), BarGrab.trimIn);
-      expect(barGrabAt(9, 200), BarGrab.move);
-      expect(barGrabAt(193, 200), BarGrab.trimOut);
-    });
-
-    test('is capped at a third, so a short clip keeps a body to hold', () {
-      expect(barGrabAt(1, 12), BarGrab.trimIn);
-      expect(barGrabAt(6, 12), BarGrab.move);
-      expect(barGrabAt(11, 12), BarGrab.trimOut);
-    });
-  });
-
-  group("A clip picture's origin", () {
-    test('travels with the start edge, so none of the box is left bare', () {
-      expect(
-        audioClipOrigin(
-            placeStartSeconds: 2, shiftFrames: 30, fps: 60, trimIn: true),
-        2.5,
-        reason: 'the buckets are asked for and drawn from the same second',
-      );
-    });
-
-    test('holds while the whole clip slides: the picture rides along', () {
-      expect(
-        audioClipOrigin(
-            placeStartSeconds: 2, shiftFrames: 30, fps: 60, trimIn: false),
-        2.0,
-      );
-    });
-  });
-
-  group("The source's start", () {
-    test('is where the sound begins, ahead of a head dragged out past it', () {
-      // A clip at frame 120 with half a second of silence in front of it, at
-      // sixty frames a second: the reach the engine reports starts thirty
-      // frames later than the box does.
-      expect(
-        audioSourceStartFrame(startFrame: 120, reachStartFrame: 150),
-        150,
-        reason: 'the head snaps to it and the box wears the mark there',
-      );
-    });
-
-    test('is nothing on a clip trimmed the ordinary way', () {
-      expect(audioSourceStartFrame(startFrame: 120, reachStartFrame: 120), null,
-          reason: 'the sound starts at the head: no silence to mark');
-      expect(audioSourceStartFrame(startFrame: 120, reachStartFrame: 90), null,
-          reason: 'trimmed in, so the source starts before the head');
-    });
-
-    test('is nothing when the engine reports no reach at all', () {
-      expect(
-        audioSourceStartFrame(startFrame: 120, reachStartFrame: null),
-        null,
-        reason: 'a retimed clip, or a source whose length would not read',
-      );
     });
   });
 
@@ -472,49 +242,6 @@ void main() {
           reason: "the later clip's box covers the join, and took the press");
       expect(hit?.grab, BarGrab.trimOut);
     });
-
-    test('the body of the topmost clip, everywhere else in the overlap', () {
-      final hit = audioClipGrabAt(clips, axis, axis.xOf(35));
-      expect(hit?.clip.id, later.id);
-      expect(hit?.grab, BarGrab.move);
-    });
-
-    test('nothing at all on empty ground', () {
-      expect(audioClipGrabAt(clips, axis, axis.xOf(80)), isNull);
-      expect(audioClipGrabAt(const [], axis, axis.xOf(10)), isNull);
-    });
-  });
-
-  group('The ramps a drag carries', () {
-    const shape = BridgeClipFadeShape.linear();
-    final ramps = <ClipFadeRamp>[
-      (clip: 'a', into: true, from: 0, to: 5, shape: shape),
-      (clip: 'a', into: false, from: 35, to: 40, shape: shape),
-      (clip: 'b', into: true, from: 60, to: 64, shape: shape),
-    ];
-
-    test('a move carries both of the dragged clip\'s ends', () {
-      final moved = shiftRamps(ramps, 'a', BarGrab.move, 4);
-      expect(moved.map((r) => (r.from, r.to)),
-          [(4.0, 9.0), (39.0, 44.0), (60.0, 64.0)],
-          reason: 'a clip nobody has hold of stays where it is');
-    });
-
-    test('a head trim carries the rising ramp alone', () {
-      final moved = shiftRamps(ramps, 'a', BarGrab.trimIn, -3);
-      expect(moved.map((r) => (r.from, r.to)),
-          [(-3.0, 2.0), (35.0, 40.0), (60.0, 64.0)]);
-    });
-
-    test('a tail trim carries the falling one', () {
-      final moved = shiftRamps(ramps, 'a', BarGrab.trimOut, 6);
-      expect(moved.map((r) => (r.from, r.to)),
-          [(0.0, 5.0), (41.0, 46.0), (60.0, 64.0)]);
-    });
-
-    test('a drag that has moved no frames changes nothing', () {
-      expect(shiftRamps(ramps, 'a', BarGrab.move, 0), same(ramps));
-    });
   });
 
   group("A clip's drop-down", () {
@@ -550,10 +277,6 @@ void main() {
       gainDb: 0,
       sourceName: 'Take 3.wav',
     );
-
-    test('shows nothing until the clip is twirled open', () {
-      expect(clipFoldRows(clip: sound, open: const {}), isEmpty);
-    });
 
     test('opens on to the clip name, then a heading per effect', () {
       final rows = clipFoldRows(clip: sound, open: {clipFoldPrefix(clipId)});

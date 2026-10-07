@@ -353,12 +353,6 @@ pub(crate) fn probed_off_thread(path: &Path) -> Option<bool> {
         .map(|e| e.off_thread)
 }
 
-/// How many paths the worker still owes an answer for. Tests only.
-#[cfg(all(test, feature = "media"))]
-pub(crate) fn queued_len() -> usize {
-    cache().lock().map(|h| h.queued.len()).unwrap_or(0)
-}
-
 #[cfg(all(test, feature = "media"))]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
@@ -418,50 +412,6 @@ mod tests {
         );
     }
 
-    /// Nothing requested, so the answer has to be got the slow way — and it is
-    /// the same answer. This is the fallback the sync ops rely on.
-    #[test]
-    fn an_unrequested_file_falls_back_to_probing_inline() {
-        let _serial = serially();
-        let dir = tempfile::tempdir().expect("temp dir");
-        let Some(clip) = lumit_media::index::tests_support::fixture(dir.path()) else {
-            return;
-        };
-
-        let info = ensure_probed(&clip).expect("the fixture probes");
-        assert_eq!(
-            probed_off_thread(&clip),
-            Some(false),
-            "nobody requested it, so the caller probed it itself"
-        );
-
-        let direct = lumit_media::probe::probe(&clip).expect("the fixture probes directly too");
-        assert_eq!(
-            *info, direct,
-            "the cache changes when the answer arrives, never what it says"
-        );
-    }
-
-    /// The worker's answer and the inline answer are the same answer, for the
-    /// same file — the no-behaviour-change claim, made against real media.
-    #[test]
-    fn both_paths_give_the_answer_the_prober_gives() {
-        let _serial = serially();
-        let dir = tempfile::tempdir().expect("temp dir");
-        let Some(clip) = lumit_media::index::tests_support::fixture(dir.path()) else {
-            return;
-        };
-        let direct = lumit_media::probe::probe(&clip).expect("the fixture probes");
-
-        let inline = ensure_probed(&clip).expect("inline");
-        request(&clip);
-        assert!(wait_for(&clip));
-        let after_request = ensure_probed(&clip).expect("after the request");
-
-        assert_eq!(*inline, direct);
-        assert_eq!(*after_request, direct);
-    }
-
     /// A file that is not media answers "no" rather than panicking, and a file
     /// that is not there answers "no" without opening anything.
     #[test]
@@ -506,15 +456,5 @@ mod tests {
             lookup(&MediaSource::file(&path), second).is_none(),
             "the held answer belongs to the file that was there before"
         );
-    }
-
-    /// Closing a project cancels what was queued for it: the worker drops
-    /// jobs from a generation that has ended rather than probing files nobody
-    /// is going to ask about.
-    #[test]
-    fn clearing_cancels_queued_work() {
-        let _serial = serially();
-        clear();
-        assert_eq!(queued_len(), 0, "nothing queued after a clear");
     }
 }

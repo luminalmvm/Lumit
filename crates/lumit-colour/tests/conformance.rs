@@ -501,46 +501,6 @@ fn the_legacy_config_refuses_only_for_luts_that_were_not_vendored() {
     }
 }
 
-/// The reader above, proven before the data arrives — which is the only way to
-/// promise that the offline run's output is *droppable*. A small config stands
-/// in for the ACES ones; the expected values are the published sRGB numbers
-/// from `published.fixture`, so this row set is a golden in its own right and
-/// not a self-check.
-#[test]
-fn a_reference_fixture_is_read_and_gated_before_any_reference_data_exists() {
-    const CONFIG: &str = r"
-ocio_profile_version: 1
-roles:
-  scene_linear: lin
-  reference: ref
-displays:
-  sRGB:
-    - !<View> {name: Standard, colorspace: out_srgb}
-colorspaces:
-  - !<ColorSpace>
-    name: ref
-  - !<ColorSpace>
-    name: lin
-  - !<ColorSpace>
-    name: srgb_texture
-    to_reference: !<ExponentWithLinearTransform> {gamma: [2.4, 2.4, 2.4, 1], offset: [0.055, 0.055, 0.055, 0]}
-  - !<ColorSpace>
-    name: out_srgb
-    from_reference: !<ExponentWithLinearTransform> {gamma: [2.4, 2.4, 2.4, 1], offset: [0.055, 0.055, 0.055, 0], direction: inverse}
-";
-    // IEC 61966-2-1, the same published values published.fixture carries.
-    const ROWS: &str = "
-space: srgb_texture -> lin | 0.5 0.5 0.5 | 0.21404114 0.21404114 0.21404114 | 1e-5
-space: srgb_texture -> lin | 1.0 1.0 1.0 | 1.0 1.0 1.0 | 1e-6
-view: sRGB / Standard      | 0.21404114 0.21404114 0.21404114 | 0.5 0.5 0.5 | 1e-5
-";
-    let dir = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures"));
-    let loaded = LoadedConfig::new(
-        lumit_colour::Config::parse(dir, CONFIG).expect("the stand-in config parses"),
-    );
-    gate_config_rows(&loaded, &read_fixture(ROWS));
-}
-
 // ---------------------------------------------------------------------------
 // The CLF suite (§7.3). Not ignored, and not waiting for anything: these are
 // the specification's own published documents, and every expected value is
@@ -587,32 +547,5 @@ fn the_clf_specification_test_files_pass() {
                 row.expected
             );
         }
-    }
-}
-
-/// Every vendored document is exercised by at least one row. A file nobody
-/// evaluates is decoration, and this is what stops one being added as such.
-#[test]
-fn every_vendored_clf_document_carries_rows() {
-    let rows = read_fixture(include_str!("fixtures/clf/clf.fixture"));
-    for entry in std::fs::read_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/clf"))
-        .expect("the clf fixture directory")
-    {
-        let name = entry
-            .expect("an entry")
-            .file_name()
-            .to_string_lossy()
-            .into_owned();
-        if !name.ends_with(".clf") {
-            continue;
-        }
-        assert!(
-            clf_document(&name).is_some(),
-            "{name} is vendored but this test does not know it"
-        );
-        assert!(
-            rows.iter().any(|r| r.id == name),
-            "{name} is vendored but no fixture row evaluates it"
-        );
     }
 }

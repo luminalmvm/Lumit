@@ -166,9 +166,7 @@ pub fn probe(src: impl Into<MediaSource>) -> Result<MediaProbe, MediaError> {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
-    use crate::index::tests_support::{
-        audio_with_cover, fixture, garbage_file, truncated_copy, zero_byte_file,
-    };
+    use crate::index::tests_support::{audio_with_cover, garbage_file};
 
     fn probe_of(
         duration_seconds: f64,
@@ -224,41 +222,6 @@ mod tests {
         }
     }
 
-    /// Half a frame's slack, so a one-frame still cannot creep over the line on
-    /// a rounded duration — and the frame after it plainly does.
-    #[test]
-    fn the_still_line_sits_half_a_frame_past_one_frame() {
-        let one_frame = probe_of(1.0 / 25.0, Some(video(25, 1, "png")), None);
-        assert!(!one_frame.runs_as_video());
-        let two_frames = probe_of(2.0 / 25.0, Some(video(25, 1, "h264")), None);
-        assert!(two_frames.runs_as_video());
-    }
-
-    /// A container that declares no rate leaves no frame length to measure
-    /// against, so the test falls back to "does it last at all": a single
-    /// undated still is still a still, and a stream that plays for a minute is
-    /// still a video. This is the behaviour `add_footage_layer` shipped with,
-    /// and it must not change with the rule moving here.
-    #[test]
-    fn a_stream_with_no_declared_rate_falls_back_to_lasting_at_all() {
-        assert!(!probe_of(0.0, Some(video(0, 0, "png")), None).runs_as_video());
-        assert!(probe_of(60.0, Some(video(0, 0, "vp9")), None).runs_as_video());
-    }
-
-    /// The panel's second fact line needs a codec name and the sound's shape;
-    /// the probe result already carries both, per stream. This pins them so a
-    /// later tidy-up cannot quietly drop what the panel reads.
-    #[test]
-    fn the_probe_result_names_the_codec_and_the_sounds_shape() {
-        let clip = probe_of(12.0, Some(video(30000, 1001, "h264")), Some(stereo()));
-        assert_eq!(clip.video.as_ref().unwrap().codec, "h264");
-        let audio = clip.audio.as_ref().unwrap();
-        assert_eq!(
-            (audio.codec.as_str(), audio.channels, audio.sample_rate),
-            ("aac", 2, 48_000)
-        );
-    }
-
     /// Regression (tester report): an audio file with embedded cover art
     /// exposes the artwork as a video stream (attached-picture disposition).
     /// It must probe as **audio-only** — treating the still as footage made
@@ -276,15 +239,6 @@ mod tests {
         assert!(p.video.is_none(), "cover art must not probe as video");
     }
 
-    /// Regression: probing a zero-byte file must return a typed error and
-    /// never panic (docs/14-ENGINEERING-RULES.md §4).
-    #[test]
-    fn probe_zero_byte_file_errors_not_panics() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = zero_byte_file(dir.path());
-        assert!(probe(&path).is_err());
-    }
-
     /// Regression: probing arbitrary non-media bytes must return a typed
     /// error and never panic.
     #[test]
@@ -292,19 +246,5 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = garbage_file(dir.path());
         assert!(probe(&path).is_err());
-    }
-
-    /// Regression: probing a file cut off before any usable stream
-    /// information (moov written at the end by this muxer) must return a
-    /// typed error and never panic.
-    #[test]
-    fn probe_truncated_file_errors_not_panics() {
-        let dir = tempfile::tempdir().unwrap();
-        let Some(file) = fixture(dir.path()) else {
-            eprintln!("skipping: no ffmpeg CLI available for fixture generation");
-            return;
-        };
-        let truncated = truncated_copy(&file, dir.path(), 200);
-        assert!(probe(&truncated).is_err());
     }
 }

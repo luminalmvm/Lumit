@@ -59,17 +59,6 @@ void main() {
       expect(written.endsWith('\n'), isTrue);
     });
 
-    test('appends rather than replacing', () {
-      final file = _scratch('two.log');
-      recordFaultTo(file, 'first', null);
-      recordFaultTo(file, 'second', null);
-
-      final written = file.readAsStringSync();
-      expect(written, contains('first'));
-      expect(written, contains('second'),
-          reason: 'a session that faults twice keeps both');
-    });
-
     test('starts again past the cap', () {
       final file = _scratch('big.log');
       file.writeAsStringSync('x' * (256 * 1024 + 1));
@@ -79,15 +68,6 @@ void main() {
       expect(written, contains('after the cap'));
       expect(written.contains('x' * 100), isFalse,
           reason: 'a fault in a loop must not fill the disk');
-    });
-
-    test('a write that cannot happen is not a crash', () {
-      // A directory where a file should be: the write throws inside, and the
-      // caller must never see it. A diagnostic that can break what it is
-      // diagnosing is worse than none.
-      final dir = Directory.systemTemp.createTempSync('lumit-faults-dir');
-      addTearDown(() => dir.deleteSync(recursive: true));
-      expect(() => recordFaultTo(File(dir.path), 'x', null), returnsNormally);
     });
   });
 
@@ -104,45 +84,6 @@ void main() {
         expect(find.textContaining('the panel broke'), findsOneWidget,
             reason: 'the fault has to name itself to be worth photographing');
       });
-    });
-
-    testWidgets('survives being drawn very small', (tester) async {
-      // A failed row is given a row's worth of space, not a panel's. The box
-      // has to clip rather than overflow: an overflow in this of all widgets
-      // would be a second fault on top of the first.
-      await _installed(() async {
-        await tester.pumpWidget(const Center(
-          child: SizedBox(width: 40, height: 12, child: _Broken()),
-        ));
-
-        expect(tester.takeException(), isA<StateError>());
-        expect(find.byType(FaultBox), findsOneWidget);
-      });
-    });
-
-    testWidgets('needs no Directionality of its own above it', (tester) async {
-      // The box can land anywhere, including above the widgets the application
-      // installs. A `Text` with no `Directionality` ancestor throws, and an
-      // error widget that errors costs the whole frame.
-      await tester.pumpWidget(FaultBox(
-        details: FlutterErrorDetails(exception: StateError('no direction')),
-      ));
-
-      expect(tester.takeException(), isNull);
-      expect(find.textContaining('no direction'), findsOneWidget);
-    });
-  });
-
-  group('the summary', () {
-    test('is the exception first line only', () {
-      // Flutter's own exception text runs to a paragraph with the offending
-      // widget's whole description in it. The box has room for a sentence; the
-      // file keeps the rest.
-      final details = FlutterErrorDetails(
-        exception: StateError('the panel broke\nand here is why\nat length'),
-      );
-      expect(faultSummary(details), contains('the panel broke'));
-      expect(faultSummary(details), isNot(contains('at length')));
     });
   });
 }

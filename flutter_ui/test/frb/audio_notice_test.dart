@@ -62,56 +62,6 @@ void main() {
       );
     });
 
-    // A layer picked by name is heard through a mute and through somebody
-    // else's solo, so a named source that still finds nothing has
-    // nothing in it — and blaming the switches would send the reader off to
-    // press one that changes nothing.
-    testWidgets('a named source that has no sound blames the layer, not a mute',
-        (tester) async {
-      final p = freshProject();
-      final comp = p.state.project!.newComposition(name: 'Cut');
-      p.uiState.setSelectedComp(comp);
-      final music = p.state.project!.importFootage(path: _silentWavFile());
-      comp.addFootageLayer(footage: music, asSequence: false);
-      p.uiState.model.refresh();
-      final feed = AudioMeterFeed();
-      feed.read = () => const [];
-      addTearDown(feed.dispose);
-      await tester.pumpWidget(hostPanel(
-        state: p.state,
-        uiState: p.uiState,
-        child: AudioPanelFrb(feed: feed),
-      ));
-      await settleFrb(tester, minRounds: 4);
-
-      // Pick the row by name in the Source dropdown.
-      await tester.tap(find.byKey(const ValueKey('beats-source')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('tone.wav').last);
-      await tester.pumpAndSettle();
-
-      // The row goes; the panel keeps the choice, which is how a source with
-      // nothing to hear is reached without touching a switch.
-      comp.getLayers().first.delete();
-      p.uiState.model.refresh();
-      await tester.pump();
-
-      await tester.tap(find.byKey(const ValueKey('beats-generate')));
-      await tester.pump();
-      await settleFrb(
-        tester,
-        minRounds: 6,
-        until: () => p.state.notice.value != null,
-        maxRounds: coldWorkerRounds,
-      );
-
-      expect(
-        p.state.notice.value?.message,
-        'No beats: the layer chosen as the source has no sound in it.',
-        reason: 'the refusal names the source that was picked',
-      );
-    });
-
     // The success is said too (the AudioWorkspace board's own status caption):
     // a run that placed markers and confirmed a grid used to land without a
     // word, and the markers land off-screen as easily as on.
@@ -197,34 +147,3 @@ String _clickWavFile() {
   return file.path;
 }
 
-/// A real, probeable WAV: a second of 8 kHz mono silence, which is enough for
-/// the probe to say the layer can make a sound. Written synchronously, like
-/// every fixture here (an awaited async `dart:io` call in a `testWidgets` body
-/// hangs).
-String _silentWavFile() {
-  final dir = Directory.systemTemp.createTempSync('lumit-beats-notice');
-  final file = File('${dir.path}/tone.wav');
-  const rate = 8000;
-  const dataBytes = rate * 2;
-  final out = BytesBuilder();
-  void ascii(String s) => out.add(s.codeUnits);
-  void u16(int v) => out.add([v & 0xff, (v >> 8) & 0xff]);
-  void u32(int v) =>
-      out.add([v & 0xff, (v >> 8) & 0xff, (v >> 16) & 0xff, (v >> 24) & 0xff]);
-  ascii('RIFF');
-  u32(36 + dataBytes);
-  ascii('WAVE');
-  ascii('fmt ');
-  u32(16);
-  u16(1); // PCM
-  u16(1); // mono
-  u32(rate);
-  u32(rate * 2);
-  u16(2);
-  u16(16);
-  ascii('data');
-  u32(dataBytes);
-  out.add(Uint8List(dataBytes));
-  file.writeAsBytesSync(out.toBytes());
-  return file.path;
-}

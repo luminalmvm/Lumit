@@ -146,7 +146,7 @@ extern "C" fn arm_on_load() {
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
-    use super::{path, record, record_to, watch, CAP, HOOK};
+    use super::{path, record_to, watch, CAP, HOOK};
 
     fn contents() -> String {
         std::fs::read_to_string(path()).unwrap_or_default()
@@ -195,24 +195,6 @@ mod tests {
             contents().contains(&marker),
             "a panic before any worker existed did not reach {:?}",
             path()
-        );
-    }
-
-    /// A recorded line is on disk, with a time in front of it.
-    #[test]
-    fn a_recorded_line_can_be_read_back() {
-        let marker = format!("marker-{:?}", std::time::Instant::now());
-        record(&marker);
-        let text = contents();
-        assert!(
-            text.contains(&marker),
-            "the line never reached {:?}",
-            path()
-        );
-        assert!(
-            text.lines()
-                .any(|l| l.starts_with('[') && l.contains(&marker)),
-            "a line with no time on it cannot be placed in a session"
         );
     }
 

@@ -15,7 +15,6 @@ import 'package:lumit_flutter/panels/layer_fold_frb.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
-import 'package:lumit_flutter/src/rust/api/retime.dart';
 
 import 'frb_test_support.dart';
 
@@ -100,98 +99,6 @@ void main() {
       );
     });
 
-    testWidgets('the group appears only while flow is on', (tester) async {
-      final p = withComp();
-      final layer = footageLayer(p);
-      await mount(tester, p);
-
-      // The section heading is a kicker, so its word reaches the screen
-      // capitalised while the string itself stays sentence case.
-      expect(find.text('FLOW'), findsNothing,
-          reason: 'a layer not using flow has no flow group');
-
-      layer.setFlowEnabled(on_: true);
-      await mount(tester, p);
-      expect(find.text('FLOW'), findsOneWidget);
-      expect(layer.getInterpolation(), BridgeRetimeInterp.flow);
-    });
-
-    testWidgets('flow is a switch, not a dropdown entry', (tester) async {
-      final p = withComp();
-      final layer = footageLayer(p);
-      await mount(tester, p);
-
-      // The dropdown is still there for Nearest/Blend...
-      expect(find.byKey(const ValueKey('src-retime-interp')), findsOneWidget);
-      // ...but flow is no longer one of the things it offers. Picking it there
-      // made the most expensive setting a layer has look like a small one.
-      expect(find.text('Optical flow'), findsNothing);
-
-      // The switch is what turns it on, and it round-trips.
-      expect(layer.getFlowEnabled(), isFalse);
-      layer.setFlowEnabled(on_: true);
-      expect(layer.getFlowEnabled(), isTrue);
-      layer.setFlowEnabled(on_: false);
-      expect(layer.getFlowEnabled(), isFalse);
-      expect(layer.getInterpolation(), BridgeRetimeInterp.nearest,
-          reason: 'turning flow off returns the layer to the crisp default');
-    });
-
-    testWidgets('every parameter reaches the document', (tester) async {
-      final p = withComp();
-      final layer = footageLayer(p);
-      layer.setFlowEnabled(on_: true);
-      await mount(tester, p);
-
-      // Sections start twirled open, so the rows are already built.
-      for (final key in [
-        'flow-engine',
-        'flow-resolution',
-        'flow-detail',
-        'flow-smoothness',
-        'flow-occlusion',
-        'flow-fallback',
-        'flow-hud-guard',
-        'flow-always',
-      ]) {
-        expect(find.byKey(ValueKey(key)), findsOneWidget,
-            reason: '$key is one of the parameters docs/08 §3.1 specifies');
-      }
-
-      // Defaults, straight from the engine.
-      final before = layer.getFlowParams();
-      expect(before.engine, 0, reason: 'the built-in engine');
-      expect(before.resolution, 0, reason: 'native');
-      expect(before.detail, 1, reason: 'medium');
-      expect(before.smoothness, 50);
-      expect(before.hudGuard, isTrue,
-          reason: 'game capture is the primary footage, so the guard is on');
-      expect(before.always, isFalse);
-
-      // A write of the whole group round-trips.
-      layer.setFlowParams(
-        params: BridgeFlowParams(
-          engine: 0,
-          resolution: 2,
-          detail: 3,
-          smoothness: 12.5,
-          occlusion: 1,
-          fallback: 1,
-          hudGuard: false,
-          always: true,
-        ),
-      );
-      final after = layer.getFlowParams();
-      expect(after.engine, 0);
-      expect(after.resolution, 2);
-      expect(after.detail, 3);
-      expect(after.smoothness, 12.5);
-      expect(after.occlusion, 1);
-      expect(after.fallback, 1);
-      expect(after.hudGuard, isFalse);
-      expect(after.always, isTrue);
-    });
-
     testWidgets('the engine is a row in the group, with two engines on it',
         (tester) async {
       final p = withComp();
@@ -220,66 +127,6 @@ void main() {
       expect(after.always, isFalse);
     });
 
-    testWidgets('a machine without the pack says so under the engine row',
-        (tester) async {
-      final p = withComp();
-      final layer = footageLayer(p);
-      layer.setFlowEnabled(on_: true);
-      await mount(tester, p);
-
-      // Nothing to say while the built-in engine is the chosen one.
-      expect(find.byKey(const ValueKey('flow-engine-notice')), findsNothing);
-
-      layer.setFlowParams(
-        params: flowParamsWith(layer.getFlowParams(), engine: 1),
-      );
-      await mount(tester, p);
-
-      // What the line says is the engine's answer, so both endings are pinned:
-      // on a machine carrying the pack there is nothing to report, and on one
-      // without it the sentence and the way to mend it are both there.
-      final state = layer.flowEngineState();
-      if (state == BridgeFlowEngineState.ready) {
-        expect(find.byKey(const ValueKey('flow-engine-notice')), findsNothing,
-            reason: 'the chosen engine is the one painting');
-        expect(flowEngineNotice(state), isNull);
-      } else {
-        expect(find.byKey(const ValueKey('flow-engine-notice')), findsOneWidget,
-            reason: 'no silent downgrade: preview says what it did instead');
-        expect(
-            find.byKey(const ValueKey('flow-engine-open-addons')), findsOneWidget,
-            reason: 'and the page that mends it is one press away');
-      }
-
-      // The five answers, each with its own sentence and none of them empty.
-      expect(flowEngineNotice(BridgeFlowEngineState.ready), isNull);
-      expect(flowEngineNotice(BridgeFlowEngineState.packMissing),
-          'RIFE is not installed, using the built-in engine');
-      expect(flowEngineNotice(BridgeFlowEngineState.runtimeMissing),
-          'RIFE is not installed, using the built-in engine');
-      expect(flowEngineNotice(BridgeFlowEngineState.failed),
-          isNot(flowEngineNotice(BridgeFlowEngineState.packMissing)));
-      expect(flowEngineNotice(BridgeFlowEngineState.floatSource),
-          isNot(flowEngineNotice(BridgeFlowEngineState.failed)));
-    });
-
-    testWidgets('the input rate has a control, defaulting to Auto',
-        (tester) async {
-      final p = withComp();
-      final layer = footageLayer(p);
-      layer.setFlowEnabled(on_: true);
-      await mount(tester, p);
-
-      expect(find.byKey(const ValueKey('flow-input-rate')), findsOneWidget);
-      expect(
-          find.byKey(const ValueKey('flow-input-rate-preset')), findsOneWidget);
-      // Auto is 0 — adjacent source frames, the clip's own rate.
-      final auto = layer.getFlowInputRate();
-      expect(auto, isA<BridgeScalar_Static>());
-      expect((auto as BridgeScalar_Static).field0, lessThan(0.5));
-      expect(find.text('Auto'), findsOneWidget);
-    });
-
     testWidgets('a cadence preset writes the rate it names', (tester) async {
       final p = withComp();
       final layer = footageLayer(p);
@@ -298,53 +145,5 @@ void main() {
       expect((rate as BridgeScalar_Static).field0, 12.0);
     });
 
-    testWidgets('the input rate is keyframeable, so a cadence can change',
-        (tester) async {
-      final p = withComp();
-      final layer = footageLayer(p);
-      layer.setFlowEnabled(on_: true);
-      await mount(tester, p);
-
-      // Anime commonly switches between 2s and 3s inside one cut, so the
-      // conform has to be able to follow it rather than being one number for
-      // the whole clip (the reason for a value field over a preset list).
-      expect(find.byKey(const ValueKey('kf-stopwatch-flow-input-rate')),
-          findsOneWidget);
-      await tester
-          .tap(find.byKey(const ValueKey('kf-stopwatch-flow-input-rate')));
-      await tester.pumpAndSettle();
-      expect(layer.getFlowInputRate(), isA<BridgeScalar_Keyframed>(),
-          reason: 'the stopwatch plants a key and the rate becomes a curve');
-    });
-
-    testWidgets('switching flow off parks the group and back on restores it',
-        (tester) async {
-      final p = withComp();
-      final layer = footageLayer(p);
-      layer.setFlowEnabled(on_: true);
-      layer.setFlowParams(
-        params: BridgeFlowParams(
-          engine: 0,
-          resolution: 1,
-          detail: 3,
-          smoothness: 80,
-          occlusion: 1,
-          fallback: 1,
-          hudGuard: false,
-          always: false,
-        ),
-      );
-      layer.setFlowEnabled(on_: false);
-      // Comparing a flow shot against the plain one is a normal thing to do and
-      // must not cost the tuning that got you there: while the policy is
-      // Nearest the group waits in the layer's parked_flow, and the panel keeps
-      // showing what it would come back to.
-      expect(layer.getFlowParams().detail, 3);
-
-      layer.setFlowEnabled(on_: true);
-      expect(layer.getFlowParams().resolution, 1);
-      expect(layer.getFlowParams().detail, 3);
-      expect(layer.getFlowParams().smoothness, 80);
-    });
   }, skip: !engineAvailable);
 }

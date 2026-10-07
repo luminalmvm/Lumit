@@ -430,11 +430,6 @@ impl<T: Clone> BakeCache<T> {
         self.by_key.insert(key, value.clone());
         value
     }
-
-    #[cfg(test)]
-    pub(super) fn len(&self) -> usize {
-        self.by_key.len()
-    }
 }
 
 /// How many blend modes the combine kernel's `flare_blend` implements — the

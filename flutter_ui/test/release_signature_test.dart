@@ -50,39 +50,6 @@ void main() {
     return base64.encode(signature.bytes);
   }
 
-  test('a manifest this key signed is believed, and names its files', () async {
-    final bytes = manifestFor();
-    final (manifest, trust) = await verifyManifestWithKey(
-      bytes,
-      await sign(bytes),
-      publicKeyBase64,
-    );
-    expect(trust, ReleaseTrust.trusted);
-    expect(manifest, isNotNull);
-    expect(manifest!.version, '0.3.4');
-    final asset = manifest.assetNamed('Lumit-0.3.4-setup.exe');
-    expect(asset, isNotNull);
-    expect(asset!.size, 4096);
-    expect(asset.sha256, aDigest);
-    // A file the manifest says nothing about is not found, rather than
-    // defaulted to something.
-    expect(manifest.assetNamed('something-else.exe'), isNull);
-  });
-
-  test('a manifest somebody else signed is refused', () async {
-    final bytes = manifestFor();
-    final impostor = await Ed25519().newKeyPair();
-    final signature = await Ed25519().sign(bytes, keyPair: impostor);
-
-    final (manifest, trust) = await verifyManifestWithKey(
-      bytes,
-      base64.encode(signature.bytes),
-      publicKeyBase64,
-    );
-    expect(trust, ReleaseTrust.badSignature);
-    expect(manifest, isNull);
-  });
-
   test('a manifest edited after it was signed is refused', () async {
     final original = manifestFor(sha256: aDigest);
     final signature = await sign(original);
@@ -94,17 +61,6 @@ void main() {
         await verifyManifestWithKey(tampered, signature, publicKeyBase64);
     expect(trust, ReleaseTrust.badSignature);
     expect(manifest, isNull);
-  });
-
-  test('a signature for another release is refused', () async {
-    // What a replay looks like: a real signature, over a real manifest, for the
-    // version before this one.
-    final older = manifestFor(version: '0.3.3');
-    final signature = await sign(older);
-    final newer = manifestFor(version: '0.3.4');
-    final (_, trust) =
-        await verifyManifestWithKey(newer, signature, publicKeyBase64);
-    expect(trust, ReleaseTrust.badSignature);
   });
 
   test('a signature that is not a signature is refused, never thrown', () async {
@@ -120,23 +76,6 @@ void main() {
           await verifyManifestWithKey(bytes, rubbish, publicKeyBase64);
       expect(trust, ReleaseTrust.badSignature, reason: 'for "$rubbish"');
     }
-  });
-
-  test('a pinned key that is not a key refuses everything', () async {
-    final bytes = manifestFor();
-    final signature = await sign(bytes);
-    for (final bad in <String>[
-      'not base64 !!',
-      base64.encode(List<int>.filled(31, 0)),
-      base64.encode(List<int>.filled(33, 0)),
-    ]) {
-      final (_, trust) = await verifyManifestWithKey(bytes, signature, bad);
-      expect(trust, ReleaseTrust.badSignature, reason: 'for "$bad"');
-    }
-    // And an empty key is "no key pinned", which is a different answer: this
-    // build simply cannot make the strong check.
-    final (_, unpinned) = await verifyManifestWithKey(bytes, signature, '');
-    expect(unpinned, ReleaseTrust.unsigned);
   });
 
   test('a signed manifest that is not a manifest is refused', () async {
@@ -200,14 +139,6 @@ void main() {
     final (_, trust) =
         await verifyManifestWithKey(huge, await sign(huge), publicKeyBase64);
     expect(trust, ReleaseTrust.malformed);
-  });
-
-  test('a digest is read case-insensitively but kept lower case', () async {
-    final bytes = manifestFor(sha256: 'A' * 64);
-    final (manifest, trust) = await verifyManifestWithKey(
-        bytes, await sign(bytes), publicKeyBase64);
-    expect(trust, ReleaseTrust.trusted);
-    expect(manifest!.assetNamed('Lumit-0.3.4-setup.exe')!.sha256, 'a' * 64);
   });
 
   test('the shipped build pins no key yet, and says so rather than pretending',

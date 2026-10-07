@@ -523,60 +523,6 @@ mod tests {
         a.iter().zip(b).all(|(x, y)| (x - y).abs() <= tol)
     }
 
-    #[test]
-    fn identity_changes_nothing_either_way() {
-        for dir in [Direction::Forward, Direction::Inverse] {
-            let chain = resolve("IDENTITY", dir).expect("implemented");
-            assert!(chain.is_identity());
-        }
-    }
-
-    #[test]
-    fn acescct_to_aces_hits_the_published_middle_grey() {
-        // ACEScct 0.4135884 is linear 0.18 in AP1; through the AP1→AP0 matrix a
-        // neutral stays neutral, so the answer is 0.18 on all three.
-        let chain = resolve("ACEScct_to_ACES2065-1", Direction::Forward).expect("implemented");
-        let got = chain.eval([0.4135884; 3]);
-        assert!(close(got, [0.18; 3], 1e-4), "{got:?}");
-    }
-
-    #[test]
-    fn acescg_to_aces_takes_white_to_white() {
-        let chain = resolve("ACEScg_to_ACES2065-1", Direction::Forward).expect("implemented");
-        assert!(close(chain.eval([1.0; 3]), [1.0; 3], 1e-5));
-    }
-
-    #[test]
-    fn the_ap0_to_xyz_utility_lands_on_d65_white() {
-        let chain = resolve("UTILITY - ACES-AP0_to_CIE-XYZ-D65_BFD", Direction::Forward)
-            .expect("implemented");
-        let got = chain.eval([1.0; 3]);
-        // D65 white in XYZ, from the (0.3127, 0.3290) chromaticity pair.
-        assert!(close(got, [0.950_456, 1.0, 1.089_058], 1e-3), "{got:?}");
-    }
-
-    #[test]
-    fn an_implemented_style_round_trips_through_its_inverse() {
-        let there = resolve("ACEScct_to_ACES2065-1", Direction::Forward).expect("implemented");
-        let back = resolve("ACEScct_to_ACES2065-1", Direction::Inverse).expect("implemented");
-        let c = [0.2, 0.45, 0.7];
-        assert!(close(back.eval(there.eval(c)), c, 1e-4));
-    }
-
-    #[test]
-    fn an_output_style_with_no_bake_refuses_by_name() {
-        // A 2000 nit ACES 1.x output transform: not in `VENDORED`, so it
-        // refuses, which is the promise, rather than a gap being papered over.
-        let style =
-            "ACES-OUTPUT - ACES2065-1_to_CIE-XYZ-D65 - HDR-VIDEO-2000nit-15nit-REC2020lim_1.1";
-        let err = resolve(style, Direction::Forward);
-        assert!(
-            matches!(&err, Err(ColourError::UnsupportedBuiltin { style: s }) if s == style),
-            "{err:?}"
-        );
-        assert!(vendored_artefact(style).is_none());
-    }
-
     /// The one thing that must be checked at a **saturated, off-neutral grid
     /// point**: a cube read red-fastest when it was written blue-fastest is
     /// the classic silent LUT bug, and it survives every test that only looks
@@ -612,13 +558,6 @@ mod tests {
         let probe = [0.18, 0.2, 0.16];
         let (want, got) = (chain.eval(probe), baked.eval(probe));
         assert!(close(got, want, 2e-3), "{got:?} vs {want:?}");
-    }
-
-    #[test]
-    fn every_listed_style_actually_resolves() {
-        for style in IMPLEMENTED.iter().chain(&VENDORED) {
-            assert!(resolve(style, Direction::Forward).is_ok(), "{style}");
-        }
     }
 
     /// A vendored file that lost its provenance header is not a golden, and

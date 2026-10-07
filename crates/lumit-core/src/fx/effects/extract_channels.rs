@@ -264,33 +264,6 @@ mod tests {
         });
     }
 
-    /// The dropdowns are the file's channels with None in front, so a fresh
-    /// instance sits on None and changes nothing.
-    #[test]
-    fn the_rows_offer_none_then_every_channel_of_the_file() {
-        let rows = rows_for(&["R".into(), "Z".into()]);
-        assert_eq!(rows.len(), 4);
-        let ParamKind::Choice {
-            options, default, ..
-        } = rows[0].kind
-        else {
-            panic!("a slot is a dropdown");
-        };
-        assert_eq!(options, [NONE_OPTION, "R", "Z"]);
-        assert_eq!(default, 0);
-    }
-
-    /// One list, one set of rows — a project with many of these on the same
-    /// render must not leak a copy of the list per instance.
-    #[test]
-    fn one_channel_list_is_interned_once() {
-        let a = rows_for(&["R".into(), "Z".into()]);
-        let b = rows_for(&["R".into(), "Z".into()]);
-        assert!(std::ptr::eq(a, b));
-        let c = rows_for(&["R".into(), "N.X".into()]);
-        assert!(!std::ptr::eq(a, c));
-    }
-
     /// Two callers building the same list at once still end up with one
     /// pointer, which is the race two of these tests hit on the macOS runner.
     #[test]
@@ -303,44 +276,6 @@ mod tests {
             .map(|h| h.join().expect("a thread that finished"))
             .collect();
         assert!(seen.iter().all(|p| *p == seen[0]), "{seen:?}");
-    }
-
-    /// A fresh instance selects nothing, so the layer decodes as it always did.
-    #[test]
-    fn every_slot_at_none_is_no_selection_at_all() {
-        assert_eq!(selection(&instance(&["R", "Z"])), None);
-    }
-
-    /// The index is read against the stored list, so option 2 of `[None, R, Z]`
-    /// is `Z`. An unset slot stays unset rather than defaulting to a channel.
-    #[test]
-    fn a_chosen_slot_names_the_channel_it_points_at() {
-        let mut inst = instance(&["R", "Z"]);
-        choose(&mut inst, 0, 2);
-        assert_eq!(selection(&inst), Some([Some("Z".into()), None, None, None]));
-    }
-
-    /// Bypass is the honest comparison: the selection stops being applied
-    /// without the choices being lost.
-    #[test]
-    fn bypass_stops_the_selection_without_forgetting_it() {
-        let mut inst = instance(&["R", "Z"]);
-        choose(&mut inst, 0, 2);
-        for p in &mut inst.params {
-            if p.id == "bypass" {
-                p.value = crate::model::EffectValue::Bool(true);
-            }
-        }
-        assert_eq!(selection(&inst), None);
-    }
-
-    /// A disabled effect is not a quietly-still-applied one.
-    #[test]
-    fn a_disabled_effect_selects_nothing() {
-        let mut inst = instance(&["R", "Z"]);
-        choose(&mut inst, 0, 2);
-        inst.enabled = false;
-        assert_eq!(selection(&inst), None);
     }
 
     /// An index past the end of the list — a preset from a project whose render

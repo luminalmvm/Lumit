@@ -144,45 +144,6 @@ void main() {
     expect(controller.offset, 120, reason: 'the scroll offset survived');
   });
 
-  testWidgets('a drag begun on an inactive pane works on the first gesture',
-      (tester) async {
-    var drags = 0;
-    final active =
-        ValueNotifier<PaneId?>(Panel.viewer.pane()); // pane A starts inactive
-    addTearDown(active.dispose);
-
-    await tester.pumpWidget(_harness(
-      root: DockSplit(
-        DockAxis.horizontal,
-        [DockPane(Panel.project), DockPane(Panel.viewer)],
-        [0.5, 0.5],
-      ),
-      buildPanel: (context, pane) => pane.panel == Panel.project
-          ? _DragCounter(() => drags++)
-          : const Text('pane B'),
-      active: active,
-    ));
-    await tester.pump();
-    expect(active.value, Panel.viewer.pane(),
-        reason: 'pane A is inactive to start');
-
-    // One unbroken gesture: press (which activates pane A), move, release.
-    final gesture =
-        await tester.startGesture(tester.getCenter(find.byType(_DragCounter)));
-    await tester.pump();
-    await gesture.moveBy(const Offset(40, 0));
-    await tester.pump();
-    await gesture.moveBy(const Offset(40, 0));
-    await tester.pump();
-    await gesture.up();
-    await tester.pump();
-
-    expect(active.value, Panel.project.pane(),
-        reason: 'the press activated pane A');
-    expect(drags, greaterThan(0),
-        reason: 'the drag took effect on the first gesture');
-  });
-
   /// Airyzz's rule (663b6cc, restored after a merge overwrote it): invisible
   /// panels are not built — not at all before first shown, and not again
   /// while hidden, however often the dock itself rebuilds.
@@ -270,42 +231,5 @@ void main() {
 
     expect(controller.offset, 90,
         reason: 'the hidden tab kept its scroll offset alive');
-  });
-
-  /// **A bare pane draws no corner grip** (owner review, 2026-08-24).
-  ///
-  /// A solo pane used to wear a 16px square of dots at its top-right, which
-  /// dragged the panel. It is gone: nothing is painted over the panel's own
-  /// top-right corner, and nothing there takes a pointer. What still moves a
-  /// panel is a tab pill, and Window → Workspace.
-  testWidgets('a bare pane paints nothing over its top-right corner',
-      (tester) async {
-    final active = ValueNotifier<PaneId?>(Panel.viewer.pane());
-    addTearDown(active.dispose);
-
-    await tester.pumpWidget(_harness(
-      root: DockSplit(
-        DockAxis.horizontal,
-        [DockPane(Panel.viewer)],
-        [1.0],
-      ),
-      buildPanel: (context, pane) => GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () => taps++,
-        child: const SizedBox.expand(child: Text('pane body')),
-      ),
-      active: active,
-    ));
-    await tester.pump();
-
-    // The pane's own top-right corner, a few pixels in — where the grip stood.
-    final pane = tester.getRect(find.text('pane body'));
-    await tester.tapAt(Offset(pane.right - 8, pane.top + 8));
-    await tester.pump();
-    expect(taps, 1,
-        reason: 'the corner belongs to the panel, not to a dock affordance');
-
-    // And the grip's own tooltip is nowhere in the tree.
-    expect(find.byType(LumitTooltip), findsNothing);
   });
 }

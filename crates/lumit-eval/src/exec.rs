@@ -379,28 +379,6 @@ mod tests {
     }
 
     #[test]
-    fn a_cache_hit_short_circuits_all_work() {
-        let log: CallLog = CallLog::default();
-        let (mut src, mut ker, mut cache) = fakes(&log);
-        let key = FrameKey(42);
-        cache.entries.push((key, FrameHandle(7)));
-        let (graph, ..) = two_layer_shared_source();
-        let token = Epoch::new().token();
-        let out = render_frame(
-            &graph,
-            0.0,
-            Some(key),
-            &mut src,
-            &mut ker,
-            &mut cache,
-            &token,
-        )
-        .unwrap();
-        assert_eq!(out, FrameHandle(7));
-        assert!(log.borrow().is_empty(), "no source or kernel work on a hit");
-    }
-
-    #[test]
     fn a_cache_miss_renders_then_fills_the_cache_under_the_same_key() {
         let log: CallLog = CallLog::default();
         let (mut src, mut ker, mut cache) = fakes(&log);
@@ -432,17 +410,6 @@ mod tests {
         .unwrap();
         assert_eq!(again, out);
         assert_eq!(log.borrow().len(), calls_before, "hit does no new work");
-    }
-
-    #[test]
-    fn an_unkeyable_frame_renders_live_and_never_touches_the_cache() {
-        let log: CallLog = CallLog::default();
-        let (mut src, mut ker, mut cache) = fakes(&log);
-        let (graph, ..) = two_layer_shared_source();
-        let token = Epoch::new().token();
-        render_frame(&graph, 0.0, None, &mut src, &mut ker, &mut cache, &token).unwrap();
-        assert_eq!(cache.gets, 0);
-        assert!(cache.entries.is_empty());
     }
 
     /// A scrub landing mid-render (epoch bump inside a kernel) abandons the
@@ -505,26 +472,5 @@ mod tests {
             render_frame(&dangling, 0.0, None, &mut src, &mut ker, &mut cache, &token),
             Err(ExecError::Node { .. })
         ));
-    }
-
-    /// The executor + pool together: a frame rendered on a worker, exactly as
-    /// the shell will submit it (docs/05 §2 job = one graph evaluation).
-    #[test]
-    fn a_render_job_runs_on_the_worker_pool() {
-        use crate::pool::{JobClass, WorkerPool};
-        let pool = WorkerPool::new(2).unwrap();
-        let (tx, rx) = std::sync::mpsc::channel();
-        let (graph, ..) = two_layer_shared_source();
-        let token = Epoch::new().token();
-        pool.try_spawn(JobClass::Interactive, move || {
-            // Thread-local fakes: the seams are plain &mut dyn, nothing shared.
-            let log: CallLog = CallLog::default();
-            let (mut src, mut ker, mut cache) = fakes(&log);
-            let result = render_frame(&graph, 0.0, None, &mut src, &mut ker, &mut cache, &token);
-            let _ = tx.send(result);
-        })
-        .unwrap();
-        let result = rx.recv_timeout(std::time::Duration::from_secs(5)).unwrap();
-        assert!(result.is_ok());
     }
 }

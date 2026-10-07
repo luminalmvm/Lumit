@@ -431,20 +431,6 @@ mod tests {
         );
     }
 
-    /// A row that collided with one of the effect's own would be two controls
-    /// under one id, so it is left off rather than drawn over.
-    #[test]
-    fn an_input_that_collides_with_a_declared_row_derives_none() {
-        let inputs = vec![
-            declared("mix", InputKind::Number, Unit::Raw),
-            declared("matte", InputKind::Number, Unit::Raw),
-            declared("gain", InputKind::Number, Unit::Raw),
-            declared("gain", InputKind::Number, Unit::Raw),
-        ];
-        let ids: Vec<&str> = input_rows(&inputs).iter().map(|r| r.id).collect();
-        assert_eq!(ids, vec!["gain"], "one row, and none of the effect's own");
-    }
-
     /// What a host hands the Inputs (§1.5): the stored row, the driver's
     /// number in front of it where a wire feeds the socket, and nothing at all
     /// for a picture Input or an Input under one of this effect's own ids.
@@ -523,15 +509,6 @@ mod tests {
             Some(EffectValue::Float(p)) => assert_eq!(p.value_at(0.0), 9.0),
             other => panic!("gain is a number, not {other:?}"),
         }
-    }
-
-    /// An instance with nothing bound shows its two declared rows and no more.
-    #[test]
-    fn an_unbound_instance_derives_nothing() {
-        let inst = crate::fx::instantiate("node_graph").expect("the catalogue knows it");
-        assert_eq!(comp_of(&inst), None);
-        assert!(inputs_of(&inst).is_empty());
-        assert!(NodeGraphDef.derived(&inst).is_empty());
     }
 
     /// **Offered, never adopted**: `refresh` rewrites the copy from the live

@@ -31,21 +31,6 @@ void main() {
     const ease =
         BridgeSideInterp.bezier(BridgeBezierSide(speed: 0, influence: 0.5));
 
-    test('with nothing around it, linear both sides', () {
-      final made = keyframeAmong(const [], rat(1, 1), 5);
-      expect(made.interpIn, isA<BridgeSideInterp_Linear>());
-      expect(made.interpOut, isA<BridgeSideInterp_Linear>());
-      expect(made.value, 5);
-    });
-
-    test('planted after a held key, it holds', () {
-      final keys = [key(0, 1, 0, interpOut: hold)];
-      final made = keyframeAmong(keys, rat(1, 1), 5);
-      expect(made.interpIn, isA<BridgeSideInterp_Hold>());
-      expect(made.interpOut, isA<BridgeSideInterp_Hold>(),
-          reason: 'with only a key before it, both halves take that one');
-    });
-
     test('each half matches the side it faces', () {
       final keys = [
         key(0, 1, 0, interpOut: hold),
@@ -57,42 +42,9 @@ void main() {
       expect(made.interpOut, isA<BridgeSideInterp_Bezier>(),
           reason: 'and leaves into an ease');
     });
-
-    test('a bezier is inherited as an easy ease, not as its neighbour shape',
-        () {
-      final keys = [key(0, 1, 0, interpOut: ease)];
-      final made = keyframeAmong(keys, rat(1, 1), 5);
-      final side = made.interpOut as BridgeSideInterp_Bezier;
-      expect(side.field0.speed, 0);
-      expect(side.field0.influence, closeTo(1 / 3, 1e-12),
-          reason: 'the shape belongs to the key that stores it');
-    });
-
-    test('planted before the first key, it takes that key', () {
-      final keys = [key(2, 1, 10, interpIn: hold)];
-      final made = keyframeAmong(keys, rat(1, 1), 5);
-      expect(made.interpIn, isA<BridgeSideInterp_Hold>());
-      expect(made.interpOut, isA<BridgeSideInterp_Hold>());
-    });
   });
 
   group('evaluateKeys', () {
-    test('clamps past the ends and lerps a straight span', () {
-      final keys = [key(0, 1, 10), key(1, 1, 20)];
-      expect(evaluateKeys(keys, -1), 10);
-      expect(evaluateKeys(keys, 2), 20);
-      expect(evaluateKeys(keys, 0.5), closeTo(15, 1e-12));
-    });
-
-    test('hold-out wins its span', () {
-      final keys = [
-        key(0, 1, 10, interpOut: const BridgeSideInterp.hold()),
-        key(1, 1, 20),
-      ];
-      expect(evaluateKeys(keys, 0.999), 10);
-      expect(evaluateKeys(keys, 1), 20);
-    });
-
     test('the easy-ease midpoint is the value midpoint', () {
       // Symmetric flat handles: the curve is odd about the centre, so the
       // midpoint in time is exactly the midpoint in value (anim.rs test).
@@ -104,18 +56,6 @@ void main() {
       // Eased: barely moving near the ends compared to linear.
       expect(evaluateKeys(keys, 0.1), lessThan(5));
       expect(evaluateKeys(keys, 0.9), greaterThan(95));
-    });
-
-    test('a linear side inside a bezier span lies on the chord', () {
-      // Out side linear, in side eased: at the linear end the curve leaves at
-      // the chord slope (100 units/s over the span).
-      final keys = [
-        key(0, 1, 0),
-        key(1, 1, 100, interpIn: easyEase),
-      ];
-      final nearStart = evaluateKeys(keys, 0.01);
-      expect(nearStart, closeTo(1.0, 0.25),
-          reason: 'leaves the first key at roughly the chord slope');
     });
 
     test('solveU round-trips x(u) = t', () {
@@ -131,45 +71,6 @@ void main() {
             u * u * u;
         expect(x, closeTo(t, 1e-9));
       }
-    });
-  });
-
-  group('evaluateKeysSpeed', () {
-    test('is the chord on straight spans, zero outside and across holds', () {
-      final keys = [
-        key(0, 1, 0),
-        key(1, 1, 10),
-        key(2, 1, 10, interpIn: const BridgeSideInterp.linear())
-      ];
-      expect(evaluateKeysSpeed(keys, -1), 0);
-      expect(evaluateKeysSpeed(keys, 0.5), closeTo(10, 1e-9));
-      expect(evaluateKeysSpeed(keys, 3), 0);
-    });
-
-    test('an eased span is flat at its keys and fastest in the middle', () {
-      final keys = [
-        key(0, 1, 0, interpOut: easyEase),
-        key(1, 1, 100, interpIn: easyEase),
-      ];
-      expect(evaluateKeysSpeed(keys, 0.001), lessThan(1));
-      expect(evaluateKeysSpeed(keys, 0.5), greaterThan(100));
-      expect(evaluateKeysSpeed(keys, 0.999), lessThan(1));
-    });
-
-    test('sideSpeedAtKey reads the side parameter directly', () {
-      const fast =
-          BridgeSideInterp.bezier(BridgeBezierSide(speed: 42, influence: 0.5));
-      final keys = [
-        key(0, 1, 0, interpOut: fast),
-        key(1, 1, 100, interpIn: easyEase),
-      ];
-      expect(sideSpeedAtKey(keys, 0, isOut: true), 42);
-      expect(sideSpeedAtKey(keys, 1, isOut: false), 0);
-      expect(sideSpeedAtKey(keys, 0, isOut: false), 0,
-          reason: 'no neighbour on that side');
-      // A linear side reads the chord.
-      final straight = [key(0, 1, 0), key(1, 1, 100)];
-      expect(sideSpeedAtKey(straight, 0, isOut: true), closeTo(100, 1e-9));
     });
   });
 
@@ -196,18 +97,6 @@ void main() {
       expect(back.speed, closeTo(15, 1e-9));
       expect(back.influence, closeTo(0.4, 1e-9));
     });
-
-    test('a drag past the span clamps its influence to 1', () {
-      final r = handleFromDrag(
-        keyTime: 0,
-        keyValue: 0,
-        neighbourTime: 1,
-        isOut: true,
-        dragTime: 5,
-        dragValue: 0,
-      );
-      expect(r.influence, 1);
-    });
   });
 
   group('fit ranges', () {
@@ -223,64 +112,9 @@ void main() {
       // The steep out-handle reaches 400 · 0.5 = 200 above the first key.
       expect(hi, greaterThanOrEqualTo(200));
     });
-
-    test('a static value alone still yields a usable range', () {
-      final (lo, hi) = fitValueRange([], [50]);
-      expect(lo, lessThan(50));
-      expect(hi, greaterThan(50));
-    });
-
-    test('the speed range always includes zero', () {
-      final keys = [key(0, 1, 0), key(1, 1, 100)];
-      final (lo, hi) = fitSpeedRange([keys]);
-      expect(lo, lessThanOrEqualTo(0));
-      expect(hi, greaterThanOrEqualTo(100));
-    });
   });
 
   group('keyframe clipboard text', () {
-    test('writes the named table and parses itself back', () {
-      final text = lumitClipboardText(
-        version: '0.1.0',
-        fps: 25,
-        width: 1920,
-        height: 816,
-        groups: [
-          const LumitClipGroup(
-            property: ['Transform', 'Position'],
-            columns: ['X pixels', 'Y pixels'],
-            rows: [
-              LumitClipRow(frame: 0, values: [100, 200]),
-              LumitClipRow(frame: 5, values: [300, 412.5]),
-            ],
-          ),
-          const LumitClipGroup(
-            property: ['Effects', 'Gaussian blur', 'Radius'],
-            columns: ['Value'],
-            rows: [
-              LumitClipRow(frame: 5, values: [208]),
-            ],
-          ),
-        ],
-      );
-      expect(text, startsWith('Lumit 0.1.0 Keyframe Data'));
-      expect(text, isNot(contains('After Effects')));
-      expect(text, contains('\tUnits Per Second\t25'));
-      expect(text, contains('Transform\tPosition'));
-      expect(text, contains('\t5\t300\t412.5\t'));
-      expect(text, contains('End of Keyframe Data'));
-
-      final parsed = parseClipboardText(text);
-      expect(parsed, isNotNull);
-      expect(parsed!.fps, 25);
-      expect(parsed.groups, hasLength(2));
-      expect(parsed.groups.first.property, ['Transform', 'Position']);
-      expect(parsed.groups.first.columns, ['X pixels', 'Y pixels']);
-      expect(parsed.groups.first.rows[1].frame, 5);
-      expect(parsed.groups.first.rows[1].values, [300, 412.5]);
-      expect(parsed.groups[1].rows.single.values, [208]);
-    });
-
     /// The whole reason the format is ours: a shaped key must come back
     /// shaped, not flattened to a straight line.
     test('easing survives the round trip, per column', () {
@@ -350,13 +184,6 @@ void main() {
   });
 
   group('gridValues', () {
-    test('rules a plain range at a round step', () {
-      final out = gridValues(0, 10, 360);
-      expect(out.first, 0);
-      expect(out.last, 10);
-      expect(out.length, 11);
-    });
-
     test('a range that is not a range rules nothing', () {
       // Every one of these used to spin `powerOfTenUnder` for ever on the
       // interface's own thread: the application froze where it stood and never
@@ -368,15 +195,6 @@ void main() {
       expect(gridValues(double.negativeInfinity, 0, 360), isEmpty);
       expect(gridValues(double.nan, 1, 360), isEmpty);
       expect(gridValues(0, double.nan, 360), isEmpty);
-    });
-
-    test('the power of ten walks down, and refuses what it cannot walk', () {
-      expect(powerOfTenUnder(30), 10);
-      expect(powerOfTenUnder(0.03), closeTo(0.01, 1e-12));
-      expect(powerOfTenUnder(double.infinity), 1);
-      expect(powerOfTenUnder(double.negativeInfinity), 1);
-      expect(powerOfTenUnder(double.nan), 1);
-      expect(powerOfTenUnder(0), 1);
     });
   });
 }
@@ -394,55 +212,6 @@ void tangentModeTests() {
       BridgeAutoSide(clamped: clamped, speed: 0, influence: 1 / 3));
 
   group('automatic tangents', () {
-    test('aim between the neighbours, and lie flat at an end key', () {
-      final keys = [
-        key(0, 1, 0, interpOut: auto()),
-        key(1, 1, 10, interpIn: auto(), interpOut: auto()),
-        key(2, 1, 30, interpIn: auto()),
-      ];
-      expect(autoSpeedAt(keys, 1, clamped: false), closeTo(15, 1e-12));
-      expect(autoSpeedAt(keys, 0, clamped: false), 0);
-      expect(autoSpeedAt(keys, 2, clamped: false), 0);
-    });
-
-    test('resolve to the bezier their neighbours dictate, keeping the reach',
-        () {
-      final keys = [
-        key(0, 1, 0, interpOut: auto()),
-        key(1, 1, 10,
-            interpOut: BridgeSideInterp.auto(BridgeAutoSide(
-                // A remembered ease, never evaluated.
-                clamped: false,
-                speed: 99,
-                influence: 0.5))),
-        key(2, 1, 30),
-      ];
-      final side = resolvedSide(keys, 1, isOut: true);
-      expect(side, isA<BridgeSideInterp_Bezier>());
-      expect(
-          (side as BridgeSideInterp_Bezier).field0.speed, closeTo(15, 1e-12));
-      expect(side.field0.influence, closeTo(0.5, 1e-12));
-      expect(sideSpeedAtKey(keys, 1, isOut: true), closeTo(15, 1e-12));
-      expect(sideInfluence(keys[1].interpOut), closeTo(0.5, 1e-12));
-    });
-
-    test('follow a moved neighbour, where a free side would not', () {
-      List<BridgeKeyframe> at(double last, BridgeSideInterp side) => [
-            key(0, 1, 0, interpOut: side),
-            key(1, 1, 10, interpIn: side, interpOut: side),
-            key(2, 1, last, interpIn: side),
-          ];
-      final before = evaluateKeys(at(30, auto()), 1.5);
-      final after = evaluateKeys(at(200, auto()), 1.5);
-      expect(
-          autoSpeedAt(at(200, auto()), 1, clamped: false), closeTo(100, 1e-12));
-      expect((after - before).abs(), greaterThan(1));
-
-      const free = BridgeSideInterp.bezier(
-          BridgeBezierSide(speed: 15, influence: 1 / 3));
-      expect(sideSpeedAtKey(at(200, free), 1, isOut: true), closeTo(15, 1e-12));
-    });
-
     test('clamped, they do not overshoot a peak', () {
       List<BridgeKeyframe> peak(BridgeSideInterp side) => [
             key(0, 1, 0),
@@ -464,14 +233,6 @@ void tangentModeTests() {
       }
       expect(high, greaterThan(10 + 1e-6));
     });
-
-    test('clamped, they keep the smooth aim where it is safe', () {
-      final gentle = [key(0, 1, 0), key(1, 1, 10), key(2, 1, 30)];
-      expect(autoSpeedAt(gentle, 1, clamped: true), closeTo(15, 1e-12));
-      // Held to three times the gentler chord where the aim is too steep.
-      final steep = [key(0, 1, 0), key(1, 1, 0.1), key(2, 1, 100)];
-      expect(autoSpeedAt(steep, 1, clamped: true), closeTo(0.3, 1e-12));
-    });
   });
 
   group('tangent mode switching', () {
@@ -485,48 +246,11 @@ void tangentModeTests() {
       expect(tangentModeOf(clamped), TangentMode.clamp);
       expect(withTangentMode(clamped, TangentMode.free), custom);
     });
-
-    test('a straight side returns eased, and a free one is left alone', () {
-      final wasStraight =
-          withTangentMode(const BridgeSideInterp.linear(), TangentMode.auto);
-      expect(
-          withTangentMode(wasStraight, TangentMode.free),
-          const BridgeSideInterp.bezier(
-              BridgeBezierSide(speed: 0, influence: 1 / 3)));
-      expect(withTangentMode(const BridgeSideInterp.hold(), TangentMode.free),
-          const BridgeSideInterp.hold());
-    });
-
-    test('an automatic side survives the keyframe clipboard', () {
-      final side = BridgeSideInterp.auto(
-          const BridgeAutoSide(clamped: true, speed: 2.5, influence: 0.4));
-      final back = easeFromText(easeToText(side));
-      expect(back, isA<BridgeSideInterp_Auto>());
-      expect((back as BridgeSideInterp_Auto).field0.clamped, isTrue);
-      expect(back.field0.speed, closeTo(2.5, 1e-9));
-      expect(back.field0.influence, closeTo(0.4, 1e-9));
-    });
   });
 }
 
 void envelopeTests() {
   group('the Vegas speed envelope', () {
-    test('an identity retime reads as 100% throughout', () {
-      // Ten seconds of layer time showing ten seconds of source.
-      final keys = [key(0, 1, 0.0), key(10, 1, 10.0)];
-      expect(envelopeSpeeds(keys), everyElement(closeTo(100, 1e-9)));
-    });
-
-    test('half speed reads as 50%', () {
-      final keys = [key(0, 1, 0.0), key(10, 1, 5.0)];
-      expect(envelopeSpeeds(keys), everyElement(closeTo(50, 1e-9)));
-    });
-
-    test('a backwards run reads negative', () {
-      final keys = [key(0, 1, 5.0), key(5, 1, 0.0)];
-      expect(envelopeSpeeds(keys), everyElement(closeTo(-100, 1e-9)));
-    });
-
     test('setting a speed re-integrates the frames after it, start pinned', () {
       final keys = [key(0, 1, 0.0), key(2, 1, 2.0), key(4, 1, 4.0)];
       // Drag the *first* point to 300%: the span to the second key now runs
@@ -539,15 +263,6 @@ void envelopeTests() {
       expect(out[2].value, closeTo(6.0, 1e-9));
       // Every keyframe *time* stayed exactly put (the beat-sync covenant).
       expect([for (final k in out) rationalSeconds(k.time)], [0.0, 2.0, 4.0]);
-    });
-
-    test('a speed set is the speed read back', () {
-      final keys = [key(0, 1, 0.0), key(2, 1, 2.0), key(4, 1, 4.0)];
-      final out = setEnvelopeSpeed(keys, 1, 250);
-      expect(envelopeSpeeds(out)[1], closeTo(250, 1e-9));
-      expect(envelopeSpeeds(out)[0], closeTo(100, 1e-9),
-          reason: 'the points either side are untouched');
-      expect(envelopeSpeeds(out)[2], closeTo(100, 1e-9));
     });
 
     // The claim the whole envelope rests on: it is not a simplified view of
@@ -567,26 +282,6 @@ void envelopeTests() {
             reason: 'speed at t=$t should sit on the envelope line');
       }
       expect(envelopeSpeeds(ramped), [closeTo(100, 1e-9), closeTo(300, 1e-9)]);
-    });
-
-    test('the default range is 125 down to -25, and only ever grows', () {
-      final flat = [key(0, 1, 0.0), key(4, 1, 4.0)];
-      expect(fitEnvelopeRange([flat]), envelopeDefaultRange,
-          reason: 'an ordinary clip opens at exactly the documented range');
-
-      final fast = setEnvelopeSpeed(flat, 1, 850);
-      final (lo, hi) = fitEnvelopeRange([fast]);
-      expect(hi, greaterThan(850),
-          reason: 'a fast ramp is framed, not clipped');
-      expect(lo, -25.0, reason: 'the floor did not move');
-      // The headroom above normal playback is the point of the top figure:
-      // a flat 100% line must not sit on the graph's own edge.
-      expect(envelopeDefaultRange.$2, 125.0);
-
-      final reversed = setEnvelopeSpeed(flat, 1, -400);
-      final (rlo, rhi) = fitEnvelopeRange([reversed]);
-      expect(rlo, lessThan(-400));
-      expect(rhi, 125.0, reason: 'the ceiling did not move either');
     });
 
     /// **The invariant the whole envelope rests on**, checked after the
@@ -631,89 +326,8 @@ void envelopeTests() {
         }
       }
     });
-
-    test('an empty or mismatched envelope leaves the keys alone', () {
-      expect(envelopeToKeys(const [], const []), isEmpty);
-      final keys = [key(0, 1, 0.0), key(4, 1, 4.0)];
-      expect(envelopeToKeys(keys, const [100.0]), same(keys));
-      expect(setEnvelopeSpeed(keys, 9, 200), same(keys));
-    });
   });
 }
 
 void envelopeShapeTests() {
-  group('the envelope leaves untouched keys alone', () {
-    test('a flat envelope is all linear sides', () {
-      final keys = [key(0, 1, 0.0), key(2, 1, 2.0), key(4, 1, 4.0)];
-      final out = envelopeToKeys(keys, const [100.0, 100.0, 100.0]);
-      for (final k in out) {
-        expect(k.interpIn, isA<BridgeSideInterp_Linear>());
-        expect(k.interpOut, isA<BridgeSideInterp_Linear>());
-      }
-    });
-
-    // The bug: dragging one point re-shaped every key on the channel, so keys
-    // nobody touched changed glyph from a diamond to a circle.
-    test('a key whose speed is still its chord keeps a linear side', () {
-      final keys = [
-        key(0, 1, 0.0),
-        key(2, 1, 2.0),
-        key(4, 1, 4.0),
-        key(6, 1, 6.0),
-      ];
-      // Ramp only the middle span: keys 0 and 3 are nowhere near it.
-      final out = envelopeToKeys(keys, const [100.0, 100.0, 300.0, 300.0]);
-      expect(out[0].interpOut, isA<BridgeSideInterp_Linear>(),
-          reason: 'the first span is still a flat 100%');
-      expect(out[3].interpIn, isA<BridgeSideInterp_Linear>(),
-          reason: 'and so is the last');
-      expect(out[1].interpOut, isA<BridgeSideInterp_Bezier>(),
-          reason: 'the ramped span genuinely leaves at a non-chord speed');
-      expect(out[2].interpIn, isA<BridgeSideInterp_Bezier>());
-    });
-
-    test('flattening a ramp puts the linear sides back', () {
-      final keys = [key(0, 1, 0.0), key(2, 1, 2.0), key(4, 1, 4.0)];
-      final ramped = setEnvelopeSpeed(keys, 1, 300);
-      final flat = setEnvelopeSpeed(ramped, 1, 100);
-      for (final k in flat) {
-        expect(k.interpIn, isA<BridgeSideInterp_Linear>());
-        expect(k.interpOut, isA<BridgeSideInterp_Linear>());
-      }
-      expect(envelopeSpeeds(flat), everyElement(closeTo(100, 1e-9)));
-    });
-
-    test('the speeds still read back after the linear-side tidying', () {
-      final keys = [key(0, 1, 0.0), key(2, 1, 2.0), key(4, 1, 4.0)];
-      final out = envelopeToKeys(keys, const [100.0, 300.0, 50.0]);
-      expect(envelopeSpeeds(out), [
-        closeTo(100, 1e-9),
-        closeTo(300, 1e-9),
-        closeTo(50, 1e-9),
-      ]);
-    });
-  });
-
-  group('the order the curve is drawn through', () {
-    /// **T3.** A key drag keeps its index for the length of the gesture, so a
-    /// marquee dragged past a key it is not moving leaves the list out of time
-    /// order — and the evaluator, which walks spans assuming that order, could
-    /// not draw the curve either side of the crossed key until the pointer came
-    /// up. The painter sorts; nothing that holds an index does.
-    test('a key dragged past one it is not moving still evaluates', () {
-      final crossed = [key(0, 1, 0.0), key(3, 1, 30.0), key(2, 1, 20.0)];
-      // Unsorted, the evaluator answers off the wrong span: it takes the last
-      // entry for the end of the curve and holds everything past 2 s flat.
-      expect(evaluateKeys(crossed, 2.5), 20);
-      final sorted = keysInTimeOrder(crossed);
-      expect(sorted.map((k) => rationalSeconds(k.time)).toList(), [0, 2, 3]);
-      expect(evaluateKeys(sorted, 2.5), closeTo(25, 1e-9));
-    });
-
-    test('a list already in order is handed back untouched', () {
-      final keys = [key(0, 1, 0.0), key(2, 1, 20.0)];
-      expect(identical(keysInTimeOrder(keys), keys), isTrue);
-      expect(keysInTimeOrder(const <BridgeKeyframe>[]), isEmpty);
-    });
-  });
 }

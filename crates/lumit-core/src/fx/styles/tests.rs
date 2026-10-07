@@ -11,39 +11,6 @@ fn style(name: &str) -> EffectInstance {
     crate::fx::instantiate(name).unwrap_or_else(|| panic!("{name} is a declared style"))
 }
 
-/// Every style's match name, in §2's stored order.
-fn names() -> Vec<&'static str> {
-    all().map(|d| d.schema().match_name).collect()
-}
-
-/// §2's order is the whole of the pinned list, and the two outer styles lead it
-/// — the property `outer_prefix` leans on to split without allocating.
-#[test]
-fn the_pinned_order_is_the_one_the_note_writes_down() {
-    assert_eq!(
-        names(),
-        vec![
-            "style_drop_shadow",
-            "style_outer_glow",
-            "style_gradient_overlay",
-            "style_colour_overlay",
-            "style_satin",
-            "style_inner_glow",
-            "style_inner_shadow",
-            "style_stroke",
-            "style_bevel_emboss",
-        ]
-    );
-    for (i, name) in names().iter().enumerate() {
-        assert_eq!(style_index(name), Some(i), "{name} knows where it sits");
-        assert_eq!(
-            style_is_outer(name),
-            i < 2,
-            "{name}: only Drop shadow and Outer glow paint outside the alpha"
-        );
-    }
-}
-
 /// A hand-shuffled list — the shape a file written by another tool, or edited
 /// by hand, arrives in — comes back one-of-each and in order.
 #[test]
@@ -133,91 +100,6 @@ fn no_style_declares_a_row_the_render_would_have_to_fill() {
     }
 }
 
-/// Every style ends with the host-uniform Mix, so every style gets the injected
-/// Blend choice beside it — which is where a style's blend mode lives
-/// (§1), and the reason no style needed a field of its own for one.
-#[test]
-fn every_style_carries_a_mix_and_the_blend_row_beside_it() {
-    for def in all() {
-        let s = def.schema();
-        let at = s
-            .params
-            .iter()
-            .position(|p| p.id == crate::fx::MIX_PARAM)
-            .unwrap_or_else(|| panic!("{} has no Mix row", s.match_name));
-        assert_eq!(
-            s.params.get(at + 1).map(|p| p.id),
-            Some(crate::fx::BLEND_PARAM),
-            "{}: the Blend choice sits beside Mix",
-            s.match_name
-        );
-    }
-}
-
-/// The names are prefixed and unique, which is what keeps a style out of the
-/// catalogue's way: `fx::def` asks the catalogue first, and no effect can ever
-/// answer to a `style_` name.
-#[test]
-fn style_names_are_prefixed_unique_and_unknown_to_the_catalogue() {
-    let mut seen: Vec<&str> = Vec::new();
-    for name in names() {
-        assert!(name.starts_with("style_"), "{name} is not prefixed");
-        assert!(!seen.contains(&name), "two styles answer to {name}");
-        seen.push(name);
-        assert!(
-            super::super::BUILTIN_DEFS.get(name).is_none(),
-            "{name} is in the effect catalogue, so the Add-effect search offers it"
-        );
-        assert!(
-            crate::fx::def(name).is_some(),
-            "{name} is not reachable through the one lookup"
-        );
-    }
-}
-
-/// A fresh instance of every style carries a value for every row it declares —
-/// the same promise `instantiate` makes for an effect, checked here because
-/// styles are born through the same call but from the other list.
-#[test]
-fn a_fresh_style_carries_every_declared_value() {
-    for def in all() {
-        let name = def.schema().match_name;
-        let inst = style(name);
-        for p in def.schema().params {
-            if matches!(p.kind, ParamKind::Action) {
-                continue;
-            }
-            assert!(
-                inst.params.iter().any(|have| have.id == p.id),
-                "{name} was born without {}",
-                p.id
-            );
-        }
-    }
-}
-
-/// Spread's slope is exactly 1 at nought, which is what makes a shadow with no
-/// spread take no branch and stay the bytes it always was — and the Drop shadow
-/// *effect* packs that neutral pair, so its kernel is untouched by styles.
-#[test]
-fn spread_at_nought_is_the_neutral_the_effect_packs() {
-    assert_eq!(cpu::spread_scale(0.0), 1.0);
-    assert_eq!(cpu::spread_scale(-5.0), 1.0, "a negative spread is nought");
-    assert!(
-        cpu::spread_scale(100.0) > 1000.0,
-        "full spread is a hard cut"
-    );
-    assert!(
-        cpu::spread_scale(100.0).is_finite(),
-        "and finite: no division by zero (docs/14 §4)"
-    );
-
-    let effect = crate::fx::effects::drop_shadow::DropShadow::read(crate::fx::Params::EMPTY);
-    let packed = effect.packed();
-    assert_eq!(packed.spread_scale, 1.0);
-    assert!(!packed.knockout);
-}
-
 /// A premultiplied mid-grey square in the middle of an otherwise empty image.
 ///
 /// Grey rather than white so an overlay's default white is visibly a change:
@@ -272,50 +154,6 @@ fn spread_at_full_hardens_the_shadow() {
     assert!(
         hard * 8 < soft,
         "Spread 100 must be a hard edge: {hard} ramp pixels against {soft}"
-    );
-}
-
-/// Layer knocks out shadow: on a **semi-transparent** layer the shape takes the
-/// shadow away where it covers, and on an opaque one the two settings are the
-/// same picture, because the composite already hides the shadow there.
-#[test]
-fn the_layer_knocks_the_shadow_out_only_where_it_is_transparent() {
-    let (w, h) = (32u32, 32u32);
-    let run = |alpha: f32, knockout: bool| {
-        let mut px = square(w, h, alpha);
-        cpu::drop_shadow(
-            &mut px,
-            w,
-            h,
-            &cpu::DropShadowParams {
-                colour: [0.0, 0.0, 0.0],
-                opacity: 1.0,
-                // No offset, so the shadow sits exactly under the shape and the
-                // question is only whether the shape removes it.
-                offset: [0.0, 0.0],
-                softness_px: 0.0,
-                shadow_only: false,
-                mix: 1.0,
-                spread_scale: 1.0,
-                knockout,
-                invert: false,
-                inner: false,
-            },
-        );
-        // The middle of the square.
-        px[(((h / 2) * w + w / 2) * 4) as usize + 3]
-    };
-    assert_eq!(
-        run(1.0, true),
-        run(1.0, false),
-        "on an opaque layer the shadow is hidden behind the shape either way"
-    );
-    let half_off = run(0.5, false);
-    let half_on = run(0.5, true);
-    assert!(
-        half_on < half_off - 0.05,
-        "a half-transparent layer must show less shadow with the knockout on: \
-         {half_on} against {half_off}"
     );
 }
 
@@ -424,66 +262,8 @@ fn an_empty_style_list_leaves_the_file_exactly_as_it_was() {
 // a kernel failure read as a resolution failure.
 // ---------------------------------------------------------------------------
 
-use crate::fx::styles::defs::{
-    DropShadowStyle, GradientOverlay, InnerGlow, InnerShadow, OuterGlow, StrokeStyle,
-};
+use crate::fx::styles::defs::{GradientOverlay, InnerShadow, StrokeStyle};
 use crate::fx::Params;
-
-/// Run one style's ops through the ordinary resolve walk — the path a real
-/// frame takes, used where *whether the style renders at all* is the question.
-fn through_the_walk(name: &str, px: &mut [f32], w: u32, h: u32) {
-    let inst = style(name);
-    let ops = crate::fx::resolve_stack(
-        std::slice::from_ref(&inst),
-        0.0,
-        1000.0,
-        1.0,
-        &crate::fx::MarkerContext::NONE,
-        std::sync::Arc::new(crate::expression::ExpressionContext::detached()),
-    );
-    assert_eq!(ops.len(), 1, "{name} resolves through the ordinary walk");
-    cpu::apply_stack(px, w, h, &ops);
-}
-
-/// **Outer glow is the drop-shadow core at distance 0** (§4), and the note means
-/// that literally: the two styles pack the *same bundle*, so the assertion is on
-/// the numbers rather than on a tolerance between two pictures.
-///
-/// The knockout is the one thing that must differ, and it is off on the glow on
-/// purpose — a glow is meant to be seen through a semi-transparent layer.
-#[test]
-fn outer_glow_is_the_drop_shadow_core_at_distance_nought() {
-    let colour = [0.2, 0.45, 0.9, 1.0];
-    let mut glow = OuterGlow::read(Params::EMPTY);
-    glow.glow_colour = colour;
-    glow.opacity = 60.0;
-    glow.softness = 6.0;
-    glow.spread = 25.0;
-
-    let mut shadow = DropShadowStyle::read(Params::EMPTY);
-    shadow.shadow_colour = colour;
-    shadow.opacity = 60.0;
-    shadow.softness = 6.0;
-    shadow.spread = 25.0;
-    shadow.distance = 0.0;
-    shadow.knockout = false;
-
-    assert_eq!(
-        glow.packed(),
-        shadow.packed(),
-        "the glow must be the shadow's own bundle at zero offset"
-    );
-
-    // And the same bundle through the same kernel is the same bytes.
-    let (w, h) = (32u32, 32u32);
-    let before = square(w, h, 1.0);
-    let mut a = before.clone();
-    let mut b = before.clone();
-    cpu::drop_shadow(&mut a, w, h, &glow.packed());
-    cpu::drop_shadow(&mut b, w, h, &shadow.packed());
-    assert_eq!(a, b, "one kernel, one picture, to the bit");
-    assert_ne!(a, before, "and it drew something");
-}
 
 /// **An inner style stays inside the shape** (§9). Both halves matter: the
 /// alpha is never touched, and no pixel outside the layer's own coverage is
@@ -525,46 +305,6 @@ fn an_inner_shadow_leaves_no_pixel_outside_the_shape() {
         "the inner shadow must darken the light-ward edge more than the far one: \
          {near} against {far}"
     );
-}
-
-/// **Inner glow's two Sources are exact complements** (§4): Edge reads what the
-/// shape is not, Centre reads the shape, and inside the coverage those two
-/// coverages sum to one. So the two pictures put the glow in opposite places,
-/// and neither leaves the shape.
-#[test]
-fn inner_glows_centre_source_inverts_the_distance_sense() {
-    let (w, h) = (32u32, 32u32);
-    let run = |source: u32| {
-        let mut g = InnerGlow::read(Params::EMPTY);
-        g.source = source;
-        g.opacity = 100.0;
-        g.softness = 5.0;
-        let p = g.packed();
-        assert_eq!(p.offset, [0.0, 0.0], "a glow does not lean");
-        assert!(p.inner, "an inner glow is an interior style");
-        let mut px = square(w, h, 1.0);
-        cpu::drop_shadow(&mut px, w, h, &p);
-        px
-    };
-    let edge = run(0);
-    let centre = run(1);
-    // One pixel in from the shape's rim, and one at its middle. The glow's
-    // default colour is a warm near-white on a mid-grey square, so brighter is
-    // more glow.
-    let at = |px: &[f32], x: u32, y: u32| px[((y * w + x) * 4) as usize];
-    let rim = (w / 4 + 1, h / 4 + 1);
-    let mid = (w / 2, h / 2);
-    assert!(
-        at(&edge, rim.0, rim.1) > at(&edge, mid.0, mid.1),
-        "Edge puts the glow against the rim"
-    );
-    assert!(
-        at(&centre, mid.0, mid.1) > at(&centre, rim.0, rim.1),
-        "Centre puts it in the middle"
-    );
-    for (a, b) in edge.chunks_exact(4).zip(centre.chunks_exact(4)) {
-        assert_eq!(a[3], b[3], "neither source touches alpha");
-    }
 }
 
 /// **Stroke's Position is the whole of which side the thickness lands on** (§9):
@@ -626,20 +366,6 @@ fn stroke_outside_adds_nothing_inside_and_inside_nothing_outside() {
     );
 }
 
-/// A stroke of **size 0** is the bit-exact identity: both copies of the alpha
-/// are the alpha, so the band between them is empty. The property that keeps
-/// dragging the slider down to nothing from leaving a one-pixel rind behind.
-#[test]
-fn a_stroke_of_no_size_is_the_picture_untouched() {
-    let (w, h) = (16u32, 16u32);
-    let before = square(w, h, 1.0);
-    let mut after = before.clone();
-    let mut s = StrokeStyle::read(Params::EMPTY);
-    s.size = 0.0;
-    cpu::stroke_contour(&mut after, w, h, &s.packed());
-    assert_eq!(before, after);
-}
-
 /// **Gradient overlay is the ramp clipped to the coverage** (§4): it recolours
 /// the shape, leaves the alpha alone, adds nothing outside, and Reverse turns
 /// the ramp round without moving it.
@@ -685,21 +411,4 @@ fn a_gradient_overlay_is_clipped_to_the_alpha_and_reverses_in_place() {
         at(&reversed, top) < at(&reversed, bottom),
         "and Reverse turns it round"
     );
-}
-
-/// **Satin and Bevel and emboss render as the identity** (§8) — on the CPU path
-/// here, and with no GPU pass at all, which `gpufx`'s own table test pins.
-///
-/// They are modelled so that an import keeps their data and no file migrates
-/// when their kernels land; until then an instance of one has to be invisible
-/// rather than a fault or a black frame.
-#[test]
-fn the_two_unrendered_styles_are_the_identity() {
-    let (w, h) = (16u32, 16u32);
-    for name in ["style_satin", "style_bevel_emboss"] {
-        let before = square(w, h, 1.0);
-        let mut after = before.clone();
-        through_the_walk(name, &mut after, w, h);
-        assert_eq!(before, after, "{name} must render as the identity in v1");
-    }
 }

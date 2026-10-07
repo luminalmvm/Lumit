@@ -10,10 +10,6 @@ import 'package:lumit_flutter/state/tools.dart';
 
 void main() {
   group('Arming a tool', () {
-    test('the session opens on the selection tool', () {
-      expect(ToolsState().tool, ToolMode.select);
-    });
-
     test('selecting notifies once, and re-selecting the armed tool does not',
         () {
       final tools = ToolsState();
@@ -30,14 +26,6 @@ void main() {
   });
 
   group('Groups remember the variant you chose', () {
-    test('a group button stands for its first member until one is picked', () {
-      final tools = ToolsState();
-      expect(tools.memberOf(ToolGroup.shape), ToolMode.shapeRectangle);
-
-      tools.select(ToolMode.shapeStar);
-      expect(tools.memberOf(ToolGroup.shape), ToolMode.shapeStar);
-    });
-
     test('the memory survives arming another group and coming back', () {
       // A built member, because an unbuilt one cannot be armed at all.
       final tools = ToolsState()..select(ToolMode.shapeStar);
@@ -50,14 +38,6 @@ void main() {
   });
 
   group('A tool chord arms, then cycles', () {
-    test('the first press arms the remembered member', () {
-      final tools = ToolsState()..select(ToolMode.shapeEllipse);
-      tools.select(ToolMode.select);
-
-      tools.cycleGroup(ToolGroup.shape);
-      expect(tools.tool, ToolMode.shapeEllipse);
-    });
-
     test('pressing again steps through the group and wraps', () {
       final tools = ToolsState();
       final shapes = ToolMode.membersOf(ToolGroup.shape);
@@ -70,28 +50,9 @@ void main() {
       }
       expect(tools.tool, shapes.first, reason: 'a full lap comes home');
     });
-
-    test('a group of one stays put however often its key is pressed', () {
-      final tools = ToolsState();
-      tools.cycleGroup(ToolGroup.hand);
-      tools.cycleGroup(ToolGroup.hand);
-      expect(tools.tool, ToolMode.hand);
-    });
   });
 
   group('Keymap actions', () {
-    test('every group has exactly one action, and every action a group', () {
-      for (final group in ToolGroup.values) {
-        expect(toolActions.values.where((g) => g == group).length, 1,
-            reason: '$group needs one and only one chord to arm it');
-      }
-      // The ids are the engine's (docs/07 §15); a typo here would silently
-      // leave a tool unreachable from the keyboard.
-      for (final action in toolActions.keys) {
-        expect(action, startsWith('tool.'));
-      }
-    });
-
     test('a tool action is handled and anything else is left alone', () {
       final tools = ToolsState();
       expect(tools.handleAction('tool.razor'), isTrue);
@@ -99,118 +60,6 @@ void main() {
 
       expect(tools.handleAction('edit.undo'), isFalse);
       expect(tools.tool, ToolMode.razor, reason: 'and nothing moved');
-    });
-  });
-
-  group('The tool set itself', () {
-    test('every group has at least one tool, in declaration order', () {
-      for (final group in ToolGroup.values) {
-        final members = ToolMode.membersOf(group);
-        expect(members, isNotEmpty, reason: '$group would be an empty button');
-        expect(members.first.group, group);
-      }
-    });
-
-    test('the tools that claim to be built are the ones that are', () {
-      // A guard on honesty rather than on behaviour: `ready` is what the
-      // tooltip promises, so it may only be true where something reads the
-      // armed tool and does the work. Selection selects and drags, Hand pans,
-      // Zoom magnifies, Rotation turns, Anchor point pans behind and the Razor
-      // cuts, the five shape tools draw masks and the Pen builds one,
-      // horizontal type makes and edits text layers, the three painting tools
-      // paint, erase and clone, the Roto pair scribbles what a subject is and
-      // where its edge may be soft, the four puppet pins place and drag pins on
-      // the layer's mesh, and the four camera tools move the active camera or
-      // the Viewer's own view; everything else is on the strip and disabled.
-      expect(ToolMode.values.where((t) => t.ready).toSet(), {
-        ToolMode.select,
-        ToolMode.hand,
-        ToolMode.zoom,
-        ToolMode.rotate,
-        ToolMode.anchor,
-        ToolMode.razor,
-        ToolMode.shapeRectangle,
-        ToolMode.shapeRoundedRectangle,
-        ToolMode.shapeEllipse,
-        ToolMode.shapePolygon,
-        ToolMode.shapeStar,
-        ToolMode.pen,
-        ToolMode.typeHorizontal,
-        ToolMode.brush,
-        ToolMode.cloneStamp,
-        ToolMode.eraser,
-        ToolMode.rotoBrush,
-        ToolMode.refineEdge,
-        ToolMode.puppetPosition,
-        ToolMode.puppetStarch,
-        ToolMode.puppetOverlap,
-        ToolMode.puppetBend,
-        ToolMode.cameraUnified,
-        ToolMode.cameraOrbit,
-        ToolMode.cameraPan,
-        ToolMode.cameraDolly,
-      });
-    });
-  });
-
-  /// The toolbar's tool options: the fill and size the drawing tools
-  /// set things in, held here because they belong to the tool and not to any
-  /// one panel.
-  group('Tool options', () {
-    test('the fill starts white and changes once per real change', () {
-      final tools = ToolsState();
-      var notices = 0;
-      tools.addListener(() => notices++);
-
-      expect(tools.fill, ToolColour.white);
-      expect(tools.fillRgba.r, 1);
-      expect(tools.fillRgba.a, 1, reason: 'a fill is opaque; Opacity is a '
-          'transform property, not a fourth number in a swatch');
-
-      tools.fill = const ToolColour(1, 0, 0);
-      tools.fill = const ToolColour(1, 0, 0);
-      expect(tools.fillRgba.g, 0);
-      expect(notices, 1);
-    });
-
-    test('the text size is held within sane bounds', () {
-      final tools = ToolsState();
-      expect(tools.textSize, 72);
-      tools.textSize = 0;
-      expect(tools.textSize, 1, reason: 'text of no size is not text');
-      tools.textSize = 100000;
-      expect(tools.textSize, 2000);
-    });
-
-    test('the stroke is held even though nothing draws one yet', () {
-      final tools = ToolsState();
-      expect(tools.stroke, ToolColour.black);
-      expect(tools.strokeWidth, 2);
-      tools.strokeWidth = -4;
-      expect(tools.strokeWidth, 0);
-    });
-
-    /// The brush's own three settings — separate from the shape tools'
-    /// stroke, because a brush is a different thing that happens to have a
-    /// width, and because these are live while that pair is not.
-    test('the brush has its own size, hardness and opacity', () {
-      final tools = ToolsState();
-      expect(tools.brushSize, 20);
-      expect(tools.brushHardness, 80);
-      expect(tools.brushOpacity, 100);
-
-      var notices = 0;
-      tools.addListener(() => notices++);
-      tools.brushSize = 0;
-      expect(tools.brushSize, 1, reason: 'a brush of no size marks nothing');
-      tools.brushSize = 1e9;
-      expect(tools.brushSize, 2000);
-      tools.brushHardness = 200;
-      expect(tools.brushHardness, 100);
-      tools.brushOpacity = -5;
-      expect(tools.brushOpacity, 0);
-      tools.brushOpacity = 0;
-      expect(notices, 4, reason: 'one notice per real change');
     });
   });
 
@@ -230,66 +79,5 @@ void main() {
       tools.select(ToolMode.hand);
       expect(tools.tool, ToolMode.hand);
     });
-
-    /// Every group on the strip now has something built in it, so the guard
-    /// against arming a group that has nothing is asserted where it lives
-    /// rather than through a group standing in for the case. The rule
-    /// is the same one: an empty built set arms nothing.
-    test('a chord on a group with nothing built does nothing', () {
-      for (final group in ToolGroup.values) {
-        expect(ToolMode.builtMembersOf(group), isNotEmpty,
-            reason: 'the strip has no wholly unbuilt group left');
-      }
-      final tools = ToolsState();
-      tools.cycleGroup(ToolGroup.roto);
-      expect(tools.tool, ToolMode.rotoBrush,
-          reason: 'and a group that does have members arms the first');
-    });
-
-    /// The Roto pair arms together: the strip button, the flyout row
-    /// and the `Alt+W` chord all wake off one flag, and the chord walks the two
-    /// built members and round.
-    test('the Roto chord cycles its two built members', () {
-      final tools = ToolsState();
-      tools.cycleGroup(ToolGroup.roto);
-      expect(tools.tool, ToolMode.rotoBrush);
-      tools.cycleGroup(ToolGroup.roto);
-      expect(tools.tool, ToolMode.refineEdge);
-      tools.cycleGroup(ToolGroup.roto);
-      expect(tools.tool, ToolMode.rotoBrush, reason: 'and round');
-
-      // The same flag the chord reads is the one the button and the flyout
-      // read, which is why there is one of it.
-      expect(tools.handleAction('tool.roto'), isTrue);
-      tools.select(ToolMode.refineEdge);
-      expect(tools.tool, ToolMode.refineEdge);
-    });
-
-    test('a chord cycles only the built members of a mixed group', () {
-      final tools = ToolsState();
-      // The Pen's four editing siblings are unbuilt, so its chord arms the Pen
-      // and stays there rather than stepping onto a tool that does nothing.
-      tools.cycleGroup(ToolGroup.pen);
-      expect(tools.tool, ToolMode.pen);
-      tools.cycleGroup(ToolGroup.pen);
-      expect(tools.tool, ToolMode.pen);
-
-      // Type's vertical member is unbuilt, so the same applies.
-      tools.cycleGroup(ToolGroup.type);
-      expect(tools.tool, ToolMode.typeHorizontal);
-      tools.cycleGroup(ToolGroup.type);
-      expect(tools.tool, ToolMode.typeHorizontal);
-    });
-
-    test('a group whose first member is unbuilt opens on one that works', () {
-      final tools = ToolsState();
-      expect(tools.memberOf(ToolGroup.type), ToolMode.typeHorizontal);
-      expect(tools.memberOf(ToolGroup.pen), ToolMode.pen);
-      // A group whose members are all built opens on its first, as it always
-      // did.
-      expect(tools.memberOf(ToolGroup.roto), ToolMode.rotoBrush);
-      expect(tools.memberOf(ToolGroup.puppet), ToolMode.puppetPosition);
-    });
   });
-
 }

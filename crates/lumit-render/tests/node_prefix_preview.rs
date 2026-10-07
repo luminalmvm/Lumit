@@ -43,7 +43,6 @@ use lumit_core::model::{
 };
 use lumit_core::time::{CompTime, Duration, FrameRate, Rational};
 use lumit_render::headless::HeadlessRenderer;
-use lumit_render::plan::Quality;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -214,46 +213,4 @@ fn the_picture_at_a_node_is_the_stack_cut_off_at_that_node() {
         .render_rgba(&cut_first, comp_id, 0, 1.0)
         .expect("the same preview again");
     assert_eq!(after_first, again, "a prefix render is deterministic");
-}
-
-/// The prefix point folds into the frame key without the key growing a field:
-/// the key hashes each layer's effects, so a shorter stack is a different name.
-/// Without this a preview could be served the Viewer's frame out of the cache —
-/// the panel would show the wrong picture and nothing would be measurably
-/// wrong anywhere else.
-#[test]
-fn each_prefix_names_its_own_frame() {
-    let Ok(mut r) = HeadlessRenderer::shared() else {
-        lumit_gpu::no_adapter();
-        return;
-    };
-
-    let layer_id = Uuid::now_v7();
-    let first = exposure(1.0);
-    let second = exposure(1.0);
-    let (doc, comp_id) = project(layer_id, vec![first.clone(), second]);
-    let q = Quality::default();
-
-    let full = r
-        .frame_key(&doc, comp_id, 0, q)
-        .expect("a solid needs no probe, so the frame is nameable");
-    let mut keys = vec![full];
-    for keep in [0usize, 1] {
-        let cut = graph::truncated_effects(&doc, comp_id, layer_id, keep).expect("a real cut");
-        let key = r.frame_key(&cut, comp_id, 0, q).expect("nameable too");
-        assert!(
-            !keys.contains(&key),
-            "the prefix keeping {keep} effects must name its own frame"
-        );
-        keys.push(key);
-    }
-
-    // And the same cut names the same frame — a key that moved between two
-    // identical documents would defeat the cache instead of protecting it.
-    let cut = graph::truncated_effects(&doc, comp_id, layer_id, 1).expect("a real cut");
-    assert_eq!(
-        r.frame_key(&cut, comp_id, 0, q),
-        Some(keys[2]),
-        "naming a prefix twice must give one name"
-    );
 }

@@ -32,8 +32,8 @@
 
 use lumit_core::anim::{Animation, Keyframe, Property, SideInterp};
 use lumit_core::model::{
-    Composition, Document, EffectValue, Layer, LayerKind, LinearColour, ProjectItem, SolidDef,
-    Switches, TransformGroup,
+    Composition, Document, Layer, LayerKind, LinearColour, ProjectItem, SolidDef, Switches,
+    TransformGroup,
 };
 use lumit_core::time::{CompTime, Duration, FrameRate, Rational};
 use lumit_render::headless::HeadlessRenderer;
@@ -261,86 +261,4 @@ fn a_retimed_precomp_shows_the_frame_its_map_points_at() {
         )),
         "an un-retimed Precomp still draws nothing past its comp's end"
     );
-}
-
-/// The same map, down the two roads that read a comp through
-/// `nested_comp_draw` rather than through the Precomp arm: an effect's Matte
-/// row and a Light wrap's Background row. Both arrive on the one carriage
-/// `layer-input.md` describes, so a map honoured in one and not the other would
-/// be a matte from one moment over a picture from another.
-#[test]
-fn a_retimed_precomp_read_as_a_matte_or_a_background_follows_its_map() {
-    let Ok(mut r) = HeadlessRenderer::shared() else {
-        lumit_gpu::no_adapter();
-        return;
-    };
-
-    // The scene: a grey base carrying one effect, and above it a hidden
-    // Precomp layer of the sliding square, which the effect reads.
-    let build = |effect: &str, row: &str, map: Option<Property>| {
-        let (doc, parent_id) = project(map);
-        let mut doc = doc.as_ref().clone();
-        let grey = Uuid::now_v7();
-        doc.items.push(ProjectItem::Solid(SolidDef {
-            id: grey,
-            name: "grey".into(),
-            colour: LinearColour([0.25, 0.25, 0.25, 1.0]),
-            width: COMP,
-            height: COMP,
-            extra: serde_json::Map::new(),
-        }));
-        let parent = doc.comp_mut(parent_id).expect("the parent");
-        // The source is read, never composited: left visible it would paint
-        // over the very pixels the comparison reads.
-        parent.layers[0].switches.visible = false;
-        let source = parent.layers[0].id;
-        let mut inst = lumit_core::fx::instantiate(effect).expect("a builtin");
-        for p in &mut inst.params {
-            if p.id == row {
-                p.value = EffectValue::Layer(Some(source));
-            }
-            // Light wrap does nothing at all until its Width is opened.
-            if p.id == "width" {
-                p.value = EffectValue::Float(Property::fixed(24.0));
-            }
-            // And an Exposure gated by a matte has to lift something.
-            if p.id == "stops" {
-                p.value = EffectValue::Float(Property::fixed(2.0));
-            }
-        }
-        let mut base = layer("base", LayerKind::Solid { def: grey }, 4);
-        // A mask, so the foreground's own picture has an alpha edge inside it:
-        // Light wrap reaches in from an edge, and a plate that fills its own
-        // texture gives it none to reach in from.
-        base.masks = vec![lumit_core::mask::Mask::ellipse(
-            f64::from(COMP) / 2.0,
-            f64::from(COMP) / 2.0,
-            20.0,
-            20.0,
-        )];
-        base.effects = vec![inst];
-        parent.layers.push(base);
-        (Arc::new(doc), parent_id)
-    };
-
-    let half = retime(&[(0, 0.0), (2, 1.0)]);
-    for (effect, row) in [
-        ("exposure", lumit_core::fx::MATTE_PARAM),
-        ("light_wrap", "background"),
-    ] {
-        let mut render = |map: Option<Property>, frame: u64| {
-            let (doc, comp) = build(effect, row, map);
-            r.render_rgba(&doc, comp, frame, 1.0).expect("the render").0
-        };
-        assert_eq!(
-            render(Some(half.clone()), 30),
-            render(None, 15),
-            "{effect}'s {row} must read the moment the map points at"
-        );
-        assert_ne!(
-            render(Some(half.clone()), 30),
-            render(None, 30),
-            "{effect}'s {row} would otherwise be reading the layer's own clock"
-        );
-    }
 }

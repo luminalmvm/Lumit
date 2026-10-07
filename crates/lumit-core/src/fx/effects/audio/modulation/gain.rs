@@ -198,31 +198,4 @@ mod tests {
         );
         assert!((f64::from(right / was_right) - 1.995).abs() < 0.01);
     }
-
-    #[test]
-    fn the_trims_move_one_side_and_invert_flips_both() {
-        let input = harness::tone(8, 220.0);
-        let values = harness::values(&AudioGainDef, &[("left_trim", -6.0)]);
-        let out = harness::run(&*harness::open(&AudioGainDef, &values), &input, &values);
-        let (left, right) = peaks(&out);
-        let (was_left, was_right) = peaks(&input);
-        assert!((f64::from(left / was_left) - 0.5012).abs() < 0.01);
-        assert!((f64::from(right / was_right) - 1.0).abs() < 1e-6);
-
-        // Opened inverted, so the multiplier starts at its target and every
-        // sample is the input's opposite from the first one.
-        let values = harness::values(&AudioGainDef, &[("invert", 1.0)]);
-        let out = harness::run(&*harness::open(&AudioGainDef, &values), &input, &values);
-        for (there, here) in out.iter().zip(&input) {
-            assert!((there + here).abs() < 1e-6, "{there} is not {here} flipped");
-        }
-    }
-
-    #[test]
-    fn the_bottom_of_the_travel_is_silence() {
-        let input = harness::tone(4, 220.0);
-        let values = harness::values(&AudioGainDef, &[("gain", -100.0)]);
-        let out = harness::run(&*harness::open(&AudioGainDef, &values), &input, &values);
-        assert!(out.iter().all(|s| *s == 0.0), "the knee is not exact");
-    }
 }

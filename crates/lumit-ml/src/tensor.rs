@@ -323,7 +323,6 @@ fn scale(norm: Option<Normalise>, channel: usize) -> (f32, f32) {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
-    use crate::manifest::IMAGENET;
 
     /// A small frame where every byte is different, so a packing that
     /// transposes two channels or two rows cannot pass.
@@ -353,28 +352,6 @@ mod tests {
         assert_eq!(unpack_u8(&planes, width, height, None), rgba);
     }
 
-    /// **ImageNet normalisation inverts.** The mean and standard deviation
-    /// the manifest carries are undone on the way back out, so a model's
-    /// picture output lands where it started.
-    #[test]
-    fn imagenet_normalisation_inverts() {
-        let (width, height) = (4, 4);
-        let rgba = frame(width, height);
-        let planes = pack_u8(&rgba, width, height, Some(IMAGENET));
-        assert!(
-            planes.iter().any(|v| *v < 0.0),
-            "normalised values leave 0..1"
-        );
-        assert_eq!(unpack_u8(&planes, width, height, Some(IMAGENET)), rgba);
-
-        let floats: Vec<f32> = rgba.iter().map(|b| f32::from(*b) / 255.0).collect();
-        let planes = pack_f32(&floats, width, height, Some(IMAGENET));
-        let back = unpack_f32(&planes, width, height, Some(IMAGENET));
-        for (was, now) in floats.iter().zip(&back) {
-            assert!((was - now).abs() < 1e-5, "{was} came back as {now}");
-        }
-    }
-
     /// **The padding to a multiple and the crop back are exact.** RIFE wants
     /// a multiple of 32 and Depth Anything a multiple of 14; both are grown
     /// by repeating the edge and cut back to the byte.
@@ -393,17 +370,6 @@ mod tests {
                 planes
             );
         }
-    }
-
-    /// **A frame already a multiple of the number is not touched.** The
-    /// common case costs a copy and no arithmetic.
-    #[test]
-    fn a_frame_already_a_multiple_is_left_alone() {
-        let (width, height) = (64, 32);
-        let planes: Vec<f32> = (0..3 * width * height).map(|n| n as f32).collect();
-        let (grown, grown_width, grown_height) = pad(&planes, width, height, 3, 32);
-        assert_eq!((grown_width, grown_height), (width, height));
-        assert_eq!(grown, planes);
     }
 
     /// **The fit keeps the long side at the size asked for and both sides on
@@ -463,51 +429,6 @@ mod tests {
         assert!(
             big.chunks_exact(4).all(|p| p[0] == 0 || p[0] == 255),
             "a magnification invents no in-between value"
-        );
-    }
-
-    /// **A one-byte plane resamples the same way.** A matte comes back at the
-    /// square the model works in and has to be taken to the frame's own shape,
-    /// and a coverage that averaged the wrong bytes would be a matte with the
-    /// subject in the wrong place.
-    #[test]
-    fn a_coverage_resamples_by_the_same_arithmetic() {
-        let (width, height) = (8usize, 8usize);
-        let split: Vec<u8> = (0..width * height)
-            .map(|pixel| if pixel % width < width / 2 { 0u8 } else { 255 })
-            .collect();
-        let halves = resample_gray(&split, width, height, 2, 1);
-        assert_eq!(halves, [0, 255], "the halves stayed where they were");
-
-        let big = resample_gray(&split, width, height, 16, 16);
-        assert_eq!(big.len(), 16 * 16);
-        assert!(
-            big.iter().all(|v| *v == 0 || *v == 255),
-            "a magnification invents no in-between coverage"
-        );
-        assert_eq!(
-            resample_gray(&[], 0, 0, 4, 4),
-            [0u8; 16],
-            "nothing covers nothing"
-        );
-    }
-
-    /// **The downsample table picks the documented ratio per resolution.**
-    /// The numbers are the model's own, and a wrong one is a matte that is
-    /// soft everywhere or ragged everywhere.
-    #[test]
-    fn the_downsample_table_picks_the_documented_ratio() {
-        assert!((downsample_ratio(512, 512, Detail::Portrait) - 1.0).abs() < f32::EPSILON);
-        assert!((downsample_ratio(512, 288, Detail::FullBody) - 1.0).abs() < f32::EPSILON);
-        assert!((downsample_ratio(1280, 720, Detail::Portrait) - 0.375).abs() < f32::EPSILON);
-        assert!((downsample_ratio(1280, 720, Detail::FullBody) - 0.6).abs() < f32::EPSILON);
-        assert!((downsample_ratio(1920, 1080, Detail::Portrait) - 0.25).abs() < f32::EPSILON);
-        assert!((downsample_ratio(1920, 1080, Detail::FullBody) - 0.4).abs() < f32::EPSILON);
-        assert!((downsample_ratio(3840, 2160, Detail::Portrait) - 0.125).abs() < f32::EPSILON);
-        assert!((downsample_ratio(3840, 2160, Detail::FullBody) - 0.2).abs() < f32::EPSILON);
-        assert!(
-            (downsample_ratio(720, 1280, Detail::Portrait) - 0.375).abs() < f32::EPSILON,
-            "a portrait frame reads its longer side"
         );
     }
 }

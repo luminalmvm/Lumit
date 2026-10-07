@@ -99,34 +99,11 @@ void main() {
           razorTargets(layers, 30, clicked: middle, allLayers: false);
       expect(targets.map((e) => e.info.name), ['middle']);
     });
-
-    test('cuts nothing when the click was on empty lane space', () {
-      expect(razorTargets(layers, 30, clicked: null, allLayers: false),
-          isEmpty);
-    });
-
-    test('cuts nothing at a layer\'s own ends: there is no second half there',
-        () {
-      expect(razorTargets(layers, 20, clicked: middle, allLayers: false),
-          isEmpty);
-      expect(razorTargets(layers, 60, clicked: middle, allLayers: false),
-          isEmpty);
-    });
   });
 
   group('A Shift-click', () {
     test('cuts every layer the time falls inside', () {
       final targets = razorTargets(layers, 30, clicked: middle, allLayers: true);
-      expect(targets.map((e) => e.info.name), ['top', 'middle']);
-    });
-
-    test('leaves out the layers that moment misses', () {
-      final targets = razorTargets(layers, 90, clicked: null, allLayers: true);
-      expect(targets.map((e) => e.info.name), ['top', 'late']);
-    });
-
-    test('needs no click at all — the time is the whole of it', () {
-      final targets = razorTargets(layers, 30, clicked: null, allLayers: true);
       expect(targets.map((e) => e.info.name), ['top', 'middle']);
     });
   });

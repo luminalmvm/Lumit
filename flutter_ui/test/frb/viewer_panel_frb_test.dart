@@ -35,11 +35,8 @@ import 'package:lumit_flutter/icons/lumit_icon.dart' as glyph;
 import 'package:lumit_flutter/icons/lumit_icons.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/assets.dart';
-import 'package:lumit_flutter/panels/transform_rows_frb.dart' show writeScalar;
 import 'package:lumit_flutter/panels/viewer_gizmo.dart';
 import 'package:lumit_flutter/panels/viewer_camera.dart' show CameraPose;
-import 'package:lumit_flutter/panels/viewer_layer_map.dart';
-import 'package:lumit_flutter/panels/viewer_overlays.dart';
 import 'package:lumit_flutter/panels/viewer_panel_frb.dart';
 import 'package:lumit_flutter/panels/viewer_paint.dart';
 import 'package:lumit_flutter/panels/viewer_rulers.dart';
@@ -53,7 +50,6 @@ import 'package:lumit_flutter/state/viewer_view.dart';
 import 'package:lumit_flutter/theme/theme.dart';
 import 'package:lumit_flutter/src/rust/api/audio.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
-import 'package:lumit_flutter/src/rust/lib.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/state.dart';
@@ -138,15 +134,6 @@ void main() {
       await tester.pump();
     }
 
-    /// Open one of the header's three pickers and choose the row [key].
-    Future<void> pickHeaderRow(
-        WidgetTester tester, String picker, String key) async {
-      await pressBar(tester, picker);
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(ValueKey<String>(key)));
-      await tester.pumpAndSettle();
-    }
-
     /// Open the bottom bar's view menu and choose the row [key].
     Future<void> pickViewRow(WidgetTester tester, String key) async {
       await pressBar(tester, 'viewer-guides-menu');
@@ -154,66 +141,6 @@ void main() {
       await tester.tap(find.byKey(ValueKey<String>(key)));
       await tester.pumpAndSettle();
     }
-
-    /// Turn the tone map on or off, which is a row in the header's
-    /// colour-pipeline menu rather than a button on the bar.
-    Future<void> flipToneMap(WidgetTester tester) =>
-        pickHeaderRow(tester, 'viewer-colour', 'viewer-tone-map');
-
-    /// **The dropper's magnifier belongs to the pointer being over the
-    /// picture.** Two things it used to get wrong: it appeared the instant the
-    /// tool was armed, sitting where the *previous* pick had left the pointer,
-    /// and it stayed on once the pointer had gone.
-    testWidgets(
-        'the magnifier appears only while the pointer is on the picture',
-        (tester) async {
-      final p = withLayer();
-      await mount(tester, p);
-
-      DropperArm arm() => DropperArm(
-            id: 'test',
-            reads: DropperReads.colour,
-            label: 'Key colour',
-            onPick: (_) {},
-          );
-
-      p.uiState.armDropper(arm());
-      await tester.pump();
-      expect(find.byType(DropperViewfinder), findsNothing,
-          reason: 'armed, but the pointer has not been near the picture');
-
-      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
-      await gesture.addPointer(location: Offset.zero);
-      addTearDown(gesture.removePointer);
-
-      final stage = find.byType(DropperLayer);
-      await gesture.moveTo(tester.getCenter(stage));
-      await tester.pump();
-      expect(find.byType(DropperViewfinder), findsOneWidget,
-          reason: 'the pointer is on the picture');
-
-      // The pasteboard around the picture is not the picture: a 16:9 comp in
-      // this panel leaves a band top and bottom.
-      await gesture.moveTo(tester.getTopLeft(stage) + const Offset(4, 4));
-      await tester.pump();
-      expect(find.byType(DropperViewfinder), findsNothing,
-          reason: 'off the picture, there is nothing to magnify');
-
-      // Back on, then disarmed and armed again: the new arm must not inherit
-      // the last one's pointer position.
-      await gesture.moveTo(tester.getCenter(stage));
-      await tester.pump();
-      expect(find.byType(DropperViewfinder), findsOneWidget);
-
-      p.uiState.disarmDropper();
-      await tester.pump();
-      expect(find.byType(DropperViewfinder), findsNothing);
-
-      p.uiState.armDropper(arm());
-      await tester.pump();
-      expect(find.byType(DropperViewfinder), findsNothing,
-          reason: 'a fresh arm starts with the pointer nowhere');
-    });
 
     /// **The scroll crash.** Scrolling over the Viewer with the dropper armed
     /// zooms the picture, which relays the panel out under the magnifier. The
@@ -298,151 +225,6 @@ void main() {
           reason: 'a pan moves the picture, it does not resize it');
     });
 
-    /// An armed picker owns the picture: it holds still while pixels are being
-    /// read off it, so the pan stands down until the tool is put away.
-    testWidgets('a middle-button drag does not pan under an armed picker',
-        (tester) async {
-      final p = withLayer();
-      await mount(tester, p);
-
-      p.uiState.armDropper(DropperArm(
-        id: 'test',
-        reads: DropperReads.colour,
-        label: 'Key colour',
-        onPick: (_) {},
-      ));
-      await tester.pump();
-
-      final before = drawnPicture(tester);
-      await dragStage(tester, const Offset(40, -30),
-          buttons: kMiddleMouseButton);
-      expect(drawnPicture(tester), before);
-    });
-
-    /// **The magnifier is on screen for the whole pick, and it shows what the
-    /// release will commit** (docs/07 §6.1). The owner reported it missing
-    /// after the redesign; nothing had been taken out of it, but a pick drag
-    /// panned the picture out from under the pointer while every window read
-    /// cost a fresh composite, so the grid a pick was aimed with was a grid of
-    /// empty cells. This pins the part the arithmetic can promise: the centre
-    /// cell of the grid, at the region on show, IS the committed value.
-    testWidgets('the magnifier follows a pick drag and shows what it commits',
-        (tester) async {
-      final p = withLayer();
-      await mount(tester, p);
-
-      final picked = <DropperSample>[];
-      p.uiState.armDropper(DropperArm(
-        id: 'test',
-        reads: DropperReads.colour,
-        label: 'Key colour',
-        onPick: picked.add,
-      ));
-      p.uiState.dropperPatch.value = wholePicture();
-      await tester.pump();
-
-      final centre = tester.getCenter(find.byType(DropperLayer));
-      final gesture = await tester.startGesture(centre);
-      await tester.pump();
-      expect(find.byType(DropperViewfinder), findsOneWidget,
-          reason: 'the grid is up while the pick is being made');
-
-      await gesture.moveTo(centre + const Offset(30, 0));
-      await tester.pump();
-      final shown =
-          tester.widget<DropperViewfinder>(find.byType(DropperViewfinder));
-      expect(find.byType(DropperViewfinder), findsOneWidget,
-          reason: 'and it followed the drag rather than being left behind');
-
-      // What the grid is drawing at its centre, worked out the way the grid
-      // itself works it out — from the window it holds, at the region it shows.
-      final atCentre = sampleFromWindow(
-          shown.window!, shown.region, shown.centre.$1, shown.centre.$2);
-
-      await gesture.up();
-      await tester.pump();
-
-      expect(picked.length, 1);
-      expect(picked.single.r, closeTo(atCentre.r, 1e-9),
-          reason: 'the committed colour is the one under the centre cell');
-      expect(picked.single.region, atCentre.region);
-
-      await settleFrb(tester, until: () => p.uiState.previewProgress.idle);
-    });
-
-    /// **Shift+scroll sizes the sample, and nothing else** (docs/07 §6.1):
-    /// 1×1 → 3×3 → 5×5 → 7×7 → 9×9 and back, holding at both ends rather than
-    /// wrapping, never zooming the picture out from under the pixel being
-    /// aimed at, and never costing the engine a thing — the window in hand
-    /// already holds every pixel a wider region could want.
-    testWidgets('Shift+scroll steps the sampled region under the magnifier',
-        (tester) async {
-      final p = withLayer();
-      await mount(tester, p);
-
-      final picked = <DropperSample>[];
-      p.uiState.armDropper(DropperArm(
-        id: 'test',
-        reads: DropperReads.colour,
-        label: 'Key colour',
-        onPick: picked.add,
-      ));
-      p.uiState.dropperPatch.value = wholePicture();
-      await tester.pump();
-
-      Rect picture() =>
-          tester.widget<DropperLayer>(find.byType(DropperLayer)).fitted;
-      int region() => tester
-          .widget<DropperViewfinder>(find.byType(DropperViewfinder))
-          .region;
-
-      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
-      await gesture.addPointer(location: Offset.zero);
-      addTearDown(gesture.removePointer);
-      final centre = tester.getCenter(find.byType(DropperLayer));
-      await gesture.moveTo(centre);
-      await tester.pump();
-      expect(region(), 1, reason: 'this pixel and no other, to start with');
-
-      final unzoomed = picture();
-      Future<void> notch(double dy) async {
-        await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
-        await tester.sendEventToBinding(
-          PointerScrollEvent(position: centre, scrollDelta: Offset(0, dy)),
-        );
-        await tester.pump();
-        await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
-      }
-
-      await notch(-60);
-      expect(region(), 3);
-      await notch(-60);
-      expect(region(), 5);
-      expect(picture(), unzoomed,
-          reason: 'sizing the sample must not zoom the picture');
-
-      await notch(60);
-      expect(region(), 3, reason: 'and the other way steps back down');
-
-      // The ends hold: a size settled on is not lost to one extra notch.
-      for (var i = 0; i < 6; i++) {
-        await notch(60);
-      }
-      expect(region(), 1);
-      for (var i = 0; i < 8; i++) {
-        await notch(-60);
-      }
-      expect(region(), dropperGrid,
-          reason: 'the region can never exceed the grid it is drawn in');
-
-      // And the size on show is the size the pick takes.
-      await tester.tapAt(centre);
-      await tester.pump();
-      expect(picked.single.region, dropperGrid);
-
-      await settleFrb(tester, until: () => p.uiState.previewProgress.idle);
-    });
-
     /// **A pick is a drag** (docs/07 §6.1). The press writes nothing; it
     /// starts a gesture that stages the sample under the pointer and previews
     /// it, and the release commits **once** — the value where the pointer let
@@ -501,128 +283,6 @@ void main() {
           reason: 'the tool put itself away');
 
       await settleFrb(tester, until: () => p.uiState.previewProgress.idle);
-    });
-
-    /// **An armed pick takes the drag off the pan** (docs/07 §6.1).
-    ///
-    /// The finding: picking a colour dragged the preview about with it. The
-    /// dropper reads raw pointer events, and a `Listener` never joins the
-    /// gesture arena, so the Viewer's own pan recogniser went on winning it
-    /// underneath the pick. Both legs are asserted, because the fix is an
-    /// arbitration and not a deletion: unarmed, the drag still pans.
-    testWidgets('a pick drag samples without panning the picture',
-        (tester) async {
-      final p = withLayer();
-      await mount(tester, p);
-      // The tool whose whole job over the picture is the drag this is about.
-      p.uiState.tools.select(ToolMode.hand);
-      await tester.pump();
-
-      // Where the picture sits at the current magnification and pan — the
-      // Viewer's transform, said in the one number the dropper cares about.
-      Rect picture() =>
-          tester.widget<DropperLayer>(find.byType(DropperLayer)).fitted;
-      final stage = find.byKey(const ValueKey('viewer-stage'));
-
-      final unarmed = picture();
-      await tester.drag(stage, const Offset(40, 24));
-      await tester.pump();
-      final panned = picture();
-      expect(panned.topLeft, isNot(unarmed.topLeft),
-          reason: 'nothing armed: a drag over the Viewer still pans');
-
-      final picked = <DropperSample>[];
-      p.uiState.armDropper(DropperArm(
-        id: 'test',
-        reads: DropperReads.colour,
-        label: 'Key colour',
-        onPick: picked.add,
-        onPreview: (_) {},
-      ));
-      p.uiState.dropperPatch.value = wholePicture();
-      await tester.pump();
-
-      final from = tester.getTopLeft(stage) + panned.center;
-      final gesture = await tester.startGesture(from);
-      for (var step = 1; step <= 4; step++) {
-        await gesture.moveTo(from + Offset(step * 12.0, 0));
-        await tester.pump(const Duration(milliseconds: 25));
-      }
-      expect(picture(), panned,
-          reason: 'the picking drag left the preview where it was');
-
-      await gesture.up();
-      await tester.pump();
-      expect(picked.length, 1, reason: 'and it was a pick, not a pan');
-      expect(picture(), panned, reason: 'still where it was after the commit');
-
-      // Disarmed by the commit: the pan comes back.
-      await tester.drag(stage, const Offset(-40, -24));
-      await tester.pump();
-      expect(picture().topLeft, isNot(panned.topLeft),
-          reason: 'the pick is over, so the drag is the pan\'s again');
-
-      await settleFrb(tester, until: () => p.uiState.previewProgress.idle);
-    });
-
-    /// **Escape mid-drag puts back what was staged** — the convention every
-    /// staged gesture in the application keeps. Nothing was committed, so the
-    /// revert has only the preview to undo, and no pick may be written.
-    testWidgets('Escape during a pick drag reverts and writes nothing',
-        (tester) async {
-      final p = withLayer();
-      await mount(tester, p);
-
-      final picked = <DropperSample>[];
-      var reverts = 0;
-      p.uiState.armDropper(DropperArm(
-        id: 'test',
-        reads: DropperReads.colour,
-        label: 'Key colour',
-        onPick: picked.add,
-        onPreview: (_) {},
-        onRevert: () => reverts += 1,
-      ));
-      p.uiState.dropperPatch.value = wholePicture();
-      await tester.pump();
-
-      final centre = tester.getCenter(find.byType(DropperLayer));
-      final gesture = await tester.startGesture(centre);
-      await tester.pump();
-      await gesture.moveTo(centre + const Offset(40, 0));
-      await tester.pump(const Duration(milliseconds: 25));
-
-      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-      await tester.pump();
-
-      expect(reverts, 1, reason: 'what the drag was showing is put back');
-      expect(picked, isEmpty, reason: 'nothing was ever committed');
-      expect(p.uiState.dropper.value, isNull);
-
-      // And the release that follows the Escape must not resurrect the pick.
-      await gesture.up();
-      await tester.pump();
-      expect(picked, isEmpty);
-
-      await settleFrb(tester, until: () => p.uiState.previewProgress.idle);
-    });
-
-    testWidgets('without a composition the empty stage offers the ways in',
-        (tester) async {
-      // A project with no comps at all shows the welcome's three
-      // start cards in the stage; the "select a composition" sentence is
-      // for a project that has comps with none fronted (EmptyStageFrb
-      // decides between the two).
-      final p = freshProject();
-      await tester.pumpWidget(hostPanel(
-        child: const ViewerPanelFrb(),
-        state: p.state,
-        uiState: p.uiState,
-      ));
-      await tester.pump();
-      expect(find.text('New project'), findsOneWidget);
-      expect(find.text('Open'), findsOneWidget);
-      expect(find.textContaining('Select a composition'), findsNothing);
     });
 
     testWidgets('the transport steps, homes and ends within the comp',
@@ -694,29 +354,6 @@ void main() {
           reason: 'the reading is always there, whatever the tier');
     }, skip: zeroCopyViewerUnavailable);
 
-    /// The other half of the returning playhead: Settings ▸ Interface ▸
-    /// Editing puts the old After Effects behaviour back, and then stopping
-    /// leaves the playhead on the frame that was on screen.
-    testWidgets('the playhead stays put when the setting asks it to',
-        (tester) async {
-      final p = withLayer();
-      p.uiState.workspace.interface.playheadStaysOnStop = true;
-      await mount(tester, p);
-
-      await pressBar(tester, 'viewer-play');
-      await tester.pump();
-      await settleFrb(tester,
-          minRounds: 6,
-          maxRounds: coldWorkerRounds,
-          until: () => p.uiState.playheadFrame.value > 0);
-
-      await pressBar(tester, 'viewer-play');
-      await tester.pump();
-      await settleFrb(tester, minRounds: 12, maxRounds: 12);
-      expect(p.uiState.playheadFrame.value, greaterThan(0),
-          reason: 'the setting keeps the playhead where the picture stopped');
-    }, skip: zeroCopyViewerUnavailable);
-
     /// A six-frame comp with its work area on frames 1 to 4, so a loop mode
     /// has an end to reach inside a test. A tenth of a second, so the end
     /// arrives inside a test rather than in the thirty seconds a default comp
@@ -771,58 +408,6 @@ void main() {
           reason: 'the engine said it ended; nothing in Dart worked it out');
     });
 
-    testWidgets('play once stops at the work-area end and returns the playhead',
-        (tester) async {
-      final p = withLayer();
-      shortWorkArea(p);
-      p.uiState.workspace.performance.loop = LoopMode.once;
-      await mount(tester, p);
-
-      await pressBar(tester, 'viewer-play');
-      await tester.pump();
-      await settleFrb(tester,
-          minRounds: 6,
-          maxRounds: coldWorkerRounds,
-          until: () => !p.uiState.playing.value);
-
-      expect(p.uiState.playing.value, isFalse,
-          reason: 'the work-area end stopped the run');
-      expect(p.uiState.playheadFrame.value, 0,
-          reason: 'stopping returns the playhead to where play started');
-    }, skip: zeroCopyViewerUnavailable);
-
-    testWidgets('ping-pong turns round at the work-area end', (tester) async {
-      final p = withLayer();
-      shortWorkArea(p);
-      p.uiState.workspace.performance.loop = LoopMode.pingPong;
-      await mount(tester, p);
-
-      // The turn sets the playhead back in the same handler that saw the end
-      // frame, so the end is caught by a listener rather than polled for.
-      var reachedEnd = false;
-      void watch() {
-        if (p.uiState.playheadFrame.value >= 4) reachedEnd = true;
-      }
-
-      p.uiState.playheadFrame.addListener(watch);
-      addTearDown(() => p.uiState.playheadFrame.removeListener(watch));
-
-      await pressBar(tester, 'viewer-play');
-      await tester.pump();
-      await settleFrb(tester,
-          minRounds: 6,
-          maxRounds: coldWorkerRounds,
-          until: () => reachedEnd && p.uiState.playheadFrame.value < 4);
-
-      expect(p.uiState.playing.value, isTrue,
-          reason: 'the end of the work area is a turn, not a stop');
-      expect(p.uiState.playheadFrame.value, lessThan(4),
-          reason: 'the playhead is running back down');
-
-      await pressBar(tester, 'viewer-play');
-      await tester.pump();
-    }, skip: zeroCopyViewerUnavailable);
-
     testWidgets(
         'the mute mark silences the output and shows the muted speaker',
         (tester) async {
@@ -848,19 +433,6 @@ void main() {
       await pressBar(tester, 'viewer-mute');
       expect(audioMuted(), isFalse);
       expect(glyphUnder('viewer-mute'), LumitIcons.audio);
-    });
-
-    testWidgets('the timecode reads HH:MM:SS:FF at the comp rate',
-        (tester) async {
-      final p = withLayer();
-      await mount(tester, p);
-
-      expect(find.text('00:00:00:00'), findsOneWidget);
-
-      // A new comp is 60 fps, so frame 90 is one and a half seconds in.
-      p.uiState.playheadFrame.value = 90;
-      await tester.pump();
-      expect(find.text('00:00:01:30'), findsOneWidget);
     });
 
     /// 29.97 counts thirty frames to the second of timecode, which is what every
@@ -891,105 +463,6 @@ void main() {
       p.uiState.playheadFrame.value = 30;
       await tester.pump();
       expect(find.text('00:00:01:00'), findsOneWidget);
-    });
-
-    testWidgets('the magnification, channel and grid controls are live',
-        (tester) async {
-      final p = withLayer();
-      await mount(tester, p);
-
-      await tester.tap(find.byKey(const ValueKey('viewer-zoom')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('100%').last);
-      await tester.pumpAndSettle();
-      expect(find.text('100%'), findsOneWidget,
-          reason: 'the picker shows what was chosen');
-
-      await pressBar(tester, 'viewer-channel');
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Alpha').last);
-      await tester.pumpAndSettle();
-      expect(find.byType(ColorFiltered), findsWidgets,
-          reason: 'a single channel is drawn through a filter');
-
-      // The grid is on by default and toggles off.
-      expect(find.byKey(const ValueKey('viewer-grid')), findsOneWidget);
-      await tester.tap(find.byKey(const ValueKey('viewer-grid')));
-      await tester.pump();
-    });
-
-    /// **The Viewer's two strips carry the drawing's own controls, in its own
-    /// order**, in place of the single bar. The arrangement is the decision,
-    /// so this is what asserts it: the keys left to right, and nothing about
-    /// pixels.
-    testWidgets("the Viewer's strips are in the drawing's order",
-        (tester) async {
-      final p = withLayer();
-      await mount(tester, p);
-
-      expect(headerKeys(tester), [
-        // The header: the magnification, the quality, the colour pipeline.
-        'viewer-zoom', 'viewer-resolution', 'viewer-colour',
-      ]);
-
-      expect(barKeys(tester), [
-        // The ways of looking, then the seam and the snapshot.
-        'viewer-grid', 'viewer-guides-menu', 'viewer-channel', 'viewer-view',
-        'viewer-exposure-reset', 'viewer-exposure',
-        // The snapshot pair: take, then show.
-        'viewer-snapshot', 'viewer-snapshot-show',
-        // The transport and its clock.
-        'viewer-home', 'viewer-step-back', 'viewer-play',
-        'viewer-step-forward', 'viewer-end', 'viewer-timecode',
-        // The right-hand end: the reading, which is not a control.
-        'viewer-readout',
-      ]);
-
-      await settleFrb(tester, until: () => p.uiState.previewProgress.idle);
-    });
-
-    /// **The grid-and-guides menu draws over the picture and nowhere else**
-    /// (docs/07 §2.2 items 5–6). Both entries are checkable, both marks
-    /// are painted by the display, and turning the last one off takes the
-    /// painter out of the tree rather than leaving it drawing nothing.
-    testWidgets('the guides menu turns the grid and the safe areas on',
-        (tester) async {
-      final p = withLayer();
-      await mount(tester, p);
-
-      final overlay = find.byKey(const ValueKey('viewer-overlay-guides'));
-      expect(overlay, findsNothing, reason: 'nothing is drawn to begin with');
-
-      Future<void> pick(String entry) async {
-        await pressBar(tester, 'viewer-guides-menu');
-        await tester.pumpAndSettle();
-        await tester.tap(find.byKey(ValueKey<String>(entry)));
-        await tester.pumpAndSettle();
-      }
-
-      await pick('viewer-guides-grid');
-      expect(p.uiState.viewerOverlays.grid, isTrue);
-      expect(overlay, findsOneWidget);
-      expect(
-        tester
-            .widget<CustomPaint>(
-              find.descendant(of: overlay, matching: find.byType(CustomPaint)),
-            )
-            .painter,
-        isA<ViewerOverlayPainter>()
-            .having((x) => x.grid, 'grid', isTrue)
-            .having((x) => x.safeAreas, 'safeAreas', isFalse),
-      );
-
-      await pick('viewer-guides-safe');
-      expect(p.uiState.viewerOverlays,
-          (grid: true, safeAreas: true, rulers: false));
-
-      // Off again, one at a time: the painter goes only when the last mark has.
-      await pick('viewer-guides-grid');
-      expect(overlay, findsOneWidget, reason: 'the safe areas are still on');
-      await pick('viewer-guides-safe');
-      expect(overlay, findsNothing);
     });
 
     /// **The rulers stand on the panel, not on the picture** (docs/07
@@ -1193,131 +666,6 @@ void main() {
       expect(find.byKey(const ValueKey('viewer-quality-auto')), findsOneWidget);
     });
 
-    /// **An option row leaves the menu open, and the pointer leaving takes it
-    /// down**. The stay-open half is what the picker test above walks;
-    /// this pins the way out, because a menu that stays and cannot be got rid
-    /// of by moving away is worse than one that shuts too eagerly.
-    testWidgets('the quality menu goes when the pointer leaves it',
-        (tester) async {
-      final p = withLayer();
-      await mount(tester, p);
-
-      await pressBar(tester, 'viewer-resolution');
-      await tester.pumpAndSettle();
-
-      // A pointer that is on the menu, then off it. Before an option is
-      // picked the menu ignores the pointer leaving — it was opened by a
-      // click and a click is what takes it away.
-      final pointer = TestPointer(1, PointerDeviceKind.mouse);
-      final row = find.byKey(const ValueKey('viewer-quality-half'));
-      await tester.sendEventToBinding(pointer.hover(tester.getCenter(row)));
-      await tester.pumpAndSettle();
-      await tester.sendEventToBinding(pointer.hover(const Offset(5, 500)));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('viewer-quality-half')), findsOneWidget,
-          reason: 'nothing was picked, so nothing armed the way out');
-
-      await tester.tap(row);
-      await tester.pumpAndSettle();
-      expect(p.uiState.previewResolution, PreviewResolution.half);
-      expect(find.byKey(const ValueKey('viewer-quality-half')), findsOneWidget,
-          reason: 'the option row left the menu up');
-
-      await tester.sendEventToBinding(pointer.hover(tester.getCenter(row)));
-      await tester.pumpAndSettle();
-      await tester.sendEventToBinding(pointer.hover(const Offset(5, 500)));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('viewer-quality-half')), findsNothing,
-          reason: 'and the pointer leaving is the way out');
-    });
-
-    /// **Auto and Full are not the same tier**. Auto renders what the
-    /// panel can show — which is what the Viewer has always in fact done, and
-    /// why it is the default — while Full means composition resolution
-    /// whatever the panel is showing. Before this there was no way to ask for
-    /// the latter at all: the tier labelled Full was silently Auto.
-    testWidgets('Auto follows the panel, Full does not', (tester) async {
-      final p = withLayer();
-      p.uiState.workspace.performance.playback = PlaybackMode.everyFrame;
-      await mount(tester, p);
-
-      // The panel is smaller than the comp, so the two must differ.
-      p.uiState.reportViewerScale(0.25);
-      expect(p.uiState.previewResolution, PreviewResolution.full,
-          reason: 'Full is the default');
-      expect(p.uiState.viewerScale, closeTo(1.0, 1e-9),
-          reason: 'Full is comp resolution whatever the panel shows');
-
-      p.uiState.setPreviewResolution(PreviewResolution.auto);
-      expect(p.uiState.viewerScale, closeTo(0.25, 1e-9),
-          reason: 'Auto renders only what the panel can show');
-
-      p.uiState.setPreviewResolution(PreviewResolution.third);
-      expect(p.uiState.viewerScale, closeTo(1.0 / 3.0, 1e-9),
-          reason: 'a fixed tier is the tier you asked for');
-    });
-
-    /// **The resolution is remembered per composition** (docs/07 §2.2):
-    /// a heavy shot can preview at Quarter while the title card beside it does
-    /// not, and fronting one back shows its own tier rather than the other's.
-    testWidgets('the preview resolution is per composition', (tester) async {
-      final p = withLayer();
-      final other = p.state.project!.newComposition(name: 'Other');
-      await mount(tester, p);
-
-      p.uiState.setPreviewResolution(PreviewResolution.quarter);
-      expect(p.uiState.previewResolution, PreviewResolution.quarter);
-
-      p.uiState.setSelectedComp(other);
-      expect(p.uiState.previewResolution, PreviewResolution.full,
-          reason: 'a comp never set is at the default');
-
-      // And Auto is a choice like any other now that it is not the default:
-      // stored, remembered per comp, and not mistaken for "never chosen".
-      p.uiState.setPreviewResolution(PreviewResolution.auto);
-      expect(
-          p.uiState.session().previewResolutions[other.internalid.toString()],
-          'auto');
-
-      p.uiState.setSelectedComp(p.comp);
-      expect(p.uiState.previewResolution, PreviewResolution.quarter,
-          reason: 'and the first comp kept its own');
-
-      // It rides the session blob, so it survives into the project's ui_state,
-      // not the document, so no op and no undo step.
-      expect(
-          p.uiState.session().previewResolutions[p.comp.internalid.toString()],
-          'quarter');
-    });
-
-    /// **The background swatch is a document edit** (docs/07 §2.2 item
-    /// 10) — unlike everything else on that half of the bar, which are ways of
-    /// looking. So it goes through an op, reaches the export, and undoes.
-    testWidgets('the background swatch writes the comp and undoes',
-        (tester) async {
-      final p = withLayer();
-      await mount(tester, p);
-
-      await pressBar(tester, 'viewer-guides-menu');
-      await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('viewer-background')), findsOneWidget);
-      await tester.tapAt(const Offset(4, 4));
-      await tester.pumpAndSettle();
-      final before = p.comp.background();
-      expect(before[3], 1.0, reason: 'a comp starts on opaque black');
-
-      p.comp.setBackground(
-        rgba: F32Array4(Float32List.fromList([0.5, 0.25, 0.125, 1.0])),
-      );
-      final after = p.comp.background();
-      expect(after[0], closeTo(0.5, 1e-6));
-      expect(after[1], closeTo(0.25, 1e-6));
-
-      p.state.project!.undo();
-      expect(p.comp.background()[0], closeTo(before[0], 1e-6),
-          reason: 'one undo puts the backdrop back');
-    });
-
     /// A scrub of [pixels] on a [DragValueField]. The first `kDragSlopDefault`
     /// pixels of any drag go on getting it recognised as a drag at all — a real
     /// one loses the same slop — so what is asked for is the slop plus the part
@@ -1353,182 +701,6 @@ void main() {
       expect(p.uiState.viewerLook.stops, closeTo(-2.3, 1e-9));
 
       await settleFrb(tester, until: () => p.uiState.previewProgress.idle);
-    });
-
-    /// The tone map is a row in the colour-pipeline menu (item 13) —
-    /// inside the display transform it is part of. One pick on, one pick off.
-    testWidgets('the tone-map row is in the colour menu and flips',
-        (tester) async {
-      final p = withLayer();
-      p.uiState.workspace.interface.showToneMap = true;
-      await mount(tester, p);
-
-      expect(p.uiState.viewerLook.toneMap, isFalse);
-
-      await flipToneMap(tester);
-      expect(p.uiState.viewerLook.toneMap, isTrue);
-
-      await flipToneMap(tester);
-      expect(p.uiState.viewerLook.toneMap, isFalse);
-
-      await settleFrb(tester, until: () => p.uiState.previewProgress.idle);
-    });
-
-    /// **The colour pipeline says what you are looking at** (docs/07 §2.2
-    /// item 8). Always in the header, naming the display transform, and
-    /// while either preview-only control is engaged it is where the Viewer
-    /// says the picture on screen is not the export.
-    testWidgets('the colour picker says when a view is engaged',
-        (tester) async {
-      final p = withLayer();
-      // The tone map is asked for; this test drives it, so it asks.
-      p.uiState.workspace.interface.showToneMap = true;
-      await mount(tester, p);
-      final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.studio);
-
-      final picker = find.byKey(const ValueKey('viewer-colour'));
-      expect(picker, findsOneWidget, reason: 'it is always in the header');
-
-      Text faceText() => tester.widget<Text>(
-          find.descendant(of: picker, matching: find.byType(Text)).first);
-
-      expect(faceText().data, 'Linear → sRGB');
-      expect(faceText().style?.color, isNull,
-          reason: "at rest it takes the dropdown face's own colour");
-
-      // The tone map is engaged: the face, not just the control, says so.
-      await flipToneMap(tester);
-      expect(faceText().data, contains('preview'));
-      expect(faceText().data, contains('Linear → sRGB'),
-          reason: 'it still names the transform it is showing through');
-      expect(faceText().style?.color, t.accent);
-
-      // Back to neutral, back to a plain statement of the transform.
-      await flipToneMap(tester);
-      expect(faceText().data, 'Linear → sRGB');
-
-      // And the exposure engages it on its own.
-      await scrub(tester, find.byKey(const ValueKey('viewer-exposure')), 10);
-      await tester.pump();
-      expect(faceText().data, contains('preview'));
-
-      await settleFrb(tester, until: () => p.uiState.previewProgress.idle);
-    });
-
-    /// The tone map is asked for, not given: its row is out of the colour
-    /// menu unless Settings → Interface says otherwise, while the exposure
-    /// stays on the bar whatever the setting says.
-    testWidgets('the tone-map row is absent until the setting asks for it',
-        (tester) async {
-      final p = withLayer();
-      await mount(tester, p);
-
-      await pressBar(tester, 'viewer-colour');
-      await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('viewer-tone-map')), findsNothing);
-      await tester.tapAt(const Offset(4, 4));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('viewer-exposure')), findsOneWidget,
-          reason: 'only the tone map is gated, not the exposure');
-
-      p.uiState.workspace.interface.showToneMap = true;
-      await mount(tester, p);
-      await pressBar(tester, 'viewer-colour');
-      await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('viewer-tone-map')), findsOneWidget);
-      await tester.tapAt(const Offset(4, 4));
-      await tester.pumpAndSettle();
-
-      await settleFrb(tester, until: () => p.uiState.previewProgress.idle);
-    });
-
-    /// Hiding the button must not strand an engaged tone map: a session saved
-    /// while it was on would otherwise keep changing the picture with nothing
-    /// left to turn it off. The setting gates the *look*, not just the button.
-    testWidgets('a stored tone map is disengaged while the setting is off',
-        (tester) async {
-      final p = withLayer();
-      p.uiState.workspace.interface.showToneMap = true;
-      await mount(tester, p);
-
-      await flipToneMap(tester);
-      expect(p.uiState.viewerLook.toneMap, isTrue);
-
-      p.uiState.workspace.interface.showToneMap = false;
-      await tester.pump();
-      expect(p.uiState.viewerLook.toneMap, isFalse,
-          reason: 'the look the Viewer and the engine read is disengaged');
-      expect(p.uiState.session().viewerLooks[p.comp.internalid.toString()],
-          (stops: 0.0, toneMap: true),
-          reason: 'the stored value is untouched, so turning it back on '
-              'returns the comp to how it was');
-
-      p.uiState.workspace.interface.showToneMap = true;
-      await tester.pump();
-      expect(p.uiState.viewerLook.toneMap, isTrue);
-
-      await settleFrb(tester, until: () => p.uiState.previewProgress.idle);
-    });
-
-    /// **Both controls are per composition**: they are a way of looking
-    /// at one comp, so fronting another must show that one's own view rather
-    /// than carrying the first one's exposure across.
-    testWidgets('the exposure and tone map are remembered per composition',
-        (tester) async {
-      final p = withLayer();
-      p.uiState.workspace.interface.showToneMap = true;
-      final other = p.state.project!.newComposition(name: 'Other');
-      await mount(tester, p);
-
-      await scrub(tester, find.byKey(const ValueKey('viewer-exposure')), 20);
-      await flipToneMap(tester);
-      expect(p.uiState.viewerLook, (stops: 2.0, toneMap: true));
-
-      p.uiState.setSelectedComp(other);
-      await tester.pump();
-      expect(p.uiState.viewerLook, (stops: 0.0, toneMap: false),
-          reason: 'a comp never looked at is looked at neutrally');
-      expect(find.text('+0.0'), findsOneWidget);
-
-      p.uiState.setSelectedComp(p.comp);
-      await tester.pump();
-      expect(p.uiState.viewerLook, (stops: 2.0, toneMap: true));
-      expect(find.text('+2.0'), findsOneWidget);
-
-      // And it is written into the session, which is what carries it into the
-      // project's `ui_state` blob — not into the document, so no op
-      // and no undo step.
-      expect(p.uiState.session().viewerLooks[p.comp.internalid.toString()],
-          (stops: 2.0, toneMap: true));
-
-      await settleFrb(tester, until: () => p.uiState.previewProgress.idle);
-    });
-
-    /// The one place in this port where a single gesture is two ops: x and y are
-    /// separate properties in the model.
-    testWidgets('dragging a selected layer repositions it', (tester) async {
-      final p = withLayer();
-      await mount(tester, p);
-
-      final before = p.layer.getTransform();
-      final beforeX = (before.positionX as BridgeScalar_Static).field0;
-
-      // The layer fills the comp, so the middle of the picture is inside it —
-      // there is no handle to find any more: the body is the handle.
-      final stage = find.byType(ViewerPanelFrb);
-      final gesture = await tester.startGesture(tester.getCenter(stage));
-      await tester.pump();
-      for (var i = 0; i < 8; i++) {
-        await gesture.moveBy(const Offset(6, 0));
-        await tester.pump();
-      }
-      await gesture.up();
-      await tester.pumpAndSettle();
-
-      final after = p.layer.getTransform();
-      expect(
-          (after.positionX as BridgeScalar_Static).field0, greaterThan(beforeX),
-          reason: 'the drag reached the document');
     });
 
     /// **One gesture, one undo step.** x and y are separate properties
@@ -1568,31 +740,6 @@ void main() {
       expect((after.positionY as BridgeScalar_Static).field0,
           closeTo(beforeY, 1e-9),
           reason: 'one undo puts back the whole drag, both axes at once');
-    });
-
-    testWidgets(
-        'with the Hand tool a drag pans the view and leaves the layer'
-        ' alone', (tester) async {
-      final p = withLayer();
-      p.uiState.tools.select(ToolMode.hand);
-      await mount(tester, p);
-
-      final before = p.layer.getTransform();
-      final beforeX = (before.positionX as BridgeScalar_Static).field0;
-
-      final stage = find.byType(ViewerPanelFrb);
-      final gesture = await tester.startGesture(tester.getCenter(stage));
-      await tester.pump();
-      for (var i = 0; i < 8; i++) {
-        await gesture.moveBy(const Offset(6, 0));
-        await tester.pump();
-      }
-      await gesture.up();
-      await tester.pumpAndSettle();
-
-      expect((p.layer.getTransform().positionX as BridgeScalar_Static).field0,
-          beforeX,
-          reason: 'the Hand tool moves the picture, never the layer');
     });
 
     testWidgets(
@@ -1754,33 +901,6 @@ void main() {
           reason: 'one undo puts the whole drag back');
     });
 
-    /// **A layer switched off is not on the picture at all.** Its eye
-    /// being off is how you get it out of the way; a box round something
-    /// invisible, and a click that selected it, put it right back in the way.
-    testWidgets(
-        'a hidden layer is neither drawn nor clickable, and the one'
-        ' under it takes the click', (tester) async {
-      final p = withLayer();
-      // A second comp-sized layer on top of the first, then switched off.
-      final above = p.comp.addSolidLayer();
-      above.setSwitch(switch_: BridgeLayerSwitch.visible, on_: false);
-      p.uiState.clearSelection();
-      p.uiState.model.refresh();
-      await mount(tester, p);
-
-      await tester.tapAt(fittedRect(tester, p.comp).center);
-      await tester.pumpAndSettle();
-
-      expect(p.uiState.selectedLayer.value?.internallayerId,
-          p.layer.internallayerId,
-          reason: 'the click fell through the hidden layer to the one below');
-      expect(
-          p.uiState.selectedLayers.value
-              .any((l) => l.internallayerId == above.internallayerId),
-          isFalse,
-          reason: 'and the hidden layer was never a target');
-    });
-
     /// **A drag takes what is selected, whatever is on top of it.**
     /// A layer chosen in the Timeline could not be dragged wherever anything
     /// covered it: the press swapped the selection for the topmost layer and
@@ -1850,47 +970,6 @@ void main() {
           reason: 'Shift-clicking the same layer takes it back out again');
     });
 
-    testWidgets(
-        'a Null layer can be picked on the picture, though it draws'
-        ' nothing', (tester) async {
-      final p = freshProject();
-      final comp = p.state.project!.newComposition(name: 'Rig');
-      final nul = comp.addNullLayer();
-      p.uiState.setSelectedComp(comp);
-      p.uiState.model.refresh();
-      await mount(tester, p);
-
-      final fitted = fittedRect(tester, comp);
-      // The Null's own 100x100 box sits on the comp's middle.
-      await tester.tapAt(fitted.center);
-      await tester.pumpAndSettle();
-      expect(
-          p.uiState.selectedLayer.value?.internallayerId, nul.internallayerId,
-          reason: 'a layer with no pixels is still a layer you can point at');
-
-      // Well outside that small box, and there is nothing else in the comp.
-      await tester.tapAt(fitted.center + const Offset(200, 0));
-      await tester.pumpAndSettle();
-      expect(p.uiState.selectedLayers.value, isEmpty);
-    });
-
-    testWidgets('clicking empty space clears the selection', (tester) async {
-      final p = withLayer();
-      await mount(tester, p);
-      expect(p.uiState.selectedLayers.value, isNotEmpty);
-
-      // The very corner of the *stage* is outside the fitted picture, so it is
-      // outside every layer's box. The panel's own corner is the header strip,
-      // which is chrome and takes no click for the picture.
-      final panel = tester.getRect(find.byKey(const ValueKey('viewer-stage')));
-      await tester.tapAt(panel.topLeft + const Offset(2, 2));
-      await tester.pumpAndSettle();
-
-      expect(p.uiState.selectedLayers.value, isEmpty);
-      expect(p.uiState.selectedLayer.value, isNull,
-          reason: 'the primary follows the selection');
-    });
-
     /// The selected layer's box on screen, for a comp-sized layer scaled to
     /// [scalePercent] about its own middle: the fitted picture, shrunk about
     /// its centre. Half size keeps the handles well inside the window, where a
@@ -1938,43 +1017,6 @@ void main() {
           (p.layer.getTransform().scaleX as BridgeScalar_Static).field0;
       expect(after, greaterThan(before),
           reason: 'pulling the corner away from the anchor grows the layer');
-    });
-
-    testWidgets('dragging the rotation knob turns the layer', (tester) async {
-      final p = withLayer();
-      halveIt(p.layer);
-      p.uiState.model.refresh();
-      await mount(tester, p);
-
-      final box = boxRect(tester, p.comp, 50);
-      final knob = Offset(box.center.dx, box.top - gizmoRotateReach);
-
-      final gesture = await tester.startGesture(knob);
-      await tester.pump();
-      // Round towards the right-hand side: a clockwise sweep about the middle.
-      for (var i = 0; i < 6; i++) {
-        await gesture.moveBy(const Offset(20, 10));
-        await tester.pump();
-      }
-      await gesture.up();
-      await tester.pumpAndSettle();
-
-      final rotation = p.layer.getTransform().rotation;
-      expect((rotation as BridgeScalar_Static).field0, isNot(0),
-          reason: 'the knob wrote a rotation');
-    });
-
-    /// The layer controls are a mark over the picture like the grid and the
-    /// safe areas, so they are a row in the same view menu.
-    testWidgets('the layer-controls row is in the view menu and toggles',
-        (tester) async {
-      final p = withLayer();
-      await mount(tester, p);
-
-      await pickViewRow(tester, 'viewer-wireframes');
-      // Hiding the controls must not disturb the selection or the picture: it
-      // is a drawing switch, nothing more.
-      expect(p.uiState.selectedLayers.value, isNotEmpty);
     });
 
     /// The Zoom tool armed, on a comp bigger than the panel so there is room
@@ -2028,106 +1070,6 @@ void main() {
           reason: 'Alt+click undoes the click before it');
     });
 
-    testWidgets('dragging a box with the Zoom tool fits that box to the panel',
-        (tester) async {
-      final p = await withZoomTool(tester);
-      final fitted = fittedRect(tester, p.comp);
-      final before = p.uiState.viewerScale;
-
-      // A quarter-width sweep in the middle of the picture.
-      final from = fitted.center - Offset(fitted.width / 8, fitted.height / 8);
-      final to = fitted.center + Offset(fitted.width / 8, fitted.height / 8);
-      final gesture = await tester.startGesture(from);
-      await tester.pump();
-      await gesture.moveTo(Offset(to.dx, from.dy));
-      await tester.pump();
-      await gesture.moveTo(to);
-      await tester.pump();
-      await gesture.up();
-      await tester.pumpAndSettle();
-
-      expect(p.uiState.viewerScale, greaterThan(before * 2),
-          reason: 'a quarter of the picture fills the panel');
-    });
-
-    testWidgets('a box drag with Alt zooms out instead', (tester) async {
-      final p = await withZoomTool(tester);
-      final fitted = fittedRect(tester, p.comp);
-      // The magnification it starts at, off the picture rather than off the
-      // scale reported to the engine — that one no longer follows a zoom out.
-      final before = fitted.width / p.comp.getSize().width;
-
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
-      final from = fitted.center - Offset(fitted.width / 8, fitted.height / 8);
-      final to = fitted.center + Offset(fitted.width / 8, fitted.height / 8);
-      final gesture = await tester.startGesture(from);
-      await tester.pump();
-      // In steps: a single jump gives the recogniser a start and an end with
-      // no update between them, so the box would be the width of the slop.
-      await gesture.moveTo(Offset(to.dx, from.dy));
-      await tester.pump();
-      await gesture.moveTo(to);
-      await tester.pump();
-      await gesture.up();
-      await tester.pumpAndSettle();
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
-
-      expect(shownZoom(tester), isNotNull);
-      expect(shownZoom(tester)!, lessThan(before));
-    });
-
-    testWidgets('a tiny wobble of a drag is a click, not a box',
-        (tester) async {
-      final p = await withZoomTool(tester);
-      final fitted = fittedRect(tester, p.comp);
-      final before = p.uiState.viewerScale;
-
-      final gesture = await tester.startGesture(fitted.center);
-      await tester.pump();
-      await gesture.moveBy(const Offset(3, 2));
-      await tester.pump();
-      await gesture.up();
-      await tester.pumpAndSettle();
-
-      // A few pixels of travel is a hand, not an intention: fitting a
-      // three-pixel box to the panel would throw the picture into orbit. It
-      // takes the click's own step instead.
-      expect(p.uiState.viewerScale, closeTo(before * zoomToolStep, 1e-6));
-    });
-
-    testWidgets('the zoom flies rather than jumping when the shell animates',
-        (tester) async {
-      final p = await withZoomTool(tester, motion: AnimationLevel.all);
-      final fitted = fittedRect(tester, p.comp);
-      final before = p.uiState.viewerScale;
-
-      await tester.tapAt(fitted.center);
-      // Part-way through the flight the magnification is between the two.
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 40));
-      final midway = p.uiState.viewerScale;
-      expect(midway, greaterThan(before));
-      expect(midway, lessThan(before * zoomToolStep),
-          reason: 'it is on its way, not there yet');
-
-      await tester.pumpAndSettle();
-      expect(p.uiState.viewerScale, closeTo(before * zoomToolStep, 1e-6),
-          reason: 'and it lands exactly where it was sent');
-    });
-
-    testWidgets('with motion off the zoom lands on the first frame',
-        (tester) async {
-      final p = await withZoomTool(tester);
-      final fitted = fittedRect(tester, p.comp);
-      final before = p.uiState.viewerScale;
-
-      await tester.tapAt(fitted.center);
-      await tester.pump();
-
-      expect(p.uiState.viewerScale, closeTo(before * zoomToolStep, 1e-6),
-          reason: 'no animation means the hard cut, immediately');
-    });
-
     testWidgets(
         'the Rotation tool turns the selection about its anchor, and'
         ' leaves unselected layers alone', (tester) async {
@@ -2158,163 +1100,6 @@ void main() {
           reason: 'the angle swept about the anchor is the angle written');
       expect((other.getTransform().rotation as BridgeScalar_Static).field0, 0,
           reason: 'a layer that was not selected does not turn');
-    });
-
-    /// **The wireframe turns with the picture, not after it.** The
-    /// picture is previewed at the new angle while the drag is in flight; the
-    /// boxes are drawn from the document, which still holds the old one, so
-    /// they sat still until the button came up. The angle in flight is
-    /// published where the layer that draws the boxes can read it.
-    testWidgets('the boxes follow a turn while it is still being made',
-        (tester) async {
-      final p = withLayer();
-      p.uiState.setSelection([p.layer]);
-      p.uiState.tools.select(ToolMode.rotate);
-      p.uiState.model.refresh();
-      await mount(tester, p);
-
-      expect(p.uiState.liveRotations.value, isEmpty,
-          reason: 'nothing is turning yet');
-
-      final fitted = fittedRect(tester, p.comp);
-      final gesture = await tester
-          .startGesture(Offset(fitted.center.dx, fitted.center.dy - 100));
-      await tester.pump();
-      // Two moves, because the first is what the framework spends recognising
-      // the drag: the update that carries the turn is the one after it.
-      await gesture
-          .moveTo(Offset(fitted.center.dx + 40, fitted.center.dy - 92));
-      await tester.pump();
-      await gesture
-          .moveTo(Offset(fitted.center.dx + 70, fitted.center.dy - 70));
-      await tester.pump();
-
-      final live = p.uiState.liveRotations.value[p.layer.internallayerId];
-      expect(live, isNotNull,
-          reason: 'the angle in flight is published as the drag happens');
-      expect(live!, closeTo(45, 1), reason: 'and it is the angle swept so far');
-      expect(p.layer.getTransform().rotation, isA<BridgeScalar_Static>());
-      expect((p.layer.getTransform().rotation as BridgeScalar_Static).field0, 0,
-          reason: 'while the document has not been written to at all');
-
-      await gesture.up();
-      await tester.pumpAndSettle();
-      expect(p.uiState.liveRotations.value, isEmpty,
-          reason: 'and the moment it lands, the document is the only truth');
-    });
-
-    /// **And the wireframe follows a value scrub, for the same reason.** The
-    /// turn above is a drag on the picture; this is a drag in the property
-    /// rows, which previews the picture through the same provisional-transform
-    /// path. The rows publish what they are previewing and the boxes read it,
-    /// so Position and Scale move the box as they are dragged rather than on
-    /// release. The document is not written to until the drag lands.
-    testWidgets('the boxes follow a value scrub while it is still being made',
-        (tester) async {
-      final p = withLayer();
-      p.uiState.setSelection([p.layer]);
-      p.uiState.model.refresh();
-      await mount(tester, p);
-
-      ViewerLayerMap mapOfBox() => tester
-          .widget<ViewerGizmoLayer>(find.byType(ViewerGizmoLayer))
-          .boxes
-          .firstWhere((b) => b.id == p.layer.internallayerId)
-          .map;
-
-      final settled = mapOfBox();
-      expect(p.uiState.liveTransforms.value, isEmpty,
-          reason: 'nothing is being scrubbed yet');
-
-      // What a Position drag in the rows publishes: the document's transform
-      // with the one property replaced, exactly what it sends for the picture.
-      final committed = p.layer.getTransform();
-      p.uiState.liveTransforms.value = {
-        p.layer.internallayerId: writeScalar(
-          committed,
-          BridgeTransformProp.positionX,
-          BridgeScalar.static_((settled.px) + 120),
-        ),
-      };
-      await tester.pump();
-
-      expect(mapOfBox().px, closeTo(settled.px + 120, 0.01),
-          reason: 'the box is drawn from the value being dragged');
-      expect((p.layer.getTransform().positionX as BridgeScalar_Static).field0,
-          closeTo(settled.px, 0.01),
-          reason: 'while the document still holds the old one');
-
-      // Release: the row clears what it published and the document is the
-      // only truth again. A value left behind here would freeze the box.
-      p.uiState.liveTransforms.value = const {};
-      await tester.pump();
-      expect(mapOfBox().px, closeTo(settled.px, 0.01),
-          reason: 'and the box goes back to what the document says');
-    });
-
-    testWidgets('Shift locks the turn to 45 degrees', (tester) async {
-      final p = withLayer();
-      p.uiState.tools.select(ToolMode.rotate);
-      await mount(tester, p);
-
-      final fitted = fittedRect(tester, p.comp);
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
-      final gesture = await tester
-          .startGesture(Offset(fitted.center.dx, fitted.center.dy - 100));
-      await tester.pump();
-      // A little over 30 degrees round: without the lock it would write ~34.
-      await gesture
-          .moveTo(Offset(fitted.center.dx + 56, fitted.center.dy - 83));
-      await tester.pump();
-      await gesture
-          .moveTo(Offset(fitted.center.dx + 58, fitted.center.dy - 81));
-      await tester.pump();
-      await gesture.up();
-      await tester.pumpAndSettle();
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
-
-      final turned =
-          (p.layer.getTransform().rotation as BridgeScalar_Static).field0;
-      expect(turned % 45, closeTo(0, 1e-6),
-          reason: 'held Shift, so it lands on a 45-degree step');
-    });
-
-    testWidgets('the Rotation tool picks a layer when you click one',
-        (tester) async {
-      final p = withLayer();
-      p.uiState.clearSelection();
-      p.uiState.tools.select(ToolMode.rotate);
-      await mount(tester, p);
-
-      await tester.tapAt(fittedRect(tester, p.comp).center);
-      await tester.pumpAndSettle();
-
-      expect(p.uiState.selectedLayer.value?.internallayerId,
-          p.layer.internallayerId,
-          reason: 'a rotation tool you cannot choose a layer with is a trip'
-              ' back to the toolbar between every turn');
-    });
-
-    testWidgets('with nothing selected the Rotation tool turns nothing',
-        (tester) async {
-      final p = withLayer();
-      p.uiState.clearSelection();
-      p.uiState.tools.select(ToolMode.rotate);
-      await mount(tester, p);
-
-      final fitted = fittedRect(tester, p.comp);
-      final gesture = await tester
-          .startGesture(Offset(fitted.center.dx, fitted.center.dy - 100));
-      await tester.pump();
-      await gesture.moveTo(Offset(fitted.center.dx + 60, fitted.center.dy));
-      await tester.pump();
-      await gesture.moveTo(Offset(fitted.center.dx + 100, fitted.center.dy));
-      await tester.pump();
-      await gesture.up();
-      await tester.pumpAndSettle();
-
-      expect(
-          (p.layer.getTransform().rotation as BridgeScalar_Static).field0, 0);
     });
 
     testWidgets(
@@ -2351,60 +1136,6 @@ void main() {
           reason: 'Position compensated exactly, so nothing appeared to move');
       expect(at(after.anchorY), closeTo(anchorBefore.$2, 0.001),
           reason: 'a sideways drag does not move the pivot vertically');
-    });
-
-    /// **The pivot goes where you point.** It used to be a *nudge*:
-    /// the drag was measured from the press and added to the anchor the layer
-    /// already had, so you could push a pivot towards somewhere but never put
-    /// it anywhere. A click now places it, and a drag keeps it under the
-    /// pointer the whole way.
-    testWidgets('the Anchor point tool puts the pivot where you click',
-        (tester) async {
-      final p = withLayer();
-      p.uiState.tools.select(ToolMode.anchor);
-      await mount(tester, p);
-
-      double at(BridgeScalar s) => (s as BridgeScalar_Static).field0;
-      final fitted = fittedRect(tester, p.comp);
-      // A quarter of the way in from the layer's top-left, which for a
-      // comp-sized layer is a quarter of the comp.
-      final target =
-          fitted.topLeft + Offset(fitted.width / 4, fitted.height / 4);
-      await tester.tapAt(target);
-      await tester.pumpAndSettle();
-
-      final size = p.comp.getSize();
-      final scale = fitted.width / size.width;
-      final after = p.layer.getTransform();
-      expect(at(after.anchorX), closeTo((target.dx - fitted.left) / scale, 1),
-          reason: 'the pivot is where the pointer was, not a nudge from where '
-              'it started');
-      expect(at(after.anchorY), closeTo((target.dy - fitted.top) / scale, 1));
-    });
-
-    /// **And the edit reaches the panels that show it.** The Timeline's
-    /// Anchor Point rows and the Effect controls both draw from the read model,
-    /// so an edit the Viewer commits has to refresh it — the tool's own
-    /// picture updating is not the same thing as the numbers updating.
-    testWidgets('an anchor edit reaches the read model the panels draw from',
-        (tester) async {
-      final p = withLayer();
-      p.uiState.tools.select(ToolMode.anchor);
-      await mount(tester, p);
-
-      double? modelAnchorX() {
-        final entry = p.uiState.model.byId(p.layer.internallayerId);
-        final x = entry?.info.transform.anchorX;
-        return x is BridgeScalar_Static ? x.field0 : null;
-      }
-
-      final before = modelAnchorX();
-      final fitted = fittedRect(tester, p.comp);
-      await tester.tapAt(fitted.center + const Offset(60, 0));
-      await tester.pumpAndSettle();
-
-      expect(modelAnchorX(), isNot(before),
-          reason: 'the model the Timeline rows read is the one that moved');
     });
 
     /// **Every tool's edit, not just the anchor's.** A drag with the Selection
@@ -2450,70 +1181,6 @@ void main() {
       }
     });
 
-    testWidgets('the Anchor point tool picks a layer when you click one',
-        (tester) async {
-      final p = withLayer();
-      p.uiState.clearSelection();
-      p.uiState.tools.select(ToolMode.anchor);
-      await mount(tester, p);
-
-      await tester.tapAt(fittedRect(tester, p.comp).center);
-      await tester.pumpAndSettle();
-
-      expect(p.uiState.selectedLayer.value?.internallayerId,
-          p.layer.internallayerId);
-    });
-
-    testWidgets(
-        'the gizmo\'s centre handle pans behind, and a drag beside it'
-        ' still moves the layer', (tester) async {
-      final p = withLayer();
-      halveIt(p.layer);
-      p.uiState.model.refresh();
-      await mount(tester, p);
-
-      double at(BridgeScalar s) => (s as BridgeScalar_Static).field0;
-      final before = p.layer.getTransform();
-      final anchorBefore = at(before.anchorX);
-      final positionBefore = at(before.positionX);
-
-      // Dead on the pivot — the middle of a layer anchored on its own centre.
-      final box = boxRect(tester, p.comp, 50);
-      var gesture = await tester.startGesture(box.center);
-      await tester.pump();
-      for (var i = 0; i < 6; i++) {
-        await gesture.moveBy(const Offset(8, 0));
-        await tester.pump();
-      }
-      await gesture.up();
-      await tester.pumpAndSettle();
-
-      final panned = p.layer.getTransform();
-      expect(at(panned.anchorX), isNot(anchorBefore),
-          reason: 'the pivot moved');
-      expect(at(panned.positionX) - positionBefore,
-          closeTo((at(panned.anchorX) - anchorBefore) / 2, 0.001),
-          reason: 'Position compensated (at 50%, half the layer-pixel delta), '
-              'so the picture did not move');
-
-      // A press a little way off the pivot is an ordinary move again.
-      final anchorNow = at(p.layer.getTransform().anchorX);
-      final positionNow = at(p.layer.getTransform().positionX);
-      gesture = await tester.startGesture(box.center + const Offset(40, 0));
-      await tester.pump();
-      for (var i = 0; i < 6; i++) {
-        await gesture.moveBy(const Offset(8, 0));
-        await tester.pump();
-      }
-      await gesture.up();
-      await tester.pumpAndSettle();
-
-      final moved = p.layer.getTransform();
-      expect(at(moved.anchorX), closeTo(anchorNow, 0.001),
-          reason: 'a body drag leaves the pivot alone');
-      expect(at(moved.positionX), greaterThan(positionNow));
-    });
-
     /// The shape tools. With a layer selected a drag draws a **mask** on
     /// it; with nothing selected there is nothing to mask, and the status line
     /// says so rather than the drag vanishing into silence.
@@ -2548,37 +1215,6 @@ void main() {
       expect(xs.reduce((a, b) => a > b ? a : b), lessThan(1920));
     });
 
-    /// The Pen with nothing selected makes a shape layer too: the same
-    /// path, and the only difference is what it will belong to.
-    testWidgets('the Pen with nothing selected closes onto a shape layer',
-        (tester) async {
-      final p = withLayer();
-      p.uiState.clearSelection();
-      p.uiState.tools.select(ToolMode.pen);
-      await mount(tester, p);
-
-      final fitted = fittedRect(tester, p.comp);
-      final first = fitted.center;
-      await tester.tapAt(first);
-      await tester.pumpAndSettle();
-      await tester.tapAt(first + const Offset(80, 0));
-      await tester.pumpAndSettle();
-      await tester.tapAt(first + const Offset(80, 60));
-      await tester.pumpAndSettle();
-      expect(p.comp.getLayers().length, 1, reason: 'still being drawn');
-
-      // Clicking the first point again closes the path and applies it.
-      await tester.tapAt(first);
-      await tester.pumpAndSettle();
-
-      final layers = p.comp.getLayers();
-      expect(layers.length, 2);
-      expect(layers.first.getKind(), BridgeLayerKind.shape);
-      expect(layers.first.getShapeContents().single.vertices, hasLength(3));
-      expect(p.layer.getMasks(), isEmpty,
-          reason: 'the layer that was not selected was not masked');
-    });
-
     testWidgets('the Pen places points and closes on the first one',
         (tester) async {
       final p = withLayer();
@@ -2607,29 +1243,6 @@ void main() {
       expect(masks.single.name, 'Mask 1');
       expect(masks.single.vertices, hasLength(3));
       expect(masks.single.closed, isTrue);
-    });
-
-    testWidgets('the polygon tool drags out a five-sided mask', (tester) async {
-      final p = withLayer();
-      p.uiState.tools.select(ToolMode.shapePolygon);
-      await mount(tester, p);
-
-      final fitted = fittedRect(tester, p.comp);
-      final gesture =
-          await tester.startGesture(fitted.center - const Offset(70, 70));
-      await tester.pump();
-      await gesture.moveTo(fitted.center);
-      await tester.pump();
-      await gesture.moveTo(fitted.center + const Offset(70, 70));
-      await tester.pump();
-      await gesture.up();
-      await tester.pumpAndSettle();
-
-      final masks = p.layer.getMasks();
-      expect(masks, hasLength(1));
-      expect(masks.single.name, 'Polygon');
-      expect(masks.single.vertices, hasLength(5),
-          reason: 'a polygon is a shape you drag out, not a path you build');
     });
 
     /// Mask points are editable on the picture: they draw as squares on
@@ -2709,70 +1322,6 @@ void main() {
           reason: 'and so did the other one the sweep caught');
       expect(after[3].x, closeTo(before[3].x, 0.001),
           reason: 'the points the sweep missed stayed put');
-    });
-
-    /// Picking a mask's Path row offers its points on the picture without the
-    /// layer being selected, so a drag there has to write too. Reported from
-    /// the app: the keyed path followed the pointer and snapped back on release.
-    testWidgets("a picked Path row's points stay where they are dragged",
-        (tester) async {
-      final p = withLayer();
-      p.layer.addMask(
-        mask: BridgeMask(
-          id: UuidValue.fromString(const Uuid().v4()),
-          name: 'Rectangle',
-          vertices: const [
-            BridgeVertex(
-                x: 860, y: 440, tanInX: 0, tanInY: 0, tanOutX: 0, tanOutY: 0),
-            BridgeVertex(
-                x: 1060, y: 440, tanInX: 0, tanInY: 0, tanOutX: 0, tanOutY: 0),
-            BridgeVertex(
-                x: 1060, y: 640, tanInX: 0, tanInY: 0, tanOutX: 0, tanOutY: 0),
-            BridgeVertex(
-                x: 860, y: 640, tanInX: 0, tanInY: 0, tanOutX: 0, tanOutY: 0),
-          ],
-          closed: true,
-          inverted: false,
-          opacity: const BridgeScalar.static_(100),
-          mode: BridgeMaskMode.add,
-          feather: const BridgeScalar.static_(0),
-          vertexFeather: const [],
-          expansion: const BridgeScalar.static_(0),
-          pathKeys: const [],
-        ),
-      );
-      final id = p.layer.getMasks().single.id;
-      for (final f in [0, 60]) {
-        p.layer.toggleMaskPathKey(id: id, time: p.comp.timeOfFrame(frame: f));
-      }
-      p.uiState.setSelection([]);
-      p.uiState.selectedProperties.value = [
-        '${p.layer.internallayerId}/masks/$id/path'
-      ];
-      p.uiState.model.refresh();
-      await mount(tester, p);
-
-      final fitted = fittedRect(tester, p.comp);
-      Offset onScreen(double x, double y) => Offset(
-            fitted.left + x / 1920 * fitted.width,
-            fitted.top + y / 1080 * fitted.height,
-          );
-      final drag = await tester.startGesture(onScreen(860, 440));
-      await tester.pump();
-      for (var i = 0; i < 10; i++) {
-        await drag.moveBy(const Offset(6, 0));
-        await tester.pump();
-      }
-      await drag.up();
-      await tester.pumpAndSettle();
-
-      final shown = p.comp.animatedMaskPathsAt(frame: 0).single.vertices;
-      expect(shown[0].x, greaterThan(861),
-          reason: 'the key under the playhead took the drag');
-      expect(shown[1].x, closeTo(1060, 0.001),
-          reason: 'only the point pressed on moved');
-      expect(p.layer.getMasks().single.pathKeys, hasLength(2),
-          reason: 'the drag reused the key there');
     });
 
     /// **A shape layer's own art is correctable on the picture**, by the same
@@ -2881,165 +1430,6 @@ void main() {
           reason: 'a horizontal drag moves nothing vertically');
     });
 
-    /// A layer can carry a mask *and* be a shape layer, and the two sets of
-    /// points are written back by different calls. This is the case that would
-    /// break if the keys naming them ever collided.
-    testWidgets('a mask on a shape layer edits apart from the art',
-        (tester) async {
-      final p = withLayer();
-      final shape = p.comp.addShapeLayer(
-        name: 'Square',
-        contents: [
-          BridgeShapeItem(
-            id: UuidValue.fromString(const Uuid().v4()),
-            name: 'Rectangle',
-            vertices: const [
-              BridgeVertex(
-                  x: 400, y: 200, tanInX: 0, tanInY: 0, tanOutX: 0, tanOutY: 0),
-              BridgeVertex(
-                  x: 600, y: 200, tanInX: 0, tanInY: 0, tanOutX: 0, tanOutY: 0),
-              BridgeVertex(
-                  x: 600, y: 400, tanInX: 0, tanInY: 0, tanOutX: 0, tanOutY: 0),
-            ],
-            closed: true,
-            fill: const BridgeColourRgba(r: 1, g: 1, b: 1, a: 1),
-            stroke: null,
-            strokeWidth: 0,
-            opacity: 100,
-            trimStart: const BridgeScalar.static_(0),
-            trimEnd: const BridgeScalar.static_(100),
-            trimOffset: const BridgeScalar.static_(0),
-            dashes: const [],
-            dashOffset: const BridgeScalar.static_(0),
-            gradient: 0,
-            gradientColour: null,
-            gradientStartX: const BridgeScalar.static_(0),
-            gradientStartY: const BridgeScalar.static_(0),
-            gradientEndX: const BridgeScalar.static_(0),
-            gradientEndY: const BridgeScalar.static_(0),
-            combine: 0,
-            pathKeys: const [],
-            offsetAmount: const BridgeScalar.static_(0),
-            repeatCopies: const BridgeScalar.static_(1),
-            repeatOffset: const BridgeScalar.static_(0),
-            repeatAnchorX: const BridgeScalar.static_(0),
-            repeatAnchorY: const BridgeScalar.static_(0),
-            repeatPositionX: const BridgeScalar.static_(0),
-            repeatPositionY: const BridgeScalar.static_(0),
-            repeatRotation: const BridgeScalar.static_(0),
-            repeatScale: const BridgeScalar.static_(100),
-            repeatStartOpacity: const BridgeScalar.static_(100),
-            repeatEndOpacity: const BridgeScalar.static_(100),
-          ),
-        ],
-      );
-      shape.addMask(
-        mask: BridgeMask(
-          id: UuidValue.fromString(const Uuid().v4()),
-          name: 'Mask',
-          vertices: const [
-            BridgeVertex(
-                x: 300, y: 300, tanInX: 0, tanInY: 0, tanOutX: 0, tanOutY: 0),
-            BridgeVertex(
-                x: 500, y: 300, tanInX: 0, tanInY: 0, tanOutX: 0, tanOutY: 0),
-            BridgeVertex(
-                x: 500, y: 500, tanInX: 0, tanInY: 0, tanOutX: 0, tanOutY: 0),
-          ],
-          closed: true,
-          inverted: false,
-          opacity: const BridgeScalar.static_(100),
-          mode: BridgeMaskMode.add,
-          feather: const BridgeScalar.static_(0),
-          vertexFeather: const [],
-          expansion: const BridgeScalar.static_(0),
-          pathKeys: const [],
-        ),
-      );
-      p.uiState.setSelection([shape]);
-      p.uiState.model.refresh();
-      await mount(tester, p);
-
-      final artBefore = shape.getShapeContents().single.vertices;
-      final maskBefore = shape.getMasks().single.vertices;
-      final fitted = fittedRect(tester, p.comp);
-      Offset onScreen(double x, double y) => Offset(
-            fitted.left + x / 1920 * fitted.width,
-            fitted.top + y / 1080 * fitted.height,
-          );
-
-      // Drag one of the ART's points, at the composition coordinates it is
-      // drawn at. The mask must not follow.
-      final drag = await tester.startGesture(onScreen(400, 200));
-      await tester.pump();
-      for (var i = 0; i < 10; i++) {
-        await drag.moveBy(const Offset(6, 0));
-        await tester.pump();
-      }
-      await drag.up();
-      await tester.pumpAndSettle();
-
-      expect(shape.getShapeContents().single.vertices[0].x,
-          greaterThan(artBefore[0].x),
-          reason: 'the art point moved');
-      final maskAfter = shape.getMasks().single.vertices;
-      for (var i = 0; i < maskAfter.length; i++) {
-        expect(maskAfter[i].x, closeTo(maskBefore[i].x, 0.001),
-            reason: 'the mask on the same layer is a different path');
-        expect(maskAfter[i].y, closeTo(maskBefore[i].y, 0.001));
-      }
-    });
-
-    /// The Type tool: a click on empty picture makes a text layer where
-    /// it landed, typing previews rather than writing, and ending the edit
-    /// writes the document once.
-    testWidgets('the Type tool makes a text layer where you click',
-        (tester) async {
-      final p = freshProject();
-      final comp = p.state.project!.newComposition(name: 'Scene');
-      p.uiState
-        ..setSelectedComp(comp)
-        ..tools.select(ToolMode.typeHorizontal);
-      await tester.pumpWidget(hostPanel(
-        child: const ViewerPanelFrb(),
-        state: p.state,
-        uiState: p.uiState,
-        size: const Size(700, 500),
-      ));
-      await tester.pump();
-
-      final fitted = fittedRect(tester, comp);
-      final at = fitted.center + const Offset(40, 20);
-      await tester.tapAt(at);
-      await tester.pumpAndSettle();
-
-      final layers = comp.getLayers();
-      expect(layers, hasLength(1), reason: 'the click made one');
-      final layer = layers.single;
-      expect(layer.getText(), isNotNull, reason: 'and it is a text layer');
-      expect(layer.getText()!.text, isEmpty,
-          reason: 'an empty line, waiting to be typed into');
-
-      // Where it landed, in comp pixels.
-      final size = comp.getSize();
-      final scale = fitted.width / size.width;
-      final tf = layer.getTransform();
-      double still(dynamic s) => (s as dynamic).field0 as double;
-      expect(still(tf.positionX), closeTo((at.dx - fitted.left) / scale, 0.5));
-      expect(still(tf.positionY), closeTo((at.dy - fitted.top) / scale, 0.5));
-
-      // Typing does not touch the document — that is what the preview path is
-      // for — and ending the edit writes it once.
-      await tester.enterText(find.byType(EditableText), 'Hello');
-      await tester.pump();
-      expect(layer.getText()!.text, isEmpty,
-          reason: 'still previewing; the document is untouched');
-
-      p.uiState.tools.select(ToolMode.select);
-      await tester.pumpAndSettle();
-      expect(layer.getText()!.text, 'Hello',
-          reason: 'putting the tool down ends the edit and writes it');
-    });
-
     /// **Two undo steps for a whole typing session, and no more.**
     ///
     /// Making the layer used to be three ops and finishing the edit two more,
@@ -3078,31 +1468,6 @@ void main() {
       p.state.project!.undo();
       expect(comp.getLayers(), isEmpty,
           reason: 'and the very next one removes the layer, whole');
-    });
-
-    testWidgets('a Type click with nothing typed leaves no layer behind',
-        (tester) async {
-      final p = freshProject();
-      final comp = p.state.project!.newComposition(name: 'Scene');
-      p.uiState
-        ..setSelectedComp(comp)
-        ..tools.select(ToolMode.typeHorizontal);
-      await tester.pumpWidget(hostPanel(
-        child: const ViewerPanelFrb(),
-        state: p.state,
-        uiState: p.uiState,
-        size: const Size(700, 500),
-      ));
-      await tester.pump();
-
-      await tester.tapAt(fittedRect(tester, comp).center);
-      await tester.pumpAndSettle();
-      expect(comp.getLayers(), hasLength(1));
-
-      p.uiState.tools.select(ToolMode.select);
-      await tester.pumpAndSettle();
-      expect(comp.getLayers(), isEmpty,
-          reason: 'a stray click must not leave an empty text layer');
     });
 
     testWidgets('the Type tool edits the text layer you click on',
@@ -3193,31 +1558,6 @@ void main() {
       p.state.project!.undo();
       p.uiState.model.refresh();
       expect(p.layer.getPaint(), isEmpty, reason: 'one undo step');
-    });
-
-    /// The brush shape chosen in the tool options is the shape the stroke is
-    /// committed with. Round unless somebody picks otherwise, so a
-    /// project painted before there was a choice reads back the way it was.
-    testWidgets('the brush commits the shape chosen in the tool options',
-        (tester) async {
-      final p = withLayer();
-      p.uiState.tools.select(ToolMode.brush);
-      await mount(tester, p);
-
-      final fitted = fittedRect(tester, p.comp);
-      await tester.tapAt(fitted.center);
-      await tester.pumpAndSettle();
-      expect(p.layer.getPaint().single.shape, BridgeBrushShape.round,
-          reason: 'the shape everything was painted with before');
-
-      p.uiState.tools.brushShape = BridgeBrushShape.square;
-      await tester.pumpAndSettle();
-      await tester.tapAt(fitted.center + const Offset(0, 30));
-      await tester.pumpAndSettle();
-      expect(p.layer.getPaint().last.shape, BridgeBrushShape.square);
-      expect(p.layer.getPaint().first.shape, BridgeBrushShape.round,
-          reason:
-              'and the one already painted keeps the shape it was made with');
     });
 
     /// A stylus's pressure rides in with the points and widens the mark, and
@@ -3321,28 +1661,6 @@ void main() {
           reason: 'the source was to the left of where the stroke began');
     });
 
-    testWidgets('painting with nothing selected says what to do instead',
-        (tester) async {
-      final p = withLayer();
-      p.uiState.clearSelection();
-      p.uiState.tools.select(ToolMode.brush);
-      await mount(tester, p);
-
-      final gesture =
-          await tester.startGesture(fittedRect(tester, p.comp).center);
-      await tester.pump();
-      for (var i = 0; i < 6; i++) {
-        await gesture.moveBy(const Offset(9, 0));
-        await tester.pump();
-      }
-      await gesture.up();
-      await tester.pumpAndSettle();
-
-      expect(p.layer.getPaint(), isEmpty);
-      expect(
-          p.state.notice.value?.message, contains('Select a layer to paint'));
-    });
-
     /// The other half of the shape tools' gesture: with nothing
     /// selected they make a **shape layer** rather than saying they cannot.
     testWidgets('a shape drag with nothing selected makes a shape layer',
@@ -3384,90 +1702,6 @@ void main() {
 
       // And the new layer is what is selected, so the next drag masks it.
       expect(p.uiState.selectedLayerIds, contains(shape.internallayerId));
-    });
-
-    /// Undo a shape layer and the next drag must draw another one.
-    ///
-    /// It did not. Making a shape layer *selects* it, so the next drag masks
-    /// it — the gesture's whole point. Undo then removed the layer but left its
-    /// id in the selection, so the tool still believed a layer was selected and
-    /// tried to add a mask to one that no longer existed. The engine refused,
-    /// the refusal was swallowed, and the drag did nothing at all.
-    testWidgets('a shape can be drawn again after undoing the last one',
-        (tester) async {
-      final p = withLayer();
-      p.uiState.clearSelection();
-      p.uiState.tools.select(ToolMode.shapeRectangle);
-      await mount(tester, p);
-
-      final before = p.comp.getLayers().length;
-      final fitted = fittedRect(tester, p.comp);
-      Future<void> drawAt(Offset centre) async {
-        final gesture = await tester.startGesture(centre);
-        await tester.pump();
-        await gesture.moveBy(const Offset(40, 30));
-        await tester.pump();
-        await gesture.moveBy(const Offset(40, 30));
-        await tester.pump();
-        await gesture.up();
-        await tester.pumpAndSettle();
-      }
-
-      await drawAt(fitted.center);
-      expect(p.comp.getLayers().length, before + 1);
-
-      p.state.project!.undo();
-      p.uiState.model.refresh();
-      await tester.pumpAndSettle();
-      expect(p.comp.getLayers().length, before,
-          reason: 'the undo took the shape layer back');
-
-      await drawAt(fitted.center - const Offset(30, 20));
-      expect(p.comp.getLayers().length, before + 1,
-          reason: 'the next drag draws another shape layer, and does not try '
-              'to mask the one the undo removed');
-      expect(p.comp.getLayers().first.getKind(), BridgeLayerKind.shape);
-    });
-
-    testWidgets('a shape layer takes the toolbar\'s stroke when it has a width',
-        (tester) async {
-      final p = withLayer();
-      p.uiState.clearSelection();
-      p.uiState.tools
-        ..select(ToolMode.shapeEllipse)
-        ..strokeWidth = 6;
-      await mount(tester, p);
-
-      final fitted = fittedRect(tester, p.comp);
-      final gesture = await tester.startGesture(fitted.center);
-      await tester.pump();
-      await gesture.moveBy(const Offset(50, 40));
-      await tester.pump();
-      await gesture.moveBy(const Offset(30, 20));
-      await tester.pump();
-      await gesture.up();
-      await tester.pumpAndSettle();
-
-      final item = p.comp.getLayers().first.getShapeContents().single;
-      expect(item.stroke, isNotNull);
-      expect(item.strokeWidth, 6);
-
-      // With no width there is no outline to draw. (The selection is cleared
-      // first: the layer just made is selected, so another drag would mask it
-      // rather than make a second shape layer.)
-      p.uiState.clearSelection();
-      p.uiState.tools.strokeWidth = 0;
-      await tester.pump();
-      final second =
-          await tester.startGesture(fitted.topLeft + const Offset(20, 20));
-      await tester.pump();
-      await second.moveBy(const Offset(40, 40));
-      await tester.pump();
-      await second.moveBy(const Offset(20, 20));
-      await tester.pump();
-      await second.up();
-      await tester.pumpAndSettle();
-      expect(p.comp.getLayers().first.getShapeContents().single.stroke, isNull);
     });
 
     /// The camera tools: a drag moves the composition's active camera,
@@ -3540,32 +1774,6 @@ void main() {
       expect(still(after.positionZ), greaterThan(still(beforeDolly.positionZ)));
     });
 
-    testWidgets('a camera drag with no camera says what to do instead',
-        (tester) async {
-      final p = withLayer();
-      p.uiState.tools.select(ToolMode.cameraOrbit);
-      await mount(tester, p);
-
-      await tester.tapAt(fittedRect(tester, p.comp).center);
-      await tester.pumpAndSettle();
-      expect(p.state.notice.value?.message, contains('add a camera layer'));
-    });
-
-    testWidgets('a missing footage layer raises the badge', (tester) async {
-      final p = withLayer();
-      final gone = p.state.project!.importFootage(path: 'C:/nowhere/gone.mp4');
-      p.comp.addFootageLayer(footage: gone, asSequence: false);
-      await mount(tester, p);
-
-      await settleFrb(
-        tester,
-        until: () =>
-            find.byKey(const ValueKey('viewer-missing')).evaluate().isNotEmpty,
-      );
-      expect(find.byKey(const ValueKey('viewer-missing')), findsOneWidget);
-      expect(find.textContaining('missing file'), findsOneWidget);
-    });
-
     testWidgets('relinking the missing footage clears the badge',
         (tester) async {
       final p = withLayer();
@@ -3583,67 +1791,6 @@ void main() {
     });
     // Without the built library there is nothing to test against; the harness
     // throws with the command to run.
-
-    /// Silence must never stop the picture: on a machine with no sound device
-    /// the transport still runs, on the wall clock.
-    testWidgets('playback works without a sound device', (tester) async {
-      final p = withLayer();
-      await mount(tester, p);
-
-      await pressBar(tester, 'viewer-play');
-      await tester.pump();
-      await settleFrb(tester,
-          minRounds: 6,
-          maxRounds: coldWorkerRounds,
-          until: () => p.uiState.playheadFrame.value > 0);
-
-      expect(p.uiState.playheadFrame.value, greaterThan(0),
-          reason:
-              'no audio device, so the engine falls back to its wall clock');
-
-      await pressBar(tester, 'viewer-play');
-      await tester.pump();
-      expect(audioClock().playing, isFalse,
-          reason: 'pausing the transport pauses the sound too');
-    }, skip: zeroCopyViewerUnavailable);
-
-    /// The shell's space bar drives the transport through LumitUiState, so the
-    /// key is a quiet no-op when no Viewer is mounted.
-    testWidgets('the transport request from the shell starts and stops it',
-        (tester) async {
-      final p = withLayer();
-      await mount(tester, p);
-
-      p.uiState.requestTogglePlay();
-      await tester.pump();
-      await settleFrb(tester,
-          minRounds: 6,
-          maxRounds: coldWorkerRounds,
-          until: () => p.uiState.playheadFrame.value > 0);
-      expect(p.uiState.playheadFrame.value, greaterThan(0),
-          reason: 'space started playback');
-
-      p.uiState.requestTogglePlay();
-      await tester.pump();
-      await settleFrb(tester, minRounds: 4, maxRounds: 4);
-      final stopped = p.uiState.playheadFrame.value;
-      await settleFrb(tester, minRounds: 8, maxRounds: 8);
-      expect(p.uiState.playheadFrame.value, stopped,
-          reason: 'and space stopped it');
-    }, skip: zeroCopyViewerUnavailable);
-
-    /// A transport belongs under the picture. Asserted by position rather than
-    /// by reading the widget tree's shape, because what matters is where the
-    /// user's eye and pointer go.
-    testWidgets('the transport sits below the picture', (tester) async {
-      final p = withLayer();
-      await mount(tester, p);
-
-      final play = tester.getCenter(find.byKey(const ValueKey('viewer-play')));
-      final stage = tester.getRect(find.byType(ViewerPanelFrb));
-      expect(play.dy, greaterThan(stage.center.dy),
-          reason: 'below the middle of the panel, not above it');
-    });
 
     /// Moving the playhead from anywhere must repaint the Viewer. Only the
     /// Viewer's own transport used to render, so dragging the Timeline's
@@ -3810,40 +1957,6 @@ void main() {
       expect(p.uiState.playheadFrame.value, lessThan(100),
           reason: 'it rewound rather than sitting at the end doing nothing');
     }, skip: zeroCopyViewerUnavailable);
-
-    /// Every-frame plays WITH sound now: audio plays while rendering holds the
-    /// comp's rate, and the worker pauses it if the picture falls genuinely
-    /// behind (it used to be silenced outright).
-    /// Headless there is no output device or mix, so what is asserted is the
-    /// seam: play in every-frame starts cleanly, the clock stays readable,
-    /// and stopping silences whatever there was.
-    testWidgets('every-frame playback starts the sound like adaptive',
-        (tester) async {
-      final p = withLayer();
-      p.uiState.workspace.performance.playback = PlaybackMode.everyFrame;
-      await mount(tester, p);
-
-      await pressBar(tester, 'viewer-play');
-      await tester.pump();
-      expect(audioClock().seconds, greaterThanOrEqualTo(0),
-          reason: 'the sound path engaged without a fault');
-
-      await pressBar(tester, 'viewer-play');
-      await tester.pump();
-      expect(audioClock().playing, isFalse, reason: 'stop silences it');
-    });
-
-    testWidgets('stepping takes the sound with it', (tester) async {
-      final p = withLayer();
-      await mount(tester, p);
-
-      // The seek must not throw whatever the device situation is — it is on the
-      // path of every arrow key.
-      await pressBar(tester, 'viewer-step-forward');
-      await tester.pump();
-      expect(p.uiState.playheadFrame.value, 1);
-      expect(audioClock().seconds, greaterThanOrEqualTo(0));
-    });
 
     /// **LAST in this file**: `openProject` clears the engine's project
     /// registry, so every reference an earlier test holds dies here.

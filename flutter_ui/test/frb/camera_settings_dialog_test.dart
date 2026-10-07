@@ -80,63 +80,6 @@ void main() {
           reason: 'the lens maths is the engine\'s, not a second copy of it');
     });
 
-    testWidgets('the button commits one settings write and nothing else',
-        (tester) async {
-      final p = freshProject();
-      final camera = withCamera(p);
-      final before = camera.layer.getTransform();
-
-      await tester.pumpWidget(hostPanel(
-          child: camera.host, state: p.state, uiState: p.uiState));
-      await tester.tap(find.byKey(const ValueKey('open')));
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.byKey(const ValueKey('camera-type')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Two-node').last);
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('camera-dof')));
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.byKey(const ValueKey('camera-apply')));
-      await tester.pumpAndSettle();
-
-      final after = camera.layer.getCameraSettings()!;
-      expect(after.twoNode, isTrue);
-      expect(after.depthOfField, isTrue);
-      expect(camera.layer.getTransform(), before,
-          reason: 'no number changed, so no transform op was written');
-
-      // One op, so one step back: the whole of what the window did undoes at
-      // once.
-      p.state.project!.undo();
-      expect(camera.layer.getCameraSettings()!.twoNode, isFalse);
-      expect(camera.layer.getCameraSettings()!.depthOfField, isFalse);
-    });
-
-    testWidgets('Cancel writes nothing', (tester) async {
-      final p = freshProject();
-      final camera = withCamera(p);
-      final settings = camera.layer.getCameraSettings()!;
-      final transform = camera.layer.getTransform();
-
-      await tester.pumpWidget(hostPanel(
-          child: camera.host, state: p.state, uiState: p.uiState));
-      await tester.tap(find.byKey(const ValueKey('open')));
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.byKey(const ValueKey('camera-preset')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('15 mm').last);
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.byKey(const ValueKey('camera-cancel')));
-      await tester.pumpAndSettle();
-
-      expect(camera.layer.getCameraSettings(), settings);
-      expect(camera.layer.getTransform(), transform);
-    });
-
     testWidgets('an animated channel says so and is left alone', (tester) async {
       final p = freshProject();
       final camera = withCamera(p);

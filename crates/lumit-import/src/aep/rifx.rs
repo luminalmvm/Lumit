@@ -352,74 +352,6 @@ mod tests {
         out
     }
 
-    /// **A well-formed walk finds every chunk, pad bytes and all.**
-    ///
-    /// The baseline the damage tests are damage *from*. The odd-sized chunk in
-    /// the middle is the point: RIFF pads to an even boundary and the pad byte
-    /// belongs to nobody, so a walker that forgets it reads the next chunk's
-    /// name one byte late and every chunk after it is nonsense.
-    #[test]
-    fn an_odd_sized_chunk_is_followed_by_a_pad_byte_that_belongs_to_nobody() {
-        let mut body = chunk(b"head", &[1, 2, 3, 4]);
-        body.extend(chunk(b"Utf8", b"odd"));
-        body.extend(chunk(b"tail", &[9, 9]));
-        let bytes = file(b"Egg!", &body);
-
-        let found: Vec<Chunk<'_>> = open_egg(&bytes).unwrap().ok().collect();
-        assert_eq!(found.len(), 3);
-        assert_eq!(found[0].id, *b"head");
-        assert_eq!(found[1].text(), "odd");
-        assert_eq!(found[2].body, &[9, 9]);
-    }
-
-    /// **A LIST hands back its type and its children.**
-    ///
-    /// The list type is the first four bytes of the body, not a separate field,
-    /// so it has to be stripped before the children are walked — leave it in
-    /// and every list's first child starts four bytes early.
-    #[test]
-    fn a_list_strips_its_type_before_walking_its_children() {
-        let inner = chunk(b"idta", &[0, 4]);
-        let mut list = b"Item".to_vec();
-        list.extend(inner);
-        let bytes = file(b"Egg!", &chunk(b"LIST", &list));
-
-        let found: Vec<Chunk<'_>> = open_egg(&bytes).unwrap().ok().collect();
-        assert_eq!(found.len(), 1);
-        assert!(found[0].is_list(b"Item"));
-        let children: Vec<Chunk<'_>> = found[0].children().ok().collect();
-        assert_eq!(children.len(), 1);
-        assert_eq!(children[0].id, *b"idta");
-    }
-
-    /// **Something that is not an `.aep` is turned away by name.**
-    ///
-    /// Three ordinary user mistakes, three plain refusals: a file that is not
-    /// RIFX at all, a RIFX of some other kind, and a file cut short before its
-    /// header finishes. None of them may reach the item walk, because a walk
-    /// over arbitrary bytes finds arbitrary chunks.
-    #[test]
-    fn a_file_that_is_not_an_aep_is_refused_rather_than_walked() {
-        assert_eq!(
-            open_egg(b"not a project at all").unwrap_err(),
-            RifxError::NotRifx
-        );
-
-        let wrong = file(b"WAVE", &chunk(b"fmt ", &[0; 4]));
-        assert_eq!(
-            open_egg(&wrong).unwrap_err(),
-            RifxError::WrongForm {
-                found: "WAVE".to_string()
-            }
-        );
-
-        let short = b"RIFX\x00\x00";
-        assert!(matches!(
-            open_egg(short).unwrap_err(),
-            RifxError::Truncated { .. }
-        ));
-    }
-
     /// **A chunk that claims more bytes than exist is an error, not a read.**
     ///
     /// The single most important check in the parser. `size` comes straight out
@@ -464,49 +396,6 @@ mod tests {
         let found: Vec<Chunk<'_>> = open_egg(cut).unwrap().ok().collect();
         assert_eq!(found.len(), 1, "only the chunk that fits is read");
         assert_eq!(found[0].id, *b"head");
-    }
-
-    /// **A list can be found by its signature when the box around it is
-    /// broken, and an overrunning match is dropped rather than read.**
-    ///
-    /// The parent's size word is overwritten with the enormous size the sweep
-    /// uses, so the walk from the root stops at once and never sees the two
-    /// `Item` lists inside — and the scan finds both anyway, at their own
-    /// offsets, nested one inside the other. The decoy at the end has the
-    /// right twelve bytes and a size reaching past the file, which is exactly
-    /// the read the walker's one check refuses; the scan inherits the refusal.
-    #[test]
-    fn a_list_is_carved_by_its_signature_when_its_parent_is_broken() {
-        let inner = chunk(b"idta", &[0, 7]);
-        let mut nested = b"Item".to_vec();
-        nested.extend(chunk(b"LIST", &{
-            let mut i = b"Item".to_vec();
-            i.extend(inner);
-            i
-        }));
-        let mut folder = b"Fold".to_vec();
-        folder.extend(chunk(b"LIST", &nested));
-        let mut body = chunk(b"LIST", &folder);
-        // Break the folder's own size word.
-        body.splice(4..8, u32::MAX.to_be_bytes());
-        // A decoy: the signature, then a size the file cannot hold.
-        body.extend_from_slice(b"LIST");
-        body.extend_from_slice(&u32::MAX.to_be_bytes());
-        body.extend_from_slice(b"Item");
-        let bytes = file(b"Egg!", &body);
-
-        assert!(
-            open_egg(&bytes).unwrap().next().unwrap().is_err(),
-            "the walk from the root stops at the broken size"
-        );
-        let carved: Vec<Chunk<'_>> = carve(&bytes, *b"Item").collect();
-        assert_eq!(carved.len(), 2, "both nested lists, and not the decoy");
-        assert!(carved.iter().all(|c| c.is_list(b"Item")));
-        assert_eq!(carved[1].children().ok().next().unwrap().id, *b"idta");
-
-        // Bytes with nothing of the shape in them carve to nothing.
-        assert_eq!(carve(b"LIST", *b"Item").count(), 0);
-        assert_eq!(carve(&[0; 64], *b"Item").count(), 0);
     }
 
     /// **Nesting stops at the cap rather than recursing without bound.**

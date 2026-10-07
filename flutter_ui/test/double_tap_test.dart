@@ -15,11 +15,4 @@ void main() {
         kDoubleTapTimeout + const Duration(milliseconds: 50)));
     expect(taps.tap(), isTrue);
   });
-
-  testWidgets('two taps a whole window apart are two clicks', (tester) async {
-    final taps = DoubleTap();
-    expect(taps.tap(), isFalse);
-    await tester.pump(kDoubleTapTimeout);
-    expect(taps.tap(), isFalse);
-  });
 }

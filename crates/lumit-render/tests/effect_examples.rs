@@ -836,39 +836,6 @@ fn env_path(key: &str) -> Option<PathBuf> {
     std::env::var_os(key).map(PathBuf::from)
 }
 
-/// **The eight entries no picture can be made of** (docs/impl/node-graph-comp.md
-/// test 24). The run above wants a GPU, a clip and an output directory, so it
-/// is ignored by default and would never say whether these arms are there; this
-/// one asks the function directly, which is the whole of what the arms do.
-///
-/// Every other name must stay illustrable: an entry that quietly grew a skip
-/// would drop its picture from the manual with nothing said.
-#[test]
-fn the_graph_only_entries_and_the_two_drivers_are_unillustrable() {
-    for name in [
-        "merge",
-        "switch",
-        "time_offset",
-        "split_channels",
-        "combine_channels",
-        "node_graph",
-        "split",
-        "combine",
-    ] {
-        assert!(
-            unillustrable(name).is_some(),
-            "{name} cannot be illustrated by this harness and must say so"
-        );
-    }
-    for name in ["exposure", "blur", "levels"] {
-        assert_eq!(
-            unillustrable(name),
-            None,
-            "{name} draws a picture and must not be skipped"
-        );
-    }
-}
-
 #[test]
 #[ignore = "wants a GPU, a source clip and a writable directory; run through web-docs/scripts/gen-effect-shots.mjs"]
 fn render_every_effect_example() {

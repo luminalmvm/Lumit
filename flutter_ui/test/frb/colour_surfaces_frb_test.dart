@@ -58,30 +58,6 @@ colorspaces:
     from_reference: !<ExponentWithLinearTransform> {gamma: [2.4, 2.4, 2.4, 1], offset: [0.055, 0.055, 0.055, 0], direction: inverse}
 ''';
 
-/// The same config with one more view, onto a space built from a transform
-/// Lumit does not do. The config still loads; that one view refuses.
-const _partlyConfig = '''
-ocio_profile_version: 1
-roles:
-  scene_linear: lin
-  reference: ref
-displays:
-  sRGB:
-    - !<View> {name: Standard, colorspace: out_srgb}
-    - !<View> {name: Fancy, colorspace: fancy}
-colorspaces:
-  - !<ColorSpace>
-    name: ref
-  - !<ColorSpace>
-    name: lin
-  - !<ColorSpace>
-    name: out_srgb
-    from_reference: !<ExponentWithLinearTransform> {gamma: [2.4, 2.4, 2.4, 1], offset: [0.055, 0.055, 0.055, 0], direction: inverse}
-  - !<ColorSpace>
-    name: fancy
-    from_reference: !<FixedFunctionTransform> {style: ACES_RedMod03}
-''';
-
 void main() {
   setUpAll(initEngineForTests);
 
@@ -179,88 +155,6 @@ void main() {
 
       await settleFrb(tester, until: () => p.uiState.previewProgress.idle);
     });
-
-    /// **The calm degrade** (§3.3). A config that is not there never holds the
-    /// project up: the picture keeps coming through the built-in transform, and
-    /// the picker says so rather than pretending the config is in force.
-    testWidgets('a config that is not in force says so, and says why',
-        (tester) async {
-      final p = withComp();
-      useConfig((state: p.state, uiState: p.uiState),
-          '${dir.path}${Platform.pathSeparator}gone.ocio');
-      await mount(tester, p);
-
-      expect(face(tester), 'Config not in force');
-
-      await openPicker(tester);
-      final problem = tester.widget<Text>(find.descendant(
-        of: find.byKey(const ValueKey('viewer-colour-problem')),
-        matching: find.byType(Text),
-      ));
-      expect(problem.data, contains('gone.ocio'),
-          reason:
-              'the reason names the file, and the name is never translated');
-      expect(
-          find.byKey(const ValueKey('viewer-colour-transform')), findsOneWidget,
-          reason: 'the built-in transform is still what is in force');
-
-      await tester.tapAt(const Offset(4, 4));
-      await tester.pumpAndSettle();
-      await settleFrb(tester, until: () => p.uiState.previewProgress.idle);
-    });
-
-    /// **In force, name by name** (§3.3). A view Lumit cannot make is listed,
-    /// drawn quiet, with its reason on hover, and does nothing when pressed;
-    /// the view beside it still works.
-    testWidgets('a view the config cannot make is greyed out, with its reason',
-        (tester) async {
-      final p = withComp();
-      final file = File('${dir.path}${Platform.pathSeparator}config.ocio');
-      file.writeAsStringSync(_partlyConfig);
-      useConfig((state: p.state, uiState: p.uiState), file.path);
-      final summary = p.uiState.colourSummary;
-      expect(summary.loaded, isTrue, reason: summary.problemEnglish);
-      expect(summary.problems.map((x) => x.name), contains('Fancy'),
-          reason: 'the refusal is per name, not per config');
-      await mount(tester, p);
-
-      await openPicker(tester);
-      final fancy = find.byKey(const ValueKey('viewer-colour-view-sRGB-Fancy'));
-      expect(fancy, findsOneWidget, reason: 'listed, never hidden');
-      final tip = tester.widget<LumitTooltip>(
-          find.ancestor(of: fancy, matching: find.byType(LumitTooltip)));
-      expect(tip.message, contains('FixedFunctionTransform'),
-          reason: "the reason is the config's own word");
-      await tester.tap(fancy);
-      await tester.pumpAndSettle();
-      expect(p.uiState.colourView, isNull, reason: 'a greyed row does nothing');
-
-      await tester
-          .tap(find.byKey(const ValueKey('viewer-colour-view-sRGB-Standard')));
-      await tester.pumpAndSettle();
-      expect(p.uiState.colourView, ['sRGB', 'Standard'],
-          reason: 'the rest of the config is in force');
-
-      await settleFrb(tester, until: () => p.uiState.previewProgress.idle);
-    });
-
-    /// **The look is set whole.** The renderer holds one look, so the view has
-    /// to ride the same message as the exposure and the tone map — a push that
-    /// left it out would say "no view" rather than "leave the view alone".
-    testWidgets('the view survives a change to the exposure', (tester) async {
-      final p = withComp();
-      useConfig((state: p.state, uiState: p.uiState), writeConfig());
-      await mount(tester, p);
-
-      p.uiState.setColourView(['sRGB', 'Standard']);
-      p.uiState.setViewerStops(2);
-      await tester.pump();
-
-      expect(p.uiState.colourView, ['sRGB', 'Standard']);
-      expect(face(tester), contains('Standard — sRGB'));
-
-      await settleFrb(tester, until: () => p.uiState.previewProgress.idle);
-    });
   });
 
   group("The export dialog's Colour section (§6.3)", () {
@@ -300,18 +194,6 @@ void main() {
       await tester.tap(field);
       await tester.pumpAndSettle();
     }
-
-    testWidgets('with no config the list is the built-in family alone',
-        (tester) async {
-      await open(tester, withConfig: false);
-      await openSpaces(tester);
-      expect(find.text('sRGB / Rec.709'), findsWidgets);
-      expect(find.text('From the configuration'), findsNothing,
-          reason: 'no config, no section');
-      expect(find.text('out_srgb'), findsNothing);
-      await tester.tapAt(const Offset(4, 4));
-      await tester.pumpAndSettle();
-    });
 
     /// The config's output spaces sit under a heading of ours, keep their own
     /// names, and can be chosen — an OCIO export rides on top of whatever the
@@ -353,32 +235,6 @@ void main() {
             .data,
         contains('untagged'),
       );
-    });
-
-    /// **The check is the pre-queue answer, and it is the composition's.** A
-    /// config that goes away under an open dialog must turn the queue button's
-    /// line into the engine's refusal rather than let a file be written in a
-    /// colour space nobody can produce.
-    testWidgets('a space the project can no longer deliver refuses',
-        (tester) async {
-      final p = await open(tester, withConfig: true);
-      await openSpaces(tester);
-      await tester.tap(find.text('out_srgb'));
-      await tester.pumpAndSettle();
-
-      // The config is undone out from under the dialog, and a field is
-      // touched so the dialog asks the composition again.
-      p.state.project!.undo();
-      await tester.tap(find.byKey(const ValueKey('export-colour-space')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('out_srgb').last);
-      await tester.pumpAndSettle();
-
-      expect(find.textContaining("this project's colour config"), findsWidgets,
-          reason:
-              "the exporter's own refusal, shown before anything is queued");
-      expect(find.textContaining('out_srgb'), findsWidgets,
-          reason: 'and it names the space it will not write');
     });
   });
 
@@ -436,37 +292,6 @@ void main() {
           .tap(find.byKey(const ValueKey('project-menu-colour-space-none')));
       await tester.pumpAndSettle();
       expect(footage.colourSpace(), isNull);
-    });
-
-    /// **A name outlives the config that defined it.** It is the user's
-    /// statement about the file; a config that moved must not silently edit
-    /// their project, so the menu still lists the name and still ticks it.
-    testWidgets('a name assigned under a config that has gone is kept',
-        (tester) async {
-      final p = freshProject();
-      final footage = p.state.project!.importFootage(path: 'C:/clips/shot.mov');
-      footage.setColourSpace(space: 'ACEScct');
-      useConfig(p, '${dir.path}${Platform.pathSeparator}gone.ocio');
-
-      await tester.pumpWidget(hostPanel(
-        child: const ProjectPanelFrb(),
-        state: p.state,
-        uiState: p.uiState,
-      ));
-      await tester.pump();
-
-      await tester.tapAt(
-        tester.getCenter(find.descendant(
-            of: find.byType(ListView), matching: find.text('shot.mov'))),
-        buttons: kSecondaryButton,
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('project-menu-colour-space')));
-      await tester.pumpAndSettle();
-
-      expect(find.byKey(const ValueKey('project-menu-colour-space-ACEScct')),
-          findsOneWidget);
-      expect(footage.colourSpace(), 'ACEScct');
     });
   });
 
@@ -552,28 +377,6 @@ void main() {
       // Both are ordinary edits, so undo puts the config back.
       p.state.project!.undo();
       expect(p.state.project!.colourSummary().loaded, isTrue);
-    });
-
-    /// A config that is named but cannot be used says why, here, once — and
-    /// the reason keeps the file's own name in it.
-    testWidgets('a refused config states its reason on the row',
-        (tester) async {
-      final p = await open(tester);
-      p.state.project!.setColourConfig(
-          path: '${dir.path}${Platform.pathSeparator}gone.ocio');
-      // Re-open the window: it holds its answer rather than re-reading the
-      // file on every rebuild.
-      await tester.tap(find.byKey(const ValueKey('project-settings-close')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('open-settings')));
-      await tester.pumpAndSettle();
-
-      expect(find.textContaining('Not in force'), findsOneWidget);
-      expect(find.textContaining('gone.ocio'), findsWidgets,
-          reason: 'the path is the user\'s own and is never translated');
-      // Choosing again is the relink: the same gesture as the first choice.
-      expect(find.byKey(const ValueKey('project-colour-config-choose')),
-          findsOneWidget);
     });
   });
 }

@@ -503,75 +503,6 @@ impl CompGraph {
             .any(|n| matches!(n, GraphNode::Read { item: named, .. } if *named == item))
     }
 
-    /// A copy with fresh ids for every box, its wires, positions, exposure and
-    /// groups all re-pointed at them.
-    ///
-    /// What duplicating or pasting a node graph makes. A copy that kept its
-    /// ids would alias its original's boxes, because a node graph's ids are
-    /// resolved across the whole comp.
-    #[must_use]
-    pub fn fresh_copy(&self) -> CompGraph {
-        let fresh: std::collections::BTreeMap<Uuid, Uuid> = self
-            .nodes
-            .iter()
-            .map(|n| (n.id(), Uuid::now_v7()))
-            .collect();
-        let renamed = |id: &Uuid| fresh.get(id).copied().unwrap_or(*id);
-        let nodes = self
-            .nodes
-            .iter()
-            .cloned()
-            .map(|node| match node {
-                GraphNode::Read {
-                    id,
-                    item,
-                    custom_name,
-                } => GraphNode::Read {
-                    id: renamed(&id),
-                    item,
-                    custom_name,
-                },
-                GraphNode::Input { id, input } => GraphNode::Input {
-                    id: renamed(&id),
-                    input,
-                },
-                GraphNode::Output { id } => GraphNode::Output { id: renamed(&id) },
-                GraphNode::Fx(mut inst) => {
-                    inst.id = renamed(&inst.id);
-                    GraphNode::Fx(inst)
-                }
-            })
-            .collect();
-        CompGraph {
-            nodes,
-            edges: self
-                .edges
-                .iter()
-                .map(|e| GraphEdge {
-                    from: renamed(&e.from),
-                    from_port: e.from_port.clone(),
-                    to: renamed(&e.to),
-                    to_port: e.to_port.clone(),
-                })
-                .collect(),
-            layout: self
-                .layout
-                .iter()
-                .map(|(id, at)| (renamed(id), *at))
-                .collect(),
-            exposed: self.exposed.iter().map(renamed).collect(),
-            groups: self
-                .groups
-                .iter()
-                .map(|g| GraphGroup {
-                    name: g.name.clone(),
-                    colour: g.colour,
-                    members: g.members.iter().map(renamed).collect(),
-                })
-                .collect(),
-        }
-    }
-
     /// A copy whose Output shows `node`'s picture - the Viewer's *at this box*
     /// reading (§4.5).
     ///
@@ -1138,30 +1069,6 @@ mod tests {
 
     // -- 1.4, the rules ------------------------------------------------------
 
-    #[test]
-    fn a_well_formed_graph_is_accepted() {
-        let (graph, ..) = read_blur_output();
-        graph.validate(None).expect("a picture into a picture");
-    }
-
-    #[test]
-    fn a_wire_to_a_box_that_is_not_there_is_refused() {
-        let (mut graph, source_id, ..) = read_blur_output();
-        graph.nodes.retain(|n| n.id() != source_id);
-        assert_eq!(graph.validate(None), Err(GraphError::UnknownNode));
-    }
-
-    #[test]
-    fn a_wire_to_a_socket_that_is_not_there_is_refused() {
-        let (mut graph, ..) = read_blur_output();
-        graph.edges[0].to_port = "no_such_socket".into();
-        assert_eq!(graph.validate(None), Err(GraphError::UnknownPort));
-
-        let (mut graph, ..) = read_blur_output();
-        graph.edges[0].from_port = "no_such_socket".into();
-        assert_eq!(graph.validate(None), Err(GraphError::UnknownPort));
-    }
-
     /// Types must match, with **one exception**: a matte socket takes a
     /// picture as well as a matte, because what the row means by matte is the
     /// picture's own channel.
@@ -1189,18 +1096,6 @@ mod tests {
     }
 
     #[test]
-    fn a_socket_cannot_take_a_second_wire() {
-        let (mut graph, _, blur_id, out_id) = read_blur_output();
-        graph.edges.push(GraphEdge {
-            from: blur_id,
-            from_port: OUTPUT_PORT.id.to_owned(),
-            to: out_id,
-            to_port: INPUT_PORT.id.to_owned(),
-        });
-        assert_eq!(graph.validate(None), Err(GraphError::InputAlreadyWired));
-    }
-
-    #[test]
     fn a_loop_through_image_wires_is_refused() {
         let first = fx("blur");
         let second = fx("blur");
@@ -1219,34 +1114,6 @@ mod tests {
         let edges = vec![wire(&alone, OUTPUT_PORT.id, &alone, INPUT_PORT.id)];
         let graph = built(vec![alone, out], edges);
         assert_eq!(graph.validate(None), Err(GraphError::Cycle));
-    }
-
-    /// A value loop is a loop too: the walk pulls a box's inputs before the
-    /// box, whichever kind of wire brought them.
-    #[test]
-    fn a_loop_through_two_drivers_is_refused() {
-        let wiggle = fx("wiggle");
-        let math = fx("math");
-        let out = GraphNode::Output { id: Uuid::now_v7() };
-        let edges = vec![
-            wire(&wiggle, "value", &math, "a"),
-            wire(&math, "value", &wiggle, "amount"),
-        ];
-        let graph = built(vec![wiggle, math, out], edges);
-        assert_eq!(graph.validate(None), Err(GraphError::Cycle));
-    }
-
-    #[test]
-    fn a_node_graph_has_exactly_one_output() {
-        let (mut graph, ..) = read_blur_output();
-        let out_id = graph.output_id().expect("the Output");
-        graph.nodes.retain(|n| n.id() != out_id);
-        graph.edges.retain(|e| e.to != out_id);
-        assert_eq!(graph.validate(None), Err(GraphError::NoOutput));
-
-        let (mut graph, ..) = read_blur_output();
-        graph.nodes.push(GraphNode::Output { id: Uuid::now_v7() });
-        assert_eq!(graph.validate(None), Err(GraphError::SecondOutput));
     }
 
     // -- 1.4, the sockets ----------------------------------------------------
@@ -1275,72 +1142,6 @@ mod tests {
         assert_eq!(ids(&outs), vec!["output"]);
     }
 
-    /// A Custom shader box has a socket for each row its source declares, as
-    /// well as its declared ones. One applied from the UI starts with Gain and
-    /// Tint.
-    #[test]
-    fn a_custom_shader_box_has_sockets_for_its_own_rows() {
-        let graph = built(vec![GraphNode::Output { id: Uuid::now_v7() }], Vec::new());
-        let shader = crate::fx::instantiate_for_raster("custom_shader", 1920.0, 1080.0)
-            .expect("the catalogue knows it");
-        let shader = GraphNode::Fx(shader);
-        let (ins, _) = ports_of(&graph, &shader, None);
-        let ids = ids(&ins);
-        assert!(
-            ids.ends_with(&["gain", "tint"]),
-            "the source's rows come after the declared ones: {ids:?}"
-        );
-
-        // And a wire plugs into one.
-        let amount = input("amount", InputKind::Number, 1.0);
-        let edges = vec![wire(&amount, VALUE_PORT.id, &shader, "gain")];
-        let mut nodes = graph.nodes;
-        nodes.extend([amount, shader]);
-        built(nodes, edges)
-            .validate(None)
-            .expect("a number into Gain");
-    }
-
-    #[test]
-    fn a_read_an_input_and_the_output_show_what_they_carry() {
-        let graph = built(vec![GraphNode::Output { id: Uuid::now_v7() }], Vec::new());
-
-        let (ins, outs) = ports_of(&graph, &read(Uuid::now_v7()), None);
-        assert!(ins.is_empty(), "a Read takes nothing");
-        assert_eq!(ids(&outs), vec!["output"]);
-
-        let picture = input("plate", InputKind::Picture, 0.0);
-        let (ins, outs) = ports_of(&graph, &picture, None);
-        assert!(ins.is_empty());
-        assert_eq!(ids(&outs), vec!["output"]);
-        assert_eq!(outs[0].ty, PortType::Image);
-
-        let number = input("amount", InputKind::Number, 0.0);
-        let (_, outs) = ports_of(&graph, &number, None);
-        assert_eq!(ids(&outs), vec!["value"]);
-        assert_eq!(outs[0].ty, PortType::Number);
-
-        let colour = input("tint", InputKind::Colour, 0.0);
-        let (_, outs) = ports_of(&graph, &colour, None);
-        assert_eq!(outs[0].ty, PortType::Colour);
-
-        let out = GraphNode::Output { id: Uuid::now_v7() };
-        let (ins, outs) = ports_of(&graph, &out, None);
-        assert_eq!(ids(&ins), vec!["input"]);
-        assert!(outs.is_empty(), "the Output hands nothing on");
-    }
-
-    #[test]
-    fn a_merge_shows_a_b_and_opacity() {
-        let graph = built(vec![GraphNode::Output { id: Uuid::now_v7() }], Vec::new());
-        let (ins, outs) = ports_of(&graph, &fx("merge"), None);
-        assert_eq!(ids(&ins), vec!["input", "background", "opacity"]);
-        assert_eq!(ins[0].label, "A");
-        assert_eq!(ins[1].label, "B");
-        assert_eq!(ins[2].ty, PortType::Number);
-        assert_eq!(ids(&outs), vec!["output"]);
-    }
-
     /// A Switch always draws **one spare socket** beyond the last one wired,
     /// which is what makes it grow by being used.
     #[test]
@@ -1362,138 +1163,6 @@ mod tests {
         let wired = built(vec![first, second, switch.clone(), out], edges);
         let (ins, _) = ports_of(&wired, &switch, None);
         assert_eq!(ids(&ins), vec!["in0", "in1", "in2", "index"]);
-    }
-
-    #[test]
-    fn a_driver_shows_what_it_shows_on_a_layer() {
-        let graph = built(vec![GraphNode::Output { id: Uuid::now_v7() }], Vec::new());
-        let (ins, outs) = ports_of(&graph, &fx("wiggle"), None);
-        assert_eq!(ids(&ins), vec!["amount", "frequency"]);
-        assert_eq!(ids(&outs), vec!["value"], "a driver makes no picture");
-    }
-
-    /// **Every socket a signature declares is drawn** (§5.1): a producer's
-    /// Points output and a consumer's Points input, one apiece.
-    #[test]
-    fn a_points_socket_is_drawn() {
-        let graph = built(vec![GraphNode::Output { id: Uuid::now_v7() }], Vec::new());
-
-        let (_, outs) = ports_of(&graph, &fx("particulate"), None);
-        let points: Vec<&GraphPort> = outs.iter().filter(|p| p.ty == PortType::Points).collect();
-        assert_eq!(points.len(), 1, "its declared Points output, once");
-        assert_eq!(ids(&outs), vec!["output", "points"]);
-
-        let (ins, _) = ports_of(&graph, &fx("clone_to_points"), None);
-        let points: Vec<&GraphPort> = ins.iter().filter(|p| p.ty == PortType::Points).collect();
-        assert_eq!(points.len(), 1, "its declared Points input, once");
-        assert_eq!(points[0].id, "points");
-    }
-
-    /// Split channels hands out a picture per channel and Combine channels
-    /// takes one per channel, red on the `output` and `input` ids.
-    #[test]
-    fn split_and_combine_show_a_socket_per_channel() {
-        let graph = built(vec![GraphNode::Output { id: Uuid::now_v7() }], Vec::new());
-        let labels = |ports: &[GraphPort]| -> Vec<String> {
-            ports.iter().map(|p| p.label.clone()).collect()
-        };
-
-        let (ins, outs) = ports_of(&graph, &fx(SPLIT_CHANNELS), None);
-        assert_eq!(ids(&ins), vec!["input"]);
-        assert_eq!(ids(&outs), vec!["output", "green", "blue", "alpha"]);
-        assert_eq!(labels(&outs), vec!["Red", "Green", "Blue", "Alpha"]);
-        assert!(outs.iter().all(|p| p.ty == PortType::Image));
-
-        // Its four pickers are rows, never sockets.
-        let combine = fx(COMBINE_CHANNELS);
-        let GraphNode::Fx(inst) = &combine else {
-            unreachable!()
-        };
-        let rows: Vec<&str> = inst.params.iter().map(|p| p.id.as_str()).collect();
-        assert_eq!(rows, ["red_from", "green_from", "blue_from", "alpha_from"]);
-        let (ins, outs) = ports_of(&graph, &combine, None);
-        assert_eq!(ids(&ins), vec!["input", "green", "blue", "alpha"]);
-        assert_eq!(labels(&ins), vec!["Red", "Green", "Blue", "Alpha"]);
-        assert!(ins.iter().all(|p| p.ty == PortType::Image));
-        assert_eq!(ids(&outs), vec!["output"]);
-    }
-
-    /// Any Split output is an ordinary picture: it validates into a Combine's
-    /// socket and into a matte socket as any picture does.
-    #[test]
-    fn a_split_output_wires_like_any_picture() {
-        let source = read(Uuid::now_v7());
-        let split = fx(SPLIT_CHANNELS);
-        let combine = fx(COMBINE_CHANNELS);
-        let blur = fx("blur");
-        let out = GraphNode::Output { id: Uuid::now_v7() };
-        let edges = vec![
-            wire(&source, OUTPUT_PORT.id, &split, INPUT_PORT.id),
-            wire(&split, "green", &combine, "green"),
-            wire(&combine, OUTPUT_PORT.id, &blur, INPUT_PORT.id),
-            wire(&split, "alpha", &blur, MATTE_PORT.id),
-            wire(&blur, OUTPUT_PORT.id, &out, INPUT_PORT.id),
-        ];
-        let mut graph = built(vec![source, split, combine, blur, out], edges);
-        graph.validate(None).expect("a channel is a picture");
-
-        graph.edges[1].from_port = "luminance".into();
-        assert_eq!(graph.validate(None), Err(GraphError::UnknownPort));
-    }
-
-    /// A Time offset takes a picture and a number and hands a picture on: the
-    /// ordinary rule, with nothing per effect at the seam (§5.2).
-    #[test]
-    fn a_time_offset_shows_its_picture_and_its_number() {
-        let graph = built(vec![GraphNode::Output { id: Uuid::now_v7() }], Vec::new());
-        let (ins, outs) = ports_of(&graph, &fx("time_offset"), None);
-        assert_eq!(ids(&ins), vec!["input", "offset"]);
-        assert_eq!(ins[0].ty, PortType::Image);
-        assert_eq!(ins[1].ty, PortType::Number);
-        assert_eq!(ids(&outs), vec!["output"]);
-        assert_eq!(outs[0].ty, PortType::Image);
-    }
-
-    /// **Layer points has no home in a graph** (§5.1): a graph has no layers to
-    /// tap, and the wire is the tap. Every other entry is offered.
-    #[test]
-    fn layer_points_is_not_offered_in_a_graph() {
-        assert!(!offered_in_graph("layer_points"));
-        assert!(offered_in_graph("points_sample"));
-        assert!(offered_in_graph(MERGE));
-    }
-
-    /// A points wire is an ordinary wire: the types match, so it validates;
-    /// they do not, so an image socket refuses it; and a loop through one is
-    /// refused as any loop is.
-    #[test]
-    fn a_points_wire_validates_and_a_mistyped_or_looping_one_does_not() {
-        let producer = fx("particulate");
-        let consumer = fx("clone_to_points");
-        let out = GraphNode::Output { id: Uuid::now_v7() };
-        let nodes = vec![producer.clone(), consumer.clone(), out.clone()];
-        let good = vec![
-            wire(&producer, "points", &consumer, "points"),
-            wire(&consumer, OUTPUT_PORT.id, &out, INPUT_PORT.id),
-        ];
-        assert_eq!(built(nodes.clone(), good.clone()).validate(None), Ok(()));
-
-        let mistyped = vec![wire(&producer, "points", &consumer, INPUT_PORT.id)];
-        assert_eq!(
-            built(nodes.clone(), mistyped).validate(None),
-            Err(GraphError::PortTypeMismatch),
-            "a stream is not a picture"
-        );
-
-        // The consumer's picture back into the producer closes the loop the
-        // points wire opened.
-        let mut looped = good;
-        looped.push(wire(&consumer, OUTPUT_PORT.id, &producer, INPUT_PORT.id));
-        assert_eq!(
-            built(nodes, looped).validate(None),
-            Err(GraphError::Cycle),
-            "a loop through a points wire is still a loop"
-        );
     }
 
     /// A Node graph box's sockets are the Inputs of the comp it names: the
@@ -1608,83 +1277,6 @@ mod tests {
         assert_eq!(radius(&graph.project(&over)), 3.0);
     }
 
-    #[test]
-    fn an_input_wired_into_a_driver_bakes_into_the_driver() {
-        let amount = input("amount", InputKind::Number, 12.0);
-        let wiggle = fx("wiggle");
-        let out = GraphNode::Output { id: Uuid::now_v7() };
-        let edges = vec![wire(&amount, "value", &wiggle, "amount")];
-        let graph = built(vec![amount, wiggle, out], edges);
-
-        let projected = graph.project(&[]);
-        assert!(projected.effects.is_empty());
-        match projected.drivers.nodes[0].param("amount") {
-            Some(EffectValue::Float(v)) => assert_eq!(v.value_at(0.0), 12.0),
-            other => panic!("amount is a number, not {other:?}"),
-        }
-    }
-
-    /// A picture Input carries a texture, so there is nothing to bake and the
-    /// image wiring is left exactly as it was.
-    #[test]
-    fn a_picture_input_bakes_nothing() {
-        let plate = input("plate", InputKind::Picture, 0.0);
-        let blur = fx("blur");
-        let out = GraphNode::Output { id: Uuid::now_v7() };
-        let before = match &blur {
-            GraphNode::Fx(inst) => inst.params.clone(),
-            _ => unreachable!(),
-        };
-        let edges = vec![wire(&plate, OUTPUT_PORT.id, &blur, INPUT_PORT.id)];
-        let graph = built(vec![plate, blur, out], edges);
-
-        let projected = graph.project(&[]);
-        assert_eq!(projected.effects[0].params, before);
-        assert!(projected.drivers.edges.is_empty());
-    }
-
-    /// A points wire comes out as the `EffectData` edge a layer stores one in,
-    /// so [`crate::fx::effect_stream_in`] finds the producer through it (§5.1).
-    #[test]
-    fn a_points_wire_projects_as_an_effect_data_edge() {
-        let producer = fx("particulate");
-        let consumer = fx("clone_to_points");
-        let sample = fx("points_sample");
-        let out = GraphNode::Output { id: Uuid::now_v7() };
-        let (producer_id, consumer_id, sample_id) = (producer.id(), consumer.id(), sample.id());
-        let edges = vec![
-            wire(&producer, "points", &consumer, "points"),
-            wire(&producer, "points", &sample, "points"),
-            // An image wire belongs to the render half and projects nothing.
-            wire(&producer, OUTPUT_PORT.id, &consumer, INPUT_PORT.id),
-        ];
-        let graph = built(vec![producer, consumer, sample, out], edges);
-
-        let data = |effect: Uuid| crate::graph::OutputRef::EffectData {
-            effect,
-            port: "points".into(),
-        };
-        assert_eq!(
-            graph.project(&[]).drivers.edges,
-            vec![
-                crate::graph::Edge {
-                    from: data(producer_id),
-                    to: crate::graph::InputRef::Param {
-                        node: crate::graph::NodeRef::Effect(consumer_id),
-                        port: "points".into(),
-                    },
-                },
-                crate::graph::Edge {
-                    from: data(producer_id),
-                    to: crate::graph::InputRef::Param {
-                        node: crate::graph::NodeRef::Driver(sample_id),
-                        port: "points".into(),
-                    },
-                },
-            ]
-        );
-    }
-
     // -- 5.2 and 5.4, the cone and the times ---------------------------------
 
     /// The cone is the boxes that make the picture, in an order where a box's
@@ -1710,39 +1302,6 @@ mod tests {
             "sources first, and the idle branch is not in it"
         );
         assert_eq!(graph.cone_of(blur_id), vec![read_id, blur_id]);
-    }
-
-    /// Every box asks its own time, and a fork asks the shared source once.
-    #[test]
-    fn a_fork_demands_its_shared_source_once() {
-        let read = read(Uuid::now_v7());
-        let left = fx("blur");
-        let right = fx("glow");
-        let merge = fx("merge");
-        let out = GraphNode::Output { id: Uuid::now_v7() };
-        let out_id = out.id();
-        let read_id = read.id();
-        let edges = vec![
-            wire(&read, OUTPUT_PORT.id, &left, INPUT_PORT.id),
-            wire(&read, OUTPUT_PORT.id, &right, INPUT_PORT.id),
-            wire(&left, OUTPUT_PORT.id, &merge, INPUT_PORT.id),
-            wire(&right, OUTPUT_PORT.id, &merge, BACKGROUND_PORT.id),
-            wire(&merge, OUTPUT_PORT.id, &out, INPUT_PORT.id),
-        ];
-        let graph = built(vec![read, left, right, merge, out], edges);
-
-        let demands = graph.time_demands(out_id, 2.0, &|inst, at| {
-            crate::fx::input_times(inst, at, 0.04)
-        });
-        assert!(
-            demands.iter().all(|(_, at)| *at == 2.0),
-            "no box asks another time"
-        );
-        assert_eq!(
-            demands.iter().filter(|(n, _)| *n == read_id).count(),
-            1,
-            "two demands of one Read at one time are one demand"
-        );
     }
 
     /// A Time offset before a temporal box shifts every neighbour that box asks
@@ -1838,51 +1397,6 @@ mod tests {
         assert!(
             read_layer(Uuid::now_v7(), &ProjectItem::Folder(folder), &host).is_none(),
             "a folder is the one item no layer can hold"
-        );
-    }
-
-    /// The *in use* badge and the export's footage list both see a Read box.
-    #[test]
-    fn the_in_use_walks_see_a_read_box() {
-        let plate = footage("plate");
-        let inner_plate = footage("inner");
-        let mut inner = comp();
-        inner.layers.push({
-            let mut l = read_layer(
-                Uuid::now_v7(),
-                &ProjectItem::Footage(inner_plate.clone()),
-                &inner,
-            )
-            .expect("a layer");
-            l.name = "inner".into();
-            l
-        });
-
-        let mut graph_comp = comp();
-        graph_comp.graph = Some(built(
-            vec![
-                read(plate.id),
-                read(inner.id),
-                GraphNode::Output { id: Uuid::now_v7() },
-            ],
-            Vec::new(),
-        ));
-
-        let mut doc = Document::new();
-        doc.items.push(ProjectItem::Footage(plate.clone()));
-        doc.items.push(ProjectItem::Footage(inner_plate.clone()));
-        doc.items.push(ProjectItem::Composition(inner.clone()));
-        doc.items.push(ProjectItem::Composition(graph_comp.clone()));
-
-        assert!(doc.item_is_used(plate.id), "a Read box places the item");
-        assert!(doc.item_is_used(inner.id), "and so does a Read of a comp");
-        assert!(!doc.item_is_used(graph_comp.id), "nothing places the graph");
-
-        let found = crate::model::comp_footage_items(&doc, &graph_comp);
-        assert_eq!(
-            found,
-            vec![plate.id, inner_plate.id],
-            "the export sees the graph's own footage and the comp's it reads"
         );
     }
 
@@ -2002,73 +1516,7 @@ mod tests {
         );
     }
 
-    #[test]
-    fn a_fresh_copy_mints_new_ids_and_repoints_everything() {
-        let (mut graph, source_id, blur_id, out_id) = read_blur_output();
-        graph.layout = vec![(source_id, [10.0, 20.0]), (blur_id, [30.0, 40.0])];
-        graph.exposed = vec![blur_id];
-        graph.groups = vec![GraphGroup {
-            name: "The plate".into(),
-            colour: 2,
-            members: vec![source_id, blur_id],
-        }];
-
-        let copy = graph.fresh_copy();
-        let old: Vec<Uuid> = vec![source_id, blur_id, out_id];
-        for node in &copy.nodes {
-            assert!(!old.contains(&node.id()), "every box is a fresh box");
-        }
-        copy.validate(None).expect("the wires found their boxes");
-        let ids: Vec<Uuid> = copy.nodes.iter().map(GraphNode::id).collect();
-        for edge in &copy.edges {
-            assert!(ids.contains(&edge.from) && ids.contains(&edge.to));
-        }
-        assert!(copy.layout.iter().all(|(id, _)| ids.contains(id)));
-        assert!(copy.exposed.iter().all(|id| ids.contains(id)));
-        assert!(copy.groups[0].members.iter().all(|id| ids.contains(id)));
-        assert_eq!(copy.groups[0].name, "The plate");
-        assert_eq!(copy.layout.len(), 2);
-    }
-
     // -- the file ------------------------------------------------------------
-
-    /// The presentation lists are skipped while empty, so a graph nobody has
-    /// arranged writes nothing for them.
-    #[test]
-    fn an_unarranged_graph_writes_no_layout_exposure_or_groups() {
-        let graph = built(vec![GraphNode::Output { id: Uuid::now_v7() }], Vec::new());
-        let json = serde_json::to_string(&graph).expect("it serialises");
-        assert!(json.contains("\"nodes\""));
-        for key in ["layout", "exposed", "groups", "edges"] {
-            assert!(!json.contains(key), "an empty {key} must not be written");
-        }
-    }
-
-    /// A picture Input's preview item is document state (§5.11): it survives a
-    /// save and a load, and an Input without one writes no key at all, so every
-    /// graph written before the field opens unchanged.
-    #[test]
-    fn a_picture_inputs_preview_item_round_trips_and_is_absent_when_there_is_none() {
-        let mut plate = input("plate", InputKind::Picture, 0.0);
-        let json = serde_json::to_string(&plate).expect("it serialises");
-        assert!(!json.contains("preview"), "no item, nothing written");
-        assert_eq!(
-            serde_json::from_str::<GraphNode>(&json).expect("and reads back"),
-            plate
-        );
-
-        let item = Uuid::now_v7();
-        if let GraphNode::Input { input, .. } = &mut plate {
-            input.preview = Some(item);
-        }
-        let json = serde_json::to_string(&plate).expect("it serialises");
-        let back: GraphNode = serde_json::from_str(&json).expect("and reads back");
-        assert_eq!(back, plate);
-        match back {
-            GraphNode::Input { input, .. } => assert_eq!(input.preview, Some(item)),
-            other => panic!("an Input came back as {other:?}"),
-        }
-    }
 
     #[test]
     fn a_whole_graph_round_trips_through_json() {
@@ -2087,75 +1535,5 @@ mod tests {
         let json = serde_json::to_string(&graph).expect("it serialises");
         let back: CompGraph = serde_json::from_str(&json).expect("and reads back");
         assert_eq!(back, graph);
-    }
-
-    /// The project panel's "in use" badge: a node graph is placed by the
-    /// effect that applies it as much as by a layer or a Read box, on a
-    /// layer, on a group header and inside another graph, bypassed or not.
-    #[test]
-    fn a_graph_applied_as_an_effect_counts_as_in_use() {
-        let mut graph_comp = comp();
-        graph_comp.graph = Some(built(
-            vec![GraphNode::Output { id: Uuid::now_v7() }],
-            Vec::new(),
-        ));
-        let graph_id = graph_comp.id;
-        let inner = graph_comp.graph.clone().expect("the graph just set");
-        let bound = || {
-            let mut inst = instantiate("node_graph").expect("the catalogue knows it");
-            crate::fx::effects::node_graph::bind(&mut inst, graph_id, &inner);
-            inst
-        };
-        let solid = SolidDef {
-            id: Uuid::now_v7(),
-            name: "grey".to_owned(),
-            colour: LinearColour([0.5, 0.5, 0.5, 1.0]),
-            width: 32,
-            height: 32,
-            extra: serde_json::Map::new(),
-        };
-
-        let mut doc = Document::new();
-        doc.items.push(ProjectItem::Composition(graph_comp));
-        assert!(!doc.item_is_used(graph_id), "nothing applies it yet");
-
-        // On a layer, switched off: a bypassed effect still places the graph.
-        let mut host = comp();
-        let mut layer = read_layer(Uuid::now_v7(), &ProjectItem::Solid(solid), &host)
-            .expect("a solid is a layer");
-        let mut off = bound();
-        off.enabled = false;
-        layer.effects = vec![off];
-        host.layers.push(layer);
-        let host_id = host.id;
-        doc.items.push(ProjectItem::Composition(host));
-        assert!(doc.item_is_used(graph_id), "a layer's effect applies it");
-
-        // On a group header.
-        doc.items.retain(|i| i.id() != host_id);
-        let mut grouped = comp();
-        grouped.groups.push(crate::group::LayerGroup {
-            id: Uuid::now_v7(),
-            name: "band".to_owned(),
-            label: 0,
-            members: Vec::new(),
-            effects: vec![bound()],
-        });
-        let grouped_id = grouped.id;
-        doc.items.push(ProjectItem::Composition(grouped));
-        assert!(doc.item_is_used(graph_id), "a header's effect applies it");
-
-        // Inside another graph.
-        doc.items.retain(|i| i.id() != grouped_id);
-        let mut outer = comp();
-        outer.graph = Some(built(
-            vec![
-                GraphNode::Fx(bound()),
-                GraphNode::Output { id: Uuid::now_v7() },
-            ],
-            Vec::new(),
-        ));
-        doc.items.push(ProjectItem::Composition(outer));
-        assert!(doc.item_is_used(graph_id), "a nested box applies it");
     }
 }

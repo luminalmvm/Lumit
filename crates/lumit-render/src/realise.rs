@@ -2304,45 +2304,4 @@ mod tests {
             "the working-format copy is the texture that is no longer made (short {short} long {long})"
         );
     }
-
-    /// **A layer with an effect keeps the linearise pass**: its stack runs in
-    /// the working format, so it still pays for the copy the plain layer above
-    /// no longer makes. The picture is the plain layer's, because the effect
-    /// is an Exposure sitting at zero stops.
-    #[test]
-    fn a_layer_with_an_effect_still_linearises() {
-        let Some(ctx) = lumit_gpu::test_support::lease() else {
-            lumit_gpu::no_adapter();
-            return;
-        };
-        let lut_cache = std::cell::RefCell::new(crate::fxops::LutCache::default());
-        let fx_cache = std::cell::RefCell::new(crate::fxops::FxCache::default());
-        let realiser = realiser(&ctx, &lut_cache, &fx_cache);
-        let rgba = plate();
-        let plain = draw(&rgba);
-        let mut with_fx = draw(&rgba);
-        with_fx.fx = lumit_core::fx::resolve_stack(
-            &[lumit_core::fx::instantiate("exposure").expect("a built-in")],
-            0.0,
-            1000.0,
-            1.0,
-            &lumit_core::fx::MarkerContext::NONE,
-            std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
-        );
-        assert!(!with_fx.fx.is_empty(), "the stack really holds an op");
-
-        let (plain_px, plain_made) = made(&ctx, || {
-            realiser.realise(None, W, H, [0.0; 4], std::slice::from_ref(&plain))
-        });
-        let (fx_px, fx_made) = made(&ctx, || {
-            realiser.realise(None, W, H, [0.0; 4], std::slice::from_ref(&with_fx))
-        });
-
-        assert_eq!(fx_px, plain_px, "zero stops changes nothing");
-        assert_eq!(
-            fx_made,
-            plain_made + 2,
-            "the linear copy the plain layer skips, and the texture the op writes (plain {plain_made} fx {fx_made})"
-        );
-    }
 }

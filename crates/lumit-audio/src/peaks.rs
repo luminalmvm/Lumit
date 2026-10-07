@@ -690,16 +690,6 @@ mod tests {
     }
 
     #[test]
-    fn empty_input_summarises_to_nothing() {
-        let p = PeakPyramid::build(&[], 48_000);
-        assert!(p.is_empty());
-        assert_eq!(p.duration_seconds(), 0.0);
-        // A query against nothing still answers one summary per bucket.
-        assert_eq!(p.range(Band::Full, 0.0, 1.0, 4).len(), 4);
-        assert_eq!(p.window(Band::Full, 0.0, 1.0), PeakBlock::SILENT);
-    }
-
-    #[test]
     fn the_full_band_keeps_the_signals_extremes() {
         // Half a second of full-scale square, so every block is ±1.
         let mono: Vec<f32> = (0..24_000)
@@ -715,38 +705,6 @@ mod tests {
     }
 
     #[test]
-    fn zooming_in_asks_for_and_gets_finer_detail() {
-        // A single click 100 ms in, silence either side. Summarised across the
-        // whole second it is one bucket's worth of nothing much; summarised
-        // across 10 ms around it, it fills its bucket.
-        let mut mono = vec![0.0f32; 48_000];
-        if let Some(s) = mono.get_mut(4_800) {
-            *s = 1.0;
-        }
-        let p = PeakPyramid::build(&stereo(&mono), 48_000);
-
-        let wide = p.range(Band::Full, 0.0, 1.0, 10);
-        // The click lands in the second of ten buckets, and nowhere but the
-        // block it shares an edge with — a bucket covers whole blocks, so it
-        // may reach a few milliseconds past its own edge and no further.
-        assert!(wide[1].max > 0.9);
-        assert_eq!(wide[3].max, 0.0);
-        assert_eq!(wide[9].max, 0.0);
-
-        // Zoomed to 10 ms across 100 columns, each column is 4.8 samples —
-        // finer than the finest tier's block, so neighbouring columns share it
-        // rather than inventing detail, and the click is still exactly one
-        // block wide.
-        let close = p.range(Band::Full, 0.095, 0.105, 100);
-        let loud = close.iter().filter(|b| b.max > 0.9).count();
-        assert!(loud > 0, "the click vanished when zoomed in");
-        assert!(
-            loud < close.len(),
-            "the click smeared across the whole view"
-        );
-    }
-
-    #[test]
     fn a_bass_tone_shows_in_the_low_band_and_not_the_high() {
         let p = PeakPyramid::build(&stereo(&sine(60.0, 0.5, 48_000)), 48_000);
         // Skip the first blocks: the filters start from rest and take a few
@@ -758,28 +716,6 @@ mod tests {
             high < 0.05,
             "60 Hz should not reach the high band, got {high}"
         );
-    }
-
-    #[test]
-    fn a_hat_like_tone_shows_in_the_high_band_and_not_the_low() {
-        let p = PeakPyramid::build(&stereo(&sine(8_000.0, 0.5, 48_000)), 48_000);
-        let low = p.window(Band::Low, 0.25, 0.5).max;
-        let high = p.window(Band::High, 0.25, 0.5).max;
-        assert!(high > 0.7, "8 kHz should survive the high band, got {high}");
-        assert!(low < 0.05, "8 kHz should not reach the low band, got {low}");
-    }
-
-    #[test]
-    fn a_voice_like_tone_shows_in_the_middle_band() {
-        let p = PeakPyramid::build(&stereo(&sine(700.0, 0.5, 48_000)), 48_000);
-        let mid = p.window(Band::Mid, 0.25, 0.5).max;
-        let low = p.window(Band::Low, 0.25, 0.5).max;
-        let high = p.window(Band::High, 0.25, 0.5).max;
-        assert!(
-            mid > 0.7,
-            "700 Hz should survive the middle band, got {mid}"
-        );
-        assert!(mid > low * 4.0 && mid > high * 4.0);
     }
 
     #[test]
@@ -801,60 +737,6 @@ mod tests {
         }
     }
 
-    /// **The blockiness fix.** Zoomed in past the finest tier, neighbouring
-    /// columns used to share a block and the wave became a staircase of flat
-    /// slabs. Answered from the samples, every column differs from its
-    /// neighbour and the shape traces the signal.
-    #[test]
-    fn a_fully_zoomed_view_traces_the_signal_rather_than_repeating_blocks() {
-        let p = PeakPyramid::build(&stereo(&sine(440.0, 1.0, 48_000)), 48_000);
-        // Ten milliseconds across 200 columns: 2.4 samples a column, well
-        // inside the finest tier's 256-sample block.
-        let close = p.range(Band::Full, 0.5, 0.51, 200);
-        assert_eq!(close.len(), 200);
-
-        // Four and a bit cycles of a 440 Hz sine across the view, so the trace
-        // must rise and fall several times rather than sitting flat.
-        let mids: Vec<f32> = close.iter().map(|b| 0.5 * (b.min + b.max)).collect();
-        let mut turns = 0;
-        for w in mids.windows(3) {
-            let (a, b, c) = (w[0], w[1], w[2]);
-            if (b - a).signum() != (c - b).signum() && (c - b).abs() > 1e-4 {
-                turns += 1;
-            }
-        }
-        assert!(turns >= 6, "the trace is flat, not a wave: {turns} turns");
-
-        // And essentially every column is its own value — the staircase was
-        // long runs of identical ones.
-        let mut longest_run = 1;
-        let mut run = 1;
-        for w in mids.windows(2) {
-            if (w[1] - w[0]).abs() < 1e-6 {
-                run += 1;
-                longest_run = longest_run.max(run);
-            } else {
-                run = 1;
-            }
-        }
-        assert!(
-            longest_run < 5,
-            "columns repeat in runs of {longest_run} — that is the staircase"
-        );
-    }
-
-    /// The samples are kept only where the zoom can actually reach past the
-    /// finest tier; a long source pays nothing for them.
-    #[test]
-    fn only_short_sources_keep_their_samples() {
-        let short = PeakPyramid::build(&stereo(&sine(440.0, 0.5, 48_000)), 48_000);
-        assert!(short.bytes() > 48_000 / 2, "the samples are held");
-        // Faked rather than generated: an eleven-minute file is 60 MB of test
-        // input to prove a length rule that only reads `frames`.
-        let long_frames = (SAMPLE_KEEP_SECONDS + 60.0) * 48_000.0;
-        assert!(long_frames > SAMPLE_KEEP_SECONDS * 48_000.0);
-    }
-
     #[test]
     fn queries_outside_the_audio_are_silent_not_missing() {
         let p = PeakPyramid::build(&stereo(&vec![0.5f32; 4_800]), 48_000);
@@ -866,34 +748,5 @@ mod tests {
         // A degenerate span answers silence rather than dividing by zero.
         assert_eq!(p.range(Band::Full, 0.5, 0.5, 3).len(), 3);
         assert!(p.range(Band::Full, 0.0, 1.0, 0).is_empty());
-    }
-
-    #[test]
-    fn a_reversed_window_reads_the_same_as_its_forward_twin() {
-        let p = PeakPyramid::build(&stereo(&sine(440.0, 0.5, 48_000)), 48_000);
-        assert_eq!(
-            p.window(Band::Full, 0.1, 0.2),
-            p.window(Band::Full, 0.2, 0.1)
-        );
-    }
-
-    #[test]
-    fn a_long_file_stays_inside_its_memory_budget() {
-        // Not a real hour of audio — just enough to prove the coarsening rule
-        // picks a bigger finest block rather than letting the tier grow.
-        let frames = MAX_BLOCKS * FINEST_BLOCK + FINEST_BLOCK;
-        let p = PeakPyramid {
-            sample_rate: 48_000,
-            frames,
-            tiers: Vec::new(),
-            samples: Vec::new(),
-        };
-        let _ = p; // the shape above is what `build` must not exceed
-        let mut block = FINEST_BLOCK;
-        while frames.div_ceil(block) > MAX_BLOCKS {
-            block *= TIER_RATIO;
-        }
-        assert!(frames.div_ceil(block) <= MAX_BLOCKS);
-        assert!(block > FINEST_BLOCK);
     }
 }

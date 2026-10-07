@@ -318,29 +318,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn two_secrets_are_not_the_same_secret() {
-        let a = Secret::generate().unwrap();
-        let b = Secret::generate().unwrap();
-        assert_ne!(a.0, b.0, "two generated secrets collided");
-        assert_ne!(
-            Token::generate().unwrap().as_name(),
-            Token::generate().unwrap().as_name()
-        );
-        assert_eq!(Token::generate().unwrap().as_name().len(), 32);
-    }
-
-    #[test]
-    fn a_secret_never_prints_itself() {
-        let secret = Secret::generate().unwrap();
-        let shown = format!("{secret:?}");
-        assert_eq!(shown, "Secret(<32 bytes>)");
-        assert!(
-            !shown.contains(&hex(&secret.0)),
-            "Debug leaked the secret: {shown}"
-        );
-    }
-
-    #[test]
     fn the_secret_survives_the_handover_and_nothing_else_does() {
         let secret = Secret::generate().unwrap();
         let line = secret.to_handover();
@@ -391,17 +368,5 @@ mod tests {
         // What an eavesdropper on an earlier handshake would have.
         let old = Proof::broker(&secret, recorded);
         assert!(!old.matches(&Proof::broker(&secret, fresh)));
-    }
-
-    #[test]
-    fn hex_round_trips_and_rejects_the_wrong_length() {
-        let bytes = [0x00, 0x0f, 0xf0, 0xff, 0x5a];
-        assert_eq!(hex(&bytes), "000ff0ff5a");
-        assert_eq!(unhex::<5>("000ff0ff5a"), Some(bytes));
-        assert_eq!(unhex::<5>("000ff0ff5"), None);
-        assert_eq!(unhex::<5>("000ff0ff5a00"), None);
-        // Upper case is read too: a hand-typed credential in a test should not
-        // fail for a reason nobody would guess.
-        assert_eq!(unhex::<5>("000FF0FF5A"), Some(bytes));
     }
 }

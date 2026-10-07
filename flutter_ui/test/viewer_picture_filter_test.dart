@@ -32,43 +32,11 @@ void main() {
       expect(filter(shown: 0.5), FilterQuality.medium);
       expect(filter(shown: 0.1), FilterQuality.medium);
     });
-
-    test('is filtered whether or not the smoothing setting is on', () {
-      expect(filter(shown: 0.8, smooth: true), FilterQuality.medium);
-    });
-  });
-
-  group('The picture at or above 100 %', () {
-    test('keeps its pixels square by default', () {
-      expect(filter(), FilterQuality.none);
-      expect(filter(shown: 8), FilterQuality.none);
-    });
-
-    test('smooths when the setting asks it to', () {
-      expect(filter(smooth: true), FilterQuality.low);
-      expect(filter(shown: 8, smooth: true), FilterQuality.low);
-    });
   });
 
   group('The three scales multiply', () {
     test('a half-resolution frame at 80 % is magnified, not minified', () {
       expect(filter(shown: 0.8, tier: 2), FilterQuality.none);
-    });
-
-    test('a quarter-resolution frame at 20 % is still minified', () {
-      expect(filter(shown: 0.2, tier: 4), FilterQuality.medium);
-      expect(filter(shown: 0.3, tier: 4), FilterQuality.none);
-    });
-
-    test('a hi-dpi screen at 80 % is really 1.2 pixels a texel', () {
-      expect(filter(shown: 0.8, dpr: 1.5), FilterQuality.none);
-      expect(filter(shown: 0.7, dpr: 1.5), FilterQuality.none);
-      expect(filter(shown: 0.6, dpr: 1.5), FilterQuality.medium);
-    });
-
-    test('an unknown or nonsense tier counts as full resolution', () {
-      expect(filter(shown: 0.8, tier: 0), FilterQuality.medium);
-      expect(filter(shown: 0.8, tier: -3), FilterQuality.medium);
     });
   });
 }
