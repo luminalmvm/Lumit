@@ -2812,6 +2812,26 @@ impl BridgeEffectInstance {
         lumit_core::fx::drivers::expression::set_source(&mut self.effect, &source);
     }
 
+    /// Stage one more number input on an Expression box and answer its name,
+    /// which is the word the expression reads it by. `None` when the box holds
+    /// as many as it can. The graph's own commit writes it.
+    #[frb(sync)]
+    pub fn add_expression_input(&mut self) -> Option<String> {
+        let name = lumit_core::fx::drivers::expression::add_input(&mut self.effect)?;
+        self.offered.extend(fill_derived(&mut self.effect));
+        Some(name.to_owned())
+    }
+
+    /// Stage the removal of an Expression box's last input and answer its
+    /// name, so the caller can take its wire off in the same commit. `None`
+    /// for a box with no inputs.
+    #[frb(sync)]
+    pub fn remove_expression_input(&mut self) -> Option<String> {
+        let name = lumit_core::fx::drivers::expression::remove_input(&mut self.effect)?;
+        self.offered.retain(|id| id != name);
+        Some(name.to_owned())
+    }
+
     /// The node graph composition this instance applies, for a **Node graph**
     /// effect, and `None` for every other effect and for one nobody has bound.
     ///

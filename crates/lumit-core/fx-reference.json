@@ -20329,6 +20329,18 @@
           "label": "Edit expression…",
           "kind": "action",
           "unit": "raw"
+        },
+        {
+          "id": "add_input",
+          "label": "Add input",
+          "kind": "action",
+          "unit": "raw"
+        },
+        {
+          "id": "remove_input",
+          "label": "Remove input",
+          "kind": "action",
+          "unit": "raw"
         }
       ],
       "groups": [],

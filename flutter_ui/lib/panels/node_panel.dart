@@ -438,15 +438,15 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
                             scale: ui.viewerScale,
                             layer: layer,
                             effects: staged));
-    if (picked.info.name == 'expression' && param == 'edit') {
-      if (home != null) {
+    if (picked.info.name == 'expression' &&
+        home != null &&
         editExpressionOn(
           context: context,
           home: home,
           effect: effect,
+          param: param,
           onApplied: ui.model.refresh,
-        );
-      }
+        )) {
       return;
     }
     if (picked.info.name == 'custom_shader' &&
