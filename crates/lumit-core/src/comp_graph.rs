@@ -413,10 +413,56 @@ fn fx_ports(
     }
 
     let mut outs = if driver { Vec::new() } else { out };
+    outs.extend(view_ports(inst));
     for port in signature.outputs() {
         outs.push(GraphPort::of(*port));
     }
     (ins, outs)
+}
+
+/// The view menu `inst`'s effect declares: its parameter id and its options.
+fn view_menu(inst: &EffectInstance) -> Option<(&'static str, &'static [&'static str])> {
+    let def = crate::fx::def(&inst.effect.match_name)?;
+    let param = def.view()?;
+    def.schema().params.iter().find_map(|p| match p.kind {
+        ParamKind::Choice { options, .. } if p.id == param => Some((param, options)),
+        _ => None,
+    })
+}
+
+/// The output sockets a view menu gives a box: one picture per option, named
+/// by the menu's parameter and the option's place in it, `display_2` for Depth
+/// of field's Focus map.
+///
+/// They sit beside `output`, which still draws whatever the dropdown says, so a
+/// graph saved before these existed reads as it did. Empty for every effect
+/// that declares no view.
+#[must_use]
+pub fn view_ports(inst: &EffectInstance) -> Vec<GraphPort> {
+    let Some((param, options)) = view_menu(inst) else {
+        return Vec::new();
+    };
+    options
+        .iter()
+        .enumerate()
+        .map(|(i, label)| GraphPort::new(format!("{param}_{i}"), *label, PortType::Image))
+        .collect()
+}
+
+/// `inst` with its view menu held on the option `port` stands for, which is
+/// the effect that socket draws. `None` for a socket that is not a view.
+///
+/// The held value is fixed, so keyframes on the dropdown move `output` alone.
+#[must_use]
+pub fn held_on_view(inst: &EffectInstance, port: &str) -> Option<EffectInstance> {
+    let (param, options) = view_menu(inst)?;
+    let option: u32 = port.strip_prefix(param)?.strip_prefix('_')?.parse().ok()?;
+    if option as usize >= options.len() {
+        return None;
+    }
+    let mut held = inst.clone();
+    set_param(&mut held, param, EffectValue::Choice(option));
+    Some(held)
 }
 
 /// As many pictures as one Switch may choose between.
@@ -1141,6 +1187,52 @@ mod tests {
         );
         assert_eq!(ins[3].ty, PortType::Number);
         assert_eq!(ids(&outs), vec!["output"]);
+    }
+
+    /// A view menu gives the box a socket per option beside `output`, and a
+    /// graph that only ever wired `output` is still a sound one.
+    #[test]
+    fn a_view_menu_gives_the_box_a_socket_per_option() {
+        let (source, dof, out) = (
+            read(Uuid::now_v7()),
+            fx("dof"),
+            GraphNode::Output { id: Uuid::now_v7() },
+        );
+        let graph = |from: &str| {
+            built(
+                vec![source.clone(), dof.clone(), out.clone()],
+                vec![
+                    wire(&source, OUTPUT_PORT.id, &dof, INPUT_PORT.id),
+                    wire(&dof, from, &out, INPUT_PORT.id),
+                ],
+            )
+        };
+        let (_, outs) = ports_of(&graph("output"), &dof, None);
+        assert_eq!(
+            ids(&outs),
+            vec!["output", "display_0", "display_1", "display_2"]
+        );
+        assert_eq!(outs[3].label, "Focus map");
+        assert_eq!(outs[3].ty, PortType::Image);
+
+        assert_eq!(graph("output").validate(None), Ok(()));
+        assert_eq!(graph("display_2").validate(None), Ok(()));
+        assert_eq!(
+            graph("display_3").validate(None),
+            Err(GraphError::UnknownPort),
+            "the menu has three options"
+        );
+
+        let GraphNode::Fx(inst) = &dof else {
+            unreachable!()
+        };
+        let held = held_on_view(inst, "display_2").expect("a view socket");
+        let display = held.params.iter().find(|p| p.id == "display");
+        assert_eq!(display.map(|p| &p.value), Some(&EffectValue::Choice(2)));
+        assert!(held_on_view(inst, "output").is_none());
+        // An effect with no view menu has the one picture output it always had.
+        let (_, plain) = ports_of(&graph("output"), &fx("blur"), None);
+        assert_eq!(ids(&plain), vec!["output"]);
     }
 
     /// A Switch always draws **one spare socket** beyond the last one wired,

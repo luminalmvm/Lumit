@@ -343,6 +343,10 @@ impl EffectDef for MatteKeyDef {
         &<MatteKey as EffectMetadata>::SCHEMA
     }
 
+    fn view(&self) -> Option<&'static str> {
+        Some("view")
+    }
+
     /// The spatial pipeline, with **no** garbage masks: the geometry arrives
     /// beside the op rather than in the bag, the shape Scribble and Set matte
     /// have, so the trait's own entry point cannot see it. Everything else —

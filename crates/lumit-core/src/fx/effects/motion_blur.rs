@@ -186,4 +186,8 @@ impl EffectDef for MotionBlurDef {
     fn schema(&self) -> &'static EffectSchema {
         &<MotionBlur as EffectMetadata>::SCHEMA
     }
+
+    fn view(&self) -> Option<&'static str> {
+        Some("view")
+    }
 }

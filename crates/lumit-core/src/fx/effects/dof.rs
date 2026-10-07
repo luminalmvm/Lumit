@@ -597,4 +597,8 @@ impl EffectDef for DofDef {
             Value::Int(blades.floor().clamp(3.0, MAX_BLADES as f32) as i32),
         );
     }
+
+    fn view(&self) -> Option<&'static str> {
+        Some("display")
+    }
 }
