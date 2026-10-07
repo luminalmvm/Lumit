@@ -188,6 +188,18 @@ enum LumitIcon {
 
   /// Vertical type: [text]'s T on its side, crossbar to the left.
   textVertical,
+
+  /// The Text and Paragraph panels' own marks: which side the lines line up
+  /// on, and the six ways a letter is restyled without changing font.
+  textAlignLeft,
+  textAlignCentre,
+  textAlignRight,
+  textFauxBold,
+  textFauxItalic,
+  textAllCaps,
+  textSmallCaps,
+  textSuperscript,
+  textSubscript,
   brush,
 
   /// The paint group's other tools, and the roto pair. The set's `Paint` is
@@ -413,6 +425,15 @@ String? _ownGlyph(LumitIcon icon) => switch (icon) {
       LumitIcon.star => LumitIcons.star,
       LumitIcon.rotate => LumitIcons.rotate,
       LumitIcon.textVertical => LumitIcons.verticalType,
+      LumitIcon.textAlignLeft => LumitIcons.alignLeft,
+      LumitIcon.textAlignCentre => LumitIcons.alignCentre,
+      LumitIcon.textAlignRight => LumitIcons.alignRight,
+      LumitIcon.textFauxBold => LumitIcons.fauxBold,
+      LumitIcon.textFauxItalic => LumitIcons.fauxItalic,
+      LumitIcon.textAllCaps => LumitIcons.allCaps,
+      LumitIcon.textSmallCaps => LumitIcons.smallCaps,
+      LumitIcon.textSuperscript => LumitIcons.superscript,
+      LumitIcon.textSubscript => LumitIcons.subscript,
       LumitIcon.vertexAdd => LumitIcons.vertexAdd,
       LumitIcon.vertexDelete => LumitIcons.vertexDelete,
       LumitIcon.vertexConvert => LumitIcons.vertexConvert,

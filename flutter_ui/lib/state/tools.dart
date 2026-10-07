@@ -22,6 +22,7 @@ import 'package:lumit_flutter/src/rust/api/layer.dart' show BridgeBrushShape;
 
 import '../icons/icons.dart';
 import '../l10n/strings.dart';
+import 'text_documents.dart';
 
 /// A cluster of tools that share one toolbar button, in the order the button's
 /// flyout lists them.
@@ -305,6 +306,25 @@ class ToolsState extends ChangeNotifier {
     final next = value.clamp(1.0, 2000.0);
     if (_textSize == next) return;
     _textSize = next;
+    notifyListeners();
+  }
+
+  /// The style new text is set in: what the Text panel was last set to with
+  /// no text layer selected.
+  BridgeTextStyle _textStyle = plainTextStyle;
+  BridgeTextStyle get textStyle => _textStyle;
+  set textStyle(BridgeTextStyle value) {
+    if (_textStyle == value) return;
+    _textStyle = value;
+    notifyListeners();
+  }
+
+  /// The paragraph new text is set in, kept the same way.
+  BridgeParagraphStyle _paragraphStyle = plainParagraphStyle;
+  BridgeParagraphStyle get paragraphStyle => _paragraphStyle;
+  set paragraphStyle(BridgeParagraphStyle value) {
+    if (_paragraphStyle == value) return;
+    _paragraphStyle = value;
     notifyListeners();
   }
 

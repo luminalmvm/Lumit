@@ -3433,6 +3433,8 @@ fn adding_the_first_animator_moves_the_anchor_and_undoes_in_one_step() {
         path: None,
         path_offset: zero(),
         animators: Vec::new(),
+        style: crate::api::assets::default_text_style(),
+        paragraph: crate::api::assets::default_paragraph_style(),
     };
     text.set_text(plain.clone()).expect("set");
     let anchor = |t: &crate::api::layer::LayerReference| match t
@@ -3544,6 +3546,8 @@ fn converting_a_text_layer_leaves_the_original_where_it_was() {
         path: None,
         path_offset: crate::api::effect::BridgeScalar::Static(0.0),
         animators: Vec::new(),
+        style: crate::api::assets::default_text_style(),
+        paragraph: crate::api::assets::default_paragraph_style(),
     })
     .expect("set");
     let before = comp.get_layers().expect("layers").len();
@@ -3588,6 +3592,8 @@ fn converting_a_text_layer_leaves_the_original_where_it_was() {
         path: None,
         path_offset: crate::api::effect::BridgeScalar::Static(0.0),
         animators: Vec::new(),
+        style: crate::api::assets::default_text_style(),
+        paragraph: crate::api::assets::default_paragraph_style(),
     })
     .expect("set");
     assert!(matches!(
@@ -3632,6 +3638,8 @@ fn a_text_layer_round_trips_its_document() {
         path: None,
         path_offset: crate::api::effect::BridgeScalar::Static(0.0),
         animators: Vec::new(),
+        style: crate::api::assets::default_text_style(),
+        paragraph: crate::api::assets::default_paragraph_style(),
     })
     .expect("set");
 
@@ -3664,9 +3672,107 @@ fn a_text_layer_round_trips_its_document() {
             path: None,
             path_offset: crate::api::effect::BridgeScalar::Static(0.0),
             animators: Vec::new(),
+            style: crate::api::assets::default_text_style(),
+            paragraph: crate::api::assets::default_paragraph_style(),
         }),
         Err(BridgeError::NotText)
     ));
+}
+
+/// A style and a paragraph round-trip through the document and undo with it.
+#[test]
+fn a_text_style_round_trips_and_undoes() {
+    use crate::api::assets::{BridgeCaps, BridgeKerning, BridgeTextAlign};
+
+    let (project, layer) = project_with_layer();
+    let comp = CompositionReference::new(project.id, layer.comp_id());
+    let text = comp.add_text_layer(None).expect("a text layer");
+    let plain = text.get_text().expect("text").expect("it is text");
+    assert_eq!(plain.style, crate::api::assets::default_text_style());
+
+    let mut styled = plain.clone();
+    styled.style.family = "Arial".into();
+    styled.style.face = "Bold".into();
+    styled.style.leading = Some(90.0);
+    styled.style.kerning = BridgeKerning::Metrics;
+    styled.style.tracking = 50.0;
+    styled.style.caps = BridgeCaps::Small;
+    styled.style.stroke_on = true;
+    styled.style.stroke_width = 4.0;
+    styled.paragraph.align = BridgeTextAlign::Centre;
+    styled.paragraph.space_after = 12.0;
+    text.set_text(styled.clone()).expect("set");
+    assert_eq!(text.get_text().expect("text").expect("text"), styled);
+
+    project.undo().expect("undone");
+    assert_eq!(text.get_text().expect("text").expect("text"), plain);
+}
+
+/// **A restyle keeps the words where they are.** A style that changes the
+/// box the words are drawn into moves the anchor with it, in the same op, so
+/// the first baseline stays put at the side the lines line up on.
+#[test]
+fn a_restyle_moves_the_anchor_so_the_words_stay_put() {
+    use crate::api::assets::{measure_text, BridgeTextAlign};
+    use crate::api::effect::BridgeScalar;
+
+    let (project, layer) = project_with_layer();
+    let comp = CompositionReference::new(project.id, layer.comp_id());
+    let text = comp.add_text_layer(None).expect("a text layer");
+    let anchor = |l: &LayerReference| {
+        let t = l.get_transform().expect("transform");
+        match (t.anchor_x, t.anchor_y) {
+            (BridgeScalar::Static(x), BridgeScalar::Static(y)) => (x, y),
+            _ => panic!("a still anchor"),
+        }
+    };
+    let layout = |d: &crate::api::assets::BridgeTextDocument| {
+        measure_text(
+            d.text.clone(),
+            d.size,
+            d.style.clone(),
+            d.paragraph.clone(),
+            false,
+        )
+    };
+    let plain = text.get_text().expect("text").expect("it is text");
+    let start = anchor(&text);
+
+    // An outline grows the box round the words, so the baseline moves inside
+    // it and the anchor follows by the same amount.
+    let mut outlined = plain.clone();
+    outlined.style.stroke_on = true;
+    outlined.style.stroke_width = 20.0;
+    text.set_text(outlined.clone()).expect("set");
+    let (was, now) = (layout(&plain), layout(&outlined));
+    let moved = anchor(&text);
+    assert!(now.left > was.left, "the outline was given room");
+    assert!((moved.0 - start.0 - (now.left - was.left)).abs() < 1e-6);
+    assert!((moved.1 - start.1 - (now.lines[0].baseline - was.lines[0].baseline)).abs() < 1e-6);
+
+    // One undo puts the style and the anchor back together.
+    project.undo().expect("undone");
+    assert_eq!(anchor(&text), start);
+
+    // Right-aligned text holds its right edge, so tracking it out moves the
+    // anchor by everything the line grew.
+    let mut right = plain.clone();
+    right.paragraph.align = BridgeTextAlign::Right;
+    text.set_text(right.clone()).expect("set");
+    let held = anchor(&text);
+    let mut tracked = right.clone();
+    tracked.style.tracking = 200.0;
+    text.set_text(tracked.clone()).expect("set");
+    let grown = layout(&tracked).right - layout(&right).right;
+    assert!(grown > 1.0, "tracking widened the line");
+    assert!((anchor(&text).0 - held.0 - grown).abs() < 1e-6);
+
+    // Retyping the words alone moves nothing.
+    let settled = anchor(&text);
+    let mut retyped = tracked;
+    retyped.text = "Other words".into();
+    text.set_text(retyped).expect("set");
+    assert_eq!(anchor(&text), settled);
 }
 
 /// The seven camera channels ride the transform (docs/impl/camera.md §1), so

@@ -417,10 +417,278 @@ pub fn glyph_xforms(animators: &[TextAnimator], text: &str, lt: f64) -> Vec<Glyp
     out
 }
 
+// ---- Character and paragraph style --------------------------------------
+
+fn is_default<T: Default + PartialEq>(v: &T) -> bool {
+    *v == T::default()
+}
+
+fn is_zero(v: &f64) -> bool {
+    *v == 0.0
+}
+
+fn is_hundred(v: &f64) -> bool {
+    *v == 100.0
+}
+
+fn is_one(v: &f64) -> bool {
+    *v == 1.0
+}
+
+fn is_true(v: &bool) -> bool {
+    *v
+}
+
+fn yes() -> bool {
+    true
+}
+
+fn hundred_per_cent() -> f64 {
+    100.0
+}
+
+fn one() -> f64 {
+    1.0
+}
+
+fn black() -> crate::model::LinearColour {
+    crate::model::LinearColour::BLACK
+}
+
+fn is_black(c: &crate::model::LinearColour) -> bool {
+    *c == crate::model::LinearColour::BLACK
+}
+
+/// Whether pairs of letters are pulled together by the font's own kerning.
+///
+/// `Off` is what every Text layer drew before there was a choice, so it stays
+/// the value a file with no key reads as.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum Kerning {
+    #[default]
+    Off,
+    Metrics,
+}
+
+/// Capitals: as typed, all capitals, or small capitals for the lower case.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum Caps {
+    #[default]
+    Normal,
+    All,
+    Small,
+}
+
+/// Where the letters sit against the baseline.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum Script {
+    #[default]
+    Normal,
+    Superscript,
+    Subscript,
+}
+
+/// Which side the lines of a block line up on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum TextAlign {
+    #[default]
+    Left,
+    Centre,
+    Right,
+}
+
+/// How a Text layer's letters are set: the font, the spacing, the scale and
+/// the outline.
+///
+/// One style for the whole layer. Every field is left out of the file while
+/// it holds its default, so a layer nobody has styled writes no `style` key.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TextStyle {
+    /// The font family as the system lists it. Empty is the built-in Inter.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub family: String,
+    /// The face inside the family, such as "Bold Italic". Empty is the
+    /// family's regular face.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub face: String,
+    /// Baseline to baseline in px. Unset is auto, 120 % of the size.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub leading: Option<f64>,
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub kerning: Kerning,
+    /// Extra space after every letter, in thousandths of an em.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub tracking: f64,
+    /// Per cent. Stretches the letters and their advances sideways.
+    #[serde(default = "hundred_per_cent", skip_serializing_if = "is_hundred")]
+    pub scale_x: f64,
+    /// Per cent. Stretches the letters up from the baseline.
+    #[serde(default = "hundred_per_cent", skip_serializing_if = "is_hundred")]
+    pub scale_y: f64,
+    /// Px the letters are lifted off the baseline, positive is up.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub baseline_shift: f64,
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub caps: Caps,
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub script: Script,
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub faux_bold: bool,
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub faux_italic: bool,
+    #[serde(default = "yes", skip_serializing_if = "is_true")]
+    pub ligatures: bool,
+    /// Off draws the outline alone.
+    #[serde(default = "yes", skip_serializing_if = "is_true")]
+    pub fill_on: bool,
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub stroke_on: bool,
+    /// Kept while the outline is off, so turning it back on brings the same
+    /// colour and width.
+    #[serde(default = "black", skip_serializing_if = "is_black")]
+    pub stroke: crate::model::LinearColour,
+    /// Px, centred on the letter's edge.
+    #[serde(default = "one", skip_serializing_if = "is_one")]
+    pub stroke_width: f64,
+    /// The outline is drawn over the fill. Off puts the fill on top, which
+    /// hides the inner half of the outline.
+    #[serde(default = "yes", skip_serializing_if = "is_true")]
+    pub stroke_over: bool,
+    #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
+    pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
+impl Default for TextStyle {
+    fn default() -> Self {
+        Self {
+            family: String::new(),
+            face: String::new(),
+            leading: None,
+            kerning: Kerning::Off,
+            tracking: 0.0,
+            scale_x: 100.0,
+            scale_y: 100.0,
+            baseline_shift: 0.0,
+            caps: Caps::Normal,
+            script: Script::Normal,
+            faux_bold: false,
+            faux_italic: false,
+            ligatures: true,
+            fill_on: true,
+            stroke_on: false,
+            stroke: crate::model::LinearColour::BLACK,
+            stroke_width: 1.0,
+            stroke_over: true,
+            extra: serde_json::Map::new(),
+        }
+    }
+}
+
+impl TextStyle {
+    /// True while nothing has been styled, which is when the layer draws the
+    /// way it always did.
+    #[must_use]
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+
+    /// The style as bytes for the frame key. Only the fields that differ from
+    /// the default are in it, the same as the file.
+    #[must_use]
+    pub fn key_bytes(&self) -> Vec<u8> {
+        serde_json::to_vec(self).unwrap_or_default()
+    }
+}
+
+/// How the lines of a Text layer are laid out against each other.
+///
+/// Each line the user breaks is its own paragraph, as it is for point text in
+/// After Effects, so the first line indent reaches every line.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+pub struct ParagraphStyle {
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub align: TextAlign,
+    /// Px in from the left edge of the block.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub indent_left: f64,
+    /// Px in from the right edge of the block.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub indent_right: f64,
+    /// Px added to the left indent of a paragraph's first line.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub indent_first: f64,
+    /// Px of room above every line but the first.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub space_before: f64,
+    /// Px of room below every line but the last.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub space_after: f64,
+    #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
+    pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
+impl ParagraphStyle {
+    #[must_use]
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+
+    /// The same idea as [`TextStyle::key_bytes`].
+    #[must_use]
+    pub fn key_bytes(&self) -> Vec<u8> {
+        serde_json::to_vec(self).unwrap_or_default()
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
+
+    /// An unstyled layer writes nothing, and a styled one writes only what was
+    /// changed and reads back the same.
+    #[test]
+    fn a_style_writes_only_what_was_changed() {
+        assert_eq!(serde_json::to_string(&TextStyle::default()).unwrap(), "{}");
+        assert_eq!(
+            serde_json::to_string(&ParagraphStyle::default()).unwrap(),
+            "{}"
+        );
+        assert_eq!(
+            serde_json::from_str::<TextStyle>("{}").unwrap(),
+            TextStyle::default()
+        );
+
+        let style = TextStyle {
+            family: "Arial".into(),
+            face: "Bold".into(),
+            leading: Some(90.0),
+            kerning: Kerning::Metrics,
+            tracking: 50.0,
+            scale_x: 87.0,
+            stroke_on: true,
+            stroke_width: 4.0,
+            ligatures: false,
+            ..TextStyle::default()
+        };
+        let json = serde_json::to_string(&style).unwrap();
+        assert!(!json.contains("scale_y"), "{json}");
+        assert!(!json.contains("caps"), "{json}");
+        assert_eq!(serde_json::from_str::<TextStyle>(&json).unwrap(), style);
+        assert_ne!(style.key_bytes(), TextStyle::default().key_bytes());
+
+        let paragraph = ParagraphStyle {
+            align: TextAlign::Centre,
+            space_after: 12.0,
+            ..ParagraphStyle::default()
+        };
+        let json = serde_json::to_string(&paragraph).unwrap();
+        assert!(!json.contains("indent"), "{json}");
+        assert_eq!(
+            serde_json::from_str::<ParagraphStyle>(&json).unwrap(),
+            paragraph
+        );
+    }
 
     fn selector(start: f64, end: f64, offset: f64) -> RangeSelector {
         RangeSelector {

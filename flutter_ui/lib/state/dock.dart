@@ -49,7 +49,14 @@ enum Panel {
   /// spectrogram on the lane and the clips laid along it. It stands where the
   /// Timeline stands in the Audio arrangement and keeps its own zoom, scroll
   /// and twirls, so the two tables can be open together.
-  audioTimeline;
+  audioTimeline,
+
+  /// The font, size, spacing and outline of a text layer's letters, or of the
+  /// next text the Type tool makes when no text layer is selected.
+  text,
+
+  /// Which side a text layer's lines line up on, and the room round them.
+  paragraph;
 
   String get title => switch (this) {
         Panel.project => l10n.panelProject,
@@ -65,6 +72,8 @@ enum Panel {
         Panel.mixer => l10n.panelMixer,
         Panel.audio => l10n.panelAudio,
         Panel.audioTimeline => l10n.panelAudioTimeline,
+        Panel.text => l10n.panelText,
+        Panel.paragraph => l10n.panelParagraph,
         Panel.debug => l10n.panelDebug
       };
 }
@@ -116,15 +125,39 @@ sealed class DockNode {
       };
 
   static DockNode? _tabs(Map<String, dynamic> j) {
-    final children = [
-      for (final c in j['children'] as List)
-        if (fromJson(c as Map<String, dynamic>) case final DockPane pane) pane,
-    ];
+    final raw = j['children'] as List;
+    // A stack's open panes and their heights are written against the children
+    // as saved, so they are read before a dropped child shifts the rest.
+    final wasOpen = {
+      for (final i in j['open'] as List? ?? const [])
+        if (i is int) i,
+    };
+    final heights = j['heights'] as List? ?? const [];
+    final children = <DockPane>[];
+    final open = <PaneId>{};
+    final shares = <PaneId, double>{};
+    for (var i = 0; i < raw.length; i++) {
+      final pane = fromJson(raw[i] as Map<String, dynamic>);
+      if (pane is! DockPane) continue;
+      children.add(pane);
+      if (wasOpen.contains(i)) open.add(pane.id);
+      final height = i < heights.length ? heights[i] : null;
+      if (height is num && height.isFinite && height > 0) {
+        shares[pane.id] = height.toDouble();
+      }
+    }
     if (children.isEmpty) return null;
     // Clamped, because the tab that was fronted may be one of the dropped
     // ones — and a group opening on a tab that is not there is a blank panel.
     final active = (j['active'] as int? ?? 0).clamp(0, children.length - 1);
-    return DockTabs(children, active: active);
+    return DockTabs(
+      children,
+      active: active,
+      stacked: j['stacked'] == true,
+      solo: j['solo'] == true,
+      open: open,
+      shares: shares,
+    );
   }
 
   static DockNode? _split(Map<String, dynamic> j) {
@@ -178,18 +211,78 @@ class DockPane extends DockNode {
 
 /// A tab group. Children are panes (egui_tiles allows nesting, but the
 /// shipped frontend only ever tabs panes — the port models what ships).
+///
+/// **A group can be drawn as a stack instead** ([stacked]): its panels one
+/// above another, each under a header that twirls it open or shut, the way
+/// After Effects stacks its side panels. It is the same group either way, so
+/// a panel is dragged into a stack exactly as it is dragged into a tab group.
 class DockTabs extends DockNode {
   final List<DockPane> children;
   int active;
-  DockTabs(this.children, {this.active = 0});
+
+  /// Drawn as a stack of twirled panels rather than as tabs.
+  bool stacked;
+
+  /// In a stack, opening one panel shuts the others.
+  bool solo;
+
+  /// The panes twirled open in a stack. By pane rather than by position, so
+  /// reordering the stack moves nothing open or shut.
+  final Set<PaneId> open;
+
+  /// How much of the stack's height each open pane takes, as a weight against
+  /// the other open ones. A pane with no entry weighs 1.
+  final Map<PaneId, double> shares;
+
+  DockTabs(
+    this.children, {
+    this.active = 0,
+    this.stacked = false,
+    this.solo = false,
+    Set<PaneId>? open,
+    Map<PaneId, double>? shares,
+  })  : open = open ?? {},
+        shares = shares ?? {};
 
   DockPane get activePane => children[active.clamp(0, children.length - 1)];
+
+  bool isOpen(PaneId pane) => open.contains(pane);
+
+  double shareOf(PaneId pane) => shares[pane] ?? 1;
+
+  /// Front child [i]. In a stack that also twirls it open, since a panel
+  /// somebody asked for is one they want to see.
+  void front(int i) {
+    active = i.clamp(0, children.length - 1);
+    if (stacked) setOpen(children[active].id, true);
+  }
+
+  /// Twirl [pane] open or shut. With [solo] on, opening one shuts the rest.
+  void setOpen(PaneId pane, bool value) {
+    if (!value) {
+      open.remove(pane);
+      return;
+    }
+    if (solo) open.clear();
+    open.add(pane);
+  }
 
   @override
   Map<String, dynamic> toJson() => {
         'kind': 'tabs',
         'active': active,
         'children': [for (final c in children) c.toJson()],
+        // Left out of a plain tab group, so one writes the bytes it always
+        // did and a build from before stacks reads a stack as tabs.
+        if (stacked) ...{
+          'stacked': true,
+          if (solo) 'solo': true,
+          'open': [
+            for (var i = 0; i < children.length; i++)
+              if (open.contains(children[i].id)) i,
+          ],
+          'heights': [for (final c in children) shareOf(c.id)],
+        },
       };
 }
 
@@ -218,12 +311,11 @@ class DockSplit extends DockNode {
 
 /// The default workspace (docs/07 §1.6 "Edit"): a vertical root (upper band
 /// 0.68, Timeline 0.32 across the full width); the upper band horizontal
-/// (left tab group 0.22, Viewer 0.58, right tab group 0.20). The left group
-/// tabs Project (fronted) and Effect controls; the right group tabs
-/// Effects & presets (fronted) and Scopes — the spec's right-hand
-/// Effects & presets column, which this layout used to bury as a left tab
-/// behind Project while fronting Debug on the right. Viewer and Timeline sit
-/// alone and render bare.
+/// (left tab group 0.22, Viewer 0.58, right group 0.20). The left group
+/// tabs Project (fronted) and Effect controls; the right group is a **stack**:
+/// Effects & presets twirled open, with Scopes, Text and Paragraph shut
+/// beneath it, each one click away. Viewer and Timeline sit alone and render
+/// bare.
 ///
 /// **The Debug panel is in no shipped arrangement either**: it is a
 /// developer's readout, and the owner took it out of every default when the
@@ -245,10 +337,16 @@ DockSplit defaultLayout() => DockSplit(
               DockPane(Panel.effectControls),
             ]),
             DockPane(Panel.viewer),
-            DockTabs([
-              DockPane(Panel.effectsAndPresets),
-              DockPane(Panel.scopes),
-            ]),
+            DockTabs(
+              [
+                DockPane(Panel.effectsAndPresets),
+                DockPane(Panel.scopes),
+                DockPane(Panel.text),
+                DockPane(Panel.paragraph),
+              ],
+              stacked: true,
+              open: {Panel.effectsAndPresets.pane()},
+            ),
           ],
           [0.22, 0.58, 0.20],
         ),
@@ -463,8 +561,9 @@ bool panelVisible(DockNode node, Panel panel) => panelsIn(node).contains(panel);
 /// Add or drop `panel`, for the Window menu's tick list. A no-op when the tree
 /// already agrees with `visible`.
 ///
-/// Showing stacks it into the first tab group, fronted — a panel you just asked
-/// for is the one you want to look at. With no tab group at all it pairs up
+/// Showing puts it into a stack when the arrangement has one, twirled open,
+/// and otherwise into the first tab group, fronted — a panel you just asked
+/// for is the one you want to look at. With no group at all it pairs up
 /// with the first tile instead, so it never has to invent a share of the
 /// window. Hiding drops the pane and simplifies, exactly as closing a tab does.
 /// The last panel standing cannot be hidden: an empty dock has no way back.
@@ -480,10 +579,10 @@ void setPanelVisible(DockSplit root, Panel panel, bool visible) {
     simplify(root);
     return;
   }
-  final tabs = _firstTabs(root);
+  final tabs = _firstTabs(root, stacked: true) ?? _firstTabs(root);
   if (tabs != null) {
     tabs.children.add(DockPane(panel));
-    tabs.active = tabs.children.length - 1;
+    tabs.front(tabs.children.length - 1);
     return;
   }
   final first = root.children.first;
@@ -496,15 +595,33 @@ void setPanelVisible(DockSplit root, Panel panel, bool visible) {
 }
 
 /// The first tab group in visit order, or null when every panel sits alone.
-DockTabs? _firstTabs(DockNode node) {
+/// With [stacked], the first group drawn as a stack.
+DockTabs? _firstTabs(DockNode node, {bool stacked = false}) {
   switch (node) {
     case DockPane():
       return null;
     case DockTabs():
-      return node;
+      return !stacked || node.stacked ? node : null;
     case DockSplit(:final children):
       for (final child in children) {
-        final found = _firstTabs(child);
+        final found = _firstTabs(child, stacked: stacked);
+        if (found != null) return found;
+      }
+      return null;
+  }
+}
+
+/// The group holding [pane], or null when it sits alone or is absent. What a
+/// group's own menu and a stack's headers act on.
+DockTabs? groupOf(DockNode node, PaneId pane) {
+  switch (node) {
+    case DockPane():
+      return null;
+    case DockTabs(:final children):
+      return children.any((c) => c.id == pane) ? node : null;
+    case DockSplit(:final children):
+      for (final child in children) {
+        final found = groupOf(child, pane);
         if (found != null) return found;
       }
       return null;
@@ -548,7 +665,7 @@ PaneId addPane(DockSplit root, Panel panel, {PaneId? beside}) {
     final tabs = _firstTabs(root);
     if (tabs != null) {
       tabs.children.add(DockPane(panel, instance: made.instance));
-      tabs.active = tabs.children.length - 1;
+      tabs.front(tabs.children.length - 1);
     } else {
       root.children.insert(0, DockPane(panel, instance: made.instance));
       root.shares.insert(0, 0.2);
@@ -571,8 +688,11 @@ bool activatePanelTab(DockNode node, Panel panel) {
       return false;
     case DockTabs(:final children):
       final i = children.indexWhere((c) => c.panel == panel);
-      if (i < 0 || node.active == i) return false;
-      node.active = i;
+      if (i < 0) return false;
+      // In a stack, fronted means twirled open.
+      final shut = node.stacked && !node.isOpen(children[i].id);
+      if (node.active == i && !shut) return false;
+      node.front(i);
       return true;
     case DockSplit(:final children):
       var moved = false;
@@ -612,8 +732,13 @@ void movePanel(
   if (pos == DropPosition.stack) {
     final tile = loc.tile;
     if (tile is DockTabs) {
-      tile.children.add(draggedPane);
-      tile.active = tile.children.length - 1;
+      // A stack is read top to bottom, so a panel dropped on one lands under
+      // the panel it was dropped on. A tab group takes it at the end.
+      final at = tile.stacked
+          ? tile.children.indexWhere((c) => c.id == target) + 1
+          : tile.children.length;
+      tile.children.insert(at, draggedPane);
+      tile.front(at);
     } else {
       // A solo pane becomes a two-tab group, the newcomer fronted.
       loc.split.children[loc.index] =

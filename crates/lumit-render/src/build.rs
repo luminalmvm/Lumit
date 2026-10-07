@@ -1037,13 +1037,14 @@ pub fn build_comp_draws_at(
                 // back an empty list and the rasteriser takes the path it
                 // always took, byte for byte.
                 let xforms = lumit_core::text::glyph_xforms(&document.animators, &line, lt);
+                // An unstyled single line draws the way it always has. A
+                // styled one, or one with a line break, is set by the shaper.
+                let block = lumit_text::TextBlock::of(document, &line);
                 let r = match &spine {
                     Some(path) => {
                         let (w, h) = lumit_text::path_box(path, size);
-                        lumit_text::rasterise_on_path_animated(
-                            &line,
-                            size,
-                            document.fill,
+                        lumit_text::rasterise_along(
+                            &block,
                             path,
                             document.path_offset.value_at(lt) as f32,
                             w,
@@ -1051,9 +1052,7 @@ pub fn build_comp_draws_at(
                             &xforms,
                         )
                     }
-                    None => {
-                        lumit_text::rasterise_line_animated(&line, size, document.fill, &xforms)
-                    }
+                    None => lumit_text::rasterise(&block, &xforms),
                 };
                 (
                     Arc::new(r.rgba),
@@ -4387,6 +4386,8 @@ mod render_below_at_tests {
                     path: None,
                     path_offset: lumit_core::anim::Property::zero(),
                     animators: Vec::new(),
+                    style: Default::default(),
+                    paragraph: Default::default(),
                     extra: serde_json::Map::new(),
                 },
             },

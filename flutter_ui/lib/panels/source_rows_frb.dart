@@ -131,6 +131,8 @@ class _SourceRowsFrbState extends State<SourceRowsFrb> {
           // them — the write takes the whole document, so anything left out is
           // deleted.
           animators: document.animators,
+          style: document.style,
+          paragraph: document.paragraph,
         ),
       );
       widget.onChanged();

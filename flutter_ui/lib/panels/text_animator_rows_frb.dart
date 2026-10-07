@@ -76,6 +76,8 @@ class TextAnimatorRowsFrb extends StatelessWidget {
           fill: document.fill,
           path: document.path,
           pathOffset: document.pathOffset,
+          style: document.style,
+          paragraph: document.paragraph,
           animators: animators,
         ),
       );
@@ -363,6 +365,8 @@ bool addTextAnimator(LayerReference layer) {
       fill: document.fill,
       path: document.path,
       pathOffset: document.pathOffset,
+      style: document.style,
+      paragraph: document.paragraph,
       animators: [
         ...document.animators,
         _freshAnimator(
@@ -524,6 +528,8 @@ void writeTextAnimatorScalar({
       fill: document.fill,
       path: document.path,
       pathOffset: document.pathOffset,
+      style: document.style,
+      paragraph: document.paragraph,
       animators: [
         for (var i = 0; i < document.animators.length; i++)
           if (i == index)

@@ -8,6 +8,7 @@
 import 'package:flutter/rendering.dart' show RenderOffstage;
 import 'package:flutter/widgets.dart';
 
+import '../icons/icons.dart';
 import '../l10n/strings.dart';
 import '../state/dock.dart';
 import '../theme/theme.dart';
@@ -67,6 +68,9 @@ double panelMinWidth(Panel panel) => switch (panel) {
       // chip and the 10 trailing inset. That comes to 278, and the board draws
       // the column at 300.
       Panel.audioTimeline => 300,
+      // A label and a value well side by side, which is every row they have.
+      Panel.text => 220,
+      Panel.paragraph => 220,
       Panel.debug => 180,
     };
 
@@ -164,8 +168,16 @@ class _DockWidgetState extends State<DockWidget> {
   final Map<PaneId, GlobalKey> _paneKeys = {};
 
   GlobalKey _paneKey(PaneId pane) => _paneKeys.putIfAbsent(pane, GlobalKey.new);
+
+  // A stack's headers are drop targets too, since a panel twirled shut has no
+  // body to drop on.
+  final Map<PaneId, GlobalKey> _headerKeys = {};
+
+  GlobalKey _headerKey(PaneId pane) =>
+      _headerKeys.putIfAbsent(pane, GlobalKey.new);
   late final _DragController _drag = _DragController(
     paneKey: _paneKey,
+    headerKey: _headerKey,
     panes: () => panesIn(widget.root),
     onGhostShow: _showGhost,
     onGhostHide: _removeGhost,
@@ -256,19 +268,31 @@ class _DockWidgetState extends State<DockWidget> {
             header: _bareTitle(ThemeScope.of(context).theme, pane.id.panel),
             child: widget.buildPanel(context, pane.id),
           ),
+        DockTabs() when node.stacked => _StackGroup(
+            tabs: node,
+            buildPanel: widget.buildPanel,
+            activePanel: widget.activePanel,
+            drag: _drag,
+            onClose: _closePanel,
+            onChanged: _groupChanged,
+          ),
         DockTabs() => _TabGroup(
             tabs: node,
             buildPanel: widget.buildPanel,
             activePanel: widget.activePanel,
             drag: _drag,
             onClose: _closePanel,
-            onChanged: () {
-              setState(() {});
-              widget.onLayoutChanged();
-            },
+            onChanged: _groupChanged,
           ),
         DockSplit() => _buildSplit(context, node),
       };
+
+  /// A group changed something of its own: the fronted tab, what is twirled
+  /// open, a height, or whether it is a stack at all.
+  void _groupChanged() {
+    setState(() {});
+    widget.onLayoutChanged();
+  }
 
   Widget _buildSplit(BuildContext context, DockSplit split) {
     final t = ThemeScope.of(context).theme;
@@ -330,6 +354,7 @@ class _DockWidgetState extends State<DockWidget> {
 /// a pointer is captured by a drag.
 class _DragController extends ChangeNotifier {
   final GlobalKey Function(PaneId) paneKey;
+  final GlobalKey Function(PaneId) headerKey;
   final Iterable<PaneId> Function() panes;
   final VoidCallback onGhostShow;
   final VoidCallback onGhostHide;
@@ -337,6 +362,7 @@ class _DragController extends ChangeNotifier {
 
   _DragController({
     required this.paneKey,
+    required this.headerKey,
     required this.panes,
     required this.onGhostShow,
     required this.onGhostHide,
@@ -407,6 +433,17 @@ class _DragController extends ChangeNotifier {
       if (rect.contains(pointer)) {
         hoveredPanel = id;
         dropPosition = _positionIn(rect, pointer);
+        return;
+      }
+    }
+    // A header in a stack joins the stack, under the panel it belongs to.
+    for (final id in panes()) {
+      final box =
+          headerKey(id).currentContext?.findRenderObject() as RenderBox?;
+      if (box == null || !box.attached || !_onStage(box)) continue;
+      if ((box.localToGlobal(Offset.zero) & box.size).contains(pointer)) {
+        hoveredPanel = id;
+        dropPosition = DropPosition.stack;
         return;
       }
     }
@@ -573,6 +610,7 @@ class _Divider extends StatefulWidget {
   final void Function(Offset delta, double totalExtent) onDrag;
 
   const _Divider({
+    super.key,
     required this.horizontal,
     required this.gap,
     required this.onDrag,
@@ -750,6 +788,8 @@ class _TabGroup extends StatelessWidget {
                       active: i == tabs.active,
                       drag: drag,
                       onClose: onClose,
+                      group: tabs,
+                      onGroupChanged: onChanged,
                       onPressed: () {
                         tabs.active = i;
                         onChanged();
@@ -840,6 +880,10 @@ class _TabPill extends StatefulWidget {
   final _DragController drag;
   final void Function(PaneId) onClose;
 
+  /// The group this tab is in, and what to call once its menu has changed it.
+  final DockTabs group;
+  final VoidCallback onGroupChanged;
+
   const _TabPill({
     required this.pane,
     required this.title,
@@ -847,6 +891,8 @@ class _TabPill extends StatefulWidget {
     required this.onPressed,
     required this.drag,
     required this.onClose,
+    required this.group,
+    required this.onGroupChanged,
   });
 
   @override
@@ -960,7 +1006,14 @@ class _TabPillState extends State<_TabPill> {
         onExit: (_) => setState(() => _hover = false),
         child: GestureDetector(
           onTap: widget.onPressed,
-          onSecondaryTapUp: (d) => _showTabMenu(context, d.globalPosition),
+          onSecondaryTapUp: (d) => _showPaneMenu(
+            context,
+            d.globalPosition,
+            pane: widget.pane,
+            group: widget.group,
+            onClose: widget.onClose,
+            onGroupChanged: widget.onGroupChanged,
+          ),
           // While this pill is the dragged one, it paints nothing but keeps
           // its footprint — egui leaves the gap while the ghost floats free.
           child: AnimatedBuilder(
@@ -975,49 +1028,306 @@ class _TabPillState extends State<_TabPill> {
       ),
     );
   }
+}
 
-  /// The tab's right-click menu: close the panel, and the pop-out that is not
-  /// built yet, listed disabled rather than left off.
-  ///
-  /// **Pop out is greyed and says why.** Tearing a panel into its own window
-  /// needs real operating-system windows, and Flutter has not shipped those on
-  /// a stable release (`docs/impl/multi-window.md`) — so the row names the
-  /// gate in its tooltip instead of quietly doing something else. It is
-  /// deliberately *not* faked with a floating in-window panel: a panel that
-  /// says it popped out and then cannot leave the app window is a worse answer
-  /// than a disabled row.
-  void _showTabMenu(BuildContext context, Offset position) {
-    final t = ThemeScope.of(context).theme;
-    showLumitPopup<void>(
-      context: context,
-      position: position,
-      builder: (close) => FloatSurface(
-        child: IntrinsicWidth(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              MenuRow(
-                key: const ValueKey('tab-menu-close'),
-                onPressed: () {
-                  close(null);
-                  widget.onClose(widget.pane);
-                },
-                child: Text(l10n.closePanel),
-              ),
-              LumitTooltip(
-                message: l10n.popOutPanelBlocked,
-                child: Padding(
-                  key: const ValueKey('tab-menu-pop-out'),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  child: Text(
-                    l10n.popOutPanel,
-                    style: t.body.copyWith(color: t.textDisabled),
-                  ),
+/// A panel's right-click menu, on its tab or its header in a stack: close the
+/// panel, the pop-out that is not built yet, listed disabled rather than left
+/// off, and how the group it is in is drawn.
+///
+/// **Pop out is greyed and says why.** Tearing a panel into its own window
+/// needs real operating-system windows, and Flutter has not shipped those on
+/// a stable release (`docs/impl/multi-window.md`) — so the row names the
+/// gate in its tooltip instead of quietly doing something else. It is
+/// deliberately *not* faked with a floating in-window panel: a panel that
+/// says it popped out and then cannot leave the app window is a worse answer
+/// than a disabled row.
+void _showPaneMenu(
+  BuildContext context,
+  Offset position, {
+  required PaneId pane,
+  required DockTabs group,
+  required void Function(PaneId) onClose,
+  required VoidCallback onGroupChanged,
+}) {
+  final t = ThemeScope.of(context).theme;
+  showLumitPopup<void>(
+    context: context,
+    position: position,
+    builder: (close) => FloatSurface(
+      child: IntrinsicWidth(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            MenuRow(
+              key: const ValueKey('tab-menu-close'),
+              onPressed: () {
+                close(null);
+                onClose(pane);
+              },
+              child: Text(l10n.closePanel),
+            ),
+            LumitTooltip(
+              message: l10n.popOutPanelBlocked,
+              child: Padding(
+                key: const ValueKey('tab-menu-pop-out'),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                child: Text(
+                  l10n.popOutPanel,
+                  style: t.body.copyWith(color: t.textDisabled),
                 ),
               ),
-            ],
+            ),
+            MenuRow(
+              key: const ValueKey('tab-menu-stacked'),
+              selected: group.stacked,
+              onPressed: () {
+                close(null);
+                group.stacked = !group.stacked;
+                // A stack with nothing open is a column of headers, so the
+                // panel that was in front opens with it.
+                if (group.stacked && group.open.isEmpty) {
+                  group.setOpen(group.activePane.id, true);
+                }
+                onGroupChanged();
+              },
+              child: Text(l10n.panelGroupStacked),
+            ),
+            if (group.stacked)
+              MenuRow(
+                key: const ValueKey('tab-menu-solo'),
+                selected: group.solo,
+                onPressed: () {
+                  close(null);
+                  group.solo = !group.solo;
+                  // Turning it on keeps the panel that was clicked and shuts
+                  // the rest, which is what the setting now means.
+                  if (group.solo && group.isOpen(pane)) {
+                    group.setOpen(pane, true);
+                  } else if (group.solo && group.open.length > 1) {
+                    group.setOpen(group.open.first, true);
+                  }
+                  onGroupChanged();
+                },
+                child: Text(l10n.panelGroupSolo),
+              ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+/// The least an open panel in a stack is drawn at, in logical pixels. Below
+/// it a divider stops, the same as a seam stops at a panel's own minimum.
+const double _stackMinBody = 48;
+
+/// A group drawn as a stack: every panel under its own header, twirled open or
+/// shut, the open ones sharing the height between them.
+///
+/// Every body stays mounted whether it is open or not, for the reason a hidden
+/// tab does: a panel's scroll, twirls and half-typed text survive being shut.
+class _StackGroup extends StatelessWidget {
+  final DockTabs tabs;
+  final PanelBuilder buildPanel;
+  final VoidCallback onChanged;
+  final ValueNotifier<PaneId?> activePanel;
+  final _DragController drag;
+  final void Function(PaneId) onClose;
+
+  const _StackGroup({
+    required this.tabs,
+    required this.buildPanel,
+    required this.onChanged,
+    required this.activePanel,
+    required this.drag,
+    required this.onClose,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    final panes = [for (final c in tabs.children) c.id];
+    final open = [for (final p in panes) if (tabs.isOpen(p)) p];
+    final hit = t.tokens.tileGap < 7.0 ? 7.0 : t.tokens.tileGap;
+    final total = open.fold<double>(0, (sum, p) => sum + tabs.shareOf(p));
+
+    return _card(
+      t,
+      Container(
+        // What shows under the headers when every panel is shut.
+        color: t.surface1,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            // What the open panels share: the stack less its headers and the
+            // seams between the open ones.
+            final shared = (constraints.maxHeight -
+                    panes.length * t.density.headerStrip -
+                    (open.isEmpty ? 0 : open.length - 1) * hit)
+                .clamp(0.0, double.infinity);
+            final children = <Widget>[];
+            for (final pane in panes) {
+              final isOpen = tabs.isOpen(pane);
+              children.add(_StackHeader(
+                key: ValueKey<(String, PaneId)>(('stack-header', pane)),
+                pane: pane,
+                open: isOpen,
+                drag: drag,
+                onToggle: () {
+                  tabs.setOpen(pane, !isOpen);
+                  if (!isOpen) tabs.active = panes.indexOf(pane);
+                  onChanged();
+                },
+                onMenu: (context, at) => _showPaneMenu(
+                  context,
+                  at,
+                  pane: pane,
+                  group: tabs,
+                  onClose: onClose,
+                  onGroupChanged: onChanged,
+                ),
+              ));
+              // Always the same widget in the same slot, open or shut, so the
+              // panel's State is never thrown away by a twirl. Shut, it is no
+              // height at all and its body is offstage.
+              children.add(SizedBox(
+                key: ValueKey<PaneId>(pane),
+                height: isOpen ? shared * tabs.shareOf(pane) / total : 0,
+                child: _KeepAlivePane(
+                  visible: isOpen,
+                  builder: (context) => _PaneChrome(
+                    pane: pane,
+                    activePanel: activePanel,
+                    drag: drag,
+                    inCard: true,
+                    child: buildPanel(context, pane),
+                  ),
+                ),
+              ));
+              // A seam under every open panel with another open one below it.
+              final next = open.indexOf(pane) + 1;
+              if (isOpen && next < open.length) {
+                final below = open[next];
+                children.add(_Divider(
+                  key: ValueKey<(String, PaneId)>(('stack-seam', pane)),
+                  horizontal: false,
+                  gap: t.tokens.tileGap,
+                  onDrag: (delta, _) {
+                    if (shared <= 0) return;
+                    final move = delta.dy / shared * total;
+                    final a = tabs.shareOf(pane) + move;
+                    final b = tabs.shareOf(below) - move;
+                    final least = _stackMinBody / shared * total;
+                    if (a < least || b < least) return;
+                    tabs.shares[pane] = a;
+                    tabs.shares[below] = b;
+                    onChanged();
+                  },
+                ));
+              }
+            }
+            // A stack shorter than its own headers clips the last of them
+            // rather than overflowing.
+            return ClipRect(
+              child: SingleChildScrollView(
+                physics: const NeverScrollableScrollPhysics(),
+                child: Column(children: children),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+/// One panel's header in a stack: a twirl and its name. A click twirls it, a
+/// drag re-docks it, a right-click opens the panel's menu.
+class _StackHeader extends StatefulWidget {
+  final PaneId pane;
+  final bool open;
+  final _DragController drag;
+  final VoidCallback onToggle;
+  final void Function(BuildContext context, Offset position) onMenu;
+
+  const _StackHeader({
+    super.key,
+    required this.pane,
+    required this.open,
+    required this.drag,
+    required this.onToggle,
+    required this.onMenu,
+  });
+
+  @override
+  State<_StackHeader> createState() => _StackHeaderState();
+}
+
+class _StackHeaderState extends State<_StackHeader> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    final ink = widget.open || _hover ? t.textPrimary : t.textMuted;
+    final strip = Container(
+      key: widget.drag.headerKey(widget.pane),
+      height: t.density.headerStrip,
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      decoration: BoxDecoration(
+        color: t.tokens.roomed ? t.surface1 : t.surface2,
+        border: Border(bottom: BorderSide(color: t.hairline)),
+      ),
+      child: Row(
+        children: [
+          lumitIcon(
+            widget.open ? LumitIcon.twirlOpen : LumitIcon.twirlClosed,
+            size: iconSize,
+            color: ink,
+          ),
+          const SizedBox(width: 4),
+          Expanded(
+            child: Text(
+              t.kickerCase(widget.pane.panel.title),
+              style: (widget.open ? t.kickerOn : t.kicker).copyWith(color: ink),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+    return _DragSource(
+      pane: widget.pane,
+      drag: widget.drag,
+      child: MouseRegion(
+        key: ValueKey<String>('dock-stack-${widget.pane.panel.name}'),
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _hover = true),
+        onExit: (_) => setState(() => _hover = false),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: widget.onToggle,
+          onSecondaryTapUp: (d) => widget.onMenu(context, d.globalPosition),
+          // A panel being dropped on this header is shown by the header
+          // lighting, since a shut panel has no body to draw the preview over.
+          child: AnimatedBuilder(
+            animation: widget.drag,
+            builder: (context, child) {
+              final target = widget.drag.dragged != null &&
+                  widget.drag.dragged != widget.pane &&
+                  widget.drag.hoveredPanel == widget.pane &&
+                  widget.drag.dropPosition == DropPosition.stack;
+              return DecoratedBox(
+                position: DecorationPosition.foreground,
+                decoration: BoxDecoration(
+                  color: t.accent.withValues(alpha: target ? 0.22 : 0),
+                ),
+                child: child,
+              );
+            },
+            child: strip,
           ),
         ),
       ),

@@ -1541,6 +1541,8 @@ impl CompositionReference {
                     path: None,
                     path_offset: lumit_core::anim::Property::zero(),
                     animators: Vec::new(),
+                    style: Default::default(),
+                    paragraph: Default::default(),
                     extra: serde_json::Map::new(),
                 },
             },
@@ -1626,23 +1628,25 @@ impl CompositionReference {
         use lumit_core::model::TransformGroup;
 
         let comp = self.composition()?;
+        // A brand-new layer starts its source at zero, so any keys on the
+        // offset dial arrive on the comp's clock unshifted.
+        let document =
+            crate::api::assets::text_document_of(document, lumit_core::time::Rational::ZERO)?;
         // The point clicked is where the baseline starts, which for an empty
-        // line is where a capital letter would stand.
-        #[allow(clippy::cast_possible_truncation)]
-        let baseline = f64::from(lumit_text::line_layout("", document.size as f32, false).baseline);
+        // line is where a capital letter would stand. A styled block keeps
+        // some room round its words, so the line starts a little way in.
+        let empty = lumit_text::layout(&lumit_text::TextBlock::of(&document, ""), false);
+        let start = empty.lines.first();
+        let baseline = start.map_or(0.0, |l| f64::from(l.baseline));
+        let left = start
+            .and_then(|l| l.carets.first())
+            .map_or(0.0, |x| f64::from(*x));
         let layer = crate::edits::base_layer(
             "Text".into(),
-            lumit_core::model::LayerKind::Text {
-                // A brand-new layer starts its source at zero, so any keys on
-                // the offset dial arrive on the comp's clock unshifted.
-                document: crate::api::assets::text_document_of(
-                    document,
-                    lumit_core::time::Rational::ZERO,
-                )?,
-            },
+            lumit_core::model::LayerKind::Text { document },
             comp.duration.0,
             TransformGroup {
-                anchor_x: Property::fixed(0.0),
+                anchor_x: Property::fixed(left),
                 anchor_y: Property::fixed(baseline),
                 position_x: Property::fixed(x),
                 position_y: Property::fixed(y),

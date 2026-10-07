@@ -280,7 +280,7 @@ class ViewerStage extends StatelessWidget {
         bounds: live == null
             ? uiState.layerBounds.boundsOf(entry,
                 compSize: compSize, revision: revision, t: playheadSeconds)
-            : textLayerBounds(live.text, live.size, animated: live.animated),
+            : textLayerBounds(live),
         // A keyed position has no one value for a body drag to add to; its
         // keys are dragged on the motion path instead. Keyed scale or
         // rotation likewise grows no handles.

@@ -128,6 +128,8 @@ fn collapsed_precomp_splices_inner_draws_with_parent_placement() {
                 path: None,
                 path_offset: lumit_core::anim::Property::zero(),
                 animators: Vec::new(),
+                style: Default::default(),
+                paragraph: Default::default(),
                 extra: serde_json::Map::new(),
             },
         },

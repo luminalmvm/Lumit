@@ -178,7 +178,7 @@ One Cargo workspace. Every `crates/lumit-*` folder is a member, one job each.
 | `lumit-flow` | Optical flow, CPU and WGSL |
 | `lumit-media` | FFmpeg: probe, index, seek, hardware decode, encode. Reads PSD files by layer |
 | `lumit-audio` | Playback, the audio clock, mixing, waveforms, beat detection |
-| `lumit-text` | Text rasterisation |
+| `lumit-text` | Text: system fonts, shaping, layout and rasterisation |
 | `lumit-colour` | OCIO, implemented natively |
 | `lumit-track` | Tracking and the camera solve |
 | `lumit-roto` | The roto brush's maths |

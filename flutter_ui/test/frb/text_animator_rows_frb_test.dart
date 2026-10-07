@@ -12,6 +12,7 @@ import 'package:lumit_flutter/panels/graph_editor_frb.dart';
 import 'package:lumit_flutter/panels/layer_fold_frb.dart';
 import 'package:lumit_flutter/panels/text_animator_rows_frb.dart';
 import 'package:lumit_flutter/src/rust/api/assets.dart';
+import 'package:lumit_flutter/state/text_documents.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 
@@ -48,6 +49,8 @@ void main() {
       final text = p.comp.addTextLayer();
       text.setText(
         document: BridgeTextDocument(
+          style: plainTextStyle,
+          paragraph: plainParagraphStyle,
           text: 'Lumit',
           size: 72,
           fill: text.getText()!.fill,

@@ -17,10 +17,10 @@ import 'package:lumit_flutter/panels/viewer_gizmo.dart' show LayerBox;
 import 'package:lumit_flutter/panels/viewer_panel_frb.dart';
 import 'package:lumit_flutter/panels/viewer_type.dart';
 import 'package:lumit_flutter/src/rust/api/assets.dart';
+import 'package:lumit_flutter/state/text_documents.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
-import 'package:lumit_flutter/state/layer_bounds.dart';
 import 'package:lumit_flutter/state/tools.dart';
 
 import 'frb_test_support.dart';
@@ -28,6 +28,15 @@ import 'frb_test_support.dart';
 // The line from the report.
 const _words = 'Hello, this is a text';
 const _size = 72.0;
+
+/// The test's line as the engine lays it out, unstyled.
+BridgeTextBlock _measured() => measureText(
+      text: _words,
+      size: _size,
+      style: plainTextStyle,
+      paragraph: plainParagraphStyle,
+      animated: false,
+    );
 
 void main() {
   setUpAll(initEngineForTests);
@@ -42,6 +51,8 @@ void main() {
     final comp = p.state.project!.newComposition(name: 'Scene');
     final layer = comp.addTextLayerAt(
       document: const BridgeTextDocument(
+        style: plainTextStyle,
+        paragraph: plainParagraphStyle,
         text: _words,
         size: _size,
         fill: BridgeColourRgba(r: 1, g: 1, b: 1, a: 1),
@@ -78,7 +89,7 @@ void main() {
 
   /// The point on screen just before character [i], halfway up a capital.
   Offset gap(WidgetTester tester, LayerBox box, int i) {
-    final line = measuredTextLine(_words, _size);
+    final line = _measured().lines.first;
     return screenOf(tester, box, line.carets[i], line.baseline - _size * 0.3);
   }
 
@@ -91,15 +102,16 @@ void main() {
       final p = withLine();
       await mount(tester, p);
 
-      final line = measureTextLine(text: _words, size: _size, animated: false);
+      final block = _measured();
+      final line = block.lines.first;
       final box = boxOf(tester, p.layer);
-      expect(box.bounds.width, line.width,
+      expect(box.bounds.width, block.width,
           reason: 'the raster the engine draws the words into');
-      expect(box.bounds.height, line.height);
+      expect(box.bounds.height, block.height);
       expect(box.bounds.width, lessThan(_words.length * _size * 0.5 * 0.9),
           reason: 'well inside the old half-a-size-per-letter estimate');
       expect(line.carets.length, _words.length + 1);
-      expect(line.carets.last, closeTo(line.width, 1),
+      expect(line.carets.last, closeTo(block.width, 1),
           reason: 'the caret after the last letter is on the box\'s edge');
     });
 
@@ -181,5 +193,72 @@ void main() {
       expect(field(tester).selection,
           const TextSelection(baseOffset: 2, extentOffset: 7));
     });
+
+    testWidgets(
+        'Shift+Enter breaks the line, the arrows move by the engine\'s lines,'
+        ' and the style survives the edit', (tester) async {
+      final p = withLine();
+      // Tracked out, so the edit has a style to lose.
+      final styled = p.layer.getText()!;
+      p.layer.setText(
+        document: styled.copyWith(
+            style: styled.style.copyWith(tracking: 40)),
+      );
+      p.uiState.model.refresh();
+      await mount(tester, p);
+
+      // The gap before character 5, as the styled line is laid out.
+      final document = p.layer.getText()!;
+      final line = measureText(
+        text: document.text,
+        size: document.size,
+        style: document.style,
+        paragraph: document.paragraph,
+        animated: false,
+      ).lines.first;
+      await tester.tapAt(screenOf(tester, boxOf(tester, p.layer),
+          line.carets[5], line.baseline - _size * 0.3));
+      await tester.pump(const Duration(seconds: 1));
+      expect(field(tester).selection, const TextSelection.collapsed(offset: 5));
+
+      await simulateKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await simulateKeyDownEvent(LogicalKeyboardKey.enter);
+      await simulateKeyUpEvent(LogicalKeyboardKey.enter);
+      await simulateKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.pump();
+      expect(field(tester).text, 'Hello\n, this is a text');
+      expect(field(tester).selection, const TextSelection.collapsed(offset: 6),
+          reason: 'the caret starts the new line');
+
+      // Up from the start of the second line is the start of the first, and
+      // End is after its last letter, before the break.
+      await simulateKeyDownEvent(LogicalKeyboardKey.arrowUp);
+      await simulateKeyUpEvent(LogicalKeyboardKey.arrowUp);
+      expect(field(tester).selection, const TextSelection.collapsed(offset: 0));
+      await simulateKeyDownEvent(LogicalKeyboardKey.end);
+      await simulateKeyUpEvent(LogicalKeyboardKey.end);
+      expect(field(tester).selection, const TextSelection.collapsed(offset: 5));
+      await simulateKeyDownEvent(LogicalKeyboardKey.arrowDown);
+      await simulateKeyUpEvent(LogicalKeyboardKey.arrowDown);
+      expect(field(tester).selection.baseOffset, greaterThan(6),
+          reason: 'down a line, at about the same x');
+
+      // Enter still ends the edit, and writes both lines with the style kept.
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pump();
+      final written = p.layer.getText()!;
+      expect(written.text, 'Hello\n, this is a text');
+      expect(written.style.tracking, 40);
+      expect(
+          measureText(
+            text: written.text,
+            size: written.size,
+            style: written.style,
+            paragraph: written.paragraph,
+            animated: false,
+          ).lines.length,
+          2);
+      await tester.pump(const Duration(seconds: 1));
+    }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
   });
 }

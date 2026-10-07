@@ -17,16 +17,64 @@ A **Text layer** holds editable text.
 2. Click in the Viewer.
 3. Type.
 
+`Shift+Enter` starts a new line. `Enter`, `Escape` or a click elsewhere ends the edit.
+
 ## Style it
 
-Set the font, size, letter-spacing, fill colour, and stroke.
+The **Text** panel sets the letters of every selected text layer. With no text layer
+selected it sets what the Type tool makes next, and its heading reads **New text**.
+
+| Control | What it does |
+| --- | --- |
+| **Font** | The font family, from the fonts installed on this computer. **Inter (built in)** is the one Lumit carries. |
+| **Style** | The face inside the family: Regular, Bold, Italic. |
+| **Size** | The letter size in pixels. |
+| **Leading** | The distance from one baseline to the next, in pixels. |
+| **Kerning** | **Metrics** uses the pair spacing the font carries. **Off** uses none. |
+| **Tracking** | Extra space after every letter, in thousandths of the size. |
+| **Fill** | The letters' colour. Unticked, only the stroke is drawn. |
+| **Stroke**, **Width** | An outline round the letters, its colour and its width in pixels. |
+
+**More** shows the rest:
+
+| Control | What it does |
+| --- | --- |
+| **Vertical scale**, **Horizontal scale** | Stretch the letters, in per cent. |
+| **Baseline shift** | Lift the letters off the line they stand on, in pixels. |
+| **Faux bold**, **Faux italic** | Thicken or slant a font that has no bold or italic of its own. |
+| **All caps**, **Small caps** | Set every letter as a capital, or the lower-case ones as small capitals. |
+| **Superscript**, **Subscript** | Set the letters small and raised, or small and lowered. |
+| **Ligatures** | Join pairs such as *fi* into the font's combined shape. |
+| **Stroke over fill** | Draw the outline on top of the letters. Unticked, the letters cover its inner half. |
+| **Auto leading** | Keep the leading at 120 % of the size. |
+
+A project opened on a computer without the layer's font draws that layer in Inter. The
+**Font** picker shows the missing name with **(not installed)**.
 
 A text layer is a layer, so it also takes [effects](/use/effects/),
 [masks](/use/masks/), and a [transform](/use/transform/) like any other.
 
 :::note[Limitation]
-A text layer's styling currently cannot be applied on a per-character basis. 
-Mixed styling within a single layer is planned.
+A text layer has one style. Mixed styling within a single layer is planned.
+A line takes one direction, so a line mixing left-to-right and right-to-left words is set
+wrongly. A character the font lacks draws as an empty box.
+:::
+
+## Lay out the lines
+
+The **Paragraph** panel sets how the lines sit against each other.
+
+| Control | What it does |
+| --- | --- |
+| **Align left**, **Align centre**, **Align right** | Which side the lines line up on. That side of the first line stays where it is. |
+| **Indent left**, **Indent right** | Move the lines in from that side, in pixels. |
+| **Indent first line** | Extra indent for the first line of each paragraph. |
+| **Space before**, **Space after** | Room above and below each paragraph, in pixels. |
+
+Each line you break is a paragraph of its own.
+
+:::note[Not built yet]
+Text in a box that wraps, justification, and vertical type are not built.
 :::
 
 ## Run it along a path
@@ -79,8 +127,7 @@ above it**. The original stays a text layer.
   words, through [Emit from image](/effects/generate/emit-from-image/).
 
 :::note[Not built yet]
-Converting a *styled* line, per-character layers, and creating masks from text are not
-built.
+Per-character layers and creating masks from text are not built.
 :::
 
 ## Related
