@@ -13,6 +13,7 @@ pub mod encode;
 pub mod exr;
 pub mod index;
 pub mod probe;
+pub mod psd;
 pub mod sequence;
 pub mod slate;
 
@@ -42,6 +43,9 @@ pub enum MediaError {
     /// than any picture, a sidecar claiming more records than a timeline holds.
     #[error("this file is larger than Lumit reads: {0}")]
     TooLarge(#[from] lumit_ingress::IngressError),
+    /// A Photoshop document that is damaged, or of a kind that is not read.
+    #[error("photoshop document: {0}")]
+    Psd(&'static str),
 }
 
 impl From<rsmpeg::error::RsmpegError> for MediaError {

@@ -165,11 +165,18 @@ impl lumit_eval::SourceStamper for Stamper<'_> {
         // *this* item's stamp rather than in the comp's own name, so
         // reassigning one item retires that item's frames and leaves every
         // other frame of the comp exactly where it was.
-        let space = match self.doc.item(item) {
-            Some(lumit_core::model::ProjectItem::Footage(f)) => f.colour_space.as_deref(),
-            _ => None,
-        }
-        .unwrap_or("");
+        //
+        // A source layer goes in beside it: two layers of one document are two
+        // pictures out of the same file. Only for the item's own media, as in
+        // the plan, since a proxy has no layers to pick from.
+        let (space, source_layer) = match self.doc.item(item) {
+            Some(lumit_core::model::ProjectItem::Footage(f)) => (
+                f.colour_space.as_deref().unwrap_or(""),
+                f.source_layer.filter(|_| std::ptr::eq(&f.media, media)),
+            ),
+            _ => ("", None),
+        };
+        let source_layer = source_layer.map(|n| format!("#l{n}")).unwrap_or_default();
         // Missing media renders the slate (docs/07 §3.3), which is perfectly
         // cacheable: it is a pure function of the size. Key it on the state
         // and the path so relinking retires those frames — returning None
@@ -200,7 +207,11 @@ impl lumit_eval::SourceStamper for Stamper<'_> {
             settled.target_width(width)
         };
         Some((
-            format!("{}#w{}#c{space}", media.absolute_path, target.unwrap_or(0)),
+            format!(
+                "{}#w{}#c{space}{source_layer}",
+                media.absolute_path,
+                target.unwrap_or(0)
+            ),
             source_frame as u64,
         ))
     }
@@ -419,6 +430,7 @@ mod tests {
                 },
                 extra: serde_json::Map::new(),
                 colour_space: None,
+                source_layer: None,
             }));
         let comp = Composition {
             graph: None,

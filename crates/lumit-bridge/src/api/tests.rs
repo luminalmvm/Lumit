@@ -53,6 +53,7 @@ fn project_with_folder() -> (
         },
         extra: serde_json::Map::new(),
         colour_space: None,
+        source_layer: None,
     };
     let loose = FootageItem {
         sequence: None,
@@ -66,6 +67,7 @@ fn project_with_folder() -> (
         },
         extra: serde_json::Map::new(),
         colour_space: None,
+        source_layer: None,
     };
     let folder = Folder {
         id: Uuid::now_v7(),
@@ -231,6 +233,7 @@ fn relinking_one_clip_rewrites_the_prefix_for_every_other_lost_clip() {
             extra: serde_json::Map::new(),
         },
         extra: serde_json::Map::new(),
+        source_layer: None,
     };
     let picked_item = footage("Depth.avi", "Cine1");
     let sibling = footage("World.avi", "Cine5");
@@ -6555,6 +6558,7 @@ fn project_with_footage() -> (ProjectReference, FootageReference, tempfile::Temp
                     },
                     extra: serde_json::Map::new(),
                     colour_space: None,
+                    source_layer: None,
                 })),
             })
             .expect("seeded");
@@ -8691,4 +8695,109 @@ fn an_addon_installs_lists_and_removes_and_is_refused_honestly() {
     assert!(addon_list().is_empty());
 
     lumit_ml::store::with_dir(None);
+}
+
+// A Photoshop document comes in as a comp of its layers and a folder of layer
+// items, in one undo step, and anything else is left to the footage import.
+#[cfg(feature = "media")]
+#[test]
+fn a_photoshop_document_imports_as_a_comp_of_its_layers_in_one_undo_step() {
+    use lumit_core::model::{BlendMode, LayerKind};
+    use lumit_media::psd::fixture::{document, Layer};
+
+    let dir = tempfile::tempdir().expect("temp dir");
+    let path = dir.path().join("poster.psd");
+    let mut hat = Layer::solid("Hat", [8, 8, 16, 16], [0, 0, 255, 255]);
+    hat.opacity = 128;
+    hat.blend = *b"mul ";
+    let mut props = Layer::group("Props", true);
+    props.visible = false;
+    // Bottom first, as the file lists them. "Levels" has no picture.
+    let layers = [
+        Layer::solid("Background", [0, 0, 32, 32], [255, 0, 0, 255]),
+        Layer::group("</Layer group>", false),
+        hat,
+        Layer::solid("Scarf", [0, 0, 8, 8], [0, 255, 0, 255]),
+        props,
+        Layer::solid("Levels", [0, 0, 0, 0], [0; 4]),
+        Layer::solid("Title", [4, 4, 12, 28], [255, 255, 255, 255]),
+    ];
+    std::fs::write(&path, document(32, 32, 8, &layers)).expect("the fixture writes");
+
+    let project = LumitBridgeState::new_project(None).expect("a new project");
+    let snapshot = || {
+        let state = project.state().expect("state");
+        let state = state.read().expect("read");
+        state.store.snapshot()
+    };
+    let before = snapshot().items.len();
+
+    let left_out = project
+        .import_layers(path.to_string_lossy().into_owned())
+        .expect("the document imports");
+    assert_eq!(left_out, Some(1), "the layer with no picture is counted");
+
+    let doc = snapshot();
+    let comp = doc
+        .items
+        .iter()
+        .find_map(|i| match i {
+            ProjectItem::Composition(c) if c.name == "poster" => Some(c),
+            _ => None,
+        })
+        .expect("a comp named for the file");
+    assert_eq!((comp.width, comp.height), (32, 32));
+    let names: Vec<&str> = comp.layers.iter().map(|l| l.name.as_str()).collect();
+    assert_eq!(names, ["Title", "Scarf", "Hat", "Background"], "top first");
+
+    // Each layer reads its own record of the file, by its place in the list.
+    let picks: Vec<Option<u32>> = comp
+        .layers
+        .iter()
+        .map(|l| match &l.kind {
+            LayerKind::Footage { item } => match doc.item(*item) {
+                Some(ProjectItem::Footage(f)) => f.source_layer,
+                _ => None,
+            },
+            _ => None,
+        })
+        .collect();
+    assert_eq!(picks, [Some(6), Some(3), Some(2), Some(0)]);
+
+    let hat = &comp.layers[2];
+    assert_eq!(hat.blend, BlendMode::Multiply);
+    let opacity = hat.transform.opacity.value_at(0.0);
+    assert!((opacity - 50.2).abs() < 0.1, "128 of 255 is {opacity}");
+    assert!(!hat.switches.visible, "a hidden group hides its members");
+    assert!(comp.layers[0].switches.visible);
+
+    assert_eq!(comp.groups.len(), 1);
+    assert_eq!(comp.groups[0].name, "Props");
+    assert_eq!(
+        comp.groups[0].members,
+        [comp.layers[1].id, comp.layers[2].id]
+    );
+
+    let folder = doc
+        .items
+        .iter()
+        .find_map(|i| match i {
+            ProjectItem::Folder(f) if f.name == "poster layers" => Some(f),
+            _ => None,
+        })
+        .expect("a folder for the layer items");
+    assert_eq!(folder.children.len(), 4);
+
+    project.undo().expect("one import, one step");
+    assert_eq!(snapshot().items.len(), before, "undo takes all of it back");
+
+    // A document with one layer is a still, and a still is not a document.
+    let flat = dir.path().join("flat.psd");
+    let one = [Layer::solid("Background", [0, 0, 32, 32], [255, 0, 0, 255])];
+    std::fs::write(&flat, document(32, 32, 8, &one)).expect("the fixture writes");
+    for plain in [flat, dir.path().join("photo.png")] {
+        let answer = project.import_layers(plain.to_string_lossy().into_owned());
+        assert_eq!(answer.expect("no error"), None);
+    }
+    assert_eq!(snapshot().items.len(), before, "and nothing was added");
 }

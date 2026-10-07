@@ -165,6 +165,7 @@ impl FootageReference {
                 .sequence
                 .as_ref()
                 .map(|s| (s.frame_rate.num(), s.frame_rate.den())),
+            source_layer: f.source_layer,
         })
     }
 
@@ -334,6 +335,7 @@ impl FootageReference {
                 repointed.push(lumit_media::MediaSource {
                     path: candidate,
                     sequence_fps: other.sequence_fps(),
+                    source_layer: other.source_layer,
                 });
                 ops.push(lumit_core::Op::SetMediaRef {
                     id: other.id,
@@ -412,6 +414,7 @@ impl FootageReference {
                     .map(|path| lumit_media::MediaSource {
                         path,
                         sequence_fps: Some((fps_num, fps_den)),
+                        source_layer: None,
                     }),
                 _ => None,
             }

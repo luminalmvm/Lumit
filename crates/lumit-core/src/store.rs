@@ -651,6 +651,7 @@ mod tests {
                     },
                     extra: serde_json::Map::new(),
                     colour_space: None,
+                    source_layer: None,
                 })),
             })
             .unwrap();
@@ -831,6 +832,7 @@ mod tests {
                 extra: serde_json::Map::new(),
             },
             colour_space: None,
+            source_layer: None,
         };
         let layer = test_layer(footage.id);
         let layer_id = layer.id;

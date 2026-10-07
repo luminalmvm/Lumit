@@ -265,6 +265,9 @@ pub struct MediaSource {
     /// of footage at exactly that rate. The rate is the item's, not the files'
     /// — stills carry no frame rate of their own, so somebody has to say.
     pub sequence_fps: Option<(u32, u32)>,
+    /// `Some(n)` reads layer `n` of a layered image file on its own
+    /// (`crate::psd`) rather than the picture the file opens as.
+    pub source_layer: Option<u32>,
 }
 
 impl MediaSource {
@@ -274,6 +277,7 @@ impl MediaSource {
         Self {
             path: path.into(),
             sequence_fps: None,
+            source_layer: None,
         }
     }
 
@@ -403,6 +407,7 @@ mod tests {
         let src = MediaSource {
             path: dir.path().join("shot0003.ppm"),
             sequence_fps: Some((30, 1)),
+            source_layer: None,
         };
 
         let probe = crate::probe::probe(&src).unwrap();
@@ -441,6 +446,7 @@ mod tests {
         let src = MediaSource {
             path: dir.path().join("g0002.ppm"),
             sequence_fps: Some((25, 1)),
+            source_layer: None,
         };
         let index = crate::index::build_frame_index(&src).unwrap();
         assert_eq!(index.frame_count(), 3, "the run stops at the hole");

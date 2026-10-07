@@ -22,7 +22,7 @@ Dragging files from your file manager onto the Project panel works as well.
 
 The dialogue's **Footage** filter lists the common formats: MP4, MOV, MKV, AVI, WebM,
 M4V, MPEG, TS, MTS, M2TS, WMV, FLV, 3GP, OGV, MXF and GIF; PNG, JPEG, TIFF, OpenEXR,
-Targa, DPX, BMP, WebP and the Netpbm family; WAV, MP3, FLAC, AAC, M4A, OGG, Opus, AIFF
+Targa, DPX, BMP, WebP, PSD and the Netpbm family; WAV, MP3, FLAC, AAC, M4A, OGG, Opus, AIFF
 and WMA.
 
 The filter is a convenience, not a limit. Switch it to **All files** and pick anything -
@@ -39,6 +39,23 @@ it does not create folders on your computer.
 
 Pick any one file of a folder of numbered stills and the whole run imports as a single
 footage item. See [Image sequences](/use/image-sequences/).
+
+## Photoshop documents
+
+A `.psd` with two or more layers imports as a composition the size of the document, with
+one layer for each Photoshop layer. Each layer is also a footage item, filed in a folder
+named after the file.
+
+- Name, opacity, visibility and blend mode are kept.
+- A top-level group becomes a layer group.
+- A layer mask and a clipping mask are applied to the layer's picture.
+
+:::note[Not built yet]
+Layer styles, adjustment layers and fill layers are not imported. A group inside a group
+joins the outer group, and a group's own opacity and blend mode are dropped. PSB, 32 bit,
+CMYK, Lab and indexed documents are not split into layers. Illustrator and Affinity files
+are not read.
+:::
 
 ## Interpretation
 

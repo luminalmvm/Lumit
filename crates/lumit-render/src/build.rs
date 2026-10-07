@@ -5252,6 +5252,7 @@ mod render_below_at_tests {
             },
             extra: serde_json::Map::new(),
             colour_space: None,
+            source_layer: None,
         }));
         let mut l = text_layer(0.0);
         l.kind = LayerKind::Footage { item };

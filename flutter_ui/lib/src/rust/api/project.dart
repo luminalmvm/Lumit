@@ -19,7 +19,7 @@ import 'shell.dart';
 import 'solid.dart';
 import 'state.dart';
 
-// These functions are ignored because they are not marked as `pub`: `new_comp_with`, `next_comp_name_in`, `of`, `to_model`
+// These functions are ignored because they are not marked as `pub`: `new_comp_ops`, `new_comp_with`, `next_comp_name_in`, `of`, `to_model`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `clone`, `clone`, `eq`, `eq`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `new`, `state`
 
@@ -321,6 +321,21 @@ class ProjectReference {
   FootageReference importFootage({required String path}) =>
       BridgeLib.instance.api
           .crateApiProjectProjectReferenceImportFootage(that: this, path: path);
+
+  /// Bring a layered image file in as a composition, as one undo step: a
+  /// footage item per layer, filed in a folder named for the file, and a
+  /// composition the document's size holding a Footage layer for each.
+  ///
+  /// `None` when `path` is not a layered file this build reads, which is
+  /// anything but a Photoshop document, one of a kind that is not read, or
+  /// one with fewer than two layers. The caller then imports it as plain
+  /// footage. Otherwise the number of layers left out because they hold no
+  /// picture, which is what an adjustment layer or a fill layer is.
+  ///
+  /// Only the layer list is read here. The pixels are read when a layer is
+  /// first drawn.
+  int? importLayers({required String path}) => BridgeLib.instance.api
+      .crateApiProjectProjectReferenceImportLayers(that: this, path: path);
 
   /// Whether the document has moved since it was last saved (or opened).
   /// The status bar's saved/unsaved readout. An undo after a save reads as

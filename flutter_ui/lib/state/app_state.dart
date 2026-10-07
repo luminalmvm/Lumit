@@ -391,7 +391,14 @@ class LumitState extends ChangeNotifier {
     if (group) project.beginUndoGroup();
     try {
       for (final path in paths) {
-        project.importFootage(path: path);
+        // A layered document comes in as a composition of its layers. The
+        // engine says which files those are, and everything else is footage.
+        final leftOut = project.importLayers(path: path);
+        if (leftOut == null) {
+          project.importFootage(path: path);
+        } else if (leftOut > 0) {
+          postNotice(l10n.importLayersLeftOut(leftOut));
+        }
       }
     } finally {
       if (group) project.endUndoGroup();
