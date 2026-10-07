@@ -20,6 +20,7 @@ import 'package:lumit_flutter/panels/easing_curve.dart' show EasingCurve;
 import 'package:lumit_flutter/panels/fx_section.dart' show FxSelection;
 import 'package:lumit_flutter/panels/key_ease_fields.dart' show KeyEaseClaim;
 import 'package:lumit_flutter/panels/layer_fold_frb.dart' show RevealFilter;
+import 'package:lumit_flutter/panels/shader_editor.dart' show InstanceHome;
 import 'package:lumit_flutter/l10n/strings.dart';
 import 'package:lumit_flutter/panels/viewer_texture_controller.dart';
 import 'package:lumit_flutter/shell/about_window_frb.dart';
@@ -84,14 +85,15 @@ const BridgeColourSummary noColourConfig = BridgeColourSummary(
   problems: [],
 );
 
-/// One entered inner shader graph (custom-shader.md §4.2): the handle
-/// the canvas edits through, and the words the breadcrumb reads — captured on
-/// the double-click so drawing them costs no call.
+/// One entered inner shader graph (custom-shader.md §4.2): where the shader
+/// sits, which the canvas reads and commits through, and the words the
+/// breadcrumb reads, captured on the double-click so drawing them costs no
+/// call. [layerName] is null for a shader in a node graph, which has no layer.
 typedef ShaderGraphEntry = ({
-  LayerReference layer,
+  InstanceHome home,
   UuidValue effect,
   String compName,
-  String layerName,
+  String? layerName,
   String effectName,
 });
 
@@ -1235,10 +1237,29 @@ class LumitUiState extends ChangeNotifier {
       // and the canvas's own reload decides whether there is anything to show.
     }
     shaderGraphEntry.value = (
-      layer: layer,
+      home: InstanceHome.layer(layer),
       effect: effect,
       compName: compName,
       layerName: layerName,
+      effectName: effectName,
+    );
+  }
+
+  /// [enterShaderGraph] for a Custom shader box in a node graph, whose boxes
+  /// are where the shader sits.
+  void enterShaderGraphInComp(CompositionReference comp, UuidValue effect,
+      {required String effectName}) {
+    var compName = '';
+    try {
+      compName = comp.getSettings().name;
+    } catch (_) {
+      // The comp has gone under the gesture; the crumb reads blank.
+    }
+    shaderGraphEntry.value = (
+      home: InstanceHome.graph(comp),
+      effect: effect,
+      compName: compName,
+      layerName: null,
       effectName: effectName,
     );
   }
@@ -2190,6 +2211,8 @@ class LumitUiState extends ChangeNotifier {
     }
     _selectedComp = reference;
     if (moved) compGraphNode.value = null;
+    // An entered shader belongs to the comp it was entered from.
+    if (moved) shaderGraphEntry.value = null;
     model.bind(reference);
     if (moved && arriving != null) {
       final want = atFrame ?? compViews[arriving.toString()]?.frame ?? 0;

@@ -418,7 +418,7 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel> {
     if (!mounted) return;
     List<BridgeEffectInstance> stack;
     try {
-      stack = widget.entry.layer.getEffects();
+      stack = widget.entry.home.read();
     } catch (_) {
       stack = const [];
     }
@@ -444,14 +444,14 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel> {
     });
   }
 
-  /// One gesture, one `setShaderGraph`, one `setEffects`, one undo step.
+  /// One gesture, one `setShaderGraph`, one commit, one undo step.
   void _commit(_Inner graph) {
     graph.layout
       ..clear()
       ..addAll(_positions);
     List<BridgeEffectInstance> stack;
     try {
-      stack = widget.entry.layer.getEffects();
+      stack = widget.entry.home.read();
     } catch (_) {
       return;
     }
@@ -459,7 +459,7 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel> {
     if (inst == null) return;
     try {
       inst.setShaderGraph(graph: graph.encode());
-      widget.entry.layer.setEffects(effects: stack);
+      widget.entry.home.commit(stack);
     } catch (_) {
       // Refused, or the stack moved under us; re-reading is the recovery.
     }
@@ -765,8 +765,10 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel> {
         children: [
           crumb('shader-crumb-comp', widget.entry.compName, widget.onExit),
           sep,
-          crumb('shader-crumb-layer', widget.entry.layerName, widget.onExit),
-          sep,
+          if (widget.entry.layerName case final layer?) ...[
+            crumb('shader-crumb-layer', layer, widget.onExit),
+            sep,
+          ],
           Expanded(
               child: crumb('shader-crumb-shader', widget.entry.effectName,
                   null)),
