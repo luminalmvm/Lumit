@@ -239,6 +239,7 @@ class _OutlineRowState extends State<OutlineRow> {
   void initState() {
     super.initState();
     widget.renameRequest.addListener(_maybeRename);
+    lumitPopupUp.addListener(_menuGone);
     _rowsOnScreen[layer.internallayerId] = this;
   }
 
@@ -249,6 +250,7 @@ class _OutlineRowState extends State<OutlineRow> {
       _rowsOnScreen.remove(layer.internallayerId);
     }
     widget.renameRequest.removeListener(_maybeRename);
+    lumitPopupUp.removeListener(_menuGone);
     _rename?.dispose();
     super.dispose();
   }
@@ -303,6 +305,34 @@ class _OutlineRowState extends State<OutlineRow> {
     // ZERO bridge calls: everything this row draws is in the read model.
     final info = widget.entry.info;
 
+    // The row knows when the pointer is over it and when one of its controls
+    // has the keyboard: what rests quietly comes up then.
+    final body = MouseRegion(
+      opaque: false,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (e) {
+        if (!mounted) return;
+        // A menu opened from this row takes the pointer without it moving:
+        // the pointer is still inside the row and a menu is up. The row then
+        // keeps its full form until the menu goes.
+        final box = context.findRenderObject();
+        setState(() {
+          _hover = false;
+          _underMenu = lumitPopupOpen &&
+              box is RenderBox &&
+              box.size.contains(box.globalToLocal(e.position));
+        });
+      },
+      child: Focus(
+        canRequestFocus: false,
+        skipTraversal: true,
+        onFocusChange: (has) {
+          if (mounted) setState(() => _focus = has);
+        },
+        child: _rowBody(context, t, info),
+      ),
+    );
+
     // Selection happens on the DOWN, for the whole row, outside the gesture
     // arena — the reason the name has always done it that way (see the note by
     // the name cell) applies to every other cell too, and the row's tap used to
@@ -328,7 +358,7 @@ class _OutlineRowState extends State<OutlineRow> {
         child: Container(
           // No drop line: the rows themselves move to where they would land,
           // so a line marking the same slot said it twice.
-          child: _rowBody(context, t, info),
+          child: body,
         ),
       ),
     );
@@ -343,6 +373,26 @@ class _OutlineRowState extends State<OutlineRow> {
   /// one — Flutter hands a pointer to the innermost target first, so the
   /// control always sets this before the row reads it.
   bool _claimed = false;
+
+  /// Whether the pointer is over this row, and whether one of its controls
+  /// has the keyboard. At rest, with neither, an off switch draws dim and a
+  /// picker at its default draws as its word alone.
+  bool _hover = false;
+  bool _focus = false;
+
+  /// Whether a menu opened from this row is up. Its barrier takes the pointer
+  /// away, and a picker must not go quiet under its own open menu.
+  bool _underMenu = false;
+  bool get _resting => !_hover && !_focus && !_underMenu;
+
+  /// The menu has gone. After the frame, so a pointer that is back over the
+  /// row has been seen and the row does not rest for one frame in between.
+  void _menuGone() {
+    if (!_underMenu || lumitPopupUp.value) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() => _underMenu = false);
+    });
+  }
 
   /// Mark [child]'s clicks as the control's own, not the row's.
   Widget _ownClick(Widget child) =>
@@ -721,6 +771,7 @@ class _OutlineRowState extends State<OutlineRow> {
             all: widget.layers,
             width: matteWidth,
             toggleRoom: widget.matteToggles,
+            resting: _resting,
             onChanged: widget.onChanged,
           ),
         ),
@@ -742,6 +793,7 @@ class _OutlineRowState extends State<OutlineRow> {
           info: info,
           all: widget.layers,
           width: width,
+          resting: _resting,
           onChanged: widget.onChanged,
         ),
       );
@@ -867,7 +919,7 @@ class _OutlineRowState extends State<OutlineRow> {
   /// The cell is still [switchCellWidth] wide and still takes the whole click,
   /// so nothing about the aiming changed — only the paint.
   ///
-  /// **On is `text_primary`, off is `text_muted`, and neither is the accent**
+  /// **On is `text_primary`, off is dimmer, and neither is the accent**
   /// (§3.1's accent list is closed, and the owner has ruled on this column
   /// more than once). Nor is it `animated`: that token means "this is keyed",
   /// and a motion-blur switch is not a keyframe. The drawing agrees — it lights
@@ -948,14 +1000,20 @@ class _OutlineRowState extends State<OutlineRow> {
       set(!on);
     }
 
-    // **Two strengths, one rule** — the drawing lights every row switch at
-    // `text_primary` and rests it at `text_muted`, and has no third reading.
-    // A switch whose glyph does not flip used to rest at `text_disabled`
-    // instead, on the theory that a shape that says nothing needs the dimmer
-    // off; with the boxed faces gone the colour is the whole of the state, and
-    // two strengths that a reader can tell apart beat three that shade into
-    // one another.
-    final ink = on ? t.textPrimary : t.textMuted;
+    // On is `text_primary`. Off rests at `text_disabled`, a clear step below,
+    // so a row's state reads at a glance down a tall stack, and comes up to
+    // `text_muted` while the pointer is over the row or the keyboard is in it,
+    // so a switch is easy to find when it is wanted.
+    //
+    // The eye and the speaker are the exception: off, they keep `text_muted`
+    // and their struck glyph at rest too. A hidden or silenced layer has to
+    // be obvious.
+    final loud = name == 'visible' || name == 'audible';
+    final ink = on
+        ? t.textPrimary
+        : loud || !_resting
+            ? t.textMuted
+            : t.textDisabled;
     final Widget face = mark != null
         ? glyph.LumitIcon(on || offMark == null ? mark : offMark,
             size: iconSize, colour: ink)
@@ -1050,15 +1108,17 @@ class _OutlineRowState extends State<OutlineRow> {
   Widget _blendPicker(
       BuildContext context, LumitTheme t, int current, double width) {
     final modes = _blendModes ??= listBlendModes();
+    // Normal leads the list, and is what an index past its end falls back to.
+    final value = current < modes.length ? current : 0;
     // The cell's share of its group: a dropdown that overflows its cell is a
     // layout error, not a cosmetic one, and the label ellipsises to fit.
-    return SizedBox(
+    final picker = SizedBox(
       width: width,
       child: BareDropdown<int>(
         key: ValueKey<String>('tl-blend-${layer.internallayerId}'),
         // In an outline row, so the mockup's 16/10 face (§12A.6).
         dense: true,
-        value: current < modes.length ? current : 0,
+        value: value,
         options: [for (var i = 0; i < modes.length; i++) i],
         label: (i) => engineLabel(modes[i]),
         onChanged: (i) {
@@ -1067,6 +1127,10 @@ class _OutlineRowState extends State<OutlineRow> {
         },
       ),
     );
+    return restingPicker(t,
+        resting: _resting && value == 0,
+        label: modes.isEmpty ? '' : engineLabel(modes[0]),
+        picker: picker);
   }
 
   Future<void> _showRowMenu(BuildContext context, Offset position) async {

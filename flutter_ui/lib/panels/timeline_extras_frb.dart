@@ -766,6 +766,52 @@ class _LayerSearchFrbState extends State<LayerSearchFrb> {
   }
 }
 
+/// A row picker showing its default value, at rest: its word alone in the
+/// muted colour, with no box and no caret.
+///
+/// [picker] is still underneath, laid out and taking the click, so the cell's
+/// width and its target are what they always were. It only stops being
+/// painted. The word stands exactly where the picker's own label does (the
+/// same inset, the same type, and the caret's room kept beside it), so
+/// nothing moves when the box comes back. The tree is the same shape either
+/// way, so a picker keeps its focus as it comes and goes.
+///
+/// [trailing] is room at the cell's end that is not the picker's face: the
+/// matte cell's two toggles.
+Widget restingPicker(LumitTheme t,
+        {required bool resting,
+        required String label,
+        required Widget picker,
+        double trailing = 0}) =>
+    Stack(
+      children: [
+        Opacity(opacity: resting ? 0 : 1, child: picker),
+        if (resting)
+          Positioned.fill(
+            right: trailing,
+            child: IgnorePointer(
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: dropdownTextInset),
+                child: Center(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(
+                        child: Text(label,
+                            style: t.small, overflow: TextOverflow.ellipsis),
+                      ),
+                      // The caret and its gap, left empty.
+                      const SizedBox(width: 13),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+
 /// The parent picker: every *other* layer in the comp, plus None.
 ///
 /// A layer cannot parent to itself, so it is not in its own list — the engine
@@ -787,6 +833,11 @@ class ParentPickerFrb extends StatelessWidget {
   final double width;
   final VoidCallback onChanged;
 
+  /// Whether the row is at rest, with no pointer over it and no focus in it.
+  /// A picker with no parent set then draws as its word alone
+  /// ([restingPicker]).
+  final bool resting;
+
   const ParentPickerFrb({
     super.key,
     required this.layer,
@@ -794,11 +845,12 @@ class ParentPickerFrb extends StatelessWidget {
     required this.all,
     required this.onChanged,
     this.width = parentCellWidth,
+    this.resting = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
+    final picker = SizedBox(
       width: width,
       child: BareLazyDropdown(
         key: ValueKey<String>('tl-parent-${layer.internallayerId}'),
@@ -828,6 +880,10 @@ class ParentPickerFrb extends StatelessWidget {
         },
       ),
     );
+    return restingPicker(ThemeScope.of(context).theme,
+        resting: resting && info.parent == null,
+        label: l10n.none,
+        picker: picker);
   }
 }
 
@@ -852,6 +908,11 @@ class MattePickerFrb extends StatelessWidget {
   final bool toggleRoom;
   final VoidCallback onChanged;
 
+  /// Whether the row is at rest, with no pointer over it and no focus in it.
+  /// A cell with no matte set then draws as its words alone
+  /// ([restingPicker]).
+  final bool resting;
+
   const MattePickerFrb({
     super.key,
     required this.layer,
@@ -860,6 +921,7 @@ class MattePickerFrb extends StatelessWidget {
     required this.onChanged,
     required this.toggleRoom,
     this.width = matteFaceWidth,
+    this.resting = false,
   });
 
   void _set(BridgeMatte? matte) {
@@ -882,8 +944,10 @@ class MattePickerFrb extends StatelessWidget {
                 .map((e) => e.info.name)
                 .firstOrNull ??
             engineLabel('Matte');
+    final faceWidth =
+        toggleRoom ? (width - matteToggleWidth).clamp(40.0, width) : width;
 
-    return SizedBox(
+    final cell = SizedBox(
       width: width,
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -896,9 +960,7 @@ class MattePickerFrb extends StatelessWidget {
             // column stays a column. On a comp with no matte at all the cell
             // is the face and nothing else, and the dropdown still
             // does not swell into room it is not given.
-            width: toggleRoom
-                ? (width - matteToggleWidth).clamp(40.0, width)
-                : width,
+            width: faceWidth,
             child: BareLazyDropdown<UuidValue?>(
               key: ValueKey<String>('tl-matte-${layer.internallayerId}'),
               // In an outline row, so the mockup's 16/10 face (§12A.6).
@@ -958,6 +1020,11 @@ class MattePickerFrb extends StatelessWidget {
         ],
       ),
     );
+    return restingPicker(t,
+        resting: resting && matte == null,
+        label: l10n.noMatte,
+        picker: cell,
+        trailing: width - faceWidth);
   }
 
   Widget _toggle(

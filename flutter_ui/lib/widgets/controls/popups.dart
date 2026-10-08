@@ -72,6 +72,7 @@ void _truncatePopups(int depth) {
   if (_popupChain.isEmpty) {
     _popupEscapeRelease?.call();
     _popupEscapeRelease = null;
+    lumitPopupUp.value = false;
   }
 }
 
@@ -81,6 +82,10 @@ void closeLumitPopups() => _truncatePopups(0);
 /// Whether any popup is up. The menus are not a modal — panels keep their
 /// keyboard — so this is for tests and for Escape, not for gating commands.
 bool get lumitPopupOpen => _popupChain.isNotEmpty;
+
+/// The same answer as something to listen to, for a control that draws
+/// differently under its own open menu and has to know when the menu goes.
+final ValueNotifier<bool> lumitPopupUp = ValueNotifier<bool>(false);
 
 /// Escape while a chain is up dismisses all of it.
 ///
@@ -169,6 +174,7 @@ Future<T?> showLumitPopup<T>({
   final takesOver = _popupJustLeft.contains(depth);
   handle = _PopupHandle(() => close(null));
   _popupChain.add(handle);
+  lumitPopupUp.value = true;
   if (_popupChain.length == 1) {
     _popupEscapeRelease = EscapeLadder.register(EscapeRung.popup, _popupEscape);
   }
