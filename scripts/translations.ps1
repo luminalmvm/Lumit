@@ -298,6 +298,8 @@ function Invoke-Ingest([string]$file) {
         $src = if ($sources.ContainsKey($key)) { $sources[$key] } else { [string]$en[$key] }
         if (-not ($src -ceq [string]$en[$key])) { $arrivedStale++ }
         $state[$locale][$key] = $src
+        # A line a translator has answered is theirs now, not the machine's.
+        if ($state[$locale].Contains("machine:$key")) { $state[$locale].Remove("machine:$key") }
     }
 
     Write-JsonMap (Get-ArbPath $locale) $arb
@@ -427,8 +429,10 @@ function Invoke-SelfTest {
                 entries      = [ordered]@{ files = '{count} Dateien'; apply = 'Anwenden' }
                 sourceHashes = [ordered]@{ files = '{count} files'; apply = 'Apply' }
             })
+        $st = Read-State; $st['de']['machine:apply'] = $true; Write-State $st
         $r = Invoke-Ingest $good
         Assert ($r.Count -eq 2 -and $r.New -eq 1) 'ingest reports what it merged'
+        Assert (-not (Read-State)['de'].Contains('machine:apply')) 'a machine-written line a translator answers is no longer marked as the machine''s'
         Assert ($r.Translator -eq 'someone') 'the name the page stamped on the file comes back for the commit message'
         $de = Read-JsonMap (Join-Path $tmp 'app_de.arb')
         Assert ($de['files'] -ceq '{count} Dateien' -and $de['apply'] -ceq 'Anwenden') 'the translations reached the .arb'
