@@ -851,8 +851,9 @@ class Workspace extends ChangeNotifier {
   }
 
   /// The room Lantern's cards stand in, from the setting: the theme's own
-  /// light neutral by day, the canvas by night. Studio and Desk are never
-  /// roomed, so the colour is carried and never drawn.
+  /// (the night room, unless a custom theme names another), the light neutral
+  /// by day, the canvas by night. Studio and Desk are never roomed, so the
+  /// colour is carried and never drawn.
   LumitTheme _withRoom(LumitTheme t) => switch (interface.room) {
         LanternRoom.auto => t,
         LanternRoom.day => t.copyWith(room: LumitTheme.dayRoom),
@@ -1098,10 +1099,26 @@ class Workspace extends ChangeNotifier {
   /// workspace strip to tick (docs/07 §1.4).
   ///
   /// Session-only, and not part of the stored layout: what persists is the
-  /// arrangement itself, which the user is free to drag about afterwards — so
-  /// on the next launch the strip shows no preset ticked rather than claiming
-  /// one the panels may no longer match.
+  /// arrangement itself, which the user is free to drag about afterwards. So
+  /// an arrangement read back from a file ticks a preset only when it is
+  /// still that preset's ([tickMatchingPreset]), and none otherwise.
   WorkspacePreset? activePreset;
+
+  /// Tick the preset whose panels the arrangement has in the same places and
+  /// at the same sizes, or none. For an arrangement that was read from a file
+  /// rather than chosen: the stored one at launch, a project's own as it
+  /// opens. Which tab is in front does not count, because start-up fronts
+  /// Project whatever was stored. One of the user's own in force keeps its
+  /// tick: the strip never shows two.
+  void tickMatchingPreset() {
+    if (activeUserWorkspace != null) return;
+    String placed(DockSplit d) =>
+        jsonEncode(d.toJson()).replaceAll(RegExp(r'"active":\d+,'), '');
+    final now = placed(dock);
+    activePreset = WorkspacePreset.values
+        .where((p) => placed(presetLayout(p)) == now)
+        .firstOrNull;
+  }
 
   // --- The user's own workspaces (docs/07 §1.4) ----------------------------
 
@@ -1507,6 +1524,7 @@ class Workspace extends ChangeNotifier {
       final parsed = DockNode.fromJson(d);
       if (parsed is DockSplit) dock = parsed;
     }
+    tickMatchingPreset();
     colorScheme = LumitColorScheme.values.asNameMap()[j['color_scheme']] ??
         LumitColorScheme.dark;
     // The shapes were once called Sharp and Round, and a settings file written

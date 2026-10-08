@@ -2889,6 +2889,8 @@ class LumitUiState extends ChangeNotifier {
       final parsed = DockNode.fromJson(json);
       if (parsed is! DockSplit) return;
       workspace.dock = parsed;
+      // The strip's tick follows the arrangement the project brought.
+      workspace.tickMatchingPreset();
       workspace.touch();
     } catch (_) {
       // Left as it was.

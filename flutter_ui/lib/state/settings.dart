@@ -200,8 +200,8 @@ enum ToolBarPosition {
 
 /// Which room Lantern's cards stand in.
 enum LanternRoom {
-  /// The style's own room: light for a dark scheme, dark for a light one,
-  /// so the cards are always the other way round from the room.
+  /// The style's own room, which is the night room for every scheme. A dark
+  /// scheme used to get the day room here, a bright frame round the picture.
   auto,
 
   /// A light neutral ground, the cards dark against it.

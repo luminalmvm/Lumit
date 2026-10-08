@@ -7,7 +7,9 @@ import 'dart:async';
 import 'package:flutter/gestures.dart' show PointerEnterEvent;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart' show SchedulerBinding;
+import 'package:provider/provider.dart';
 
+import '../../state/ui_state.dart';
 import '../../theme/motion.dart';
 import '../escape_ladder.dart';
 import 'base.dart';
@@ -290,21 +292,28 @@ class _PopupLayout extends SingleChildLayoutDelegate {
 /// the one thing Flutter's own Tooltip cannot do.
 class LumitTooltip extends StatelessWidget {
   final String message;
+
+  /// The keymap action the control runs, when it has one. Its chord is shown
+  /// after the message, read from the keymap as the tip appears, so a rebound
+  /// shortcut is taught rebound and an unbound one is left out.
+  final String? action;
   final Widget child;
-  const LumitTooltip({super.key, required this.message, required this.child});
+  const LumitTooltip(
+      {super.key, required this.message, this.action, required this.child});
 
   @override
   Widget build(BuildContext context) {
     final scope = ThemeScope.of(context);
     if (!scope.showTooltips) return child;
-    return _HoverTip(message: message, child: child);
+    return _HoverTip(message: message, action: action, child: child);
   }
 }
 
 class _HoverTip extends StatefulWidget {
   final String message;
+  final String? action;
   final Widget child;
-  const _HoverTip({required this.message, required this.child});
+  const _HoverTip({required this.message, this.action, required this.child});
 
   @override
   State<_HoverTip> createState() => _HoverTipState();
@@ -335,6 +344,13 @@ class _HoverTipState extends State<_HoverTip> {
     final origin = box.localToGlobal(Offset(0, box.size.height + 4));
     final scope = ThemeScope.of(context);
     final t = scope.theme;
+    // Null outside the shell (a bare widget test), where there is no keymap.
+    final action = widget.action;
+    final chord = action == null
+        ? null
+        : Provider.of<LumitUiState?>(context, listen: false)
+            ?.keymap
+            .chordFor(action);
     _entry = OverlayEntry(
       builder: (_) => Positioned.fill(
         child: IgnorePointer(
@@ -354,7 +370,18 @@ class _HoverTipState extends State<_HoverTip> {
                   border: Border.all(color: t.hairline),
                   boxShadow: t.floatShadow,
                 ),
-                child: Text(widget.message, style: t.body),
+                // The chord reads as a menu row's does: small and muted.
+                child: chord == null
+                    ? Text(widget.message, style: t.body)
+                    : Text.rich(
+                        TextSpan(text: widget.message, children: [
+                          TextSpan(
+                            text: '  $chord',
+                            style: t.small.copyWith(color: t.textMuted),
+                          ),
+                        ]),
+                        style: t.body,
+                      ),
               ),
             ),
           ),

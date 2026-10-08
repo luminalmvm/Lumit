@@ -12869,6 +12869,75 @@
       }
     }
   },
+  "statusHintSelect": "Shift adds to the selection · Shift on a scale handle keeps proportions · Ctrl suspends snapping",
+  "@statusHintSelect": {
+    "description": "Right-hand end of the status bar while the Selection tool is armed: one quiet line saying what its modifier keys do in the Viewer. The parts are separated by a middle dot. Shift and Ctrl are key names."
+  },
+  "statusHintZoom": "Click zooms in · Alt zooms out · Drag a box to zoom to it",
+  "@statusHintZoom": {
+    "description": "Right-hand end of the status bar while the Zoom tool is armed: one quiet line saying what a click, the Alt key and a dragged box do in the Viewer. The parts are separated by a middle dot."
+  },
+  "statusHintRotate": "Drag turns the selected layers · Shift turns in 45° steps · Shift-click adds to the selection",
+  "@statusHintRotate": {
+    "description": "Right-hand end of the status bar while the Rotation tool is armed: one quiet line saying what a drag and the Shift key do in the Viewer. The parts are separated by a middle dot."
+  },
+  "statusHintAnchor": "Click or drag places the anchor point · Shift keeps a drag to one axis · {modifier} snaps to the layer's corners, edge midpoints and centre",
+  "@statusHintAnchor": {
+    "description": "Right-hand end of the status bar while the Anchor point tool is armed: one quiet line saying what a click, a drag and the modifier keys do in the Viewer. {modifier} is the name of the platform's main modifier key, Ctrl or the Mac command symbol. The parts are separated by a middle dot.",
+    "placeholders": {
+      "modifier": {
+        "type": "String"
+      }
+    }
+  },
+  "statusHintRazor": "Click a layer in the Timeline to cut it there · Shift cuts every layer at that frame",
+  "@statusHintRazor": {
+    "description": "Right-hand end of the status bar while the Razor tool is armed: one quiet line saying what a click and a Shift-click do in the Timeline. The parts are separated by a middle dot."
+  },
+  "statusHintShape": "Draws a mask on the selected layer, or a shape layer with nothing selected · Shift keeps the width and height equal",
+  "@statusHintShape": {
+    "description": "Right-hand end of the status bar while one of the five shape tools is armed: one quiet line saying what a drag makes in the Viewer and what the Shift key does to it. The parts are separated by a middle dot."
+  },
+  "statusHintPen": "Drag pulls out a point's handles · Alt pulls out one only · Backspace removes the last point · Esc abandons the path",
+  "@statusHintPen": {
+    "description": "Right-hand end of the status bar while the Pen tool is armed: one quiet line saying what a drag and the Alt, Backspace and Esc keys do while a path is being drawn in the Viewer. The parts are separated by a middle dot."
+  },
+  "statusHintType": "Shift+Enter starts a new line · Enter or Esc finishes the edit",
+  "@statusHintType": {
+    "description": "Right-hand end of the status bar while the Type tool is armed: one quiet line saying which keys break a line and end the edit while typing in the Viewer. The parts are separated by a middle dot."
+  },
+  "statusHintPaint": "Backspace removes the last stroke · Esc abandons a stroke in progress",
+  "@statusHintPaint": {
+    "description": "Right-hand end of the status bar while the Brush or the Eraser is armed: one quiet line saying what the Backspace and Esc keys do while painting in the Viewer. The parts are separated by a middle dot."
+  },
+  "statusHintCloneStamp": "Alt-click sets the source · Backspace removes the last stroke",
+  "@statusHintCloneStamp": {
+    "description": "Right-hand end of the status bar while the Clone stamp is armed: one quiet line saying what an Alt-click and the Backspace key do in the Viewer. The parts are separated by a middle dot."
+  },
+  "statusHintRotoBrush": "Alt marks the background · Esc abandons a stroke in progress",
+  "@statusHintRotoBrush": {
+    "description": "Right-hand end of the status bar while the Roto brush is armed: one quiet line saying what the Alt and Esc keys do while scribbling in the Viewer. The parts are separated by a middle dot."
+  },
+  "statusHintPuppet": "Click places a pin · Drag moves a pin · Delete removes the pin under the pointer",
+  "@statusHintPuppet": {
+    "description": "Right-hand end of the status bar while a Puppet position, starch or overlap pin tool is armed: one quiet line saying what a click, a drag and the Delete key do in the Viewer. The parts are separated by a middle dot."
+  },
+  "statusHintPuppetBend": "Click places a pin · Drag turns a bend pin · Alt scales it instead · Delete removes the pin under the pointer",
+  "@statusHintPuppetBend": {
+    "description": "Right-hand end of the status bar while the Puppet bend pin tool is armed: one quiet line saying what a click, a drag, the Alt key and the Delete key do in the Viewer. The parts are separated by a middle dot."
+  },
+  "statusHintCameraUnified": "Left button orbits, middle button tracks, right button dollies · Shift keeps orbiting and tracking to one axis",
+  "@statusHintCameraUnified": {
+    "description": "Right-hand end of the status bar while the Unified camera tool is armed: one quiet line saying which mouse button makes which camera move in the Viewer, and what the Shift key does. Tracks is the camera move the Track camera tool makes. The parts are separated by a middle dot."
+  },
+  "statusHintCameraOrbit": "Shift keeps the orbit to one axis",
+  "@statusHintCameraOrbit": {
+    "description": "Right-hand end of the status bar while the Orbit camera tool is armed: one quiet line saying what the Shift key does to a drag in the Viewer."
+  },
+  "statusHintCameraPan": "Shift keeps the move to one axis",
+  "@statusHintCameraPan": {
+    "description": "Right-hand end of the status bar while the Track camera tool is armed: one quiet line saying what the Shift key does to a drag in the Viewer."
+  },
   "startupFailedTitle": "Lumit could not start",
   "@startupFailedTitle": {
     "description": "Heading of the screen that takes the place of the whole editor when something went wrong before the window opened. Nothing else is on screen but this, the line below it, and the error itself."

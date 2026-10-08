@@ -68,8 +68,16 @@ class LumitState extends ChangeNotifier {
   /// feed, which is what the egui shell's `app.notice` was too.
   final ValueNotifier<LumitNotice?> notice = ValueNotifier(null);
 
-  void postNotice(String message, {bool error = false}) =>
-      notice.value = LumitNotice(message, error: error);
+  /// The last twenty notices, newest first: what a click on the status bar's
+  /// notice lists. Held while Lumit is open and never written anywhere.
+  final List<LumitNotice> recentNotices = [];
+
+  void postNotice(String message, {bool error = false}) {
+    final posted = LumitNotice(message, error: error);
+    recentNotices.insert(0, posted);
+    if (recentNotices.length > 20) recentNotices.removeLast();
+    notice.value = posted;
+  }
 
   /// How the shell asks what to do with unsaved changes. It answers true when
   /// the project may go: it was saved, or the user chose to discard it. Null
