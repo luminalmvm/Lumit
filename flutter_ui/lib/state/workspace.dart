@@ -643,9 +643,12 @@ class Workspace extends ChangeNotifier {
   /// screen. Both settings move together here and separately in Settings — this
   /// is the pair the screen offers, not a mode the rest of the code reads.
   /// Marks the screen answered, so it is asked exactly once.
-  void setEditingStyle({required bool vegas}) {
+  ///
+  /// [sequenceLayers] is the Vegas answer's own tick: without it the Retime
+  /// graph opens to speed and video still arrives as an ordinary layer.
+  void setEditingStyle({required bool vegas, bool sequenceLayers = true}) {
     interface.retimeOpensToSpeed = vegas;
-    interface.videoAsSequenceLayer = vegas;
+    interface.videoAsSequenceLayer = vegas && sequenceLayers;
     firstRunDone = true;
     settingsChanged();
   }
@@ -654,6 +657,22 @@ class Workspace extends ChangeNotifier {
   /// defaults, docs/07 §13.1). Recorded so it is not asked again.
   void skipFirstRun() {
     firstRunDone = true;
+    settingsChanged();
+  }
+
+  /// Whether the guided tour has been finished or skipped (shell/tour.dart),
+  /// after which it only opens from the Help menu.
+  ///
+  /// True unless [load] finds no settings file, for the reason [firstRunDone]
+  /// is: a new machine is shown round once, and somebody who has been working
+  /// in Lumit for months is not.
+  bool tourDone = true;
+
+  /// The tour has been seen to its end, or skipped. Either way it does not
+  /// open by itself again.
+  void finishTour() {
+    if (tourDone) return;
+    tourDone = true;
     settingsChanged();
   }
 
@@ -1427,6 +1446,7 @@ class Workspace extends ChangeNotifier {
         'performance': performance.toJson(),
         'interface': interface.toJson(),
         'first_run_done': firstRunDone,
+        'tour_done': tourDone,
         'auto_update': autoUpdate,
         'show_welcome_on_launch': showWelcomeOnLaunch,
         'last_update_check_ms': lastUpdateCheckMs,
@@ -1498,6 +1518,7 @@ class Workspace extends ChangeNotifier {
     }
     // Absent means an existing user, not a new one — see the field.
     firstRunDone = j['first_run_done'] as bool? ?? true;
+    tourDone = j['tour_done'] as bool? ?? true;
     // Absent means a settings file written before there were updates to check
     // for; the default is on, and an existing user gets the same offer a new
     // one does.
@@ -1608,6 +1629,7 @@ class Workspace extends ChangeNotifier {
         // used Lumit already, and losing their settings is enough of an insult
         // without being asked to introduce themselves again.
         firstRunDone = false;
+        tourDone = false;
         return;
       }
       final j = jsonDecode(f.readAsStringSync());

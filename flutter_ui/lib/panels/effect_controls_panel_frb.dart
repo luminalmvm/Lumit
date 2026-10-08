@@ -789,9 +789,8 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
         ),
         Expanded(
           // The drop target for an effect dragged from Effects & presets.
-          // Nothing else produces an `EffectDragData`, and this is the only
-          // thing that accepts one — the same contract `FootageDragData` has
-          // with the Timeline.
+          // Nothing else produces an `EffectDragData`; the Timeline's layer
+          // rows and the graph panels are the other places that take one.
           child: DragTarget<EffectDragData>(
             onAcceptWithDetails: (details) {
               try {

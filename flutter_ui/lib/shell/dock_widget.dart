@@ -1422,6 +1422,8 @@ class _PaneChrome extends StatelessWidget {
     return ValueListenableBuilder<PaneId?>(
       valueListenable: activePanel,
       builder: (context, active, _) => Listener(
+        // The whole pane by name, for the tour and the screenshot sweeps.
+        key: ValueKey<String>('dock-pane-${pane.panel.name}'),
         // Any press claims focus for this panel, before the content handles
         // the event (the egui edge follows the last click the same way).
         onPointerDown: (_) => activePanel.value = pane,

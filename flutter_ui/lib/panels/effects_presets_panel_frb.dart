@@ -3,8 +3,9 @@
 // Every built-in effect under its category heading, filtered by a search field,
 // with the selected layer's `.lumfx` save and load beneath. An effect applies by
 // double-click — to every selected layer, as the Effect menu does — or by
-// dragging it onto the Effect controls panel, which carries an `EffectDragData`
-// and lands on that panel's one layer.
+// dragging it, which carries an `EffectDragData`: onto a layer's row or bar in
+// the Timeline, or onto the Effect controls panel, where it lands on that
+// panel's one layer.
 //
 // The list comes from `listEffects`, which is the engine's own schema order, so
 // the panel never holds a copy of what effects exist. Adding a built-in to the

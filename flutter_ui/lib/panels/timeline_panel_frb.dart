@@ -3972,6 +3972,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                             // headers, in both views (the graph's own
                             // filter row went with its own outline).
                             ColumnHeader(
+                              key: const ValueKey('tl-column-header'),
                               order: groupOrder,
                               widths: groupWidths,
                               matteToggles: matteToggles,
@@ -4232,6 +4233,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
             ),
             Expanded(
                 child: ColumnToggles(
+              key: const ValueKey('tl-column-toggles'),
               groups: _toggleableGroups,
               labels: _chromeLabels,
               hidden: _hiddenGroups,

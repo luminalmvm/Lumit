@@ -1586,25 +1586,25 @@
   "@firstMask": {
     "description": "Effect controls: the default entry of a mask picker, meaning whichever mask is first on the layer rather than one named mask."
   },
-  "firstRunAfterEffects": "Footage arrives as a layer, and the Retime graph shows which moment of the source is on screen.",
+  "firstRunAfterEffects": "Footage arrives as a layer, and the Retime graph shows the time value of the source.",
   "@firstRunAfterEffects": {
     "description": "First run: what choosing After Effects habits does. Retime is a Lumit product term."
   },
-  "firstRunAutoUpdate": "Check for new versions of Lumit. Nothing is downloaded until you ask for it.",
+  "firstRunAutoUpdate": "Check for new versions of Lumit automatically.",
   "@firstRunAutoUpdate": {
     "description": "First run: the sentence beside the automatic-updates checkbox."
   },
-  "firstRunBlurb": "Lumit can start out shaped like the editor you already know. Either answer can be changed later in Settings.",
-  "@firstRunBlurb": {
-    "description": "The sentence under the first-run question."
-  },
-  "firstRunTitle": "How do you edit?",
+  "firstRunTitle": "Editing style",
   "@firstRunTitle": {
-    "description": "Title of the one screen shown the first time Lumit opens."
+    "description": "First-run screen: heading over its first question, whose two answers are After Effects and Vegas."
   },
-  "firstRunVegas": "Video arrives as a Sequence layer you can cut into clips, and the Retime graph shows playback speed you drag up to ramp and below zero to reverse.",
+  "firstRunVegas": "Video arrives as a Sequence layer to cut into clips, and the Retime graph shows speed as a percentage.",
   "@firstRunVegas": {
     "description": "First run: what choosing Vegas habits does. Retime and Sequence layer are Lumit product terms."
+  },
+  "firstRunVegasRetimeOnly": "Only change default Retime graph",
+  "@firstRunVegasRetimeOnly": {
+    "description": "First run: a tick on the Vegas card. Ticked, the Retime graph opens to speed and nothing else changes: video still arrives as an ordinary layer. Retime is a Lumit product term."
   },
   "firstRunVegasName": "Vegas",
   "@firstRunVegasName": {
@@ -13815,5 +13815,216 @@
   "panelGroupSolo": "One open at a time",
   "@panelGroupSolo": {
     "description": "The right-click menu on a panel's header in a stacked group: a tick that makes opening one panel shut the others."
+  },
+  "menuShowTour": "Lumit tour",
+  "@menuShowTour": {
+    "description": "Help menu item: opens the guided tour of the interface again."
+  },
+  "tourBack": "Back",
+  "@tourBack": {
+    "description": "Guided tour: button on a step's card that returns to the step before. One word."
+  },
+  "tourNext": "Next",
+  "@tourNext": {
+    "description": "Guided tour: button on a step's card that moves to the step after. One word."
+  },
+  "tourProjectBody": "Everything in the project is listed here. Import footage with the button at the bottom, double-clicking, or drop files onto the panel.",
+  "@tourProjectBody": {
+    "description": "Guided tour: the card beside the Project panel. Two sentences at most."
+  },
+  "tourViewerBody": "The frame at the playhead is shown here. The menus round it set the zoom, the preview quality and how colour is displayed.",
+  "@tourViewerBody": {
+    "description": "Guided tour: the card beside the Viewer while a composition is open. Two sentences at most."
+  },
+  "tourToolsTitle": "Tools",
+  "@tourToolsTitle": {
+    "description": "Guided tour: title of the card beside the tool bar."
+  },
+  "tourToolsBody": "Click a tool to pick it. A tool with a mark in its corner has more behind it. Accessed by right-clicking or holding the button.",
+  "@tourToolsBody": {
+    "description": "Guided tour: the card beside the tool bar. The mark is the small triangle in a tool button's corner. Two sentences at most."
+  },
+  "tourLayersTitle": "Layers",
+  "@tourLayersTitle": {
+    "description": "Guided tour: title of the card beside the Timeline's list of layers."
+  },
+  "tourLayersBody": "Each layer in the composition has a row here. Click a row to select its layer.",
+  "@tourLayersBody": {
+    "description": "Guided tour: the card beside the Timeline's list of layers. Two sentences at most."
+  },
+  "tourColumnsTitle": "Columns",
+  "@tourColumnsTitle": {
+    "description": "Guided tour: title of the card beside the Timeline's column headings."
+  },
+  "tourColumnsBody": "Drag the line between two headings to resize a column, or drag a heading to move it. Narrow {switches} or {modes} to show fewer of its buttons, and widen it to show more.",
+  "@tourColumnsBody": {
+    "description": "Guided tour: the card beside the Timeline's column headings. {switches} and {modes} are those two columns' own headings. Two sentences at most.",
+    "placeholders": {
+      "switches": {
+        "type": "String"
+      },
+      "modes": {
+        "type": "String"
+      }
+    }
+  },
+  "tourColumnTogglesTitle": "Show and hide columns",
+  "@tourColumnTogglesTitle": {
+    "description": "Guided tour: title of the card beside the strip under the Timeline's list of layers."
+  },
+  "tourColumnTogglesBody": "The first three buttons hide the {switches}, {modes} and {parent} columns entirely. Press again to bring its column back.",
+  "@tourColumnTogglesBody": {
+    "description": "Guided tour: the card beside the strip under the Timeline's list of layers. The placeholders are the three columns' own headings. Two sentences at most.",
+    "placeholders": {
+      "switches": {
+        "type": "String"
+      },
+      "modes": {
+        "type": "String"
+      },
+      "parent": {
+        "type": "String"
+      }
+    }
+  },
+  "tourPropertiesTitle": "Properties",
+  "@tourPropertiesTitle": {
+    "description": "Guided tour: title of the card beside a layer's opened property row in the Timeline."
+  },
+  "tourPropertiesBody": "The arrow beside a layer opens its properties, as it has here. Click a property's stopwatch, like this one, to start animating it.",
+  "@tourPropertiesBody": {
+    "description": "Guided tour: the card pointing at the stopwatch on a layer's Position row in the Timeline, which the tour has just opened. Two sentences at most."
+  },
+  "tourGraphTitle": "{layers} and {graph}",
+  "@tourGraphTitle": {
+    "description": "Guided tour: title of the card beside the Timeline's two mode tabs. The placeholders are the tabs' own labels.",
+    "placeholders": {
+      "layers": {
+        "type": "String"
+      },
+      "graph": {
+        "type": "String"
+      }
+    }
+  },
+  "tourGraphBody": "{graph} shows curves in place of the layer bars. It draws the properties you have selected.",
+  "@tourGraphBody": {
+    "description": "Guided tour: the card beside the Timeline's two mode tabs. {graph} is the Graph tab's own label. Two sentences at most.",
+    "placeholders": {
+      "graph": {
+        "type": "String"
+      }
+    }
+  },
+  "tourEffectsBody": "Double-click an effect to add it to the selected layers, or drag it onto a layer. {shortcut} finds an effect from anywhere.",
+  "@tourEffectsBody": {
+    "description": "Guided tour: the card beside the Effects & presets panel. {shortcut} is the key that opens the FX console, such as Ctrl+Space. Two sentences at most.",
+    "placeholders": {
+      "shortcut": {
+        "type": "String"
+      }
+    }
+  },
+  "tourEffectsBodyNoShortcut": "Double-click an effect to add it to the selected layers, or drag it onto a layer.",
+  "@tourEffectsBodyNoShortcut": {
+    "description": "Guided tour: the card beside the Effects & presets panel, when the FX console has no key bound."
+  },
+  "tourWorkspacesTitle": "Workspaces",
+  "@tourWorkspacesTitle": {
+    "description": "Guided tour: title of the card beside the workspace strip."
+  },
+  "tourWorkspacesBody": "Each name is a panel layout for a different job. {shortcut} opens the command palette, which finds any command.",
+  "@tourWorkspacesBody": {
+    "description": "Guided tour: the card beside the workspace strip. {shortcut} is the key that opens the command palette, such as Ctrl+Shift+P. Two sentences at most.",
+    "placeholders": {
+      "shortcut": {
+        "type": "String"
+      }
+    }
+  },
+  "tourWorkspacesBodyNoShortcut": "Each name is a panel layout for a different job.",
+  "@tourWorkspacesBodyNoShortcut": {
+    "description": "Guided tour: the card beside the workspace strip, when the command palette has no key bound."
+  },
+  "tourEffectControlsBody": "The selected layer's effects are listed here, in the order they are applied. Drag an effect's heading to move it, and click a parameter's stopwatch to animate it.",
+  "@tourEffectControlsBody": {
+    "description": "Guided tour: the card beside the Effect controls panel, which the tour has brought to the front. Two sentences at most."
+  },
+  "tourEffectMenusTitle": "Effect menus",
+  "@tourEffectMenusTitle": {
+    "description": "Guided tour: title of the card pointing at the Add effect button in the Effect controls panel."
+  },
+  "tourEffectMenusBody": "{add} lists every effect by category. Right-click an effect's heading to rename, move, copy or remove it.",
+  "@tourEffectMenusBody": {
+    "description": "Guided tour: the card pointing at the Add effect button in the Effect controls panel. {add} is that button's name. Two sentences at most.",
+    "placeholders": {
+      "add": {
+        "type": "String"
+      }
+    }
+  },
+  "tourNodeGraphBody": "The {workspace} workspace draws the selected layer's effects as boxes joined by wires. Drop a box onto a wire to insert it there, and drag a wire off a box to bypass it.",
+  "@tourNodeGraphBody": {
+    "description": "Guided tour: the card beside the Node graph panel, shown after the tour has switched to the Nodes workspace. {workspace} is that workspace's name. Two sentences at most.",
+    "placeholders": {
+      "workspace": {
+        "type": "String"
+      }
+    }
+  },
+  "tourNodeSearchTitle": "Node search",
+  "@tourNodeSearchTitle": {
+    "description": "Guided tour: title of the card about the search that adds a box to the node graph."
+  },
+  "tourNodeSearchBody": "{shortcut}, or a right-click on the canvas, opens this search for an effect or a driver to add. A driver makes a value, and a wire from one into a parameter drives it.",
+  "@tourNodeSearchBody": {
+    "description": "Guided tour: the card beside the node search, which the tour has put up over the node graph's canvas as a thing to look at, when both a key and a right-click open it. {shortcut} is the key, such as Tab. Two sentences at most.",
+    "placeholders": {
+      "shortcut": {
+        "type": "String"
+      }
+    }
+  },
+  "tourNodeSearchBodyKey": "{shortcut} over the canvas opens this search for an effect or a driver to add. A driver makes a value, and a wire from one into a parameter drives it.",
+  "@tourNodeSearchBodyKey": {
+    "description": "Guided tour: the card over the node graph's canvas, when Settings has turned the right-click door off and only a key opens the node search. {shortcut} is the key, such as Tab. Two sentences at most.",
+    "placeholders": {
+      "shortcut": {
+        "type": "String"
+      }
+    }
+  },
+  "tourNodeSearchBodyClick": "A right-click on the canvas opens this search for an effect or a driver to add. A driver makes a value, and a wire from one into a parameter drives it.",
+  "@tourNodeSearchBodyClick": {
+    "description": "Guided tour: the card over the node graph's canvas, when no key opens the node search and only a right-click does. Two sentences at most."
+  },
+  "tourNodePanelBody": "Click a box and its parameters are listed here, a driver's included. An effect's rows are the same ones {effectControls} shows.",
+  "@tourNodePanelBody": {
+    "description": "Guided tour: the card beside the Node panel in the Nodes workspace. {effectControls} is the Effect controls panel's name. Two sentences at most.",
+    "placeholders": {
+      "effectControls": {
+        "type": "String"
+      }
+    }
+  },
+  "tourDemoComp": "Tour",
+  "@tourDemoComp": {
+    "description": "The name of the small composition the guided tour makes in an empty project so it has a Timeline and a picture to show, and takes away again when the tour ends. One word."
+  },
+  "firstRunSetup": "Set up Lumit",
+  "@firstRunSetup": {
+    "description": "Title of the screen shown the first time Lumit opens, over its five questions."
+  },
+  "firstRunSetupBlurb": "Customise Lumit, all of them can be later changed in Settings.",
+  "@firstRunSetupBlurb": {
+    "description": "First-run screen: the line under its title."
+  },
+  "firstRunStyle": "Style",
+  "@firstRunStyle": {
+    "description": "First-run screen: heading over the three interface styles, Studio, Desk and Lantern, each shown as a small drawing of the window."
+  },
+  "firstRunContinue": "Continue",
+  "@firstRunContinue": {
+    "description": "First-run screen: the button that keeps the choices made and closes the screen. One word."
   }
 }
