@@ -378,7 +378,8 @@ fn a_press_comes_back_with_what_the_plugin_wrote() {
 
     let params = broker
         .press(instance, "trigger", 0.0, &a_flat_frame(0.5))
-        .expect("the press came back");
+        .expect("the press came back")
+        .params;
     assert_eq!(
         params.get("gain"),
         Some(&PropValue::double(lumit_ofx_testplug::TRIGGERED_GAIN))

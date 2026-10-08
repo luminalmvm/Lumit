@@ -581,14 +581,47 @@ pub(crate) fn press_plugin_now(
             .iter_mut()
             .find(|e| e.id == effect)
             .ok_or(BridgeError::InvalidEffect)?;
-        for (row, value) in pressed.rows {
-            if let Some(param) = fx.params.iter_mut().find(|p| p.id == row) {
-                write_row(&mut param.value, value, at);
-            }
-        }
-        fx.set_plugin_state(pressed.memory.as_deref().unwrap_or(&[]));
+        keep(fx, pressed, at);
         Ok(())
     })
+}
+
+/// Let each plugin in an edited list answer the edit, and keep what it wrote
+/// on the list.
+///
+/// A plugin answers an edit by setting, hiding and greying its other
+/// controls. Only a new instance, or one whose values moved, is news to it.
+/// Called before the commit and with no lock held, since the plugin is asked
+/// in its own process and a render in flight is waited for.
+pub(crate) fn settle(
+    before: &[lumit_core::model::EffectInstance],
+    after: &mut [lumit_core::model::EffectInstance],
+) {
+    for fx in after {
+        let was = before.iter().find(|held| held.id == fx.id);
+        if was.is_some_and(|was| was.params == fx.params) {
+            continue;
+        }
+        let answer =
+            lumit_core::fx::def(fx.effect.match_name.as_str()).and_then(|def| def.settle(was, fx));
+        if let Some(answer) = answer {
+            keep(fx, answer, Rational::ZERO);
+        }
+    }
+}
+
+/// Put what a plugin wrote onto the document's copy of its instance.
+pub(crate) fn keep(
+    fx: &mut lumit_core::model::EffectInstance,
+    pressed: lumit_core::fx::Pressed,
+    at: Rational,
+) {
+    for (row, value) in pressed.rows {
+        if let Some(param) = fx.params.iter_mut().find(|p| p.id == row) {
+            write_row(&mut param.value, value, at);
+        }
+    }
+    fx.set_plugin_state(pressed.memory.as_deref().unwrap_or(&[]));
 }
 
 /// The picture the plugin's window is shown: the comp at `frame` with the
@@ -636,7 +669,7 @@ fn press_frame(
 /// Put a value the plugin wrote onto the document's row at `at`, keeping the
 /// row's animation: a static row takes the value, a keyed row gets a key
 /// there, and a row an expression drives stays the expression's.
-fn write_row(value: &mut EffectValue, written: Value, at: Rational) {
+pub(crate) fn write_row(value: &mut EffectValue, written: Value, at: Rational) {
     fn set(property: &mut Property, v: f64, at: Rational) {
         if let Animation::Static(held) = &mut property.animation {
             *held = v;

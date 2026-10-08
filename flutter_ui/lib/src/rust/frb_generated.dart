@@ -16639,8 +16639,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeEffectInstanceInfo dco_decode_bridge_effect_instance_info(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 12)
-      throw Exception('unexpected arr length: expect 12 but see ${arr.length}');
+    if (arr.length != 14)
+      throw Exception('unexpected arr length: expect 14 but see ${arr.length}');
     return BridgeEffectInstanceInfo(
       id: dco_decode_Uuid(arr[0]),
       name: dco_decode_String(arr[1]),
@@ -16653,7 +16653,9 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       badgeDetail: dco_decode_opt_String(arr[8]),
       derivedParams: dco_decode_list_bridge_param_info(arr[9]),
       hiddenRows: dco_decode_list_String(arr[10]),
-      nodeGraphComp: dco_decode_opt_Uuid(arr[11]),
+      disabledRows: dco_decode_list_String(arr[11]),
+      rowOptions: dco_decode_list_bridge_row_options(arr[12]),
+      nodeGraphComp: dco_decode_opt_Uuid(arr[13]),
     );
   }
 
@@ -18283,6 +18285,18 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  BridgeRowOptions dco_decode_bridge_row_options(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return BridgeRowOptions(
+      id: dco_decode_String(arr[0]),
+      options: dco_decode_list_String(arr[1]),
+    );
+  }
+
+  @protected
   BridgeRuntimeState dco_decode_bridge_runtime_state(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return BridgeRuntimeState.values[raw as int];
@@ -19508,6 +19522,12 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   List<BridgeRotoStroke> dco_decode_list_bridge_roto_stroke(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_bridge_roto_stroke).toList();
+  }
+
+  @protected
+  List<BridgeRowOptions> dco_decode_list_bridge_row_options(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_bridge_row_options).toList();
   }
 
   @protected
@@ -21541,6 +21561,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_badgeDetail = sse_decode_opt_String(deserializer);
     var var_derivedParams = sse_decode_list_bridge_param_info(deserializer);
     var var_hiddenRows = sse_decode_list_String(deserializer);
+    var var_disabledRows = sse_decode_list_String(deserializer);
+    var var_rowOptions = sse_decode_list_bridge_row_options(deserializer);
     var var_nodeGraphComp = sse_decode_opt_Uuid(deserializer);
     return BridgeEffectInstanceInfo(
         id: var_id,
@@ -21554,6 +21576,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         badgeDetail: var_badgeDetail,
         derivedParams: var_derivedParams,
         hiddenRows: var_hiddenRows,
+        disabledRows: var_disabledRows,
+        rowOptions: var_rowOptions,
         nodeGraphComp: var_nodeGraphComp);
   }
 
@@ -23270,6 +23294,14 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  BridgeRowOptions sse_decode_bridge_row_options(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_id = sse_decode_String(deserializer);
+    var var_options = sse_decode_list_String(deserializer);
+    return BridgeRowOptions(id: var_id, options: var_options);
+  }
+
+  @protected
   BridgeRuntimeState sse_decode_bridge_runtime_state(
       SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -24923,6 +24955,19 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var ans_ = <BridgeRotoStroke>[];
     for (var idx_ = 0; idx_ < len_; ++idx_) {
       ans_.add(sse_decode_bridge_roto_stroke(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<BridgeRowOptions> sse_decode_list_bridge_row_options(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <BridgeRowOptions>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_bridge_row_options(deserializer));
     }
     return ans_;
   }
@@ -27210,6 +27255,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_opt_String(self.badgeDetail, serializer);
     sse_encode_list_bridge_param_info(self.derivedParams, serializer);
     sse_encode_list_String(self.hiddenRows, serializer);
+    sse_encode_list_String(self.disabledRows, serializer);
+    sse_encode_list_bridge_row_options(self.rowOptions, serializer);
     sse_encode_opt_Uuid(self.nodeGraphComp, serializer);
   }
 
@@ -28533,6 +28580,14 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  void sse_encode_bridge_row_options(
+      BridgeRowOptions self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.id, serializer);
+    sse_encode_list_String(self.options, serializer);
+  }
+
+  @protected
   void sse_encode_bridge_runtime_state(
       BridgeRuntimeState self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -29774,6 +29829,16 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
       sse_encode_bridge_roto_stroke(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_bridge_row_options(
+      List<BridgeRowOptions> self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_bridge_row_options(item, serializer);
     }
   }
 

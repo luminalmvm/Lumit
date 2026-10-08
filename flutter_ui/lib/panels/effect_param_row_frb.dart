@@ -2183,6 +2183,35 @@ String? pairStemOf(String effect, String xId) {
   return null;
 }
 
+/// [rows] with a plugin's own lists in place of the ones its choices
+/// described. A plugin refills one choice from another, a film stock from its
+/// category, and the row draws the list the instance holds now.
+List<BridgeParamInfo> relistedRows(
+  List<BridgeParamInfo> rows,
+  List<BridgeRowOptions> relisted,
+) {
+  if (relisted.isEmpty) return rows;
+  final lists = {for (final r in relisted) r.id: r.options};
+  return [
+    for (final p in rows)
+      switch ((p.kind, lists[p.id])) {
+        (BridgeParamKind_Choice(:final default_), final options?) =>
+          BridgeParamInfo(
+            id: p.id,
+            label: p.label,
+            unit: p.unit,
+            derived: p.derived,
+            kind: BridgeParamKind.choice(
+              options: options,
+              default_: default_,
+              dividersAfter: Uint32List(0),
+            ),
+          ),
+        _ => p,
+      },
+  ];
+}
+
 /// Which of `effect`'s parameters are currently NOT editable, given the values
 /// the panel is showing.
 ///

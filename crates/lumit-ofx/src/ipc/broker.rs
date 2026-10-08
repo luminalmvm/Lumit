@@ -33,7 +33,7 @@
 //! back as its own input, with `errored` set, and the caller puts a calm badge
 //! on the layer.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
@@ -45,7 +45,7 @@ use thiserror::Error;
 
 use crate::describe::{Context, PluginDescriptor};
 use crate::image::{Frame16, RectI};
-use crate::instance::ParamSnapshot;
+use crate::instance::{ParamSnapshot, Settled};
 use crate::ipc::pipe::{self, PipeError};
 use crate::ipc::proto::{
     BrokerMessage, FrameRef, FrameWanted, HostMessage, InstanceId, Slot, PROTOCOL_VERSION,
@@ -255,9 +255,6 @@ pub struct BrokerRender {
     pub frames_needed: BTreeMap<String, (f64, f64)>,
     /// The clip the plugin said this frame simply is, if it said so.
     pub identity_of: Option<String>,
-    /// The controls the plugin is hiding after this render, or `None` when
-    /// no render happened to ask.
-    pub secret: Option<BTreeSet<String>>,
 }
 
 /// The live connection to one broker process.
@@ -597,7 +594,7 @@ impl Broker {
     /// The frame goes across first, since a plugin's own window asks the
     /// Source clip for its preview. The wait is [`PRESS_TIMEOUT`] rather than
     /// the control deadline, since Magic Bullet Looks stays in its editor until
-    /// the user closes it. What comes back is every value the plugin holds
+    /// the user closes it. What comes back is what the plugin holds
     /// afterwards, which is how a look the user built reaches the document.
     ///
     /// # Errors
@@ -609,7 +606,7 @@ impl Broker {
         name: &str,
         time: f64,
         source: &Frame16,
-    ) -> Result<ParamSnapshot, BrokerError> {
+    ) -> Result<Settled, BrokerError> {
         if !self.instances.contains_key(&instance) {
             return Err(BrokerError::NoSuchInstance);
         }
@@ -631,16 +628,45 @@ impl Broker {
             },
         };
         allow_foreground(self.link.as_ref().map(|link| link.child.id()));
-        match self.action(&message, PRESS_TIMEOUT, None) {
-            Ok(BrokerMessage::Pressed { params }) => {
+        let answer = self.action(&message, PRESS_TIMEOUT, None);
+        self.settled(instance, answer)
+    }
+
+    /// Tell an instance that the values it was last handed are an edit at the
+    /// panel, and hand back what the plugin holds once it has reacted. The
+    /// wait is the render deadline: this is the work a plugin used to do at
+    /// the top of a render, and a stock change can load a file.
+    ///
+    /// # Errors
+    ///
+    /// [`BrokerError`].
+    pub fn settle(&mut self, instance: InstanceId, time: f64) -> Result<Settled, BrokerError> {
+        if !self.instances.contains_key(&instance) {
+            return Err(BrokerError::NoSuchInstance);
+        }
+        let deadline = self.config.quirks.render_timeout;
+        let answer = self.action(&HostMessage::Settle { instance, time }, deadline, None);
+        self.settled(instance, answer)
+    }
+
+    /// Read the answer to a press or a settle.
+    fn settled(
+        &mut self,
+        instance: InstanceId,
+        answer: Result<BrokerMessage, Fault>,
+    ) -> Result<Settled, BrokerError> {
+        match answer {
+            Ok(BrokerMessage::Settled { settled }) => {
                 // The record is what a restart rebuilds the instance from, so
                 // it carries the plugin's own writes from here on.
                 if let Some(record) = self.instances.get_mut(&instance) {
-                    record.params = params.clone();
+                    record.params = settled.params.clone();
                 }
-                Ok(params)
+                Ok(settled)
             }
-            Ok(_) => Err(BrokerError::Unexpected("something other than a press")),
+            Ok(_) => Err(BrokerError::Unexpected(
+                "something other than what it holds",
+            )),
             Err(fault) => Err(self.fault_error(&fault)),
         }
     }
@@ -723,7 +749,6 @@ impl Broker {
                 slot,
                 frames_needed,
                 identity_of,
-                secret,
             }) => {
                 let (_, frame) = self.ring.read_frame(slot)?;
                 Ok(BrokerRender {
@@ -732,7 +757,6 @@ impl Broker {
                     error: None,
                     frames_needed,
                     identity_of,
-                    secret: Some(secret),
                 })
             }
             Ok(_) => Ok(errored(identity, "the broker answered out of turn")),
@@ -1106,7 +1130,6 @@ fn errored(frame: Frame16, why: &str) -> BrokerRender {
         error: Some(why.to_owned()),
         frames_needed: BTreeMap::new(),
         identity_of: None,
-        secret: None,
     }
 }
 

@@ -259,6 +259,8 @@ void main() {
       linkedPairs: const [],
       derivedParams: const [],
       hiddenRows: const [],
+      disabledRows: const [],
+      rowOptions: const [],
     );
     final sound = BridgeClip(
       id: clipId,

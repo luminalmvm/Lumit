@@ -52,7 +52,7 @@ use std::time::Duration;
 
 use lumit_core::anim::{Animation, Property};
 use lumit_core::fx::{
-    EffectDef, EffectSchema, ParamId, Params, PressFrame, Pressed, ResolveCx, Value,
+    EffectDef, EffectSchema, ParamId, Params, PressFrame, Pressed, ResolveCx, RowState, Value,
 };
 use lumit_core::model::{EffectInstance, EffectValue};
 use parking_lot::Mutex;
@@ -62,7 +62,7 @@ use crate::bundle::{Bundle, PluginRef};
 use crate::describe::{Context, PluginDescriptor};
 use crate::ffi::param_types;
 use crate::image::Frame16;
-use crate::instance::{Instance, ParamSnapshot};
+use crate::instance::{Controls, Instance, ParamSnapshot, Settled};
 use crate::ipc::broker::Broker;
 use crate::ipc::proto::InstanceId;
 use crate::props::PropValue;
@@ -76,9 +76,6 @@ pub struct Rendering {
     pub frame: Frame16,
     /// What went wrong, in a sentence, or `None` when nothing did.
     pub error: Option<String>,
-    /// The controls the plugin is hiding after this render, by parameter
-    /// name, or `None` when no render happened to ask.
-    pub secret: Option<BTreeSet<String>>,
 }
 
 /// Where a plugin effect's frames actually come from.
@@ -121,7 +118,7 @@ pub trait PluginHost: Send + Sync {
     fn frames_needed(&self, instance: Uuid, time: f64, params: &ParamSnapshot) -> Option<Vec<i32>>;
 
     /// Press one of an instance's buttons, with the picture its own window may
-    /// ask for, and hand back every value the plugin holds afterwards.
+    /// ask for, and hand back what the plugin holds afterwards.
     ///
     /// Blocks for as long as the plugin does, which for a plugin with an editor
     /// is until the user closes it.
@@ -136,7 +133,28 @@ pub trait PluginHost: Send + Sync {
         params: &ParamSnapshot,
         name: &str,
         source: Frame16,
-    ) -> Result<ParamSnapshot, String>;
+    ) -> Result<Settled, String>;
+
+    /// Tell an instance that `handed` is an edit at the panel, between
+    /// renders, and hand back what the plugin holds once it has reacted.
+    /// `made_with` is what the instance is created holding when this is the
+    /// first anyone has asked of it: the values before the edit, so the edit
+    /// is still news.
+    ///
+    /// Waits for a render in flight.
+    ///
+    /// # Errors
+    ///
+    /// A sentence nobody reads: an edit that could not be settled lands as it
+    /// is and the plugin hears of it at its next render.
+    fn settle(
+        &self,
+        _instance: Uuid,
+        _made_with: &ParamSnapshot,
+        _handed: &ParamSnapshot,
+    ) -> Result<Settled, String> {
+        Err("this host does not settle".to_owned())
+    }
 }
 
 thread_local! {
@@ -160,10 +178,10 @@ pub struct OfxEffectDef {
     /// row is keyframed or driven by an expression, so the snapshot can say
     /// which values are the playhead's rather than a person's.
     quiet_ids: Vec<ParamId>,
-    /// The rows hidden before any render has said otherwise: the describe-time
-    /// secret flags, through the same groups and pages a live answer goes
-    /// through.
-    initial_hidden: Vec<&'static str>,
+    /// The rows as the plugin described them, which is what an instance draws
+    /// until its plugin has answered once: the describe-time secret flags,
+    /// through the same groups and pages a live answer goes through.
+    described: RowState,
     /// Each parameter's group or page, by name, so a hidden group hides its
     /// rows.
     owners: BTreeMap<String, String>,
@@ -192,13 +210,15 @@ impl OfxEffectDef {
             .map(|route| ParamId::new(&format!("derived.quiet.{}", route.row)))
             .collect();
         let owners = crate::schema::owner_names(descriptor);
-        let initial_hidden =
-            hidden_rows_of(&routes, &owners, &crate::schema::secret_names(descriptor));
+        let described = RowState {
+            hidden: rows_under(&routes, &owners, &crate::schema::secret_names(descriptor)),
+            ..RowState::default()
+        };
         Self {
             schema,
             routes,
             quiet_ids,
-            initial_hidden,
+            described,
             owners,
             defaults: ParamSnapshot::from_defaults(descriptor),
             host,
@@ -230,14 +250,20 @@ impl OfxEffectDef {
     }
 
     /// The document's own rows at `lt`, with the plugin's memory laid over
-    /// them. This is what a press starts from, since a press happens outside
-    /// a render and so has no bag.
+    /// them. This is what a press or an edit starts from, since both happen
+    /// outside a render and so have no bag. A keyframed or expression row is
+    /// the playhead's, so the plugin is not told about it, as in a render.
     // ponytail: an expression on a row reads as its plain evaluation here, the
     // resolve walk is the thing that knows the layer's context.
     fn snapshot_of(&self, inst: &EffectInstance, lt: f64) -> ParamSnapshot {
         let mut snapshot = self.assemble(|route| {
             let param = inst.params.iter().find(|param| param.id == route.row)?;
             Some(match &param.value {
+                // A whole number goes over whole: a seed is past what single
+                // precision holds.
+                EffectValue::Float(property) if is_whole(&route.param_type) => {
+                    Value::Int(property.value_at(lt).round() as i32)
+                }
                 EffectValue::Float(property) => Value::Float(property.value_at(lt) as f32),
                 EffectValue::Bool(value) => Value::Bool(*value),
                 EffectValue::Choice(value) => Value::Choice(*value),
@@ -248,12 +274,46 @@ impl OfxEffectDef {
                 _ => return None,
             })
         });
-        if let Some(memory) = inst.plugin_state_bytes() {
-            if let Ok(memory) = bincode::deserialize::<ParamSnapshot>(&memory) {
-                recall(&mut snapshot, &memory);
+        if let Some(kept) = inst.plugin_state_bytes().and_then(|bytes| unpack(&bytes)) {
+            recall(&mut snapshot, &kept.memory);
+        }
+        for route in &self.routes {
+            if self.moving(inst, route) {
+                snapshot.quiet.insert(route.name.clone());
             }
         }
         snapshot
+    }
+
+    /// Whether the document's row behind `route` changes with time on its own.
+    fn moving(&self, inst: &EffectInstance, route: &ValueRoute) -> bool {
+        inst.params
+            .iter()
+            .find(|param| param.id == route.row)
+            .is_some_and(|param| moves(&param.value))
+    }
+
+    /// What a plugin's answer is as the document keeps it: the rows it wrote,
+    /// and everything else it holds.
+    fn kept_from(&self, handed: &ParamSnapshot, after: &Settled) -> Pressed {
+        Pressed {
+            rows: self.rows_written(handed, &after.params),
+            memory: self.pack(after),
+        }
+    }
+
+    /// The rows these controls come to, through the groups and pages a hidden
+    /// or greyed one takes its rows with.
+    fn rows_of(&self, controls: &Controls) -> RowState {
+        RowState {
+            hidden: rows_under(&self.routes, &self.owners, &controls.secret),
+            disabled: rows_under(&self.routes, &self.owners, &controls.disabled),
+            options: self
+                .routes
+                .iter()
+                .filter_map(|route| Some((route.row, controls.options.get(&route.name)?.clone())))
+                .collect(),
+        }
     }
 
     /// The rows whose value the plugin changed while it was pressed, as the
@@ -281,21 +341,23 @@ impl OfxEffectDef {
         rows
     }
 
-    /// Everything the plugin holds that no row carries, a vendor blob or a
-    /// text, packed for `EffectInstance::plugin_state`. `None` when there is
-    /// nothing of the kind.
-    fn memory_of(&self, after: &ParamSnapshot) -> Option<Vec<u8>> {
+    /// Everything the plugin holds that no row carries, packed for
+    /// `EffectInstance::plugin_state`: a vendor blob or a text, then what it
+    /// has done to its controls. `None` when there is nothing of either.
+    fn pack(&self, after: &Settled) -> Option<Vec<u8>> {
         let mut memory = ParamSnapshot::new();
-        for (name, value) in after.iter() {
+        for (name, value) in after.params.iter() {
             if self.routes.iter().any(|route| &route.name == name) {
                 continue;
             }
             memory.set(name, value.clone());
         }
-        if memory.is_empty() {
+        if memory.is_empty() && after.controls == Controls::default() {
             return None;
         }
-        bincode::serialize(&memory).ok()
+        let mut bytes = bincode::serialize(&memory).ok()?;
+        bytes.extend(bincode::serialize(&after.controls).ok()?);
+        Some(bytes)
     }
 
     /// The plugin's values, one route at a time, from wherever `get` reads
@@ -422,6 +484,24 @@ fn frame_in_bag(p: Params<'_>, lt: f64) -> f64 {
     }
 }
 
+/// What an instance's plugin keeps in the document beside its rows
+/// (`EffectInstance::plugin_state`).
+struct Kept {
+    /// The values no row carries, a vendor blob or a text.
+    memory: ParamSnapshot,
+    /// What the plugin had done to its controls when it last answered, or
+    /// `None` for an instance saved before that was kept.
+    controls: Option<Controls>,
+}
+
+/// Read a plugin state back: the memory, then the controls if they are there.
+fn unpack(bytes: &[u8]) -> Option<Kept> {
+    let mut rest = bytes;
+    let memory = bincode::deserialize_from(&mut rest).ok()?;
+    let controls = bincode::deserialize_from(&mut rest).ok();
+    Some(Kept { memory, controls })
+}
+
 /// What each instance's plugin keeps beyond its rows, decoded once per change
 /// from `EffectInstance::plugin_state` and laid over the snapshot on every
 /// render. Keyed by the effect instance, with the hash it was decoded from.
@@ -438,8 +518,8 @@ fn remember(inst: &EffectInstance) -> i32 {
     let hash = hash_of(&bytes);
     let known = matches!(table.get(&inst.id), Some((seen, _)) if *seen == hash);
     if !known {
-        if let Ok(memory) = bincode::deserialize::<ParamSnapshot>(&bytes) {
-            table.insert(inst.id, (hash, Arc::new(memory)));
+        if let Some(kept) = unpack(&bytes) {
+            table.insert(inst.id, (hash, Arc::new(kept.memory)));
         }
     }
     // Truncated on purpose: the bag carries an int, and any change in the
@@ -447,15 +527,23 @@ fn remember(inst: &EffectInstance) -> i32 {
     hash as i32
 }
 
-/// The rows each instance's plugin is hiding, as its last render reported.
-/// An instance with no entry is at `OfxEffectDef::initial_hidden`.
-// ponytail: never pruned, a few strings per instance the document has ever
-// rendered; prune with the memory table if it ever shows.
-static HIDDEN: Mutex<BTreeMap<Uuid, Vec<&'static str>>> = Mutex::new(BTreeMap::new());
+/// Each instance's rows as its plugin state says they are, worked out once
+/// per change. The panel asks on every read, and the render never does.
+// ponytail: never pruned, a few hundred row names per instance the panel has
+// ever drawn; prune with the memory table if it ever shows.
+static ROWS: Mutex<BTreeMap<Uuid, (u64, RowState)>> = Mutex::new(BTreeMap::new());
 
-/// The rows hidden when these parameters are secret: the row's own parameter,
-/// or any group or page above it.
-fn hidden_rows_of(
+/// Whether a parameter of this type holds whole numbers.
+fn is_whole(param_type: &str) -> bool {
+    matches!(
+        param_type,
+        param_types::INTEGER | param_types::INTEGER_2D | param_types::INTEGER_3D
+    )
+}
+
+/// The rows under these parameters: the row's own parameter, or any group or
+/// page above it. A hidden group hides its rows and a greyed one greys them.
+fn rows_under(
     routes: &[ValueRoute],
     owners: &BTreeMap<String, String>,
     secret: &BTreeSet<String>,
@@ -572,11 +660,6 @@ impl EffectDef for OfxEffectDef {
             .render(inst, frame_in_bag(p, lt), &snapshot, source, &frames);
         let failed = rendered.error.is_some();
         LAST_ERROR.with(|slot| *slot.borrow_mut() = rendered.error);
-        if let Some(secret) = &rendered.secret {
-            HIDDEN
-                .lock()
-                .insert(inst, hidden_rows_of(&self.routes, &self.owners, secret));
-        }
         if failed {
             // **Identity, byte for byte**. A failed render hands back the
             // input, and the input is already in `rgba` — writing it again
@@ -597,24 +680,13 @@ impl EffectDef for OfxEffectDef {
 
     /// Asked with the instance's own values, since a plugin's window can
     /// follow its settings and the declared defaults would answer for a
-    /// different effect. A keyframed or expression row is the playhead's, so
-    /// the plugin is not told about it, as in a render.
+    /// different effect.
     // ponytail: this question carries the frame and no rate, so a moving row
     // is read at the frame number as if it were seconds. The render sets it
     // right before it draws. Hand the rate down if a plugin's window ever
     // follows a keyframed row.
     fn frames_needed(&self, inst: &EffectInstance, frame: f64) -> Option<Vec<i32>> {
-        let mut params = self.snapshot_of(inst, frame);
-        for route in &self.routes {
-            let moving = inst
-                .params
-                .iter()
-                .find(|param| param.id == route.row)
-                .is_some_and(|param| moves(&param.value));
-            if moving {
-                params.quiet.insert(route.name.clone());
-            }
-        }
+        let params = self.snapshot_of(inst, frame);
         self.host.frames_needed(inst.id, frame, &params)
     }
 
@@ -622,12 +694,47 @@ impl EffectDef for OfxEffectDef {
         LAST_ERROR.with(|slot| slot.borrow_mut().take())
     }
 
-    fn hidden_rows(&self, inst: &EffectInstance) -> Vec<&'static str> {
-        HIDDEN
-            .lock()
-            .get(&inst.id)
-            .cloned()
-            .unwrap_or_else(|| self.initial_hidden.clone())
+    fn row_state(&self, inst: &EffectInstance) -> RowState {
+        let Some(state) = inst.plugin_state.as_ref() else {
+            return self.described.clone();
+        };
+        let hash = hash_of(state.as_bytes());
+        let mut table = ROWS.lock();
+        if let Some((seen, rows)) = table.get(&inst.id) {
+            if *seen == hash {
+                return rows.clone();
+            }
+        }
+        let rows = inst
+            .plugin_state_bytes()
+            .and_then(|bytes| unpack(&bytes))
+            .and_then(|kept| kept.controls)
+            .map_or_else(
+                || self.described.clone(),
+                |controls| self.rows_of(&controls),
+            );
+        table.insert(inst.id, (hash, rows.clone()));
+        rows
+    }
+
+    /// The plugin is made holding what the document held before the edit, so
+    /// an edit that is the first thing to reach it is still told as one.
+    // ponytail: the rows are read at time nought. A row with keys is not told
+    // either way, so this only matters to a plugin that reads the time itself.
+    fn settle(&self, before: Option<&EffectInstance>, after: &EffectInstance) -> Option<Pressed> {
+        let handed = self.snapshot_of(after, 0.0);
+        let made_with = before.map_or_else(|| handed.clone(), |inst| self.snapshot_of(inst, 0.0));
+        let settled = self.host.settle(after.id, &made_with, &handed).ok()?;
+        let mut kept = self.kept_from(&handed, &settled);
+        // An edit has no playhead, so a row with keys is left to them rather
+        // than given a key at nought.
+        kept.rows.retain(|(row, _)| {
+            !self
+                .routes
+                .iter()
+                .any(|route| route.row == *row && self.moving(after, route))
+        });
+        Some(kept)
     }
 
     /// The plugin's memory reaches the render from here: this is the one hook
@@ -673,10 +780,7 @@ impl EffectDef for OfxEffectDef {
         let before = self.snapshot_of(inst, lt);
         let frame = frame_of(source)?;
         let after = self.host.press(inst.id, lt, &before, &route.name, frame)?;
-        Ok(Pressed {
-            rows: self.rows_written(&before, &after),
-            memory: self.memory_of(&after),
-        })
+        Ok(self.kept_from(&before, &after))
     }
 }
 
@@ -765,18 +869,20 @@ impl LocalHost {
         request: &RenderRequest,
         params: &ParamSnapshot,
     ) -> Result<Rendered, String> {
-        self.with_instance(instance, params, |plugin, live| {
+        self.with_instance(instance, params, params, |plugin, live| {
             let token = lumit_eval::epoch::Epoch::new().token();
             crate::render::render(plugin, live, request, &token).map_err(|error| error.to_string())
         })
     }
 
-    /// The plugin and the live instance, made on first use and holding
-    /// `params`, handed to `call`. A question about frames hands them over
-    /// as a render does, since the answer can depend on them.
+    /// The plugin and the live instance, made on first use with `made_with`
+    /// in place and holding `params`, handed to `call`. A question about
+    /// frames hands them over as a render does, since the answer can depend
+    /// on them.
     fn with_instance<T>(
         &self,
         instance: Uuid,
+        made_with: &ParamSnapshot,
         params: &ParamSnapshot,
         call: impl FnOnce(&PluginRef, &Instance) -> Result<T, String>,
     ) -> Result<T, String> {
@@ -793,7 +899,7 @@ impl LocalHost {
         // the plugin, which is docs/14 §7's rule.
         let mut pool = self.instances.lock();
         if let std::collections::btree_map::Entry::Vacant(slot) = pool.entry(instance) {
-            let made = Instance::create(plugin, &self.descriptor, self.context, params)
+            let made = Instance::create(plugin, &self.descriptor, self.context, made_with)
                 .map_err(|status| format!("the plugin refused an instance ({status:?})"))?;
             slot.insert(made);
         }
@@ -821,12 +927,10 @@ impl PluginHost for LocalHost {
             Ok(rendered) => Rendering {
                 frame: rendered.frame,
                 error: None,
-                secret: Some(rendered.secret),
             },
             Err(why) => Rendering {
                 frame: source,
                 error: Some(why),
-                secret: None,
             },
         }
     }
@@ -848,10 +952,22 @@ impl PluginHost for LocalHost {
         params: &ParamSnapshot,
         name: &str,
         source: Frame16,
-    ) -> Result<ParamSnapshot, String> {
-        self.with_instance(instance, params, |plugin, live| {
+    ) -> Result<Settled, String> {
+        self.with_instance(instance, params, params, |plugin, live| {
             live.press(plugin, name, time, &source)
                 .map_err(|status| format!("the plugin refused the press ({status:?})"))
+        })
+    }
+
+    fn settle(
+        &self,
+        instance: Uuid,
+        made_with: &ParamSnapshot,
+        handed: &ParamSnapshot,
+    ) -> Result<Settled, String> {
+        self.with_instance(instance, made_with, handed, |plugin, live| {
+            live.settle(plugin, 0.0)
+                .map_err(|status| format!("the plugin would not settle ({status:?})"))
         })
     }
 }
@@ -975,14 +1091,12 @@ impl PluginHost for BrokerHost {
             return Rendering {
                 frame: source,
                 error: Some(BUSY.to_owned()),
-                secret: None,
             };
         };
         let Some(id) = self.instance_of(&mut broker, instance, params) else {
             return Rendering {
                 frame: source,
                 error: Some("the plugin would not make an instance".to_owned()),
-                secret: None,
             };
         };
         let _ = broker.set_params(id, params.clone());
@@ -999,12 +1113,10 @@ impl PluginHost for BrokerHost {
             Ok(answer) => Rendering {
                 frame: answer.frame,
                 error: answer.error,
-                secret: answer.secret,
             },
             Err(error) => Rendering {
                 frame: source,
                 error: Some(error.to_string()),
-                secret: None,
             },
         }
     }
@@ -1031,7 +1143,7 @@ impl PluginHost for BrokerHost {
         params: &ParamSnapshot,
         name: &str,
         source: Frame16,
-    ) -> Result<ParamSnapshot, String> {
+    ) -> Result<Settled, String> {
         // A render in flight finishes first, then the flag goes up so no other
         // render queues behind the plugin's window.
         let mut broker = self.broker.broker.lock();
@@ -1044,6 +1156,29 @@ impl PluginHost for BrokerHost {
         self.broker.pressing.store(true, Ordering::Release);
         let answer = broker.press(id, name, time, &source);
         self.broker.pressing.store(false, Ordering::Release);
+        let notes = broker.take_notes();
+        drop(broker);
+        file(notes);
+        answer.map_err(|error| error.to_string())
+    }
+
+    // ponytail: this is on the edit, so the edit waits for a render in flight,
+    // up to the render deadline for one that hangs. Settle on a thread and
+    // fold the answer into the same undo step if that wait ever shows.
+    fn settle(
+        &self,
+        instance: Uuid,
+        made_with: &ParamSnapshot,
+        handed: &ParamSnapshot,
+    ) -> Result<Settled, String> {
+        let mut broker = self.broker.lock().ok_or_else(|| BUSY.to_owned())?;
+        let id = self
+            .instance_of(&mut broker, instance, made_with)
+            .ok_or_else(|| "the plugin would not make an instance".to_owned())?;
+        broker
+            .set_params(id, handed.clone())
+            .map_err(|error| error.to_string())?;
+        let answer = broker.settle(id, 0.0);
         let notes = broker.take_notes();
         drop(broker);
         file(notes);
