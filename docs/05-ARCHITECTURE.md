@@ -29,6 +29,7 @@ One process, plus a sandbox process per third-party plugin bundle.
 | Analysis | Camera tracking, one at a time |
 | Audio pair | The cpal callback (lock-free reads only) and a thread that fills its ring ahead |
 | GPU submit | The only thread that submits to the wgpu queue |
+| Share | While a project is shared: one accepting, and a reader and a writer per connection. The readers apply other people's edits |
 
 **Cancellation.** Every request carries an epoch per consumer (the Viewer, each export,
 background warming). Moving the playhead bumps the Viewer's. Jobs check at node and tile
@@ -49,6 +50,16 @@ behind, frames drop. Audio never waits.
 - The snapshot is published by one atomic pointer swap (`arc-swap`). Workers keep the
   snapshot they started with, so nobody reads a half-finished edit and edit and render
   never share a lock.
+- A shared project has one host, and the host's order of edits is the order. A guest
+  applies its own edits straight away and replays them over the host's as they arrive.
+  An op writes a whole value, so one made against an older document is cut down to what
+  its author changed before it is applied (`shared::land`). Two people on one layer then
+  keep each other's changes, down to one parameter of one effect. Footage never crosses,
+  each machine finds its own copy by fingerprint.
+- Closing Lumit loses neither end's work. A host writes every edit since its last save to
+  a log beside the journals, and lands them again when it shares the project next. A guest
+  without its host writes the last document both had and each edit since, and its copy
+  opened again carries on from there (`lumit-share`, `kept.rs`).
 
 ## 4. The evaluation graph
 

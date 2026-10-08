@@ -8,6 +8,7 @@ crashes" erode one careless commit at a time.
 | Work | Where |
 |---|---|
 | Document edits, snapshot publication, painting | UI thread only |
+| Other people's edits in a shared project | That project's share threads only |
 | Pixel jobs | Worker pool only |
 | Media decode | Decode threads only |
 | Disk IO | IO threads only |

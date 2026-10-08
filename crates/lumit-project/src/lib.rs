@@ -687,6 +687,13 @@ pub fn journal_path(doc_id: Uuid) -> Option<PathBuf> {
     )
 }
 
+/// Where a shared project keeps what closing Lumit must not lose: a host's
+/// edits since its last save, and the edits a guest made while its host was
+/// away. With the journals, and for the same reason.
+pub fn shared_dir() -> Option<PathBuf> {
+    Some(project_dirs()?.cache_dir().join("shared"))
+}
+
 /// Where a document's parked frames live when the disk frame cache is kept in
 /// the application's own data area rather than beside the project file
 /// (docs/06-RENDER-PIPELINE.md §5.4, Settings → Performance → Cache).
