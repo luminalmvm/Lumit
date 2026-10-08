@@ -52,8 +52,11 @@ void main() {
         .node);
 
     Future<void> enter(WidgetTester tester, LayerReference layer) async {
-      final box = tester.getCenter(
-          find.byKey(ValueKey<String>('graph-node-${effectKey(layer)}')));
+      // On the first socket row, clear of the picture under the rows, which
+      // opens on one click.
+      final box = tester.getTopLeft(
+              find.byKey(ValueKey<String>('graph-node-${effectKey(layer)}'))) +
+          const Offset(75, 30);
       await tester.tapAt(box);
       await tester.pump(kDoubleTapMinTime);
       await tester.tapAt(box);
@@ -131,6 +134,36 @@ void main() {
       await tester.pump();
       expect(p.layer.getEffects().single.shaderGraph(), isNull,
           reason: 'one gesture, one undo step');
+    });
+
+    testWidgets("the box's thumbnail opens the graph and draws it",
+        (tester) async {
+      final p = withShader();
+      final effect = p.layer.getEffects().single.id();
+      await mount(tester, p);
+
+      final empty = find.byKey(ValueKey<String>('shader-thumb-empty-$effect'));
+      expect(empty, findsOneWidget,
+          reason: 'a shader with no graph says where to click');
+      await tester.tap(find.byKey(ValueKey<String>('shader-thumb-$effect')));
+      await tester.pump();
+      expect(find.byKey(const ValueKey<String>('shader-breadcrumb')),
+          findsOneWidget,
+          reason: 'one click on the picture is a double-click on the box');
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+
+      final stack = p.layer.getEffects();
+      stack.single.setShaderGraph(
+          graph: '{"nodes":[{"id":1,"kind":"result"},{"id":2,"kind":"uv"}],'
+              '"edges":[]}');
+      p.layer.setEffects(effects: stack);
+      p.uiState.model.refresh();
+      await tester.pump();
+      expect(empty, findsNothing);
+      expect(find.byKey(ValueKey<String>('shader-thumb-graph-$effect')),
+          findsOneWidget,
+          reason: 'a stored graph is drawn in place of the words');
     });
   });
 }

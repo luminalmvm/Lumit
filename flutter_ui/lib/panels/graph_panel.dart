@@ -63,7 +63,8 @@ import '../widgets/marquee.dart';
 import 'comp_graph_panel.dart' show CompGraphPanel;
 import 'fx_section.dart' show fxEnableMark, fxEnableMarkScale;
 import 'placeholder.dart';
-import 'shader_graph.dart' show ShaderGraphPanel;
+import 'shader_editor.dart' show InstanceHome;
+import 'shader_graph.dart' show ShaderGraphPanel, ShaderGraphThumb;
 import 'timeline_extras_frb.dart' show DoubleTap;
 
 // --- The drawing's own numbers (NodeGraph, Nodes-workspace) ---------------
@@ -354,6 +355,12 @@ class GraphSocket {
   const GraphSocket(this.node, this.port, this.isInput, this.at);
 }
 
+/// The picture of its inner graph a Custom shader box carries under its rows:
+/// how tall it is, the air round it, and the room the two take on the box.
+const double graphShaderThumbHeight = 56;
+const double graphFootPad = 6;
+const double graphShaderFoot = graphShaderThumbHeight + graphFootPad * 2;
+
 /// What one box shows, whichever graph it came out of.
 ///
 /// The canvas draws three subjects and each has a model of its own, so a card
@@ -422,13 +429,15 @@ class GraphBox {
 /// it draws every socket it has (§1.4). Exposure grows the box; it is not a
 /// second kind of wiring. [params] are the parameters an open node graph box
 /// gives a control row each, in the order the panel lists them; the layer
-/// canvas passes none and its rows are sockets alone.
+/// canvas passes none and its rows are sockets alone. [foot] is room left
+/// under the rows, which a Custom shader box fills with its inner graph.
 GraphBox graphLayoutBox(
   GraphCard card,
   Offset at, {
   required bool open,
   double width = graphNodeWidth,
   List<String> params = const [],
+  double foot = 0,
 }) {
   List<BridgePort> shown(List<BridgePort> ports) => [
         for (final p in ports)
@@ -444,7 +453,7 @@ GraphBox graphLayoutBox(
       at.dx,
       at.dy,
       width + 2,
-      2 + graphNodeHeaderHeight + height,
+      2 + graphNodeHeaderHeight + height + foot,
     ),
     inputs,
     outputs,
@@ -643,6 +652,7 @@ GraphLayout _layoutOf(
       open: exposed.contains(key) || isDriver,
       width:
           node.node is BridgeNodeRef_Out ? graphOutNodeWidth : graphNodeWidth,
+      foot: node.matchName == 'custom_shader' ? graphShaderFoot : 0,
     ));
   }
   return GraphLayout(boxes);
@@ -2187,6 +2197,24 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     });
   }
 
+  /// A Custom shader box's picture of its inner graph, which a click opens.
+  /// Null for every other box.
+  Widget? _shaderThumb(String key) {
+    final layer = _layer;
+    final node = _node(key);
+    if (layer == null || node == null || node.matchName != 'custom_shader') {
+      return null;
+    }
+    final effect = _effectIdOf(node.node);
+    if (effect == null) return null;
+    return ShaderGraphThumb(
+      home: InstanceHome.layer(layer),
+      effect: effect,
+      height: graphShaderThumbHeight,
+      onOpen: () => _enterBox(node),
+    );
+  }
+
   /// A double-click on a box with an inside: a Custom shader opens its inner
   /// graph, a Node graph box opens the composition it applies. False for every
   /// other box, which is a plain press.
@@ -2653,6 +2681,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
                                   // Escape: shut the editor, rename nothing.
                                   onRenameCancelled: () =>
                                       setState(() => _renamingNode = null),
+                                  foot: _shaderThumb(box.key),
                                 ),
                               ),
                           ],
@@ -2784,6 +2813,10 @@ class GraphNodeCard extends StatelessWidget {
   /// own row, on the box. Null on a canvas whose rows are sockets alone.
   final Widget Function(String param)? paramRow;
 
+  /// What the box draws under its rows, in the room its layout left: a Custom
+  /// shader's picture of its inner graph. A press on it is its own.
+  final Widget? foot;
+
   const GraphNodeCard({
     super.key,
     required this.box,
@@ -2797,6 +2830,7 @@ class GraphNodeCard extends StatelessWidget {
     required this.onRenamed,
     required this.onRenameCancelled,
     this.paramRow,
+    this.foot,
   });
 
   GraphCard get _card => box.card;
@@ -2835,6 +2869,13 @@ class GraphNodeCard extends StatelessWidget {
               width: box.rect.width - 2,
               height: row.height,
               child: _row(t, row),
+            ),
+          if (foot case final foot?)
+            Positioned(
+              left: 1 + graphFootPad,
+              right: 1 + graphFootPad,
+              bottom: 1 + graphFootPad,
+              child: _claim(foot),
             ),
         ],
       ),

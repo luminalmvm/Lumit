@@ -1236,6 +1236,10 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                 effectName: fx.customName ?? effectLabelOf(fx.name));
           }
         },
+        onOpenShaderGraph: fx.name == 'custom_shader' && !style
+            ? () => ui.enterShaderGraph(layer, fx.id,
+                effectName: fx.customName ?? effectLabelOf(fx.name))
+            : null,
         stagedValue: _effects.stagedValue,
         trackCorrected: info.trackCorrected,
         onStackChanged: ui.model.refresh,
@@ -1653,6 +1657,10 @@ class _EffectSection extends StatelessWidget {
   final void Function(UuidValue effect, String param) onAction;
   final int pressed;
 
+  /// Open this Custom shader's inner graph. Null on every other effect, which
+  /// draws no button for it.
+  final VoidCallback? onOpenShaderGraph;
+
   /// A camera following this layer's Camera track has been nudged —
   /// drawn as a dot on the status row. From the read model, like everything
   /// else this card draws.
@@ -1698,6 +1706,7 @@ class _EffectSection extends StatelessWidget {
     required this.onToggleGroup,
     required this.onAction,
     required this.pressed,
+    this.onOpenShaderGraph,
     this.trackCorrected = false,
     this.themedGraphs = false,
     this.curvePlotSize = curvePlotSizeDefault,
@@ -1969,6 +1978,21 @@ class _EffectSection extends StatelessWidget {
           badge,
         if (displayAt(playheadFrame) != null)
           _AtPlayhead(builder: (context, at) => displayAt(at)!),
+        // The way into a Custom shader's inner graph, drawn as its other
+        // buttons are.
+        if (onOpenShaderGraph case final open?)
+          fxTwoColumnRow(
+            context: context,
+            name: const SizedBox.shrink(),
+            keyframeControls: null,
+            control: HouseButton(
+              key: ValueKey<String>('fx-open-graph-$id'),
+              small: true,
+              onPressed: open,
+              child: Text(engineLabel('Open graph'),
+                  style: ThemeScope.of(context).theme.body),
+            ),
+          ),
         ..._paramRows(id, values),
       ],
     );

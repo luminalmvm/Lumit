@@ -31,12 +31,14 @@ import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:provider/provider.dart';
+import 'package:uuid/uuid.dart';
 
 import '../l10n/strings.dart';
 import '../shell/fx_console_frb.dart';
 import '../state/dock.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import 'shader_editor.dart' show InstanceHome;
 import 'graph_panel.dart'
     show
         GraphGroundPainter,
@@ -230,6 +232,31 @@ class _Box {
             port * graphPortRowHeight +
             graphPortRowHeight / 2,
       );
+}
+
+/// Every box where it sits: its stored position, or a place in a grid of four
+/// across for a box nobody has moved. The canvas and the thumbnail both lay
+/// out through this, so the small picture is the big one.
+List<_Box> _layOut(
+    List<BridgeShaderGraphNode> nodes, Map<int, Offset> positions) {
+  final out = <_Box>[];
+  var placed = 0;
+  for (final node in nodes) {
+    final at = positions[node.id] ??
+        Offset(40.0 + (placed % 4) * 170.0, 40.0 + (placed ~/ 4) * 120.0);
+    placed++;
+    final rows = math.max(node.inputs.length, node.outputs.length);
+    out.add(_Box(
+      node,
+      Rect.fromLTWH(
+        at.dx,
+        at.dy,
+        graphOutNodeWidth + 2,
+        2 + graphNodeHeaderHeight + rows * graphPortRowHeight,
+      ),
+    ));
+  }
+  return out;
 }
 
 /// A wire in hand: the socket it left, where the pointer is, and — when the
@@ -526,26 +553,8 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel> {
 
   Offset _toCanvas(Offset local) => (local - _pan) / _zoom;
 
-  List<_Box> _boxes() {
-    final out = <_Box>[];
-    var placed = 0;
-    for (final node in _view?.nodes ?? const <BridgeShaderGraphNode>[]) {
-      final at = _positions[node.id] ??
-          Offset(40.0 + (placed % 4) * 170.0, 40.0 + (placed ~/ 4) * 120.0);
-      placed++;
-      final rows = math.max(node.inputs.length, node.outputs.length);
-      out.add(_Box(
-        node,
-        Rect.fromLTWH(
-          at.dx,
-          at.dy,
-          graphOutNodeWidth + 2,
-          2 + graphNodeHeaderHeight + rows * graphPortRowHeight,
-        ),
-      ));
-    }
-    return out;
-  }
+  List<_Box> _boxes() =>
+      _layOut(_view?.nodes ?? const <BridgeShaderGraphNode>[], _positions);
 
   _Sock? _socketAt(List<_Box> boxes, Offset at) {
     for (final box in boxes) {
@@ -1081,4 +1090,203 @@ class _WirePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_WirePainter old) => true;
+}
+
+/// How tall the thumbnail is in the Node panel. A box on the canvas draws it
+/// shorter.
+const double shaderGraphThumbHeight = 72;
+
+/// A Custom shader's inner graph in miniature, and the way into it.
+///
+/// The boxes and wires of the stored graph, drawn small. A shader with no
+/// graph yet says where to click instead. Either way a click opens the graph,
+/// as a double-click on the box does.
+///
+/// It reads when it is mounted and when the document changes, never in a
+/// build.
+class ShaderGraphThumb extends StatefulWidget {
+  final InstanceHome home;
+  final UuidValue effect;
+  final VoidCallback onOpen;
+  final double height;
+
+  const ShaderGraphThumb({
+    super.key,
+    required this.home,
+    required this.effect,
+    required this.onOpen,
+    this.height = shaderGraphThumbHeight,
+  });
+
+  @override
+  State<ShaderGraphThumb> createState() => _ShaderGraphThumbState();
+}
+
+class _ShaderGraphThumbState extends State<ShaderGraphThumb> {
+  LumitUiState? _ui;
+
+  /// The graph laid out, or null for a shader that holds none.
+  ({List<_Box> boxes, List<Map<String, dynamic>> edges})? _drawn;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    if (identical(ui, _ui)) return;
+    _ui?.model.removeListener(_reload);
+    _ui = ui;
+    ui.model.addListener(_reload);
+    _reload();
+  }
+
+  @override
+  void didUpdateWidget(covariant ShaderGraphThumb old) {
+    super.didUpdateWidget(old);
+    if (old.effect != widget.effect) _reload();
+  }
+
+  @override
+  void dispose() {
+    _ui?.model.removeListener(_reload);
+    super.dispose();
+  }
+
+  void _reload() {
+    if (!mounted) return;
+    String? json;
+    try {
+      json = widget.home
+          .read()
+          .where((i) => i.id() == widget.effect)
+          .firstOrNull
+          ?.shaderGraph();
+    } catch (_) {
+      // The effect's home has gone; the placeholder is the honest answer.
+    }
+    if (json == null) {
+      setState(() => _drawn = null);
+      return;
+    }
+    final graph = _Inner.parse(json);
+    final view = shaderGraphView(graph: graph.encode());
+    setState(() => _drawn =
+        (boxes: _layOut(view.nodes, graph.layout), edges: graph.edges));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    final drawn = _drawn;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        key: ValueKey<String>('shader-thumb-${widget.effect}'),
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onOpen,
+        child: Container(
+          height: widget.height,
+          decoration: BoxDecoration(
+            color: t.surface0,
+            border: Border.all(color: t.hairline),
+            borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: drawn == null
+              ? Center(
+                  child: Text(
+                    l10n.shaderGraphOpen,
+                    key: ValueKey<String>(
+                        'shader-thumb-empty-${widget.effect}'),
+                    style: t.small.copyWith(color: t.textMuted),
+                  ),
+                )
+              : CustomPaint(
+                  key: ValueKey<String>('shader-thumb-graph-${widget.effect}'),
+                  painter: _ThumbPainter(
+                      boxes: drawn.boxes, edges: drawn.edges, theme: t),
+                  child: const SizedBox.expand(),
+                ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The whole graph fitted into the thumbnail: each box as its frame and header
+/// strip, each wire in its source socket's colour. No words at this size.
+class _ThumbPainter extends CustomPainter {
+  final List<_Box> boxes;
+  final List<Map<String, dynamic>> edges;
+  final LumitTheme theme;
+
+  const _ThumbPainter({
+    required this.boxes,
+    required this.edges,
+    required this.theme,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (boxes.isEmpty) return;
+    var bounds = boxes.first.rect;
+    for (final box in boxes.skip(1)) {
+      bounds = bounds.expandToInclude(box.rect);
+    }
+    const pad = 8.0;
+    // Never larger than life, so one box alone stays a box.
+    final zoom = math.min(
+      1.0,
+      math.min((size.width - pad * 2) / bounds.width,
+          (size.height - pad * 2) / bounds.height),
+    );
+    if (zoom <= 0) return;
+    final shift = size.center(Offset.zero) - bounds.center * zoom;
+    Offset at(Offset canvasPoint) => canvasPoint * zoom + shift;
+
+    final byId = {for (final b in boxes) b.node.id: b};
+    for (final e in edges) {
+      final from = byId[e['from']];
+      final to = byId[e['to']];
+      if (from == null || to == null) continue;
+      final port = e['from_port'] as int? ?? 0;
+      if (port >= from.node.outputs.length) continue;
+      canvas.drawPath(
+        graphWirePath(
+          at(from.socket(port, isInput: false)),
+          at(to.socket(e['to_port'] as int? ?? 0, isInput: true)),
+          zoom: zoom,
+        ),
+        Paint()
+          ..color = shaderPortColour(theme, from.node.outputs[port].ty)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1,
+      );
+    }
+
+    final fill = Paint()..color = theme.surface1;
+    final head = Paint()..color = graphShaderHeader(theme);
+    final edge = Paint()
+      ..color = theme.hairline
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+    for (final box in boxes) {
+      final rect =
+          Rect.fromPoints(at(box.rect.topLeft), at(box.rect.bottomRight));
+      final shape = RRect.fromRectAndRadius(rect, const Radius.circular(2));
+      canvas.drawRRect(shape, fill);
+      canvas.save();
+      canvas.clipRRect(shape);
+      canvas.drawRect(
+        Rect.fromLTWH(
+            rect.left, rect.top, rect.width, graphNodeHeaderHeight * zoom),
+        head,
+      );
+      canvas.restore();
+      canvas.drawRRect(shape, edge);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_ThumbPainter old) =>
+      old.boxes != boxes || old.edges != edges || old.theme != theme;
 }
