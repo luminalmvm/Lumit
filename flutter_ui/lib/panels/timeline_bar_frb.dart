@@ -20,6 +20,7 @@ import 'timeline_extras_frb.dart';
 import 'layer_fold_frb.dart';
 import 'timeline_snap.dart';
 import 'timeline_key_block_frb.dart';
+import 'timeline_layer_drag.dart' show LayerLift;
 
 /// The same on a **shut layer's** row: smaller than the keys you take hold
 /// of, because these are a summary of everything keyed inside the layer.
@@ -583,8 +584,11 @@ class _BarState extends State<Bar> {
               child: IgnorePointer(child: ColoredBox(color: t.surface2)),
             ),
           // Lantern's selected row: accent_soft behind the bar, rounded as
-          // the outline's row is.
-          if (widget.selected && t.shape == ThemeShape.lantern)
+          // the outline's row is. Not while the layer is in hand, when the
+          // lifted card is that fill.
+          if (widget.selected &&
+              t.shape == ThemeShape.lantern &&
+              !LayerLift.of(context))
             Positioned(
               key: ValueKey<String>(
                   'tl-bar-rowfill-${widget.entry.layer.internallayerId}'),

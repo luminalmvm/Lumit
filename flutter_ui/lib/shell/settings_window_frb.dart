@@ -60,6 +60,7 @@ import '../state/updates.dart';
 import '../state/workspace.dart';
 import '../theme/custom_theme.dart';
 import '../icons/icon_style.dart';
+import '../theme/motion.dart';
 import '../theme/theme.dart';
 import '../theme/theme_file.dart';
 import '../widgets/controls.dart';
@@ -204,6 +205,11 @@ enum CacheScope { everywhere, thisProject }
 class _SettingsWindowState extends State<_SettingsWindow> {
   late SettingsPage _page = widget.initialPage;
 
+  /// How many times the page has been changed since the window opened. The
+  /// page the window opens on arrives with the window, and every page after
+  /// it makes a small entrance of its own (docs/15 §8).
+  int _pageTurns = 0;
+
   @override
   void initState() {
     super.initState();
@@ -269,6 +275,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   /// it is up, so its readouts stay live without a bridge call in `build()`.
   void _showPage(SettingsPage page) {
     setState(() {
+      if (page != _page) _pageTurns++;
       _page = page;
       if (page == SettingsPage.previewAndCache) _pollPerf();
       // Re-read rather than cache for the session: a device can be plugged in
@@ -501,7 +508,12 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                 key: ValueKey<String>('settings-page-${page.name}'),
                 behavior: HitTestBehavior.opaque,
                 onTap: () => _showPage(page),
-                child: Container(
+                // The tick and the fill behind it move from the page left to
+                // the page chosen. The padding gives up exactly what the tick
+                // takes at every step, so the name does not move.
+                child: AnimatedContainer(
+                  duration: ThemeScope.of(context).motion.mark.duration,
+                  curve: ThemeScope.of(context).motion.mark.curve,
                   height: settingsNavRow,
                   alignment: Alignment.centerLeft,
                   padding: EdgeInsets.only(
@@ -599,19 +611,28 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           child: SingleChildScrollView(
             key: ValueKey<String>('settings-body-${_page.name}'),
             controller: _scroll,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                ...sections,
-                if (sections.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Text(l10n.settingsNoMatches,
-                        key: const ValueKey('settings-no-matches'),
-                        style: t.small.copyWith(color: t.textMuted)),
-                  ),
-                const SizedBox(height: 8),
-              ],
+            // The scroll view above is keyed by page, so this mounts afresh
+            // for each one and plays once: a page comes up into place rather
+            // than cutting. Searching within a page replays nothing.
+            child: Entrance(
+              spec: _pageTurns == 0
+                  ? MotionSpec.still
+                  : ThemeScope.of(context).motion.reveal,
+              rise: ThemeScope.of(context).motion.revealRise,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  ...sections,
+                  if (sections.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Text(l10n.settingsNoMatches,
+                          key: const ValueKey('settings-no-matches'),
+                          style: t.small.copyWith(color: t.textMuted)),
+                    ),
+                  const SizedBox(height: 8),
+                ],
+              ),
             ),
           ),
         ),

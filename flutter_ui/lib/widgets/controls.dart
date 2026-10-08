@@ -13,6 +13,7 @@ export 'controls/dropdowns.dart';
 export 'controls/indicators.dart';
 export 'controls/menus.dart';
 export 'controls/modal_window.dart';
+export 'controls/motion.dart';
 export 'controls/popups.dart';
 export 'controls/slider.dart';
 export 'controls/text_field.dart';

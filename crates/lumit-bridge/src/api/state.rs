@@ -478,6 +478,10 @@ pub type WorkerResponseStream = StreamSink<WorkerResponse>;
 pub enum OpenPhase {
     /// Unzipping the `.lum` and typing the document out of its JSON.
     ReadingFile,
+    /// Copying packed footage out of the `.lum`, for the files that are no
+    /// longer on disk. Only reported when there is something to copy, and the
+    /// one phase that says how far through itself it is.
+    ReadingPackedMedia,
     /// Pointing every footage reference at a file on this machine (docs/10 §2),
     /// including the one walk of the project's folder a lost item costs.
     ResolvingMedia,
@@ -506,6 +510,7 @@ pub type OpenProgressStream = StreamSink<OpenProgress>;
 fn phase_fraction(phase: OpenPhase) -> f64 {
     match phase {
         OpenPhase::ReadingFile => 0.0,
+        OpenPhase::ReadingPackedMedia => 0.1,
         OpenPhase::ResolvingMedia => 0.4,
         OpenPhase::PreparingProject => 0.7,
         OpenPhase::StartingPreview => 0.9,
@@ -598,6 +603,9 @@ pub(crate) fn op_scope(op: &lumit_core::Op) -> (Option<Uuid>, Option<Uuid>, bool
         | Op::SetItemProxy { .. }
         | Op::SetItemUseProxy { .. }
         | Op::SetUseProxies { .. }
+        // Read by the File menu when it opens, and it is a document change
+        // like the proxy switch above.
+        | Op::SetAutoPack { .. }
         | Op::SetFolderChildren { .. }
         | Op::SetAutoFolder { .. }
         // Where this project parks its frames. No panel draws it — Settings
@@ -884,6 +892,27 @@ pub(crate) fn adopt(
 ) -> Result<(ProjectReference, Vec<String>), BridgeError> {
     let id = Uuid::now_v7();
 
+    // Packed footage first, so the resolver finds those items already placed
+    // and does not go looking for files that were never sent.
+    if let Some(archive) = saved_at.as_deref() {
+        let mut sent = -1.0_f64;
+        crate::packing::restore(&mut doc, archive, media_root, |copied| {
+            // The copy fills the bar from this phase's start to the next one's.
+            let from = phase_fraction(OpenPhase::ReadingPackedMedia);
+            let to = phase_fraction(OpenPhase::ResolvingMedia);
+            let fraction = from + (to - from) * copied;
+            if fraction - sent < 0.005 {
+                return;
+            }
+            sent = fraction;
+            if let Some(sink) = on_progress {
+                let _ = sink.add(OpenProgress {
+                    phase: OpenPhase::ReadingPackedMedia,
+                    fraction,
+                });
+            }
+        });
+    }
     report_phase(on_progress, OpenPhase::ResolvingMedia);
     let (_relinked, missing) = lumit_project::resolve_all_media(&mut doc, media_root, &[]);
     report_phase(on_progress, OpenPhase::PreparingProject);

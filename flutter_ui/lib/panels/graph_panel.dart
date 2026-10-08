@@ -3037,10 +3037,13 @@ class GraphNodeCard extends StatelessWidget {
           width: graphBadgeSize,
           height: graphBadgeSize,
           child: Center(
-            child: lumitIcon(
-              exposed ? LumitIcon.twirlOpen : LumitIcon.twirlClosed,
-              size: graphTwirlSize,
-              color: exposed ? t.textPrimary : t.textMuted,
+            child: TwirlTurn(
+              open: exposed,
+              child: lumitIcon(
+                exposed ? LumitIcon.twirlOpen : LumitIcon.twirlClosed,
+                size: graphTwirlSize,
+                color: exposed ? t.textPrimary : t.textMuted,
+              ),
             ),
           ),
         ),

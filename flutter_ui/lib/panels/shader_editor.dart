@@ -26,8 +26,10 @@ import 'package:flutter/services.dart';
 import 'package:lumit_flutter/panels/effect_param_row_frb.dart';
 import 'package:uuid/uuid.dart';
 
+import 'package:lumit_flutter/src/rust/api/comp_graph.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
+import 'package:lumit_flutter/src/rust/api/graph.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 
 import '../l10n/strings.dart';
@@ -60,7 +62,18 @@ class InstanceHome {
   /// there is nothing to draw into.
   final void Function(List<BridgeEffectInstance> instances)? draw;
 
-  const InstanceHome({required this.read, required this.commit, this.draw});
+  /// [commit], with the wire into socket [port] of box [node] taken off in
+  /// the same op. Null where the instances have no sockets of their own.
+  final void Function(
+          List<BridgeEffectInstance> instances, UuidValue node, String port)?
+      commitUnplugging;
+
+  const InstanceHome({
+    required this.read,
+    required this.commit,
+    this.draw,
+    this.commitUnplugging,
+  });
 
   factory InstanceHome.layer(LayerReference layer,
           {void Function(List<BridgeEffectInstance> instances)? draw}) =>
@@ -75,6 +88,24 @@ class InstanceHome {
         read: layer.getGraphDrivers,
         commit: (drivers) =>
             layer.setGraph(drivers: drivers, wiring: layer.getGraph().wiring),
+        commitUnplugging: (drivers, node, port) {
+          final w = layer.getGraph().wiring;
+          final socket = BridgeInputRef.param(
+              node: BridgeNodeRef.driver(node), port: port);
+          layer.setGraph(
+            drivers: drivers,
+            wiring: BridgeGraphWiring(
+              edges: [
+                for (final e in w.edges)
+                  if (e.to != socket) e,
+              ],
+              layout: w.layout,
+              exposed: w.exposed,
+              groups: w.groups,
+              outUnwired: w.outUnwired,
+            ),
+          );
+        },
       );
 
   /// The wiring is read at the commit, so it is the graph as it stands then.
@@ -85,6 +116,24 @@ class InstanceHome {
         commit: (instances) => graph.setNodeGraph(
             instances: instances, wiring: graph.getNodeGraph().wiring),
         draw: draw,
+        commitUnplugging: (instances, node, port) {
+          final w = graph.getNodeGraph().wiring;
+          graph.setNodeGraph(
+            instances: instances,
+            wiring: BridgeCompWiring(
+              reads: w.reads,
+              inputs: w.inputs,
+              output: w.output,
+              edges: [
+                for (final e in w.edges)
+                  if (e.to != node || e.toPort != port) e,
+              ],
+              layout: w.layout,
+              exposed: w.exposed,
+              groups: w.groups,
+            ),
+          );
+        },
       );
 }
 
@@ -166,15 +215,54 @@ bool pressShaderButton({
   return true;
 }
 
-/// Press an Expression box's Edit expression row: open the expression
-/// dialogue on its text and stage what comes back. [onApplied] runs when text
-/// landed.
-Future<void> editExpressionOn({
+/// Press one of an Expression box's buttons, wherever the box sits.
+///
+/// Edit expression opens the dialogue on its text. Add input and Remove input
+/// change how many numbers the text can read, one op each. Answers whether
+/// [param] was one of them. [onApplied] runs when something landed.
+bool editExpressionOn({
   required BuildContext context,
   required InstanceHome home,
   required UuidValue effect,
+  required String param,
   required VoidCallback onApplied,
-}) async {
+}) {
+  switch (param) {
+    case 'edit':
+      unawaited(_editExpressionText(context, home, effect, onApplied));
+    case 'add_input' || 'remove_input':
+      final staged = home.read();
+      final instance = staged.where((i) => i.id() == effect).firstOrNull;
+      if (instance == null) return true;
+      try {
+        if (param == 'add_input') {
+          if (instance.addExpressionInput() == null) return true;
+          home.commit(staged);
+        } else {
+          final gone = instance.removeExpressionInput();
+          if (gone == null) return true;
+          // The input's wire goes with it, or the graph would name a socket
+          // that is no longer there and the whole edit would be refused.
+          if (home.commitUnplugging case final unplug?) {
+            unplug(staged, effect, gone);
+          } else {
+            home.commit(staged);
+          }
+        }
+      } catch (_) {
+        // The graph changed under the press; re-reading is the recovery.
+        return true;
+      }
+      onApplied();
+    default:
+      return false;
+  }
+  return true;
+}
+
+/// Open the expression dialogue on the box's text and stage what comes back.
+Future<void> _editExpressionText(BuildContext context, InstanceHome home,
+    UuidValue effect, VoidCallback onApplied) async {
   final held =
       home.read().where((i) => i.id() == effect).firstOrNull?.expressionSource();
   if (held == null) return;

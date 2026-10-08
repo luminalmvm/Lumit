@@ -12,6 +12,7 @@ use crate::api::{
     state::{WorkerResponseStream, PROJECTS, STREAMS},
     worker_thread, BridgeError,
 };
+use crate::frb_generated::StreamSink;
 
 /// Whether undo and redo have anything to do, for greying the menu items.
 #[frb(non_opaque)]
@@ -67,6 +68,53 @@ impl BridgeSwatch {
         }
     }
 }
+
+/// How much of the project's footage its `.lum` carries, for the File menu's
+/// packing rows (docs/01-GLOSSARY.md: Packed project).
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BridgePackState {
+    /// How many footage items the project holds.
+    pub footage: u32,
+    /// How many of them are packed.
+    pub packed: u32,
+    /// Whether every save packs the footage imported since the last one.
+    pub auto_pack: bool,
+}
+
+/// How a save that packs ended.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BridgePackResult {
+    /// The file written. Empty when the save was cancelled, which leaves the
+    /// file on disk as it was.
+    pub path: String,
+    pub cancelled: bool,
+    /// How many footage items the file now carries.
+    pub packed: u32,
+    /// How many it was asked to carry and does not, because their file could
+    /// not be found or read. They stay as they were, referenced by path.
+    pub left_out: u32,
+}
+
+/// How an unpack ended.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BridgeUnpackResult {
+    /// True when the unpack was stopped. Files already written stay, and the
+    /// project still carries all of its footage.
+    pub cancelled: bool,
+    /// How many files were written beside the project.
+    pub written: u32,
+    /// How many items are still packed because their file could not be
+    /// written out.
+    pub kept: u32,
+    /// The folder the files were written to.
+    pub folder: String,
+}
+
+/// The fraction of a pack or an unpack that is done, 0..=1.
+pub type PackProgressStream = StreamSink<f64>;
 
 #[derive(Debug, Clone)]
 #[frb]
@@ -653,7 +701,162 @@ impl ProjectReference {
     /// so a project saved somewhere new keeps relative links that work.
     /// A successful save clears the crash journal: the journal covers work
     /// *between* saves, so once the document is on disk it is redundant.
+    ///
+    /// A packed project is saved with its footage still inside
+    /// ([`Self::save_packed`] is the same save with a progress stream).
     pub fn save(&self, path: String) -> Result<String, BridgeError> {
+        let saved = self.save_with(path, false, None)?;
+        if saved.cancelled {
+            return Err(BridgeError::WriteFailed);
+        }
+        Ok(saved.path)
+    }
+
+    /// [`Self::save`], with the footage inside the file (docs/01-GLOSSARY.md:
+    /// Packed project).
+    ///
+    /// `pack_all` packs every footage item, which is what Pack project file
+    /// does. Without it the save packs what the project packs already, and
+    /// everything when the project packs automatically. Footage on disk that
+    /// has changed since it was packed is packed again, so the file holds
+    /// what the project is showing.
+    ///
+    /// The copy is as long as the footage is big. `on_progress` hears how far
+    /// it has got, and [`Self::cancel_packing`] stops it with the file on disk
+    /// left as it was.
+    ///
+    /// Not an undo step. A save is not one, and which items the file carries
+    /// is a fact about the file.
+    pub fn save_packed(
+        &self,
+        path: String,
+        pack_all: bool,
+        on_progress: Option<PackProgressStream>,
+    ) -> Result<BridgePackResult, BridgeError> {
+        self.save_with(path, pack_all, on_progress.as_ref())
+    }
+
+    /// Stop the pack or unpack in flight. Harmless when there is none.
+    #[frb(sync)]
+    pub fn cancel_packing(&self) {
+        crate::packing::cancel();
+    }
+
+    /// How much of the project's footage is packed, and whether saves pack
+    /// automatically.
+    #[frb(sync)]
+    pub fn pack_state(&self) -> Result<BridgePackState, BridgeError> {
+        let state = self.state()?;
+        let state = state.read().map_err(|_| BridgeError::ReadFailed)?;
+        let doc = state.store.snapshot();
+        let footage = doc.items.iter().filter_map(|item| match item {
+            lumit_core::model::ProjectItem::Footage(f) => Some(f.id),
+            _ => None,
+        });
+        let (mut count, mut packed) = (0, 0);
+        for id in footage {
+            count += 1;
+            packed += u32::from(doc.packed.contains_key(&id));
+        }
+        Ok(BridgePackState {
+            footage: count,
+            packed,
+            auto_pack: doc.auto_pack,
+        })
+    }
+
+    /// Set whether every save packs the project's footage. An ordinary op, so
+    /// it is undoable and travels in the `.lum`. Nothing is packed until the
+    /// next save.
+    #[frb(sync)]
+    pub fn set_auto_pack(&self, auto_pack: bool) -> Result<(), BridgeError> {
+        let state = self.state()?;
+        let state = state.write().map_err(|_| BridgeError::WriteFailed)?;
+        state
+            .store
+            .commit(Op::SetAutoPack { auto_pack })
+            .map_err(BridgeError::OpError)?;
+        Ok(())
+    }
+
+    /// Write the packed footage back out as files and save the project
+    /// without it.
+    ///
+    /// An item whose original is still on disk goes back to reading it and
+    /// nothing is written for it. The rest land in a `media` folder beside
+    /// the project file, and their items are pointed there. Packing
+    /// automatically is switched off, or the save that ends this would pack
+    /// everything again.
+    ///
+    /// Not an undo step, for [`Self::save_packed`]'s reason.
+    pub fn unpack(
+        &self,
+        on_progress: Option<PackProgressStream>,
+    ) -> Result<BridgeUnpackResult, BridgeError> {
+        let project = self.state()?;
+        let (document, path) = {
+            let state = project.read().map_err(|_| BridgeError::ReadFailed)?;
+            let path = state.path.clone().ok_or(BridgeError::NoProjectPath)?;
+            (state.store.snapshot(), path)
+        };
+        let dir = path.parent().unwrap_or_else(|| std::path::Path::new(""));
+        let folder = dir.join("media").to_string_lossy().into_owned();
+
+        crate::packing::begin();
+        let mut progress = crate::packing::progress(|fraction| {
+            if let Some(sink) = &on_progress {
+                let _ = sink.add(fraction);
+            }
+        });
+        let unpacked = match lumit_project::unpack(
+            &document,
+            &crate::packing::archives(&path),
+            dir,
+            &crate::packing::read_out_dir(document.id),
+            &mut progress,
+        ) {
+            Ok(unpacked) => unpacked,
+            Err(lumit_project::ProjectError::Cancelled) => {
+                return Ok(BridgeUnpackResult {
+                    cancelled: true,
+                    written: 0,
+                    kept: 0,
+                    folder,
+                });
+            }
+            Err(_) => return Err(BridgeError::WriteFailed),
+        };
+
+        let kept = unpacked.kept.len() as u32;
+        {
+            let state = project.write().map_err(|_| BridgeError::WriteFailed)?;
+            if state.store.snapshot().auto_pack {
+                state
+                    .store
+                    .commit(Op::SetAutoPack { auto_pack: false })
+                    .map_err(BridgeError::OpError)?;
+            }
+            state.store.set_packed(unpacked.kept, unpacked.moved);
+        }
+        // The save is what takes the bytes out of the file.
+        self.save_with(String::new(), false, None)?;
+        Ok(BridgeUnpackResult {
+            cancelled: false,
+            written: u32::try_from(unpacked.written).unwrap_or(u32::MAX),
+            kept,
+            folder,
+        })
+    }
+
+    /// The one save. `pack_all` and the document decide whether footage goes
+    /// in with it.
+    #[frb(ignore)]
+    fn save_with(
+        &self,
+        path: String,
+        pack_all: bool,
+        on_progress: Option<&PackProgressStream>,
+    ) -> Result<BridgePackResult, BridgeError> {
         let project = self.state()?;
 
         // **The destination, the revision and an `Arc` clone of the document
@@ -665,7 +868,7 @@ impl ProjectReference {
         // 9d96a24f). This is the shape the autosave sweep already writes in
         // (`crate::autosave::sweep_one`); the lock comes back at the end only
         // to record where the file went.
-        let (document, target, revision) = {
+        let (document, target, revision, previous) = {
             let state = project.read().map_err(|_| BridgeError::ReadFailed)?;
             let target = if path.trim().is_empty() {
                 // Never saved and no path given: the caller has to pick one.
@@ -682,16 +885,85 @@ impl ProjectReference {
                 }
                 target
             };
-            (state.store.snapshot(), target, state.store.revision())
+            (
+                state.store.snapshot(),
+                target,
+                state.store.revision(),
+                state.path.clone(),
+            )
         };
 
         // Everything from here is outside the lock.
         let dir = target.parent().unwrap_or_else(|| std::path::Path::new(""));
         let doc = lumit_project::rebase_for_save(&document, dir);
-        lumit_project::save(&doc, &target).map_err(|_| BridgeError::WriteFailed)?;
+        let is_footage = |doc: &lumit_core::Document, id: Uuid| {
+            matches!(
+                doc.item(id),
+                Some(lumit_core::model::ProjectItem::Footage(_))
+            )
+        };
+        let all = pack_all || doc.auto_pack;
+        let mut result = BridgePackResult {
+            path: String::new(),
+            cancelled: false,
+            packed: 0,
+            left_out: 0,
+        };
+        // A project that packs nothing is written exactly as it always was.
+        let packed = if !all && doc.packed.is_empty() {
+            lumit_project::save(&doc, &target).map_err(|_| BridgeError::WriteFailed)?;
+            None
+        } else {
+            crate::packing::begin();
+            let sources = crate::packing::sources(&doc, dir, all);
+            let mut progress = crate::packing::progress(|fraction| {
+                if let Some(sink) = on_progress {
+                    let _ = sink.add(fraction);
+                }
+            });
+            // The file as it stands is where footage already packed is copied
+            // from, and it may be the file being written.
+            let packed = match lumit_project::save_packed(
+                &doc,
+                &target,
+                previous.as_deref(),
+                &sources,
+                &mut progress,
+            ) {
+                Ok(packed) => packed,
+                Err(lumit_project::ProjectError::Cancelled) => {
+                    result.cancelled = true;
+                    return Ok(result);
+                }
+                Err(_) => return Err(BridgeError::WriteFailed),
+            };
+            let asked = doc
+                .items
+                .iter()
+                .filter(|item| {
+                    matches!(item, lumit_core::model::ProjectItem::Footage(_))
+                        && (all || doc.packed.contains_key(&item.id()))
+                })
+                .count();
+            result.packed = packed.packed.len() as u32;
+            result.left_out = asked.saturating_sub(packed.packed.len()) as u32;
+            Some(packed.packed)
+        };
 
-        let written = target.to_string_lossy().into_owned();
+        result.path = target.to_string_lossy().into_owned();
         let mut state = project.write().map_err(|_| BridgeError::WriteFailed)?;
+        if let Some(mut packed) = packed {
+            // An item deleted since it was packed keeps its entry in the open
+            // document, so undoing the delete brings it back packed.
+            for (id, media) in &document.packed {
+                if !is_footage(&document, *id) {
+                    packed.insert(*id, media.clone());
+                }
+            }
+            if packed != state.store.snapshot().packed {
+                state.store.set_packed(packed, Vec::new());
+            }
+        }
 
         // The journal covers work *between* saves, so once the document is on
         // disk it is redundant — and keeping it would mean a later recovery
@@ -707,7 +979,7 @@ impl ProjectReference {
         // whatever the store is on now. An edit made while the disk was busy
         // is not in the file, and must still read as unsaved.
         state.saved_revision = revision;
-        Ok(written)
+        Ok(result)
     }
 
     /// Whether the document has moved since it was last saved (or opened).

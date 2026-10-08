@@ -21,6 +21,7 @@ import '../widgets/controls.dart';
 /// `engine_labels.dart` to carry.
 String openPhaseLabel(OpenPhase phase) => switch (phase) {
       OpenPhase.readingFile => l10n.openingReadingFile,
+      OpenPhase.readingPackedMedia => l10n.openingReadingPackedMedia,
       OpenPhase.resolvingMedia => l10n.openingResolvingMedia,
       OpenPhase.preparingProject => l10n.openingPreparingProject,
       OpenPhase.startingPreview => l10n.openingStartingPreview,
@@ -64,7 +65,11 @@ class OpeningOverlay extends StatefulWidget {
   /// How far the job has got, 0..1, or null for one that cannot say.
   final double? fraction;
 
-  const OpeningOverlay({super.key, this.label, this.fraction});
+  /// Stops the job, for one that can be stopped: the card then carries a
+  /// Cancel button, the one thing on it that takes a click.
+  final VoidCallback? onCancel;
+
+  const OpeningOverlay({super.key, this.label, this.fraction, this.onCancel});
 
   @override
   State<OpeningOverlay> createState() => _OpeningOverlayState();
@@ -98,48 +103,67 @@ class _OpeningOverlayState extends State<OpeningOverlay>
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     // Nothing underneath is clickable while the document it belongs to is being
-    // replaced, and the scrim is what says so.
+    // replaced, and the scrim is what says so. The card fades up rather than
+    // cutting in, and the scrim takes every click meant for the shell from the
+    // first frame either way. Absorbing is lifted only for the card's own
+    // Cancel.
     return AbsorbPointer(
-      child: ColoredBox(
-        color: t.scrim,
-        child: Center(
-          child: Container(
-            width: 260,
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: t.surface1,
-              borderRadius: BorderRadius.circular(t.tokens.floatRadius),
-              border: Border.all(color: t.hairline),
-              boxShadow: t.floatShadow,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(widget.label ?? l10n.openingProject,
-                          style: t.bodyPrimary),
-                    ),
-                    if (widget.fraction != null)
-                      Text(
-                        l10n.openingPercent(
-                            (widget.fraction!.clamp(0.0, 1.0) * 100).round()),
-                        style: t.small,
+      absorbing: widget.onCancel == null,
+      child: Entrance.fade(
+        spec: ThemeScope.of(context).motion.swap,
+        child: ColoredBox(
+          color: t.scrim,
+          child: Center(
+            child: Container(
+              width: 260,
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: t.surface1,
+                borderRadius: BorderRadius.circular(t.tokens.floatRadius),
+                border: Border.all(color: t.hairline),
+                boxShadow: t.floatShadow,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(widget.label ?? l10n.openingProject,
+                            style: t.bodyPrimary),
                       ),
+                      if (widget.fraction != null)
+                        Text(
+                          l10n.openingPercent(
+                              (widget.fraction!.clamp(0.0, 1.0) * 100).round()),
+                          style: t.small,
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  if (_sweep case final sweep?)
+                    AnimatedBuilder(
+                      animation: sweep,
+                      builder: (context, _) =>
+                          HouseProgressBar(fraction: sweep.value, eased: false),
+                    )
+                  else
+                    HouseProgressBar(fraction: widget.fraction ?? 0),
+                  if (widget.onCancel case final cancel?) ...[
+                    const SizedBox(height: 14),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: HouseButton(
+                        key: const ValueKey('busy-cancel'),
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        onPressed: cancel,
+                        child: Text(l10n.cancel),
+                      ),
+                    ),
                   ],
-                ),
-                const SizedBox(height: 12),
-                if (_sweep case final sweep?)
-                  AnimatedBuilder(
-                    animation: sweep,
-                    builder: (context, _) =>
-                        HouseProgressBar(fraction: sweep.value),
-                  )
-                else
-                  HouseProgressBar(fraction: widget.fraction ?? 0),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -158,11 +182,16 @@ class _OpeningOverlayState extends State<OpeningOverlay>
 /// detection does, and its bar fills and says the percentage exactly as an open
 /// does. A job with nothing to report leaves this out and keeps the sweep,
 /// which claims nothing about work it cannot see.
+///
+/// [cancel] is how the job is stopped, where it can be: packing a project can,
+/// and its card carries a Cancel button. It is read when the card goes up.
 class BusyOverlay extends StatelessWidget {
   final ValueListenable<String?> busy;
   final ValueListenable<double?>? progress;
+  final ValueListenable<VoidCallback?>? cancel;
 
-  const BusyOverlay({super.key, required this.busy, this.progress});
+  const BusyOverlay(
+      {super.key, required this.busy, this.progress, this.cancel});
 
   @override
   Widget build(BuildContext context) => ValueListenableBuilder<String?>(
@@ -170,11 +199,14 @@ class BusyOverlay extends StatelessWidget {
         builder: (context, label, _) {
           if (label == null) return const SizedBox.shrink();
           final reported = progress;
-          if (reported == null) return OpeningOverlay(label: label);
+          final onCancel = cancel?.value;
+          if (reported == null) {
+            return OpeningOverlay(label: label, onCancel: onCancel);
+          }
           return ValueListenableBuilder<double?>(
             valueListenable: reported,
-            builder: (context, fraction, _) =>
-                OpeningOverlay(label: label, fraction: fraction),
+            builder: (context, fraction, _) => OpeningOverlay(
+                label: label, fraction: fraction, onCancel: onCancel),
           );
         },
       );

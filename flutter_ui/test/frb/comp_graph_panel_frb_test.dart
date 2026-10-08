@@ -14,7 +14,7 @@
 import 'dart:typed_data' show Float64List;
 
 import 'package:flutter/gestures.dart'
-    show kSecondaryMouseButton;
+    show kDoubleTapMinTime, kSecondaryMouseButton;
 import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -556,6 +556,55 @@ void main() {
           shader);
       expect(shaderOn(p.graph, box), shader);
       expect(p.graph.documentRevision(), was + BigInt.one, reason: 'one op');
+    });
+
+    testWidgets("a double-click opens a Custom shader box's inner graph",
+        (tester) async {
+      final p = withGraph();
+      final box = seedFx(p.graph, 'custom_shader', const Offset(60, 40));
+      p.uiState.model.refresh();
+      await mount(tester, p);
+
+      expect(find.byKey(ValueKey<String>('shader-thumb-empty-$box')),
+          findsOneWidget,
+          reason: 'the box carries the picture of its inner graph');
+      // On the first socket row, clear of that picture, which opens on one
+      // click.
+      final at = tester.getTopLeft(card(box)) + const Offset(75, 30);
+      await tester.tapAt(at);
+      await tester.pump(kDoubleTapMinTime);
+      await tester.tapAt(at);
+      await tester.pump();
+      expect(find.byKey(const ValueKey<String>('shader-breadcrumb')),
+          findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('shader-crumb-layer')),
+          findsNothing,
+          reason: 'a node graph has no layer to name');
+
+      // An edit inside is one op on the node graph, and one undo.
+      String? inner() => p.graph
+          .getNodeGraphInstances()
+          .firstWhere((i) => i.id() == box)
+          .shaderGraph();
+      final was = p.graph.documentRevision();
+      p.uiState.activePane.value = Panel.graph.pane();
+      expect(p.uiState.consoleClaim!(), isTrue);
+      await tester.pump();
+      await tester
+          .tap(find.byKey(const ValueKey<String>('fx-console-item-UV')));
+      await tester.pump();
+      expect(inner(), contains('"uv"'));
+      expect(p.graph.documentRevision(), was + BigInt.one, reason: 'one op');
+
+      p.state.project!.undo();
+      p.uiState.model.refresh();
+      await tester.pump();
+      expect(inner(), isNull, reason: 'one undo step');
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+      expect(card(box), findsOneWidget,
+          reason: 'Escape returns to the node graph');
     });
 
     testWidgets('the marquee and a wire land on an open box', (tester) async {

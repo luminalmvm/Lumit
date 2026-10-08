@@ -283,6 +283,57 @@ fn relinking_one_clip_rewrites_the_prefix_for_every_other_lost_clip() {
     );
 }
 
+/// **A packed project keeps its footage when the original goes.**
+///
+/// Packed, the original deleted, saved again the ordinary way: the next open
+/// still reads the footage out of the file, and an unpack writes it back
+/// beside the project and leaves the file without it.
+#[test]
+fn a_packed_project_keeps_its_footage_when_the_original_goes() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let clip = dir.path().join("clip.mov");
+    std::fs::write(&clip, b"not really a movie").expect("clip");
+    let lum = dir.path().join("scene.lum");
+
+    let project = LumitBridgeState::new_project(None).expect("a new project");
+    let footage = project
+        .import_footage(clip.to_string_lossy().into_owned())
+        .expect("imported");
+    let packed = project
+        .save_packed(lum.to_string_lossy().into_owned(), true, None)
+        .expect("packed");
+    assert_eq!((packed.packed, packed.left_out), (1, 0));
+    assert_eq!(project.pack_state().expect("state").packed, 1);
+
+    // The original goes, and an ordinary save still carries the footage.
+    std::fs::remove_file(&clip).expect("deleted");
+    project.new_composition("Later".into(), None).expect("comp");
+    project.save(String::new()).expect("saved");
+
+    // What an open does with the file.
+    let (mut doc, _) = lumit_project::open(&lum).expect("opens");
+    crate::packing::restore(&mut doc, &lum, dir.path(), |_| {});
+    let Some(ProjectItem::Footage(read_out)) = doc.item(footage.id) else {
+        panic!("the footage is still there");
+    };
+    assert_eq!(
+        std::fs::read(&read_out.media.absolute_path).expect("read out of the file"),
+        b"not really a movie"
+    );
+
+    let unpacked = project.unpack(None).expect("unpacked");
+    assert_eq!((unpacked.written, unpacked.kept), (1, 0));
+    assert_eq!(
+        std::fs::read(dir.path().join("media").join("clip.mov")).expect("written back out"),
+        b"not really a movie"
+    );
+    assert_eq!(project.pack_state().expect("state").packed, 0);
+    let (doc, _) = lumit_project::open(&lum).expect("opens");
+    assert!(doc.packed.is_empty(), "the file no longer carries it");
+
+    project.close().expect("closed");
+}
+
 /// A placed clip must land in the composition; the span/size fallbacks are what
 /// let a *missing* file still place, so the user can relink rather than being
 /// unable to add it at all.

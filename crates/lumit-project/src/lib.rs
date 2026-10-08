@@ -2,8 +2,10 @@
 //! docs/10-FILE-FORMAT.md, Phase 0 scope (no thumbnails yet).
 
 pub mod fixtures;
+pub mod pack;
 pub mod plugins;
 
+pub use pack::{autosave_owner, restore_packed, save_packed, unpack, PackSource, Packed, Unpacked};
 pub use plugins::{plugin_prefs_path, PluginPrefs};
 
 use lumit_core::model::{Fingerprint, MediaRef, ProjectItem};
@@ -49,6 +51,9 @@ pub enum ProjectError {
         "this project has a {width} by {height} composition; Lumit composes up to {limit} a side"
     )]
     CompTooLarge { width: u32, height: u32, limit: u32 },
+    /// A pack or an unpack was told to stop. Nothing half-written is left.
+    #[error("cancelled")]
+    Cancelled,
 }
 
 /// manifest.json — MUST be the archive's first entry and parse standalone.
@@ -718,6 +723,16 @@ pub fn frame_cache_dir(doc_id: Uuid) -> Option<PathBuf> {
     Some(dirs.cache_dir().join("frames").join(doc_id.to_string()))
 }
 
+/// Where a packed project's footage is read out to when the file on disk has
+/// gone (docs/01-GLOSSARY.md: Packed project), one folder per document.
+///
+/// The cache, because the `.lum` still holds every byte: deleting this costs
+/// the next open the time to read them out again and nothing else.
+pub fn packed_media_dir(doc_id: Uuid) -> Option<PathBuf> {
+    let dirs = project_dirs()?;
+    Some(dirs.cache_dir().join("packed").join(doc_id.to_string()))
+}
+
 /// The application's own cache directory, the parent of every folder below,
 /// which unlike `/tmp` belongs to one user on every platform.
 pub fn cache_dir() -> Option<PathBuf> {
@@ -1068,6 +1083,12 @@ fn rebase_one(media: &mut lumit_core::model::MediaRef, project_dir: &Path) {
     let Some(located) = located else {
         return; // missing: keep the reference untouched for relinking
     };
+    // A copy read out of a packed project lives in this machine's cache. The
+    // path the file keeps is still the original's, which is where an unpacked
+    // copy of the project would look for it.
+    if cache_dir().is_some_and(|cache| located.starts_with(cache.join("packed"))) {
+        return;
+    }
     // Footage on another drive has no relative path, so it keeps the whole
     // path, otherwise it goes missing on the next open.
     media.relative_path = relative_between(project_dir, &located)
@@ -1095,6 +1116,12 @@ pub fn resolve_all_media(
         let ProjectItem::Footage(f) = item else {
             continue;
         };
+        // A packed item `restore_packed` has already placed stays where it
+        // was put. The relative path may name a different file of the same
+        // name on this machine.
+        if doc.packed.contains_key(&f.id) && Path::new(&f.media.absolute_path).is_file() {
+            continue;
+        }
         // An image sequence imported from After Effects arrives pointing at the
         // *folder* the run lives in, because that is what the .aep records — a
         // folder is not a file, so every step below would call it missing. One

@@ -280,7 +280,7 @@ class LayerArea extends StatelessWidget {
   /// The layer drag in flight, and the block heights it slides by — the
   /// outline makes the gesture, and these are what let this side move with it
   /// rather than sit still while its layers are reordered.
-  final ValueNotifier<LayerDrag?> layerDrag;
+  final LayerDragState layerDrag;
   final List<double> blockHeights;
 
   /// The comp's exact rate, for the times a key drag commits.
@@ -727,6 +727,7 @@ class LayerArea extends StatelessWidget {
                               controller: vScroll,
                               heights: blockHeights,
                               viewport: box.maxHeight,
+                              raised: layerDrag.raised,
                               builder: (context, i) =>
                                   // The block slides by the same rule and
                                   // the same heights the outline's does, so
@@ -736,6 +737,9 @@ class LayerArea extends StatelessWidget {
                                 drag: layerDrag,
                                 heights: blockHeights,
                                 index: i,
+                                // The right end of the card the outline's
+                                // block starts.
+                                side: LiftSide.trailing,
                                 child: Container(
                                   // One outline around the layer's own
                                   // bar row and everything its open
@@ -983,8 +987,26 @@ class LayerArea extends StatelessWidget {
                             Positioned.fill(
                               child: IgnorePointer(
                                 child: AnimatedBuilder(
-                                  animation: vScroll,
+                                  // The drag's band as well: this overlay is
+                                  // above every block, so a layer in hand is
+                                  // lifted over the seams by the seams
+                                  // standing clear of it.
+                                  animation: Listenable.merge([
+                                    vScroll,
+                                    layerDrag.band,
+                                    layerDrag.mark,
+                                  ]),
                                   builder: (context, _) => CustomPaint(
+                                    // The line marking a drop's place, for a
+                                    // drag that is not carried. This overlay
+                                    // rides the rows, so the mark is in its
+                                    // pixels already.
+                                    foregroundPainter:
+                                        switch (layerDrag.mark.value) {
+                                      final y? => DropMarkPainter(
+                                          y: y, colour: t.accent),
+                                      null => null,
+                                    },
                                     painter: RowDividerPainter(
                                       step: t.density.laneRow,
                                       colour: rowSeamColour(t),
@@ -995,7 +1017,12 @@ class LayerArea extends StatelessWidget {
                                       origin:
                                           -((positionOf(vScroll)?.pixels ?? 0) %
                                               1.0),
-                                      blanks: sequenceBlanks,
+                                      blanks: [
+                                        ...sequenceBlanks,
+                                        if (layerDrag.band.value
+                                            case final band?)
+                                          band.blank,
+                                      ],
                                     ),
                                   ),
                                 ),
@@ -1101,7 +1128,7 @@ class LayerArea extends StatelessWidget {
                     child: SpectralLane(
                       grid: summaries.spectra[id],
                       originSeconds:
-                          -startOffset - TimelineAxis.pad * secondsPerPixel,
+                          -startOffset - axis.inset * secondsPerPixel,
                       secondsPerPixel: secondsPerPixel,
                       left: axis.xOf(inFrame),
                       right: axis.xOf(outFrame),
@@ -1120,7 +1147,7 @@ class LayerArea extends StatelessWidget {
                   // padding's width in, and the source's own clock runs from
                   // there less wherever the layer starts it.
                   originSeconds:
-                      -startOffset - TimelineAxis.pad * secondsPerPixel,
+                      -startOffset - axis.inset * secondsPerPixel,
                   secondsPerPixel: secondsPerPixel,
                   left: axis.xOf(inFrame),
                   right: axis.xOf(outFrame),

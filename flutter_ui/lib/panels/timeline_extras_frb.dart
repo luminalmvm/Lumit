@@ -1359,10 +1359,18 @@ class TimelineAxis implements CacheBarAxis {
   @override
   final int frames;
 
-  /// The whole width the axis is laid out in — [pad] either side plus the
+  /// The whole width the axis is laid out in — [inset] either side plus the
   /// [span] the frames occupy.
   final double width;
-  const TimelineAxis({required this.frames, required this.width});
+
+  /// The room this axis leaves either side of the frames: [pad], unless the
+  /// lanes it measures stand in a card with rounded corners ([padFor]).
+  final double inset;
+  const TimelineAxis({
+    required this.frames,
+    required this.width,
+    this.inset = pad,
+  });
 
   /// The few pixels either side of the frames (docs/15 §12A.1). Without them a
   /// handle on the first or last frame is half outside the area that draws it,
@@ -1376,17 +1384,29 @@ class TimelineAxis implements CacheBarAxis {
   /// so the middle of the axis is still the middle frame.
   static const double pad = 6;
 
+  /// The room the Timeline's lanes leave either side of the frames under
+  /// [t]'s shape.
+  ///
+  /// Lantern stands the lanes in a card with the section's corners, and six
+  /// pixels put frame zero inside the corner: the playhead's round head lost
+  /// its outer edge to the curve at the top and the foot of its stem at the
+  /// bottom, and the first bar its corner (owner, desk test). There the room
+  /// is the corner's radius and one more, so whatever stands on the first or
+  /// the last frame is clear of the curve the whole way down.
+  static double padFor(LumitTheme t) =>
+      t.tokens.roomed ? max(pad, t.tokens.sectionRadius + 1) : pad;
+
   /// The pixels the frames themselves occupy.
-  double get span => max(0.0, width - pad * 2);
+  double get span => max(0.0, width - inset * 2);
 
   double get perFrame => frames <= 0 ? 0 : span / frames;
   @override
-  double xOf(num frame) => pad + frame * perFrame;
+  double xOf(num frame) => inset + frame * perFrame;
   int frameAt(double x) => frameAtExact(x).round();
 
   /// Where [x] falls **between** frames — what a drag with the magnet off, or
   /// a curve being sampled across the pane, asks for.
-  double frameAtExact(double x) => perFrame <= 0 ? 0 : (x - pad) / perFrame;
+  double frameAtExact(double x) => perFrame <= 0 ? 0 : (x - inset) / perFrame;
 
   /// How many frames a *travel* of [dx] pixels is worth. Not [frameAtExact]:
   /// a distance has no origin, so the padding must not be taken off it.
@@ -1815,22 +1835,30 @@ class _TimelineRulerState extends State<TimelineRuler> {
               left: axis.xOf(work.start),
               width:
                   (axis.xOf(work.end) - axis.xOf(work.start)).clamp(1.0, 1e6),
-              top: widget.height / 2,
-              bottom: 0,
+              // Lantern's band is a rail between its two handles: centred on
+              // them and a little shorter, so each pill stands proud of the
+              // band it ends.
+              top: style.round
+                  ? workAreaPillTop(widget.height) + workAreaSoftInset
+                  : widget.height / 2,
+              height: style.round
+                  ? workAreaPillHeight - workAreaSoftInset * 2
+                  : null,
+              bottom: style.round ? null : 0,
               child: IgnorePointer(
                 child: Container(
                   key: const ValueKey('tl-work-area'),
                   // Desk paints no band here: the ground dimming outside the
                   // work area says it, and the widget stays so its gestures
-                  // and keys do. Lantern draws it as an accent-soft capsule.
+                  // and keys do. Lantern fills it accent-soft and keeps its
+                  // ends square, so the band runs into its two handles
+                  // rather than curling away short of them.
                   decoration: style.engraved
                       ? const BoxDecoration()
                       : style.round
                           ? BoxDecoration(
                               color: t.accent
                                   .withValues(alpha: workAreaSoftFillAlpha),
-                              borderRadius:
-                                  BorderRadius.circular(ShapeTokens.stadium),
                             )
                           : workAreaBand(t, fillAlpha: workAreaRulerFillAlpha),
                 ),
@@ -1974,7 +2002,7 @@ class _TimelineRulerState extends State<TimelineRuler> {
                           // under the clock.
                           child: SizedBox(
                             width: style.round ? 6 : workAreaHandleTabWidth,
-                            height: style.round ? 18 : null,
+                            height: style.round ? workAreaPillHeight : null,
                             child: DecoratedBox(
                               decoration: BoxDecoration(
                                 color: workAreaHandleColour(t),
@@ -2891,6 +2919,18 @@ Color workAreaHandleColour(LumitTheme t) => switch (t.shape) {
 
 /// How strong Lantern's accent-soft band fills.
 const double workAreaSoftFillAlpha = 0.18;
+
+/// How tall Lantern's round handle is.
+const double workAreaPillHeight = 18;
+
+/// Where Lantern's handle starts in a ruler [height] tall: centred in the
+/// room under [workAreaHandleTopInset].
+double workAreaPillTop(double height) =>
+    workAreaHandleTopInset +
+    (height - workAreaHandleTopInset - workAreaPillHeight) / 2;
+
+/// How far Lantern's band stops short of its handle's top and bottom.
+const double workAreaSoftInset = 2;
 
 /// How wide the drawn tab is, inside the [_workHandleWidth] it grabs across.
 /// Narrow, because it is a mark on an edge rather than a bar of its own —

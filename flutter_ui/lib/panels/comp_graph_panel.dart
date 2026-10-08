@@ -65,6 +65,7 @@ import 'graph_panel.dart';
 import 'placeholder.dart';
 import 'shader_editor.dart'
     show InstanceHome, editExpressionOn, pressShaderButton;
+import 'shader_graph.dart' show ShaderGraphThumb;
 import 'timeline_extras_frb.dart' show DoubleTap;
 
 /// This canvas's idea of identity, as [graphNodeKey] is the layer canvas's.
@@ -606,9 +607,23 @@ class _CompGraphPanelState extends State<CompGraphPanel> {
             : rows.isEmpty
                 ? graphNodeWidth
                 : graphNodeOpenWidth,
+        foot: node.matchName == 'custom_shader' ? graphShaderFoot : 0,
       ));
     }
     return GraphLayout(boxes);
+  }
+
+  /// A Custom shader box's picture of its inner graph, which a click opens.
+  /// Null for every other box.
+  Widget? _shaderThumb(String key) {
+    final node = _byKey[key];
+    if (node == null || node.matchName != 'custom_shader') return null;
+    return ShaderGraphThumb(
+      home: InstanceHome.graph(widget.comp),
+      effect: node.id,
+      height: graphShaderThumbHeight,
+      onOpen: () => _enterBox(node),
+    );
   }
 
   // --- A box's own controls -----------------------------------------------
@@ -683,16 +698,17 @@ class _CompGraphPanelState extends State<CompGraphPanel> {
             )) {
           return;
         }
-        if (node.matchName == 'expression' && param == 'edit') {
-          editExpressionOn(
-            context: context,
-            home: InstanceHome.graph(widget.comp),
-            effect: effect,
-            onApplied: () {
-              ui.model.refresh();
-              _reload();
-            },
-          );
+        if (node.matchName == 'expression' &&
+            editExpressionOn(
+              context: context,
+              home: InstanceHome.graph(widget.comp),
+              effect: effect,
+              param: param,
+              onApplied: () {
+                ui.model.refresh();
+                _reload();
+              },
+            )) {
           return;
         }
         _enterBox(node);
@@ -1533,11 +1549,17 @@ class _CompGraphPanelState extends State<CompGraphPanel> {
   }
 
   /// A double-click on a box with an inside: a Read of a composition and a
-  /// nested node graph both open that comp, as entering a precomp does.
+  /// nested node graph both open that comp, as entering a precomp does, and a
+  /// Custom shader opens its inner graph.
   bool _enterBox(BridgeCompNode node) {
     final project = Provider.of<LumitState>(context, listen: false).project;
     if (node.item case ItemReference_Composition(:final field0)) {
       _ui?.setSelectedComp(field0);
+      return true;
+    }
+    if (node.matchName == 'custom_shader') {
+      _ui?.enterShaderGraphInComp(widget.comp, node.id,
+          effectName: node.customName ?? engineLabel(node.label));
       return true;
     }
     if (node.matchName != 'node_graph') return false;
@@ -1962,6 +1984,7 @@ class _CompGraphPanelState extends State<CompGraphPanel> {
                                 onRenameCancelled: () =>
                                     setState(() => _renaming = null),
                                 paramRow: (param) => _paramRow(box.key, param),
+                                foot: _shaderThumb(box.key),
                               ),
                             ),
                         ],

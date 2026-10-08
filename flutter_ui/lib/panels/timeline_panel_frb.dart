@@ -1696,7 +1696,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// notifier rather than panel state: a drag slides rows, and rebuilding the
   /// whole panel per pointer move to do it would cost the table its bridge
   /// budget (docs/13).
-  final ValueNotifier<LayerDrag?> _layerDrag = ValueNotifier(null);
+  final LayerDragState _layerDrag = LayerDragState();
 
   /// The layer `Enter` has asked to rename. A notifier for the same
   /// reason the drag is one: only the row it names has anything to do, and
@@ -1749,9 +1749,14 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// scope is in reach — the same arrangement the Viewer's zoom uses.
   AnimationLevel _animationLevel = AnimationLevel.all;
 
+  /// The room the lanes leave either side of the frames
+  /// ([TimelineAxis.padFor]), read in build beside [_animationLevel] so the
+  /// scroll arithmetic outside it measures against the axis that is drawn.
+  double _axisPad = TimelineAxis.pad;
+
   double get _perFrameNow => _laneFrames <= 0
       ? 0
-      : max(0.0, _laneViewport * _zoomMotion.value - TimelineAxis.pad * 2) /
+      : max(0.0, _laneViewport * _zoomMotion.value - _axisPad * 2) /
           _laneFrames;
 
   /// How many frames full zoom-in shows across the lanes (owner, 2026-08-06).
@@ -1937,13 +1942,13 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     final position = positionOf(_hLane);
     if (position == null || position.maxScrollExtent <= 0) return;
     final viewport = position.viewportDimension;
-    final span = viewport + position.maxScrollExtent - TimelineAxis.pad * 2;
+    final span = viewport + position.maxScrollExtent - _axisPad * 2;
     if (_laneFrames <= 0 || span <= 0) return;
-    final x = TimelineAxis.pad + ui.playheadFrame.value * span / _laneFrames;
+    final x = _axisPad + ui.playheadFrame.value * span / _laneFrames;
     final at = x - position.pixels;
     if (at >= 0 && at <= viewport) return;
     // The playhead to the left edge, one padding in so its head is whole.
-    _hLane.jumpTo((x - TimelineAxis.pad).clamp(0.0, position.maxScrollExtent));
+    _hLane.jumpTo((x - _axisPad).clamp(0.0, position.maxScrollExtent));
   }
 
   /// When the render cache may have changed — a frame arrived, or the cache
@@ -3186,6 +3191,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       span: span,
       frames: _laneFrames,
       viewport: positionOf(_hLane)?.viewportDimension ?? _laneViewport,
+      pad: _axisPad,
     ).clamp(1.0, _maxZoom);
     if ((want - _zoomMotion.target).abs() > 1e-9) {
       _setZoom(want, fly: false);
@@ -3200,9 +3206,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     if (position == null || _laneFrames <= 0) return;
     final span = position.viewportDimension +
         position.maxScrollExtent -
-        TimelineAxis.pad * 2;
+        _axisPad * 2;
     if (span <= 0) return;
-    _hLane.jumpTo((TimelineAxis.pad + frame * span / _laneFrames)
+    _hLane.jumpTo((_axisPad + frame * span / _laneFrames)
         .clamp(0.0, position.maxScrollExtent));
   }
 
@@ -3238,12 +3244,12 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                 0.0,
                 _hLane.position.viewportDimension +
                     _hLane.position.maxScrollExtent -
-                    TimelineAxis.pad * 2) /
+                    _axisPad * 2) /
             _laneFrames
         : _perFrameNow;
     final playhead = (_ui?.playheadFrame.value ?? 0).toDouble();
     _zoomAnchorFrame = playhead;
-    final x = TimelineAxis.pad + playhead * perFrame - offset;
+    final x = _axisPad + playhead * perFrame - offset;
     _zoomAnchorViewportX =
         perFrame > 0 && x >= 0 && x <= viewport ? x : viewport / 2;
   }
@@ -3283,7 +3289,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       frame: _zoomAnchorFrame,
       viewportX: _zoomAnchorViewportX,
       frames: _laneFrames,
-      pad: TimelineAxis.pad,
+      pad: _axisPad,
     ));
   }
 
@@ -3486,6 +3492,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     final t = scope.theme;
     // How much motion the shell shows, for the zoom's flight.
     _animationLevel = scope.animationLevel;
+    _axisPad = TimelineAxis.padFor(t);
     // The columns actually drawn. The render-time column is only there while
     // something is being measured: switched off it takes no width, no
     // header and no cells — a column of blanks is not a column, and the outline
@@ -3818,6 +3825,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                               // and the playhead for itself.
                               TimelineNavigator(
                                 trailing: scrollGutterWidth,
+                                pad: _axisPad,
                                 frames: frames,
                                 zoom: _zoomMotion,
                                 hScroll: _hLane,
@@ -3844,7 +3852,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                     // lanes scroll under the bottom bar's scrollbar.
                                     final axis = TimelineAxis(
                                         frames: frames,
-                                        width: laneViewport * _zoom);
+                                        width: laneViewport * _zoom,
+                                        inset: _axisPad);
                                     return _graph
                                         ? _graphHalf(context, ui, comp,
                                             axis: axis,
@@ -4076,8 +4085,20 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                 bottom: 0,
                 child: IgnorePointer(
                   child: AnimatedBuilder(
-                    animation: _vOutline,
+                    // And the layer drag's band, which the seams stand clear
+                    // of so a layer in hand is drawn over them.
+                    animation: Listenable.merge(
+                        [_vOutline, _layerDrag.band, _layerDrag.mark]),
                     builder: (context, _) => CustomPaint(
+                      // The line marking a drop's place, for a drag that is
+                      // not carried: across the columns and the gutter, so it
+                      // meets the lane area's.
+                      foregroundPainter: switch (_layerDrag.mark.value) {
+                        final y? => DropMarkPainter(
+                            y: y - (positionOf(_vOutline)?.pixels ?? 0),
+                            colour: t.accent),
+                        null => null,
+                      },
                       painter: RowDividerPainter(
                         step: t.density.laneRow,
                         colour: rowSeamColour(t),
@@ -4093,9 +4114,48 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                               b.$1 - (positionOf(_vOutline)?.pixels ?? 0),
                               b.$2 - (positionOf(_vOutline)?.pixels ?? 0),
                             ),
+                          if (_layerDrag.band.value case final band?)
+                            (
+                              band.top - (positionOf(_vOutline)?.pixels ?? 0),
+                              band.bottom -
+                                  (positionOf(_vOutline)?.pixels ?? 0),
+                            ),
                         ],
                       ),
                     ),
+                  ),
+                ),
+              ),
+              // The stretch of a lifted layer's card that crosses the gutter.
+              // The outline's block draws the card's left end and the lanes'
+              // block its right; without this the gutter showed between them
+              // and a layer in hand read as two cards.
+              Positioned(
+                top: t.density.navigatorBand + t.density.ruler,
+                right: 0,
+                // A pixel over the columns' edge: the two stretches meet on
+                // a fractional pixel at any interface scale but 1, and
+                // butted there they showed a hairline of the ground between.
+                width: scrollGutterWidth + 1,
+                bottom: 0,
+                child: IgnorePointer(
+                  child: AnimatedBuilder(
+                    animation: Listenable.merge([_vOutline, _layerDrag.band]),
+                    builder: (context, _) {
+                      final band = _layerDrag.band.value;
+                      if (band == null) return const SizedBox.expand();
+                      final scrolled = positionOf(_vOutline)?.pixels ?? 0;
+                      return CustomPaint(
+                        key: const ValueKey('tl-lift-bridge'),
+                        painter: LiftBridgePainter(
+                          top: band.top - scrolled,
+                          bottom: band.bottom - scrolled,
+                          amount: band.amount,
+                          ground: liftGround(t),
+                          shadow: liftShadow(t),
+                        ),
+                      );
+                    },
                   ),
                 ),
               ),
@@ -4225,7 +4285,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Expanded(
-          child: Row(
+          // The lane half's wrapper, empty here: see [_laneHalf].
+          child: CustomPaint(
+            child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Expanded(
@@ -4363,6 +4425,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
               ),
             ],
           ),
+          ),
         ),
         LaneBottomBar(
           zoom: _zoomMotion.target,
@@ -4403,7 +4466,22 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Expanded(
-          child: Row(
+          // Behind the lane card, the lifted layer's card where the lane
+          // card's own rounded corner would otherwise cut it
+          // ([_LiftCornerPainter]). The graph half wears the same wrapper
+          // with nothing to paint, so the two halves keep one shape of tree.
+          child: CustomPaint(
+            painter: t.tokens.roomed
+                ? _LiftCornerPainter(
+                    drag: _layerDrag,
+                    scroll: _vLane,
+                    top: t.density.ruler,
+                    width: t.tokens.sectionRadius,
+                    ground: liftGround(t),
+                    shadow: liftShadow(t),
+                  )
+                : null,
+            child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Expanded(
@@ -4496,6 +4574,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
               ),
             ],
           ),
+          ),
         ),
         // The Sound mix row's lane, level with the outline's row for it.
         if (mixRow)
@@ -4514,6 +4593,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         if (t.shape == ThemeShape.lantern)
           TimelineNavigator(
             trailing: scrollGutterWidth,
+            pad: _axisPad,
             frames: frames,
             zoom: _zoomMotion,
             hScroll: _hLane,
@@ -4545,4 +4625,69 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       ],
     );
   }
+}
+
+/// The lifted layer's card, where the lane card's rounded corner would cut it.
+///
+/// Lantern stands the lanes in a card with the section's corners, and that
+/// card cuts everything in it to those corners, a layer in hand included. A
+/// card carried across the bottom corner lost a wedge there: the gutter's
+/// stretch ran up to the lane card's edge and the lanes' stretch began past
+/// the curve, with the panel's ground showing between them (owner, desk
+/// test). This paints the card behind the lane card, in a strip as wide as
+/// the corner, so what the curve cuts away from the lanes is the same card
+/// underneath.
+///
+/// It repaints from the drag and the scroll themselves, so it costs no build.
+class _LiftCornerPainter extends CustomPainter {
+  final LayerDragState drag;
+  final ScrollController scroll;
+
+  /// Where the rows start below the painter's top edge: the ruler's height.
+  final double top;
+
+  /// How far in from the left edge the lane card's corner reaches.
+  final double width;
+  final Color ground;
+  final Color shadow;
+
+  _LiftCornerPainter({
+    required this.drag,
+    required this.scroll,
+    required this.top,
+    required this.width,
+    required this.ground,
+    required this.shadow,
+  }) : super(repaint: Listenable.merge([drag.band, scroll]));
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final band = drag.band.value;
+    if (band == null || size.height <= top) return;
+    final scrolled = positionOf(scroll)?.pixels ?? 0;
+    canvas.save();
+    canvas.translate(0, top);
+    LiftBridgePainter(
+      top: band.top - scrolled,
+      bottom: band.bottom - scrolled,
+      amount: band.amount,
+      ground: ground,
+      shadow: shadow,
+    ).paint(canvas, Size(width, size.height - top));
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(_LiftCornerPainter old) =>
+      old.drag != drag ||
+      old.scroll != scroll ||
+      old.top != top ||
+      old.width != width ||
+      old.ground != ground ||
+      old.shadow != shadow;
+
+  /// Never a pointer's: it stands behind the lanes and must not answer for
+  /// them.
+  @override
+  bool? hitTest(Offset position) => false;
 }

@@ -61,6 +61,12 @@ Source: "..\..\assets\brand\lumit-theme.ico"; DestDir: "{app}\icons"
 ; The runner was lumit_flutter.exe up to 0.3.2. An update over one of those
 ; installs would leave the old name beside the new one without this.
 Type: files; Name: "{app}\lumit_flutter.exe"
+; The libraries sat beside the exe up to 0.5.0 and live in lib\ now. Windows
+; looks beside the exe first, so an old copy left here would be loaded in
+; place of the new one.
+Type: files; Name: "{app}\*.dll"
+; An OFX plugin's own log, which the plugin brokers used to let land here.
+Type: files; Name: "{app}\ofxTestLog.txt"
 
 [Icons]
 Name: "{group}\Lumit"; Filename: "{app}\{#MyAppExe}"

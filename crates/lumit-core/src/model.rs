@@ -237,6 +237,28 @@ pub struct ProxyRef {
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
+/// One footage item's file carried inside the `.lum` (docs/01-GLOSSARY.md:
+/// Packed project).
+///
+/// The reference in [`FootageItem::media`] stays what it was. This sits beside
+/// it and says the file's bytes are also in the archive, so the project still
+/// opens when the file on disk has gone.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PackedMedia {
+    /// The archive entry of the file the item's reference names:
+    /// `media/<folder>/<file name>`. An image sequence's other files sit in
+    /// the same folder under their own names.
+    pub entry: String,
+    /// The fingerprint of the bytes that were packed. A file on disk that
+    /// still matches it is read in place; one that does not, or is not there,
+    /// is read from the copy the archive carries.
+    pub fingerprint: Fingerprint,
+    /// Unknown fields from newer Lumit versions, preserved on load/save
+    /// (docs/10-FILE-FORMAT.md §1.1 — mandatory forward compatibility).
+    #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
+    pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
 /// A shared solid definition (docs/03-DATA-MODEL.md §2): solids are assets,
 /// so many layers can reference one colour/size and they dedupe naturally.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -1426,6 +1448,11 @@ pub(crate) fn default_true() -> bool {
 /// project writes no line for it, so older files round-trip unchanged.
 pub(crate) fn is_true(b: &bool) -> bool {
     *b
+}
+
+/// The same for a field whose default is `false`.
+pub(crate) fn is_false(b: &bool) -> bool {
+    !*b
 }
 
 /// `skip_serializing_if` for a number whose default is zero, the twin of
@@ -2969,6 +2996,20 @@ pub struct Document {
     /// otherwise — see `lumit_render::export::RenderOptions::use_proxies`.
     #[serde(default = "default_true", skip_serializing_if = "is_true")]
     pub use_proxies: bool,
+    /// The footage items whose files the `.lum` carries, by item id
+    /// ([`PackedMedia`]).
+    ///
+    /// A map beside the items for the reason `proxies` gives. It says what the
+    /// file on disk holds, so it is written by a save and an unpack rather
+    /// than by an op: see `DocumentStore::set_packed`. An entry whose item has
+    /// been deleted stays here so undoing the delete brings it back packed,
+    /// and is left out of the file.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub packed: std::collections::BTreeMap<Uuid, PackedMedia>,
+    /// Pack every footage item on every save, the ones imported since the
+    /// last pack included. Off packs only when asked.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub auto_pack: bool,
     /// How hard the renderer works at the edges of transformed layers
     /// (docs/impl/anti-aliasing.md).
     ///
@@ -3324,6 +3365,8 @@ impl Document {
             item_labels: std::collections::BTreeMap::new(),
             proxies: std::collections::BTreeMap::new(),
             use_proxies: true,
+            packed: std::collections::BTreeMap::new(),
+            auto_pack: false,
             anti_aliasing: AntiAliasing::default(),
             colour_depth: ColourDepth::default(),
             cache_location: None,

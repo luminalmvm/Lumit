@@ -1088,6 +1088,10 @@
   "@openingReadingFile": {
     "description": "First phase line on the card shown while a project is being opened: the .lum is being unzipped and read."
   },
+  "openingReadingPackedMedia": "Reading the packed footage",
+  "@openingReadingPackedMedia": {
+    "description": "Phase line on the card shown while a project is being opened: footage stored inside the project file is being copied out because its original file is not on this machine."
+  },
   "openingResolvingMedia": "Finding the media",
   "@openingResolvingMedia": {
     "description": "Second phase line on the card shown while a project is being opened: each footage item's file is being located on this machine."
@@ -1108,6 +1112,72 @@
         "type": "String"
       }
     }
+  },
+  "couldNotPackProject": "Could not pack the project file",
+  "@couldNotPackProject": {
+    "description": "Bottom-strip notice when saving the project with its footage inside failed."
+  },
+  "couldNotUnpackProject": "Could not unpack the project file",
+  "@couldNotUnpackProject": {
+    "description": "Bottom-strip notice when writing the packed footage back out as files failed."
+  },
+  "packCancelled": "Packing stopped. The project file is as it was",
+  "@packCancelled": {
+    "description": "Bottom-strip notice after the user pressed Cancel while the project's footage was being written into the project file."
+  },
+  "packedProject": "{count, plural, =1{Packed 1 footage item into {path}} other{Packed {count} footage items into {path}}}",
+  "@packedProject": {
+    "description": "Bottom-strip notice after Pack project file. {count} is how many footage items the project file now holds, {path} is the project file's path.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "packedProjectLeftOut": "{count, plural, =1{1 footage item could not be found and was not packed} other{{count} footage items could not be found and were not packed}}",
+  "@packedProjectLeftOut": {
+    "description": "Bottom-strip notice after a save that packs footage into the project file, when some footage files were missing or unreadable. {count} is how many.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "packingProject": "Packing the project file",
+  "@packingProject": {
+    "description": "Card shown over the interface while the project's footage is being written into the project file."
+  },
+  "unpackCancelled": "Unpacking stopped. The project file still holds its footage",
+  "@unpackCancelled": {
+    "description": "Bottom-strip notice after the user pressed Cancel while packed footage was being written back out as files."
+  },
+  "unpackKept": "{count, plural, =1{1 footage item could not be written out and is still packed} other{{count} footage items could not be written out and are still packed}}",
+  "@unpackKept": {
+    "description": "Bottom-strip notice after Unpack project file, when some footage could not be written to disk. {count} is how many footage items stay inside the project file.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "unpackedProject": "{count, plural, =0{Unpacked. The footage is read from its own files again} =1{Unpacked 1 file to {folder}} other{Unpacked {count} files to {folder}}}",
+  "@unpackedProject": {
+    "description": "Bottom-strip notice after Unpack project file. {count} is how many files were written, {folder} is the folder they were written to. Zero means every original file was still on disk, so nothing needed writing.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "folder": {
+        "type": "String"
+      }
+    }
+  },
+  "unpackingProject": "Unpacking the project file",
+  "@unpackingProject": {
+    "description": "Card shown over the interface while packed footage is being written back out as files."
   },
   "couldNotSaveProject": "Could not save the project",
   "@couldNotSaveProject": {
@@ -2959,6 +3029,14 @@
   "fxEditExpression": "Edit expression…",
   "@fxEditExpression": {
     "description": "Effect controls — the Expression driver's row that opens its expression for editing."
+  },
+  "fxAddInput": "Add input",
+  "@fxAddInput": {
+    "description": "Button on the Expression driver, in the Node panel and on its box in a node graph. Gives the box one more number input, a socket the expression can read by name (input_1, input_2 and so on)."
+  },
+  "fxRemoveInput": "Remove input",
+  "@fxRemoveInput": {
+    "description": "Button on the Expression driver, beside Add input. Takes away the box's last number input, and the wire plugged into it."
   },
   "fxEditShader": "Edit shader…",
   "@fxEditShader": {
@@ -5012,6 +5090,22 @@
   "menuOpenProject": "Open project…",
   "@menuOpenProject": {
     "description": "Menu item."
+  },
+  "menuPackAutomatically": "Pack automatically",
+  "@menuPackAutomatically": {
+    "description": "Tick row in File > Packed project file. When ticked, every save writes the project's footage into the project file. Also the name of this edit in the Edit > History window."
+  },
+  "menuPackProject": "Pack project file",
+  "@menuPackProject": {
+    "description": "Menu item in File > Packed project file: saves the project with all of its footage files written inside the .lum project file."
+  },
+  "menuPackedProject": "Packed project file",
+  "@menuPackedProject": {
+    "description": "Submenu of the File menu holding the commands that put the project's footage inside the project file and take it out again."
+  },
+  "menuUnpackProject": "Unpack project file",
+  "@menuUnpackProject": {
+    "description": "Menu item in File > Packed project file: writes the footage held inside the project file back out as ordinary files and saves the project without it."
   },
   "menuOpenRecent": "Open recent",
   "@menuOpenRecent": {

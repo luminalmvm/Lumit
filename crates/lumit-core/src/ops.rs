@@ -110,6 +110,12 @@ pub enum Op {
     SetUseProxies {
         use_proxies: bool,
     },
+    /// Whether every save packs the project's footage into the `.lum`
+    /// (`Document::auto_pack`). Which items are packed already is not an op:
+    /// see `DocumentStore::set_packed`.
+    SetAutoPack {
+        auto_pack: bool,
+    },
     RenameItem {
         id: Uuid,
         name: String,
@@ -806,6 +812,7 @@ impl Op {
             Op::SetItemProxy { .. } => "Set proxy",
             Op::SetItemUseProxy { .. } => "Use proxy",
             Op::SetUseProxies { .. } => "Use proxies",
+            Op::SetAutoPack { .. } => "Pack automatically",
             Op::RenameItem { .. } => "Rename item",
             Op::SetItemLabel { .. } => "Set item colour",
             Op::AddLayer { .. } => "Add layer",
@@ -1141,6 +1148,12 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
             let previous = std::mem::replace(&mut doc.use_proxies, *use_proxies);
             Ok(Op::SetUseProxies {
                 use_proxies: previous,
+            })
+        }
+        Op::SetAutoPack { auto_pack } => {
+            let previous = std::mem::replace(&mut doc.auto_pack, *auto_pack);
+            Ok(Op::SetAutoPack {
+                auto_pack: previous,
             })
         }
         Op::RenameItem { id, name } => {

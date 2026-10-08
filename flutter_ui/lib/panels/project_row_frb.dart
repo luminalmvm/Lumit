@@ -642,12 +642,15 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
                 key: ValueKey<String>('project-twirl-${projectItemId(item)}'),
                 behavior: HitTestBehavior.opaque,
                 onTap: widget.onToggleFolder,
-                child: lumitIcon(
-                  widget.folderOpen
-                      ? LumitIcon.twirlOpen
-                      : LumitIcon.twirlClosed,
-                  size: projectRowIconSize,
-                  color: t.textMuted,
+                child: TwirlTurn(
+                  open: widget.folderOpen,
+                  child: lumitIcon(
+                    widget.folderOpen
+                        ? LumitIcon.twirlOpen
+                        : LumitIcon.twirlClosed,
+                    size: projectRowIconSize,
+                    color: t.textMuted,
+                  ),
                 ),
               ),
       );

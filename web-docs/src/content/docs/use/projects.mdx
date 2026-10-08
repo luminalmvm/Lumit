@@ -1,6 +1,6 @@
 ---
 title: Projects
-description: The .lum file, saving, autosave, and crash recovery.
+description: The .lum file, saving, packing, autosave, and crash recovery.
 sidebar:
   order: 0
 ---
@@ -12,14 +12,35 @@ their settings. It is saved as a `.lum` file.
 
 <Shot file="recovery-dialog.png" caption="The crash-recovery dialogue, offering the journal, the newest autosave, or the saved file." eager/>
 
-Footage and media are never embedded. The project file stores references to files, and Lumit never
-modifies those files.
+The project file stores references to footage files, and Lumit never modifies those files.
+A [packed project](#packed-projects) also carries the files themselves.
 
 ## Save and open
 
 - **File ▸ Save** saves the project.
 - **File ▸ Save as…** saves to a new path. If already saved, it creates a new copy at the location.
 - **File ▸ Open project…** opens a `.lum` file, **Open recent** lists the last few.
+
+## Packed projects
+
+A packed project carries its footage inside the `.lum` file. It opens on a machine that has
+none of the original files. The commands are under **File ▸ Packed project file**.
+
+- **Pack project file** saves the project with every footage item's file inside it. Footage
+  imported afterwards is not packed until the command is run again.
+- **Pack automatically** packs on every save.
+- **Unpack project file** writes the packed footage into a `media` folder beside the project
+  and saves the project without it. A footage item whose original file is still on disk
+  goes back to reading that file, and nothing is written for it.
+
+A packed footage item reads its original file while that file is on disk and unchanged.
+Otherwise it reads the packed copy, which is copied into Lumit's cache when the project opens.
+A file that has changed on disk since it was packed is packed again on the next save.
+
+:::note
+Proxies and the OCIO config are not packed. Autosave copies hold the document only, and an
+autosave reads its footage from the project file it was written beside.
+:::
 
 ## Autosave
 

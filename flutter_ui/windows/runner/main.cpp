@@ -2,6 +2,8 @@
 #include <flutter/flutter_view_controller.h>
 #include <windows.h>
 
+#include <string>
+
 #include "flutter_window.h"
 #include "utils.h"
 
@@ -18,8 +20,24 @@ __declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
 __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 0x00000001;
 }
 
+// Flutter, the plugins, the bridge and FFmpeg all live in lib\ beside the exe.
+// This puts that folder on the search path, straight after the exe's own. It
+// has to run before anything touches Flutter, which is why those libraries
+// are delay-loaded (windows/CMakeLists.txt).
+static void AddLibFolderToSearchPath() {
+  // 32,768 characters is the longest path Windows has.
+  std::wstring path(32768, L'\0');
+  path.resize(::GetModuleFileNameW(nullptr, path.data(),
+                                   static_cast<DWORD>(path.size())));
+  path.resize(path.find_last_of(L'\\') + 1);
+  path += L"lib";
+  ::SetDllDirectoryW(path.c_str());
+}
+
 int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
                       _In_ wchar_t *command_line, _In_ int show_command) {
+  AddLibFolderToSearchPath();
+
   // Attach to console when present (e.g., 'flutter run') or create a
   // new console when running with a debugger.
   if (!::AttachConsole(ATTACH_PARENT_PROCESS) && ::IsDebuggerPresent()) {

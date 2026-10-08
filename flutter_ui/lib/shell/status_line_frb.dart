@@ -340,30 +340,38 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
       valueListenable: state.notice,
       builder: (context, notice, _) {
         if (notice == null) return const SizedBox.shrink();
-        return _bubble(
-          t,
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Flexible(
-                child: Text(
-                  notice.message,
-                  key: const ValueKey('status-notice'),
-                  style: notice.error
-                      ? t.small.copyWith(color: t.warning)
-                      : t.small,
-                  overflow: TextOverflow.ellipsis,
+        final motion = ThemeScope.of(context).motion;
+        // Each notice arrives: keyed by the notice itself, so a new one
+        // taking the line over plays in again rather than swapping its words.
+        return Entrance(
+          key: ObjectKey(notice),
+          spec: motion.reveal,
+          rise: motion.revealRise,
+          child: _bubble(
+            t,
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(
+                  child: Text(
+                    notice.message,
+                    key: const ValueKey('status-notice'),
+                    style: notice.error
+                        ? t.small.copyWith(color: t.warning)
+                        : t.small,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 4),
-              HouseButton(
-                key: const ValueKey('status-notice-close'),
-                small: true,
-                frameless: true,
-                onPressed: () => state.notice.value = null,
-                child: Text('×', style: t.small.copyWith(color: t.textMuted)),
-              ),
-            ],
+                const SizedBox(width: 4),
+                HouseButton(
+                  key: const ValueKey('status-notice-close'),
+                  small: true,
+                  frameless: true,
+                  onPressed: () => state.notice.value = null,
+                  child: Text('×', style: t.small.copyWith(color: t.textMuted)),
+                ),
+              ],
+            ),
           ),
         );
       },

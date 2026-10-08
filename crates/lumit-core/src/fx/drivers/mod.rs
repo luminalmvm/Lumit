@@ -2509,6 +2509,49 @@ mod tests {
         .collect()
     }
 
+    /// An input is a number the text reads by name: what its wire carries
+    /// where it has one, its own row's value where it does not. Removing one
+    /// takes its stored value with it.
+    #[test]
+    fn an_expression_reads_its_inputs_by_name() {
+        let mut e = expression("(input_1 + input_2) * input_3");
+        for _ in 0..3 {
+            expression::add_input(&mut e);
+        }
+        // `input_1` and `input_3` hold typed values; `input_2` follows a wire.
+        for (id, value) in [("input_1", 2.0), ("input_3", 4.0)] {
+            e.params.push(crate::model::EffectParam {
+                id: id.to_owned(),
+                value: EffectValue::Float(crate::anim::Property::fixed(value)),
+                extra: serde_json::Map::new(),
+            });
+        }
+        // Math multiplies by default, so this box hands out 3.
+        let mut three = inst("math");
+        set(&mut three, "a", 3.0);
+        set(&mut three, "b", 1.0);
+        let target = inst("blur");
+        let graph = LayerGraph {
+            edges: vec![
+                edge(&three, "value", NodeRef::Driver(e.id), "input_2"),
+                edge(&e, "value", NodeRef::Effect(target.id), "radius"),
+            ],
+            nodes: vec![three, e.clone()],
+            ..LayerGraph::default()
+        };
+        assert_eq!(graph.validate(std::slice::from_ref(&target)), Ok(()));
+        assert_eq!(
+            resolve_drivers(&graph, 0.0, ctx(), None)
+                .param(NodeRef::Effect(target.id), ParamId::new("radius")),
+            Some(Value::Float(20.0)),
+            "(2 + 3) * 4"
+        );
+
+        assert_eq!(expression::remove_input(&mut e), Some("input_3"));
+        assert_eq!(expression::input_count(&e), 2);
+        assert!(e.params.iter().all(|p| p.id != "input_3"));
+    }
+
     /// A number fills Value and nothing else (node-graph.md §1.3).
     #[test]
     fn an_expression_returning_a_number_carries_only_its_value_port() {

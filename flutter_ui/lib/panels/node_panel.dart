@@ -439,15 +439,15 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
                             scale: ui.viewerScale,
                             layer: layer,
                             effects: staged));
-    if (picked.info.name == 'expression' && param == 'edit') {
-      if (home != null) {
+    if (picked.info.name == 'expression' &&
+        home != null &&
         editExpressionOn(
           context: context,
           home: home,
           effect: effect,
+          param: param,
           onApplied: ui.model.refresh,
-        );
-      }
+        )) {
       return;
     }
     if (picked.info.name == 'custom_shader' &&
@@ -632,15 +632,24 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     // query point's two channels are a place, not a size — nothing here scales.
     final rows = <Widget>[
       // A Custom shader's inner graph, small, and the way into it.
-      if (picked.info.name == 'custom_shader' && !picked.graph && layer != null)
+      if (picked.info.name == 'custom_shader')
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
           child: ShaderGraphThumb(
-            home: InstanceHome.layer(layer),
+            home: layer == null
+                ? InstanceHome.graph(ui.selectedComp!)
+                : InstanceHome.layer(layer),
             effect: id,
-            onOpen: () => ui.enterShaderGraph(layer, id,
-                effectName:
-                    picked.info.customName ?? engineLabel(picked.info.name)),
+            onOpen: () {
+              final name =
+                  picked.info.customName ?? engineLabel(picked.info.name);
+              if (layer == null) {
+                ui.enterShaderGraphInComp(ui.selectedComp!, id,
+                    effectName: name);
+              } else {
+                ui.enterShaderGraph(layer, id, effectName: name);
+              }
+            },
           ),
         ),
     ];

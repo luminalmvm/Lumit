@@ -31,6 +31,7 @@ import 'package:lumit_flutter/state/viewer_view.dart';
 import 'package:lumit_flutter/state/app_state.dart';
 import 'package:lumit_flutter/state/ui_state.dart';
 import 'package:lumit_flutter/state/viewer_views.dart';
+import 'package:lumit_flutter/theme/motion.dart';
 import 'package:lumit_flutter/widgets/escape_ladder.dart';
 import 'package:lumit_flutter/widgets/controls.dart';
 import 'package:lumit_flutter/widgets/ui_scale.dart';
@@ -182,6 +183,11 @@ class _BootGateState extends State<BootGate> {
   /// it is a bridge call, and it answers the same thing every time.
   late final List<String> _lines = _readBootLog();
 
+  /// How many times the window has changed hands: splash to welcome, welcome
+  /// to shell. The first of the three is simply there, and each one after it
+  /// fades up in its place (docs/15 §8).
+  int _handovers = 0;
+
   static List<String> _readBootLog() {
     try {
       return bootLog();
@@ -192,18 +198,38 @@ class _BootGateState extends State<BootGate> {
 
   @override
   Widget build(BuildContext context) {
+    // Keyed by the handover, so each window mounts afresh and plays in once.
+    // The one before it is gone at once: only what arrives is animated.
+    return Entrance.fade(
+      key: ValueKey<int>(_handovers),
+      spec: _handovers == 0
+          ? MotionSpec.still
+          : ThemeScope.of(context).motion.swap,
+      child: _window(),
+    );
+  }
+
+  Widget _window() {
     if (_booting) {
       return SplashOverlay(
         lines: _lines,
         onDone: () {
-          if (mounted) setState(() => _booting = false);
+          if (!mounted) return;
+          setState(() {
+            _booting = false;
+            _handovers++;
+          });
         },
       );
     }
     if (_welcoming) {
       return WelcomeScreenFrb(
         onDone: () {
-          if (mounted) setState(() => _welcoming = false);
+          if (!mounted) return;
+          setState(() {
+            _welcoming = false;
+            _handovers++;
+          });
         },
       );
     }
@@ -330,9 +356,12 @@ class _LumitAppViewState extends State<LumitAppView> {
               : const SizedBox.shrink(),
         ),
         // The same card for a job working on the document that is already open
-        // — beat detection. The two never overlap: nothing can be started
+        // — beat detection, packing the project. The two never overlap: nothing can be started
         // against a document that is still being read.
-        BusyOverlay(busy: state.busy, progress: state.busyProgress),
+        BusyOverlay(
+            busy: state.busy,
+            progress: state.busyProgress,
+            cancel: state.busyCancel),
       ]),
     );
   }

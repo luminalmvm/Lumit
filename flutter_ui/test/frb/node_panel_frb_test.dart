@@ -124,6 +124,71 @@ void main() {
       expect(p.layer.getGraphDrivers().single.expressionSource(), 'time * 2');
     });
 
+    /// Add input gives an Expression box a socket and a row. Remove input
+    /// takes them away again, with the wire that was plugged in, in one op.
+    testWidgets("an Expression driver's inputs are added and removed",
+        (tester) async {
+      final p = withBlur();
+      final box = seedWiredDriver(p.layer, 'expression');
+      p.uiState.graphNode.value = BridgeNodeRef.driver(box);
+      await mount(tester, p, const NodePanelFrb(), width: 600);
+
+      List<String> sockets() => [
+            for (final s in p.layer
+                .getGraph()
+                .nodes
+                .firstWhere((n) => n.node == BridgeNodeRef.driver(box))
+                .inputs)
+              s.id,
+          ];
+      final socket = BridgeInputRef.param(
+          node: BridgeNodeRef.driver(box), port: 'input_1');
+      bool plugged() =>
+          p.layer.getGraph().wiring.edges.any((e) => e.to == socket);
+
+      await tester
+          .tap(find.byKey(ValueKey<String>('fx-action-$box-add_input')));
+      await tester.pump();
+      expect(sockets(), ['input_1']);
+      expect(find.byKey(ValueKey<String>('node-row-$box-input_1')),
+          findsOneWidget);
+
+      // A Math box wired into the new input.
+      final math = p.layer.newDriver(name: 'math');
+      final graph = p.layer.getGraph();
+      p.layer.setGraph(
+        drivers: [...p.layer.getGraphDrivers(), math],
+        wiring: BridgeGraphWiring(
+          edges: [
+            ...graph.wiring.edges,
+            BridgeGraphEdge(
+              from: BridgeOutputRef.driver(node: math.id(), port: 'value'),
+              to: socket,
+            ),
+          ],
+          layout: graph.wiring.layout,
+          exposed: graph.wiring.exposed,
+          groups: graph.wiring.groups,
+          outUnwired: false,
+        ),
+      );
+      p.uiState.model.refresh();
+      await tester.pump();
+      expect(plugged(), isTrue);
+
+      await tester
+          .tap(find.byKey(ValueKey<String>('fx-action-$box-remove_input')));
+      await tester.pump();
+      expect(sockets(), isEmpty);
+      expect(plugged(), isFalse, reason: 'the wire goes with its socket');
+      expect(p.layer.getGraph().wiring.edges, hasLength(1),
+          reason: 'the wire into the blur is untouched');
+
+      p.state.project!.undo();
+      expect(sockets(), ['input_1']);
+      expect(plugged(), isTrue, reason: 'one undo step brings both back');
+    });
+
     /// **Audio level's Source row is a dropdown that starts on the comp**, and
     /// the Audio row under it names no layer until one is picked
     /// (docs/impl/audio-nodes.md §3). The layer list offers **every** layer,

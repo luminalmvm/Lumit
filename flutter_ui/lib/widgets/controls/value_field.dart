@@ -492,7 +492,9 @@ class _DragValueFieldState extends State<DragValueField>
 
   @override
   Widget build(BuildContext context) {
-    final t = ThemeScope.of(context).theme;
+    final scope = ThemeScope.of(context);
+    final t = scope.theme;
+    final motion = scope.motion;
     if (_editing) {
       // **The editor is the resting face, with a caret in it.** Same box, same
       // padding, same border, same type, same right-hand anchor — because
@@ -639,7 +641,14 @@ class _DragValueFieldState extends State<DragValueField>
           setState(() => _dragging = false);
           widget.onDragCancel?.call();
         },
-        child: Container(
+        // Animated for the edge alone. It lights at once under a scrub, which
+        // is the hand already moving, and eases for hover and focus.
+        child: AnimatedContainer(
+          duration: _dragging
+              ? Duration.zero
+              : (_hover || _focused ? motion.hoverIn : motion.hoverOut)
+                  .duration,
+          curve: motion.hoverOut.curve,
           height: widget.bare ? null : wellHeight,
           padding: widget.bare
               ? EdgeInsets.zero
