@@ -162,9 +162,15 @@ class TimelineNavigator extends StatefulWidget {
     this.onWindowEnd,
     this.height,
     this.bars,
+    this.pad = TimelineAxis.pad,
   });
 
   final double trailing;
+
+  /// The room the lanes leave either side of the frames
+  /// ([TimelineAxis.padFor]). The strip leaves the same, so a frame stands at
+  /// the same x here as in the lanes under it when the whole comp is in view.
+  final double pad;
 
   /// The band this strip stands in, or null for the density's navigator band.
   /// Lantern's minimap under the lanes asks for its own 10.
@@ -250,14 +256,15 @@ class _TimelineNavigatorState extends State<TimelineNavigator> {
           viewport: position.viewportDimension,
           content: content,
           frames: widget.frames,
+          pad: widget.pad,
           clamp: clamp,
         );
-    final span = content - TimelineAxis.pad * 2;
+    final span = content - widget.pad * 2;
     return (
       window: at(clamp: true),
       raw: at(clamp: false),
       overhang: widget.frames > 0 && span > 0
-          ? TimelineAxis.pad * widget.frames / span
+          ? widget.pad * widget.frames / span
           : 0.0,
     );
   }
@@ -334,7 +341,9 @@ class _TimelineNavigatorState extends State<TimelineNavigator> {
                   child: LayoutBuilder(
                     builder: (context, constraints) {
                       final axis = TimelineAxis(
-                          frames: widget.frames, width: constraints.maxWidth);
+                          frames: widget.frames,
+                          width: constraints.maxWidth,
+                          inset: widget.pad);
                       return _surface(t, axis);
                     },
                   ),

@@ -10,18 +10,40 @@ import 'base.dart';
 class HouseProgressBar extends StatelessWidget {
   final double fraction;
   final double height;
-  const HouseProgressBar({super.key, required this.fraction, this.height = 4});
+
+  /// Whether the fill runs to each new reading instead of jumping to it. Off
+  /// for a bar that something else is already moving every frame, the
+  /// indeterminate sweep, which would only be smeared by a second easing.
+  final bool eased;
+
+  const HouseProgressBar({
+    super.key,
+    required this.fraction,
+    this.height = 4,
+    this.eased = true,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final t = ThemeScope.of(context).theme;
+    final scope = ThemeScope.of(context);
+    final t = scope.theme;
     final radius = BorderRadius.circular(height / 2);
     return Container(
       height: height,
       decoration: BoxDecoration(color: t.surface3, borderRadius: radius),
-      child: FractionallySizedBox(
-        alignment: Alignment.centerLeft,
-        widthFactor: fraction.clamp(0.0, 1.0),
+      // A job reports its progress in steps, and a bar that jumped from one
+      // to the next read as a stutter in the job. The fill runs to each new
+      // reading instead (docs/15 §8). It is paint inside a fixed track, so
+      // nothing around the bar is laid out again.
+      child: TweenAnimationBuilder<double>(
+        tween: Tween<double>(end: fraction.clamp(0.0, 1.0)),
+        duration: eased ? scope.motion.mark.duration : Duration.zero,
+        curve: Curves.easeOut,
+        builder: (context, shown, child) => FractionallySizedBox(
+          alignment: Alignment.centerLeft,
+          widthFactor: shown.clamp(0.0, 1.0),
+          child: child,
+        ),
         child: Container(
           decoration: BoxDecoration(color: t.accent, borderRadius: radius),
         ),

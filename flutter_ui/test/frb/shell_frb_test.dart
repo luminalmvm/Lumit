@@ -1024,7 +1024,11 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('a waiting row is dragged to another place', (tester) async {
+    /// The drag is carried at Full and marked with a line below it (docs/15
+    /// §8.1). Either way the row lands where it was dropped.
+    for (final level in AnimationLevel.values) {
+      testWidgets('a waiting row is dragged to another place, at ${level.name}',
+          (tester) async {
       tester.view.physicalSize = const Size(1200, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
@@ -1033,6 +1037,7 @@ void main() {
       final moves = <(int, int)>[];
       final p = freshProject();
       await tester.pumpWidget(hostPanel(
+        animationLevel: level,
         child: Builder(
           builder: (context) => HouseButton(
             key: const ValueKey('open-queue'),
@@ -1056,6 +1061,35 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('open-queue')));
       await tester.pumpAndSettle();
 
+      // Held over the first row, the line stands on the edge the row would
+      // land against, and nothing has moved. Only where the drag is marked.
+      if (level != AnimationLevel.all) {
+        final held = await tester.startGesture(tester
+            .getCenter(find.byKey(const ValueKey('export-queue-item-3'))));
+        await tester.pump();
+        for (var step = 0; step < 6; step++) {
+          await held.moveBy(const Offset(0, -2 * exportQueueRow / 6));
+          await tester.pump();
+        }
+        final line = find.byKey(const ValueKey('export-queue-drop-line'));
+        expect(line, findsOneWidget);
+        expect(
+            find.descendant(
+                of: line,
+                matching: find.byKey(const ValueKey('export-queue-item-1'))),
+            findsOneWidget,
+            reason: 'on the row it is aimed at');
+        final border =
+            (tester.widget<DecoratedBox>(line).decoration as BoxDecoration)
+                .border! as Border;
+        expect(border.top.width, 2, reason: 'over it: the row came from below');
+        expect(border.bottom, BorderSide.none);
+        expect(moves, isEmpty, reason: 'nothing moves until the drop');
+        await held.cancel();
+        await tester.pump();
+        expect(line, findsNothing);
+      }
+
       // The last row, dragged up onto the first. In steps, because a drag
       // reported as one jump is consumed starting the gesture and lands the
       // avatar back where it began.
@@ -1069,6 +1103,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('export-queue-dismiss')));
       await tester.pumpAndSettle();
     });
+    }
 
   }, skip: !engineAvailable);
 
