@@ -33,7 +33,8 @@ void main() {
         verticals: const [200],
         horizontals: const [],
       );
-      expect(nudged, const Offset(150, 40));
+      // The line that took it comes back too, so it can be drawn.
+      expect(nudged, (delta: const Offset(150, 40), x: 200.0, y: null));
 
       // Out of reach on both axes: the pointer's own travel, untouched.
       expect(
@@ -42,7 +43,7 @@ void main() {
             delta: const Offset(120, 40),
             verticals: const [200],
             horizontals: const []),
-        const Offset(120, 40),
+        (delta: const Offset(120, 40), x: null, y: null),
       );
 
       // The middle of the box counts too, not only its edges: it is what
@@ -53,6 +54,7 @@ void main() {
                 delta: const Offset(97, 0),
                 verticals: const [200],
                 horizontals: const [])
+            .delta
             .dx,
         100,
       );

@@ -16,6 +16,7 @@ import 'package:provider/provider.dart';
 import '../icons/icons.dart';
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
+import '../state/settings.dart' show LoopMode;
 import '../state/timecode.dart';
 import '../state/viewer_view.dart' show ViewerView;
 import '../state/workspace.dart' show ViewerLook;
@@ -34,7 +35,7 @@ import 'viewer_strips.dart';
 /// the transparency board, the view menu, the channel, the exposure — then a
 /// hairline seam and the snapshot; the transport with its clock in the middle;
 /// and at the right-hand end the composition's own reading, which says what is
-/// being shown, at what time, at how many pixels, and how big.
+/// being shown, at how many pixels, and how big.
 class ViewerBar extends StatelessWidget {
   final ViewerChannel channel;
   final bool grid;
@@ -90,6 +91,11 @@ class ViewerBar extends StatelessWidget {
   /// deck under the picture carries them instead.
   final bool transport;
 
+  /// What playback does at the end of the work area, and how to change it:
+  /// the mark beside the transport. Handed in, like everything else here.
+  final LoopMode loop;
+  final ValueChanged<LoopMode> onLoop;
+
   const ViewerBar({
     super.key,
     required this.channel,
@@ -114,6 +120,8 @@ class ViewerBar extends StatelessWidget {
     required this.onSnapshotTake,
     required this.onSnapshotHold,
     required this.detached,
+    required this.loop,
+    required this.onLoop,
     this.leading = const [],
     this.transport = true,
   });
@@ -145,13 +153,13 @@ class ViewerBar extends StatelessWidget {
               _barMinimum + (t.shape == ThemeShape.desk ? 60 : 0);
           // The rungs, in the order the owner ruled them (see [_barMinimum]).
           final keepsReading = width >= _barKeepsReading;
+          final keepsLoop = width >= _barKeepsLoop;
           final keepsLooking = width >= _barKeepsLooking;
           final keepsClock = width >= _barKeepsClock;
           final reading = _Readout(
             comp: comp,
             settings: settings,
             compSize: compSize,
-            frame: frame,
             tier: tier,
             shownScale: shownScale,
           );
@@ -184,19 +192,26 @@ class ViewerBar extends StatelessWidget {
               ]),
               if (!loose && transport) const SizedBox(width: 24),
               if (transport)
-                Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: viewerTransportMarks(
-                      t,
-                      playing: playing,
-                      frame: frame,
-                      settings: settings,
-                      comp: comp,
-                      onPlayPause: onPlayPause,
-                      onSeek: onSeek,
-                      detached: detached,
-                      clock: keepsClock,
-                    )),
+                Row(mainAxisSize: MainAxisSize.min, children: [
+                  ...viewerTransportMarks(
+                    t,
+                    playing: playing,
+                    frame: frame,
+                    settings: settings,
+                    comp: comp,
+                    onPlayPause: onPlayPause,
+                    onSeek: onSeek,
+                    detached: detached,
+                    clock: keepsClock,
+                  ),
+                  // The loop mode, beside the clock. The first of the controls
+                  // to leave a narrowing bar. One edge to allow for: the clock
+                  // before it is text.
+                  if (keepsLoop) ...[
+                    SizedBox(width: viewerTransportGap - viewerMarkEdge),
+                    viewerLoopMark(t, loop: loop, onLoop: onLoop),
+                  ],
+                ]),
               if (!loose && keepsReading) const SizedBox(width: 24),
               // The reading takes the room the two gaps are not using, and
               // sheds parts of itself before it elides — the ladder is in
@@ -465,6 +480,34 @@ List<Widget> viewerTransportMarks(
   ];
 }
 
+/// The loop mode, one mark cycling through the three (docs/07 §9). The set
+/// has one loop glyph, so the colour tells the modes apart: lit for the
+/// work-area loop, muted for once, accent for ping-pong.
+///
+/// On the deck, and beside the transport on the bar where there is no deck, so
+/// every arrangement has a way to change it.
+Widget viewerLoopMark(
+  LumitTheme t, {
+  required LoopMode loop,
+  required ValueChanged<LoopMode> onLoop,
+}) =>
+    viewerBarMark(
+      key: const ValueKey('viewer-loop'),
+      icon: LumitIcon.loop,
+      colour: switch (loop) {
+        LoopMode.workArea => t.textPrimary,
+        LoopMode.once => t.textMuted,
+        LoopMode.pingPong => t.accent,
+      },
+      onPressed: () =>
+          onLoop(LoopMode.values[(loop.index + 1) % LoopMode.values.length]),
+      tip: switch (loop) {
+        LoopMode.workArea => l10n.tipTransportLoopWorkArea,
+        LoopMode.once => l10n.tipTransportLoopOnce,
+        LoopMode.pingPong => l10n.tipTransportLoopPingPong,
+      },
+    );
+
 /// The width of the deck's accent play capsule under Lantern (12B.4).
 const double viewerPlayCapsuleWidth = 34;
 
@@ -486,11 +529,13 @@ const double viewerPlayCapsuleWidth = 34;
 ///    composition name, which is the ladder inside [viewerReadoutLadder];
 /// 3. **the reading goes entirely** ([_barKeepsReading]) — every one of its
 ///    facts is said again in the header, the tabs or the clock;
-/// 4. **the ways of looking fold into one overflow mark**
+/// 4. **the loop mark goes** ([_barKeepsLoop]), the least of the transport:
+///    what playback does at the end is set once and left;
+/// 5. **the ways of looking fold into one overflow mark**
 ///    ([_barKeepsLooking]), which is §12A.6's step 4 exactly: a toolbar
 ///    collapses into a menu rather than shrinking or clipping;
-/// 5. **the clock goes** ([_barKeepsClock]);
-/// 6. **the five transport buttons stand alone**, and only if the bar is
+/// 6. **the clock goes** ([_barKeepsClock]);
+/// 7. **the five transport buttons stand alone**, and only if the bar is
 ///    narrower than *those* does it finally slide sideways (step 5).
 ///
 /// The numbers are the widths at which the pieces below them stop fitting,
@@ -499,6 +544,10 @@ const double _barMinimum = 560;
 
 /// Below this the bar drops the reading and keeps the controls.
 const double _barKeepsReading = 460;
+
+/// Below this the loop mark goes: it no longer fits beside the ways of
+/// looking, the transport and the clock.
+const double _barKeepsLoop = 450;
 
 /// Below this the ways of looking fold into the overflow mark.
 const double _barKeepsLooking = 400;
@@ -555,18 +604,23 @@ class _LookingOverflow extends StatelessWidget {
   }
 }
 
-/// **What is on screen, in one line**: the composition, the time, the
-/// pixels the engine actually made, and the magnification they are drawn at.
+/// **What is on screen, in one line**: the composition, the pixels the
+/// engine actually made, and the magnification they are drawn at.
 ///
 /// It is the drawing's right-hand end, and it absorbs the degradation badge
 /// (docs/07 §2.2 item 9) that used to come and go beside the transport: a
-/// reading that always says `1920×1080 → 960×540` states the tier plainly, in
+/// reading that says `1920×1080 → 960×540` states the tier plainly, in
 /// the one place a person already looks to ask what they are looking at, and
 /// without a box appearing mid-playback and dragging the bar about.
 /// **What it sheds, and in what order** (§12A.6's ladder). The reading is
-/// four statements on one line, so step 1 — "flexible text ellipsises" — is not
-/// one decision but four, and cutting the line at the ellipsis would take the
+/// several statements on one line, so step 1, "flexible text ellipsises", is
+/// not one decision, and cutting the line at the ellipsis would take the
 /// magnification, which is the part a person is most often watching.
+///
+/// **The time is not on it.** The clock beside the transport and the
+/// Timeline's own both say it already. **The size is said once** while the
+/// preview is made at the composition's own, and as the arrowed pair
+/// ([degraded], `1920×1080 → 960×540`) only while it is made smaller.
 ///
 /// So, narrowing:
 ///
@@ -576,27 +630,25 @@ class _LookingOverflow extends StatelessWidget {
 ///    least of what the line says, and the picture itself shows it;
 /// 3. it drops the **composition's name**, which the panel's header and the
 ///    composition tabs both still carry;
-/// 4. and only then does what is left — the time, the size, the magnification —
+/// 4. and only then does what is left, the size and the magnification,
 ///    **ellipsise**. In practice the bar reaches [_barMinimum] and scrolls
 ///    (step 5) before that, so a value is never cut.
 List<String> viewerReadoutLadder({
   required String comp,
-  required String time,
   required String source,
-  required String preview,
+  required String? degraded,
   required String zoom,
 }) =>
     [
-      l10n.viewerReadout(comp, time, source, preview, zoom),
-      l10n.viewerReadoutNoPreview(comp, time, source, zoom),
-      l10n.viewerReadoutNoComp(time, source, zoom),
+      if (degraded != null) l10n.viewerReadoutFull(comp, degraded, zoom),
+      l10n.viewerReadoutFull(comp, source, zoom),
+      l10n.viewerReadoutShort(source, zoom),
     ];
 
 class _Readout extends StatelessWidget {
   final CompositionReference comp;
   final BridgeCompSettings settings;
   final BridgeCompSize compSize;
-  final int frame;
   final int tier;
   final double shownScale;
 
@@ -604,7 +656,6 @@ class _Readout extends StatelessWidget {
     required this.comp,
     required this.settings,
     required this.compSize,
-    required this.frame,
     required this.tier,
     required this.shownScale,
   });
@@ -615,22 +666,70 @@ class _Readout extends StatelessWidget {
     final divisor = tier < 1 ? 1 : tier;
     final style =
         t.mono.copyWith(fontSize: barValueTextSize, color: t.textMuted);
+    final source = '${compSize.width}×${compSize.height}';
+    final preview =
+        '${compSize.width ~/ divisor}×${compSize.height ~/ divisor}';
+    final degraded = preview == source
+        ? null
+        : l10n.viewerReadoutDegraded(source, preview);
+    final zoom = '${(shownScale * 100).round()}%';
     final rungs = viewerReadoutLadder(
       comp: settings.name,
-      time: timecodeOf(frame, settings),
-      source: '${compSize.width}×${compSize.height}',
-      preview: '${compSize.width ~/ divisor}×${compSize.height ~/ divisor}',
-      zoom: '${(shownScale * 100).round()}%',
+      source: source,
+      degraded: degraded,
+      zoom: zoom,
+    );
+    // The line as it would read with the arrowed pair at its widest. Its room
+    // is kept whether or not the pair is showing, so the transport does not
+    // shift under the pointer when playback drops the preview a tier.
+    final widest = viewerReadoutLadder(
+      comp: settings.name,
+      source: source,
+      degraded: l10n.viewerReadoutDegraded(source, source),
+      zoom: zoom,
     );
     return LayoutBuilder(
-      builder: (context, constraints) => Text(
-        _widestThatFits(rungs, style, constraints.maxWidth, context),
-        key: const ValueKey('viewer-readout'),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        softWrap: false,
-        style: style,
-      ),
+      builder: (context, constraints) {
+        final text =
+            _widestThatFits(rungs, style, constraints.maxWidth, context);
+        // The arrowed pair in the warning colour, so a preview made smaller
+        // than the composition stands out. From the end: a composition can be
+        // named anything, and the name comes first.
+        final at = degraded == null ? -1 : text.lastIndexOf(degraded);
+        return Stack(
+          alignment: Alignment.centerRight,
+          children: [
+            Opacity(
+              opacity: 0,
+              child: Text(
+                _widestThatFits(widest, style, constraints.maxWidth, context),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                softWrap: false,
+                style: style,
+              ),
+            ),
+            Text.rich(
+              TextSpan(
+                text: at < 0 ? text : text.substring(0, at),
+                children: at < 0
+                    ? null
+                    : [
+                        TextSpan(
+                            text: degraded,
+                            style: TextStyle(color: t.warning)),
+                        TextSpan(text: text.substring(at + degraded!.length)),
+                      ],
+              ),
+              key: const ValueKey('viewer-readout'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              softWrap: false,
+              style: style,
+            ),
+          ],
+        );
+      },
     );
   }
 

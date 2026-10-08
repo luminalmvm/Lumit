@@ -71,6 +71,7 @@ class LumitAppNew extends StatelessWidget {
         ...WidgetsApp.defaultActions,
         NextFocusIntent: _TabOnwards(),
         PreviousFocusIntent: _TabBack(),
+        DirectionalFocusIntent: _ArrowOnwards(),
       },
       home: ChangeNotifierProvider.value(
         value: state,
@@ -129,6 +130,14 @@ class _TabOnwards extends NextFocusAction {
 class _TabBack extends PreviousFocusAction {
   @override
   bool isEnabled(PreviousFocusIntent intent) => _tabMovesFocus;
+}
+
+/// The arrow keys move the focus on the same terms as Tab. Otherwise an arrow
+/// pressed over the Viewer, to nudge a layer, would also park the focus on a
+/// button, and every key after it would be that button's.
+class _ArrowOnwards extends DirectionalFocusAction {
+  @override
+  bool isEnabled(DirectionalFocusIntent intent) => _tabMovesFocus;
 }
 
 /// The boot splash, the welcome screen, and the shell behind them once both are

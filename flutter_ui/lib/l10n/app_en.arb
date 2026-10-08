@@ -10285,9 +10285,41 @@
   "@tipTransportUnmute": {
     "description": "Tooltip on the Viewer deck's speaker mark while the output is silenced: pressing it lets sound play again."
   },
+  "viewerAlignBottom": "Bottom",
+  "@viewerAlignBottom": {
+    "description": "Entry in the Align submenu of the Viewer picture's right-click menu: moves each selected layer so the bottom edge of its box meets the bottom edge of the composition. One word."
+  },
+  "viewerAlignCentre": "Centre",
+  "@viewerAlignCentre": {
+    "description": "Entry in the Align submenu of the Viewer picture's right-click menu: moves each selected layer left or right so the middle of its box meets the middle of the composition. One word."
+  },
+  "viewerAlignLeft": "Left",
+  "@viewerAlignLeft": {
+    "description": "Entry in the Align submenu of the Viewer picture's right-click menu: moves each selected layer so the left edge of its box meets the left edge of the composition. One word."
+  },
+  "viewerAlignMiddle": "Middle",
+  "@viewerAlignMiddle": {
+    "description": "Entry in the Align submenu of the Viewer picture's right-click menu: moves each selected layer up or down so the middle of its box meets the middle of the composition. One word, and a different one from the horizontal Centre."
+  },
+  "viewerAlignRight": "Right",
+  "@viewerAlignRight": {
+    "description": "Entry in the Align submenu of the Viewer picture's right-click menu: moves each selected layer so the right edge of its box meets the right edge of the composition. One word."
+  },
+  "viewerAlignTop": "Top",
+  "@viewerAlignTop": {
+    "description": "Entry in the Align submenu of the Viewer picture's right-click menu: moves each selected layer so the top edge of its box meets the top edge of the composition. One word."
+  },
   "viewerColourToneMap": "Tone mapping",
   "@viewerColourToneMap": {
     "description": "Entry in the Viewer header's colour-pipeline menu, with a tick beside it when it is on. It folds very bright values back under 1 so they can be seen rather than clipping flat. Preview only, so it never changes an export."
+  },
+  "viewerMenuAlign": "Align",
+  "@viewerMenuAlign": {
+    "description": "Entry in the Viewer picture's right-click menu, shown while layers are selected. It opens a submenu of the six ways to line a layer up with the composition: Left, Centre, Right, Top, Middle, Bottom."
+  },
+  "viewerMenuSelect": "Select",
+  "@viewerMenuSelect": {
+    "description": "Entry in the Viewer picture's right-click menu. It opens a submenu naming every layer under the pointer, top to bottom, so a layer covered by another can be selected."
   },
   "viewerOverlayBackground": "Composition background…",
   "@viewerOverlayBackground": {
@@ -10325,53 +10357,38 @@
   "@viewerQualityResolution": {
     "description": "Heading over the first group in the Viewer header's quality menu: how many pixels the engine is asked to make for the preview."
   },
-  "viewerReadout": "{comp} · {time} · {source} → {preview} · {zoom}",
-  "@viewerReadout": {
-    "description": "The reading at the right-hand end of the Viewer's bottom bar, set in mono: which composition is on screen, the time shown, the composition's own pixel size, the pixel size the preview was actually made at, and the magnification it is drawn at. Every part is a number or a name, so only the separators are translatable.",
+  "viewerReadoutDegraded": "{source} → {preview}",
+  "@viewerReadoutDegraded": {
+    "description": "The size part of the Viewer bar's reading while the preview was made at fewer pixels than the composition has, set in mono and drawn in the warning colour: the composition's own pixel size, an arrow, and the pixel size the preview was actually made at. Both parts are numbers, so only the arrow is translatable.",
     "placeholders": {
-      "comp": {
-        "type": "String"
-      },
-      "time": {
-        "type": "String"
-      },
       "source": {
         "type": "String"
       },
       "preview": {
         "type": "String"
-      },
-      "zoom": {
-        "type": "String"
       }
     }
   },
-  "viewerReadoutNoComp": "{time} · {source} · {zoom}",
-  "@viewerReadoutNoComp": {
-    "description": "The Viewer bar's reading, third and shortest form, used when the bar is too narrow for the composition's name as well: the time shown, the composition's pixel size, and the magnification. Every part is a number, so only the separators are translatable.",
-    "placeholders": {
-      "time": {
-        "type": "String"
-      },
-      "source": {
-        "type": "String"
-      },
-      "zoom": {
-        "type": "String"
-      }
-    }
-  },
-  "viewerReadoutNoPreview": "{comp} · {time} · {source} · {zoom}",
-  "@viewerReadoutNoPreview": {
-    "description": "The Viewer bar's reading, second form, used when the bar is too narrow for the full one: the same line with the arrow and the preview's own pixel size dropped. Which composition is on screen, the time shown, the composition's pixel size, and the magnification. Every part is a number or a name, so only the separators are translatable.",
+  "viewerReadoutFull": "{comp} · {size} · {zoom}",
+  "@viewerReadoutFull": {
+    "description": "The reading at the right-hand end of the Viewer's bottom bar, set in mono: which composition is on screen, its pixel size (or the arrowed pair while the preview is made smaller), and the magnification it is drawn at. Every part is a number or a name, so only the separators are translatable.",
     "placeholders": {
       "comp": {
         "type": "String"
       },
-      "time": {
+      "size": {
         "type": "String"
       },
-      "source": {
+      "zoom": {
+        "type": "String"
+      }
+    }
+  },
+  "viewerReadoutShort": "{size} · {zoom}",
+  "@viewerReadoutShort": {
+    "description": "The Viewer bar's reading, shortest form, used when the bar is too narrow for the composition's name as well: the composition's pixel size and the magnification. Every part is a number, so only the separator is translatable.",
+    "placeholders": {
+      "size": {
         "type": "String"
       },
       "zoom": {
