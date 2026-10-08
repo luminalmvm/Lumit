@@ -10,6 +10,7 @@ import 'package:flutter/widgets.dart';
 
 import '../icons/icons.dart';
 import '../l10n/strings.dart';
+import '../panels/viewer_strips.dart' show viewerPaneCorners;
 import '../state/dock.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
@@ -1406,11 +1407,13 @@ class _PaneChrome extends StatelessWidget {
     // Whether this pane is itself a card, with a card's corners and shadow.
     final card = round && !onRoom;
     final corner = Radius.circular(t.tokens.cardRadius);
-    final edgeRadius = round
-        ? BorderRadius.all(corner)
-        : t.tokens.roomed
-            ? BorderRadius.vertical(bottom: corner)
-            : null;
+    final edgeRadius = onRoom
+        ? viewerPaneCorners(context, t)
+        : round
+            ? BorderRadius.all(corner)
+            : t.tokens.roomed
+                ? BorderRadius.vertical(bottom: corner)
+                : null;
     final body = Stack(
       children: [
         // **Nothing paints outside its pane**, step 5 of the
