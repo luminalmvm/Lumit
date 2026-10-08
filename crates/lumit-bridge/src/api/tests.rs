@@ -4626,6 +4626,7 @@ fn the_audio_transport_answers_without_a_device() {
     );
 
     // The rest of the transport is safe whatever the device did.
+    comp.audio_scrub(12).expect("scrub");
     audio_seek(1.5);
     audio_pause();
     audio_stop();

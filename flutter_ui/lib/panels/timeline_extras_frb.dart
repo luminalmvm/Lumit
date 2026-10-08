@@ -1522,6 +1522,31 @@ class _TimelineRulerState extends State<TimelineRuler> {
     super.dispose();
   }
 
+  /// The frame the scrub last sounded, so a drag that has not left it yet
+  /// does not sound it again on every pixel of travel.
+  int? _heard;
+
+  /// Move the playhead to the pointer at [x], and with `Ctrl` held sound the
+  /// frame it lands on: the comp is heard a frame at a time as the playhead
+  /// is dragged over it, which finds a beat without playing up to it. `Cmd`
+  /// on a Mac.
+  ///
+  /// A [press] always sounds, even on the frame the last drag ended on,
+  /// because pressing there again is asking to hear it again.
+  void _seek(double x, {bool press = false}) {
+    final frame = widget.axis.frameAt(x);
+    widget.onSeek(frame);
+    final keys = HardwareKeyboard.instance;
+    if (!keys.isControlPressed && !keys.isMetaPressed) return;
+    final last = widget.axis.frames - 1;
+    final at = frame.clamp(0, last < 0 ? 0 : last);
+    if (!press && at == _heard) return;
+    _heard = at;
+    // After the seek, which stops playback first: the engine only sounds a
+    // scrub while the transport is stopped.
+    widget.comp.audioScrub(frame: BigInt.from(at));
+  }
+
   /// Where a drag on the ruler lands: the pointer's own frame, taken to the
   /// nearest shared target while the magnet is on and `Ctrl` is not held
   /// (docs/07 §4.5). Sets [_caught], so the caller is already inside its own
@@ -1724,7 +1749,7 @@ class _TimelineRulerState extends State<TimelineRuler> {
         // comp back is still counted, so a band too narrow to have a middle is
         // not a band that cannot be cleared.
         if (!_onWorkHandle(d.localPosition.dx, work)) {
-          widget.onSeek(axis.frameAt(d.localPosition.dx));
+          _seek(d.localPosition.dx, press: true);
         }
         if (!_rulerTaps.tap()) return;
         // The second click of a pair, on ground nothing else claimed — a flag
@@ -1749,8 +1774,7 @@ class _TimelineRulerState extends State<TimelineRuler> {
           _createMarkerAt(axis.frameAt(x));
         }
       },
-      onHorizontalDragUpdate: (d) =>
-          widget.onSeek(axis.frameAt(d.localPosition.dx)),
+      onHorizontalDragUpdate: (d) => _seek(d.localPosition.dx),
       child: Container(
         height: widget.height,
         // **The lane ground, not a strip of its own**: the mockup

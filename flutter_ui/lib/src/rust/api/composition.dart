@@ -760,6 +760,20 @@ class CompositionReference {
         that: this,
       );
 
+  /// Hear `frame` without playing: one short burst of this comp's mix from
+  /// that frame on, which is what dragging the playhead with Ctrl held
+  /// sounds like.
+  ///
+  /// Call it for each frame the playhead lands on. The transport stays
+  /// stopped and the clock does not move. A burst asked for while another
+  /// is sounding takes over from it, so a steady drag is heard as one run of
+  /// sound. How long a burst lasts is the engine's to decide. During
+  /// playback it does nothing, and before the mix is loaded it asks for the
+  /// mix and is silent until that arrives.
+  void audioScrub({required BigInt frame}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceAudioScrub(
+          that: this, frame: frame);
+
   /// This composition's background colour, scene-linear RGBA (docs/07 §2.2
   /// item 10). What the composite is drawn onto where nothing covers it, and
   /// what an export writes there — distinct from the Viewer's transparency
