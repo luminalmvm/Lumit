@@ -358,14 +358,29 @@ pub trait EffectDef: Sync + Send + 'static {
         &[]
     }
 
-    /// The rows **this instance** is not showing right now, by id.
+    /// What **this instance** has done to its own rows: which are hidden,
+    /// which are greyed, and which choices list something else.
     ///
     /// Empty for every built-in, whose conditional rows are declared on the
-    /// schema (`visible_when`). A plugin hides and shows its own controls
-    /// from inside its code, so the answer is a fact about the instance, read
-    /// off its last render, and the panel skips these rows.
-    fn hidden_rows(&self, _inst: &EffectInstance) -> Vec<&'static str> {
-        Vec::new()
+    /// schema (`visible_when`, `enabled_when`). A plugin does all three from
+    /// inside its code, so the answer is a fact about the instance, kept in
+    /// the document with its values, and the panel draws it.
+    fn row_state(&self, _inst: &EffectInstance) -> RowState {
+        RowState::default()
+    }
+
+    /// Let the effect react to an edit of its values, and hand back what it
+    /// wrote in answer.
+    ///
+    /// `None` for every built-in, which has nothing to say. A **plugin** is
+    /// told through `kOfxActionInstanceChanged` and may set other controls,
+    /// hide them, grey them or relist a choice. `before` is the instance as
+    /// the document held it, or `None` for one just added, and `after` is the
+    /// edit. What comes back goes into the document in the same step.
+    ///
+    /// Waits for a render in flight, so never from a rebuild path.
+    fn settle(&self, _before: Option<&EffectInstance>, _after: &EffectInstance) -> Option<Pressed> {
+        None
     }
 
     /// Whether this effect has an image operation at all. `false` for the
@@ -528,7 +543,19 @@ pub struct PressFrame<'a> {
     pub height: u32,
 }
 
-/// What a pressed effect wrote while it was pressed.
+/// What one instance has done to its own rows, by row id
+/// ([`EffectDef::row_state`]).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct RowState {
+    /// Rows the panel skips.
+    pub hidden: Vec<&'static str>,
+    /// Rows the panel greys.
+    pub disabled: Vec<&'static str>,
+    /// Choice rows whose list is not the schema's, with the list to draw.
+    pub options: Vec<(&'static str, Vec<String>)>,
+}
+
+/// What an effect wrote while it was pressed, or in answer to an edit.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Pressed {
     /// Row values the effect set, by the row's schema id.

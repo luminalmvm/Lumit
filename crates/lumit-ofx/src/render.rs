@@ -177,9 +177,6 @@ pub struct Rendered {
     /// The clip the plugin said it was a pass-through of, if it said so. When
     /// this is set, no render happened at all.
     pub identity_of: Option<String>,
-    /// The controls the plugin is hiding after this render
-    /// ([`Instance::secret_names`]).
-    pub secret: BTreeSet<String>,
 }
 
 thread_local! {
@@ -397,7 +394,6 @@ pub fn render_with_prefetch(
         region_of_definition: answers.region_of_definition,
         frames_needed: answers.frames_needed,
         identity_of: answers.identity_of,
-        secret: instance.secret_names()?,
     })
 }
 

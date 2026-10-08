@@ -851,6 +851,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeRotoStrokeKind dco_decode_bridge_roto_stroke_kind(dynamic raw);
 
   @protected
+  BridgeRowOptions dco_decode_bridge_row_options(dynamic raw);
+
+  @protected
   BridgeRuntimeState dco_decode_bridge_runtime_state(dynamic raw);
 
   @protected
@@ -1223,6 +1226,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeRotoStroke> dco_decode_list_bridge_roto_stroke(dynamic raw);
+
+  @protected
+  List<BridgeRowOptions> dco_decode_list_bridge_row_options(dynamic raw);
 
   @protected
   List<BridgeScalar> dco_decode_list_bridge_scalar(dynamic raw);
@@ -2426,6 +2432,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeRowOptions sse_decode_bridge_row_options(SseDeserializer deserializer);
+
+  @protected
   BridgeRuntimeState sse_decode_bridge_runtime_state(
       SseDeserializer deserializer);
 
@@ -2868,6 +2877,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeRotoStroke> sse_decode_list_bridge_roto_stroke(
+      SseDeserializer deserializer);
+
+  @protected
+  List<BridgeRowOptions> sse_decode_list_bridge_row_options(
       SseDeserializer deserializer);
 
   @protected
@@ -4203,6 +4216,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeRotoStrokeKind self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_row_options(
+      BridgeRowOptions self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_runtime_state(
       BridgeRuntimeState self, SseSerializer serializer);
 
@@ -4673,6 +4690,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_list_bridge_roto_stroke(
       List<BridgeRotoStroke> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_bridge_row_options(
+      List<BridgeRowOptions> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_bridge_scalar(

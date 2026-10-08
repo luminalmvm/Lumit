@@ -17735,6 +17735,9 @@ impl SseDecode for crate::api::effect::BridgeEffectInstanceInfo {
         let mut var_derivedParams =
             <Vec<crate::api::effect::BridgeParamInfo>>::sse_decode(deserializer);
         let mut var_hiddenRows = <Vec<String>>::sse_decode(deserializer);
+        let mut var_disabledRows = <Vec<String>>::sse_decode(deserializer);
+        let mut var_rowOptions =
+            <Vec<crate::api::effect::BridgeRowOptions>>::sse_decode(deserializer);
         let mut var_nodeGraphComp = <Option<uuid::Uuid>>::sse_decode(deserializer);
         return crate::api::effect::BridgeEffectInstanceInfo {
             id: var_id,
@@ -17748,6 +17751,8 @@ impl SseDecode for crate::api::effect::BridgeEffectInstanceInfo {
             badge_detail: var_badgeDetail,
             derived_params: var_derivedParams,
             hidden_rows: var_hiddenRows,
+            disabled_rows: var_disabledRows,
+            row_options: var_rowOptions,
             node_graph_comp: var_nodeGraphComp,
         };
     }
@@ -19929,6 +19934,18 @@ impl SseDecode for crate::api::roto::BridgeRotoStrokeKind {
     }
 }
 
+impl SseDecode for crate::api::effect::BridgeRowOptions {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_id = <String>::sse_decode(deserializer);
+        let mut var_options = <Vec<String>>::sse_decode(deserializer);
+        return crate::api::effect::BridgeRowOptions {
+            id: var_id,
+            options: var_options,
+        };
+    }
+}
+
 impl SseDecode for crate::api::addons::BridgeRuntimeState {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -21848,6 +21865,20 @@ impl SseDecode for Vec<crate::api::roto::BridgeRotoStroke> {
         let mut ans_ = Vec::with_capacity(len_ as usize);
         for idx_ in 0..len_ {
             ans_.push(<crate::api::roto::BridgeRotoStroke>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::api::effect::BridgeRowOptions> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::effect::BridgeRowOptions>::sse_decode(
                 deserializer,
             ));
         }
@@ -25000,6 +25031,8 @@ impl flutter_rust_bridge::IntoDart for crate::api::effect::BridgeEffectInstanceI
             self.badge_detail.into_into_dart().into_dart(),
             self.derived_params.into_into_dart().into_dart(),
             self.hidden_rows.into_into_dart().into_dart(),
+            self.disabled_rows.into_into_dart().into_dart(),
+            self.row_options.into_into_dart().into_dart(),
             self.node_graph_comp.into_into_dart().into_dart(),
         ]
         .into_dart()
@@ -27837,6 +27870,27 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::roto::BridgeRotoStrokeKind>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::effect::BridgeRowOptions {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.id.into_into_dart().into_dart(),
+            self.options.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::effect::BridgeRowOptions
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::effect::BridgeRowOptions>
+    for crate::api::effect::BridgeRowOptions
+{
+    fn into_into_dart(self) -> crate::api::effect::BridgeRowOptions {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::addons::BridgeRuntimeState {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         match self {
@@ -30248,6 +30302,8 @@ impl SseEncode for crate::api::effect::BridgeEffectInstanceInfo {
         <Option<String>>::sse_encode(self.badge_detail, serializer);
         <Vec<crate::api::effect::BridgeParamInfo>>::sse_encode(self.derived_params, serializer);
         <Vec<String>>::sse_encode(self.hidden_rows, serializer);
+        <Vec<String>>::sse_encode(self.disabled_rows, serializer);
+        <Vec<crate::api::effect::BridgeRowOptions>>::sse_encode(self.row_options, serializer);
         <Option<uuid::Uuid>>::sse_encode(self.node_graph_comp, serializer);
     }
 }
@@ -31923,6 +31979,14 @@ impl SseEncode for crate::api::roto::BridgeRotoStrokeKind {
     }
 }
 
+impl SseEncode for crate::api::effect::BridgeRowOptions {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.id, serializer);
+        <Vec<String>>::sse_encode(self.options, serializer);
+    }
+}
+
 impl SseEncode for crate::api::addons::BridgeRuntimeState {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -33379,6 +33443,16 @@ impl SseEncode for Vec<crate::api::roto::BridgeRotoStroke> {
         <i32>::sse_encode(self.len() as _, serializer);
         for item in self {
             <crate::api::roto::BridgeRotoStroke>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::api::effect::BridgeRowOptions> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::effect::BridgeRowOptions>::sse_encode(item, serializer);
         }
     }
 }

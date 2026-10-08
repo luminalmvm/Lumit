@@ -1153,6 +1153,10 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
         fx.badgeDetail,
         fx.derivedParams,
         fx.hiddenRows,
+        fx.disabledRows,
+        [
+          for (final r in fx.rowOptions) [r.id, r.options],
+        ],
         fx.nodeGraphComp,
         info.trackCorrected,
         graphName,
@@ -1830,8 +1834,10 @@ class _EffectSection extends StatelessWidget {
   /// under the match name because it never changes; the derived half rides the
   /// read model beside the values, because it is a fact about the instance and
   /// a fetch per card per rebuild is the traffic the budget test forbids.
-  List<BridgeParamInfo> get _rows =>
-      [...cachedListParameters(info.name), ...info.derivedParams];
+  List<BridgeParamInfo> get _rows => relistedRows(
+        [...cachedListParameters(info.name), ...info.derivedParams],
+        info.rowOptions,
+      );
 
   /// Put every parameter back to the value its schema declares, and drop any
   /// curve on it — one op, so one undo step for the whole reset.
@@ -2043,7 +2049,11 @@ class _EffectSection extends StatelessWidget {
       for (final p in params)
         if ((stagedValue(id, p.id) ?? values[p.id]) case final v?) p.id: v,
     };
-    final disabled = disabledParams(info.name, shown);
+    // A plugin greys its own rows as well, and the instance says which.
+    final disabled = {
+      ...disabledParams(info.name, shown),
+      ...info.disabledRows,
+    };
 
     // The uniform Matte row and the Mix row: a Layer picker carries its Channel
     // and Invert beside it, a Mix slider its Blend, and no rider gets a row of
