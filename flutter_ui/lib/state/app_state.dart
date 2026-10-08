@@ -71,7 +71,45 @@ class LumitState extends ChangeNotifier {
   void postNotice(String message, {bool error = false}) =>
       notice.value = LumitNotice(message, error: error);
 
-  void newProject() {
+  /// How the shell asks what to do with unsaved changes. It answers true when
+  /// the project may go: it was saved, or the user chose to discard it. Null
+  /// until there is a window to ask in.
+  Future<bool> Function()? askUnsaved;
+
+  bool _askingUnsaved = false;
+
+  /// Whether the open project has unsaved changes somebody can be asked about.
+  /// Synchronous, so a clean project is swapped without waiting a turn.
+  bool get unsavedNeedsAsking {
+    if (askUnsaved == null) return false;
+    try {
+      return project?.isDirty() ?? false;
+    } catch (_) {
+      // A reference that has gone dead holds nothing left to save.
+      return false;
+    }
+  }
+
+  /// Ask about the unsaved changes, and say whether the project may go.
+  ///
+  /// Every way out of a project comes through here: New, Open, Close, an
+  /// import, and quitting. A second request while the question is up is
+  /// refused, so the question is never stacked on itself.
+  Future<bool> askBeforeLeaving() async {
+    final ask = askUnsaved;
+    if (ask == null) return true;
+    if (_askingUnsaved) return false;
+    _askingUnsaved = true;
+    try {
+      return await ask();
+    } finally {
+      _askingUnsaved = false;
+    }
+  }
+
+  /// A new, empty project in place of the open one. Close project is this too.
+  Future<void> newProject() async {
+    if (unsavedNeedsAsking && !await askBeforeLeaving()) return;
     _adopt(LumitBridgeState.newProject(onChangeStream: _changeSink()));
   }
 
@@ -151,6 +189,10 @@ class LumitState extends ChangeNotifier {
     // One at a time: the change sink below is a single pending field, and two
     // opens in flight would have the second take the first's.
     if (opening.value) return;
+    if (unsavedNeedsAsking && !await askBeforeLeaving()) return;
+    // Asked again, because another open can have started while the question
+    // was up.
+    if (opening.value) return;
     opening.value = true;
     // Determinate from the first frame, before the engine has had a turn to
     // say so: the card must not flip from a sweeping bar to a filling one a
@@ -199,6 +241,8 @@ class LumitState extends ChangeNotifier {
   Future<BridgeImportReport?> importAeBundle(String path) async {
     // One at a time, for [openProject]'s reason: `_pendingSink` is a single
     // field and two adoptions in flight would have the second take the first's.
+    if (opening.value) return null;
+    if (unsavedNeedsAsking && !await askBeforeLeaving()) return null;
     if (opening.value) return null;
     // Forgiveness before the engine sees the path: people naturally pick the
     // folder *containing* the bundle, not the bundle itself. One unambiguous

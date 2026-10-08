@@ -8189,7 +8189,11 @@
   },
   "unsavedChanges": "Unsaved changes",
   "@unsavedChanges": {
-    "description": "Bottom strip: the project has edits that are not written to disk."
+    "description": "Bottom strip: the project has edits that are not written to disk. Also the title of the question asked before such a project is closed."
+  },
+  "unsavedQuestion": "This project has unsaved changes. Save them first?",
+  "@unsavedQuestion": {
+    "description": "The one sentence in the question asked before a project with unsaved changes is closed, replaced by another, or quit out of. Answered with Save, Discard or Cancel."
   },
   "updateAvailable": "{installed}. Lumit {version} is available.",
   "@updateAvailable": {

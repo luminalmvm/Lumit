@@ -1924,6 +1924,11 @@ class LumitUiState extends ChangeNotifier {
       onInactive: rememberSession,
       onExitRequested: () async {
         rememberSession();
+        // The window stays open while the question is up. The platform waits
+        // for this answer, and closes only when it is told to exit.
+        if (_app.unsavedNeedsAsking && !await _app.askBeforeLeaving()) {
+          return AppExitResponse.cancel;
+        }
         return AppExitResponse.exit;
       },
     );

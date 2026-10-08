@@ -20,6 +20,7 @@ import 'package:lumit_flutter/shell/settings_window_frb.dart';
 import 'package:lumit_flutter/shell/splash.dart';
 import 'package:lumit_flutter/shell/status_line_frb.dart';
 import 'package:lumit_flutter/shell/tool_bar_frb.dart';
+import 'package:lumit_flutter/shell/unsaved_changes_frb.dart';
 import 'package:lumit_flutter/shell/welcome_frb.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart' show BridgeLayerSwitch;
 import 'package:lumit_flutter/src/rust/api/state.dart' show OpenProgress;
@@ -176,6 +177,9 @@ class _BootGateState extends State<BootGate> {
     super.initState();
     _welcoming = widget.welcome &&
         context.read<LumitUiState>().workspace.showWelcomeOnLaunch;
+    // Up for the whole life of the window, so this is where unsaved changes
+    // are asked about.
+    installUnsavedQuestion(context);
   }
 
   /// The engine's boot log, or empty where there is no engine to ask — a
