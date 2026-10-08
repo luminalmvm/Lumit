@@ -24,6 +24,7 @@ import 'package:lumit_flutter/shell/status_line_frb.dart';
 import 'package:lumit_flutter/shell/tool_bar_frb.dart';
 import 'package:lumit_flutter/shell/unsaved_changes_frb.dart';
 import 'package:lumit_flutter/shell/welcome_frb.dart';
+import 'package:lumit_flutter/shell/window_drop_frb.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart' show BridgeLayerSwitch;
 import 'package:lumit_flutter/src/rust/api/state.dart' show OpenProgress;
 import 'package:lumit_flutter/src/rust/api/shell.dart' show bootLog;
@@ -304,7 +305,7 @@ class _LumitAppViewState extends State<LumitAppView> {
       final ui = context.read<LumitUiState>();
       // The update check follows the question rather than racing it: the
       // setup screen is where somebody may have just switched it off.
-      maybeShowFirstRunFrb(context, ui.workspace)
+      maybeShowFirstRunFrb(context, ui.workspace, keymap: ui.keymap)
           .then((_) => ui.maybeCheckForUpdates());
     });
   }
@@ -351,7 +352,7 @@ class _LumitAppViewState extends State<LumitAppView> {
     return FocusScope(
       autofocus: true,
       child: Stack(children: [
-        _shell(uiState, state),
+        WindowDropFrb(child: _shell(uiState, state)),
         // Over everything while a document is being read (see OpeningOverlay):
         // the shell behind it is still the previous project and swaps in one go.
         ValueListenableBuilder<bool>(

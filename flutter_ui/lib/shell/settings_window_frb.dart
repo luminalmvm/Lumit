@@ -28,8 +28,8 @@
 // its chord on the right — click a chord and press the keys you want.
 // It edits the engine's keymap, not a copy, so what the table shows is what the
 // keyboard does. The title strip's search is its search too: on every other
-// page the field hides the rows whose names do not match, and on this one it
-// asks the engine the same question.
+// page the field finds rows by name across all the pages and lists them under
+// their page names, and on this one it asks the engine the same question.
 
 import 'dart:async';
 import 'dart:io';
@@ -175,22 +175,53 @@ enum SettingsPage {
 }
 
 /// Open Settings, on [initialPage] when somewhere else has a reason to send the
-/// user to a particular one (an effect whose addon is missing, say).
+/// user to a particular one (an effect whose addon is missing, say), and
+/// scrolled to the row called [row] when it has a reason to send them to one
+/// setting (the command palette).
 Future<void> showSettingsWindowFrb(BuildContext context,
-        {SettingsPage initialPage = SettingsPage.general}) =>
+        {SettingsPage initialPage = SettingsPage.general, String? row}) =>
     showLumitModal<void>(
       context: context,
       id: 'settings',
       initialSize: settingsWindowSize,
       minSize: settingsMinSize,
-      builder: (close) =>
-          _SettingsWindow(onClose: () => close(null), initialPage: initialPage),
+      builder: (close) => _SettingsWindow(
+          onClose: () => close(null), initialPage: initialPage, row: row),
     );
+
+/// The name of every row on [page], for the command palette.
+///
+/// Read by running the page's own builder on a window that is never shown,
+/// which notes each name as the search is asked about it. So the palette
+/// lists what the page lists, and a row added to a page is found there too. A
+/// page that cannot be built this way offers no rows, rather than stopping the
+/// palette opening.
+List<String> settingsRowNames(SettingsPage page, LumitUiState ui) {
+  // The shortcuts are the keymap's, and the palette teaches a chord on the
+  // command it runs.
+  if (page == SettingsPage.shortcuts) return const [];
+  final window = _SettingsWindowState();
+  // A set, because a name can be on a page more than once (Budget, In use).
+  final names = window._names = <String>{};
+  try {
+    if (page == SettingsPage.previewAndCache) window._pollPerf();
+    window._sectionsOf(page, ui.theme, ui);
+  } catch (_) {
+    // Whatever was noted before the builder gave up still stands.
+  }
+  window._filenameTemplate.dispose();
+  window._scroll.dispose();
+  return names.toList();
+}
 
 class _SettingsWindow extends StatefulWidget {
   final VoidCallback onClose;
   final SettingsPage initialPage;
-  const _SettingsWindow({required this.onClose, required this.initialPage});
+
+  /// The row to open scrolled to, by name. Null opens the page at its top.
+  final String? row;
+  const _SettingsWindow(
+      {required this.onClose, required this.initialPage, this.row});
 
   @override
   State<_SettingsWindow> createState() => _SettingsWindowState();
@@ -213,15 +244,36 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   @override
   void initState() {
     super.initState();
+    // Preview and cache draws its readings in the first frame, so a window
+    // opened straight onto it has to have them by then.
+    if (widget.initialPage == SettingsPage.previewAndCache) _pollPerf();
     // A page that reads something on entry has to be given its entry, and that
     // cannot happen while the first frame is being built.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _showPage(widget.initialPage);
+      if (!mounted) return;
+      _showPage(widget.initialPage);
+      final wanted = _wantedRow.currentContext;
+      if (wanted != null) Scrollable.ensureVisible(wanted, alignment: 0.2);
     });
   }
 
+  /// On the row the window was opened to show, so it can be scrolled to.
+  final GlobalKey _wantedRow = GlobalKey();
+
+  /// Whether this build has put [_wantedRow] on a row yet. A name can be on a
+  /// page more than once and a key can be in the tree only once.
+  bool _wantedKeyed = false;
+
+  /// Where [settingsRowNames] collects a page's row names. Null in a window
+  /// that is on screen.
+  Set<String>? _names;
+
   /// What the title strip's search field holds. Empty shows everything.
   String _query = '';
+
+  /// Whether the search is listing rows from every page. Not on Shortcuts,
+  /// whose table the engine filters and which keeps the search to itself.
+  bool get _everywhere => _query.isNotEmpty && _page != SettingsPage.shortcuts;
 
   /// The Preview and cache page's engine readouts, captured in one sweep so
   /// `build()` never crosses the bridge (the standing rebuild-path rule —
@@ -268,7 +320,8 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         // ladder nobody can see stepping is a bug in itself (docs/13 §4,
         // "silent degradation is a bug"). It ships.
         governor: governorReport(),
-        own: _project(context)?.cacheLocation(),
+        // Unmounted is [settingsRowNames], which wants the names and no more.
+        own: mounted ? _project(context)?.cacheLocation() : null,
       );
 
   /// Front [page]. Preview and cache polls on entry and keeps a slow tick while
@@ -303,6 +356,26 @@ class _SettingsWindowState extends State<_SettingsWindow> {
     }
   }
 
+  /// What each page reads as it comes forward, read for all of them at once:
+  /// a search draws rows from every page, and Preview and cache keeps its slow
+  /// tick while it does.
+  void _readEveryPage() {
+    _pollPerf();
+    _perfTimer ??=
+        Timer.periodic(const Duration(seconds: 1), (_) => setState(_pollPerf));
+    _audio = listAudioDevices();
+    _readExportDefaults();
+    _watchAddons();
+  }
+
+  /// A press on a page's name, in the sidebar or over its rows in a search.
+  /// It ends the search, because the page is where the press was going. The
+  /// Shortcuts page takes the search with it instead.
+  void _openPage(SettingsPage page) {
+    if (page != SettingsPage.shortcuts) _search?.clear();
+    _showPage(page);
+  }
+
   KeymapState? _keymapState() =>
       Provider.of<LumitUiState>(context, listen: false).keymap;
 
@@ -319,13 +392,24 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   /// their own names only: a search that also read the section kickers would
   /// keep every row under "Theme" for the word *theme*, which is a page, not a
   /// result.
-  bool _matches(String title) =>
-      _query.isEmpty || title.toLowerCase().contains(_query.toLowerCase());
+  bool _matches(String title) {
+    // [settingsRowNames] is asking what the rows are called, not for the rows.
+    if (_names case final names?) {
+      names.add(title);
+      return false;
+    }
+    return _query.isEmpty || title.toLowerCase().contains(_query.toLowerCase());
+  }
 
   /// A row, or nothing when the search has hidden it.
   Widget? _row(LumitTheme t, String title, Widget control,
-          {String description = ''}) =>
-      _matches(title) ? settingsRow(t, title, description, control) : null;
+      {String description = ''}) {
+    if (!_matches(title)) return null;
+    final row = settingsRow(t, title, description, control);
+    if (title != widget.row || _wantedKeyed) return row;
+    _wantedKeyed = true;
+    return KeyedSubtree(key: _wantedRow, child: row);
+  }
 
   /// A switch row — the drawing's pill, not a checkbox: the same answer, in the
   /// shape the Settings drawing gives it.
@@ -388,6 +472,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     final ui = Provider.of<LumitUiState>(context);
+    _wantedKeyed = false;
 
     // No width or height of its own: the window frame around it is what has the
     // size, so the corner grip can change it.
@@ -498,6 +583,10 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         ),
       );
 
+  /// Whether [page] is the one marked in the sidebar. None is while a search
+  /// lists rows from all of them.
+  bool _marked(SettingsPage page) => _page == page && !_everywhere;
+
   Widget _sidebar(LumitTheme t) => Padding(
         padding: const EdgeInsets.only(top: 8),
         child: Column(
@@ -507,7 +596,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               GestureDetector(
                 key: ValueKey<String>('settings-page-${page.name}'),
                 behavior: HitTestBehavior.opaque,
-                onTap: () => _showPage(page),
+                onTap: () => _openPage(page),
                 // The tick and the fill behind it move from the page left to
                 // the page chosen. The padding gives up exactly what the tick
                 // takes at every step, so the name does not move.
@@ -517,21 +606,21 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                   height: settingsNavRow,
                   alignment: Alignment.centerLeft,
                   padding: EdgeInsets.only(
-                      left: _page == page ? 14 - settingsNavTick : 14,
+                      left: _marked(page) ? 14 - settingsNavTick : 14,
                       right: 14),
                   decoration: BoxDecoration(
-                    color: _page == page ? t.surface2 : null,
+                    color: _marked(page) ? t.surface2 : null,
                     // The tick, not a fill: the page in force is marked by an
                     // accent edge down its left, which is the one job §3.1
                     // leaves the accent on a list of names.
-                    border: _page == page
+                    border: _marked(page)
                         ? Border(
                             left: BorderSide(
                                 color: t.accent, width: settingsNavTick))
                         : null,
                   ),
                   child: Text(page.label,
-                      style: _page == page ? t.bodyPrimary : t.body),
+                      style: _marked(page) ? t.bodyPrimary : t.body),
                 ),
               ),
           ],
@@ -561,7 +650,8 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               child: HouseButton(
                 key: const ValueKey('settings-reset-page'),
                 padding: const EdgeInsets.symmetric(horizontal: 12),
-                onPressed: () => _resetPage(ui),
+                // A search across the pages has no one page to reset.
+                onPressed: _everywhere ? null : () => _resetPage(ui),
                 child: Text(l10n.settingsResetPage),
               ),
             ),
@@ -579,19 +669,51 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         ),
       );
 
+  List<Widget> _sectionsOf(SettingsPage page, LumitTheme t, LumitUiState ui) =>
+      switch (page) {
+        SettingsPage.general => _general(t, ui),
+        SettingsPage.appearance => _appearance(t, ui),
+        SettingsPage.timeline => _timeline(t, ui),
+        SettingsPage.viewer => _viewer(t, ui),
+        SettingsPage.audio => _audioPage(t, ui),
+        SettingsPage.autosave => _autosavePage(t, ui),
+        SettingsPage.export => _exportPage(t),
+        SettingsPage.addons => _addonsPage(t, ui),
+        SettingsPage.previewAndCache => _performance(t, ui),
+        SettingsPage.shortcuts => _keymap(t, ui),
+      };
+
+  /// What a search found: each page's surviving rows, live as they are on the
+  /// page, under a band with the page's name. Pressing the band goes to the
+  /// page.
+  List<Widget> _found(LumitTheme t, LumitUiState ui) => [
+        for (final page in SettingsPage.values)
+          if (page != SettingsPage.shortcuts)
+            if (_sectionsOf(page, t, ui) case final sections
+                when sections.isNotEmpty) ...[
+              MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: GestureDetector(
+                  key: ValueKey<String>('settings-found-${page.name}'),
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => _openPage(page),
+                  child: Container(
+                    height: settingsNavRow,
+                    color: t.surface2,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: settingsRowPadding),
+                    alignment: Alignment.centerLeft,
+                    child: Text(page.label, style: t.bodyPrimary),
+                  ),
+                ),
+              ),
+              ...sections,
+              const SizedBox(height: 8),
+            ],
+      ];
+
   Widget _pageBody(LumitTheme t, LumitUiState ui) {
-    final sections = switch (_page) {
-      SettingsPage.general => _general(t, ui),
-      SettingsPage.appearance => _appearance(t, ui),
-      SettingsPage.timeline => _timeline(t, ui),
-      SettingsPage.viewer => _viewer(t, ui),
-      SettingsPage.audio => _audioPage(t, ui),
-      SettingsPage.autosave => _autosavePage(t, ui),
-      SettingsPage.export => _exportPage(t),
-      SettingsPage.addons => _addonsPage(t, ui),
-      SettingsPage.previewAndCache => _performance(t, ui),
-      SettingsPage.shortcuts => _keymap(t, ui),
-    };
+    final sections = _everywhere ? _found(t, ui) : _sectionsOf(_page, t, ui);
     return Stack(children: [
       RawScrollbar(
         controller: _scroll,
@@ -609,11 +731,13 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         child: ScrollConfiguration(
           behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
           child: SingleChildScrollView(
-            key: ValueKey<String>('settings-body-${_page.name}'),
+            key: ValueKey<String>(
+                'settings-body-${_everywhere ? 'search' : _page.name}'),
             controller: _scroll,
             // The scroll view above is keyed by page, so this mounts afresh
             // for each one and plays once: a page comes up into place rather
-            // than cutting. Searching within a page replays nothing.
+            // than cutting. A search is a page of its own, so it starts from
+            // its top, and typing more into it replays nothing.
             child: Entrance(
               spec: _pageTurns == 0
                   ? MotionSpec.still
@@ -1998,7 +2122,8 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         l10n.settingsGroupAddonsInstalled,
         [
           for (final pack in service.packs) _packRow(t, service, pack),
-          if (service.packs.isEmpty)
+          // Not a row with a name, so a search has nothing to find it by.
+          if (service.packs.isEmpty && _query.isEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(settingsRowPadding, 4,
                   settingsRowPadding, settingsSectionGap),
@@ -2536,11 +2661,17 @@ class _SettingsWindowState extends State<_SettingsWindow> {
     if (existing != null) return existing;
     final created = TextEditingController(text: _query)
       ..addListener(() {
+        final was = _everywhere;
         _query = _search?.text ?? '';
         // The keymap filters engine-side against its own query, so the shared
         // field has to hand it over rather than filtering the rows itself.
         _keymapState()?.query = _query;
-        if (mounted) setState(() {});
+        if (!mounted) return;
+        // Into a search across the pages, every page's readings are wanted;
+        // out of one, only those of the page that is left showing.
+        if (_everywhere && !was) _readEveryPage();
+        if (was && !_everywhere) _showPage(_page);
+        setState(() {});
       });
     _search = created;
     return created;

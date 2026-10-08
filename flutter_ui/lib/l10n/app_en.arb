@@ -1590,7 +1590,11 @@
   "@firstRunAfterEffects": {
     "description": "First run: what choosing After Effects habits does. Retime is a Lumit product term."
   },
-  "firstRunAutoUpdate": "Check for new versions of Lumit. Nothing is downloaded until you ask for it.",
+  "firstRunAfterEffectsKeys": "The After Effects shortcuts are loaded too.",
+  "@firstRunAfterEffectsKeys": {
+    "description": "First run: a second line on the After Effects card, saying that choosing it also switches the keyboard shortcuts to the After Effects preset."
+  },
+  "firstRunAutoUpdate": "Check for new versions of Lumit.",
   "@firstRunAutoUpdate": {
     "description": "First run: the sentence beside the automatic-updates checkbox."
   },
@@ -5501,13 +5505,29 @@
   "@off": {
     "description": "A setting that is switched off."
   },
+  "paletteCommand": "Command",
+  "@paletteCommand": {
+    "description": "Command palette: the badge at the end of a row that runs a menu command, such as 'Layer › New › Solid'. Short: it sits in a narrow column."
+  },
   "paletteComps": "Comp",
   "@paletteComps": {
     "description": "Command palette: heading over the compositions you can jump to. Short — it sits in a narrow column."
   },
+  "paletteLayer": "Layer",
+  "@paletteLayer": {
+    "description": "Command palette: the badge at the end of a row that names a layer of the open composition. Choosing the row selects that layer. Short: it sits in a narrow column."
+  },
+  "paletteNeedsLayer": "Select a layer first",
+  "@paletteNeedsLayer": {
+    "description": "Command palette: shown greyed on an effect row while no layer is selected, in place of a shortcut, to say why the effect cannot be applied yet. Keep it short."
+  },
   "palettePanels": "Panel",
   "@palettePanels": {
     "description": "Command palette: heading over the panels you can focus."
+  },
+  "paletteSetting": "Setting",
+  "@paletteSetting": {
+    "description": "Command palette: the badge at the end of a row that names a Settings page or one setting on it. Choosing the row opens Settings there. Short: it sits in a narrow column."
   },
   "panelDebug": "Debug View",
   "@panelDebug": {
@@ -10111,7 +10131,7 @@
   },
   "searchSettings": "Search settings",
   "@searchSettings": {
-    "description": "Placeholder in the search box in the Settings window's title strip; it hides the setting rows that do not match."
+    "description": "Placeholder in the search box in the Settings window's title strip; it finds settings by name on every page and lists them under their page names."
   },
   "settingsAccent": "Accent",
   "@settingsAccent": {
@@ -10171,7 +10191,7 @@
   },
   "settingsNoMatches": "No setting matches that.",
   "@settingsNoMatches": {
-    "description": "Settings window: shown in place of a page when the search box has hidden every row on it."
+    "description": "Settings window: shown in place of the pages when the search box finds no setting on any of them."
   },
   "settingsPageAudio": "Audio",
   "@settingsPageAudio": {

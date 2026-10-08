@@ -359,8 +359,11 @@ typedef MenuSection = ({String title, List<MenuEntry> Function() items});
 /// pressing it opens the same palette Ctrl+Shift+P does. A pill on the room
 /// under Lantern, a well elsewhere.
 class _CommandBox extends StatelessWidget {
+  /// The chord that opens the palette, from the live keymap. Null when the
+  /// action is unbound, and then no chord is drawn.
+  final String? chord;
   final VoidCallback onPressed;
-  const _CommandBox({required this.onPressed});
+  const _CommandBox({required this.chord, required this.onPressed});
 
   @override
   Widget build(BuildContext context) {
@@ -400,8 +403,8 @@ class _CommandBox extends StatelessWidget {
                   overflow: TextOverflow.clip,
                 ),
               ),
-              Text('Ctrl+Shift+P',
-                  style: t.kicker.copyWith(color: t.textDisabled)),
+              if (chord case final chord?)
+                Text(chord, style: t.kicker.copyWith(color: t.textDisabled)),
             ],
           ),
         ),
@@ -567,7 +570,14 @@ class LumitMenuBarFrb extends StatelessWidget {
             // narrow to hold the menus and the box at once (the chord still
             // opens the palette).
             if (ui.workspace.interface.commandBox && c.maxWidth >= 1000) ...[
-              _CommandBox(onPressed: () => _palette(context)),
+              // Watching the keymap, so a rebind shows here as it lands.
+              ListenableBuilder(
+                listenable: ui.keymap,
+                builder: (context, _) => _CommandBox(
+                  chord: ui.keymap.chordFor('palette.open'),
+                  onPressed: () => _palette(context),
+                ),
+              ),
               const SizedBox(width: 6),
             ],
           ],
@@ -576,147 +586,129 @@ class LumitMenuBarFrb extends StatelessWidget {
     );
   }
 
-  /// The palette's commands are declared here, where the menu items are, so the
-  /// two cannot drift apart into different ideas of what "New composition" does.
-  /// A row teaches whatever chord the keymap gives its action, the same lookup
-  /// the menus do, so a rebound shortcut is taught rebound and an unbound one
-  /// is not taught at all.
-  /// Beyond commands it carries the other three categories docs/07 §12 asks
-  /// for: every effect (applies to the selected layer), every comp (fronts
-  /// it), and every panel (focuses it) — each under its own badge.
+  /// The palette finds everything from one box: every menu command, and the
+  /// compositions, layers, effects, panels and settings, each under its own
+  /// badge.
+  ///
+  /// The commands are not a list of their own. They are the menu bar's tree,
+  /// walked, so a command the menus gain is in the palette the same day and
+  /// runs the same closure its menu row runs. A row teaches whatever chord the
+  /// keymap gives its action, the same lookup the menus do. A row the menus
+  /// show disabled is left out.
   Future<void> _palette(BuildContext context) async {
-    final project = app.project;
     final ui = Provider.of<LumitUiState>(context, listen: false);
     final keymap = ui.keymap;
     final workspace = ui.workspace;
+    final commands = <PaletteCommand>[];
+
+    void walk(String path, List<MenuEntry> rows) {
+      for (final raw in rows) {
+        final row = raw.current;
+        if (row.isDivider || !row.enabled) continue;
+        final label = '$path$palettePathSeparator${row.text}';
+        if (row.children case final children?) {
+          walk(label, children);
+          continue;
+        }
+        commands.add(PaletteCommand(
+          label: label,
+          category: l10n.paletteCommand,
+          shortcut: row.action == null ? null : keymap.chordFor(row.action!),
+          ticked: row.checked ?? false,
+          run: row.onPressed!,
+        ));
+      }
+    }
+
+    // Built without the palette's own opener, so the row that opens the
+    // palette is disabled here and is not offered from inside it.
+    final menus = lumitMenus(
+      context,
+      app,
+      openPicker: openPicker,
+      savePicker: savePicker,
+      footagePicker: footagePicker,
+      aeProjectPicker: aeProjectPicker,
+    );
+    for (final menu in menus) {
+      // The Effect menu is the effect rows further down, which are kept when
+      // no layer is selected so they can say why they are greyed.
+      if (menu.title != l10n.menuEffect) walk(menu.title, menu.items());
+    }
+
+    // Every comp, by name: Enter fronts it in the Viewer and Timeline.
+    for (final (comp, name) in app.comps()) {
+      commands.add(PaletteCommand(
+        label: name,
+        category: l10n.paletteComps,
+        run: () => ui.setSelectedComp(comp),
+      ));
+    }
+    // Every layer of the front comp: Enter selects it.
+    try {
+      for (final each
+          in ui.selectedComp?.getLayers() ?? const <LayerReference>[]) {
+        commands.add(PaletteCommand(
+          label: each.getName(),
+          category: l10n.paletteLayer,
+          run: () => ui.setSelection([each]),
+        ));
+      }
+    } catch (_) {
+      // The comp has gone since it was fronted; it has no layers to offer.
+    }
+    // Every effect: Enter applies it to the primary layer, as the Effect menu
+    // does. With no layer selected the rows stay, greyed, and say what they
+    // are waiting for.
+    final layer = ui.selectedLayer.value;
+    for (final effect in listEffects()) {
+      commands.add(PaletteCommand(
+        label: engineLabel(effect.label),
+        category: l10n.menuEffect,
+        disabled: layer == null ? l10n.paletteNeedsLayer : null,
+        run: () {
+          layer?.addEffect(name: effect.name);
+          app.notifyDocumentChanged();
+        },
+      ));
+    }
+    // Every panel: Enter shows it if it was closed, fronts it in its group
+    // and points the keyboard at it, which is what cycling to it does.
+    for (final panel in Panel.values) {
+      commands.add(PaletteCommand(
+        label: panel.title,
+        category: l10n.palettePanels,
+        run: () {
+          setPanelVisible(ui.split, panel, true);
+          activatePanelTab(ui.split, panel);
+          ui.activePane.value = panel.pane();
+          ui.workspace.touch();
+        },
+      ));
+    }
+    // Every Settings page and every row on one: Enter opens Settings there.
+    for (final page in SettingsPage.values) {
+      final path = '${l10n.settingsTitle}$palettePathSeparator${page.label}';
+      commands.add(PaletteCommand(
+        label: path,
+        category: l10n.paletteSetting,
+        run: () => showSettingsWindowFrb(context, initialPage: page),
+      ));
+      for (final row in settingsRowNames(page, ui)) {
+        commands.add(PaletteCommand(
+          label: '$path$palettePathSeparator$row',
+          category: l10n.paletteSetting,
+          run: () =>
+              showSettingsWindowFrb(context, initialPage: page, row: row),
+        ));
+      }
+    }
+
     await showCommandPaletteFrb(
       context: context,
       recent: workspace.paletteRecents,
       onRun: workspace.noteCommandRun,
-      commands: [
-        PaletteCommand(
-          label: l10n.menuNew,
-          category: l10n.menuFile,
-          shortcut: keymap.chordFor('file.new'),
-          run: app.newProject,
-        ),
-        if (project != null) ...[
-          PaletteCommand(
-            label: l10n.menuSave,
-            category: l10n.menuFile,
-            shortcut: keymap.chordFor('file.save'),
-            run: () => saveProjectFrb(app, ui, picker: savePicker),
-          ),
-          PaletteCommand(
-            label: l10n.menuSaveAs,
-            category: l10n.menuFile,
-            shortcut: keymap.chordFor('file.save.as'),
-            run: () =>
-                saveProjectFrb(app, ui, forcePicker: true, picker: savePicker),
-          ),
-          PaletteCommand(
-            label: l10n.menuPackProject,
-            category: l10n.menuFile,
-            run: () =>
-                saveProjectFrb(app, ui, picker: savePicker, pack: true),
-          ),
-          PaletteCommand(
-            label: l10n.menuUnpackProject,
-            category: l10n.menuFile,
-            run: () => unpackProjectFrb(app),
-          ),
-          PaletteCommand(
-            label: l10n.menuImportFootage,
-            category: l10n.menuFile,
-            shortcut: keymap.chordFor('file.import'),
-            run: () => importFootageFrb(app, picker: footagePicker),
-          ),
-          PaletteCommand(
-            label: l10n.newComposition,
-            category: l10n.menuComposition,
-            shortcut: keymap.chordFor('comp.new'),
-            run: () => newCompositionFrb(context, app),
-          ),
-          PaletteCommand(
-            label: l10n.newNodeGraph,
-            category: l10n.menuComposition,
-            run: () => app.newNodeGraph(context),
-          ),
-          PaletteCommand(
-            label: l10n.menuUndo,
-            category: l10n.menuEdit,
-            shortcut: keymap.chordFor('edit.undo'),
-            run: () => undoFrb(app),
-          ),
-          PaletteCommand(
-            label: l10n.menuRedo,
-            category: l10n.menuEdit,
-            shortcut: keymap.chordFor('edit.redo'),
-            run: () => redoFrb(app),
-          ),
-          PaletteCommand(
-            label: l10n.menuExport,
-            category: l10n.menuFile,
-            shortcut: keymap.chordFor('file.export'),
-            run: () => exportFrb(context),
-          ),
-          // Every comp, by name: Enter fronts it in the Viewer and Timeline.
-          for (final (comp, name) in app.comps())
-            PaletteCommand(
-              label: name,
-              category: l10n.paletteComps,
-              run: () => ui.setSelectedComp(comp),
-            ),
-          // Every built-in effect: Enter applies it to the selected layer;
-          // with none selected it does nothing, exactly like the browser.
-          for (final effect in listEffects())
-            PaletteCommand(
-              label: engineLabel(effect.label),
-              category: l10n.menuEffect,
-              run: () => ui.selectedLayer.value?.addEffect(name: effect.name),
-            ),
-        ],
-        // Every panel: Enter focuses it in the dock.
-        for (final panel in Panel.values)
-          PaletteCommand(
-            label: panel.title,
-            category: l10n.palettePanels,
-            run: () => ui.activePane.value = panel.pane(),
-          ),
-        // The View menu's magnification and preview resolution, so the palette
-        // carries them too rather than the menu being the only route.
-        for (final zoom in ViewerZoomCommand.values)
-          PaletteCommand(
-            label: zoom.title,
-            category: l10n.menuView,
-            shortcut: keymap.chordFor(zoom.action),
-            run: () => ui.requestViewerZoom(zoom),
-          ),
-        // Under the Resolution badge rather than View's, because "Full" on its
-        // own says nothing about what it is full of.
-        for (final resolution in PreviewResolution.values)
-          PaletteCommand(
-            label: resolution.title,
-            category: l10n.menuResolution,
-            shortcut: resolution.action == null
-                ? null
-                : keymap.chordFor(resolution.action!),
-            run: () => ui.setPreviewResolution(resolution),
-          ),
-        PaletteCommand(
-          label: l10n.menuSettings,
-          category: l10n.menuEdit,
-          shortcut: keymap.chordFor('app.settings'),
-          run: () => showSettingsWindowFrb(context),
-        ),
-        if (app.project case final project?)
-          PaletteCommand(
-            label: l10n.menuProjectSettings,
-            category: l10n.menuFile,
-            shortcut: keymap.chordFor('project.settings'),
-            run: () => showProjectSettingsFrb(context, project),
-          ),
-      ],
+      commands: commands,
     );
   }
 
@@ -790,7 +782,8 @@ class LumitMenuBarFrb extends StatelessWidget {
       // last was, because the key event itself has no position.
       anchor: lastKnownPointerPosition,
       model: FxConsoleModel(
-        keyHint: l10n.fxConsoleKey,
+        // The chord the keymap has for it now, as the menus read theirs.
+        keyHint: ui.keymap.chordFor('console.open'),
         footer: l10n.fxConsoleApplies,
         onSnapshot: comp == null ? null : () => saveSnapshotFrb(app, ui),
         entries: [
