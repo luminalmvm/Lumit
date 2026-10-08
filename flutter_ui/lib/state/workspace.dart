@@ -824,6 +824,7 @@ class Workspace extends ChangeNotifier {
     // The icon weight and the person's own icons ride with the theme: set
     // here so every glyph reads them on its next build.
     IconStyle.weight = IconStyle.weightOf(interface.iconSet);
+    LumitTheme.labelCaseChoice = interface.labelCase;
     if (IconStyle.folder == null) {
       IconStyle.folder =
           '${storeFile().parent.path}${Platform.pathSeparator}icons';

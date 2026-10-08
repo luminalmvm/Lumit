@@ -61,8 +61,8 @@ void main() {
       p.uiState.selectedLayer.value = text;
       await mount(tester, p);
 
-      // A kicker now: capitals on the way to the screen.
-      expect(find.text('ANIMATORS'), findsOneWidget);
+      // A kicker now, which Studio draws as written.
+      expect(find.text('Animators'), findsOneWidget);
       expect(text.getText()!.animators, isEmpty);
 
       await tester.tap(find.byKey(const ValueKey('text-animator-add')));

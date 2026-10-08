@@ -232,8 +232,8 @@ void main() {
       final p = withComp();
       await mount(tester, p);
 
-      expect(find.text('LAYERS'), findsOneWidget);
-      expect(find.text('GRAPH'), findsOneWidget);
+      expect(find.text('Layers'), findsOneWidget);
+      expect(find.text('Graph'), findsOneWidget);
 
       // Layers is in force to begin with, so the graph editor is not up.
       expect(find.byType(GraphEditorFrb), findsNothing);

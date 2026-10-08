@@ -147,7 +147,7 @@ void main() {
       expect(find.text(l10n.aeSummary(63, 55, 0, 0)), findsOneWidget,
           reason: 'what the direct parse recovers, end to end');
 
-      await tester.tap(find.text(l10n.close.toUpperCase()));
+      await tester.tap(find.text(l10n.close));
       await tester.pump();
       expect(find.text(l10n.aeReportTitle), findsNothing);
     });

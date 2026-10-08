@@ -409,9 +409,9 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('recover')));
       await tester.pumpAndSettle();
 
-      // The title is a kicker now the dialogue wears the shared frame, so the
-      // capitals are the style rather than the string.
-      expect(find.text('RECOVER WORK'), findsOneWidget);
+      // The title is a kicker now the dialogue wears the shared frame, and
+      // Studio draws a kicker as written.
+      expect(find.text('Recover work'), findsOneWidget);
       expect(find.byKey(const ValueKey('recover-journal')), findsOneWidget);
       expect(find.byKey(const ValueKey('recover-autosave')), findsOneWidget);
       expect(find.byKey(const ValueKey('recover-discard')), findsOneWidget);
@@ -1012,7 +1012,7 @@ void main() {
           reason: 'and the page that mends it is one press away');
       expect(exportQueueList().where((i) => i.path == target), isEmpty,
           reason: 'nothing was queued and nothing was written');
-      expect(find.text('EXPORT QUEUE'), findsNothing,
+      expect(find.text('Export queue'), findsNothing,
           reason: 'the dialogue stays up, holding what was typed into it');
 
       await tester.tap(find.byKey(const ValueKey('export-close')));
@@ -1032,7 +1032,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('export-add-to-queue')));
       await tester.pumpAndSettle();
 
-      expect(find.text('EXPORT QUEUE'), findsOneWidget,
+      expect(find.text('Export queue'), findsOneWidget,
           reason: 'the queue window opens over the closed dialog');
       final queued = exportQueueList().where((i) => i.path == target).toList();
       expect(queued, hasLength(1), reason: "the item is on the engine's list");

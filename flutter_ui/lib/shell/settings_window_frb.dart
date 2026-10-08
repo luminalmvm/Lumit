@@ -831,6 +831,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         settings.compact = shipped.compact;
         settings.chromeLabels = shipped.chromeLabels;
         settings.room = shipped.room;
+        settings.labelCase = shipped.labelCase;
         settings.toolBarPosition = shipped.toolBarPosition;
         settings.rangeSliders = shipped.rangeSliders;
         workspace.recompose();
@@ -1063,6 +1064,33 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               description: _themeMessage ?? ''),
           _row(t, l10n.settingsAccent, _accentSwatches(t, ui)),
           _row(t, l10n.settingsShape, _shapeChips(t, ui)),
+          // How labels are cased. Null is the style's own, and a file that
+          // never chose stores nothing.
+          _row(
+            t,
+            l10n.settingsLabelCase,
+            _dropdown<LabelCase?>(
+              key: 'settings-label-case',
+              value: settings.labelCase,
+              options: const [
+                null,
+                LabelCase.caps,
+                LabelCase.sentence,
+                LabelCase.lower,
+              ],
+              label: (labelCase) => switch (labelCase) {
+                null => l10n.styleChoice,
+                LabelCase.caps => l10n.labelCaseCaps,
+                LabelCase.sentence => l10n.labelCaseSentence,
+                LabelCase.lower => l10n.labelCaseLower,
+              },
+              onChanged: (labelCase) => setState(() {
+                settings.labelCase = labelCase;
+                ui.workspace.recompose();
+                ui.workspace.save();
+              }),
+            ),
+          ),
           // Desk's rooms are colour schemes, and this row is the one tap that
           // picks one: choosing Desk leaves the scheme where it was.
           if (ui.shape == ThemeShape.desk)

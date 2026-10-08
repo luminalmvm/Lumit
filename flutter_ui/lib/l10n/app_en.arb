@@ -2004,6 +2004,22 @@
   "@styleChoice": {
     "description": "Settings window, Appearance: the option in the Viewer bars and Toolbar position dropdowns that leaves the arrangement to the chosen interface style."
   },
+  "settingsLabelCase": "Label case",
+  "@settingsLabelCase": {
+    "description": "Settings window, Appearance: the name of the row choosing how panel titles, headings and other labels are cased. Its first option leaves it to the interface style."
+  },
+  "labelCaseCaps": "All caps",
+  "@labelCaseCaps": {
+    "description": "Label case option: every label in capital letters."
+  },
+  "labelCaseSentence": "First letter",
+  "@labelCaseSentence": {
+    "description": "Label case option: only the first letter of a label is a capital."
+  },
+  "labelCaseLower": "Lower case",
+  "@labelCaseLower": {
+    "description": "Label case option: every label in small letters."
+  },
   "settingsDeskRooms": "Rooms drawn for Desk",
   "@settingsDeskRooms": {
     "description": "Settings window, Appearance: the name of the row offering the two colour schemes drawn for the Desk shape, Grey room and Graphite."

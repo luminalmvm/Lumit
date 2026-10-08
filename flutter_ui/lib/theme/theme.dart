@@ -294,7 +294,7 @@ class ShapeTokens {
     tileGap: 1.0,
     windowInset: 0.0,
     cardShadow: [],
-    labelCase: LabelCase.caps,
+    labelCase: LabelCase.sentence,
     titleCentred: false,
     headerDot: false,
     strokeWeight: 1.5,
@@ -2416,7 +2416,14 @@ class LumitTheme {
         // 1.08 written out, not `9 * 0.12`: the product is 0.12000000000000001
         // in binary floating point, which lands a hair outside the band the
         // spec states and the primitives test checks.
-        letterSpacing: tokens.kickerTracking,
+        //
+        // That tracking was drawn for capitals. Small letters at it read as
+        // loose single characters, so a label not in capitals takes the
+        // drawings' sentence-case 0.06em, unless the shape is tighter still.
+        letterSpacing:
+            labelCase == LabelCase.caps || tokens.kickerTracking < 0.54
+                ? tokens.kickerTracking
+                : 0.54,
         color: textMuted,
         decoration: TextDecoration.none,
         fontWeight: FontWeight.w400,
@@ -2428,13 +2435,26 @@ class LumitTheme {
   /// moves (§7.1 — state reads from colour, never from size or weight).
   TextStyle get kickerOn => kicker.copyWith(color: textPrimary);
 
-  /// A container label cased the way the shape wants it: Studio and Lantern
-  /// shout, Desk whispers.
-  String kickerCase(String s) => switch (tokens.labelCase) {
+  /// The label case chosen in Settings, or null to leave it to the shape. Set
+  /// by the workspace as it builds the theme, the way the icon weight is.
+  static LabelCase? labelCaseChoice;
+
+  /// The label case in force: the one chosen in Settings, else the shape's.
+  LabelCase get labelCase => labelCaseChoice ?? tokens.labelCase;
+
+  /// A container label cased the way [labelCase] says: Lantern shouts, Desk
+  /// whispers, Studio leaves the words as they were written.
+  String kickerCase(String s) => switch (labelCase) {
         LabelCase.caps => s.toUpperCase(),
         LabelCase.lower => s.toLowerCase(),
         LabelCase.sentence => s,
       };
+
+  /// A property's name in a row: small with the labels when they are lower
+  /// case, and as written otherwise. A row is not a label, so capitals never
+  /// reach it.
+  String propertyCase(String s) =>
+      labelCase == LabelCase.lower ? s.toLowerCase() : s;
   TextStyle get mono => TextStyle(
       fontFamily: tokens.monoFamily,
       fontFamilyFallback: monoFontFamilyFallback,

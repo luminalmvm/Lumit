@@ -345,7 +345,7 @@ class _StrokeValueRowState extends State<StrokeValueRow> {
         ),
         const SizedBox(width: 4),
         Expanded(
-          child: Text(strokeValueLabel(widget.value),
+          child: Text(t.propertyCase(strokeValueLabel(widget.value)),
               style: t.body, overflow: TextOverflow.ellipsis),
         ),
         SizedBox(
@@ -477,7 +477,7 @@ class _AnimatorValueRowState extends State<AnimatorValueRow> {
         ),
         const SizedBox(width: 4),
         Expanded(
-          child: Text(textAnimatorValueLabel(widget.value),
+          child: Text(t.propertyCase(textAnimatorValueLabel(widget.value)),
               style: t.body, overflow: TextOverflow.ellipsis),
         ),
         SizedBox(
@@ -686,7 +686,7 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
           ),
         const SizedBox(width: 4),
         Expanded(
-          child: Text(shapeValueLabel(widget.value),
+          child: Text(t.propertyCase(shapeValueLabel(widget.value)),
               style: t.body, overflow: TextOverflow.ellipsis),
         ),
         SizedBox(
@@ -831,7 +831,7 @@ class ShapePaintRow extends StatelessWidget {
         // labels line up down the fold.
         const SizedBox(width: 24),
         Expanded(
-          child: Text(shapePaintLabel(which),
+          child: Text(t.propertyCase(shapePaintLabel(which)),
               style: t.body, overflow: TextOverflow.ellipsis),
         ),
         SizedBox(

@@ -440,7 +440,8 @@ class _SourceRowsFrbState extends State<SourceRowsFrb> {
         context: context,
         // A source row is not a keyable property, so its name is plain text —
         // there is no curve for the graph editor to aim at.
-        name: Text(label, style: t.body, overflow: TextOverflow.ellipsis),
+        name: Text(t.propertyCase(label),
+            style: t.body, overflow: TextOverflow.ellipsis),
         control: control,
       );
 }

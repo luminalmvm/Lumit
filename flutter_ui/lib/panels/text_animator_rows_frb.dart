@@ -102,7 +102,9 @@ class TextAnimatorRowsFrb extends StatelessWidget {
         onPressed: () {
           if (addTextAnimator(layer)) onChanged();
         },
-        child: Text(l10n.textAnimatorAdd),
+        child: Text(ThemeScope.of(context)
+            .theme
+            .propertyCase(l10n.textAnimatorAdd)),
       ),
     ));
 
@@ -312,7 +314,8 @@ class TextAnimatorRowsFrb extends StatelessWidget {
         // columns.
         fixedColumns: true,
       ),
-      name: Text(label, style: t.body, overflow: TextOverflow.ellipsis),
+      name: Text(t.propertyCase(label),
+          style: t.body, overflow: TextOverflow.ellipsis),
       control: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -341,7 +344,8 @@ class TextAnimatorRowsFrb extends StatelessWidget {
     final t = ThemeScope.of(context).theme;
     return fxTwoColumnRow(
       context: context,
-      name: Text(label, style: t.body, overflow: TextOverflow.ellipsis),
+      name: Text(t.propertyCase(label),
+          style: t.body, overflow: TextOverflow.ellipsis),
       control: SizedBox(width: _cellWidth + 60, child: control),
     );
   }

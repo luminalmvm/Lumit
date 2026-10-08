@@ -339,7 +339,7 @@ class EffectParamRowFrb extends StatelessWidget {
         ? t.body.copyWith(color: t.textDisabled)
         : (graphColour == null ? t.body : t.body.copyWith(color: graphColour));
     final labelText = Text(
-      engineLabel(param.label),
+      t.propertyCase(engineLabel(param.label)),
       style: labelStyle,
       overflow: TextOverflow.ellipsis,
     );
@@ -1890,7 +1890,7 @@ class EffectPointRowFrb extends StatelessWidget {
           );
 
     final label = Text(
-      stem,
+      t.propertyCase(stem),
       style: enabled ? t.body : t.body.copyWith(color: t.textDisabled),
       overflow: TextOverflow.ellipsis,
     );

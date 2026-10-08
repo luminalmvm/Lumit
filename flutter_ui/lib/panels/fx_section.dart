@@ -826,7 +826,8 @@ Widget fxTextAction(
       onPressed: onPressed,
       // A little word beside a value is plain mono, not body text (§7.1).
       child:
-          Text(label, style: t.mono.copyWith(fontSize: 10, color: t.textMuted)),
+          Text(t.propertyCase(label),
+              style: t.mono.copyWith(fontSize: 10, color: t.textMuted)),
     ),
   );
 }

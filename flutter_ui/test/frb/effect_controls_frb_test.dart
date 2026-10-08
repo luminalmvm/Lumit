@@ -43,10 +43,9 @@ void main() {
     /// A section or parameter-group heading, by the words in it.
     ///
     /// Every container label in the panel is a kicker (docs/15 §7.1) and a
-    /// kicker capitalises **on the way to the screen**, so the schema label
-    /// and the arb string both stay sentence case and only the finder knows
-    /// about the capitals.
-    Finder heading(String label) => find.text(label.toUpperCase());
+    /// kicker is cased **on the way to the screen**, so the schema label and
+    /// the arb string both stay sentence case. Studio draws them as written.
+    Finder heading(String label) => find.text(label);
 
     /// A project with one comp, one layer in it, and that layer selected — the
     /// state the panel needs before it draws anything at all.

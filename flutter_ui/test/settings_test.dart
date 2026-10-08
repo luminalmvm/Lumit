@@ -65,6 +65,7 @@ void main() {
       tabOpensNodeSearch: false,
       shiftAOpensNodeSearch: false,
       room: LanternRoom.night,
+      labelCase: LabelCase.lower,
     );
     final back = InterfaceSettings.fromJson(all.toJson());
     expect(back.language, 'de');
@@ -90,9 +91,10 @@ void main() {
     expect(back.tabOpensNodeSearch, isFalse);
     expect(back.shiftAOpensNodeSearch, isFalse);
     expect(back.room, LanternRoom.night);
+    expect(back.labelCase, LabelCase.lower);
     // Every field is one of the above: a new one added without a line here is
     // a setting nothing checks survives the file.
-    expect(all.toJson().keys.length, 26);
+    expect(all.toJson().keys.length, 27);
   });
 
   // The whole first-run rule in two lines: no file means ask, a file means

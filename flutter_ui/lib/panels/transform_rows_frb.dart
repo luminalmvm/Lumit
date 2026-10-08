@@ -549,7 +549,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
           ...flatGroupPrefix(t, widget.nameGroup),
           Flexible(
             child: Text(
-              group.label,
+              t.propertyCase(group.label),
               style: widget.graphColours?.isNotEmpty ?? false
                   ? t.body.copyWith(color: widget.graphColours!.first)
                   : t.body,

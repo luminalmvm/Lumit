@@ -8,7 +8,7 @@
 
 import 'package:lumit_flutter/src/rust/api/cache.dart';
 import 'package:lumit_flutter/icons/icon_style.dart' show IconSet;
-import 'package:lumit_flutter/theme/theme.dart' show ThemeShape;
+import 'package:lumit_flutter/theme/theme.dart' show LabelCase, ThemeShape;
 
 /// Which of the two playback behaviours the Viewer uses (docs/13 §B5).
 ///
@@ -436,6 +436,10 @@ class InterfaceSettings {
   /// room is what the drawing draws. Read only while the shape is Lantern.
   LanternRoom room;
 
+  /// How labels are cased, or null to leave it to the style: Studio as
+  /// written, Desk lower case, Lantern capitals.
+  LabelCase? labelCase;
+
   /// What the chrome says: words, or the icon set's glyphs.
   ///
   /// [ChromeLabels.icons] by default — see the enum for why that is not Words.
@@ -481,6 +485,7 @@ class InterfaceSettings {
     this.shiftAOpensNodeSearch = true,
     this.iconSet = IconSet.styleChoice,
     this.room = LanternRoom.auto,
+    this.labelCase,
   });
 
   Map<String, dynamic> toJson() => {
@@ -513,6 +518,7 @@ class InterfaceSettings {
         'shift_a_opens_node_search': shiftAOpensNodeSearch,
         'icon_set': iconSet.name,
         'lantern_room': room.name,
+        if (labelCase != null) 'label_case': labelCase!.name,
       };
   factory InterfaceSettings.fromJson(Map<String, dynamic> j) =>
       InterfaceSettings(
@@ -621,5 +627,7 @@ class InterfaceSettings {
           (r) => r.name == j['lantern_room'],
           orElse: () => LanternRoom.auto,
         ),
+        // Absent, or a name no build wrote, means the style's own.
+        labelCase: LabelCase.values.asNameMap()[j['label_case']],
       );
 }
