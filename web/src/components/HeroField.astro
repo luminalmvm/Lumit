@@ -42,23 +42,36 @@
 </style>
 
 <script>
+  import { hero } from "../scripts/hero-state";
+
+  // Two passes. The field is slow, soft and the expensive part - six runs of
+  // four-octave noise a pixel - so it is drawn small into a texture, thirty
+  // times a second. The second pass is the one the screen sees: it stretches
+  // that texture over the canvas and lays the cheap, sharp things on top at
+  // full size, every frame - the grain, the reveal, the lockup's light and
+  // the streak. Drawing the field itself at the screen's own size cost
+  // between ten and forty times as much for a picture nobody could tell apart.
+
   const VERT = `
     attribute vec2 a;
     void main() { gl_Position = vec4(a, 0.0, 1.0); }
   `;
 
-  const FRAG = `
+  const PRECISION = `
     #ifdef GL_FRAGMENT_PRECISION_HIGH
     precision highp float;
     #else
     precision mediump float;
     #endif
+  `;
+
+  // The field, at the small size. Colour out in rgb, and in alpha how much of
+  // it shows over the page.
+  const FIELD = `
+    ${PRECISION}
     uniform vec2 u_res;
+    uniform float u_aspect;
     uniform float u_t;
-    uniform vec4 u_box;
-    uniform float u_reveal;
-    uniform float u_ms;
-    uniform vec2 u_span;
 
     float hash(vec2 p) {
       return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
@@ -75,18 +88,6 @@
       );
     }
 
-    // A hash that is random at screen coordinates. 
-    float phash(vec2 p) {
-      vec3 q = fract(vec3(p.xyx) * 0.1031);
-      q += dot(q, q.yzx + 33.33);
-      return fract((q.x + q.y) * q.z);
-    }
-
-    // Interleaved gradient noise. 
-    float ign(vec2 p) {
-      return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715))));
-    }
-
     // Turblent noise complexity
     float fbm(vec2 p) {
       float v = 0.0;
@@ -101,7 +102,7 @@
 
     void main() {
       vec2 uv = gl_FragCoord.xy / u_res;
-      vec2 p = vec2(uv.x * (u_res.x / u_res.y), uv.y) * 1.7;
+      vec2 p = vec2(uv.x * u_aspect, uv.y) * 1.7;
       float t = u_t * 0.055;
 
       vec2 q = vec2(fbm(p + vec2(0.0, t)), fbm(p + vec2(5.2, 1.3) - t));
@@ -136,14 +137,53 @@
       col = mix(col, spruce, smoothstep(0.36, 0.58, r.x) * (0.4 + 0.6 * (1.0 - uv.y)));
       col = mix(col, spruce, smoothstep(0.95, 1.35, q.y + r.y) * 0.4);
 
+      float fade = smoothstep(0.0, 0.42, uv.y);
+      float matte = fbm(p * 1.1 + vec2(3.7, 11.3));
+      float alpha = clamp(fade * 1.5 - 0.25 + (matte - 0.5) * 0.9, 0.0, 1.0);
+
+      gl_FragColor = vec4(col, alpha);
+    }
+  `;
+
+  // What the screen sees, at the canvas's own size.
+  const FRAG = `
+    ${PRECISION}
+    uniform sampler2D u_tex;
+    uniform vec2 u_res;
+    uniform vec4 u_box;
+    uniform float u_reveal;
+    uniform float u_ms;
+    uniform vec2 u_span;
+    uniform float u_glow;
+    uniform float u_flare;
+    uniform float u_pose;
+    uniform float u_field;
+
+    // A hash that is random at screen coordinates.
+    float phash(vec2 p) {
+      vec3 q = fract(vec3(p.xyx) * 0.1031);
+      q += dot(q, q.yzx + 33.33);
+      return fract((q.x + q.y) * q.z);
+    }
+
+    // Interleaved gradient noise.
+    float ign(vec2 p) {
+      return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715))));
+    }
+
+    void main() {
+      vec2 uv = gl_FragCoord.xy / u_res;
+      vec4 field = texture2D(u_tex, uv);
+      vec3 col = field.rgb;
+
+      // The grain is laid here, a screen pixel at a time. It is also what
+      // keeps the stretched field from banding.
       vec2 gp = gl_FragCoord.xy;
       col += (phash(gp) - 0.5) * 0.036;
       col += (ign(gp) - 0.5) / 255.0;
 
       vec3 page = vec3(0.043, 0.047, 0.055);  // #0b0c0e, the page itself
-      float fade = smoothstep(0.0, 0.42, uv.y);
-      float matte = fbm(p * 1.1 + vec2(3.7, 11.3));
-      float alpha = clamp(fade * 1.5 - 0.25 + (matte - 0.5) * 0.9, 0.0, 1.0);
+      float alpha = field.a * u_field;
       col = mix(page, col, alpha);
 
       vec2 bd = max(u_box.xy - gl_FragCoord.xy, gl_FragCoord.xy - u_box.zw);
@@ -168,12 +208,41 @@
 
       col = mix(page, col, vis);
 
+      // The light the lockup throws, which the hero's timeline keys: green at
+      // the L and blue at the t, gathered on the diamond while the mark is the
+      // icon and as wide as the word once it has opened. It is added over the
+      // reveal, so the icon is lit before the field has arrived. u_box is the
+      // wordmark's box grown by half its size each way, so a quarter of it is
+      // the wordmark's own half-size.
+      vec2 mid = 0.5 * (u_box.xy + u_box.zw);
+      vec2 hw = max(0.25 * (u_box.zw - u_box.xy), vec2(1.0));
+      vec2 d = gl_FragCoord.xy - mid;
+      float spread = mix(0.34, 1.0, u_pose);
+      vec2 reach = vec2(hw.x * spread * 1.15, hw.y * 1.9);
+      float light = exp(-dot(d / reach, d / reach));
+      vec3 tint = mix(
+        vec3(0.44, 0.86, 0.50),
+        vec3(0.30, 0.62, 0.95),
+        smoothstep(-1.0, 1.0, d.x / (hw.x * spread))
+      );
+      col += tint * light * u_glow * 0.3;
+
+      // The streak as it lands: long and thin across the lockup, and a short
+      // one standing through its middle.
+      float streak = exp(-abs(d.y) / (hw.y * 0.09)) * exp(-abs(d.x) / (hw.x * 2.4))
+        + 0.4 * exp(-abs(d.x) / (hw.y * 0.06)) * exp(-abs(d.y) / (hw.y * 1.6));
+      col += vec3(0.78, 0.93, 1.0) * streak * u_flare * 0.8;
+
       gl_FragColor = vec4(col, 1.0);
     }
   `;
 
   const REVEAL_MS = 450;
   const GLOW_MS = 1000;
+  // The field's texture is a third of the hero's size each way, whatever the
+  // screen's pixel density, and it is redrawn this often.
+  const FIELD_SCALE = 1 / 3;
+  const FIELD_EVERY_MS = 1000 / 30;
 
   let cueAt: number | null = matchMedia("(prefers-reduced-motion: reduce)")
     .matches
@@ -214,32 +283,55 @@
       gl.compileShader(sh);
       return sh;
     };
-    const prog = gl.createProgram()!;
-    gl.attachShader(prog, compile(gl.VERTEX_SHADER, VERT));
-    gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FRAG));
-    gl.linkProgram(prog);
-
-    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+    // Both programs draw the same one triangle, so the corner goes in slot 0
+    // of each and is set up once.
+    const build = (frag: string) => {
+      const p = gl.createProgram()!;
+      gl.attachShader(p, compile(gl.VERTEX_SHADER, VERT));
+      gl.attachShader(p, compile(gl.FRAGMENT_SHADER, frag));
+      gl.bindAttribLocation(p, 0, "a");
+      gl.linkProgram(p);
+      return gl.getProgramParameter(p, gl.LINK_STATUS) ? p : null;
+    };
+    const fieldProg = build(FIELD);
+    const prog = build(FRAG);
+    const tex = gl.createTexture();
+    const target = gl.createFramebuffer();
+    if (!fieldProg || !prog || !tex || !target) {
       giveUp();
       return;
     }
 
-    gl.useProgram(prog);
     gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
     gl.bufferData(
       gl.ARRAY_BUFFER,
       new Float32Array([-1, -1, 3, -1, -1, 3]),
       gl.STATIC_DRAW,
     );
-    const a = gl.getAttribLocation(prog, "a");
-    gl.enableVertexAttribArray(a);
-    gl.vertexAttribPointer(a, 2, gl.FLOAT, false, 0, 0);
-    const uRes = gl.getUniformLocation(prog, "u_res");
-    const uT = gl.getUniformLocation(prog, "u_t");
-    const uBox = gl.getUniformLocation(prog, "u_box");
-    const uReveal = gl.getUniformLocation(prog, "u_reveal");
-    const uMs = gl.getUniformLocation(prog, "u_ms");
-    const uSpan = gl.getUniformLocation(prog, "u_span");
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+    const at = (p: WebGLProgram, name: string) => gl.getUniformLocation(p, name);
+    const fRes = at(fieldProg, "u_res");
+    const fAspect = at(fieldProg, "u_aspect");
+    const fT = at(fieldProg, "u_t");
+    const uRes = at(prog, "u_res");
+    const uBox = at(prog, "u_box");
+    const uReveal = at(prog, "u_reveal");
+    const uMs = at(prog, "u_ms");
+    const uSpan = at(prog, "u_span");
+    const uGlow = at(prog, "u_glow");
+    const uFlare = at(prog, "u_flare");
+    const uPose = at(prog, "u_pose");
+    const uField = at(prog, "u_field");
+    gl.useProgram(prog);
+    gl.uniform1i(at(prog, "u_tex"), 0);
 
     let box = [0, 0, 0, 0];
     const measure = () => {
@@ -264,34 +356,83 @@
       ];
     };
 
+    let small = [1, 1];
+    let fieldAt = -1e6;
+    const drawField = (now: number) => {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, target);
+      gl.viewport(0, 0, small[0], small[1]);
+      gl.useProgram(fieldProg);
+      gl.uniform2f(fRes, small[0], small[1]);
+      gl.uniform1f(fAspect, canvas.width / canvas.height);
+      gl.uniform1f(fT, now / 1000);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      fieldAt = now;
+    };
+
     let revealAt: number | null = null;
-    const draw = (now: number) => {
+    // What the last frame was drawn from. With the field unchanged, the
+    // reveal over and these the same, a new frame would be the same picture.
+    let drawn = [-1, -1, -1, -1];
+    const draw = (now: number, force = false) => {
+      const since = revealAt === null ? -1e6 : now - revealAt;
+      const revealing = since < REVEAL_MS + GLOW_MS + 400;
+      const fieldDue = hero.field > 0 && now - fieldAt >= FIELD_EVERY_MS - 2;
+      const moved =
+        hero.glow !== drawn[0] ||
+        hero.flare !== drawn[1] ||
+        hero.pose !== drawn[2] ||
+        hero.field !== drawn[3];
+      if (!force && !fieldDue && !moved && !revealing) return;
+
+      if (fieldDue || force) drawField(now);
+      gl.viewport(0, 0, canvas.width, canvas.height);
+      gl.useProgram(prog);
       gl.uniform2f(uRes, canvas.width, canvas.height);
-      gl.uniform1f(uT, now / 1000);
       gl.uniform4f(uBox, box[0], box[1], box[2], box[3]);
       gl.uniform2f(uSpan, REVEAL_MS, GLOW_MS);
-      const since = revealAt === null ? -1e6 : now - revealAt;
       gl.uniform1f(uMs, since);
       gl.uniform1f(uReveal, Math.min(1, Math.max(0, since / REVEAL_MS)));
+      gl.uniform1f(uGlow, hero.glow);
+      gl.uniform1f(uFlare, hero.flare);
+      gl.uniform1f(uPose, hero.pose);
+      gl.uniform1f(uField, hero.field);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
+      drawn = [hero.glow, hero.flare, hero.pose, hero.field];
     };
+    // Under reduced motion nothing ticks, so the timeline asks for a frame
+    // when the visitor moves something on it.
+    hero.redraw = () => draw(performance.now(), true);
 
     const dpr = Math.min(2, devicePixelRatio || 1);
     const resize = () => {
       canvas.width = Math.max(1, Math.round(canvas.clientWidth * dpr));
       canvas.height = Math.max(1, Math.round(canvas.clientHeight * dpr));
-      gl.viewport(0, 0, canvas.width, canvas.height);
+      small = [
+        Math.max(1, Math.round(canvas.clientWidth * FIELD_SCALE)),
+        Math.max(1, Math.round(canvas.clientHeight * FIELD_SCALE)),
+      ];
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.texImage2D(
+        gl.TEXTURE_2D, 0, gl.RGBA, small[0], small[1], 0,
+        gl.RGBA, gl.UNSIGNED_BYTE, null,
+      );
+      gl.bindFramebuffer(gl.FRAMEBUFFER, target);
+      gl.framebufferTexture2D(
+        gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0,
+      );
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     };
     new ResizeObserver(() => {
       resize();
       measure();
-      draw(performance.now());
+      draw(performance.now(), true);
     }).observe(canvas);
     resize();
     measure();
 
     const readyAt = performance.now();
-    draw(readyAt);
+    draw(readyAt, true);
     canvas.classList.add("lit");
 
     const begin = () => {
@@ -303,13 +444,13 @@
 
     if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
       revealAt = 0;
-      draw(performance.now());
+      draw(performance.now(), true);
       return;
     }
 
     let frame = 0;
     const tick = (ms: number) => {
-      draw(ms);
+      if (!hero.paused) draw(ms);
       frame = requestAnimationFrame(tick);
     };
     new IntersectionObserver((entries) => {

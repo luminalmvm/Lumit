@@ -47,9 +47,57 @@ const links = [
       </a>
     </nav>
   </div>
+  {/* The page is a timeline too: a playhead along the top edge that follows
+      the scroll. CSS alone, and absent where the browser cannot do it. Last
+      in the bar, so it is drawn over the blurred ground and not through it. */}
+  <div class="playhead" aria-hidden="true"><i></i></div>
 </header>
 
 <style>
+  .playhead {
+    position: absolute;
+    inset: 0 0 auto 0;
+    display: none;
+    height: 2px;
+    pointer-events: none;
+  }
+  .playhead::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to right, transparent, var(--color-accent-2));
+    transform-origin: left;
+  }
+  .playhead i {
+    position: absolute;
+    top: 0;
+    left: 0;
+    margin-left: -5px;
+    border: 5px solid transparent;
+    border-top: 7px solid var(--color-accent-2);
+  }
+  @supports (animation-timeline: scroll()) {
+    .playhead {
+      display: block;
+    }
+    .playhead::before {
+      animation: playhead-fill linear both;
+      animation-timeline: scroll(root block);
+    }
+    .playhead i {
+      animation: playhead-move linear both;
+      animation-timeline: scroll(root block);
+    }
+  }
+  @keyframes playhead-fill {
+    from { transform: scaleX(0); }
+    to { transform: scaleX(1); }
+  }
+  @keyframes playhead-move {
+    from { left: 0; }
+    to { left: 100%; }
+  }
+
   /* The bar always carries its own ground, on every page and at every scroll
      position. It used to grow one only once the page had scrolled, which meant
      a visible darkening the moment you began to move - the ground arriving is

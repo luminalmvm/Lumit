@@ -14,7 +14,7 @@
 
 :root {
   --sl-font: "Hanken Grotesk Variable", ui-sans-serif, system-ui, sans-serif;
-  --sl-font-mono: "Geist Mono", ui-monospace, monospace;
+  --sl-font-mono: "Paper Mono", ui-monospace, monospace;
 
   --sl-color-bg: #0b0c0e; /* surface_0 - the page */
   --sl-color-black: #0b0c0e; /* the mobile menu, the search dialog, the page frame */

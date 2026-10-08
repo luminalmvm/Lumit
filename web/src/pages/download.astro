@@ -136,7 +136,11 @@ const notes = [
       }
 
       const ua = navigator.userAgent;
-      const mine = /Win/.test(ua) ? "win" : /Mac/.test(ua) ? "mac" : /Linux|X11/.test(ua) ? "lin" : null;
+      // Not on a phone or tablet, which name a desktop system in passing
+      // (see the hero's own check in index.astro).
+      const handheld =
+        /Android|iPhone|iPad|iPod/.test(ua) || (/Mac/.test(ua) && navigator.maxTouchPoints > 1);
+      const mine = handheld ? null : /Win/.test(ua) ? "win" : /Mac/.test(ua) ? "mac" : /Linux|X11/.test(ua) ? "lin" : null;
       if (mine) document.querySelector(`[data-plat="${mine}"]`)?.classList.add("border-line-2");
     })
     .catch(() => {

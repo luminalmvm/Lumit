@@ -75,9 +75,13 @@ void main() {
     // A family the theme asks for but pubspec never declares renders as the
     // platform default and nothing complains, so pin the pair together.
     expect(LumitTheme.fontFamily, 'Hanken Grotesk');
-    expect(LumitTheme.dark().mono.fontFamily, 'Geist Mono');
+    expect(LumitTheme.dark().mono.fontFamily, 'Paper Mono');
     final pubspec = File('pubspec.yaml').readAsStringSync();
     expect(pubspec, contains('family: Hanken Grotesk'));
+    expect(pubspec, contains('family: Paper Mono'));
+    // Every fallback the theme names has to be bundled too, or Cyrillic
+    // drops to whatever the platform has.
+    expect(LumitTheme.monoFontFamilyFallback.first, 'Geist Mono');
     expect(pubspec, contains('family: Geist Mono'));
   });
 }
