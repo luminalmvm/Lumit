@@ -5,6 +5,7 @@
 // — and stayed whole.
 
 import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/l10n/engine_labels.dart';
 import 'package:lumit_flutter/main.dart';
@@ -17,6 +18,7 @@ import '../icons/icons.dart';
 import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
+import '../shell/menu_bar_frb.dart' show duplicateLayersFrb;
 import '../shell/stretch_dialog_frb.dart';
 import '../state/timeline_columns.dart';
 import '../theme/theme.dart';
@@ -36,6 +38,11 @@ List<String>? _blendModes;
 /// drawn round whatever the shape is: this is a colour swatch, not a control,
 /// and Sharp's square corners have nothing to say about a bullet.
 const double _labelDotSize = 6;
+
+/// A switch being painted down its column: which switch, the layer the drag
+/// started on, and the state that layer took, which every row the pointer
+/// crosses takes too.
+typedef _SwitchPaint = ({String cell, UuidValue from, bool to});
 
 /// The inline rename a row turns into while it is being named: `Enter`
 /// commits, Escape throws the edit away, and a click anywhere else commits too
@@ -149,6 +156,16 @@ class OutlineRow extends StatefulWidget {
   State<OutlineRow> createState() => _OutlineRowState();
 }
 
+/// The rows on screen, by layer, so a layer's bar can open its row's menu.
+final Map<UuidValue, _OutlineRowState> _rowsOnScreen = {};
+
+/// The menu a right-click on [layer]'s row opens, at [position]. Nothing
+/// when that row is not on screen.
+void showLayerRowMenu(UuidValue layer, Offset position) {
+  final row = _rowsOnScreen[layer];
+  if (row != null) row._showRowMenu(row.context, position);
+}
+
 class _OutlineRowState extends State<OutlineRow> {
   /// The inline rename, entered with `Enter` on the selected layer.
   TextEditingController? _rename;
@@ -222,11 +239,18 @@ class _OutlineRowState extends State<OutlineRow> {
   void initState() {
     super.initState();
     widget.renameRequest.addListener(_maybeRename);
+    lumitPopupUp.addListener(_menuGone);
+    _rowsOnScreen[layer.internallayerId] = this;
   }
 
   @override
   void dispose() {
+    // Only its own entry: a row rebuilt elsewhere has already taken the slot.
+    if (_rowsOnScreen[layer.internallayerId] == this) {
+      _rowsOnScreen.remove(layer.internallayerId);
+    }
     widget.renameRequest.removeListener(_maybeRename);
+    lumitPopupUp.removeListener(_menuGone);
     _rename?.dispose();
     super.dispose();
   }
@@ -281,6 +305,34 @@ class _OutlineRowState extends State<OutlineRow> {
     // ZERO bridge calls: everything this row draws is in the read model.
     final info = widget.entry.info;
 
+    // The row knows when the pointer is over it and when one of its controls
+    // has the keyboard: what rests quietly comes up then.
+    final body = MouseRegion(
+      opaque: false,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (e) {
+        if (!mounted) return;
+        // A menu opened from this row takes the pointer without it moving:
+        // the pointer is still inside the row and a menu is up. The row then
+        // keeps its full form until the menu goes.
+        final box = context.findRenderObject();
+        setState(() {
+          _hover = false;
+          _underMenu = lumitPopupOpen &&
+              box is RenderBox &&
+              box.size.contains(box.globalToLocal(e.position));
+        });
+      },
+      child: Focus(
+        canRequestFocus: false,
+        skipTraversal: true,
+        onFocusChange: (has) {
+          if (mounted) setState(() => _focus = has);
+        },
+        child: _rowBody(context, t, info),
+      ),
+    );
+
     // Selection happens on the DOWN, for the whole row, outside the gesture
     // arena — the reason the name has always done it that way (see the note by
     // the name cell) applies to every other cell too, and the row's tap used to
@@ -306,7 +358,7 @@ class _OutlineRowState extends State<OutlineRow> {
         child: Container(
           // No drop line: the rows themselves move to where they would land,
           // so a line marking the same slot said it twice.
-          child: _rowBody(context, t, info),
+          child: body,
         ),
       ),
     );
@@ -321,6 +373,26 @@ class _OutlineRowState extends State<OutlineRow> {
   /// one — Flutter hands a pointer to the innermost target first, so the
   /// control always sets this before the row reads it.
   bool _claimed = false;
+
+  /// Whether the pointer is over this row, and whether one of its controls
+  /// has the keyboard. At rest, with neither, an off switch draws dim and a
+  /// picker at its default draws as its word alone.
+  bool _hover = false;
+  bool _focus = false;
+
+  /// Whether a menu opened from this row is up. Its barrier takes the pointer
+  /// away, and a picker must not go quiet under its own open menu.
+  bool _underMenu = false;
+  bool get _resting => !_hover && !_focus && !_underMenu;
+
+  /// The menu has gone. After the frame, so a pointer that is back over the
+  /// row has been seen and the row does not rest for one frame in between.
+  void _menuGone() {
+    if (!_underMenu || lumitPopupUp.value) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() => _underMenu = false);
+    });
+  }
 
   /// Mark [child]'s clicks as the control's own, not the row's.
   Widget _ownClick(Widget child) =>
@@ -440,7 +512,8 @@ class _OutlineRowState extends State<OutlineRow> {
               context, id, 'solo', null, switches.solo, BridgeLayerSwitch.solo,
               mark: LumitIcons.solo,
               offMark: LumitIcons.solo,
-              tip: switches.solo ? l10n.switchSoloed : l10n.switchSolo),
+              tip: l10n.switchSoloAlone(
+                  switches.solo ? l10n.switchSoloed : l10n.switchSolo)),
           SwitchCell.locked => _switch(context, id, 'locked', null,
               switches.locked, BridgeLayerSwitch.locked,
               mark: LumitIcons.lock,
@@ -585,8 +658,8 @@ class _OutlineRowState extends State<OutlineRow> {
   /// that draw nothing.
   ///
   /// **And only what the column has room for** (T4): dragged narrower it gives
-  /// its cells up in [modeHideOrder] — flow, then adjustment, then motion blur
-  /// — leaving fx, 3D and collapse.
+  /// its cells up in [modeHideOrder]: collapse, then flow, then adjustment,
+  /// leaving fx, 3D and motion blur.
   /// Whether the adjustment cell is drawn on a row of this kind: every
   /// kind that puts something in the Viewer, which is everything except the
   /// four with no picture of their own.
@@ -652,10 +725,11 @@ class _OutlineRowState extends State<OutlineRow> {
           // the policy").
           ModeCell.flow => info.kind == BridgeLayerKind.footage
               ? _switch(context, id, 'flow', LumitIcon.flow, info.flow, null,
-                  tip: info.flow ? l10n.tipFlowOn : l10n.tipFlowOff, onTap: () {
+                  tip: info.flow ? l10n.tipFlowOn : l10n.tipFlowOff,
+                  onSet: (to) {
                   // A locked layer refuses, and quietly.
                   try {
-                    layer.setFlowEnabled(on_: !info.flow);
+                    layer.setFlowEnabled(on_: to);
                   } catch (_) {}
                   widget.onChanged();
                 })
@@ -697,6 +771,7 @@ class _OutlineRowState extends State<OutlineRow> {
             all: widget.layers,
             width: matteWidth,
             toggleRoom: widget.matteToggles,
+            resting: _resting,
             onChanged: widget.onChanged,
           ),
         ),
@@ -718,6 +793,7 @@ class _OutlineRowState extends State<OutlineRow> {
           info: info,
           all: widget.layers,
           width: width,
+          resting: _resting,
           onChanged: widget.onChanged,
         ),
       );
@@ -737,12 +813,20 @@ class _OutlineRowState extends State<OutlineRow> {
   /// own view in place — its clips and their speed envelope, inside its row —
   /// because cutting is done against the beat you can see, so the
   /// music and the ruler have to stay on screen. A Precomp opens the comp it
-  /// draws, the way it does in the Project panel and the Hierarchy; every
-  /// other kind will open in a Viewer of its own once there is one to open,
-  /// and until then does nothing. It no longer renames — `Enter` does that.
+  /// draws, the way it does in the Project panel and the Hierarchy. Every
+  /// other kind has nothing to open, so the double-click renames it, the same
+  /// rename `Enter` starts.
   void _openLayer() {
-    if (widget.entry.info.kind == BridgeLayerKind.sequence) {
+    final kind = widget.entry.info.kind;
+    if (kind == BridgeLayerKind.sequence) {
       widget.onOpenSequence?.call();
+      return;
+    }
+    if (kind != BridgeLayerKind.precomp) {
+      widget.renameRequest.value = layer.internallayerId;
+      // Asked directly as well: a request already standing for this layer
+      // does not notify a second time.
+      _maybeRename();
       return;
     }
     final comp = _sourceComp();
@@ -835,7 +919,7 @@ class _OutlineRowState extends State<OutlineRow> {
   /// The cell is still [switchCellWidth] wide and still takes the whole click,
   /// so nothing about the aiming changed — only the paint.
   ///
-  /// **On is `text_primary`, off is `text_muted`, and neither is the accent**
+  /// **On is `text_primary`, off is dimmer, and neither is the accent**
   /// (§3.1's accent list is closed, and the owner has ruled on this column
   /// more than once). Nor is it `animated`: that token means "this is keyed",
   /// and a motion-blur switch is not a keyframe. The drawing agrees — it lights
@@ -844,9 +928,13 @@ class _OutlineRowState extends State<OutlineRow> {
   /// With an [offIcon] the glyph
   /// itself flips (closed eye, muted speaker, hollow circle) and keeps full
   /// strength either way; without one the off state dims, as before.
-  /// [onTap] replaces the default `set_switch` write for a cell that only
+  /// [onSet] replaces the default `set_switch` write for a cell that only
   /// wears the switch's clothes — the Flow cell, whose write is the layer's
   /// interpolation policy — in which case [which] may be null.
+  ///
+  /// Press a cell and drag up or down the column and every row the pointer
+  /// crosses takes the state the first one took, as one undo step. The same
+  /// drag the effect headings' enable boxes have (`fxEnableSwitch`).
   Widget _switch(
     BuildContext context,
     String id,
@@ -863,17 +951,69 @@ class _OutlineRowState extends State<OutlineRow> {
     String? mark,
     String? offMark,
     String? tip,
-    VoidCallback? onTap,
+    ValueChanged<bool>? onSet,
   }) {
     final t = ThemeScope.of(context).theme;
-    // **Two strengths, one rule** — the drawing lights every row switch at
-    // `text_primary` and rests it at `text_muted`, and has no third reading.
-    // A switch whose glyph does not flip used to rest at `text_disabled`
-    // instead, on the theory that a shape that says nothing needs the dimmer
-    // off; with the boxed faces gone the colour is the whole of the state, and
-    // two strengths that a reader can tell apart beat three that shade into
-    // one another.
-    final ink = on ? t.textPrimary : t.textMuted;
+    final project = Provider.of<LumitState>(context, listen: false).project;
+    final me = layer.internallayerId;
+
+    // Write [to]. A press writes it to every selected layer when this row is
+    // one of them. A row the pointer only crosses mid-paint takes it [alone].
+    void set(bool to, {bool alone = false}) {
+      if (onSet != null) return onSet(to);
+      // **Every selected layer, not only this row.** This is the one choke
+      // point all the switches pass through, so it is the one place the rule
+      // has to be written. They all take *this* row's new state rather than
+      // each flipping its own, so a column of mixed eyes comes out even, and
+      // the whole click is **one** bridge call and one undo step: a Ctrl+A
+      // click used to commit one edit per layer, and undoing it walked back
+      // through all fifty-three.
+      //
+      // The engine keeps the loop's manners: a locked *sibling* silently
+      // refuses its share of the batch, while the clicked row's own refusal
+      // is the whole call's. A locked layer refuses every switch but its own
+      // lock and shy. That refusal is quiet too: nothing commits and nothing
+      // changes.
+      try {
+        widget.comp.setSwitchOnLayers(
+          clicked: me,
+          layers: alone
+              ? [me]
+              : [
+                  for (final target in _menuTargets())
+                    target.layer.internallayerId,
+                ],
+          switch_: which!,
+          on_: to,
+        );
+      } catch (_) {}
+      widget.onChanged();
+    }
+
+    // A click, or the start of a paint. Alt on the solo switch solos this
+    // layer alone.
+    void press() {
+      if (which == BridgeLayerSwitch.solo &&
+          HardwareKeyboard.instance.isAltPressed) {
+        return _soloAlone();
+      }
+      set(!on);
+    }
+
+    // On is `text_primary`. Off rests at `text_disabled`, a clear step below,
+    // so a row's state reads at a glance down a tall stack, and comes up to
+    // `text_muted` while the pointer is over the row or the keyboard is in it,
+    // so a switch is easy to find when it is wanted.
+    //
+    // The eye and the speaker are the exception: off, they keep `text_muted`
+    // and their struck glyph at rest too. A hidden or silenced layer has to
+    // be obvious.
+    final loud = name == 'visible' || name == 'audible';
+    final ink = on
+        ? t.textPrimary
+        : loud || !_resting
+            ? t.textMuted
+            : t.textDisabled;
     final Widget face = mark != null
         ? glyph.LumitIcon(on || offMark == null ? mark : offMark,
             size: iconSize, colour: ink)
@@ -882,35 +1022,7 @@ class _OutlineRowState extends State<OutlineRow> {
     final cell = GestureDetector(
       key: ValueKey<String>('tl-$name-$id'),
       behavior: HitTestBehavior.opaque,
-      onTap: onTap ??
-          () {
-            // **Every selected layer, not only this row** — this is
-            // the one choke point all the switches pass through, so it is the
-            // one place the rule has to be written. They all take *this*
-            // row's new state rather than each flipping its own, so a column
-            // of mixed eyes comes out even — and the whole click is **one**
-            // bridge call and one undo step: a Ctrl+A click used to
-            // commit one edit per layer, and undoing it walked back through
-            // all fifty-three.
-            //
-            // The engine keeps the loop's manners: a locked *sibling* silently
-            // refuses its share of the batch, while the clicked row's own
-            // refusal is the whole call's — a locked layer refuses every
-            // switch but its own lock and shy.
-            // That refusal is quiet too: nothing commits and nothing changes.
-            try {
-              widget.comp.setSwitchOnLayers(
-                clicked: layer.internallayerId,
-                layers: [
-                  for (final target in _menuTargets())
-                    target.layer.internallayerId,
-                ],
-                switch_: which!,
-                on_: !on,
-              );
-            } catch (_) {}
-            widget.onChanged();
-          },
+      onTap: press,
       child: SizedBox(
         width: switchCellWidth,
         height: t.density.laneRow,
@@ -933,21 +1045,80 @@ class _OutlineRowState extends State<OutlineRow> {
         ),
       ),
     );
-    return tip == null ? cell : LumitTooltip(message: tip, child: cell);
+    final painted = DragTarget<_SwitchPaint>(
+      // Answered once per cell the pointer crosses, and never accepted: the
+      // crossing is the act. Only the same switch on another row takes it.
+      onWillAcceptWithDetails: (details) {
+        final paint = details.data;
+        if (paint.cell == name && paint.from != me && paint.to != on) {
+          set(paint.to, alone: true);
+        }
+        return false;
+      },
+      builder: (context, _, __) => Draggable<_SwitchPaint>(
+        data: (cell: name, from: me, to: !on),
+        // Nothing rides under the pointer: this drag paints, it carries
+        // nothing anywhere.
+        feedback: const SizedBox.shrink(),
+        // The undo group is what makes the whole stroke one step. No cell
+        // accepts the drop, so the drag always ends as cancelled, and that
+        // is where the group closes.
+        onDragStarted: () {
+          project?.beginUndoGroup();
+          press();
+        },
+        onDraggableCanceled: (_, __) => project?.endUndoGroup(),
+        child: cell,
+      ),
+    );
+    return tip == null ? painted : LumitTooltip(message: tip, child: painted);
+  }
+
+  /// Alt-click on a solo switch: this layer soloed and every other layer's
+  /// solo off, as one undo step.
+  void _soloAlone() {
+    final project = Provider.of<LumitState>(context, listen: false).project;
+    final me = layer.internallayerId;
+    project?.beginUndoGroup();
+    try {
+      widget.comp.setSwitchOnLayers(
+          clicked: me,
+          layers: [me],
+          switch_: BridgeLayerSwitch.solo,
+          on_: true);
+      // Every layer in the comp, not only the rows on screen.
+      widget.comp.setSwitchOnLayers(
+          clicked: me,
+          layers: [
+            for (final e in Provider.of<LumitUiState>(context, listen: false)
+                .model
+                .heldLayers)
+              if (e.layer.internallayerId != me) e.layer.internallayerId,
+          ],
+          switch_: BridgeLayerSwitch.solo,
+          on_: false);
+    } catch (_) {
+      // A locked layer refuses its solo, and then nothing else changes.
+    } finally {
+      project?.endUndoGroup();
+    }
+    widget.onChanged();
   }
 
   Widget _blendPicker(
       BuildContext context, LumitTheme t, int current, double width) {
     final modes = _blendModes ??= listBlendModes();
+    // Normal leads the list, and is what an index past its end falls back to.
+    final value = current < modes.length ? current : 0;
     // The cell's share of its group: a dropdown that overflows its cell is a
     // layout error, not a cosmetic one, and the label ellipsises to fit.
-    return SizedBox(
+    final picker = SizedBox(
       width: width,
       child: BareDropdown<int>(
         key: ValueKey<String>('tl-blend-${layer.internallayerId}'),
         // In an outline row, so the mockup's 16/10 face (§12A.6).
         dense: true,
-        value: current < modes.length ? current : 0,
+        value: value,
         options: [for (var i = 0; i < modes.length; i++) i],
         label: (i) => engineLabel(modes[i]),
         onChanged: (i) {
@@ -956,6 +1127,10 @@ class _OutlineRowState extends State<OutlineRow> {
         },
       ),
     );
+    return restingPicker(t,
+        resting: _resting && value == 0,
+        label: modes.isEmpty ? '' : engineLabel(modes[0]),
+        picker: picker);
   }
 
   Future<void> _showRowMenu(BuildContext context, Offset position) async {
@@ -1078,11 +1253,7 @@ class _OutlineRowState extends State<OutlineRow> {
     switch (picked) {
       case 'duplicate':
         // Offered on a locked layer too: copying is not editing.
-        for (final target in targets) {
-          try {
-            target.layer.duplicate();
-          } catch (_) {}
-        }
+        duplicateLayersFrb([for (final target in targets) target.layer]);
       case 'up' || 'down':
         final delta = picked == 'up' ? -1 : 1;
         final ids = {

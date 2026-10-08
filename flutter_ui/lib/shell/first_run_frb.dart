@@ -1,7 +1,8 @@
 // The first-run screen: one question, asked once (docs/07 §13.1).
 //
 // On the very first launch — a machine with no settings file — Lumit asks how
-// the user edits, and sets the two editing preferences from the answer. That
+// the user edits, and sets the two editing preferences from the answer. The
+// After Effects answer loads the After Effects shortcuts with them. That
 // is the whole screen, plus the update tick along the bottom: a preference
 // primer, not a tour, and not a wizard. Every setting it writes is an ordinary
 // row in Settings afterwards — the editing pair under Interface ▸ Editing, the
@@ -13,8 +14,10 @@
 // asked for the simple version first and the polish is in docs/TODO.md.
 
 import 'package:flutter/widgets.dart';
+import 'package:lumit_flutter/src/rust/api/keymap.dart';
 
 import '../l10n/strings.dart';
+import '../state/keymap.dart';
 import '../state/workspace.dart';
 import '../widgets/controls.dart';
 
@@ -27,8 +30,10 @@ typedef FirstRunAnswer = ({bool? vegas, bool autoUpdate});
 /// Show the screen if this machine has never answered it, and record the
 /// answer. Does nothing at all on any later launch, so callers can call it
 /// unconditionally at start-up.
-Future<void> maybeShowFirstRunFrb(
-    BuildContext context, Workspace workspace) async {
+///
+/// [keymap] is what the After Effects answer loads its shortcuts into.
+Future<void> maybeShowFirstRunFrb(BuildContext context, Workspace workspace,
+    {KeymapState? keymap}) async {
   if (workspace.firstRunDone) return;
   final answer = await showLumitModal<FirstRunAnswer>(
     context: context,
@@ -45,6 +50,9 @@ Future<void> maybeShowFirstRunFrb(
     workspace.skipFirstRun();
   } else {
     workspace.setEditingStyle(vegas: vegas);
+    // The card says After Effects, so its keys come too: the preset the
+    // After Effects button on Settings > Shortcuts loads.
+    if (!vegas) await keymap?.loadPreset(BridgeKeymapPreset.afterEffects);
   }
 }
 
@@ -96,6 +104,7 @@ class _FirstRunState extends State<_FirstRun> {
                         id: 'first-run-ae',
                         title: l10n.keymapAfterEffects,
                         blurb: l10n.firstRunAfterEffects,
+                        note: l10n.firstRunAfterEffectsKeys,
                         onTap: () => _answer(false),
                       ),
                     ),
@@ -151,40 +160,64 @@ class _FirstRunState extends State<_FirstRun> {
 
 /// One answer: a tall card that is entirely the button, because the blurb is
 /// as much a part of the choice as the name at the top of it.
-class _Choice extends StatelessWidget {
+class _Choice extends StatefulWidget {
   final String id;
   final String title;
   final String blurb;
+
+  /// One more line under the blurb, for something else the answer does.
+  final String? note;
   final VoidCallback onTap;
 
   const _Choice({
     required this.id,
     required this.title,
     required this.blurb,
+    this.note,
     required this.onTap,
   });
 
   @override
+  State<_Choice> createState() => _ChoiceState();
+}
+
+class _ChoiceState extends State<_Choice> {
+  bool _hover = false;
+
+  @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    return GestureDetector(
-      key: ValueKey<String>(id),
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: t.surface2,
-          borderRadius: BorderRadius.circular(t.tokens.controlRadius),
-          border: Border.all(color: t.hairline, width: 1),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: t.bodyPrimary),
-            const SizedBox(height: 6),
-            Text(blurb, style: t.small.copyWith(color: t.textMuted)),
-          ],
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        key: ValueKey<String>(widget.id),
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onTap,
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            // The welcome screen's cards: under the pointer the fill and the
+            // hairline both come up. Two steps of fill here, because the
+            // window these sit on is itself the step between.
+            color: _hover ? t.surface4 : t.surface2,
+            borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+            border: Border.all(
+                color: _hover ? t.hairlineStrong : t.hairline, width: 1),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(widget.title, style: t.bodyPrimary),
+              const SizedBox(height: 6),
+              Text(widget.blurb, style: t.small.copyWith(color: t.textMuted)),
+              if (widget.note case final note?) ...[
+                const SizedBox(height: 6),
+                Text(note, style: t.small.copyWith(color: t.textMuted)),
+              ],
+            ],
+          ),
         ),
       ),
     );

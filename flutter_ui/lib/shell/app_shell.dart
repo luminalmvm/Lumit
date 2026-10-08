@@ -5,6 +5,8 @@ import 'package:flutter/gestures.dart' show GestureBinding;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lumit_flutter/l10n/strings.dart';
+import 'package:lumit_flutter/panels/graph_channels.dart' show keyFrame;
+import 'package:lumit_flutter/panels/layer_fold_frb.dart' show layerKeys;
 import 'package:lumit_flutter/panels/panels_frb.dart';
 import 'package:lumit_flutter/panels/timeline_extras_frb.dart';
 import 'package:lumit_flutter/panels/timeline_group_row_frb.dart';
@@ -20,7 +22,9 @@ import 'package:lumit_flutter/shell/settings_window_frb.dart';
 import 'package:lumit_flutter/shell/splash.dart';
 import 'package:lumit_flutter/shell/status_line_frb.dart';
 import 'package:lumit_flutter/shell/tool_bar_frb.dart';
+import 'package:lumit_flutter/shell/unsaved_changes_frb.dart';
 import 'package:lumit_flutter/shell/welcome_frb.dart';
+import 'package:lumit_flutter/shell/window_drop_frb.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart' show BridgeLayerSwitch;
 import 'package:lumit_flutter/src/rust/api/state.dart' show OpenProgress;
 import 'package:lumit_flutter/src/rust/api/shell.dart' show bootLog;
@@ -68,6 +72,7 @@ class LumitAppNew extends StatelessWidget {
         ...WidgetsApp.defaultActions,
         NextFocusIntent: _TabOnwards(),
         PreviousFocusIntent: _TabBack(),
+        DirectionalFocusIntent: _ArrowOnwards(),
       },
       home: ChangeNotifierProvider.value(
         value: state,
@@ -128,6 +133,14 @@ class _TabBack extends PreviousFocusAction {
   bool isEnabled(PreviousFocusIntent intent) => _tabMovesFocus;
 }
 
+/// The arrow keys move the focus on the same terms as Tab. Otherwise an arrow
+/// pressed over the Viewer, to nudge a layer, would also park the focus on a
+/// button, and every key after it would be that button's.
+class _ArrowOnwards extends DirectionalFocusAction {
+  @override
+  bool isEnabled(DirectionalFocusIntent intent) => _tabMovesFocus;
+}
+
 /// The boot splash, the welcome screen, and the shell behind them once both are
 /// done.
 ///
@@ -176,6 +189,9 @@ class _BootGateState extends State<BootGate> {
     super.initState();
     _welcoming = widget.welcome &&
         context.read<LumitUiState>().workspace.showWelcomeOnLaunch;
+    // Up for the whole life of the window, so this is where unsaved changes
+    // are asked about.
+    installUnsavedQuestion(context);
   }
 
   /// The engine's boot log, or empty where there is no engine to ask — a
@@ -289,7 +305,7 @@ class _LumitAppViewState extends State<LumitAppView> {
       final ui = context.read<LumitUiState>();
       // The update check follows the question rather than racing it: the
       // setup screen is where somebody may have just switched it off.
-      maybeShowFirstRunFrb(context, ui.workspace)
+      maybeShowFirstRunFrb(context, ui.workspace, keymap: ui.keymap)
           .then((_) => ui.maybeCheckForUpdates());
     });
   }
@@ -336,7 +352,7 @@ class _LumitAppViewState extends State<LumitAppView> {
     return FocusScope(
       autofocus: true,
       child: Stack(children: [
-        _shell(uiState, state),
+        WindowDropFrb(child: _shell(uiState, state)),
         // Over everything while a document is being read (see OpeningOverlay):
         // the shell behind it is still the previous project and swaps in one go.
         ValueListenableBuilder<bool>(
@@ -499,6 +515,59 @@ class _LumitAppViewState extends State<LumitAppView> {
         ui.stepFrame(-1);
       case 'playback.frame.next' || 'playback.shuttle.forward':
         ui.stepFrame(1);
+      // `K` stops the transport the way Space does, and is left for anything
+      // else that wants it when nothing is playing.
+      case 'playback.shuttle.pause':
+        if (ui.playing.value) {
+          ui.stopPlayback();
+        } else {
+          handled = false;
+        }
+      // `,` and `.` go to the keyframe either side of the playhead, and with
+      // Ctrl to the edit point: on the selected layers, or on every layer when
+      // none is selected. Found the way a property's own arrows find theirs,
+      // by frame and never the one the playhead is on.
+      case 'keyframe.prev' ||
+            'keyframe.next' ||
+            'edit.point.prev' ||
+            'edit.point.next':
+        final ids = ui.selectedLayerIds;
+        final before = action.endsWith('prev');
+        final at = ui.playheadFrame.value;
+        int? to;
+        for (final entry in ui.model.layers) {
+          if (ids.isNotEmpty && !ids.contains(entry.layer.internallayerId)) {
+            continue;
+          }
+          final frames = action.startsWith('keyframe')
+              ? [
+                  for (final key in layerKeys(
+                    entry: entry,
+                    flowParams:
+                        entry.info.flow ? entry.layer.getFlowParams() : null,
+                    volumeDb: entry.info.volumeDb,
+                  ))
+                    keyFrame(key, ui.model.fps).round(),
+                ]
+              // A cut between clips, so only a Sequence layer has any.
+              : [
+                  for (final clip in entry.layer.getClips()) ...[
+                    clip.startFrame,
+                    clip.endFrame,
+                  ],
+                ];
+          for (final frame in frames) {
+            // One outside the composition is nowhere for a playhead to stand.
+            if (frame < 0 || frame >= ui.model.durationFrames) continue;
+            if (before ? frame >= at : frame <= at) continue;
+            if (to == null || (before ? frame > to : frame < to)) to = frame;
+          }
+        }
+        if (to == null) {
+          handled = false;
+        } else {
+          ui.scrubTo(to);
+        }
       case 'playback.comp.start':
         ui.playheadFrame.value = 0;
       case 'playback.comp.end':
@@ -689,12 +758,14 @@ class _LumitAppViewState extends State<LumitAppView> {
           );
           state.notifyDocumentChanged();
         }
+      // Every selected layer, through the call the Edit menu and the Timeline
+      // row's own menu make.
       case 'layer.duplicate':
-        final layer = ui.selectedLayer.value;
-        if (layer == null) {
+        final layers = ui.selectedLayers.value;
+        if (layers.isEmpty) {
           handled = false;
         } else {
-          layer.duplicate();
+          duplicateLayersFrb(layers);
           state.notifyDocumentChanged();
         }
       // The light fold, beside the heavy one below it. Ctrl+G gathers

@@ -7,6 +7,8 @@
 // (viewer_bar.dart) and is built from these same pieces, which is why they
 // live here rather than in either strip.
 
+import 'dart:math' as math;
+
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/cache.dart';
@@ -89,9 +91,11 @@ Widget viewerBarMark({
   required Color colour,
   required VoidCallback? onPressed,
   required String tip,
+  String? action,
 }) =>
     LumitTooltip(
       message: tip,
+      action: action,
       child: HouseButton(
         key: key,
         frameless: true,
@@ -144,6 +148,33 @@ BoxDecoration viewerStripDecoration(LumitTheme t, bool detached) =>
       border: detached ? Border.all(color: t.hairline) : null,
       boxShadow: detached ? t.tokens.cardShadow : null,
     );
+
+/// The corners of the Viewer's pane where it stands on the room, for the
+/// dock's focus outline. The pane is no card there: it is its strips and its
+/// picture, so each end of the outline rounds with whichever stands at it.
+BorderRadius viewerPaneCorners(BuildContext context, LumitTheme t) {
+  // Lantern's own arrangement where there is no shell above, as in a test.
+  final bars = context
+          .watch<LumitUiState?>()
+          ?.workspace
+          .interface
+          .viewerBarsFor(t.shape) ??
+      ViewerBars.deck;
+  // A strip's corner is the action radius, which a capsule holds to half its
+  // own height.
+  Radius strip(double height) =>
+      Radius.circular(math.min(t.tokens.actionRadius, height / 2));
+  final bar = strip(viewerStripHeightFor(t));
+  final card = Radius.circular(t.tokens.cardRadius);
+  return BorderRadius.vertical(
+    top: bars == ViewerBars.bottom ? card : bar,
+    bottom: switch (bars) {
+      ViewerBars.top => card,
+      ViewerBars.deck => strip(t.density.headerStrip),
+      _ => bar,
+    },
+  );
+}
 
 /// The Viewer's **panel header strip** (§12A.6: 22 tall): the panel's
 /// own kicker, then the three pickers the approved drawing puts at its right —

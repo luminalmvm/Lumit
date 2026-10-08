@@ -7,7 +7,9 @@ import 'dart:async';
 import 'package:flutter/gestures.dart' show PointerEnterEvent;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart' show SchedulerBinding;
+import 'package:provider/provider.dart';
 
+import '../../state/ui_state.dart';
 import '../../theme/motion.dart';
 import '../escape_ladder.dart';
 import 'base.dart';
@@ -70,6 +72,7 @@ void _truncatePopups(int depth) {
   if (_popupChain.isEmpty) {
     _popupEscapeRelease?.call();
     _popupEscapeRelease = null;
+    lumitPopupUp.value = false;
   }
 }
 
@@ -79,6 +82,10 @@ void closeLumitPopups() => _truncatePopups(0);
 /// Whether any popup is up. The menus are not a modal — panels keep their
 /// keyboard — so this is for tests and for Escape, not for gating commands.
 bool get lumitPopupOpen => _popupChain.isNotEmpty;
+
+/// The same answer as something to listen to, for a control that draws
+/// differently under its own open menu and has to know when the menu goes.
+final ValueNotifier<bool> lumitPopupUp = ValueNotifier<bool>(false);
 
 /// Escape while a chain is up dismisses all of it.
 ///
@@ -167,6 +174,7 @@ Future<T?> showLumitPopup<T>({
   final takesOver = _popupJustLeft.contains(depth);
   handle = _PopupHandle(() => close(null));
   _popupChain.add(handle);
+  lumitPopupUp.value = true;
   if (_popupChain.length == 1) {
     _popupEscapeRelease = EscapeLadder.register(EscapeRung.popup, _popupEscape);
   }
@@ -290,21 +298,28 @@ class _PopupLayout extends SingleChildLayoutDelegate {
 /// the one thing Flutter's own Tooltip cannot do.
 class LumitTooltip extends StatelessWidget {
   final String message;
+
+  /// The keymap action the control runs, when it has one. Its chord is shown
+  /// after the message, read from the keymap as the tip appears, so a rebound
+  /// shortcut is taught rebound and an unbound one is left out.
+  final String? action;
   final Widget child;
-  const LumitTooltip({super.key, required this.message, required this.child});
+  const LumitTooltip(
+      {super.key, required this.message, this.action, required this.child});
 
   @override
   Widget build(BuildContext context) {
     final scope = ThemeScope.of(context);
     if (!scope.showTooltips) return child;
-    return _HoverTip(message: message, child: child);
+    return _HoverTip(message: message, action: action, child: child);
   }
 }
 
 class _HoverTip extends StatefulWidget {
   final String message;
+  final String? action;
   final Widget child;
-  const _HoverTip({required this.message, required this.child});
+  const _HoverTip({required this.message, this.action, required this.child});
 
   @override
   State<_HoverTip> createState() => _HoverTipState();
@@ -332,9 +347,19 @@ class _HoverTipState extends State<_HoverTip> {
     if (!mounted || _entry != null) return;
     final box = context.findRenderObject() as RenderBox?;
     if (box == null || !box.attached) return;
-    final origin = box.localToGlobal(Offset(0, box.size.height + 4));
+    // In the overlay's own space, or the UI scale puts the tip further from
+    // its control the further the control is from the window's corner.
+    final origin = overlayLocal(
+        context, box.localToGlobal(Offset(0, box.size.height + 4)));
     final scope = ThemeScope.of(context);
     final t = scope.theme;
+    // Null outside the shell (a bare widget test), where there is no keymap.
+    final action = widget.action;
+    final chord = action == null
+        ? null
+        : Provider.of<LumitUiState?>(context, listen: false)
+            ?.keymap
+            .chordFor(action);
     _entry = OverlayEntry(
       builder: (_) => Positioned.fill(
         child: IgnorePointer(
@@ -354,7 +379,18 @@ class _HoverTipState extends State<_HoverTip> {
                   border: Border.all(color: t.hairline),
                   boxShadow: t.floatShadow,
                 ),
-                child: Text(widget.message, style: t.body),
+                // The chord reads as a menu row's does: small and muted.
+                child: chord == null
+                    ? Text(widget.message, style: t.body)
+                    : Text.rich(
+                        TextSpan(text: widget.message, children: [
+                          TextSpan(
+                            text: '  $chord',
+                            style: t.small.copyWith(color: t.textMuted),
+                          ),
+                        ]),
+                        style: t.body,
+                      ),
               ),
             ),
           ),

@@ -62,15 +62,14 @@ A panel ticked in the **Window** menu joins a stack when the arrangement has one
 **Stacked group** turns the stack back into tabs.
 
 :::note[Not built yet]
-Panels cannot be torn off into their own operating-system window. The **Pop out** row is
-greyed out.
+Panels cannot be torn off into their own operating-system window.
 :::
 
 ## The shipped workspaces
 
 The strip at the right-hand end of the toolbar switches between them, and so does **Window ▸
 Workspace**. `Alt+Shift+1` to `Alt+Shift+9` reach them by position, counting the presets
-first and then your own.
+first and then your own. Each button's tooltip gives its name and its shortcut.
 
 | Workspace | Arranged for |
 | --- | --- |
@@ -121,14 +120,39 @@ field beside the slider for typing value.
 Three more settings sit under it: **Tooltips**, on or off; **Motion**, how much controls
 animate as they change; and **Compact**, which tightens row spacing throughout.
 
+A tooltip gives the control's name and its shortcut, as the keymap has it now.
+
 ## The command palette
 
-`Ctrl+Shift+P` opens the command palette. Search for any command and run it.
+`Ctrl+Shift+P` opens the command palette, and so does the box at the right-hand end of the
+menu bar. It finds every menu command, composition, layer, effect, panel and setting by
+name, and **Enter** runs or opens the one highlighted.
+
+<Shot file="command-palette.png" caption="The command palette, with a badge on each row saying what it is." />
+
+A layer row selects that layer in the open composition, and a setting row opens Settings on
+that setting. An effect row reads *Select a layer first* while no layer is selected.
 
 ## The menu bar
 
 Nine menus: **File, Edit, Composition, Layer, Effect, Animation, View, Window, Help**. A
-menu item that needs something you have not selected appears disabled.
+menu item that needs something you have not selected appears disabled. A command that is
+not built yet is left off its menu.
+
+**Edit ▸ Undo** and **Redo** name the step they would take, as **Edit ▸ History** lists it.
+
+## The status line
+
+The strip along the bottom of the window. Left to right:
+
+| Part | Shows |
+| --- | --- |
+| **Unsaved changes** | The project has edits that are not saved. |
+| **Cache** | How full the RAM, VRAM and disk tiers are. Click it to clear them. |
+| **Hourglass** | Turns render-time measuring on and off. See [the Timeline](/panels/timeline/#render-times). |
+| **Notice** | The latest message. Click it to list the last twenty. |
+| **Jobs** | A running export or proxy, with its progress and a **Cancel**. |
+| **Hint** | What the armed tool's modifier keys do, at the right-hand end. |
 
 ## Related
 

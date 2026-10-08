@@ -32,6 +32,7 @@ import 'timeline_bar_frb.dart';
 import 'timeline_key_lane_frb.dart';
 import 'timeline_key_block_frb.dart';
 import 'timeline_group_row_frb.dart';
+import 'timeline_toolbar_frb.dart' show showTimelineMoreMenu;
 
 /// One selected keyframe, and where it sits: which row's curve it belongs to,
 /// which key of that curve it is, what frame it reads and where its lane is in
@@ -714,6 +715,24 @@ class LayerArea extends StatelessWidget {
                                 onTapAt: _tapGround,
                               ),
                             ),
+                            // A right-click on the ground opens the bottom
+                            // strip's menu, and "here" is the frame under the
+                            // pointer. Translucent, so the marquee behind it
+                            // still gets every press; the bars and keys above
+                            // take their own.
+                            Positioned.fill(
+                              child: GestureDetector(
+                                behavior: HitTestBehavior.translucent,
+                                onSecondaryTapUp: (d) => showTimelineMoreMenu(
+                                  context,
+                                  comp: comp,
+                                  playhead: playhead,
+                                  position: d.globalPosition,
+                                  frame: axis.frameAt(d.localPosition.dx),
+                                  onChanged: onChanged,
+                                ),
+                              ),
+                            ),
                             // Only the blocks in view are built, the rest
                             // held open by two blanks — so the stack keeps
                             // the height every overlay around it is drawn
@@ -1008,7 +1027,11 @@ class LayerArea extends StatelessWidget {
                                       null => null,
                                     },
                                     painter: RowDividerPainter(
-                                      step: t.density.laneRow,
+                                      // No rows, no rules: an empty
+                                      // composition is a clear ground.
+                                      step: rows.isEmpty
+                                          ? 0
+                                          : t.density.laneRow,
                                       colour: rowSeamColour(t),
                                       // Only the fraction: rounding is
                                       // invariant under whole-pixel shifts,

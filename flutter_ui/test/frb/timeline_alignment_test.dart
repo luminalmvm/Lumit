@@ -1163,17 +1163,13 @@ void main() {
 
       // Across the row: the two cluster seams a solid layer draws cells on
       // either side of, and then picker to picker.
-      // Guide is the cluster's last cell, so it is the mark the identity
-      // cluster stands a gap away from.
-      expect(at('twirl').left - at('guide').right, closeTo(outlineGap, 0.5),
+      // The column opens with shy and guide put away, so lock is its last
+      // cell and the mark the identity cluster stands a gap away from.
+      expect(at('twirl').left - at('locked').right, closeTo(outlineGap, 0.5),
           reason: 'the seam between the switches and the identity cluster is '
               'one gap, where it had been 7');
-      // A solid draws the adjustment cell and neither of the two that end the
-      // column — flow is footage's and collapse is a Precomp's — so the seam
-      // between the modes and the pickers is one gap past two cells it keeps
-      // but does not fill.
-      expect(at('matte').left - at('adjust').right,
-          closeTo(outlineGap + 2 * switchCellWidth, 0.5),
+      // Modes opens on fx, 3D and motion blur, so motion blur ends it.
+      expect(at('matte').left - at('mb').right, closeTo(outlineGap, 0.5),
           reason: 'as is the seam between the modes and the pickers — the '
               'name\'s own trailing 4 is gone with it');
       expect(at('blend').left - at('matte').right, closeTo(outlineGap, 0.5),
@@ -1429,8 +1425,8 @@ void main() {
       await mount(tester, p);
       final id = layer.internallayerId;
 
-      // Both columns are exactly their cells: six A/V marks (guide is the
-      // sixth) and six modes (collapse has one of its own).
+      // Fully open, both columns are exactly their cells: six A/V marks (guide
+      // is the sixth) and six modes (collapse has one of its own).
       expect(switchesGroupWidth, 6 * switchCellWidth);
       expect(renderGroupWidth, 6 * switchCellWidth);
 
@@ -1441,6 +1437,17 @@ void main() {
       expect(find.descendant(of: seam, matching: find.byType(GestureDetector)),
           findsOneWidget,
           reason: 'the seam is a handle now, not only a rule');
+
+      // It opens with shy and the grid mark put away, and a drag brings them
+      // out.
+      expect(drawn('guide'), isFalse);
+      expect(drawn('shy'), isFalse);
+      expect(drawn('locked'), isTrue);
+      expect(drawn('solo'), isTrue);
+      await tester.drag(seam, const Offset(400, 0));
+      await tester.pump();
+      expect(drawn('guide'), isTrue);
+      expect(drawn('shy'), isTrue);
 
       // Two cells' worth to the left: the grid mark and shy go, in that order,
       // and nothing else does.
@@ -1465,13 +1472,18 @@ void main() {
       await tester.pump();
       expect(drawn('guide'), isTrue, reason: 'the whole set comes back');
 
-      // Modes runs the same ladder: flow, then adjustment, then motion blur,
-      // leaving fx, 3D and collapse.
+      // Modes runs its own ladder from the right: collapse, then flow, then
+      // adjustment, leaving fx, 3D and motion blur. It opens on those three.
       final modes = find.byKey(const ValueKey('tl-seam-render'));
-      await tester.drag(modes, const Offset(-3 * switchCellWidth, 0));
+      expect(drawn('adjust'), isFalse, reason: 'put away to begin with');
+      expect(drawn('mb'), isTrue);
+      await tester.drag(modes, const Offset(switchCellWidth, 0));
       await tester.pump();
-      expect(drawn('mb'), isFalse, reason: 'motion blur is the third to go');
+      expect(drawn('adjust'), isTrue, reason: 'adjustment is the first back');
+      await tester.drag(modes, const Offset(-200, 0));
+      await tester.pump();
       expect(drawn('adjust'), isFalse);
+      expect(drawn('mb'), isTrue, reason: 'the first three are the floor');
       expect(drawn('fx'), isTrue, reason: 'fx leads the column and stays');
       expect(drawn('3d'), isTrue);
     });

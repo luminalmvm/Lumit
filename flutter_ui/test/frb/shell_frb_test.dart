@@ -5,6 +5,7 @@
 // what matters about it is which command comes first — not how it is drawn.
 
 import 'dart:io';
+import 'dart:ui' show AppExitResponse;
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -16,6 +17,7 @@ import 'package:lumit_flutter/shell/export_queue_frb.dart';
 import 'package:lumit_flutter/shell/recovery_dialog_frb.dart';
 import 'package:lumit_flutter/shell/settings_window_frb.dart';
 import 'package:lumit_flutter/shell/status_line_frb.dart';
+import 'package:lumit_flutter/shell/unsaved_changes_frb.dart';
 import 'package:lumit_flutter/shell/welcome_frb.dart';
 import 'package:lumit_flutter/src/rust/api/cache.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
@@ -407,9 +409,9 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('recover')));
       await tester.pumpAndSettle();
 
-      // The title is a kicker now the dialogue wears the shared frame, so the
-      // capitals are the style rather than the string.
-      expect(find.text('RECOVER WORK'), findsOneWidget);
+      // The title is a kicker now the dialogue wears the shared frame, and
+      // Studio draws a kicker as written.
+      expect(find.text('Recover work'), findsOneWidget);
       expect(find.byKey(const ValueKey('recover-journal')), findsOneWidget);
       expect(find.byKey(const ValueKey('recover-autosave')), findsOneWidget);
       expect(find.byKey(const ValueKey('recover-discard')), findsOneWidget);
@@ -500,6 +502,105 @@ void main() {
         }),
         isNull,
       );
+    });
+  }, skip: !engineAvailable);
+
+  group('Unsaved changes (frb)', () {
+    /// Guards lost work, and a window that can no longer be closed. New, Close
+    /// project, Open, an import and quitting all pass the one check in
+    /// LumitState, so New, Open and quitting stand for the rest here.
+    testWidgets('leaving a project with unsaved changes asks first',
+        (tester) async {
+      tester.view.physicalSize = const Size(1800, 1100);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final p = freshProject();
+      final state = p.state;
+      // The welcome screen is the window, and the question opens over it.
+      await tester.pumpWidget(hostPanel(
+        child: const BootGate(splash: false),
+        state: state,
+        uiState: p.uiState,
+      ));
+      await tester.pump();
+      final question = find.byKey(const ValueKey('unsaved-save'));
+
+      Future<AppExitResponse?> quit() async {
+        AppExitResponse? answer;
+        tester.binding.handleRequestAppExit().then((a) => answer = a);
+        await tester.pumpAndSettle();
+        return answer;
+      }
+
+      // A clean project goes at once, and quitting is not held up.
+      final clean = state.project;
+      state.newProject();
+      await tester.pump();
+      expect(identical(state.project, clean), isFalse);
+      expect(question, findsNothing);
+      expect(await quit(), AppExitResponse.exit);
+
+      // With work in it, each way out asks, and Cancel changes nothing.
+      state.project!.newComposition(name: 'Scene');
+      final kept = state.project;
+      Future<void> cancel() async {
+        expect(question, findsOneWidget);
+        await tester.tap(find.byKey(const ValueKey('unsaved-cancel')));
+        await tester.pumpAndSettle();
+        expect(identical(state.project, kept), isTrue);
+        expect(kept!.isDirty(), isTrue);
+        expect(state.comps(), hasLength(1));
+      }
+
+      state.newProject();
+      await tester.pumpAndSettle();
+      await cancel();
+
+      state.openProject('nowhere.lum');
+      await tester.pumpAndSettle();
+      await cancel();
+      expect(state.opening.value, isFalse);
+
+      AppExitResponse? answer;
+      tester.binding.handleRequestAppExit().then((a) => answer = a);
+      await tester.pumpAndSettle();
+      expect(answer, isNull, reason: 'the window waits for the answer');
+      await cancel();
+      expect(answer, AppExitResponse.cancel);
+
+      // Save on a project with no file asks where. Backing out of that keeps
+      // the project open.
+      final dir = Directory.systemTemp.createTempSync('lumit-unsaved');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final path = '${dir.path}/scene.lum';
+      String? picked;
+      final gate = tester.element(find.byType(BootGate));
+      state.askUnsaved = () => askUnsavedChangesFrb(gate, state, p.uiState,
+          savePicker: () async => picked);
+      state.newProject();
+      await tester.pumpAndSettle();
+      await tester.tap(question);
+      await tester.pumpAndSettle();
+      expect(identical(state.project, kept), isTrue);
+      expect(question, findsNothing);
+
+      // Saved for real, the project is on disk before it goes.
+      picked = path;
+      state.newProject();
+      await tester.pumpAndSettle();
+      await tester.tap(question);
+      await settleFrb(tester, until: () => !identical(state.project, kept));
+      expect(identical(state.project, kept), isFalse);
+      expect(File(path).existsSync(), isTrue);
+
+      // Discard lets it go, and so lets the window close.
+      state.project!.newComposition(name: 'Scratch');
+      tester.binding.handleRequestAppExit().then((a) => answer = a);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('unsaved-discard')));
+      await tester.pumpAndSettle();
+      expect(answer, AppExitResponse.exit);
     });
   }, skip: !engineAvailable);
 
@@ -911,7 +1012,7 @@ void main() {
           reason: 'and the page that mends it is one press away');
       expect(exportQueueList().where((i) => i.path == target), isEmpty,
           reason: 'nothing was queued and nothing was written');
-      expect(find.text('EXPORT QUEUE'), findsNothing,
+      expect(find.text('Export queue'), findsNothing,
           reason: 'the dialogue stays up, holding what was typed into it');
 
       await tester.tap(find.byKey(const ValueKey('export-close')));
@@ -931,7 +1032,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('export-add-to-queue')));
       await tester.pumpAndSettle();
 
-      expect(find.text('EXPORT QUEUE'), findsOneWidget,
+      expect(find.text('Export queue'), findsOneWidget,
           reason: 'the queue window opens over the closed dialog');
       final queued = exportQueueList().where((i) => i.path == target).toList();
       expect(queued, hasLength(1), reason: "the item is on the engine's list");

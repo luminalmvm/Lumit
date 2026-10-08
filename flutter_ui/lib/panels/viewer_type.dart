@@ -179,10 +179,20 @@ TextSelection wordAround(String text, int at) {
   return TextSelection(baseOffset: start, extentOffset: end);
 }
 
+/// A text layer the Selection tool's double-click asked to have opened for
+/// typing: the view it was clicked in, the layer, and where on it. The gizmo
+/// sets this and arms the Type tool; that view's Type layer reads it as the
+/// tool arrives, and the gizmo clears it when the frame is done.
+({int? view, LayerReference layer, Offset at})? viewerTypeEditRequest;
+
 /// The Type tool over the picture.
 class ViewerTypeLayer extends StatefulWidget {
   /// Whether a type tool is armed. Inert otherwise.
   final bool active;
+
+  /// The engine's id for the view this is drawn over, so a request made in one
+  /// view is not answered in another.
+  final int? viewId;
 
   final ToolMode tool;
   final CompositionReference comp;
@@ -215,6 +225,7 @@ class ViewerTypeLayer extends StatefulWidget {
     required this.compSize,
     required this.accent,
     required this.onChanged,
+    this.viewId,
   });
 
   @override
@@ -387,8 +398,22 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
     // Repeat calls are harmless: the first clears `_editing` and the rest
     // return at the top.
     if (!widget.active || widget.tool != old.tool) {
+      // A double-click with the Selection tool arms this tool and asks for a
+      // layer to be opened with it. Read now and opened after the frame, once
+      // whatever was being typed has been written.
+      final asked = viewerTypeEditRequest;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _finish();
+        if (!mounted) return;
+        _finish();
+        if (asked == null || !widget.active || asked.view != widget.viewId) {
+          return;
+        }
+        final id = asked.layer.internallayerId;
+        for (final box in widget.boxes) {
+          if (box.id != id) continue;
+          _begin(asked.layer, created: false, box: box, at: asked.at);
+          break;
+        }
       });
     }
   }

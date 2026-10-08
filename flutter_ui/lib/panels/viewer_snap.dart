@@ -106,7 +106,10 @@ List<double> viewerSnapTargets({
 /// the pointer has asked for; the answer is the travel to actually use. Each
 /// axis is decided on its own, because a layer lined up with a guide down one
 /// side is still free to move along it — which is what a guide is *for*.
-Offset snapViewerDrag({
+///
+/// [x] and [y] are the lines that took each axis, on screen, or null where
+/// nothing did.
+({Offset delta, double? x, double? y}) snapViewerDrag({
   required Rect box,
   required Offset delta,
   required List<double> verticals,
@@ -124,5 +127,9 @@ Offset snapViewerDrag({
     targets: horizontals,
     slopPx: slopPx,
   );
-  return delta + Offset(x.shift, y.shift);
+  return (
+    delta: delta + Offset(x.shift, y.shift),
+    x: x.caught,
+    y: y.caught,
+  );
 }

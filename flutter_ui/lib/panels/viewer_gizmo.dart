@@ -34,20 +34,28 @@ import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
+import 'package:lumit_flutter/src/rust/api/keymap.dart' show BridgeKeyContext;
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:lumit_flutter/state/tools.dart';
+import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
+import '../l10n/strings.dart';
+import '../state/dock.dart' show Panel;
 import '../state/layer_bounds.dart' show shapeContentsRect;
 import '../state/preview_throttle.dart';
 import '../widgets/controls.dart';
+import 'timeline_extras_frb.dart' show DoubleTap, showMenuAt;
 import 'timeline_snap.dart' show snapSuspended;
 import 'viewer_anchor.dart';
 import 'viewer_layer_map.dart';
-import 'viewer_overlays.dart' show ViewerOverlayPainter;
+import 'viewer_overlays.dart'
+    show ViewerOverlayPainter, viewerOverlayToggles, viewerToggleRow;
 import 'viewer_shapes.dart' show bezierPath, stillHalfFeather;
 import 'viewer_snap.dart' show snapViewerDrag, viewerSnapTargets;
 import 'viewer_tool_cursor.dart' show paintAnchorMark, paintMarquee;
+import 'viewer_type.dart' show viewerTypeEditRequest;
 import 'layer_fold_frb.dart';
 
 /// How big a scale handle is drawn, and how far from it a press still counts.
@@ -717,6 +725,26 @@ enum _GizmoDrag {
   motionKey,
 }
 
+/// Where the right-click menu's Align puts a layer's box against the
+/// composition's: an edge to an edge, or a middle to a middle.
+enum _Align {
+  left,
+  centre,
+  right,
+  top,
+  middle,
+  bottom;
+
+  String get title => switch (this) {
+        _Align.left => l10n.viewerAlignLeft,
+        _Align.centre => l10n.viewerAlignCentre,
+        _Align.right => l10n.viewerAlignRight,
+        _Align.top => l10n.viewerAlignTop,
+        _Align.middle => l10n.viewerAlignMiddle,
+        _Align.bottom => l10n.viewerAlignBottom,
+      };
+}
+
 /// The layer controls over the picture.
 class ViewerGizmoLayer extends StatefulWidget {
   final CompositionReference comp;
@@ -747,6 +775,14 @@ class ViewerGizmoLayer extends StatefulWidget {
 
   final VoidCallback onChanged;
 
+  /// The engine's id for the view this is drawn over. With several views up,
+  /// only the active one answers the arrow keys and a double-click.
+  final int? viewId;
+
+  /// Take the picture to a magnification, null for fit: the right-click
+  /// menu's two zoom rows. The panel holds the magnification, so it applies it.
+  final ValueChanged<double?>? onZoom;
+
   const ViewerGizmoLayer({
     super.key,
     required this.comp,
@@ -758,6 +794,8 @@ class ViewerGizmoLayer extends StatefulWidget {
     required this.picture,
     required this.compSize,
     this.showAnchors = false,
+    this.viewId,
+    this.onZoom,
   });
 
   @override
@@ -809,13 +847,78 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
 
   final PreviewThrottle _throttle = PreviewThrottle();
 
+  /// Counts a second click in one place, for opening what a layer holds.
+  final DoubleTap _taps = DoubleTap();
+
+  @override
+  void initState() {
+    super.initState();
+    HardwareKeyboard.instance.addHandler(_onKey);
+  }
+
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_onKey);
     _throttle.cancel();
     super.dispose();
   }
 
   bool get _selectionTool => widget.tool.group == ToolGroup.select;
+
+  /// Whether this is the view the keys and the double-click belong to. Every
+  /// view on screen hears a key, and only one of them may answer it.
+  bool get _activeView =>
+      widget.viewId == null ||
+      widget.uiState.views.active?.engineId == widget.viewId;
+
+  /// The arrow keys nudge the selected layers by one composition pixel, ten
+  /// with Shift, one undo step a press. Only with the Selection tool in hand
+  /// and the Viewer the active panel, and never while something is being typed.
+  /// A layer with a keyed position stays put, as it does under a drag.
+  bool _onKey(KeyEvent event) {
+    if (event is KeyUpEvent || !mounted || !_selectionTool) return false;
+    final step = switch (event.logicalKey) {
+      LogicalKeyboardKey.arrowLeft => const Offset(-1, 0),
+      LogicalKeyboardKey.arrowRight => const Offset(1, 0),
+      LogicalKeyboardKey.arrowUp => const Offset(0, -1),
+      LogicalKeyboardKey.arrowDown => const Offset(0, 1),
+      _ => null,
+    };
+    if (step == null) return false;
+    final keys = HardwareKeyboard.instance;
+    if (keys.isControlPressed || keys.isMetaPressed || keys.isAltPressed) {
+      return false;
+    }
+    final ui = widget.uiState;
+    if (lumitModalOpen ||
+        lumitPopupOpen ||
+        _drag != _GizmoDrag.none ||
+        !_activeView ||
+        ui.activePanel != Panel.viewer) {
+      return false;
+    }
+    final focus = FocusManager.instance.primaryFocus;
+    final focused = focus?.context;
+    if (focus is ControlFocusNode ||
+        (focused != null &&
+            (focused.widget is EditableText ||
+                focused.findAncestorWidgetOfExactType<EditableText>() !=
+                    null))) {
+      return false;
+    }
+    // A chord somebody has bound for themselves keeps its meaning.
+    if (ui.keymap.actionFor(BridgeKeyContext.viewer, event) != null) {
+      return false;
+    }
+    final by = step * (keys.isShiftPressed ? 10.0 : 1.0);
+    final moves = [
+      for (final box in _selected)
+        if (box.draggable) (box, box.map.px + by.dx, box.map.py + by.dy),
+    ];
+    if (moves.isEmpty) return false;
+    _place(moves);
+    return true;
+  }
 
   /// The boxes of the selected layers, in stacking order.
   List<LayerBox> get _selected {
@@ -897,6 +1000,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     final soleHandles = selected.length == 1 && selected.single.scalable
         ? selected.single
         : null;
+    final move = _drag == _GizmoDrag.move ? _move : null;
 
     final painter = CustomPaint(
       key: const ValueKey('viewer-gizmo'),
@@ -924,7 +1028,14 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
             ? [for (final box in selected) box.anchorScreen]
             : const [],
         marquee: _drag == _GizmoDrag.marquee ? _marqueeRect() : null,
-        moved: _drag == _GizmoDrag.move ? _moveDelta : Offset.zero,
+        moved: move?.delta ?? Offset.zero,
+        // What the move has caught, across the picture. The accent, as a
+        // guide is: §3.2 lets a guide be the one saturated mark over the
+        // picture, and this is the same kind of line.
+        snapX: move?.x,
+        snapY: move?.y,
+        picture: widget.picture,
+        snapLine: t.accent,
         // `animated`, not `accent` (§3.1): the closed list gives that
         // colour to "this is selected or in hand", and **selected gizmo
         // handles** are named in it. The approved drawing agrees — the box
@@ -952,6 +1063,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTapUp: _onTapUp,
+            onSecondaryTapUp: _onSecondaryTapUp,
             onPanStart: _onPanStart,
             onPanUpdate: _onPanUpdate,
             onPanEnd: (_) => _onPanEnd(),
@@ -1010,22 +1122,25 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   // grammar, measured in screen pixels so the magnification is the precision
   // control (`viewer_snap.dart`).
   //
-  // **What caught it is not drawn, and does not need to be.** The Timeline
-  // marks its target because a layer's in point is not a line on the screen
-  // until something lands on it; a guide already *is* one, drawn the whole
-  // time, so the layer arriving on it is the indication.
+  // **What caught it is drawn for as long as it holds.** A guide is a line on
+  // the screen the whole time, so a layer arriving on one shows itself. A line
+  // of the grid with the grid switched off, the frame's own edge and its
+  // middle are not: nothing is there until something lands on it, which is
+  // the Timeline's reason for marking its target, and it holds here too.
 
   /// The whole selection's box on screen, or null when nothing draggable is
   /// selected. Corners rather than sides, because a turned layer's box is a
   /// turned quad and what lines up with a guide is its extent.
-  Rect? _selectionRect() {
+  Rect? _selectionRect() => _rectOf(_selected.where((box) => box.draggable));
+
+  /// The upright box round [boxes] on screen, or null when there are none.
+  Rect? _rectOf(Iterable<LayerBox> boxes) {
     var left = double.infinity;
     var top = double.infinity;
     var right = double.negativeInfinity;
     var bottom = double.negativeInfinity;
     var any = false;
-    for (final box in _selected) {
-      if (!box.draggable) continue;
+    for (final box in boxes) {
       for (final corner in box.corners) {
         if (!corner.dx.isFinite || !corner.dy.isFinite) continue;
         any = true;
@@ -1038,18 +1153,25 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     return any ? Rect.fromLTRB(left, top, right, bottom) : null;
   }
 
-  /// The travel the move actually uses: the pointer's own, pulled onto the
-  /// nearest line within the magnet's reach.
-  Offset get _moveDelta {
-    if (_drag != _GizmoDrag.move || _delta == Offset.zero) return _delta;
+  /// The travel the move actually uses, and the lines that took it: the
+  /// pointer's own, kept to the axis it has gone furthest along while Shift is
+  /// held, then pulled onto the nearest line within the magnet's reach.
+  ({Offset delta, double? x, double? y}) get _move {
+    // Shift is the same lock it is on the anchor: one screen axis.
+    final locked = HardwareKeyboard.instance.isShiftPressed;
+    final delta = _drag == _GizmoDrag.move && locked
+        ? constrainToAxis(_delta)
+        : _delta;
+    final free = (delta: delta, x: null, y: null);
+    if (_drag != _GizmoDrag.move || delta == Offset.zero) return free;
     final tools = widget.uiState.tools;
     if (!tools.snapping ||
         snapSuspended(
             controlPressed: HardwareKeyboard.instance.isControlPressed)) {
-      return _delta;
+      return free;
     }
     final rect = _selectionRect();
-    if (rect == null) return _delta;
+    if (rect == null) return free;
     List<double> targets(bool vertical) => viewerSnapTargets(
           guides: widget.uiState.guides,
           vertical: vertical,
@@ -1060,11 +1182,15 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
         );
     return snapViewerDrag(
       box: rect,
-      delta: _delta,
-      verticals: targets(true),
-      horizontals: targets(false),
+      delta: delta,
+      // The axis Shift is holding reaches for nothing, or the magnet would
+      // pull the layer off the line it is being kept to.
+      verticals: locked && delta.dx == 0 ? const [] : targets(true),
+      horizontals: locked && delta.dy == 0 ? const [] : targets(false),
     );
   }
+
+  Offset get _moveDelta => _move.delta;
 
   void _setHover(UuidValue? id) {
     if (_hover == id) return;
@@ -1115,8 +1241,206 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
       widget.uiState.toggleSelected(hit.layer);
     } else {
       widget.uiState.setSelection([hit.layer]);
+      // A second click in the same place opens what the layer holds.
+      if (_taps.tap(at: details.localPosition, slop: kDoubleTapSlop)) {
+        _open(hit, details.localPosition);
+      }
     }
     _setHover(null);
+  }
+
+  /// A double-click opens what the layer holds: a text layer's words, for
+  /// typing, as a click with the Type tool does, and a precomp layer's
+  /// composition, as its bar in the Timeline does. No other kind has anything
+  /// to open.
+  void _open(LayerBox hit, Offset at) {
+    final ui = widget.uiState;
+    BridgeLayerKind? kind;
+    for (final entry in ui.model.heldLayers) {
+      if (entry.layer.internallayerId == hit.id) kind = entry.info.kind;
+    }
+    if (kind == BridgeLayerKind.text) {
+      // The Type layer of this view takes the request as the tool arms. If
+      // nothing took it by the end of the frame it is dropped, so it cannot
+      // open an edit the next time the tool is picked up.
+      viewerTypeEditRequest = (view: widget.viewId, layer: hit.layer, at: at);
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => viewerTypeEditRequest = null);
+      ui.tools.select(ToolMode.typeHorizontal);
+    } else if (kind == BridgeLayerKind.precomp) {
+      try {
+        if (hit.layer.getSourceItem()
+            case ItemReference_Composition(:final field0)) {
+          ui.openNestedComp(hit.layer, field0);
+        }
+      } catch (_) {
+        // A layer that has gone: nothing to open.
+      }
+    }
+  }
+
+  // --- The right-click menu ---------------------------------------------------
+
+  /// The picture's own menu: every layer under the pointer by name, which is
+  /// how one hidden under another is reached; Align, while something is
+  /// selected; the two magnifications asked for most; and the view menu's
+  /// switches, the same rows it draws.
+  void _onSecondaryTapUp(TapUpDetails details) {
+    final ui = widget.uiState;
+    final under = [
+      for (final box in widget.boxes)
+        if (box.contains(details.localPosition)) box
+    ];
+    final names = {
+      for (final entry in ui.model.heldLayers)
+        entry.layer.internallayerId: entry.info.name,
+    };
+    final picked = ui.selectedLayerIds;
+    final zoom = widget.onZoom;
+    Widget flyout(List<Widget> rows) => FloatSurface(
+          child: IntrinsicWidth(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: rows,
+            ),
+          ),
+        );
+    // The empty tick slot, so every name in the menu starts on one line.
+    Widget named(String text) => Row(children: [menuTick(false), Text(text)]);
+    showMenuAt<void>(
+      context: context,
+      position: details.globalPosition,
+      rows: (close) => [
+        if (under.isNotEmpty)
+          SubmenuRow(
+            key: const ValueKey('viewer-menu-select'),
+            closeParent: () => close(null),
+            submenu: (dismiss) => flyout([
+              for (final box in under)
+                MenuRow(
+                  key: ValueKey<String>('viewer-select-${box.id}'),
+                  onPressed: () {
+                    dismiss();
+                    ui.setSelection([box.layer]);
+                  },
+                  child: Row(children: [
+                    menuTick(picked.contains(box.id)),
+                    Text(names[box.id] ?? ''),
+                  ]),
+                ),
+            ]),
+            child: named(l10n.viewerMenuSelect),
+          ),
+        if (picked.isNotEmpty)
+          SubmenuRow(
+            key: const ValueKey('viewer-menu-align'),
+            closeParent: () => close(null),
+            submenu: (dismiss) => flyout([
+              for (final to in _Align.values)
+                MenuRow(
+                  key: ValueKey<String>('viewer-align-${to.name}'),
+                  onPressed: () {
+                    dismiss();
+                    _align(to);
+                  },
+                  child: Text(to.title),
+                ),
+            ]),
+            child: named(l10n.viewerMenuAlign),
+          ),
+        if (zoom != null) ...[
+          MenuRow(
+            key: const ValueKey('viewer-menu-fit'),
+            onPressed: () {
+              close(null);
+              zoom(null);
+            },
+            child: named(l10n.menuFit),
+          ),
+          MenuRow(
+            key: const ValueKey('viewer-menu-actual'),
+            onPressed: () {
+              close(null);
+              zoom(1);
+            },
+            // A number, spelled the way the magnification picker spells it.
+            child: named('100%'),
+          ),
+        ],
+        for (final row in [
+          ...viewerOverlayToggles(ui),
+          (
+            key: 'viewer-menu-checkerboard',
+            text: l10n.tipTransparencyGrid,
+            on: ui.viewerGrid,
+            pick: () => ui.setViewerGrid(!ui.viewerGrid),
+          ),
+        ])
+          viewerToggleRow(row, () => close(null)),
+      ],
+    );
+  }
+
+  /// Move each selected layer so that edge, or the middle, of its box meets
+  /// the composition's. The box is the one the outline draws, so what lines up
+  /// is what is seen. A layer with a keyed position stays where it is, as it
+  /// does under a drag.
+  void _align(_Align to) {
+    final moves = <(LayerBox, double, double)>[];
+    for (final box in _selected) {
+      final rect = box.draggable ? _rectOf([box]) : null;
+      if (rect == null) continue;
+      // Both measured from the composition's corner, at the view's scale.
+      final scale = box.map.viewScale;
+      final r = rect.shift(-box.map.origin);
+      final frame = widget.compSize * scale;
+      final d = switch (to) {
+            _Align.left => Offset(-r.left, 0),
+            _Align.centre => Offset(frame.width / 2 - r.center.dx, 0),
+            _Align.right => Offset(frame.width - r.right, 0),
+            _Align.top => Offset(0, -r.top),
+            _Align.middle => Offset(0, frame.height / 2 - r.center.dy),
+            _Align.bottom => Offset(0, frame.height - r.bottom),
+          } /
+          scale;
+      moves.add((box, box.map.px + d.dx, box.map.py + d.dy));
+    }
+    _place(moves);
+  }
+
+  /// Write new Positions, in composition pixels: one op a layer for both axes,
+  /// and the lot as one undo step. A move, a nudge and an align all land here.
+  void _place(List<(LayerBox, double, double)> moves) {
+    if (moves.isEmpty) return;
+    var landed = false;
+    asOneUndoStep(
+      // One layer is one op already, and needs no group round it.
+      moves.length > 1
+          ? Provider.of<LumitState>(context, listen: false).project
+          : null,
+      () {
+        for (final (box, x, y) in moves) {
+          // One op for both axes. x and y are separate properties in the
+          // model, and writing them separately made one drag cost two undo
+          // steps: Ctrl+Z put the layer back half way, along one axis, which
+          // reads as the undo being broken rather than as two honest edits.
+          try {
+            box.layer.setTransforms(
+              props: const [
+                BridgeTransformProp.positionX,
+                BridgeTransformProp.positionY,
+              ],
+              values: [BridgeScalar.static_(x), BridgeScalar.static_(y)],
+            );
+            landed = true;
+          } catch (_) {
+            // A layer deleted meanwhile. The rest still move.
+          }
+        }
+      },
+    );
+    if (landed) widget.onChanged();
   }
 
   void _onPanStart(DragStartDetails details) {
@@ -1334,28 +1658,13 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
 
   void _commitMove() {
     if (_delta == Offset.zero) return;
-    var landed = false;
+    final moves = <(LayerBox, double, double)>[];
     for (final box in _selected) {
       if (!box.draggable) continue;
       final (x, y) = _movedPosition(box);
-      // One op for both axes. x and y are separate properties in the
-      // model, and writing them separately made one drag cost two undo steps —
-      // Ctrl+Z put the layer back half way, along one axis, which reads as the
-      // undo being broken rather than as two honest edits.
-      try {
-        box.layer.setTransforms(
-          props: const [
-            BridgeTransformProp.positionX,
-            BridgeTransformProp.positionY,
-          ],
-          values: [BridgeScalar.static_(x), BridgeScalar.static_(y)],
-        );
-        landed = true;
-      } catch (_) {
-        // A layer deleted while the drag was in flight. The rest still move.
-      }
+      moves.add((box, x, y));
     }
-    if (landed) widget.onChanged();
+    _place(moves);
   }
 
   // --- Scale ----------------------------------------------------------------
@@ -1786,6 +2095,13 @@ class _GizmoPainter extends CustomPainter {
   final Rect? marquee;
   final Offset moved;
 
+  /// The lines a move in flight has caught, on screen, one an axis; null
+  /// where it has caught nothing. Drawn across [picture] in [snapLine].
+  final double? snapX;
+  final double? snapY;
+  final Rect picture;
+  final Color snapLine;
+
   /// The colour a selected box, its handles and its anchor mark are drawn in:
   /// `animated` (§3.1), which is the name the field keeps for its history.
   final Color accent;
@@ -1804,6 +2120,10 @@ class _GizmoPainter extends CustomPainter {
     required this.anchors,
     required this.marquee,
     required this.moved,
+    required this.snapX,
+    required this.snapY,
+    required this.picture,
+    required this.snapLine,
     required this.accent,
     required this.hairline,
     required this.surface,
@@ -1811,6 +2131,20 @@ class _GizmoPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    // What the move has caught, under the boxes so the edge that landed on it
+    // stays legible, the way the Timeline draws its own.
+    final caught = Paint()
+      ..color = snapLine
+      ..strokeWidth = 1;
+    if (snapX case final x?) {
+      canvas.drawLine(
+          Offset(x, picture.top), Offset(x, picture.bottom), caught);
+    }
+    if (snapY case final y?) {
+      canvas.drawLine(
+          Offset(picture.left, y), Offset(picture.right, y), caught);
+    }
+
     // The layer a click would take: the same box, drawn faintly. Under the
     // selection, so a selected box is never dimmed by a hover on top of it.
     final hovered = hover;

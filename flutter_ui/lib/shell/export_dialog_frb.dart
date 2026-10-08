@@ -1410,32 +1410,43 @@ class _ExportDialogState extends State<_ExportDialog> {
           _row(
             t,
             l10n.exportChannels,
-            dialogDropdown<bool>(
-              t,
-              id: 'export-channels',
-              value: _alphaChannel,
-              options: const [false, true],
-              label: (alpha) =>
-                  alpha ? l10n.exportChannelsRgbAlpha : l10n.exportChannelsRgb,
-              onChanged:
-                  _caps.alpha ? (a) => _edit(() => _alphaChannel = a) : null,
+            _why(
+              _caps.alpha ? null : l10n.tipExportFormatLimit,
+              dialogDropdown<bool>(
+                t,
+                id: 'export-channels',
+                value: _alphaChannel,
+                options: const [false, true],
+                label: (alpha) => alpha
+                    ? l10n.exportChannelsRgbAlpha
+                    : l10n.exportChannelsRgb,
+                onChanged:
+                    _caps.alpha ? (a) => _edit(() => _alphaChannel = a) : null,
+              ),
             ),
             dimmed: dim,
           ),
           _row(
             t,
             l10n.exportAlpha,
-            dialogDropdown<bool>(
-              t,
-              id: 'export-alpha',
-              value: _straightAlpha,
-              options: const [false, true],
-              label: (straight) => straight
-                  ? l10n.exportAlphaStraight
-                  : l10n.exportAlphaPremultiplied,
-              onChanged: _caps.alpha && _alphaChannel
-                  ? (s) => _edit(() => _straightAlpha = s)
-                  : null,
+            _why(
+              !_caps.alpha
+                  ? l10n.tipExportFormatLimit
+                  : _alphaChannel
+                      ? null
+                      : l10n.tipExportNeedsAlpha,
+              dialogDropdown<bool>(
+                t,
+                id: 'export-alpha',
+                value: _straightAlpha,
+                options: const [false, true],
+                label: (straight) => straight
+                    ? l10n.exportAlphaStraight
+                    : l10n.exportAlphaPremultiplied,
+                onChanged: _caps.alpha && _alphaChannel
+                    ? (s) => _edit(() => _straightAlpha = s)
+                    : null,
+              ),
             ),
             labelColumn: exportLabelColumnPaired,
             dimmed: dim,
@@ -1448,12 +1459,15 @@ class _ExportDialogState extends State<_ExportDialog> {
             t,
             l10n.exportBitRate,
             Row(children: [
-              _tick(
-                t,
-                'export-bitrate-auto',
-                l10n.exportBitRateAuto,
-                _autoBitrate,
-                _caps.bitRate ? (on) => _edit(() => _autoBitrate = on) : null,
+              _why(
+                _caps.bitRate ? null : l10n.tipExportFormatLimit,
+                _tick(
+                  t,
+                  'export-bitrate-auto',
+                  l10n.exportBitRateAuto,
+                  _autoBitrate,
+                  _caps.bitRate ? (on) => _edit(() => _autoBitrate = on) : null,
+                ),
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -1737,6 +1751,8 @@ class _ExportDialogState extends State<_ExportDialog> {
   /// goes dead entire rather than offering four rows that write nothing.
   Widget _audioGroup(LumitTheme t) {
     final dim = !_caps.audio;
+    // Why the settings after the first list are dead while it reads Off.
+    final off = _audio ? null : l10n.tipExportAudioOff;
     return _group(
       t,
       ExportSection.audio,
@@ -1767,58 +1783,71 @@ class _ExportDialogState extends State<_ExportDialog> {
             SizedBox(
               width: exportAudioRateWidth,
               height: dialogControlHeight,
-              child: BareDropdown<int>(
-                key: const ValueKey('export-audio-sample-rate'),
-                value: _audioSampleRate,
-                options: _sampleRates,
-                label: _sampleRateLabel,
-                onChanged: _caps.audio && _audio
-                    ? (r) => _edit(() => _audioSampleRate = r)
-                    : null,
+              child: _why(
+                off,
+                BareDropdown<int>(
+                  key: const ValueKey('export-audio-sample-rate'),
+                  value: _audioSampleRate,
+                  options: _sampleRates,
+                  label: _sampleRateLabel,
+                  onChanged: _caps.audio && _audio
+                      ? (r) => _edit(() => _audioSampleRate = r)
+                      : null,
+                ),
               ),
             ),
             const SizedBox(width: 6),
             SizedBox(
               width: exportAudioDepthWidth,
               height: dialogControlHeight,
-              child: BareDropdown<int>(
-                key: const ValueKey('export-audio-depth'),
-                value: _audioDepth,
-                options: _caps.audio24Bit ? const [16, 24] : const [16],
-                label: (d) =>
-                    d >= 24 ? l10n.exportAudio24Bit : l10n.exportAudio16Bit,
-                onChanged: _caps.audio && _caps.audio24Bit && _audio
-                    ? (d) => _edit(() => _audioDepth = d)
-                    : null,
+              child: _why(
+                off ?? (_caps.audio24Bit ? null : l10n.tipExportFormatLimit),
+                BareDropdown<int>(
+                  key: const ValueKey('export-audio-depth'),
+                  value: _audioDepth,
+                  options: _caps.audio24Bit ? const [16, 24] : const [16],
+                  label: (d) =>
+                      d >= 24 ? l10n.exportAudio24Bit : l10n.exportAudio16Bit,
+                  onChanged: _caps.audio && _caps.audio24Bit && _audio
+                      ? (d) => _edit(() => _audioDepth = d)
+                      : null,
+                ),
               ),
             ),
             const SizedBox(width: 6),
             SizedBox(
               width: exportAudioLayoutWidth,
               height: dialogControlHeight,
-              child: BareDropdown<int>(
-                key: const ValueKey('export-audio-layout'),
-                value: _audioChannels,
-                options: const [2, 1],
-                label: (c) =>
-                    c == 1 ? l10n.exportAudioMono : l10n.exportAudioStereo,
-                onChanged: _caps.audio && _audio
-                    ? (c) => _edit(() => _audioChannels = c)
-                    : null,
+              child: _why(
+                off,
+                BareDropdown<int>(
+                  key: const ValueKey('export-audio-layout'),
+                  value: _audioChannels,
+                  options: const [2, 1],
+                  label: (c) =>
+                      c == 1 ? l10n.exportAudioMono : l10n.exportAudioStereo,
+                  onChanged: _caps.audio && _audio
+                      ? (c) => _edit(() => _audioChannels = c)
+                      : null,
+                ),
               ),
             ),
             const Spacer(),
             SizedBox(
               width: exportAudioBitRateWidth,
               height: dialogControlHeight,
-              child: BareDropdown<int>(
-                key: const ValueKey('export-audio-rate'),
-                value: _audioRate,
-                options: _audioRates,
-                label: (r) => '${r ~/ 1000} kb/s',
-                onChanged: _caps.audioBitRate && _audio
-                    ? (r) => _edit(() => _audioRate = r)
-                    : null,
+              child: _why(
+                off ??
+                    (_caps.audioBitRate ? null : l10n.tipExportFormatLimit),
+                BareDropdown<int>(
+                  key: const ValueKey('export-audio-rate'),
+                  value: _audioRate,
+                  options: _audioRates,
+                  label: (r) => '${r ~/ 1000} kb/s',
+                  onChanged: _caps.audioBitRate && _audio
+                      ? (r) => _edit(() => _audioRate = r)
+                      : null,
+                ),
               ),
             ),
           ]),
@@ -1934,13 +1963,24 @@ class _ExportDialogState extends State<_ExportDialog> {
     List<Widget> rows, {
     bool dimmed = false,
   }) =>
-      dialogGroup(
-        t,
-        title,
-        rows,
-        key: ValueKey<String>('export-group-${title.toLowerCase()}'),
-        highlighted: _flash == section,
-        dimmed: dimmed,
+      _why(
+        // A dead group answers no pointer, so it says why once for all its
+        // rows. Only three things leave a group dead, one per kind of group.
+        !dimmed
+            ? null
+            : switch (section) {
+                ExportSection.audio => l10n.tipExportNoSound,
+                ExportSection.metadata => l10n.tipExportNoMetadata,
+                _ => l10n.tipExportNoPicture,
+              },
+        dialogGroup(
+          t,
+          title,
+          rows,
+          key: ValueKey<String>('export-group-${title.toLowerCase()}'),
+          highlighted: _flash == section,
+          dimmed: dimmed,
+        ),
       );
 
   Widget _row(LumitTheme t, String label, Widget control,
@@ -1995,23 +2035,34 @@ class _ExportDialogState extends State<_ExportDialog> {
         ),
       );
 
+  /// A control with the reason it is dead on hover, or the control alone when
+  /// it is live. A greyed list with no reason reads as a fault. The reasons
+  /// are two words each, which is all a tooltip is allowed here.
+  Widget _why(String? reason, Widget control) => reason == null
+      ? control
+      : LumitTooltip(message: reason, child: control);
+
   /// The colour depth, offered only where the format carries more than one.
-  Widget _depthDropdown(LumitTheme t, String id) => dialogDropdown<int>(
-        t,
-        id: id,
-        value: _depth,
-        options: _caps.depths.isEmpty
-            ? [_depth]
-            : _caps.depths.map((d) => d.toInt()).toList(),
-        // OpenEXR carries floats and nothing else, so its 16 is half floats
-        // rather than sixteen-bit codes and it offers a 32 the others do not.
-        // Naming those by their depth alone keeps the row honest without a
-        // second word for what is already an established abbreviation.
-        label: (d) => _format.key == 'exr'
-            ? l10n.bitsPerChannel('$d')
-            : (d >= 16 ? l10n.exportDepth16 : l10n.exportDepth8),
-        onChanged:
-            _caps.depths.length > 1 ? (d) => _edit(() => _depth = d) : null,
+  Widget _depthDropdown(LumitTheme t, String id) => _why(
+        _caps.depths.length > 1 ? null : l10n.tipExportFormatLimit,
+        dialogDropdown<int>(
+          t,
+          id: id,
+          value: _depth,
+          options: _caps.depths.isEmpty
+              ? [_depth]
+              : _caps.depths.map((d) => d.toInt()).toList(),
+          // OpenEXR carries floats and nothing else, so its 16 is half floats
+          // rather than sixteen-bit codes and it offers a 32 the others do
+          // not. Naming those by their depth alone keeps the row honest
+          // without a second word for what is already an established
+          // abbreviation.
+          label: (d) => _format.key == 'exr'
+              ? l10n.bitsPerChannel('$d')
+              : (d >= 16 ? l10n.exportDepth16 : l10n.exportDepth8),
+          onChanged:
+              _caps.depths.length > 1 ? (d) => _edit(() => _depth = d) : null,
+        ),
       );
 
   /// One crop inset: its mark and its well, in pixels at composition size.

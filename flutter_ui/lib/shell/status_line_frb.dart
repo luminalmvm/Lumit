@@ -7,6 +7,9 @@
 // with its progress and a Cancel that works from anywhere, not only with the
 // dialogue open. Both engine polls latch their state between calls, so this and
 // the export dialogue can both ask without stealing each other's answer.
+//
+// The right-hand end says what the armed tool's modifier keys do, in whatever
+// room the rest leaves.
 
 import 'dart:async';
 import 'dart:math' as math;
@@ -17,6 +20,7 @@ import 'package:lumit_flutter/src/rust/api/cache.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart' show pluginMessages;
 import 'package:lumit_flutter/src/rust/api/export.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart';
+import 'package:lumit_flutter/src/rust/api/shell.dart' show revealInFolder;
 import 'package:provider/provider.dart';
 
 import '../l10n/strings.dart';
@@ -167,7 +171,7 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
   }
 
   /// What the output just peaked at, in dB, or null while the transport is
-  /// still — the strip's far-right reading (the AudioWorkspace board's own
+  /// still: the last of the strip's readings (the AudioWorkspace board's own
   /// status caption). Read on the tick that already runs during playback, off
   /// the same lock-free tap the meters read (docs/09 §3.1), so an idle strip
   /// keeps costing nothing.
@@ -216,9 +220,9 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
       height: roomed ? 32 : 20,
       color: roomed ? t.room : t.surface1,
       padding: EdgeInsets.symmetric(horizontal: roomed ? 10 : 8),
-      child: Row(
-        key: const ValueKey('status-line'),
-        children: [
+      child: _line(
+        t,
+        (width) => [
           _bubble(t, _savedState(t, state)),
           _divider(t),
           // Deliberately NOT const: a const child is skipped by the tick's
@@ -247,11 +251,18 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
           // header, which is where nobody found it.
           _bubble(t, const RenderTimingsToggle()),
           _divider(t),
-          Expanded(
+          // At most half the line, which is what these had, but no longer
+          // holding the half they do not fill. The meter above takes what
+          // is left, so it is cut only when the line is truly full.
+          ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: width / 2),
             child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Flexible(child: _notice(t, state)),
-                const Spacer(),
+                // The spacer that stood here is the hint's now ([_line]), so
+                // a job follows the notice across a plain gap.
+                if (!roomed) const SizedBox(width: 8),
                 ..._job(t, _proxySection(t)),
                 ..._job(t, _exportSection(t)),
                 if (_outputPeakDb case final db?) ...[
@@ -272,6 +283,36 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
       ),
     );
   }
+
+  /// The strip's row: the readouts, then the armed tool's hint.
+  ///
+  /// The readouts are laid out first, at the width they want and never more
+  /// than the line has, which [readouts] is told. The hint is the one stretchy
+  /// thing beside them, so it gets what they leave and no more: it moves no
+  /// readout, and it is the first thing a narrow window cuts short. The
+  /// readouts used to share the width by halves, which left the right-hand
+  /// end empty whatever was said.
+  Widget _line(LumitTheme t, List<Widget> Function(double width) readouts) =>
+      LayoutBuilder(
+        builder: (context, line) => Row(
+          key: const ValueKey('status-line'),
+          children: [
+            ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: line.maxWidth),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: readouts(line.maxWidth),
+              ),
+            ),
+            Expanded(
+              child: ListenableBuilder(
+                listenable: _ui.tools,
+                builder: (context, _) => _hint(t),
+              ),
+            ),
+          ],
+        ),
+      );
 
   /// A hairline between readouts on a flush strip; nothing between bubbles,
   /// which space themselves.
@@ -297,7 +338,9 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
             decoration: BoxDecoration(
               color: t.surface1,
               borderRadius: BorderRadius.circular(t.tokens.actionRadius),
-              boxShadow: t.floatShadow,
+              // The shadow every pill on the room wears. A menu's float
+              // shadow fell 15 below a 26 pill and off the window's edge.
+              boxShadow: t.tokens.cardShadow,
             ),
             child: child,
           ),
@@ -334,7 +377,71 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
     );
   }
 
-  /// The latest notice, with the close button every notice carries.
+  /// What the armed tool's modifiers do, at the right-hand end: one muted
+  /// line, or nothing for a tool with nothing to say.
+  Widget _hint(LumitTheme t) {
+    final hint = _ui.tools.tool.hint;
+    if (hint == null) return const SizedBox.shrink();
+    return LayoutBuilder(
+      // Under a few words' width there is nothing worth cutting short, and a
+      // bubble holding three dots is worse than none.
+      builder: (context, room) => room.maxWidth < 120
+          ? const SizedBox.shrink()
+          : Align(
+              alignment: Alignment.centerRight,
+              child: Padding(
+                // Clear of the readout before it on a flush strip. Bubbles
+                // space themselves.
+                padding: EdgeInsets.only(left: t.tokens.roomed ? 0 : 12),
+                child: _bubble(
+                  t,
+                  Text(
+                    hint,
+                    key: const ValueKey('status-hint'),
+                    style: t.small.copyWith(color: t.textMuted),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+            ),
+    );
+  }
+
+  /// The notices of this run, newest first, in a menu over the line. Read as
+  /// it opens, so it needs no listener of its own.
+  void _showNotices(BuildContext context, LumitTheme t, LumitState state) {
+    final box = context.findRenderObject();
+    if (box is! RenderBox) return;
+    showLumitPopup<void>(
+      context: context,
+      position: box.localToGlobal(Offset.zero),
+      builder: (close) => FloatSurface(
+        width: 420,
+        child: Column(
+          key: const ValueKey('status-notice-list'),
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final past in state.recentNotices)
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                child: Text(
+                  past.message,
+                  style: past.error
+                      ? t.small.copyWith(color: t.warning)
+                      : t.small,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// The latest notice, with the close button every notice carries. A click
+  /// on its words lists the ones before it.
   Widget _notice(LumitTheme t, LumitState state) {
     return ValueListenableBuilder<LumitNotice?>(
       valueListenable: state.notice,
@@ -353,13 +460,19 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Flexible(
-                  child: Text(
-                    notice.message,
-                    key: const ValueKey('status-notice'),
-                    style: notice.error
-                        ? t.small.copyWith(color: t.warning)
-                        : t.small,
-                    overflow: TextOverflow.ellipsis,
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: GestureDetector(
+                      onTap: () => _showNotices(context, t, state),
+                      child: Text(
+                        notice.message,
+                        key: const ValueKey('status-notice'),
+                        style: notice.error
+                            ? t.small.copyWith(color: t.warning)
+                            : t.small,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 4),
@@ -443,11 +556,13 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
         BridgeExportState_Running(:final frame, :final total, :final encoder) =>
           [
             Flexible(
-              child: Text(
-                l10n.exportingFrame('$frame', '$total', encoder),
-                key: const ValueKey('status-export-progress'),
-                style: t.small,
-                overflow: TextOverflow.ellipsis,
+              // Twice the notice's share of the strip, now that this line
+              // carries the estimate as well as the count.
+              flex: 2,
+              child: _ExportProgress(
+                label: l10n.exportingFrame('$frame', '$total', encoder),
+                frame: frame.toInt(),
+                total: total.toInt(),
               ),
             ),
             const SizedBox(width: 8),
@@ -469,12 +584,22 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
             ),
           ],
         BridgeExportState_Done(:final path) => [
+            // The finished file is one click away: the line opens its folder.
             Flexible(
-              child: Text(
-                l10n.exportedTo(path),
-                key: const ValueKey('status-export-done'),
-                style: t.small,
-                overflow: TextOverflow.ellipsis,
+              child: LumitTooltip(
+                message: l10n.tipOpenFolder,
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: GestureDetector(
+                    key: const ValueKey('status-export-done'),
+                    onTap: () => revealInFolder(path: path),
+                    child: Text(
+                      l10n.exportedTo(path),
+                      style: t.small,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
               ),
             ),
           ],
@@ -491,6 +616,75 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
             ),
           ],
       };
+}
+
+/// How long a running export has left, in words for the strip, or null while
+/// there is too little to go on.
+///
+/// It is frames done over time taken since the strip first saw the export, so
+/// it follows the average speed and one slow frame does not move it. Nothing
+/// is said for the first five seconds, when that average is mostly noise.
+String? exportTimeLeft(
+    {required int done, required int left, required Duration taken}) {
+  if (done <= 0 || left <= 0 || taken < const Duration(seconds: 5)) return null;
+  final minutes = (taken.inMilliseconds / 60000 * left / done).round();
+  if (minutes < 1) return l10n.exportLeftUnderMinute;
+  return minutes < 120
+      ? l10n.exportLeftMinutes('$minutes')
+      : l10n.exportLeftHours('${(minutes / 60).round()}');
+}
+
+/// The export's frame count with the estimate after it. One line of text, so
+/// a narrow window cuts the estimate short before it touches the count. It
+/// holds the clock itself, so the clock lives exactly as long as the strip
+/// shows an export running.
+class _ExportProgress extends StatefulWidget {
+  final String label;
+  final int frame;
+  final int total;
+  const _ExportProgress(
+      {required this.label, required this.frame, required this.total});
+
+  @override
+  State<_ExportProgress> createState() => _ExportProgressState();
+}
+
+class _ExportProgressState extends State<_ExportProgress> {
+  /// Where the export stood when the strip first saw it, and the time since.
+  late int _from = widget.frame;
+  final Stopwatch _since = Stopwatch()..start();
+
+  @override
+  void didUpdateWidget(_ExportProgress old) {
+    super.didUpdateWidget(old);
+    // A new count, or the frame gone backwards, is the next item in the
+    // queue (or the count arriving after the preparation): start again.
+    if (widget.total != old.total || widget.frame < old.frame) {
+      _from = widget.frame;
+      _since
+        ..reset()
+        ..start();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    final left = exportTimeLeft(
+      done: widget.frame - _from,
+      left: widget.total - widget.frame,
+      taken: _since.elapsed,
+    );
+    return Text.rich(
+      TextSpan(text: widget.label, children: [
+        if (left != null)
+          TextSpan(text: ' · $left', style: TextStyle(color: t.textMuted)),
+      ]),
+      key: const ValueKey('status-export-progress'),
+      style: t.small,
+      overflow: TextOverflow.ellipsis,
+    );
+  }
 }
 
 /// How full each tier of the frame cache is — one bar per tier, with the

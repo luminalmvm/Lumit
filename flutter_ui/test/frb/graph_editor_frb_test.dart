@@ -336,8 +336,8 @@ void main() {
       await tester.ensureVisible(find.text('Slow start'));
       await tester.tap(find.text('Slow start'));
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('Apply'.toUpperCase()));
-      await tester.tap(find.text('Apply'.toUpperCase()));
+      await tester.ensureVisible(find.text('Apply'));
+      await tester.tap(find.text('Apply'));
       await tester.pumpAndSettle();
       expect(opacityKeys(p.layer)[0].interpOut, isA<BridgeSideInterp_Linear>(),
           reason: 'one key on its own has no span to shape');
@@ -355,8 +355,8 @@ void main() {
       await tester.ensureVisible(find.text('Slow start'));
       await tester.tap(find.text('Slow start'));
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('Apply'.toUpperCase()));
-      await tester.tap(find.text('Apply'.toUpperCase()));
+      await tester.ensureVisible(find.text('Apply'));
+      await tester.tap(find.text('Apply'));
       await tester.pumpAndSettle();
 
       final keys = opacityKeys(p.layer);

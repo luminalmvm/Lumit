@@ -33,6 +33,7 @@ import 'dart:async';
 import 'package:flutter/gestures.dart' show DragStartBehavior;
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/export.dart';
+import 'package:lumit_flutter/src/rust/api/shell.dart' show revealInFolder;
 
 import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
@@ -228,7 +229,7 @@ class _ExportQueueState extends State<_ExportQueue> {
   /// waiting has no listener at all, so it can be read and dropped past but
   /// never picked up.
   Widget _row(LumitTheme t, BridgeExportQueueItem item, int index) {
-    final row = _rowFace(t, item);
+    final row = _opensFolder(item, _rowFace(t, item));
     return KeyedSubtree(
       key: ValueKey<String>('export-queue-row-${item.id}'),
       child: item.state is BridgeExportQueueState_Waiting
@@ -246,7 +247,7 @@ class _ExportQueueState extends State<_ExportQueue> {
   /// One item's row where a drag is marked and not carried: the same grip,
   /// and the line on whichever edge the row in hand would land against.
   Widget _markedRow(LumitTheme t, BridgeExportQueueItem item, int index) {
-    final row = _rowFace(t, item);
+    final row = _opensFolder(item, _rowFace(t, item));
     final from = _items.indexWhere((i) => i.id == _markedId);
     final to = _markedTo;
     final marked = from >= 0 && to == index && to != from;
@@ -319,6 +320,25 @@ class _ExportQueueState extends State<_ExportQueue> {
         ),
         child: child,
       );
+
+  /// A finished row opens the folder its file is in, with a tooltip saying so.
+  /// Every other row is handed back as it is: there is no file to show yet.
+  /// The remove mark still takes its own click, being the deeper of the two.
+  Widget _opensFolder(BridgeExportQueueItem item, Widget row) =>
+      item.state is! BridgeExportQueueState_Done
+          ? row
+          : LumitTooltip(
+              message: l10n.tipOpenFolder,
+              child: MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: GestureDetector(
+                  key: ValueKey<String>('export-queue-open-${item.id}'),
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => revealInFolder(path: item.path),
+                  child: row,
+                ),
+              ),
+            );
 
   /// One item: what it is, where it goes, how it is getting on, and the mark
   /// that takes it off the list.

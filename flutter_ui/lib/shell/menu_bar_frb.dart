@@ -10,9 +10,9 @@
 // cannot drift apart.
 //
 // **What a row can say.** Every engine-backed item calls straight through a
-// reference handle. An item with no action yet is still *listed*, marked
-// "(Not implemented)" and disabled, so the shape of the finished application is
-// visible while it is being built and nobody has to guess whether a command is
+// reference handle. An item with no action yet stays in the tree as a
+// [MenuEntry.todo] and is left off the menus until it is built, so a menu
+// offers only what works and nobody has to guess whether a listed command is
 // missing or broken. An item whose command needs something that is not there —
 // no project, no composition, no selected layer — greys out rather than failing
 // when pressed: an item you can see is disabled tells you the state of the
@@ -45,6 +45,7 @@ import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
+import '../panels/effect_param_row_frb.dart' show byEffectLabel;
 import '../panels/layer_fold_frb.dart' show RevealFilter;
 import '../panels/timeline_extras_frb.dart';
 import '../panels/timeline_group_row_frb.dart';
@@ -181,8 +182,8 @@ List<MenuEntry> _userWorkspaceRows(
 ///
 /// [action] is a keymap action id, not a callback — the chord beside the row is
 /// looked up from the live keymap when the bar is built. [todo] marks a command
-/// that is specified but not built; it draws disabled with "(Not implemented)"
-/// after its name. [checked] makes the row a toggle, drawn with a tick column.
+/// that is specified but not built; neither renderer shows it ([shown]).
+/// [checked] makes the row a toggle, drawn with a tick column.
 class MenuEntry {
   final String? label;
   final VoidCallback? onPressed;
@@ -333,6 +334,11 @@ class MenuEntry {
   /// What the row reads as, suffix and all.
   String get text => todo ? l10n.notImplemented(label ?? '') : (label ?? '');
 
+  /// The rows of [items] a menu draws: all but the commands not built yet.
+  /// Both renderers ask here, so an unbuilt row is hidden in one place.
+  static List<MenuEntry> shown(List<MenuEntry> items) =>
+      items.where((item) => !item.todo).toList();
+
   /// Whether pressing this row does anything. A submenu is never "pressed" but
   /// is still live, so it counts as enabled when it has children.
   bool get enabled => onPressed != null || (children?.isNotEmpty ?? false);
@@ -353,8 +359,11 @@ typedef MenuSection = ({String title, List<MenuEntry> Function() items});
 /// pressing it opens the same palette Ctrl+Shift+P does. A pill on the room
 /// under Lantern, a well elsewhere.
 class _CommandBox extends StatelessWidget {
+  /// The chord that opens the palette, from the live keymap. Null when the
+  /// action is unbound, and then no chord is drawn.
+  final String? chord;
   final VoidCallback onPressed;
-  const _CommandBox({required this.onPressed});
+  const _CommandBox({required this.chord, required this.onPressed});
 
   @override
   Widget build(BuildContext context) {
@@ -394,8 +403,8 @@ class _CommandBox extends StatelessWidget {
                   overflow: TextOverflow.clip,
                 ),
               ),
-              Text('Ctrl+Shift+P',
-                  style: t.kicker.copyWith(color: t.textDisabled)),
+              if (chord case final chord?)
+                Text(chord, style: t.kicker.copyWith(color: t.textDisabled)),
             ],
           ),
         ),
@@ -561,7 +570,14 @@ class LumitMenuBarFrb extends StatelessWidget {
             // narrow to hold the menus and the box at once (the chord still
             // opens the palette).
             if (ui.workspace.interface.commandBox && c.maxWidth >= 1000) ...[
-              _CommandBox(onPressed: () => _palette(context)),
+              // Watching the keymap, so a rebind shows here as it lands.
+              ListenableBuilder(
+                listenable: ui.keymap,
+                builder: (context, _) => _CommandBox(
+                  chord: ui.keymap.chordFor('palette.open'),
+                  onPressed: () => _palette(context),
+                ),
+              ),
               const SizedBox(width: 6),
             ],
           ],
@@ -570,147 +586,129 @@ class LumitMenuBarFrb extends StatelessWidget {
     );
   }
 
-  /// The palette's commands are declared here, where the menu items are, so the
-  /// two cannot drift apart into different ideas of what "New composition" does.
-  /// A row teaches whatever chord the keymap gives its action, the same lookup
-  /// the menus do, so a rebound shortcut is taught rebound and an unbound one
-  /// is not taught at all.
-  /// Beyond commands it carries the other three categories docs/07 §12 asks
-  /// for: every effect (applies to the selected layer), every comp (fronts
-  /// it), and every panel (focuses it) — each under its own badge.
+  /// The palette finds everything from one box: every menu command, and the
+  /// compositions, layers, effects, panels and settings, each under its own
+  /// badge.
+  ///
+  /// The commands are not a list of their own. They are the menu bar's tree,
+  /// walked, so a command the menus gain is in the palette the same day and
+  /// runs the same closure its menu row runs. A row teaches whatever chord the
+  /// keymap gives its action, the same lookup the menus do. A row the menus
+  /// show disabled is left out.
   Future<void> _palette(BuildContext context) async {
-    final project = app.project;
     final ui = Provider.of<LumitUiState>(context, listen: false);
     final keymap = ui.keymap;
     final workspace = ui.workspace;
+    final commands = <PaletteCommand>[];
+
+    void walk(String path, List<MenuEntry> rows) {
+      for (final raw in rows) {
+        final row = raw.current;
+        if (row.isDivider || !row.enabled) continue;
+        final label = '$path$palettePathSeparator${row.text}';
+        if (row.children case final children?) {
+          walk(label, children);
+          continue;
+        }
+        commands.add(PaletteCommand(
+          label: label,
+          category: l10n.paletteCommand,
+          shortcut: row.action == null ? null : keymap.chordFor(row.action!),
+          ticked: row.checked ?? false,
+          run: row.onPressed!,
+        ));
+      }
+    }
+
+    // Built without the palette's own opener, so the row that opens the
+    // palette is disabled here and is not offered from inside it.
+    final menus = lumitMenus(
+      context,
+      app,
+      openPicker: openPicker,
+      savePicker: savePicker,
+      footagePicker: footagePicker,
+      aeProjectPicker: aeProjectPicker,
+    );
+    for (final menu in menus) {
+      // The Effect menu is the effect rows further down, which are kept when
+      // no layer is selected so they can say why they are greyed.
+      if (menu.title != l10n.menuEffect) walk(menu.title, menu.items());
+    }
+
+    // Every comp, by name: Enter fronts it in the Viewer and Timeline.
+    for (final (comp, name) in app.comps()) {
+      commands.add(PaletteCommand(
+        label: name,
+        category: l10n.paletteComps,
+        run: () => ui.setSelectedComp(comp),
+      ));
+    }
+    // Every layer of the front comp: Enter selects it.
+    try {
+      for (final each
+          in ui.selectedComp?.getLayers() ?? const <LayerReference>[]) {
+        commands.add(PaletteCommand(
+          label: each.getName(),
+          category: l10n.paletteLayer,
+          run: () => ui.setSelection([each]),
+        ));
+      }
+    } catch (_) {
+      // The comp has gone since it was fronted; it has no layers to offer.
+    }
+    // Every effect: Enter applies it to the primary layer, as the Effect menu
+    // does. With no layer selected the rows stay, greyed, and say what they
+    // are waiting for.
+    final layer = ui.selectedLayer.value;
+    for (final effect in listEffects()) {
+      commands.add(PaletteCommand(
+        label: engineLabel(effect.label),
+        category: l10n.menuEffect,
+        disabled: layer == null ? l10n.paletteNeedsLayer : null,
+        run: () {
+          layer?.addEffect(name: effect.name);
+          app.notifyDocumentChanged();
+        },
+      ));
+    }
+    // Every panel: Enter shows it if it was closed, fronts it in its group
+    // and points the keyboard at it, which is what cycling to it does.
+    for (final panel in Panel.values) {
+      commands.add(PaletteCommand(
+        label: panel.title,
+        category: l10n.palettePanels,
+        run: () {
+          setPanelVisible(ui.split, panel, true);
+          activatePanelTab(ui.split, panel);
+          ui.activePane.value = panel.pane();
+          ui.workspace.touch();
+        },
+      ));
+    }
+    // Every Settings page and every row on one: Enter opens Settings there.
+    for (final page in SettingsPage.values) {
+      final path = '${l10n.settingsTitle}$palettePathSeparator${page.label}';
+      commands.add(PaletteCommand(
+        label: path,
+        category: l10n.paletteSetting,
+        run: () => showSettingsWindowFrb(context, initialPage: page),
+      ));
+      for (final row in settingsRowNames(page, ui)) {
+        commands.add(PaletteCommand(
+          label: '$path$palettePathSeparator$row',
+          category: l10n.paletteSetting,
+          run: () =>
+              showSettingsWindowFrb(context, initialPage: page, row: row),
+        ));
+      }
+    }
+
     await showCommandPaletteFrb(
       context: context,
       recent: workspace.paletteRecents,
       onRun: workspace.noteCommandRun,
-      commands: [
-        PaletteCommand(
-          label: l10n.menuNew,
-          category: l10n.menuFile,
-          shortcut: keymap.chordFor('file.new'),
-          run: app.newProject,
-        ),
-        if (project != null) ...[
-          PaletteCommand(
-            label: l10n.menuSave,
-            category: l10n.menuFile,
-            shortcut: keymap.chordFor('file.save'),
-            run: () => saveProjectFrb(app, ui, picker: savePicker),
-          ),
-          PaletteCommand(
-            label: l10n.menuSaveAs,
-            category: l10n.menuFile,
-            shortcut: keymap.chordFor('file.save.as'),
-            run: () =>
-                saveProjectFrb(app, ui, forcePicker: true, picker: savePicker),
-          ),
-          PaletteCommand(
-            label: l10n.menuPackProject,
-            category: l10n.menuFile,
-            run: () =>
-                saveProjectFrb(app, ui, picker: savePicker, pack: true),
-          ),
-          PaletteCommand(
-            label: l10n.menuUnpackProject,
-            category: l10n.menuFile,
-            run: () => unpackProjectFrb(app),
-          ),
-          PaletteCommand(
-            label: l10n.menuImportFootage,
-            category: l10n.menuFile,
-            shortcut: keymap.chordFor('file.import'),
-            run: () => importFootageFrb(app, picker: footagePicker),
-          ),
-          PaletteCommand(
-            label: l10n.newComposition,
-            category: l10n.menuComposition,
-            shortcut: keymap.chordFor('comp.new'),
-            run: () => newCompositionFrb(context, app),
-          ),
-          PaletteCommand(
-            label: l10n.newNodeGraph,
-            category: l10n.menuComposition,
-            run: () => app.newNodeGraph(context),
-          ),
-          PaletteCommand(
-            label: l10n.menuUndo,
-            category: l10n.menuEdit,
-            shortcut: keymap.chordFor('edit.undo'),
-            run: () => undoFrb(app),
-          ),
-          PaletteCommand(
-            label: l10n.menuRedo,
-            category: l10n.menuEdit,
-            shortcut: keymap.chordFor('edit.redo'),
-            run: () => redoFrb(app),
-          ),
-          PaletteCommand(
-            label: l10n.menuExport,
-            category: l10n.menuFile,
-            shortcut: keymap.chordFor('file.export'),
-            run: () => exportFrb(context),
-          ),
-          // Every comp, by name: Enter fronts it in the Viewer and Timeline.
-          for (final (comp, name) in app.comps())
-            PaletteCommand(
-              label: name,
-              category: l10n.paletteComps,
-              run: () => ui.setSelectedComp(comp),
-            ),
-          // Every built-in effect: Enter applies it to the selected layer;
-          // with none selected it does nothing, exactly like the browser.
-          for (final effect in listEffects())
-            PaletteCommand(
-              label: engineLabel(effect.label),
-              category: l10n.menuEffect,
-              run: () => ui.selectedLayer.value?.addEffect(name: effect.name),
-            ),
-        ],
-        // Every panel: Enter focuses it in the dock.
-        for (final panel in Panel.values)
-          PaletteCommand(
-            label: panel.title,
-            category: l10n.palettePanels,
-            run: () => ui.activePane.value = panel.pane(),
-          ),
-        // The View menu's magnification and preview resolution, so the palette
-        // carries them too rather than the menu being the only route.
-        for (final zoom in ViewerZoomCommand.values)
-          PaletteCommand(
-            label: zoom.title,
-            category: l10n.menuView,
-            shortcut: keymap.chordFor(zoom.action),
-            run: () => ui.requestViewerZoom(zoom),
-          ),
-        // Under the Resolution badge rather than View's, because "Full" on its
-        // own says nothing about what it is full of.
-        for (final resolution in PreviewResolution.values)
-          PaletteCommand(
-            label: resolution.title,
-            category: l10n.menuResolution,
-            shortcut: resolution.action == null
-                ? null
-                : keymap.chordFor(resolution.action!),
-            run: () => ui.setPreviewResolution(resolution),
-          ),
-        PaletteCommand(
-          label: l10n.menuSettings,
-          category: l10n.menuEdit,
-          shortcut: keymap.chordFor('app.settings'),
-          run: () => showSettingsWindowFrb(context),
-        ),
-        if (app.project case final project?)
-          PaletteCommand(
-            label: l10n.menuProjectSettings,
-            category: l10n.menuFile,
-            shortcut: keymap.chordFor('project.settings'),
-            run: () => showProjectSettingsFrb(context, project),
-          ),
-      ],
+      commands: commands,
     );
   }
 
@@ -784,7 +782,8 @@ class LumitMenuBarFrb extends StatelessWidget {
       // last was, because the key event itself has no position.
       anchor: lastKnownPointerPosition,
       model: FxConsoleModel(
-        keyHint: l10n.fxConsoleKey,
+        // The chord the keymap has for it now, as the menus read theirs.
+        keyHint: ui.keymap.chordFor('console.open'),
         footer: l10n.fxConsoleApplies,
         onSnapshot: comp == null ? null : () => saveSnapshotFrb(app, ui),
         entries: [
@@ -989,11 +988,22 @@ List<MenuSection> lumitMenus(
     ),
     (
       title: l10n.menuEdit,
-      items: () => [
-            MenuEntry(l10n.menuUndo,
+      items: () {
+        // Undo and Redo name the step they would take. Read as the menu
+        // opens, like the pack state above, so the bar's own rebuilds cost
+        // nothing for it.
+        final steps = _historySteps(project);
+        return [
+            MenuEntry(
+                steps.undo == null
+                    ? l10n.menuUndo
+                    : l10n.menuUndoStep(steps.undo!),
                 (history?.canUndo ?? false) ? () => undoFrb(app) : null,
                 action: 'edit.undo'),
-            MenuEntry(l10n.menuRedo,
+            MenuEntry(
+                steps.redo == null
+                    ? l10n.menuRedo
+                    : l10n.menuRedoStep(steps.redo!),
                 (history?.canRedo ?? false) ? () => redoFrb(app) : null,
                 action: 'edit.redo'),
             // The journal as a list you can read and click. Undo and redo above it
@@ -1032,10 +1042,15 @@ List<MenuSection> lumitMenus(
                       },
                 action: 'edit.delete.selection'),
             MenuEntry.divider(),
-            MenuEntry(l10n.menuDuplicate, onLayer((l) {
-              l.duplicate();
-              app.notifyDocumentChanged();
-            }), action: 'layer.duplicate'),
+            MenuEntry(
+                l10n.menuDuplicate,
+                layers.isEmpty
+                    ? null
+                    : () {
+                        duplicateLayersFrb(layers);
+                        app.notifyDocumentChanged();
+                      },
+                action: 'layer.duplicate'),
             MenuEntry(l10n.menuSplitLayer, onComp((c) => _splitAtPlayhead(ui)),
                 action: 'layer.split'),
             MenuEntry(l10n.menuSelectAll,
@@ -1050,7 +1065,8 @@ List<MenuSection> lumitMenus(
             // application *those* users know puts it.
             MenuEntry(l10n.menuSettings, () => showSettingsWindowFrb(context),
                 action: 'app.settings'),
-          ]
+          ];
+      }
     ),
     (
       title: l10n.menuComposition,
@@ -1422,9 +1438,11 @@ List<MenuSection> lumitMenus(
             // same switch under its own name — they are one switch until the full
             // wireframe display mode of §2.2 item 5 gives this row something of
             // its own to turn on.
-            MenuEntry(l10n.menuShowWireframe,
-                () => ui.setViewerLayerControls(!ui.viewerLayerControls),
-                checked: ui.viewerLayerControls),
+            MenuEntry.toggle(
+              l10n.menuShowWireframe,
+              () => ui.setViewerLayerControls(!ui.viewerLayerControls),
+              checked: () => ui.viewerLayerControls,
+            ),
             // Whether the grid's own lines are things a dragged layer lands on,
             // over and above the guides. The magnet on the toolbar is what decides
             // whether *any* of it engages; this says what is in the list.
@@ -1617,7 +1635,7 @@ List<MenuEntry> _effectMenu(LumitState app, List<LayerReference> layers) => [
         ]),
     ];
 
-/// Every built-in effect, grouped by its heading, in the engine's own order.
+/// Every built-in effect, grouped by its heading, each group sorted by name.
 ///
 /// Read once: the catalogue is fixed for the run, and the menu bar rebuilds on
 /// every document change — a bridge call per rebuild is exactly the cost the
@@ -1628,7 +1646,7 @@ Map<String, List<BridgeEffectInfo>> _effectGroups() =>
       for (final effect in listEffects()) {
         groups.putIfAbsent(effect.categoryLabel, () => []).add(effect);
       }
-      return groups;
+      return groups..forEach((_, effects) => effects.sort(byEffectLabel));
     }();
 
 Map<String, List<BridgeEffectInfo>>? _effectGroupsCache;
@@ -1808,6 +1826,35 @@ void undoFrb(LumitState app) {
 void redoFrb(LumitState app) {
   app.project?.redo();
   app.notifyDocumentChanged();
+}
+
+/// What Undo and Redo would each do, in the History window's own words, or
+/// null where there is nothing that way.
+({String? undo, String? redo}) _historySteps(ProjectReference? project) {
+  try {
+    final steps = project?.historyEntries() ?? const <BridgeHistoryEntry>[];
+    final applied = project?.appliedSteps() ?? 0;
+    return (
+      undo: applied > 0 && applied <= steps.length
+          ? engineLabel(steps[applied - 1].name)
+          : null,
+      redo: applied < steps.length ? engineLabel(steps[applied].name) : null,
+    );
+  } catch (_) {
+    // A project that has just gone: the plain words, greyed.
+    return (undo: null, redo: null);
+  }
+}
+
+/// Duplicate every layer in [layers]. One function for the Edit menu, the
+/// chord and the Timeline row's own menu, so they all copy the same set. A
+/// layer that refuses leaves the rest standing.
+void duplicateLayersFrb(Iterable<LayerReference> layers) {
+  for (final layer in layers) {
+    try {
+      layer.duplicate();
+    } catch (_) {}
+  }
 }
 
 /// Whether Cut and Copy have anything to act on — an effect picked out of a
@@ -2244,7 +2291,7 @@ List<PlatformMenuItem> platformMenusFor(
       group = [];
     }
 
-    for (final raw in items) {
+    for (final raw in MenuEntry.shown(items)) {
       if (raw.isDivider) {
         flush();
         continue;
@@ -2492,7 +2539,7 @@ class _MenuList extends StatefulWidget {
 class _MenuListState extends State<_MenuList> {
   @override
   Widget build(BuildContext context) {
-    final items = widget.items;
+    final items = MenuEntry.shown(widget.items);
     final close = widget.close;
     final t = ThemeScope.of(context).theme;
     final keymap = context.read<LumitUiState>().keymap;
