@@ -17,12 +17,15 @@ import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import '../l10n/strings.dart';
 import '../state/timeline_columns.dart';
-import '../theme/theme.dart';
-import '../widgets/controls.dart';
 import 'graph_panel.dart' show DrivenParam;
 import 'layer_fold_frb.dart';
 import 'timeline_group_row_frb.dart';
+import 'timeline_layer_drag.dart';
 import 'package:lumit_flutter/src/rust/api/retime.dart';
+
+// The layer drag's own file, re-exported so everything that reads the
+// Timeline's shared numbers still finds the drag among them.
+export 'timeline_layer_drag.dart';
 
 /// The layer-number column: the mockup's own 18, shared by the column
 /// header's `#` and the muted mono number under it so the two stack.
@@ -230,27 +233,6 @@ double zoomNudged(double zoom,
         {required bool inward, required double maxZoom}) =>
     (inward ? zoom * zoomKeyStep : zoom / zoomKeyStep)
         .clamp(1.0, maxZoom < 1 ? 1.0 : maxZoom);
-
-/// A layer drag in flight: the index lifted, and the index it would land on.
-///
-/// **Held by the panel and read by both halves of the table**, which is the
-/// point. The outline owns the gesture — the name is the stack handle
-/// — so when only it knew about the drag, only it could move: the lanes sat
-/// still while their layers were being reordered beside them. One value, read
-/// by the outline rows and the lane blocks alike, and the two halves slide as
-/// one row because they are working from the same number.
-class LayerDrag {
-  final int from;
-  final int to;
-  const LayerDrag(this.from, this.to);
-
-  @override
-  bool operator ==(Object other) =>
-      other is LayerDrag && other.from == from && other.to == to;
-
-  @override
-  int get hashCode => Object.hash(from, to);
-}
 
 /// One layer as **both halves of the table see it**: the rows it shows, the
 /// room an open Sequence view wants, and the height those come to.
@@ -594,79 +576,6 @@ List<LayerRow> layerRows({
   return out;
 }
 
-/// How far the block at [index] slides while a drag is in flight, in pixels;
-/// positive is down.
-///
-/// The lifted block travels the whole way to the slot it would take, and every
-/// block it passes moves one lift's height the other way — so the stack reads
-/// as already reordered before the drop, which is what makes a drop feel
-/// decided rather than guessed at. Pure, so the maths both halves depend on is
-/// tested without building a Timeline.
-double layerDragShift(List<double> heights, LayerDrag? drag, int index) {
-  if (drag == null || drag.from == drag.to) return 0;
-  if (index < 0 || index >= heights.length) return 0;
-  if (drag.from < 0 || drag.from >= heights.length) return 0;
-  if (drag.to < 0 || drag.to >= heights.length) return 0;
-  if (index == drag.from) {
-    var travel = 0.0;
-    if (drag.to > drag.from) {
-      for (var i = drag.from + 1; i <= drag.to; i++) {
-        travel += heights[i];
-      }
-      return travel;
-    }
-    for (var i = drag.to; i < drag.from; i++) {
-      travel -= heights[i];
-    }
-    return travel;
-  }
-  final lifted = heights[drag.from];
-  if (drag.to > drag.from) {
-    return index > drag.from && index <= drag.to ? -lifted : 0;
-  }
-  return index >= drag.to && index < drag.from ? lifted : 0;
-}
-
-/// Which slot a drag is aiming at, from how far it has travelled.
-///
-/// [from] is the block lifted, [travel] how far the pointer has moved down the
-/// stack since the lift in pixels (negative is up). Returns the index the block
-/// would take if dropped now.
-///
-/// **Measured against the stack as it was when the drag began**, which is the
-/// whole point. The rows on screen are slid out of the way while a drag is in
-/// flight, so asking "which row is the pointer over?" asks about geometry the
-/// drag itself is moving: each answer slides the rows, which changes the next
-/// answer, and the block oscillates between two slots without the pointer
-/// moving at all. Travel against the original heights cannot do that — it is
-/// a function of the pointer alone.
-///
-/// The threshold is the midpoint of the block being passed, not its edge: an
-/// edge means the slot flips the instant a single pixel of overlap appears,
-/// which is the other half of the same jitter. Travelling back to where the
-/// drag started therefore returns [from] exactly, so a cancelled-by-hand drag
-/// leaves the stack alone.
-int layerDragTarget(List<double> heights, int from, double travel) {
-  if (from < 0 || from >= heights.length) return from;
-  var to = from;
-  if (travel > 0) {
-    var passed = 0.0;
-    for (var i = from + 1; i < heights.length; i++) {
-      if (travel < passed + heights[i] / 2) break;
-      passed += heights[i];
-      to = i;
-    }
-  } else if (travel < 0) {
-    var passed = 0.0;
-    for (var i = from - 1; i >= 0; i--) {
-      if (-travel < passed + heights[i] / 2) break;
-      passed += heights[i];
-      to = i;
-    }
-  }
-  return to;
-}
-
 /// Which slot footage dropped from the Project panel takes, from how far down
 /// the stack it landed.
 ///
@@ -690,50 +599,6 @@ int layerDropSlot(List<double> heights, double y) {
 /// state. Pure, so the rule is checked without a widget tree.
 Set<String> rowsTwirledWith(String path, Set<String> selected) =>
     selected.contains(path) ? {path, ...selected} : {path};
-
-/// One layer's block, slid out of a dragged layer's way.
-///
-/// A transform, not a layout change: the rows keep their places, so a drag
-/// never reflows the table under itself — and the same widget wraps the block
-/// in the outline and the block in the lanes, which is what keeps them
-/// together to the pixel.
-class LayerDragSlide extends StatelessWidget {
-  final ValueListenable<LayerDrag?> drag;
-  final List<double> heights;
-  final int index;
-  final Widget child;
-
-  const LayerDragSlide({
-    super.key,
-    required this.drag,
-    required this.heights,
-    required this.index,
-    required this.child,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    // The user's animation level, not a constant: at *None* the rows must
-    // arrive without travelling at all (15-DESIGN §8), and a hard-coded
-    // duration here would be one animation the setting could not reach.
-    final duration = animationDuration(ThemeScope.of(context).animationLevel);
-    return ValueListenableBuilder<LayerDrag?>(
-      valueListenable: drag,
-      child: child,
-      builder: (context, value, child) {
-        final height = index < heights.length ? heights[index] : 0.0;
-        return AnimatedSlide(
-          offset: height <= 0
-              ? Offset.zero
-              : Offset(0, layerDragShift(heights, value, index) / height),
-          duration: duration,
-          curve: Curves.easeOut,
-          child: child,
-        );
-      },
-    );
-  }
-}
 
 /// Which blocks a viewport [viewport] tall, scrolled to [offset], has to have
 /// built — as `[first, last)` into [heights].
@@ -798,6 +663,7 @@ class LazyBlocks extends StatefulWidget {
     required this.heights,
     required this.viewport,
     required this.builder,
+    this.raised,
   });
 
   /// The scroll this stack sits in. Listened to rather than rebuilt from
@@ -813,6 +679,11 @@ class LazyBlocks extends StatefulWidget {
   final double viewport;
 
   final Widget Function(BuildContext context, int index) builder;
+
+  /// The block to draw over its neighbours, as an index into [heights]: the
+  /// layer a drag has in hand ([LayerDragState.raised]). Null for a stack
+  /// nothing is dragged in.
+  final ValueListenable<int?>? raised;
 
   @override
   State<LazyBlocks> createState() => _LazyBlocksState();
@@ -856,7 +727,12 @@ class _LazyBlocksState extends State<LazyBlocks> {
   void initState() {
     super.initState();
     widget.controller.addListener(_follow);
+    widget.raised?.addListener(_raise);
   }
+
+  /// A different block is in hand. Only the paint order changes, and every
+  /// block handed back is the instance already built, so this costs a repaint.
+  void _raise() => setState(() {});
 
   @override
   void didUpdateWidget(covariant LazyBlocks old) {
@@ -864,6 +740,10 @@ class _LazyBlocksState extends State<LazyBlocks> {
     if (old.controller != widget.controller) {
       old.controller.removeListener(_follow);
       widget.controller.addListener(_follow);
+    }
+    if (old.raised != widget.raised) {
+      old.raised?.removeListener(_raise);
+      widget.raised?.addListener(_raise);
     }
     // A new widget carries a new builder closure — over new rows, a new
     // selection, a new zoom — so every cached block is answering from the last
@@ -880,6 +760,7 @@ class _LazyBlocksState extends State<LazyBlocks> {
   @override
   void dispose() {
     widget.controller.removeListener(_follow);
+    widget.raised?.removeListener(_raise);
     super.dispose();
   }
 
@@ -911,8 +792,17 @@ class _LazyBlocksState extends State<LazyBlocks> {
     // screen behind a single vertical line moving, which is exactly what a
     // scrub over cached frames is. Behind a boundary, the blocks are repainted
     // when the blocks change and not when something above them does.
+    // The block in hand is painted last, so it rides over the rows it is
+    // carried past rather than sliding under the ones after it. Its place
+    // among the children is its index less the window's start, plus one for
+    // the blank that holds the top of the stack open.
+    final raised = widget.raised?.value;
+    final over = raised != null && raised >= first && raised < last
+        ? raised - first + (above > 0 ? 1 : 0)
+        : null;
     return RepaintBoundary(
-      child: Column(
+      child: RaisedColumn(
+        raised: over,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (above > 0) SizedBox(height: above),

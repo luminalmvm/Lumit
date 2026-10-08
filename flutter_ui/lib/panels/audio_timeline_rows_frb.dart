@@ -408,10 +408,13 @@ class AudioTrackOutlineRow extends StatelessWidget {
               width: 16,
               height: t.density.laneRow,
               child: Center(
-                child: glyph.LumitIcon(
-                  track.open ? LumitIcons.collapse : LumitIcons.expand,
-                  size: iconSize,
-                  colour: track.open ? t.textPrimary : t.textMuted,
+                child: TwirlTurn(
+                  open: track.open,
+                  child: glyph.LumitIcon(
+                    track.open ? LumitIcons.collapse : LumitIcons.expand,
+                    size: iconSize,
+                    colour: track.open ? t.textPrimary : t.textMuted,
+                  ),
                 ),
               ),
             ),

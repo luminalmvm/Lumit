@@ -814,7 +814,7 @@ class Outline extends StatelessWidget {
 
   /// The drag in flight and the block heights it slides by — the panel's, so
   /// the lanes are working from the same two values.
-  final ValueNotifier<LayerDrag?> layerDrag;
+  final LayerDragState layerDrag;
   final List<double> blockHeights;
 
   /// The layer `Enter` has just asked to rename.
@@ -877,10 +877,13 @@ class Outline extends StatelessWidget {
       controller: vScroll,
       heights: blockHeights,
       viewport: viewport,
+      raised: layerDrag.raised,
       builder: (context, i) => LayerDragSlide(
         drag: layerDrag,
         heights: blockHeights,
         index: i,
+        // The left end of the one card a layer in hand is drawn as.
+        side: LiftSide.leading,
         // **The selection is listened to here, one layer at a time.** A
         // click that lights a row must not redraw the layers it did not
         // touch, and this is the seam that decides that.

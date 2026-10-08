@@ -4,10 +4,13 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart' show SchedulerBinding;
 
 import '../../state/workspace.dart';
+import '../../theme/motion.dart';
 import '../escape_ladder.dart';
 import 'base.dart';
+import 'motion.dart';
 
 /// Show a positioned popup and complete with the value handed to `close`.
 /// Clicking outside, or pressing Escape, dismisses with null.
@@ -44,10 +47,16 @@ Future<T?> showLumitModal<T>({
   final overlay = Overlay.of(context);
   final completer = Completer<T?>();
   late OverlayEntry entry;
+  // One window answering another, a confirmation and then the dialogue it
+  // was guarding, opens before the screen has shown the gap between them.
+  // The wash is then already up as far as the eye is concerned, so it stays
+  // up rather than fading in a second time.
+  final takesOver = _modalJustLeft;
   void close(T? v) {
     if (completer.isCompleted) return;
     completer.complete(v);
     entry.remove();
+    _noteModalLeft();
   }
 
   entry = OverlayEntry(
@@ -58,29 +67,59 @@ Future<T?> showLumitModal<T>({
     // then filled the screen with "looking up a deactivated widget's ancestor
     // is unsafe". The overlay's own context is alive for exactly as long as
     // the entry is.
-    builder: (overlayContext) => Stack(
-      children: [
-        Positioned.fill(
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () => close(null),
-            child: ColoredBox(
-              color: dimBackground ? ThemeScope.of(overlayContext).theme.scrim : Color(0x00000000),
+    builder: (overlayContext) {
+      final scope = ThemeScope.of(overlayContext);
+      final motion = scope.motion;
+      return Stack(
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => close(null),
+              // The wash comes up with the window rather than cutting in ahead
+              // of it. It takes the click from its first frame either way.
+              child: Entrance.fade(
+                spec: takesOver ? MotionSpec.still : motion.scrim,
+                child: ColoredBox(
+                  color: dimBackground
+                      ? scope.theme.scrim
+                      : const Color(0x00000000),
+                ),
+              ),
             ),
           ),
-        ),
-        _MovableWindow(
-          id: id,
-          initialSize: initialSize,
-          minSize: minSize,
-          onDismiss: () => close(null),
-          child: builder(close),
-        ),
-      ],
-    ),
+          _MovableWindow(
+            id: id,
+            initialSize: initialSize,
+            minSize: minSize,
+            onDismiss: () => close(null),
+            // The window arrives once and leaves at once (docs/15 §8): what
+            // was dismissed is gone, and the caller's next window never opens
+            // over one still fading out.
+            child: Entrance(
+              spec: motion.modal,
+              rise: motion.modalRise,
+              scale: motion.modalScale,
+              child: builder(close),
+            ),
+          ),
+        ],
+      );
+    },
   );
   overlay.insert(entry);
   return completer.future;
+}
+
+/// Whether a modal window has closed since the last frame, which the closing
+/// itself schedules.
+bool _modalJustLeft = false;
+
+void _noteModalLeft() {
+  if (_modalJustLeft) return;
+  _modalJustLeft = true;
+  SchedulerBinding.instance
+      .addPostFrameCallback((_) => _modalJustLeft = false);
 }
 
 /// Where movable windows remember being left. The shell points this at the one

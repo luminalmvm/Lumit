@@ -98,48 +98,52 @@ class _OpeningOverlayState extends State<OpeningOverlay>
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     // Nothing underneath is clickable while the document it belongs to is being
-    // replaced, and the scrim is what says so.
+    // replaced, and the scrim is what says so. The card fades up rather than
+    // cutting in, and the pointer is absorbed from the first frame either way.
     return AbsorbPointer(
-      child: ColoredBox(
-        color: t.scrim,
-        child: Center(
-          child: Container(
-            width: 260,
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: t.surface1,
-              borderRadius: BorderRadius.circular(t.tokens.floatRadius),
-              border: Border.all(color: t.hairline),
-              boxShadow: t.floatShadow,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(widget.label ?? l10n.openingProject,
-                          style: t.bodyPrimary),
-                    ),
-                    if (widget.fraction != null)
-                      Text(
-                        l10n.openingPercent(
-                            (widget.fraction!.clamp(0.0, 1.0) * 100).round()),
-                        style: t.small,
+      child: Entrance.fade(
+        spec: ThemeScope.of(context).motion.swap,
+        child: ColoredBox(
+          color: t.scrim,
+          child: Center(
+            child: Container(
+              width: 260,
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: t.surface1,
+                borderRadius: BorderRadius.circular(t.tokens.floatRadius),
+                border: Border.all(color: t.hairline),
+                boxShadow: t.floatShadow,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(widget.label ?? l10n.openingProject,
+                            style: t.bodyPrimary),
                       ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                if (_sweep case final sweep?)
-                  AnimatedBuilder(
-                    animation: sweep,
-                    builder: (context, _) =>
-                        HouseProgressBar(fraction: sweep.value),
-                  )
-                else
-                  HouseProgressBar(fraction: widget.fraction ?? 0),
-              ],
+                      if (widget.fraction != null)
+                        Text(
+                          l10n.openingPercent(
+                              (widget.fraction!.clamp(0.0, 1.0) * 100).round()),
+                          style: t.small,
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  if (_sweep case final sweep?)
+                    AnimatedBuilder(
+                      animation: sweep,
+                      builder: (context, _) =>
+                          HouseProgressBar(fraction: sweep.value, eased: false),
+                    )
+                  else
+                    HouseProgressBar(fraction: widget.fraction ?? 0),
+                ],
+              ),
             ),
           ),
         ),

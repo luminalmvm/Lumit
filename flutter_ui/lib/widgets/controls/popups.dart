@@ -6,9 +6,12 @@ import 'dart:async';
 
 import 'package:flutter/gestures.dart' show PointerEnterEvent;
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart' show SchedulerBinding;
 
+import '../../theme/motion.dart';
 import '../escape_ladder.dart';
 import 'base.dart';
+import 'motion.dart';
 
 /// One popup on the chain: the handle that takes it back down again.
 class _PopupHandle {
@@ -33,9 +36,35 @@ class _PopupHandle {
 /// up. One click on a barrier, or one Escape, takes the whole chain.
 final List<_PopupHandle> _popupChain = [];
 
+/// The depths of the chain that have lost a popup since the last frame, for
+/// telling a menu that takes over from another apart from one opening afresh.
+///
+/// Crossing the menu bar with a menu open closes one list and opens the next
+/// inside a single pointer event, and so does moving from one submenu row to
+/// its neighbour. A list that arrives that way is a continuation of the one it
+/// replaced, and it makes no entrance: playing one for every heading crossed
+/// would have the bar flickering under a moving pointer. Only the first popup
+/// of a chain, opened onto nothing, arrives with motion.
+///
+/// Emptied after the next frame, which the dismissal itself schedules, so
+/// "took over" means opened before the screen had shown the gap.
+final Set<int> _popupJustLeft = {};
+bool _popupJustLeftClears = false;
+
+void _notePopupLeft(int depth) {
+  _popupJustLeft.add(depth);
+  if (_popupJustLeftClears) return;
+  _popupJustLeftClears = true;
+  SchedulerBinding.instance.addPostFrameCallback((_) {
+    _popupJustLeft.clear();
+    _popupJustLeftClears = false;
+  });
+}
+
 /// Close every popup at [depth] and deeper, innermost first.
 void _truncatePopups(int depth) {
   while (_popupChain.length > depth) {
+    _notePopupLeft(_popupChain.length - 1);
     _popupChain.removeLast().dismiss();
   }
   if (_popupChain.isEmpty) {
@@ -133,6 +162,9 @@ Future<T?> showLumitPopup<T>({
       context.getInheritedWidgetOfExactType<_PopupScope>()?.depth ?? -1;
   _truncatePopups(parentDepth + 1);
   final depth = _popupChain.length;
+  // Whether this one takes over from a popup that left at the same depth
+  // during this very event, in which case it arrives without an entrance.
+  final takesOver = _popupJustLeft.contains(depth);
   handle = _PopupHandle(() => close(null));
   _popupChain.add(handle);
   if (_popupChain.length == 1) {
@@ -168,7 +200,14 @@ Future<T?> showLumitPopup<T>({
               // Scrolls only when it has to: a shorter popup shrink-wraps and
               // behaves exactly as before.
               child: SingleChildScrollView(
-                child: _PopupScope(depth: depth, child: builder(close)),
+                child: _PopupScope(
+                  depth: depth,
+                  child: _PopupEntrance(
+                    flyout: depth > 0,
+                    still: takesOver,
+                    child: builder(close),
+                  ),
+                ),
               ),
             ),
           ),
@@ -178,6 +217,42 @@ Future<T?> showLumitPopup<T>({
   );
   overlay.insert(entry);
   return completer.future;
+}
+
+/// How a popup arrives (docs/15-DESIGN.md §8): the first of a chain fades in
+/// while it settles from its anchor, a flyout only fades, and one taking over
+/// from another is simply there.
+///
+/// The spec is read when the popup mounts and [Entrance] plays once, so a
+/// rebuild of the overlay never replays it.
+class _PopupEntrance extends StatelessWidget {
+  final bool flyout;
+  final bool still;
+  final Widget child;
+
+  const _PopupEntrance({
+    required this.flyout,
+    required this.still,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final motion = ThemeScope.maybeOf(context)?.motion;
+    if (motion == null || still) {
+      return Entrance(spec: MotionSpec.still, child: child);
+    }
+    if (flyout) return Entrance(spec: motion.flyout, child: child);
+    return Entrance(
+      spec: motion.popup,
+      rise: motion.popupRise,
+      scale: motion.popupScale,
+      // Grown from the corner it is anchored at, which is the control that
+      // opened it.
+      alignment: Alignment.topLeft,
+      child: child,
+    );
+  }
 }
 
 /// Places a popup at its anchor, then pulls it back on screen if it would hang
@@ -268,15 +343,19 @@ class _HoverTipState extends State<_HoverTip> {
           // the window entirely.
           child: CustomSingleChildLayout(
             delegate: _PopupLayout(origin),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: t.surface3,
-                borderRadius: BorderRadius.circular(t.tokens.floatRadius),
-                border: Border.all(color: t.hairline),
-                boxShadow: t.floatShadow,
+            child: Entrance(
+              spec: scope.motion.tooltip,
+              rise: scope.motion.tooltipRise,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: t.surface3,
+                  borderRadius: BorderRadius.circular(t.tokens.floatRadius),
+                  border: Border.all(color: t.hairline),
+                  boxShadow: t.floatShadow,
+                ),
+                child: Text(widget.message, style: t.body),
               ),
-              child: Text(widget.message, style: t.body),
             ),
           ),
         ),

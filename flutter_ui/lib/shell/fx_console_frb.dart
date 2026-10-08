@@ -125,7 +125,12 @@ Future<void> showFxConsoleFrb({
   // 100% — so it is converted here, exactly as a popup's is.
   final at = anchor == null ? null : overlayLocal(context, anchor);
   entry = OverlayEntry(
-    builder: (_) => _FxConsole(model: model, anchor: at, onClose: close),
+    // It fades up where the pointer is and takes the keyboard from its first
+    // frame. Closing it is immediate (docs/15 §8).
+    builder: (context) => Entrance.fade(
+      spec: ThemeScope.of(context).motion.popup,
+      child: _FxConsole(model: model, anchor: at, onClose: close),
+    ),
   );
   overlay.insert(entry);
   return completer.future;

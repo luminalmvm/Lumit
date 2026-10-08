@@ -367,7 +367,8 @@ class _CommandBox extends StatelessWidget {
         child: Container(
           width: 220,
           height: pill ? 28 : 20,
-          padding: const EdgeInsets.symmetric(horizontal: 8),
+          padding: EdgeInsets.symmetric(
+              horizontal: pill ? ShapeTokens.capsuleEnd : 8),
           decoration: BoxDecoration(
             color: pill ? t.surface1 : t.surface0,
             borderRadius: BorderRadius.circular(
