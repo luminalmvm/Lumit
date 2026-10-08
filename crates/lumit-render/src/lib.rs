@@ -122,6 +122,10 @@ pub use lumit_media::DecodedFrame;
 /// direct `lumit-gpu` dependency to ask.
 pub use lumit_gpu::video_memory_bytes;
 
+/// Which graphics card the renderer opened, as one line, re-exported for the
+/// same reason: the bridge writes it to the diagnostics file once a session.
+pub use lumit_gpu::adapter_summary;
+
 /// The Viewer's display view, re-exported for the same reason: the bridge sets
 /// it on [`HeadlessRenderer::set_display_view`] and would otherwise need a
 /// `lumit-gpu` dependency to name the type it is passing.

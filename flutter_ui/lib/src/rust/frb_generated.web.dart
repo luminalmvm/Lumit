@@ -190,6 +190,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeCompWiring dco_decode_box_autoadd_bridge_comp_wiring(dynamic raw);
 
   @protected
+  BridgeDrmNode dco_decode_box_autoadd_bridge_drm_node(dynamic raw);
+
+  @protected
   BridgeEffectInstanceInfo dco_decode_box_autoadd_bridge_effect_instance_info(
       dynamic raw);
 
@@ -515,6 +518,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeDiskCacheStats dco_decode_bridge_disk_cache_stats(dynamic raw);
+
+  @protected
+  BridgeDrmNode dco_decode_bridge_drm_node(dynamic raw);
 
   @protected
   BridgeEffectInfo dco_decode_bridge_effect_info(dynamic raw);
@@ -1399,6 +1405,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeCompSize? dco_decode_opt_box_autoadd_bridge_comp_size(dynamic raw);
 
   @protected
+  BridgeDrmNode? dco_decode_opt_box_autoadd_bridge_drm_node(dynamic raw);
+
+  @protected
   BridgeEffectInstanceInfo?
       dco_decode_opt_box_autoadd_bridge_effect_instance_info(dynamic raw);
 
@@ -1672,6 +1681,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeCompWiring sse_decode_box_autoadd_bridge_comp_wiring(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeDrmNode sse_decode_box_autoadd_bridge_drm_node(
       SseDeserializer deserializer);
 
   @protected
@@ -2058,6 +2071,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   BridgeDiskCacheStats sse_decode_bridge_disk_cache_stats(
       SseDeserializer deserializer);
+
+  @protected
+  BridgeDrmNode sse_decode_bridge_drm_node(SseDeserializer deserializer);
 
   @protected
   BridgeEffectInfo sse_decode_bridge_effect_info(SseDeserializer deserializer);
@@ -3090,6 +3106,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeDrmNode? sse_decode_opt_box_autoadd_bridge_drm_node(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeEffectInstanceInfo?
       sse_decode_opt_box_autoadd_bridge_effect_instance_info(
           SseDeserializer deserializer);
@@ -3383,6 +3403,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_box_autoadd_bridge_comp_wiring(
       BridgeCompWiring self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_bridge_drm_node(
+      BridgeDrmNode self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_bridge_effect_instance_info(
@@ -3799,6 +3823,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_disk_cache_stats(
       BridgeDiskCacheStats self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_drm_node(BridgeDrmNode self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_effect_info(
@@ -4921,6 +4948,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_bridge_comp_size(
       BridgeCompSize? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_bridge_drm_node(
+      BridgeDrmNode? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_box_autoadd_bridge_effect_instance_info(

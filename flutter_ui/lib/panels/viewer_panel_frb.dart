@@ -1174,12 +1174,19 @@ class FootageStageFrb extends StatelessWidget {
                 // rebuild the tree it is measuring.
                 WidgetsBinding.instance.addPostFrameCallback(
                     (_) => ui.reportViewerScale(drawn.width / facts.width));
-                return Center(
-                  child: SizedBox(
-                    width: drawn.width,
-                    height: drawn.height,
-                    child: _FootagePicture(uiState: ui, view: view),
-                  ),
+                return Stack(
+                  children: [
+                    Center(
+                      child: SizedBox(
+                        width: drawn.width,
+                        height: drawn.height,
+                        child: _FootagePicture(uiState: ui, view: view),
+                      ),
+                    ),
+                    // The same message the composition's stage shows when the
+                    // runner has had to refuse the texture.
+                    const Positioned.fill(child: ViewerGpuMismatchNotice()),
+                  ],
                 );
               },
             ),

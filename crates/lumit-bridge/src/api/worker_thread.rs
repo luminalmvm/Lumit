@@ -23,7 +23,7 @@ use uuid::Uuid;
 ))]
 use crate::api::state::BridgeSharedFrameInfo;
 #[cfg(all(target_os = "linux", feature = "shared-texture-linux"))]
-use crate::api::state::BridgeSharedFrameInfoLinux;
+use crate::api::state::{BridgeDrmNode, BridgeSharedFrameInfoLinux};
 
 use crate::api::{
     composition::CompositionReference,
@@ -2507,6 +2507,9 @@ fn build_viewer_renderer(
         }
     };
     drop(building);
+    // Which card that renderer is on, in the file a bug report is written
+    // from. Once a session, however many renderers it builds.
+    crate::faults::record_adapter();
     // The governor's ceilings, from what this machine actually has (docs/13 §3:
     // 70% of the card, 60% of physical, and one share of the pool rather than
     // two when the card *is* the machine's memory). The renderer sized the
@@ -3255,6 +3258,12 @@ fn present_ring_frame(
                 offset: shared.offset,
                 drm_fourcc: shared.drm_fourcc,
                 modifier: shared.modifier,
+                render_node: shared
+                    .render_node
+                    .map(|(major, minor)| BridgeDrmNode { major, minor }),
+                primary_node: shared
+                    .primary_node
+                    .map(|(major, minor)| BridgeDrmNode { major, minor }),
                 tier: crate::realtime::tier(),
                 view,
             }));
@@ -4756,6 +4765,12 @@ fn publish_zero_copy(
         offset: shared.offset,
         drm_fourcc: shared.drm_fourcc,
         modifier: shared.modifier,
+        render_node: shared
+            .render_node
+            .map(|(major, minor)| BridgeDrmNode { major, minor }),
+        primary_node: shared
+            .primary_node
+            .map(|(major, minor)| BridgeDrmNode { major, minor }),
         // A still frame is made at Full, whatever playback last settled on,
         // so it must not report a tier it was not rendered at.
         tier: lumit_eval::schedule::FINEST_TIER,
