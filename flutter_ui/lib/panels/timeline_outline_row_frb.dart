@@ -109,7 +109,7 @@ class OutlineRow extends StatefulWidget {
   /// The panel's drag state: this row is where the gesture is made — the name
   /// is the stack handle — and setting it here is what lets the lanes beside
   /// the outline move with it.
-  final ValueNotifier<LayerDrag?> layerDrag;
+  final LayerDragState layerDrag;
 
   /// The layer the panel has just been asked to rename (`Enter`), or
   /// null. A notifier rather than a rebuild because only the one row it names
@@ -167,8 +167,10 @@ class _OutlineRowState extends State<OutlineRow> {
   /// changing their mind, and it must cost nothing. Committing it anyway
   /// wrote an undo step for a stack that had not moved.
   void _commitDrag() {
-    final drag = widget.layerDrag.value;
-    widget.layerDrag.value = null;
+    // Letting go first: the blocks take their landing from the drag state,
+    // and the reorder below rebuilds the rows in the same frame, so the row
+    // in hand settles into a stack that is already in its new order.
+    final drag = widget.layerDrag.release(widget.blockHeights);
     if (drag == null || drag.from == drag.to) return;
     widget.layers[drag.from].layer
         .reorder(newIndex: BigInt.from(_stackIndex(drag.to)));
@@ -336,11 +338,16 @@ class _OutlineRowState extends State<OutlineRow> {
               // Selected is the brighter of the two states; a highlight (this
               // layer's fold-out was last touched) is the same surface at half
               // strength, so they read apart at a glance.
-              color: widget.selected
-                  ? rowSelectionFill(t)
-                  : widget.highlighted
-                      ? rowSelectionFill(t).withValues(alpha: 0.45)
-                      : null,
+              //
+              // In hand it draws neither: the lifted card under the row is
+              // that fill already, and it runs on into the lanes.
+              color: LayerLift.of(context)
+                  ? null
+                  : widget.selected
+                      ? rowSelectionFill(t)
+                      : widget.highlighted
+                          ? rowSelectionFill(t).withValues(alpha: 0.45)
+                          : null,
               // No seam of its own: the overlay draws the seams for the whole
               // outline, and a border here drew a *second* line a fraction of a
               // pixel from it, the overlay is phased by the scroll offset, which
@@ -484,10 +491,13 @@ class _OutlineRowState extends State<OutlineRow> {
               width: 16,
               height: t.density.laneRow,
               child: Center(
-                child: glyph.LumitIcon(
-                  widget.open ? LumitIcons.collapse : LumitIcons.expand,
-                  size: iconSize,
-                  colour: widget.open ? t.textPrimary : t.textMuted,
+                child: TwirlTurn(
+                  open: widget.open,
+                  child: glyph.LumitIcon(
+                    widget.open ? LumitIcons.collapse : LumitIcons.expand,
+                    size: iconSize,
+                    colour: widget.open ? t.textPrimary : t.textMuted,
+                  ),
                 ),
               ),
             ),
@@ -534,18 +544,20 @@ class _OutlineRowState extends State<OutlineRow> {
                   supportedDevices: dragDevices,
                   onVerticalDragStart: (_) {
                     _dragTravel = 0;
-                    widget.layerDrag.value = LayerDrag(index, index);
+                    // Carried at Full; at Minimal and None the rows stay put
+                    // and a line marks the drop's place (docs/15 §8.1).
+                    widget.layerDrag.lift(index,
+                        carries: ThemeScope.of(context).motion.carries);
                   },
+                  // The row in hand follows the pointer, and the slot it is
+                  // aiming at is worked out from the same travel.
                   onVerticalDragUpdate: (d) {
                     _dragTravel += d.delta.dy;
-                    final to = layerDragTarget(
-                        widget.blockHeights, index, _dragTravel);
-                    final drag = widget.layerDrag.value;
-                    if (drag?.to == to && drag?.from == index) return;
-                    widget.layerDrag.value = LayerDrag(index, to);
+                    widget.layerDrag.carry(widget.blockHeights, _dragTravel);
                   },
                   onVerticalDragEnd: (_) => _commitDrag(),
-                  onVerticalDragCancel: () => widget.layerDrag.value = null,
+                  onVerticalDragCancel: () => widget.layerDrag
+                      .release(widget.blockHeights, cancelled: true),
                   child: _name(t, id, info),
                 ),
         ),

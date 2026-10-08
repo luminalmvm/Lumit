@@ -411,10 +411,13 @@ class FoldRow extends StatelessWidget {
                   // Wider than the glyph: the twirl is now the only way to open
                   // a heading, so it has to be worth aiming at.
                   width: iconSize + 6,
-                  child: glyph.LumitIcon(
-                    open ? LumitIcons.collapse : LumitIcons.expand,
-                    size: iconSize,
-                    colour: open ? t.textPrimary : t.textMuted,
+                  child: TwirlTurn(
+                    open: open,
+                    child: glyph.LumitIcon(
+                      open ? LumitIcons.collapse : LumitIcons.expand,
+                      size: iconSize,
+                      colour: open ? t.textPrimary : t.textMuted,
+                    ),
                   ),
                 ),
               ),

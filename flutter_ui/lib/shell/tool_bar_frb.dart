@@ -848,7 +848,8 @@ class _ToolButtonState extends State<_ToolButton> {
               : null,
           child: AnimatedContainer(
             key: ValueKey<String>('tool-${widget.group.name}'),
-            duration: animationDuration(scope.animationLevel),
+            duration: scope.motion.mark.duration,
+            curve: scope.motion.mark.curve,
             width: _toolButtonWidth,
             height: height,
             decoration: decoration,

@@ -277,6 +277,13 @@ class ShapeTokens {
   /// number serves every height.
   static const double stadium = 1000;
 
+  /// How far in from a capsule's end a word, a reading or a bare glyph
+  /// stands: about where the round end has straightened, so the content is
+  /// not sitting in the curve. Only for content that is not itself a capsule.
+  /// A capsule nested in a capsule sits concentric instead, the same margin
+  /// all the way round.
+  static const double capsuleEnd = 12;
+
   static const studio = ShapeTokens(
     // The mockups draw 2 on almost every control (measured from the
     // computed-style manifests); 4 was the original guess.

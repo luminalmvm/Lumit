@@ -286,10 +286,13 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
           padding: const EdgeInsets.fromLTRB(4, 6, 10, 2),
           child: Row(
             children: [
-              lumitIcon(
-                open ? LumitIcon.twirlOpen : LumitIcon.twirlClosed,
-                size: iconSize,
-                color: t.textMuted,
+              TwirlTurn(
+                open: open,
+                child: lumitIcon(
+                  open ? LumitIcon.twirlOpen : LumitIcon.twirlClosed,
+                  size: iconSize,
+                  color: t.textMuted,
+                ),
               ),
               const SizedBox(width: 2),
               Expanded(

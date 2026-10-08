@@ -513,10 +513,13 @@ class FxSection extends StatelessWidget {
                 child: Padding(
                   // Room to aim at, now that it is the only way in.
                   padding: const EdgeInsets.symmetric(horizontal: 2),
-                  child: lumitIcon(
-                    open ? LumitIcon.twirlOpen : LumitIcon.twirlClosed,
-                    size: iconSize,
-                    color: open ? t.textPrimary : t.textMuted,
+                  child: TwirlTurn(
+                    open: open,
+                    child: lumitIcon(
+                      open ? LumitIcon.twirlOpen : LumitIcon.twirlClosed,
+                      size: iconSize,
+                      color: open ? t.textPrimary : t.textMuted,
+                    ),
                   ),
                 ),
               ),
@@ -762,10 +765,13 @@ Widget fxGroupHeaderRow(
                 alignment: Alignment.centerLeft,
                 child: Padding(
                   padding: const EdgeInsets.only(left: 1),
-                  child: lumitIcon(
-                    open ? LumitIcon.twirlOpen : LumitIcon.twirlClosed,
-                    size: iconSize,
-                    color: open ? t.textPrimary : t.textMuted,
+                  child: TwirlTurn(
+                    open: open,
+                    child: lumitIcon(
+                      open ? LumitIcon.twirlOpen : LumitIcon.twirlClosed,
+                      size: iconSize,
+                      color: open ? t.textPrimary : t.textMuted,
+                    ),
                   ),
                 ),
               ),

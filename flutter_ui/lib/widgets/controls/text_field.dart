@@ -320,11 +320,16 @@ class _HouseTextFieldState extends State<HouseTextField>
 
   @override
   Widget build(BuildContext context) {
-    final t = ThemeScope.of(context).theme;
+    final scope = ThemeScope.of(context);
+    final t = scope.theme;
     final hint = widget.hint;
     final leading = widget.leading;
 
-    return Container(
+    // Animated for the edge alone: the focus ring comes up as the well takes
+    // focus and fades as it gives it up (docs/15 §8).
+    return AnimatedContainer(
+      duration: scope.motion.mark.duration,
+      curve: scope.motion.mark.curve,
       width: widget.width,
       padding: widget.padding,
       // Fill the height the caller gives (a well is its stated height, not

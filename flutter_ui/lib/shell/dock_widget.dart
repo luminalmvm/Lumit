@@ -561,7 +561,15 @@ class _GhostLayer extends StatelessWidget {
             left: at.dx + 10,
             top: at.dy + 8,
             child: IgnorePointer(
-                child: _GhostPill(title: pane.panel.title, theme: t)),
+              // Picked up rather than cut in: the pill comes up from a little
+              // small as the tab leaves its strip (docs/15 §8).
+              child: Entrance(
+                spec: ThemeScope.of(context).motion.lift,
+                scale: 0.92,
+                alignment: Alignment.topLeft,
+                child: _GhostPill(title: pane.panel.title, theme: t),
+              ),
+            ),
           );
         },
       );
@@ -626,7 +634,10 @@ class _DividerState extends State<_Divider> {
 
   @override
   Widget build(BuildContext context) {
-    final t = ThemeScope.of(context).theme;
+    final scope = ThemeScope.of(context);
+    final t = scope.theme;
+    final step =
+        _hover || _dragging ? scope.motion.hoverIn : scope.motion.hoverOut;
     // Flush panes (Studio and Desk): hairline-toned gap, brighter on hover
     // and drag. Cards: the room shows between them with no hairline, a
     // hairline on hover, accent while dragging (dock.rs::resize_stroke).
@@ -678,7 +689,9 @@ class _DividerState extends State<_Divider> {
           height: widget.horizontal ? null : hit,
           color: idle,
           child: Center(
-            child: Container(
+            child: AnimatedContainer(
+              duration: step.duration,
+              curve: step.curve,
               width: widget.horizontal ? widget.gap : null,
               height: widget.horizontal ? null : widget.gap,
               color: colour,
@@ -925,7 +938,15 @@ class _TabPillState extends State<_TabPill> {
 
   @override
   Widget build(BuildContext context) {
-    final t = ThemeScope.of(context).theme;
+    final scope = ThemeScope.of(context);
+    final t = scope.theme;
+    // The fronted tab's fill takes the mark's time. A hover fill comes up
+    // quickly and leaves a little slower (docs/15 §8).
+    final step = widget.active
+        ? scope.motion.mark
+        : _hover
+            ? scope.motion.hoverIn
+            : scope.motion.hoverOut;
     // A filled pill marks the fronted tab only where actions are capsules.
     final round = t.tokens.actionRadius == ShapeTokens.stadium;
     // Desk draws the mockup's tab: a bare lowercase word on the 24 line, the
@@ -971,30 +992,40 @@ class _TabPillState extends State<_TabPill> {
     // same the whole way round. Desk's rule spans the word alone, so the word
     // takes the mockup's 10 of air as margin rather than padding, and the
     // box under the rule is the word's own.
-    final pill = Container(
-      key: ValueKey<String>('dock-tab-fill-${widget.pane.panel.name}'),
-      margin: round
-          ? EdgeInsets.all(t.tokens.pillInset)
-          : ruled
-              ? const EdgeInsets.symmetric(horizontal: 10)
-              : const EdgeInsets.symmetric(horizontal: 2, vertical: 3),
-      padding:
-          ruled ? EdgeInsets.zero : const EdgeInsets.symmetric(horizontal: 8),
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: fill,
-        borderRadius: BorderRadius.circular(round
-            ? t.tokens.actionRadius - t.tokens.pillInset
-            : t.tokens.actionRadius),
-        border: border,
+    // Only the fill and its edge are eased, so the pill keeps one size and one
+    // place while the colour under the word changes.
+    final pill = TweenAnimationBuilder<Decoration>(
+      tween: DecorationTween(
+        end: BoxDecoration(
+          color: fill,
+          borderRadius: BorderRadius.circular(round
+              ? t.tokens.actionRadius - t.tokens.pillInset
+              : t.tokens.actionRadius),
+          border: border,
+        ),
       ),
-      // Painted over the box, so the rule insets nothing and the fronted word
-      // sits on the same line as its neighbours.
-      foregroundDecoration: ruled && widget.active
-          ? BoxDecoration(
-              border: Border(bottom: BorderSide(color: t.accent, width: 2)))
-          : null,
+      duration: step.duration,
+      curve: step.curve,
       child: label,
+      builder: (context, decoration, label) => Container(
+        key: ValueKey<String>('dock-tab-fill-${widget.pane.panel.name}'),
+        margin: round
+            ? EdgeInsets.all(t.tokens.pillInset)
+            : ruled
+                ? const EdgeInsets.symmetric(horizontal: 10)
+                : const EdgeInsets.symmetric(horizontal: 2, vertical: 3),
+        padding:
+            ruled ? EdgeInsets.zero : const EdgeInsets.symmetric(horizontal: 8),
+        alignment: Alignment.center,
+        decoration: decoration,
+        // Painted over the box, so the rule insets nothing and the fronted
+        // word sits on the same line as its neighbours.
+        foregroundDecoration: ruled && widget.active
+            ? BoxDecoration(
+                border: Border(bottom: BorderSide(color: t.accent, width: 2)))
+            : null,
+        child: label,
+      ),
     );
     return _DragSource(
       pane: widget.pane,
@@ -1364,9 +1395,12 @@ class _PaneChrome extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final t = ThemeScope.of(context).theme;
+    final scope = ThemeScope.of(context);
+    final t = scope.theme;
     final round = t.tokens.roomed && !inCard;
     final onRoom = round && pane.panel == Panel.viewer;
+    // Whether this pane is itself a card, with a card's corners and shadow.
+    final card = round && !onRoom;
     final corner = Radius.circular(t.tokens.cardRadius);
     final edgeRadius = round
         ? BorderRadius.all(corner)
@@ -1393,13 +1427,18 @@ class _PaneChrome extends StatelessWidget {
         onPointerDown: (_) => activePanel.value = pane,
         child: GestureDetector(
           behavior: HitTestBehavior.translucent,
-          child: Container(
+          // Animated for the boundary alone: the accent edge comes up on the
+          // pane that took the click and fades off the one that lost it. The
+          // content is the same widget either way, so it is not rebuilt.
+          child: AnimatedContainer(
             key: drag.paneKey(pane),
+            duration: scope.motion.mark.duration,
+            curve: scope.motion.mark.curve,
             decoration: BoxDecoration(
               color: onRoom ? t.room : t.surface1,
               borderRadius:
-                  round ? BorderRadius.circular(t.tokens.cardRadius) : null,
-              boxShadow: round && !onRoom ? t.tokens.cardShadow : null,
+                  card ? BorderRadius.circular(t.tokens.cardRadius) : null,
+              boxShadow: card ? t.tokens.cardShadow : null,
             ),
             // The accent boundary paints over the content's edge, like the
             // egui overlay stroke at Order::Middle. It is ALWAYS supplied — an
@@ -1419,7 +1458,12 @@ class _PaneChrome extends StatelessWidget {
               borderRadius: edgeRadius,
             ),
             padding: round ? EdgeInsets.all(t.tokens.cardPadding) : null,
-            clipBehavior: round ? Clip.antiAlias : Clip.none,
+            // A card is cut to its corners. A pane on the room is not a card:
+            // its tiles are, and each has corners of its own. Cutting the
+            // pane to the card radius took a second, wider corner off the
+            // outer half of the Viewer's pills (a 16 corner off a capsule of
+            // 14) and cut their shadows off at the pane's edge.
+            clipBehavior: card ? Clip.antiAlias : Clip.none,
             child: header == null
                 ? body
                 : Column(children: [header!, Expanded(child: body)]),
@@ -1447,32 +1491,57 @@ class _DropPreview extends StatelessWidget {
               drag.dropPosition == null) {
             return const SizedBox.shrink();
           }
-          final t = ThemeScope.of(context).theme;
+          final scope = ThemeScope.of(context);
+          final zone = scope.motion.dropZone;
           return IgnorePointer(
-            child: CustomPaint(
-              painter: _DropPainter(pos: drag.dropPosition!, accent: t.accent),
+            // Fades in on the pane the pointer has reached, then glides
+            // between that pane's five places as the pointer moves over it,
+            // so the eye follows one region rather than a series of cuts
+            // (docs/15 §8). At *Minimal* it fades in and then cuts from place
+            // to place, since nothing travels there; at *None* both are
+            // immediate.
+            child: Entrance(
+              spec: zone,
+              child: TweenAnimationBuilder<Rect?>(
+                tween: RectTween(end: _dropRegion(drag.dropPosition!)),
+                duration:
+                    scope.motion.carries ? zone.duration : Duration.zero,
+                curve: zone.curve,
+                builder: (context, region, _) => CustomPaint(
+                  painter: _DropPainter(
+                      region: region!, accent: scope.theme.accent),
+                ),
+              ),
             ),
           );
         },
       );
 }
 
+/// Where a drop at [pos] lands, as a fraction of the pane: the whole of it for
+/// a stack, the near half for an edge split.
+Rect _dropRegion(DropPosition pos) => switch (pos) {
+      DropPosition.stack => const Rect.fromLTWH(0, 0, 1, 1),
+      DropPosition.left => const Rect.fromLTWH(0, 0, 0.5, 1),
+      DropPosition.right => const Rect.fromLTWH(0.5, 0, 0.5, 1),
+      DropPosition.above => const Rect.fromLTWH(0, 0, 1, 0.5),
+      DropPosition.below => const Rect.fromLTWH(0, 0.5, 1, 0.5),
+    };
+
 class _DropPainter extends CustomPainter {
-  final DropPosition pos;
+  /// The region to light, as a fraction of the pane ([_dropRegion]).
+  final Rect region;
   final Color accent;
-  const _DropPainter({required this.pos, required this.accent});
+  const _DropPainter({required this.region, required this.accent});
 
   @override
   void paint(Canvas canvas, Size size) {
-    final region = switch (pos) {
-      DropPosition.stack => Offset.zero & size,
-      DropPosition.left => Rect.fromLTWH(0, 0, size.width / 2, size.height),
-      DropPosition.right =>
-        Rect.fromLTWH(size.width / 2, 0, size.width / 2, size.height),
-      DropPosition.above => Rect.fromLTWH(0, 0, size.width, size.height / 2),
-      DropPosition.below =>
-        Rect.fromLTWH(0, size.height / 2, size.width, size.height / 2),
-    };
+    final region = Rect.fromLTRB(
+      this.region.left * size.width,
+      this.region.top * size.height,
+      this.region.right * size.width,
+      this.region.bottom * size.height,
+    );
     canvas.drawRect(region, Paint()..color = accent.withValues(alpha: 0.35));
     canvas.drawRect(
       region,
@@ -1485,7 +1554,7 @@ class _DropPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_DropPainter old) =>
-      old.pos != pos || old.accent != accent;
+      old.region != region || old.accent != accent;
 }
 
 /// **The bare-pane corner grip is gone** (owner review, 2026-08-24).

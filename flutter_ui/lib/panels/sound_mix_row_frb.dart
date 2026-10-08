@@ -105,10 +105,13 @@ class SoundMixOutlineRow extends StatelessWidget {
                   width: 16,
                   height: t.density.laneRow,
                   child: Center(
-                    child: glyph.LumitIcon(
-                      open ? LumitIcons.collapse : LumitIcons.expand,
-                      size: iconSize,
-                      colour: open ? t.textPrimary : t.textMuted,
+                    child: TwirlTurn(
+                      open: open,
+                      child: glyph.LumitIcon(
+                        open ? LumitIcons.collapse : LumitIcons.expand,
+                        size: iconSize,
+                        colour: open ? t.textPrimary : t.textMuted,
+                      ),
                     ),
                   ),
                 ),
@@ -234,7 +237,7 @@ class SoundMixLane extends StatelessWidget {
                 // Comp time 0 sits a padding's width into the lanes, and this
                 // row's canvas starts wherever the lanes are scrolled to.
                 originSeconds: ((hScroll.hasClients ? hScroll.offset : 0.0) -
-                        TimelineAxis.pad) *
+                        TimelineAxis.padFor(t)) *
                     secondsPerPixel,
                 secondsPerPixel: secondsPerPixel,
                 left: 0,

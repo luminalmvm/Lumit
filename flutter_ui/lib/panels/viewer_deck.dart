@@ -91,7 +91,11 @@ class ViewerDeck extends StatelessWidget {
         left: t.tokens.roomed
             ? concentric
             : viewerStripPadding - viewerMarkEdge,
-        right: t.tokens.roomed ? concentric : viewerStripPadding,
+        // The right-hand end holds a bar and its label, not a capsule, so it
+        // takes the capsule's end inset rather than the concentric one.
+        right: t.tokens.roomed
+            ? math.max(concentric, ShapeTokens.capsuleEnd)
+            : viewerStripPadding,
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {

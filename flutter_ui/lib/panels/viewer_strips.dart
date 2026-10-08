@@ -33,16 +33,20 @@ const double viewerStripHeight = 22;
 
 /// The strip's height under the shape: Lantern's detached strips are pills
 /// that hold 20px picker faces, so they stand at 28 and the faces sit 4 in
-/// from every edge, the inner corner the outer one less that 4 (the same
-/// concentric rule as every filled state). The flat shapes keep the 22.
+/// from the top and the bottom. The flat shapes keep the 22.
 double viewerStripHeightFor(LumitTheme t) =>
     t.tokens.roomed ? viewerStripHeight + 6 : viewerStripHeight;
 
-/// The room either end of a strip under the shape: the concentric inset on
-/// a Lantern pill, the drawing's 10 elsewhere.
-double viewerStripPaddingFor(LumitTheme t) => t.tokens.roomed
-    ? (viewerStripHeightFor(t) - t.density.dropdownFace) / 2
-    : viewerStripPadding;
+/// The room either end of a strip under the shape: a capsule's end inset on a
+/// Lantern pill, the drawing's 10 elsewhere.
+///
+/// It was the concentric 4 the picker faces take above and below, which is
+/// right for a face and wrong for what actually stands at the ends: the
+/// panel's name at the left and a reading at the right, both words, and a
+/// word 4 from the end of a capsule is sitting in its curve (owner, desk
+/// test).
+double viewerStripPaddingFor(LumitTheme t) =>
+    t.tokens.roomed ? ShapeTokens.capsuleEnd : viewerStripPadding;
 
 /// The room either end of both strips — the drawing's `padding: 0 10px`.
 const double viewerStripPadding = 10;
