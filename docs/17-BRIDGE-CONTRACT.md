@@ -58,6 +58,11 @@ halves means a mismatched library refuses to start.
 
 - The Viewer's frames cross as zero-copy shared textures only: D3D12 on Windows,
   IOSurface on macOS, DMA-BUF on Linux. No pixels are copied.
+- A Linux frame also names the graphics card it is on, by the device numbers of its
+  nodes under `/dev/dri`. The runner compares them with the card Flutter draws with, and
+  refuses a frame NVIDIA's driver made on a different card, because the other card's
+  driver crashes on it. The Viewer then shows a message. A card that can't be named is never
+  refused.
 - Small, bounded stills still cross as pixels: thumbnails, scope traces, the dropper's
   window. The engine caps their size.
 - Scope traces, dropper reads, progress and frame timings ride the frame response stream.

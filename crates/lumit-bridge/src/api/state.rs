@@ -138,6 +138,17 @@ pub struct ScopedChange {
     pub items: bool,
 }
 
+/// One Linux graphics device node, as the kernel numbers it: what `stat()`
+/// reports for `/dev/dri/renderD128` or `/dev/dri/card0`. It names a graphics
+/// card unambiguously, which a model name can't on a machine with two of the
+/// same card.
+#[frb(non_opaque)]
+#[derive(Clone)]
+pub struct BridgeDrmNode {
+    pub major: u32,
+    pub minor: u32,
+}
+
 #[frb(non_opaque)]
 #[derive(Clone)]
 pub struct BridgeSharedFrameInfoLinux {
@@ -154,6 +165,20 @@ pub struct BridgeSharedFrameInfoLinux {
     pub drm_fourcc: u32,
     /// The DRM modifier (`DRM_FORMAT_MOD_LINEAR` = 0 on the linear-tiling path).
     pub modifier: u64,
+    /// The render node of the card the buffer is on, or `None` when the driver
+    /// does not say.
+    ///
+    /// A laptop with two graphics cards renders on the fast one while Flutter
+    /// draws the window with the other, and NVIDIA's driver can't share a
+    /// buffer with the other card: an Intel and NVIDIA laptop crashed on its
+    /// first frame that way. The runner compares this with the card behind
+    /// its own display before it imports the buffer, and refuses it with a
+    /// message when they differ. `None` means the comparison is not made.
+    pub render_node: Option<BridgeDrmNode>,
+    /// The same card's primary node, for a display driver that only names its
+    /// own primary node. A render node is only ever compared with a render
+    /// node, and a primary with a primary.
+    pub primary_node: Option<BridgeDrmNode>,
     /// The preview tier this frame was made at: 1 Full, 2 Half, 3 Third,
     /// 4 Quarter.
     ///

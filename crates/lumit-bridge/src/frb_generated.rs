@@ -17906,6 +17906,18 @@ impl SseDecode for crate::api::cache::BridgeDiskCacheStats {
     }
 }
 
+impl SseDecode for crate::api::state::BridgeDrmNode {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_major = <u32>::sse_decode(deserializer);
+        let mut var_minor = <u32>::sse_decode(deserializer);
+        return crate::api::state::BridgeDrmNode {
+            major: var_major,
+            minor: var_minor,
+        };
+    }
+}
+
 impl SseDecode for crate::api::effect::BridgeEffectInfo {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -20514,6 +20526,10 @@ impl SseDecode for crate::api::state::BridgeSharedFrameInfoLinux {
         let mut var_offset = <u32>::sse_decode(deserializer);
         let mut var_drmFourcc = <u32>::sse_decode(deserializer);
         let mut var_modifier = <u64>::sse_decode(deserializer);
+        let mut var_renderNode =
+            <Option<crate::api::state::BridgeDrmNode>>::sse_decode(deserializer);
+        let mut var_primaryNode =
+            <Option<crate::api::state::BridgeDrmNode>>::sse_decode(deserializer);
         let mut var_tier = <u32>::sse_decode(deserializer);
         let mut var_view = <u32>::sse_decode(deserializer);
         return crate::api::state::BridgeSharedFrameInfoLinux {
@@ -20525,6 +20541,8 @@ impl SseDecode for crate::api::state::BridgeSharedFrameInfoLinux {
             offset: var_offset,
             drm_fourcc: var_drmFourcc,
             modifier: var_modifier,
+            render_node: var_renderNode,
+            primary_node: var_primaryNode,
             tier: var_tier,
             view: var_view,
         };
@@ -22747,6 +22765,17 @@ impl SseDecode for Option<crate::api::composition::BridgeCompSize> {
             return Some(<crate::api::composition::BridgeCompSize>::sse_decode(
                 deserializer,
             ));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<crate::api::state::BridgeDrmNode> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::api::state::BridgeDrmNode>::sse_decode(deserializer));
         } else {
             return None;
         }
@@ -25258,6 +25287,27 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::cache::BridgeDiskCacheStats>
     for crate::api::cache::BridgeDiskCacheStats
 {
     fn into_into_dart(self) -> crate::api::cache::BridgeDiskCacheStats {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::state::BridgeDrmNode {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.major.into_into_dart().into_dart(),
+            self.minor.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::state::BridgeDrmNode
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::state::BridgeDrmNode>
+    for crate::api::state::BridgeDrmNode
+{
+    fn into_into_dart(self) -> crate::api::state::BridgeDrmNode {
         self
     }
 }
@@ -28636,6 +28686,8 @@ impl flutter_rust_bridge::IntoDart for crate::api::state::BridgeSharedFrameInfoL
             self.offset.into_into_dart().into_dart(),
             self.drm_fourcc.into_into_dart().into_dart(),
             self.modifier.into_into_dart().into_dart(),
+            self.render_node.into_into_dart().into_dart(),
+            self.primary_node.into_into_dart().into_dart(),
             self.tier.into_into_dart().into_dart(),
             self.view.into_into_dart().into_dart(),
         ]
@@ -30612,6 +30664,14 @@ impl SseEncode for crate::api::cache::BridgeDiskCacheStats {
         <u64>::sse_encode(self.budget_bytes, serializer);
         <u64>::sse_encode(self.entries, serializer);
         <String>::sse_encode(self.root, serializer);
+    }
+}
+
+impl SseEncode for crate::api::state::BridgeDrmNode {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <u32>::sse_encode(self.major, serializer);
+        <u32>::sse_encode(self.minor, serializer);
     }
 }
 
@@ -32603,6 +32663,8 @@ impl SseEncode for crate::api::state::BridgeSharedFrameInfoLinux {
         <u32>::sse_encode(self.offset, serializer);
         <u32>::sse_encode(self.drm_fourcc, serializer);
         <u64>::sse_encode(self.modifier, serializer);
+        <Option<crate::api::state::BridgeDrmNode>>::sse_encode(self.render_node, serializer);
+        <Option<crate::api::state::BridgeDrmNode>>::sse_encode(self.primary_node, serializer);
         <u32>::sse_encode(self.tier, serializer);
         <u32>::sse_encode(self.view, serializer);
     }
@@ -34312,6 +34374,16 @@ impl SseEncode for Option<crate::api::composition::BridgeCompSize> {
         <bool>::sse_encode(self.is_some(), serializer);
         if let Some(value) = self {
             <crate::api::composition::BridgeCompSize>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<crate::api::state::BridgeDrmNode> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::api::state::BridgeDrmNode>::sse_encode(value, serializer);
         }
     }
 }

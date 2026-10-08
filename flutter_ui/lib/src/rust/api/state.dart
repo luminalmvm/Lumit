@@ -19,7 +19,7 @@ import 'solid.dart';
 part 'state.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `adopt`, `discard_unsaved_journal`, `forget_streams_except`, `handle_change_callback`, `journal_file`, `journal_for`, `op_scope`, `phase_fraction`, `report_phase`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<LumitBridgeState>>
 abstract class LumitBridgeState implements RustOpaqueInterface {
@@ -75,6 +75,31 @@ abstract class LumitBridgeState implements RustOpaqueInterface {
           path: path,
           onChangeStream: onChangeStream,
           onProgressStream: onProgressStream);
+}
+
+/// One Linux graphics device node, as the kernel numbers it: what `stat()`
+/// reports for `/dev/dri/renderD128` or `/dev/dri/card0`. It names a graphics
+/// card unambiguously, which a model name can't on a machine with two of the
+/// same card.
+class BridgeDrmNode {
+  final int major;
+  final int minor;
+
+  const BridgeDrmNode({
+    required this.major,
+    required this.minor,
+  });
+
+  @override
+  int get hashCode => major.hashCode ^ minor.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeDrmNode &&
+          runtimeType == other.runtimeType &&
+          major == other.major &&
+          minor == other.minor;
 }
 
 /// One effect's measured cost within its layer, in milliseconds.
@@ -583,6 +608,22 @@ class BridgeSharedFrameInfoLinux {
   /// The DRM modifier (`DRM_FORMAT_MOD_LINEAR` = 0 on the linear-tiling path).
   final BigInt modifier;
 
+  /// The render node of the card the buffer is on, or `None` when the driver
+  /// does not say.
+  ///
+  /// A laptop with two graphics cards renders on the fast one while Flutter
+  /// draws the window with the other, and NVIDIA's driver can't share a
+  /// buffer with the other card: an Intel and NVIDIA laptop crashed on its
+  /// first frame that way. The runner compares this with the card behind
+  /// its own display before it imports the buffer, and refuses it with a
+  /// message when they differ. `None` means the comparison is not made.
+  final BridgeDrmNode? renderNode;
+
+  /// The same card's primary node, for a display driver that only names its
+  /// own primary node. A render node is only ever compared with a render
+  /// node, and a primary with a primary.
+  final BridgeDrmNode? primaryNode;
+
   /// The preview tier this frame was made at: 1 Full, 2 Half, 3 Third,
   /// 4 Quarter.
   ///
@@ -608,6 +649,8 @@ class BridgeSharedFrameInfoLinux {
     required this.offset,
     required this.drmFourcc,
     required this.modifier,
+    this.renderNode,
+    this.primaryNode,
     required this.tier,
     required this.view,
   });
@@ -622,6 +665,8 @@ class BridgeSharedFrameInfoLinux {
       offset.hashCode ^
       drmFourcc.hashCode ^
       modifier.hashCode ^
+      renderNode.hashCode ^
+      primaryNode.hashCode ^
       tier.hashCode ^
       view.hashCode;
 
@@ -638,6 +683,8 @@ class BridgeSharedFrameInfoLinux {
           offset == other.offset &&
           drmFourcc == other.drmFourcc &&
           modifier == other.modifier &&
+          renderNode == other.renderNode &&
+          primaryNode == other.primaryNode &&
           tier == other.tier &&
           view == other.view;
 }

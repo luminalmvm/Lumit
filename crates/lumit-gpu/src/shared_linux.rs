@@ -60,6 +60,26 @@
 //! path still works. Verifying the export actually lands on the collaborator's
 //! GPUs is their runtime gate (docs/GUIDE §9).
 //!
+//! # Two graphics cards
+//!
+//! All of the above assumes the card that drew the picture and the card
+//! Flutter draws the window with are the same card. On a laptop with two they
+//! need not be: the renderer asks for the fast one, and the desktop hands
+//! Flutter whichever one drives the screen. A DMA-BUF is memory on *one* card,
+//! and exporting it from NVIDIA's driver gives a descriptor Intel's will accept
+//! and then can't use, which ended the process inside Mesa on the first draw
+//! ("intel: the execbuf ioctl keeps returning ENOMEM") with nothing for the
+//! crash net to catch.
+//!
+//! So every exported frame also says **which card it is on**: the device nodes
+//! Vulkan reports for the adapter ([`drm_device`], `VK_EXT_physical_device_drm`).
+//! The runner compares them with the card behind its own EGL display before it
+//! imports anything, and refuses the texture with a message when they differ
+//! and the buffer is NVIDIA's. Two cards on the kernel's own drivers are left
+//! alone, since those move a shared buffer to where the other card can read it.
+//! A driver that doesn't report its nodes leaves them unknown, and unknown is
+//! never grounds to refuse. See [`crate::drm`] for the description itself.
+//!
 //! # Synchronisation
 //!
 //! Same as the Windows path: after the copy we `poll(Wait)` so the GPU has
@@ -73,6 +93,7 @@
 
 #![allow(unsafe_code)]
 
+use crate::drm::DrmDevice;
 use crate::GpuContext;
 use ash::vk;
 
@@ -111,6 +132,10 @@ pub struct SharedDmabuf {
     offset: u32,
     pub width: u32,
     pub height: u32,
+    /// Which card the memory behind the fd is on. Read once as the context
+    /// opened ([`crate::adapter_drm_device`]) and carried on every frame, so
+    /// the runner can refuse a texture it could not have used.
+    device: DrmDevice,
 }
 
 // The fd is an opaque OS descriptor, not a live pointer we dereference; keeping
@@ -130,6 +155,9 @@ pub struct SharedDmabufInfo {
     pub offset: u32,
     pub drm_fourcc: u32,
     pub modifier: u64,
+    /// The card the buffer lives on, for the runner to compare with its own
+    /// before importing. [`DrmDevice::UNKNOWN`] when the driver does not say.
+    pub device: DrmDevice,
 }
 
 impl SharedDmabuf {
@@ -191,11 +219,12 @@ impl SharedDmabuf {
             offset,
             width,
             height,
+            device: crate::adapter_drm_device(),
         })
     }
 
     /// The DRM metadata Flutter's runner imports (fd, dimensions, stride, offset,
-    /// fourcc, modifier).
+    /// fourcc, modifier), and the card it has to be imported on.
     pub fn info(&self) -> SharedDmabufInfo {
         SharedDmabufInfo {
             fd: self.fd,
@@ -205,6 +234,7 @@ impl SharedDmabuf {
             offset: self.offset,
             drm_fourcc: DRM_FORMAT_ABGR8888,
             modifier: DRM_FORMAT_MOD_LINEAR,
+            device: self.device,
         }
     }
 
@@ -414,6 +444,56 @@ pub(crate) fn device_local_bytes(adapter: &wgpu::Adapter) -> u64 {
                 .map(|heap| heap.size)
                 .max()
                 .unwrap_or(0)
+        })
+    }
+}
+
+/// Which card this adapter is, as the kernel names it: the device nodes from
+/// `VkPhysicalDeviceDrmPropertiesEXT` (`VK_EXT_physical_device_drm`).
+///
+/// [`DrmDevice::UNKNOWN`] whenever the question can't be asked properly: the
+/// adapter is not a Vulkan one, the driver does not offer the extension, or
+/// either the instance or the card is still on Vulkan 1.0, where the query
+/// that carries the answer does not exist. None of those is an error. The
+/// runner reads unknown as "do not compare" and carries on exactly as it did
+/// before this existed.
+///
+/// One `vkGetPhysicalDeviceProperties2` against an adapter already open, so it
+/// is read once at context creation and stashed, like [`device_local_bytes`].
+pub(crate) fn drm_device(adapter: &wgpu::Adapter) -> DrmDevice {
+    // SAFETY: the closure only *reads* the adapter's properties. It creates and
+    // destroys nothing, and neither the instance nor the physical device handle
+    // outlives the call. The properties struct is chained only after the
+    // extension that defines it has been found in the adapter's own list, and
+    // the 1.1 entry point is called only when both sides say they have it:
+    // ash fills a missing entry point with a function that panics.
+    unsafe {
+        adapter.as_hal::<wgpu::hal::api::Vulkan, _, _>(|hal_adapter| {
+            let Some(hal_adapter) = hal_adapter else {
+                return DrmDevice::UNKNOWN;
+            };
+            let capabilities = hal_adapter.physical_device_capabilities();
+            if !capabilities.supports_extension(vk::EXT_PHYSICAL_DEVICE_DRM_NAME) {
+                return DrmDevice::UNKNOWN;
+            }
+            let instance = hal_adapter.shared_instance();
+            if instance.instance_api_version() < vk::API_VERSION_1_1
+                || capabilities.properties().api_version < vk::API_VERSION_1_1
+            {
+                return DrmDevice::UNKNOWN;
+            }
+            let mut drm = vk::PhysicalDeviceDrmPropertiesEXT::default();
+            let mut properties = vk::PhysicalDeviceProperties2::default().push_next(&mut drm);
+            instance.raw_instance().get_physical_device_properties2(
+                hal_adapter.raw_physical_device(),
+                &mut properties,
+            );
+            DrmDevice::from_vulkan(
+                drm.has_primary != vk::FALSE,
+                (drm.primary_major, drm.primary_minor),
+                drm.has_render != vk::FALSE,
+                (drm.render_major, drm.render_minor),
+            )
         })
     }
 }
