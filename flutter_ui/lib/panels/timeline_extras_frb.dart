@@ -1711,6 +1711,56 @@ class _TimelineRulerState extends State<TimelineRuler> {
     );
   }
 
+  /// The right-click menu on the ruler's own ground: a marker or a work-area
+  /// edge at [frame], the one under the pointer. A ruler with nothing to
+  /// commit to offers nothing.
+  Future<void> _groundMenu(Offset at, int frame) async {
+    final setWork = widget.onWorkArea;
+    if (setWork == null && widget.onMarkersChanged == null) return;
+    final picked = await showMenuAt<String>(
+      context: context,
+      position: at,
+      rows: (close) => [
+        if (widget.onMarkersChanged != null)
+          MenuRow(
+              key: const ValueKey('tl-ruler-add-marker'),
+              onPressed: () => close('marker'),
+              child: Text(l10n.menuAddMarkerHere)),
+        if (setWork != null) ...[
+          MenuRow(
+              key: const ValueKey('tl-ruler-work-in'),
+              onPressed: () => close('work-in'),
+              child: Text(l10n.workAreaStart)),
+          MenuRow(
+              key: const ValueKey('tl-ruler-work-out'),
+              onPressed: () => close('work-out'),
+              child: Text(l10n.workAreaEnd)),
+          MenuRow(
+              key: const ValueKey('tl-ruler-work-clear'),
+              onPressed: () => close('work-clear'),
+              child: Text(l10n.workAreaClear)),
+        ],
+      ],
+    );
+    if (picked == null || !mounted) return;
+    switch (picked) {
+      case 'marker':
+        await _createMarkerAt(frame);
+      case 'work-clear':
+        setWork?.call(null);
+      case _:
+        // A comp with no frames has no valid span: it keeps the one it has.
+        try {
+          setWork?.call(workAreaWith(
+            comp: widget.comp,
+            current: widget.comp.getWorkArea(),
+            wanted: frame,
+            isStart: picked == 'work-in',
+          ));
+        } catch (_) {}
+    }
+  }
+
   /// Whether [x], in the ruler's own pixels, lands in either work-area
   /// handle's reach — the same [_workHandleWidth] the handles claim.
   bool _onWorkHandle(double x, ({int start, int end, bool whole}) work) {
@@ -1795,6 +1845,8 @@ class _TimelineRulerState extends State<TimelineRuler> {
         }
       },
       onHorizontalDragUpdate: (d) => _seek(d.localPosition.dx),
+      onSecondaryTapUp: (d) =>
+          _groundMenu(d.globalPosition, axis.frameAt(d.localPosition.dx)),
       child: Container(
         height: widget.height,
         // **The lane ground, not a strip of its own**: the mockup

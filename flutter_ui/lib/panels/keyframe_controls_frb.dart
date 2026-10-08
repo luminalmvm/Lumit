@@ -374,13 +374,16 @@ class KeyframeControlsFrb extends StatelessWidget {
     );
 
     final navigator = <Widget>[
-      _button(
-        keyName: 'kf-prev-$rowKey',
-        enabled: previous != null,
-        child: LumitIcon(LumitIcons.previousKey,
-            size: iconSize,
-            colour: previous == null ? t.textDisabled : t.textMuted),
-        onPressed: () => _seekTo(previous),
+      LumitTooltip(
+        message: l10n.keyPreviousKeyframe,
+        child: _button(
+          keyName: 'kf-prev-$rowKey',
+          enabled: previous != null,
+          child: LumitIcon(LumitIcons.previousKey,
+              size: iconSize,
+              colour: previous == null ? t.textDisabled : t.textMuted),
+          onPressed: () => _seekTo(previous),
+        ),
       ),
       LumitTooltip(
         message: onKey ? l10n.tipRemoveKeyframe : l10n.tipAddKeyframe,
@@ -391,13 +394,16 @@ class KeyframeControlsFrb extends StatelessWidget {
           onPressed: () => _toggleKeyHere(playhead.value),
         ),
       ),
-      _button(
-        keyName: 'kf-next-$rowKey',
-        enabled: next != null,
-        child: LumitIcon(LumitIcons.nextKey,
-            size: iconSize,
-            colour: next == null ? t.textDisabled : t.textMuted),
-        onPressed: () => _seekTo(next),
+      LumitTooltip(
+        message: l10n.keyNextKeyframe,
+        child: _button(
+          keyName: 'kf-next-$rowKey',
+          enabled: next != null,
+          child: LumitIcon(LumitIcons.nextKey,
+              size: iconSize,
+              colour: next == null ? t.textDisabled : t.textMuted),
+          onPressed: () => _seekTo(next),
+        ),
       ),
     ];
 
@@ -657,13 +663,16 @@ class PathKeyframesFrb extends StatelessWidget {
           ),
         ),
         if (_animated) ...[
-          button(
-            keyName: 'kf-prev-$rowKey',
-            enabled: previous != null,
-            child: LumitIcon(LumitIcons.previousKey,
-                size: iconSize,
-                colour: previous == null ? t.textDisabled : t.textMuted),
-            onPressed: () => onSeek(previous!),
+          LumitTooltip(
+            message: l10n.keyPreviousKeyframe,
+            child: button(
+              keyName: 'kf-prev-$rowKey',
+              enabled: previous != null,
+              child: LumitIcon(LumitIcons.previousKey,
+                  size: iconSize,
+                  colour: previous == null ? t.textDisabled : t.textMuted),
+              onPressed: () => onSeek(previous!),
+            ),
           ),
           LumitTooltip(
             message: onKey ? l10n.tipRemoveKeyframe : l10n.tipAddKeyframe,
@@ -674,13 +683,16 @@ class PathKeyframesFrb extends StatelessWidget {
               onPressed: () => _toggleKeyHere(playhead.value),
             ),
           ),
-          button(
-            keyName: 'kf-next-$rowKey',
-            enabled: next != null,
-            child: LumitIcon(LumitIcons.nextKey,
-                size: iconSize,
-                colour: next == null ? t.textDisabled : t.textMuted),
-            onPressed: () => onSeek(next!),
+          LumitTooltip(
+            message: l10n.keyNextKeyframe,
+            child: button(
+              keyName: 'kf-next-$rowKey',
+              enabled: next != null,
+              child: LumitIcon(LumitIcons.nextKey,
+                  size: iconSize,
+                  colour: next == null ? t.textDisabled : t.textMuted),
+              onPressed: () => onSeek(next!),
+            ),
           ),
         ],
       ],

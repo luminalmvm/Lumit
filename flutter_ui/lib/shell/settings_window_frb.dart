@@ -720,6 +720,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         settings.transformInEffectControls = shipped.transformInEffectControls;
         settings.easingInPopup = shipped.easingInPopup;
         settings.layerNamesOnBars = shipped.layerNamesOnBars;
+        settings.timelineMinimap = shipped.timelineMinimap;
         settings.rightClickOpensNodeSearch = shipped.rightClickOpensNodeSearch;
         settings.tabOpensNodeSearch = shipped.tabOpensNodeSearch;
         settings.shiftAOpensNodeSearch = shipped.shiftAOpensNodeSearch;
@@ -1574,6 +1575,13 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               l10n.settingsLayerNamesOnLaneBars,
               value: settings.layerNamesOnBars, set: (on) {
             settings.layerNamesOnBars = on;
+            changed();
+          }),
+          // Unset, it follows the style: on in Lantern, off in the others.
+          _flag(t, 'settings-timeline-minimap', l10n.settingsTimelineMinimap,
+              value: settings.timelineMinimap ?? t.shape == ThemeShape.lantern,
+              set: (on) {
+            settings.timelineMinimap = on;
             changed();
           }),
         ],

@@ -156,6 +156,16 @@ class OutlineRow extends StatefulWidget {
   State<OutlineRow> createState() => _OutlineRowState();
 }
 
+/// The rows on screen, by layer, so a layer's bar can open its row's menu.
+final Map<UuidValue, _OutlineRowState> _rowsOnScreen = {};
+
+/// The menu a right-click on [layer]'s row opens, at [position]. Nothing
+/// when that row is not on screen.
+void showLayerRowMenu(UuidValue layer, Offset position) {
+  final row = _rowsOnScreen[layer];
+  if (row != null) row._showRowMenu(row.context, position);
+}
+
 class _OutlineRowState extends State<OutlineRow> {
   /// The inline rename, entered with `Enter` on the selected layer.
   TextEditingController? _rename;
@@ -229,10 +239,15 @@ class _OutlineRowState extends State<OutlineRow> {
   void initState() {
     super.initState();
     widget.renameRequest.addListener(_maybeRename);
+    _rowsOnScreen[layer.internallayerId] = this;
   }
 
   @override
   void dispose() {
+    // Only its own entry: a row rebuilt elsewhere has already taken the slot.
+    if (_rowsOnScreen[layer.internallayerId] == this) {
+      _rowsOnScreen.remove(layer.internallayerId);
+    }
     widget.renameRequest.removeListener(_maybeRename);
     _rename?.dispose();
     super.dispose();

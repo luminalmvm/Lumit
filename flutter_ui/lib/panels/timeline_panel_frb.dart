@@ -4631,10 +4631,13 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
             onOpen: () => _openAudioWorkspace(ui),
             onMenu: (at) => _soundMixMenu(ui, comp, at),
           ),
-        // Lantern's minimap: the whole comp's bars compressed into a strip
+        // The minimap: the whole comp's bars compressed into a strip
         // under the lanes, with the visible range as a lighter window that
         // drags to scroll. The same strip the navigator is, drawing bars.
-        if (t.shape == ThemeShape.lantern)
+        // Lantern draws it unless Settings says otherwise, the others when
+        // asked.
+        if (ui.workspace.interface.timelineMinimap ??
+            t.shape == ThemeShape.lantern)
           TimelineNavigator(
             trailing: scrollGutterWidth,
             pad: _axisPad,

@@ -4801,6 +4801,10 @@
   "@menuAddMarkerAtPlayhead": {
     "description": "Menu item."
   },
+  "menuAddMarkerHere": "Add marker here",
+  "@menuAddMarkerHere": {
+    "description": "Timeline: a row of the right-click menu on the time ruler's own ground. It makes a composition marker at the frame under the pointer."
+  },
   "menuAddTextSelector": "Add text selector",
   "@menuAddTextSelector": {
     "description": "Menu item."
@@ -7018,7 +7022,7 @@
   },
   "tipEasyEase": "Easy ease",
   "@tipEasyEase": {
-    "description": "Tooltip on the graph editor's Bezier button, naming the easing it applies. The F9 shortcut is not quoted here; the keymap teaches it."
+    "description": "Tooltip on the graph editor's Easy ease button, naming the easing it applies. The F9 shortcut is not quoted here; the keymap teaches it."
   },
   "tipEdgeHardness": "Edge hardness",
   "@tipEdgeHardness": {
@@ -7120,13 +7124,13 @@
   "@tipMaskMode": {
     "description": "Tooltip on the picker choosing how a mask combines with the ones above it — Add, Subtract, Intersect, Difference. One or two words."
   },
-  "tipMasterMotionBlurOff": "Blur off",
+  "tipMasterMotionBlurOff": "Motion blur",
   "@tipMasterMotionBlurOff": {
-    "description": "Tooltip on the composition's motion-blur switch, when it is off. One or two words."
+    "description": "Tooltip on the composition's motion-blur switch, when it is off. The control's name, two words at most; the glyph's colour says whether it is on."
   },
-  "tipMasterMotionBlurOn": "Blur on",
+  "tipMasterMotionBlurOn": "Motion blur",
   "@tipMasterMotionBlurOn": {
-    "description": "Tooltip on the composition's motion-blur switch, when it is on. One or two words."
+    "description": "Tooltip on the composition's motion-blur switch, when it is on. The control's name, two words at most; the glyph's colour says whether it is on."
   },
   "tipMatte": "Matte",
   "@tipMatte": {
@@ -7340,12 +7344,16 @@
   },
   "tipToggleColumns": "{column} column",
   "@tipToggleColumns": {
-    "description": "Tooltip on the Timeline bottom bar's column-group toggles. {column} is that group's own column heading — Switches, Modes, or Parent.",
+    "description": "Tooltip on the Timeline bottom bar's column-group toggles. {column} is that group's own column heading: Switches, Modes, Parent, or Render time.",
     "placeholders": {
       "column": {
         "type": "String"
       }
     }
+  },
+  "tipTimelineMore": "More commands",
+  "@tipTimelineMore": {
+    "description": "Tooltip on the three-dot button at the end of the Timeline's bottom bar, which opens a menu of commands: new layer, the razor, the work area, markers and beat detection. One or two words."
   },
   "tipTransparencyGrid": "Transparency grid",
   "@tipTransparencyGrid": {
@@ -10044,7 +10052,7 @@
   },
   "keysEase": "Ease",
   "@keysEase": {
-    "description": "Timeline bottom bar: tooltip on the curve glyph that opens the Ease popover on the selected keyframes, between the Hold and Bezier glyphs."
+    "description": "Timeline bottom bar: tooltip on the curve glyph that opens the Ease popover on the selected keyframes, last of the four after the Hold glyph."
   },
   "welcomeNewProject": "New project",
   "@welcomeNewProject": {
@@ -11398,6 +11406,21 @@
       }
     }
   },
+  "timelineBarDragHint": "f{inFrame}–f{outFrame} · {frames} f",
+  "@timelineBarDragHint": {
+    "description": "Timeline lanes: the small readout pill beside the pointer while a layer's bar is being moved or trimmed, saying the frame it now starts on, the frame it ends on, and how many frames long it is. Very small mono type; an en dash between the two ends, a middle dot before the length.",
+    "placeholders": {
+      "inFrame": {
+        "type": "int"
+      },
+      "outFrame": {
+        "type": "int"
+      },
+      "frames": {
+        "type": "int"
+      }
+    }
+  },
   "graphKeyKicker": "Key",
   "@graphKeyKicker": {
     "description": "Timeline, Graph mode: the label opening the readout row at the foot of the outline, which appears while exactly one keyframe is selected and says which frame and value it holds. Shown in small capitals."
@@ -11819,6 +11842,10 @@
   "settingsLayerNamesOnLaneBars": "Layer names on lane bars",
   "@settingsLayerNamesOnLaneBars": {
     "description": "Settings window, Timeline page: the name of one setting - whether each layer bar in the Timeline lane area is labelled with the layer name. Off by default."
+  },
+  "settingsTimelineMinimap": "Minimap under the lanes",
+  "@settingsTimelineMinimap": {
+    "description": "Settings window, Timeline page: the name of one setting - whether a thin strip under the Timeline's lanes draws every layer's bar in miniature, with the part in view as a window that drags to scroll. On by default in the Lantern style, off in the others."
   },
   "settingsGroupNodeGraphs": "Node graphs",
   "@settingsGroupNodeGraphs": {

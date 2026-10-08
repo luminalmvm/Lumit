@@ -363,6 +363,11 @@ class InterfaceSettings {
   /// few pixels to the left. Turning it on gives the labels back, unchanged.
   bool layerNamesOnBars;
 
+  /// Whether the minimap of the bars is drawn under the Timeline's lanes.
+  ///
+  /// Null follows the style: Lantern draws it, Studio and Desk do not.
+  bool? timelineMinimap;
+
   /// Whether rows are drawn a pixel or two tighter than the approved mockups
   /// render them (`DensityTokens` in `theme/theme.dart`).
   ///
@@ -465,6 +470,7 @@ class InterfaceSettings {
     this.showToneMap = false,
     this.easingInPopup = false,
     this.layerNamesOnBars = false,
+    this.timelineMinimap,
     this.compact = false,
     this.viewerBars = ViewerBars.auto,
     this.toolBarPosition = ToolBarPosition.auto,
@@ -496,6 +502,7 @@ class InterfaceSettings {
         'show_tone_map': showToneMap,
         'easing_in_popup': easingInPopup,
         'layer_names_on_bars': layerNamesOnBars,
+        'timeline_minimap': timelineMinimap,
         'compact': compact,
         'viewer_bars': viewerBars.name,
         'tool_bar_position': toolBarPosition.name,
@@ -571,6 +578,7 @@ class InterfaceSettings {
         // ruling on what the editor should look like, and the labels are one
         // click away for anyone who wants them back.
         layerNamesOnBars: j['layer_names_on_bars'] as bool? ?? false,
+        timelineMinimap: j['timeline_minimap'] as bool?,
         // Absent means off, which is the roomy default — and every settings
         // file written before this field existed was written by a build that
         // drew the tight rows. Those users get the extra pixel or two back,

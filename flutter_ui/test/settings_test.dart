@@ -56,6 +56,7 @@ void main() {
       showToneMap: true,
       easingInPopup: true,
       layerNamesOnBars: true,
+      timelineMinimap: true,
       compact: true,
       viewerBars: ViewerBars.bottom,
       toolBarPosition: ToolBarPosition.left,
@@ -80,6 +81,7 @@ void main() {
     expect(back.showToneMap, isTrue);
     expect(back.easingInPopup, isTrue);
     expect(back.layerNamesOnBars, isTrue);
+    expect(back.timelineMinimap, isTrue);
     expect(back.compact, isTrue);
     expect(back.viewerBars, ViewerBars.bottom);
     expect(back.toolBarPosition, ToolBarPosition.left);
@@ -90,7 +92,7 @@ void main() {
     expect(back.room, LanternRoom.night);
     // Every field is one of the above: a new one added without a line here is
     // a setting nothing checks survives the file.
-    expect(all.toJson().keys.length, 25);
+    expect(all.toJson().keys.length, 26);
   });
 
   // The whole first-run rule in two lines: no file means ask, a file means
