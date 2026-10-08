@@ -1027,7 +1027,11 @@ class LayerArea extends StatelessWidget {
                                       null => null,
                                     },
                                     painter: RowDividerPainter(
-                                      step: t.density.laneRow,
+                                      // No rows, no rules: an empty
+                                      // composition is a clear ground.
+                                      step: rows.isEmpty
+                                          ? 0
+                                          : t.density.laneRow,
                                       colour: rowSeamColour(t),
                                       // Only the fraction: rounding is
                                       // invariant under whole-pixel shifts,

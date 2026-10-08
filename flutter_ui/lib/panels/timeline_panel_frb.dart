@@ -4143,7 +4143,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                         null => null,
                       },
                       painter: RowDividerPainter(
-                        step: t.density.laneRow,
+                        // No rows, no rules, as on the lanes.
+                        step: rows.isEmpty ? 0 : t.density.laneRow,
                         colour: rowSeamColour(t),
                         phase: -((positionOf(_vOutline)?.pixels ?? 0) %
                             t.density.laneRow),
