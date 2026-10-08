@@ -108,15 +108,20 @@ class CompTabsFrb extends StatelessWidget {
           // click from the composition it would write.
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: HouseButton(
-              key: const ValueKey('tl-export'),
-              small: true,
-              primary: true,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-              onPressed: onExport,
-              // `primary` sets the label's own style, kicker in `surface_0` on
-              // the accent fill (§7.1), and cases the word for the shape.
-              child: Text(l10n.exportAction),
+            child: LumitTooltip(
+              message: l10n.keyExportTheComposition,
+              action: 'file.export',
+              child: HouseButton(
+                key: const ValueKey('tl-export'),
+                small: true,
+                primary: true,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                onPressed: onExport,
+                // `primary` sets the label's own style, kicker in `surface_0`
+                // on the accent fill (§7.1), and cases the word for the shape.
+                child: Text(l10n.exportAction),
+              ),
             ),
           ),
         ],
@@ -206,6 +211,7 @@ class CompTabsFrb extends StatelessWidget {
                   ])
                     LumitTooltip(
                       message: tip,
+                      action: 'graph.toggle',
                       child: SegmentOption(
                         key: ValueKey<String>(keyName),
                         active: mode == which,
@@ -217,14 +223,18 @@ class CompTabsFrb extends StatelessWidget {
                 ]),
                 const SizedBox(width: 6),
               ],
-              HouseButton(
-                key: const ValueKey('tl-export'),
-                small: true,
-                primary: true,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                onPressed: onExport,
-                child: Text(l10n.exportAction),
+              LumitTooltip(
+                message: l10n.keyExportTheComposition,
+                action: 'file.export',
+                child: HouseButton(
+                  key: const ValueKey('tl-export'),
+                  small: true,
+                  primary: true,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  onPressed: onExport,
+                  child: Text(l10n.exportAction),
+                ),
               ),
             ],
           ),
@@ -756,6 +766,52 @@ class _LayerSearchFrbState extends State<LayerSearchFrb> {
   }
 }
 
+/// A row picker showing its default value, at rest: its word alone in the
+/// muted colour, with no box and no caret.
+///
+/// [picker] is still underneath, laid out and taking the click, so the cell's
+/// width and its target are what they always were. It only stops being
+/// painted. The word stands exactly where the picker's own label does (the
+/// same inset, the same type, and the caret's room kept beside it), so
+/// nothing moves when the box comes back. The tree is the same shape either
+/// way, so a picker keeps its focus as it comes and goes.
+///
+/// [trailing] is room at the cell's end that is not the picker's face: the
+/// matte cell's two toggles.
+Widget restingPicker(LumitTheme t,
+        {required bool resting,
+        required String label,
+        required Widget picker,
+        double trailing = 0}) =>
+    Stack(
+      children: [
+        Opacity(opacity: resting ? 0 : 1, child: picker),
+        if (resting)
+          Positioned.fill(
+            right: trailing,
+            child: IgnorePointer(
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: dropdownTextInset),
+                child: Center(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(
+                        child: Text(label,
+                            style: t.small, overflow: TextOverflow.ellipsis),
+                      ),
+                      // The caret and its gap, left empty.
+                      const SizedBox(width: 13),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+
 /// The parent picker: every *other* layer in the comp, plus None.
 ///
 /// A layer cannot parent to itself, so it is not in its own list — the engine
@@ -777,6 +833,11 @@ class ParentPickerFrb extends StatelessWidget {
   final double width;
   final VoidCallback onChanged;
 
+  /// Whether the row is at rest, with no pointer over it and no focus in it.
+  /// A picker with no parent set then draws as its word alone
+  /// ([restingPicker]).
+  final bool resting;
+
   const ParentPickerFrb({
     super.key,
     required this.layer,
@@ -784,11 +845,12 @@ class ParentPickerFrb extends StatelessWidget {
     required this.all,
     required this.onChanged,
     this.width = parentCellWidth,
+    this.resting = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
+    final picker = SizedBox(
       width: width,
       child: BareLazyDropdown(
         key: ValueKey<String>('tl-parent-${layer.internallayerId}'),
@@ -818,6 +880,10 @@ class ParentPickerFrb extends StatelessWidget {
         },
       ),
     );
+    return restingPicker(ThemeScope.of(context).theme,
+        resting: resting && info.parent == null,
+        label: l10n.none,
+        picker: picker);
   }
 }
 
@@ -842,6 +908,11 @@ class MattePickerFrb extends StatelessWidget {
   final bool toggleRoom;
   final VoidCallback onChanged;
 
+  /// Whether the row is at rest, with no pointer over it and no focus in it.
+  /// A cell with no matte set then draws as its words alone
+  /// ([restingPicker]).
+  final bool resting;
+
   const MattePickerFrb({
     super.key,
     required this.layer,
@@ -850,6 +921,7 @@ class MattePickerFrb extends StatelessWidget {
     required this.onChanged,
     required this.toggleRoom,
     this.width = matteFaceWidth,
+    this.resting = false,
   });
 
   void _set(BridgeMatte? matte) {
@@ -872,8 +944,10 @@ class MattePickerFrb extends StatelessWidget {
                 .map((e) => e.info.name)
                 .firstOrNull ??
             engineLabel('Matte');
+    final faceWidth =
+        toggleRoom ? (width - matteToggleWidth).clamp(40.0, width) : width;
 
-    return SizedBox(
+    final cell = SizedBox(
       width: width,
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -886,9 +960,7 @@ class MattePickerFrb extends StatelessWidget {
             // column stays a column. On a comp with no matte at all the cell
             // is the face and nothing else, and the dropdown still
             // does not swell into room it is not given.
-            width: toggleRoom
-                ? (width - matteToggleWidth).clamp(40.0, width)
-                : width,
+            width: faceWidth,
             child: BareLazyDropdown<UuidValue?>(
               key: ValueKey<String>('tl-matte-${layer.internallayerId}'),
               // In an outline row, so the mockup's 16/10 face (§12A.6).
@@ -948,6 +1020,11 @@ class MattePickerFrb extends StatelessWidget {
         ],
       ),
     );
+    return restingPicker(t,
+        resting: resting && matte == null,
+        label: l10n.noMatte,
+        picker: cell,
+        trailing: width - faceWidth);
   }
 
   Widget _toggle(
@@ -1542,6 +1619,31 @@ class _TimelineRulerState extends State<TimelineRuler> {
     super.dispose();
   }
 
+  /// The frame the scrub last sounded, so a drag that has not left it yet
+  /// does not sound it again on every pixel of travel.
+  int? _heard;
+
+  /// Move the playhead to the pointer at [x], and with `Ctrl` held sound the
+  /// frame it lands on: the comp is heard a frame at a time as the playhead
+  /// is dragged over it, which finds a beat without playing up to it. `Cmd`
+  /// on a Mac.
+  ///
+  /// A [press] always sounds, even on the frame the last drag ended on,
+  /// because pressing there again is asking to hear it again.
+  void _seek(double x, {bool press = false}) {
+    final frame = widget.axis.frameAt(x);
+    widget.onSeek(frame);
+    final keys = HardwareKeyboard.instance;
+    if (!keys.isControlPressed && !keys.isMetaPressed) return;
+    final last = widget.axis.frames - 1;
+    final at = frame.clamp(0, last < 0 ? 0 : last);
+    if (!press && at == _heard) return;
+    _heard = at;
+    // After the seek, which stops playback first: the engine only sounds a
+    // scrub while the transport is stopped.
+    widget.comp.audioScrub(frame: BigInt.from(at));
+  }
+
   /// Where a drag on the ruler lands: the pointer's own frame, taken to the
   /// nearest shared target while the magnet is on and `Ctrl` is not held
   /// (docs/07 §4.5). Sets [_caught], so the caller is already inside its own
@@ -1686,6 +1788,56 @@ class _TimelineRulerState extends State<TimelineRuler> {
     );
   }
 
+  /// The right-click menu on the ruler's own ground: a marker or a work-area
+  /// edge at [frame], the one under the pointer. A ruler with nothing to
+  /// commit to offers nothing.
+  Future<void> _groundMenu(Offset at, int frame) async {
+    final setWork = widget.onWorkArea;
+    if (setWork == null && widget.onMarkersChanged == null) return;
+    final picked = await showMenuAt<String>(
+      context: context,
+      position: at,
+      rows: (close) => [
+        if (widget.onMarkersChanged != null)
+          MenuRow(
+              key: const ValueKey('tl-ruler-add-marker'),
+              onPressed: () => close('marker'),
+              child: Text(l10n.menuAddMarkerHere)),
+        if (setWork != null) ...[
+          MenuRow(
+              key: const ValueKey('tl-ruler-work-in'),
+              onPressed: () => close('work-in'),
+              child: Text(l10n.workAreaStart)),
+          MenuRow(
+              key: const ValueKey('tl-ruler-work-out'),
+              onPressed: () => close('work-out'),
+              child: Text(l10n.workAreaEnd)),
+          MenuRow(
+              key: const ValueKey('tl-ruler-work-clear'),
+              onPressed: () => close('work-clear'),
+              child: Text(l10n.workAreaClear)),
+        ],
+      ],
+    );
+    if (picked == null || !mounted) return;
+    switch (picked) {
+      case 'marker':
+        await _createMarkerAt(frame);
+      case 'work-clear':
+        setWork?.call(null);
+      case _:
+        // A comp with no frames has no valid span: it keeps the one it has.
+        try {
+          setWork?.call(workAreaWith(
+            comp: widget.comp,
+            current: widget.comp.getWorkArea(),
+            wanted: frame,
+            isStart: picked == 'work-in',
+          ));
+        } catch (_) {}
+    }
+  }
+
   /// Whether [x], in the ruler's own pixels, lands in either work-area
   /// handle's reach — the same [_workHandleWidth] the handles claim.
   bool _onWorkHandle(double x, ({int start, int end, bool whole}) work) {
@@ -1744,7 +1896,7 @@ class _TimelineRulerState extends State<TimelineRuler> {
         // comp back is still counted, so a band too narrow to have a middle is
         // not a band that cannot be cleared.
         if (!_onWorkHandle(d.localPosition.dx, work)) {
-          widget.onSeek(axis.frameAt(d.localPosition.dx));
+          _seek(d.localPosition.dx, press: true);
         }
         if (!_rulerTaps.tap()) return;
         // The second click of a pair, on ground nothing else claimed — a flag
@@ -1769,8 +1921,9 @@ class _TimelineRulerState extends State<TimelineRuler> {
           _createMarkerAt(axis.frameAt(x));
         }
       },
-      onHorizontalDragUpdate: (d) =>
-          widget.onSeek(axis.frameAt(d.localPosition.dx)),
+      onHorizontalDragUpdate: (d) => _seek(d.localPosition.dx),
+      onSecondaryTapUp: (d) =>
+          _groundMenu(d.globalPosition, axis.frameAt(d.localPosition.dx)),
       child: Container(
         height: widget.height,
         // **The lane ground, not a strip of its own**: the mockup

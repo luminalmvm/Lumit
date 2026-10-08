@@ -570,6 +570,35 @@ class Workspace extends ChangeNotifier {
     settingsChanged();
   }
 
+  /// The expressions saved from the Expressions panel, script by name.
+  // ponytail: kept in the settings file, move to a folder of files if people
+  // want to share them.
+  final Map<String, String> savedExpressions = <String, String>{};
+
+  /// Save [text] under [name], over whatever that name held.
+  void saveExpression(String name, String text) {
+    savedExpressions[name] = text;
+    settingsChanged();
+  }
+
+  void deleteExpression(String name) {
+    if (savedExpressions.remove(name) != null) settingsChanged();
+  }
+
+  /// The last eight colours applied through the colour picker, newest first,
+  /// each as red, green and blue. Kept here so they outlast a restart.
+  final List<List<double>> recentColours = [];
+
+  /// Put a colour at the front of [recentColours]. Saved at once and nobody
+  /// is told: the picker reads the list when it opens.
+  void rememberColour(double r, double g, double b) {
+    recentColours
+      ..removeWhere((c) => c[0] == r && c[1] == g && c[2] == b)
+      ..insert(0, [r, g, b]);
+    if (recentColours.length > 8) recentColours.length = 8;
+    save();
+  }
+
   /// Whether an effect's own graph — Levels' histogram, a Curves channel —
   /// draws entirely in the theme's colours (owner, desk test). Off by default,
   /// and for the same reason the scopes toggle is: a red curve should be red.
@@ -604,6 +633,11 @@ class Workspace extends ChangeNotifier {
   bool precomposeMoveAttributes = true;
   bool precomposeAdjustDuration = true;
   bool precomposeOpenNewComp = false;
+
+  /// The Timeline outline's columns: the group order, each group's width and
+  /// the groups switched off, as the Timeline wrote them. Null until a column
+  /// is first moved, and the Timeline opens on its defaults.
+  Map<String, dynamic>? timelineColumns;
 
   PerformanceSettings performance = PerformanceSettings();
   InterfaceSettings interface = InterfaceSettings();
@@ -809,6 +843,7 @@ class Workspace extends ChangeNotifier {
     // The icon weight and the person's own icons ride with the theme: set
     // here so every glyph reads them on its next build.
     IconStyle.weight = IconStyle.weightOf(interface.iconSet);
+    LumitTheme.labelCaseChoice = interface.labelCase;
     if (IconStyle.folder == null) {
       IconStyle.folder =
           '${storeFile().parent.path}${Platform.pathSeparator}icons';
@@ -836,8 +871,9 @@ class Workspace extends ChangeNotifier {
   }
 
   /// The room Lantern's cards stand in, from the setting: the theme's own
-  /// light neutral by day, the canvas by night. Studio and Desk are never
-  /// roomed, so the colour is carried and never drawn.
+  /// (the night room, unless a custom theme names another), the light neutral
+  /// by day, the canvas by night. Studio and Desk are never roomed, so the
+  /// colour is carried and never drawn.
   LumitTheme _withRoom(LumitTheme t) => switch (interface.room) {
         LanternRoom.auto => t,
         LanternRoom.day => t.copyWith(room: LumitTheme.dayRoom),
@@ -1016,6 +1052,13 @@ class Workspace extends ChangeNotifier {
     settingsChanged();
   }
 
+  /// Saved straight away and without notifying: the Timeline already shows
+  /// what it is writing.
+  void setTimelineColumns(Map<String, dynamic> columns) {
+    timelineColumns = columns;
+    save();
+  }
+
   void setShape(ThemeShape s) {
     themeShape = s;
     recompose();
@@ -1076,10 +1119,26 @@ class Workspace extends ChangeNotifier {
   /// workspace strip to tick (docs/07 §1.4).
   ///
   /// Session-only, and not part of the stored layout: what persists is the
-  /// arrangement itself, which the user is free to drag about afterwards — so
-  /// on the next launch the strip shows no preset ticked rather than claiming
-  /// one the panels may no longer match.
+  /// arrangement itself, which the user is free to drag about afterwards. So
+  /// an arrangement read back from a file ticks a preset only when it is
+  /// still that preset's ([tickMatchingPreset]), and none otherwise.
   WorkspacePreset? activePreset;
+
+  /// Tick the preset whose panels the arrangement has in the same places and
+  /// at the same sizes, or none. For an arrangement that was read from a file
+  /// rather than chosen: the stored one at launch, a project's own as it
+  /// opens. Which tab is in front does not count, because start-up fronts
+  /// Project whatever was stored. One of the user's own in force keeps its
+  /// tick: the strip never shows two.
+  void tickMatchingPreset() {
+    if (activeUserWorkspace != null) return;
+    String placed(DockSplit d) =>
+        jsonEncode(d.toJson()).replaceAll(RegExp(r'"active":\d+,'), '');
+    final now = placed(dock);
+    activePreset = WorkspacePreset.values
+        .where((p) => placed(presetLayout(p)) == now)
+        .firstOrNull;
+  }
 
   // --- The user's own workspaces (docs/07 §1.4) ----------------------------
 
@@ -1458,6 +1517,8 @@ class Workspace extends ChangeNotifier {
         'custom_theme': customThemeName,
         'themed_scopes': themedScopes,
         'favourite_effects': favouriteEffects.toList()..sort(),
+        'saved_expressions': savedExpressions,
+        'recent_colours': [...recentColours],
         'themed_effect_graphs': themedEffectGraphs,
         'curve_plot_size': curvePlotSize,
         'themed_viewer_surround': themedViewerSurround,
@@ -1465,6 +1526,7 @@ class Workspace extends ChangeNotifier {
         'precompose_move_attributes': precomposeMoveAttributes,
         'precompose_adjust_duration': precomposeAdjustDuration,
         'precompose_open_new_comp': precomposeOpenNewComp,
+        'timeline_columns': timelineColumns,
         'last_project_path': lastProjectPath,
         'recent_projects': recentProjects,
         'recent_opened': _recentOpened,
@@ -1483,6 +1545,7 @@ class Workspace extends ChangeNotifier {
       final parsed = DockNode.fromJson(d);
       if (parsed is DockSplit) dock = parsed;
     }
+    tickMatchingPreset();
     colorScheme = LumitColorScheme.values.asNameMap()[j['color_scheme']] ??
         LumitColorScheme.dark;
     // The shapes were once called Sharp and Round, and a settings file written
@@ -1559,6 +1622,21 @@ class Workspace extends ChangeNotifier {
           for (final key in starred)
             if (key is String) key,
       ]);
+    savedExpressions
+      ..clear()
+      ..addAll({
+        if (j['saved_expressions'] case final Map<dynamic, dynamic> saved)
+          for (final MapEntry(:key, :value) in saved.entries)
+            if (key is String && value is String) key: value,
+      });
+    recentColours
+      ..clear()
+      ..addAll([
+        if (j['recent_colours'] case final List<dynamic> colours)
+          for (final c in colours.take(8))
+            if (c case [final num r, final num g, final num b])
+              [r.toDouble(), g.toDouble(), b.toDouble()],
+      ]);
     themedEffectGraphs = j['themed_effect_graphs'] == true;
     // Absent means a file written before the size could be chosen: medium.
     curvePlotSize = (j['curve_plot_size'] as num?)?.toDouble() ?? 150;
@@ -1567,6 +1645,9 @@ class Workspace extends ChangeNotifier {
     precomposeMoveAttributes = j['precompose_move_attributes'] as bool? ?? true;
     precomposeAdjustDuration = j['precompose_adjust_duration'] as bool? ?? true;
     precomposeOpenNewComp = j['precompose_open_new_comp'] as bool? ?? false;
+    // Absent means a file written before the columns were kept: the defaults.
+    final columns = j['timeline_columns'];
+    timelineColumns = columns is Map<String, dynamic> ? columns : null;
     lastProjectPath = j['last_project_path'] is String
         ? j['last_project_path'] as String
         : null;

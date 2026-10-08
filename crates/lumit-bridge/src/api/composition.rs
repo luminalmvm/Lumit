@@ -3324,10 +3324,22 @@ impl CompositionReference {
         instances: Vec<BridgeEffectInstance>,
         wiring: crate::api::comp_graph::BridgeCompWiring,
     ) -> Result<(), BridgeError> {
-        let nodes: Vec<lumit_core::model::EffectInstance> = instances
+        let mut nodes: Vec<lumit_core::model::EffectInstance> = instances
             .iter()
             .map(BridgeEffectInstance::get_effects)
             .collect();
+        // A plugin on a box answers an edit as one on a layer does.
+        let doc = self.document()?;
+        let before: Vec<lumit_core::model::EffectInstance> = self
+            .graph_of(&doc)?
+            .nodes
+            .iter()
+            .filter_map(|node| match node {
+                lumit_core::comp_graph::GraphNode::Fx(instance) => Some(instance.clone()),
+                _ => None,
+            })
+            .collect();
+        crate::api::track::settle(&before, &mut nodes);
         let graph = crate::api::comp_graph::wiring_into(wiring, nodes);
         self.commit(lumit_core::Op::SetCompGraph {
             comp: self.id,

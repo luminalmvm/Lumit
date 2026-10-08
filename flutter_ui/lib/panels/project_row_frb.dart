@@ -156,6 +156,10 @@ class ProjectRowFrb extends StatefulWidget {
   /// but footage — nothing else has a media reference to stand in for.
   final BridgeProxy? proxy;
   final bool selected;
+
+  /// Whether this is one of the alternate rows, which stand on a slightly
+  /// different ground so the eye can follow a line across the columns.
+  final bool shaded;
   final bool renaming;
 
   /// Which optional columns this width carries, and the finished strings to put
@@ -232,6 +236,7 @@ class ProjectRowFrb extends StatefulWidget {
     required this.inUse,
     required this.proxy,
     required this.selected,
+    this.shaded = false,
     required this.renaming,
     required this.columns,
     required this.cells,
@@ -456,11 +461,15 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
             height: projectRowHeight,
             // Three greys at rest (§2.1): the row's own selected fill is
             // the header grey, and `surface_3` appears only under the pointer.
+            // An alternate row takes half a step towards the selected fill,
+            // so a picked or hovered row still stands clear of both grounds.
             color: widget.selected
                 ? t.surface2
                 : _hover
                     ? t.surface3
-                    : null,
+                    : widget.shaded
+                        ? t.surface2.withValues(alpha: 0.5)
+                        : null,
             padding: EdgeInsets.only(
               left: projectRowPadding + widget.depth * projectIndentPerDepth,
               right: projectRowPadding,

@@ -25,6 +25,7 @@ bezier with speed and influence.
 
 If you aren't used to all of Lumit's keybinds, an After Effects keymap 
 preset ships in Settings, which you can access via **Edit ▸ Settings ▸ Shortcuts**.
+Choosing **After Effects** when Lumit asks *How do you edit?* on its first run loads it.
 
 Whole projects come across too. **File ▸ Import ▸ After Effects project**, and a 
 report will appear telling you what was carried across with or without adjustments. 

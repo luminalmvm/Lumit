@@ -96,6 +96,10 @@ enum LumitIcon {
   /// second state, and the Timeline draws the pair side by side.
   keyframeFilled,
   stopwatch,
+
+  /// The render-time measuring switch: an hourglass. [stopwatch] is the mark
+  /// that starts a property animating, and the two stand a few rows apart.
+  renderTime,
   twirlClosed,
   twirlOpen,
 
@@ -396,6 +400,7 @@ String? _ownGlyph(LumitIcon icon) => switch (icon) {
       LumitIcon.graphCurve => LumitIcons.scopes,
       // Keyframes and values.
       LumitIcon.stopwatch => LumitIcons.stopwatch,
+      LumitIcon.renderTime => LumitIcons.renderTime,
       LumitIcon.fx => LumitIcons.effectsSwitch,
       LumitIcon.prevKeyframe => LumitIcons.previousKey,
       LumitIcon.nextKeyframe => LumitIcons.nextKey,

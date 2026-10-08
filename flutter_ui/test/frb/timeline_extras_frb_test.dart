@@ -5,6 +5,7 @@
 // everywhere else here: what matters is that a click reaches the document.
 
 import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/main.dart';
@@ -283,6 +284,25 @@ void main() {
           reason: 'taking hold of the playhead stops the transport');
       expect(p.uiState.playheadFrame.value, greaterThan(0),
           reason: 'and it stays where the drag left it, not back at the start');
+    });
+
+    /// `Ctrl` held over the ruler sounds each frame the playhead lands on.
+    /// Nothing here can listen, so this holds the other half: it is still the
+    /// same scrub, and asking to hear a comp with no sound in it is not an
+    /// error that stops the drag.
+    testWidgets('a Ctrl-drag on the ruler scrubs like a plain one',
+        (tester) async {
+      final p = withComp();
+      p.comp.addAdjustmentLayer();
+      await mount(tester, p);
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.drag(
+          find.byKey(const ValueKey('tl-ruler')), const Offset(120, 0));
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pumpAndSettle();
+
+      expect(p.uiState.playheadFrame.value, greaterThan(0));
     });
 
     /// Markers on the ruler are direct manipulation now: a flag can be

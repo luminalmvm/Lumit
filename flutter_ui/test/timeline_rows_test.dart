@@ -145,7 +145,9 @@ void main() {
         values: const [],
         linkedPairs: const [],
         derivedParams: const [],
-        hiddenRows: const []);
+        hiddenRows: const [],
+        disabledRows: const [],
+        rowOptions: const []);
     // A parameter at its default, with a wire from the node graph on it:
     // nothing has been typed into it and it is not the same at every
     // frame either.

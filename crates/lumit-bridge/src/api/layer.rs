@@ -6572,6 +6572,14 @@ impl LayerReference {
         home: InstanceHome,
         edit: impl FnOnce(&mut Vec<EffectInstance>) -> Result<(), BridgeError>,
     ) -> Result<(), BridgeError> {
+        // A plugin on the list answers the edit before it is committed, so
+        // what it wrote lands in the same undo step.
+        let edit = |list: &mut Vec<EffectInstance>| {
+            let before = list.clone();
+            edit(list)?;
+            crate::api::track::settle(&before, list);
+            Ok(())
+        };
         let op = match home {
             InstanceHome::Effects | InstanceHome::Styles => {
                 let layer = self.item()?;

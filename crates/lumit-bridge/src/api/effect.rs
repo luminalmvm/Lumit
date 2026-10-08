@@ -1898,10 +1898,15 @@ pub struct BridgeEffectInstanceInfo {
     /// [`BridgeEffectInstance::list_parameters`] answers in one piece.
     pub derived_params: Vec<BridgeParamInfo>,
     /// The rows this instance is not showing right now, by id: a plugin's
-    /// own hidden controls, read off its last render (docs/12 §2.2). Empty for
-    /// every built-in. Here for the same reason as the rest: the panel draws
-    /// on every rebuild and may not call.
+    /// own hidden controls, as it last answered an edit (docs/12 §2.2). Empty
+    /// for every built-in. Here for the same reason as the rest: the panel
+    /// draws on every rebuild and may not call.
     pub hidden_rows: Vec<String>,
+    /// The rows a plugin has greyed, by id. Drawn, and not editable.
+    pub disabled_rows: Vec<String>,
+    /// The choice rows whose list a plugin has replaced, with the list to
+    /// draw in place of the schema's.
+    pub row_options: Vec<BridgeRowOptions>,
     /// The node graph this instance applies (docs/impl/node-graph-comp.md
     /// §4.4), and `None` for every other effect.
     ///
@@ -2350,6 +2355,12 @@ pub(crate) fn read_instance_info(
     fill_derived(&mut filled);
     let effect = &filled;
     let (badge_reason, badge_detail) = badge_of(effect);
+    // What the instance's plugin has done to its own rows, or nothing for a
+    // built-in.
+    let rows = lumit_core::fx::def(effect.effect.match_name.as_str())
+        .map(|def| def.row_state(effect))
+        .unwrap_or_default();
+    let owned = |ids: Vec<&'static str>| ids.into_iter().map(str::to_owned).collect();
     BridgeEffectInstanceInfo {
         id: effect.id,
         name: effect.effect.match_name.clone(),
@@ -2368,22 +2379,26 @@ pub(crate) fn read_instance_info(
         badge_reason,
         badge_detail,
         derived_params: derived_params_of(effect),
-        hidden_rows: hidden_rows_of(effect),
+        hidden_rows: owned(rows.hidden),
+        disabled_rows: owned(rows.disabled),
+        row_options: rows
+            .options
+            .into_iter()
+            .map(|(id, options)| BridgeRowOptions {
+                id: id.to_owned(),
+                options,
+            })
+            .collect(),
         node_graph_comp: lumit_core::fx::effects::node_graph::comp_of(effect),
     }
 }
 
-/// The rows the instance's plugin is hiding, or nothing for a built-in.
-#[frb(ignore)]
-fn hidden_rows_of(effect: &EffectInstance) -> Vec<String> {
-    lumit_core::fx::def(effect.effect.match_name.as_str())
-        .map(|def| {
-            def.hidden_rows(effect)
-                .into_iter()
-                .map(str::to_owned)
-                .collect()
-        })
-        .unwrap_or_default()
+/// One choice row's list, as its plugin has it now.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BridgeRowOptions {
+    pub id: String,
+    pub options: Vec<String>,
 }
 
 impl BridgeEffectInstance {

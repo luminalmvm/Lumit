@@ -149,13 +149,22 @@ SingleActivator? activatorForChord(String chord) {
 /// How a chord is *shown* on this machine: `Mod` becomes the symbol or word the
 /// platform's own menus use, so a Windows user reads Ctrl and a Mac user reads
 /// ⌘. The stored form never changes — only the reading of it.
+///
+/// The keys the keymap names in one word read the way their caps do: an arrow
+/// is an arrow, and PageUp is Page Up.
 String chordLabel(String chord) {
   if (chord.isEmpty) return '';
   final mac = defaultTargetPlatform == TargetPlatform.macOS;
   return chord
       .replaceAll('Mod+', mac ? '⌘' : 'Ctrl+')
       .replaceAll('Alt+', mac ? '⌥' : 'Alt+')
-      .replaceAll('Shift+', mac ? '⇧' : 'Shift+');
+      .replaceAll('Shift+', mac ? '⇧' : 'Shift+')
+      .replaceAll('ArrowLeft', '←')
+      .replaceAll('ArrowRight', '→')
+      .replaceAll('ArrowUp', '↑')
+      .replaceAll('ArrowDown', '↓')
+      .replaceAll('PageUp', 'Page Up')
+      .replaceAll('PageDown', 'Page Down');
 }
 
 /// How far a wheel event moved, on whichever axis carries it. Some platforms

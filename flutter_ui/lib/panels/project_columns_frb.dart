@@ -148,8 +148,9 @@ const double projectMinWidth = 180;
 /// columns hide, least essential first). The two mockups are the two ends of
 /// this ladder — the 360-wide artboard shows everything, the 260-wide docked
 /// panel has already dropped the preview card and the Items column.
-/// The preview card, the Path column and the Items column leave **together**,
-/// at the first step down from the 360 artboard.
+/// The preview card and the Items column leave **together**, at the first
+/// step down from the 360 artboard. Path left with them until it was given a
+/// step of its own above theirs, see [_widthForPath].
 ///
 /// §12A.3a lists them one after the other, but the two mockups are the only
 /// measurements there are — 360 wide shows all three, 260 shows none — so
@@ -159,8 +160,23 @@ const double projectMinWidth = 180;
 /// columns, and four columns plus an `in use` pill need more room than the
 /// header alone does. Below this the row keeps its badges and sheds the two
 /// least essential columns, which is §12A.6's ladder in the order it asks for.
-const double _widthForPath = 340;
 const double _widthForItems = 340;
+
+/// **Path now goes first, before Name gives anything up.** It is drawn only
+/// once the panel can carry every column at its starting width, Name's 220
+/// included, which comes to 432. The docked panel opens narrower than that,
+/// and there the 40 Path was holding showed five letters of a folder while a
+/// name beside an `in use` badge was cut to "White s…". So the room goes to
+/// Name, and a name is shortened only once the panel is too narrow for Path
+/// as well.
+const double _widthForPath = projectHeaderPadLeft +
+    projectNameColumn +
+    projectRowPadding +
+    4 * projectRowGap +
+    projectItemsColumn +
+    projectSizeColumn +
+    projectFpsColumn +
+    projectPathColumn;
 const double _widthForFps = 230;
 const double _widthForSize = 190;
 
@@ -274,6 +290,9 @@ class ProjectColumns {
   /// does — and the rows pass nothing, so they keep the plain [projectRowGap]
   /// the header's handle is drawn inside. Both sides therefore reserve the
   /// same width and stay column-aligned.
+  ///
+  /// [heading] wraps a finished cell, which is how the header makes each
+  /// heading something to click.
   List<Widget> cells({
     String? items,
     String? size,
@@ -282,6 +301,7 @@ class ProjectColumns {
     required TextStyle style,
     TextStyle? pathStyle,
     Widget Function(ProjectColumn before)? seam,
+    Widget Function(ProjectColumn column, Widget cell)? heading,
   }) =>
       [
         for (final column in visible)
@@ -300,7 +320,11 @@ class ProjectColumns {
               overflow: column == ProjectColumn.path
                   ? TextOverflow.ellipsis
                   : TextOverflow.clip,
-            ),
+              // The gap comes first and stays bare. The cell after it is
+              // what a heading wraps.
+            ).indexed.map((part) => part.$1 == 1 && heading != null
+                ? heading(column, part.$2)
+                : part.$2),
       ];
 
   List<Widget> _cell(

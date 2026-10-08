@@ -505,8 +505,11 @@ class _MaskValueRowState extends State<MaskValueRow> {
             onTap: widget.onLabelTap,
             child: Row(children: [
               Flexible(
-                child: Text(maskValueLabel(widget.value, widget.vertex),
-                    style: t.body, overflow: TextOverflow.ellipsis),
+                child: Text(
+                    t.propertyCase(
+                        maskValueLabel(widget.value, widget.vertex)),
+                    style: t.body,
+                    overflow: TextOverflow.ellipsis),
               ),
             ]),
           ),

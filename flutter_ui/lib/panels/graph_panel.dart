@@ -1748,7 +1748,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     final driverNames = {for (final driver in all) driver.name};
     return FxConsoleModel(
       // A wire summoned this by a drop, not by a key, so it wears none.
-      keyHint: wire == null ? l10n.fxConsoleKey : null,
+      keyHint: wire == null ? _ui?.keymap.chordFor('console.open') : null,
       footer: wire == null ? l10n.graphConsoleAdds : l10n.graphSearchWires,
       entries: [
         // The drivers first — the graph's own family. With a wire in hand

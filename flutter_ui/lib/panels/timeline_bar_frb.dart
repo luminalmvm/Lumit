@@ -13,6 +13,7 @@ import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:uuid/uuid.dart';
+import '../l10n/strings.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/drag_escape.dart';
@@ -21,6 +22,7 @@ import 'layer_fold_frb.dart';
 import 'timeline_snap.dart';
 import 'timeline_key_block_frb.dart';
 import 'timeline_layer_drag.dart' show LayerLift;
+import 'timeline_outline_row_frb.dart' show showLayerRowMenu;
 
 /// The same on a **shut layer's** row: smaller than the keys you take hold
 /// of, because these are a summary of everything keyed inside the layer.
@@ -757,6 +759,13 @@ class _BarState extends State<Bar> {
                           _keptSelection = false;
                           widget.onSelect();
                         },
+                  // The row's own menu, on the bar. A bar outside the
+                  // selection is selected first, so the menu is about it.
+                  onSecondaryTapUp: (d) {
+                    if (!widget.selected) widget.onSelect();
+                    showLayerRowMenu(
+                        widget.entry.layer.internallayerId, d.globalPosition);
+                  },
                   onHorizontalDragDown: widget.razor || held
                       ? null
                       : (d) => _downDx = d.localPosition.dx,
@@ -936,11 +945,9 @@ class _BarState extends State<Bar> {
                         // the name on every bar and so did the editor, and the
                         // owner's ruling from desktop testing is that it reads
                         // as the outline's own column of names said twice.
-                        // Off by default, unchanged when on. Lantern's bar
-                        // carries its name always, at 11 semibold.
-                        if (widget.showName ||
-                            t.shape == ThemeShape.lantern ||
-                            t.shape == ThemeShape.desk)
+                        // Off by default, unchanged when on, and the same
+                        // in every style. Lantern sets it at 11 semibold.
+                        if (widget.showName)
                           Positioned(
                             left: clipEdgeWidth + 4,
                             right: 2,
@@ -1025,9 +1032,10 @@ class _BarState extends State<Bar> {
                   'tl-bar-keys-${widget.entry.layer.internallayerId}'),
               child: IgnorePointer(
                 child: CustomPaint(
-                  // Desk and Lantern draw the marks as outlined diamonds in
-                  // the secondary text colour, as their mockups do.
-                  painter: t.shape == ThemeShape.studio
+                  // Lantern draws the marks as outlined diamonds in the
+                  // secondary text colour. Desk's were the same, and too
+                  // faint on its bar to find, so it fills them as Studio does.
+                  painter: t.shape != ThemeShape.lantern
                       ? LaneKeysPainter(
                           frames: [
                             for (final k in widget.summaryKeys)
@@ -1078,8 +1086,29 @@ class _BarState extends State<Bar> {
                 ),
               ),
             ),
+          // The live readout, while the button is down: where the bar's two
+          // ends have reached and how long it is now. The pill a key drag
+          // carries, over everything in the row and gone on release.
+          if (_grab != null) _dragHint(inFrame, drawIn, drawOut),
         ],
       ),
+    );
+  }
+
+  /// The `f<in>–f<out> · <frames> f` pill beside the pointer while the bar is
+  /// moved or trimmed.
+  Widget _dragHint(int restIn, int drawIn, int drawOut) {
+    final text = l10n.timelineBarDragHint(drawIn, drawOut, drawOut - drawIn);
+    // Where the pointer is: where it took hold, and how far it has gone.
+    final x = widget.axis.xOf(restIn) + _downDx + _deltaPx;
+    // Beside the pointer, or on its other side where the axis has run out.
+    // The text is 8px mono, so its width is near enough five a letter.
+    final pill = text.length * 5.0 + 8;
+    return Positioned(
+      key: const ValueKey<String>('tl-bar-drag-hint'),
+      left: x + 8 + pill > widget.axis.width ? x - 8 - pill : x + 8,
+      top: 1,
+      child: HintPill(text: text),
     );
   }
 
@@ -1207,8 +1236,8 @@ class _BarState extends State<Bar> {
 /// Which part of a bar a drag grabbed: its middle, or one of its two ends.
 enum BarGrab { move, trimIn, trimOut }
 
-/// A shut layer's keys as outlined diamonds on its bar, Desk's and Lantern's
-/// mark: 7px across, a 1px stroke, one per frame.
+/// A shut layer's keys as outlined diamonds on its bar, Lantern's mark: 7px
+/// across, a 1px stroke, one per frame.
 class OutlinedKeysPainter extends CustomPainter {
   final List<double> frames;
   final TimelineAxis axis;

@@ -4677,6 +4677,7 @@ fn the_audio_transport_answers_without_a_device() {
     );
 
     // The rest of the transport is safe whatever the device did.
+    comp.audio_scrub(12).expect("scrub");
     audio_seek(1.5);
     audio_pause();
     audio_stop();
@@ -7492,7 +7493,8 @@ fn an_unknown_effect_is_a_badged_placeholder_and_never_an_error() {
 /// Pressing a plugin's button writes what the plugin did into the document,
 /// as one undo step: a row it set as that row, and everything no row carries
 /// as the instance's own memory. The plugin is shown the comp at the playhead
-/// while it is pressed.
+/// while it is pressed. What it did to its controls in answer is kept in the
+/// same step, and the panel reads it from there.
 #[test]
 fn pressing_a_plugins_button_writes_what_it_did_into_the_document() {
     use std::sync::{Arc, Mutex};
@@ -7515,7 +7517,6 @@ fn pressing_a_plugins_button_writes_what_it_did_into_the_document() {
             lumit_ofx::Rendering {
                 frame: source,
                 error: None,
-                secret: None,
             }
         }
 
@@ -7535,7 +7536,7 @@ fn pressing_a_plugins_button_writes_what_it_did_into_the_document() {
             params: &lumit_ofx::ParamSnapshot,
             name: &str,
             source: lumit_ofx::Frame16,
-        ) -> Result<lumit_ofx::ParamSnapshot, String> {
+        ) -> Result<lumit_ofx::Settled, String> {
             assert_eq!(name, "trigger", "the plugin's own name for the button");
             *self.shown.lock().expect("the record") = Some((source.width(), source.height()));
             let mut after = params.clone();
@@ -7544,7 +7545,28 @@ fn pressing_a_plugins_button_writes_what_it_did_into_the_document() {
                 "vendorBlob",
                 lumit_ofx::PropValue::string("pressed").expect("a string"),
             );
-            Ok(after)
+            Ok(lumit_ofx::Settled {
+                params: after,
+                controls: lumit_ofx::Controls::default(),
+            })
+        }
+
+        /// Greys its button once gain is off its default, the way a plugin
+        /// greys what an edit rules out.
+        fn settle(
+            &self,
+            _instance: Uuid,
+            _made_with: &lumit_ofx::ParamSnapshot,
+            handed: &lumit_ofx::ParamSnapshot,
+        ) -> Result<lumit_ofx::Settled, String> {
+            let mut controls = lumit_ofx::Controls::default();
+            if handed.get("gain") != Some(&lumit_ofx::PropValue::double(1.0)) {
+                controls.disabled.insert("trigger".to_owned());
+            }
+            Ok(lumit_ofx::Settled {
+                params: handed.clone(),
+                controls,
+            })
         }
     }
 
@@ -7623,6 +7645,11 @@ fn pressing_a_plugins_button_writes_what_it_did_into_the_document() {
         fx.plugin_state_bytes()
             .is_some_and(|bytes| !bytes.is_empty()),
         "the blob has no row, so it is the instance's memory"
+    );
+    assert_eq!(
+        def.row_state(&fx).disabled,
+        ["trigger"],
+        "the plugin answered the edit, and the document kept what it greyed"
     );
 
     // One undo step takes both back.
@@ -7807,13 +7834,11 @@ fn a_plugin_that_fails_a_frame_badges_its_layer_and_the_next_frame_clears_it() {
                 return lumit_ofx::Rendering {
                     frame: source,
                     error: Some(self.why.clone()),
-                    secret: None,
                 };
             }
             lumit_ofx::Rendering {
                 frame: source,
                 error: None,
-                secret: None,
             }
         }
 
@@ -7833,7 +7858,7 @@ fn a_plugin_that_fails_a_frame_badges_its_layer_and_the_next_frame_clears_it() {
             _params: &lumit_ofx::ParamSnapshot,
             _name: &str,
             _source: lumit_ofx::Frame16,
-        ) -> Result<lumit_ofx::ParamSnapshot, String> {
+        ) -> Result<lumit_ofx::Settled, String> {
             Err(self.why.clone())
         }
     }

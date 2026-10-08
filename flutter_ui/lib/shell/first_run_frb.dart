@@ -2,8 +2,9 @@
 //
 // On the very first launch — a machine with no settings file — Lumit asks how
 // the user edits and what the interface should look like: the style, the
-// colour scheme, where the toolbar stands and how much the chrome moves. One
-// page, no steps. Every setting it writes is an ordinary row in Settings
+// colour scheme, where the toolbar stands and how much the chrome moves. The
+// After Effects answer loads the After Effects shortcuts with it. One page,
+// no steps. Every setting it writes is an ordinary row in Settings
 // afterwards — the editing pair under Interface ▸ Editing, the look under
 // Appearance and Interface, the update tick under General ▸ Updates — so
 // nothing here is a decision anybody is stuck with.
@@ -14,8 +15,10 @@
 import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
+import 'package:lumit_flutter/src/rust/api/keymap.dart';
 
 import '../l10n/strings.dart';
+import '../state/keymap.dart';
 import '../state/settings.dart';
 import '../state/workspace.dart';
 import '../theme/theme.dart';
@@ -33,8 +36,10 @@ typedef FirstRunAnswer = ({bool? vegas, bool sequenceLayers, bool autoUpdate});
 /// Show the screen if this machine has never answered it, and record the
 /// answer. Does nothing at all on any later launch, so callers can call it
 /// unconditionally at start-up.
-Future<void> maybeShowFirstRunFrb(
-    BuildContext context, Workspace workspace) async {
+///
+/// [keymap] is what the After Effects answer loads its shortcuts into.
+Future<void> maybeShowFirstRunFrb(BuildContext context, Workspace workspace,
+    {KeymapState? keymap}) async {
   if (workspace.firstRunDone) return;
   // The look as it stood, which is what Skip goes back to.
   final shape = workspace.themeShape;
@@ -61,6 +66,9 @@ Future<void> maybeShowFirstRunFrb(
   } else {
     workspace.setEditingStyle(
         vegas: vegas, sequenceLayers: answer!.sequenceLayers);
+    // The card says After Effects, so its keys come too: the preset the
+    // After Effects button on Settings > Shortcuts loads.
+    if (!vegas) await keymap?.loadPreset(BridgeKeymapPreset.afterEffects);
   }
 }
 
@@ -134,6 +142,7 @@ class _FirstRunState extends State<_FirstRun> {
                                 vegas: false,
                                 title: l10n.keymapAfterEffects,
                                 blurb: l10n.firstRunAfterEffects,
+                                note: l10n.firstRunAfterEffectsKeys,
                                 chosen: !_vegas,
                                 onTap: () => setState(() => _vegas = false),
                               ),
@@ -393,6 +402,9 @@ class _Choice extends StatelessWidget {
   final bool vegas;
   final String title;
   final String blurb;
+
+  /// One more line under the blurb, for something else the answer does.
+  final String? note;
   final bool chosen;
   final VoidCallback onTap;
 
@@ -407,6 +419,7 @@ class _Choice extends StatelessWidget {
     required this.vegas,
     required this.title,
     required this.blurb,
+    this.note,
     required this.chosen,
     required this.onTap,
     this.option,
@@ -434,6 +447,10 @@ class _Choice extends StatelessWidget {
           Text(title, style: t.bodyPrimary),
           const SizedBox(height: 4),
           Text(blurb, style: t.small.copyWith(color: t.textSecondary)),
+          if (note case final note?) ...[
+            const SizedBox(height: 8),
+            Text(note, style: t.small.copyWith(color: t.textSecondary)),
+          ],
           if (option case final option?) ...[
             const SizedBox(height: 8),
             Row(

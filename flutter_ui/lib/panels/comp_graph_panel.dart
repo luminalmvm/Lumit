@@ -60,7 +60,8 @@ import 'effect_param_row_frb.dart'
         cachedListParameters,
         disabledParams,
         paramGroupVisible,
-        paramRidersFor;
+        paramRidersFor,
+        relistedRows;
 import 'graph_panel.dart';
 import 'placeholder.dart';
 import 'shader_editor.dart'
@@ -403,7 +404,10 @@ class _CompGraphPanelState extends State<CompGraphPanel> {
           infos[key] = info;
           params[key] = compBoxRows(
             info.name,
-            [...cachedListParameters(info.name), ...info.derivedParams],
+            relistedRows(
+              [...cachedListParameters(info.name), ...info.derivedParams],
+              info.rowOptions,
+            ),
             {for (final v in info.values) v.id: v.value},
             info.hiddenRows.toSet(),
           );
@@ -1159,7 +1163,8 @@ class _CompGraphPanelState extends State<CompGraphPanel> {
         context: context,
         anchor: lastKnownPointerPosition,
         model: FxConsoleModel(
-          keyHint: wire == null ? l10n.fxConsoleKey : null,
+          keyHint:
+              wire == null ? _ui?.keymap.chordFor('console.open') : null,
           footer: wire == null ? l10n.graphConsoleAdds : l10n.graphSearchWires,
           entries: entries,
         ),

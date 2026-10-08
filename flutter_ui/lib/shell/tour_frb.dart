@@ -283,5 +283,6 @@ void _clearDemo(LumitState state, int? made) {
   } catch (_) {
     return;
   }
-  state.newProject();
+  // Nothing in it is the user's, so there is nothing to ask about saving.
+  state.newProject(ask: false);
 }

@@ -339,7 +339,7 @@ class EffectParamRowFrb extends StatelessWidget {
         ? t.body.copyWith(color: t.textDisabled)
         : (graphColour == null ? t.body : t.body.copyWith(color: graphColour));
     final labelText = Text(
-      engineLabel(param.label),
+      t.propertyCase(engineLabel(param.label)),
       style: labelStyle,
       overflow: TextOverflow.ellipsis,
     );
@@ -773,6 +773,7 @@ class EffectParamRowFrb extends StatelessWidget {
               min: 0,
               max: 0xFFFFFFFF,
               speed: 1,
+              resetTo: 0,
               onChanged: (v) =>
                   _set(BridgeEffectValue.seed(v.toInt().clamp(0, 0xFFFFFFFF))),
             ),
@@ -995,6 +996,12 @@ class EffectParamRowFrb extends StatelessWidget {
         ? (span <= 40 ? 0.08 : span / 400)
         : (span <= 0 ? 0.5 : span / 200);
     double snap(num v) => integer ? v.roundToDouble() : v.toDouble();
+    // What the field's own Reset puts back: the default the schema declares.
+    final resetTo = switch (defaultEffectValue(param.kind)) {
+      BridgeEffectValue_Float(field0: BridgeScalar_Static(:final field0)) =>
+        field0,
+      _ => null,
+    };
 
     if (scalar case BridgeScalar_Keyframed()) {
       final sampled = sampledScalar(scalar, timeOfFrame(comp, frame));
@@ -1002,6 +1009,7 @@ class EffectParamRowFrb extends StatelessWidget {
         width: effectCellWidth,
         child: KeyedValueField(
           fieldKey: ValueKey<String>('fx-float-$keyName'),
+          resetTo: resetTo,
           value: sampled,
           min: hardMin ?? -1000000,
           max: hardMax ?? 1000000,
@@ -1049,6 +1057,7 @@ class EffectParamRowFrb extends StatelessWidget {
         max: hardMax ?? 1000000,
         speed: speed,
         decimals: integer ? 0 : 2,
+        resetTo: resetTo,
         onChanged: (v) => write(BridgeScalar.static_(snap(v))),
         onChangeLive: (v) =>
             _setLive(BridgeEffectValue.float(BridgeScalar.static_(snap(v)))),
@@ -1435,7 +1444,9 @@ class EffectParamRowFrb extends StatelessWidget {
     String named(String name, UuidValue layerId) =>
         layerId == ownerLayerId ? l10n.thisLayerSuffix(name) : name;
     return SizedBox(
-      width: effectCellWidth + 40,
+      // With riders beside it the picker is only as wide as its name, so a
+      // short one leaves its room to them. Alone it keeps the column's width.
+      width: riders.isEmpty ? effectCellWidth + 40 : null,
       child: BareLazyDropdown<UuidValue?>(
         key: ValueKey<String>('fx-layer-$id-${param.id}'),
         // Named from the read model when it can be, so the closed button
@@ -1606,23 +1617,63 @@ class EffectParamRowFrb extends StatelessWidget {
       // line cannot be seen at all.
       final canGrow =
           !constraints.hasBoundedHeight || constraints.maxHeight >= 44;
+      // **Nothing is cut short to keep a share free.** Flex shares cap each
+      // part whether or not its neighbours use theirs, which is how a row
+      // with room in it came to read "Nor…", "Lu…" and "Inv…". So the parts
+      // take their own widths in turn, each under a ceiling, and one part is
+      // left flexible to have the rest:
+      // - a switch's word, up to three tenths of the room;
+      // - beside a number, the choice, with the well giving up to eleven
+      //   pixels for it so "Normal" is read whole;
+      // - beside a picker with a choice, the picker up to half the room,
+      //   and the choice has what is left.
+      // [room] is the row less its gaps and the switch's own box. Null where
+      // the row has no width to measure, and the parts share as they used to.
+      final room = constraints.maxWidth.isFinite
+          ? math.max(
+              0.0,
+              constraints.maxWidth -
+                  riders.fold(
+                      0.0,
+                      (taken, r) =>
+                          taken +
+                          (r.$1.kind is BridgeParamKind_Bool ? 26 : 6)))
+          : null;
+      final beside = riders.any((r) => r.$1.kind is BridgeParamKind_Choice);
+      final picker = param.kind is BridgeParamKind_Layer && beside;
       // Each rider lays its own parts straight into the row: a switch keeps
       // its box at full size and only its word gives, where a nested row
       // would have shared the room evenly and starved the box first.
       final riderRow = [
         for (final (p, v) in riders) ...[
           const SizedBox(width: 6),
-          ..._rider(t, id, p, v),
+          ..._rider(
+            t,
+            id,
+            p,
+            v,
+            wordCeiling: room == null ? null : room * 0.3,
+            // Never under twenty, so at the panel's floor there is still a
+            // button to press even with no room left for its word.
+            choiceCeiling: room == null || picker
+                ? null
+                : math.max(20.0, room - effectCellWidth - 2),
+          ),
         ],
       ];
       if (constraints.maxWidth >= wrapBelow || !canGrow) {
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Flexible, so a narrow panel shrinks the host and its riders
-            // rather than overflowing the row; at the panel's working width
-            // every one of them gets its natural size.
-            Flexible(flex: 3, child: control),
+            if (room != null && picker)
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: room * 0.5),
+                child: control,
+              )
+            else
+              // Flexible, so a narrow panel shrinks the host rather than
+              // overflowing the row.
+              Flexible(child: control),
             ...riderRow,
           ],
         );
@@ -1642,8 +1693,12 @@ class EffectParamRowFrb extends StatelessWidget {
     });
   }
 
+  /// [wordCeiling] and [choiceCeiling] are how wide a switch's word and a
+  /// choice may run at their own widths. Null, the part shares the row
+  /// instead, which is all it can do where the row has no width to measure.
   List<Widget> _rider(
-      LumitTheme t, UuidValue id, BridgeParamInfo p, BridgeEffectValue? v) {
+      LumitTheme t, UuidValue id, BridgeParamInfo p, BridgeEffectValue? v,
+      {double? wordCeiling, double? choiceCeiling}) {
     // The key a row of its own would have drawn under: the control moved
     // house, it did not become a different control.
     switch (p.kind) {
@@ -1652,6 +1707,11 @@ class EffectParamRowFrb extends StatelessWidget {
           BridgeEffectValue_Bool(:final field0) => field0,
           _ => false,
         };
+        final word = Text(
+          engineLabel(p.label),
+          style: t.mono.copyWith(fontSize: 10, color: t.textMuted),
+          overflow: TextOverflow.ellipsis,
+        );
         return [
           HouseCheckbox(
             key: ValueKey<String>('fx-bool-$id-${p.id}'),
@@ -1660,13 +1720,12 @@ class EffectParamRowFrb extends StatelessWidget {
                 onWrite(effectId, p.id, BridgeEffectValue.bool(next)),
           ),
           const SizedBox(width: 6),
-          Flexible(
-            child: Text(
-              engineLabel(p.label),
-              style: t.mono.copyWith(fontSize: 10, color: t.textMuted),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
+          wordCeiling == null
+              ? Flexible(child: word)
+              : ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: wordCeiling),
+                  child: word,
+                ),
         ];
       case BridgeParamKind_Choice(:final options):
         final index = switch (v) {
@@ -1675,21 +1734,24 @@ class EffectParamRowFrb extends StatelessWidget {
             field0.toInt(),
           _ => 0,
         };
-        return [
-          Flexible(
-            flex: 2,
-            child: LumitTooltip(
-              message: engineLabel(p.label),
-              child: BareDropdown<int>(
-                key: ValueKey<String>('fx-choice-$id-${p.id}'),
-                value: index,
-                options: [for (var i = 0; i < options.length; i++) i],
-                label: (i) => engineLabel(options[i]),
-                onChanged: (i) =>
-                    onWrite(effectId, p.id, BridgeEffectValue.choice(i)),
-              ),
-            ),
+        final choice = LumitTooltip(
+          message: engineLabel(p.label),
+          child: BareDropdown<int>(
+            key: ValueKey<String>('fx-choice-$id-${p.id}'),
+            value: index,
+            options: [for (var i = 0; i < options.length; i++) i],
+            label: (i) => engineLabel(options[i]),
+            onChanged: (i) =>
+                onWrite(effectId, p.id, BridgeEffectValue.choice(i)),
           ),
+        );
+        return [
+          choiceCeiling == null
+              ? Flexible(child: choice)
+              : ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: choiceCeiling),
+                  child: choice,
+                ),
         ];
       default:
         return const [];
@@ -1828,7 +1890,7 @@ class EffectPointRowFrb extends StatelessWidget {
           );
 
     final label = Text(
-      stem,
+      t.propertyCase(stem),
       style: enabled ? t.body : t.body.copyWith(color: t.textDisabled),
       overflow: TextOverflow.ellipsis,
     );
@@ -1907,6 +1969,7 @@ class EffectPointRowFrb extends StatelessWidget {
           width: effectCellWidth,
           child: KeyedValueField(
             fieldKey: ValueKey<String>('fx-float-$id-${param.id}'),
+            resetTo: kind.default_,
             value: sampled,
             min: kind.hardMin ?? -1000000,
             max: kind.hardMax ?? 1000000,
@@ -1926,6 +1989,7 @@ class EffectPointRowFrb extends StatelessWidget {
           max: kind.hardMax ?? 1000000,
           speed: speed,
           decimals: 2,
+          resetTo: kind.default_,
           // Typing keeps the ratio too, not only dragging: the chain is about
           // the two numbers, not about which gesture moved one of them.
           onChanged: (v) => writeChannel(param, v.toDouble(), live: false),
@@ -2071,6 +2135,13 @@ class EffectPointRowFrb extends StatelessWidget {
 List<BridgeEffectInfo>? _effectSchema;
 List<BridgeEffectInfo> cachedListEffects() => _effectSchema ??= listEffects();
 
+/// The order a category's effects are listed in wherever one is chosen from:
+/// alphabetical by the label on the row. The engine's own order is the order
+/// the effects were written in, which helps nobody find one.
+int byEffectLabel(BridgeEffectInfo a, BridgeEffectInfo b) =>
+    engineLabel(a.label).toLowerCase().compareTo(
+        engineLabel(b.label).toLowerCase());
+
 /// All nine layer styles, memoised for exactly [cachedListEffects]'
 /// reason: a fixed table that was crossing the bridge every time a menu tree or
 /// a panel heading was rebuilt.
@@ -2181,6 +2252,35 @@ String? pairStemOf(String effect, String xId) {
     if (pair.x == xId) return pair.stem;
   }
   return null;
+}
+
+/// [rows] with a plugin's own lists in place of the ones its choices
+/// described. A plugin refills one choice from another, a film stock from its
+/// category, and the row draws the list the instance holds now.
+List<BridgeParamInfo> relistedRows(
+  List<BridgeParamInfo> rows,
+  List<BridgeRowOptions> relisted,
+) {
+  if (relisted.isEmpty) return rows;
+  final lists = {for (final r in relisted) r.id: r.options};
+  return [
+    for (final p in rows)
+      switch ((p.kind, lists[p.id])) {
+        (BridgeParamKind_Choice(:final default_), final options?) =>
+          BridgeParamInfo(
+            id: p.id,
+            label: p.label,
+            unit: p.unit,
+            derived: p.derived,
+            kind: BridgeParamKind.choice(
+              options: options,
+              default_: default_,
+              dividersAfter: Uint32List(0),
+            ),
+          ),
+        _ => p,
+      },
+  ];
 }
 
 /// Which of `effect`'s parameters are currently NOT editable, given the values

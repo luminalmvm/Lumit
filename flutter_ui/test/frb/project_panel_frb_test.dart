@@ -95,7 +95,7 @@ void main() {
             find.byKey(const ValueKey('comp-apply')).evaluate().isNotEmpty,
       );
 
-      expect(find.text('NEW COMPOSITION'), findsWidgets);
+      expect(find.text('New composition'), findsWidgets);
       expect(find.byKey(const ValueKey('rename-field')), findsNothing,
           reason: 'a double-click on footage is not a rename any more');
 
@@ -646,7 +646,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('project-new-comp')));
       await tester.pump();
       // The button asks before it commits: nothing exists until Create.
-      expect(find.text('NEW COMPOSITION'), findsWidgets);
+      expect(find.text('New composition'), findsWidgets);
       expect(p.state.project!.getItems(), isEmpty);
 
       await tester.tap(find.byKey(const ValueKey('comp-apply')));

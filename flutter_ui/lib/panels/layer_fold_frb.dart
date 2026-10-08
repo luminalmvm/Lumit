@@ -57,12 +57,17 @@ final class FoldGroupRow extends LayerFoldRow {
   /// rather than an effect (Transform, Effects, a clip's name), which wears
   /// none, and null on every heading whose panel does not offer the tick.
   final bool? enabled;
+
+  /// True when [label] is a name somebody typed (a clip's source, a renamed
+  /// effect), which is drawn as typed whatever the label case.
+  final bool named;
   const FoldGroupRow({
     required this.path,
     required this.label,
     required this.open,
     required int depth,
     this.enabled,
+    this.named = false,
   }) : super(depth);
 }
 
@@ -1535,7 +1540,8 @@ List<LayerFoldRow> groupHeaderFoldRows({
         path: path,
         label: fx.customName ?? effectLabelOf(fx.name),
         open: fxOpen,
-        depth: 1));
+        depth: 1,
+        named: fx.customName != null));
     if (fxOpen) {
       final values = {for (final v in fx.values) v.id: v.value};
       for (final param in cachedListParameters(fx.name)) {
@@ -1567,7 +1573,12 @@ List<LayerFoldRow> clipFoldRows({
   final cid = clipFoldPrefix(clip.id);
   if (!open.contains(cid)) return const [];
   final rows = <LayerFoldRow>[
-    FoldGroupRow(path: cid, label: clip.sourceName, open: true, depth: 1),
+    FoldGroupRow(
+        path: cid,
+        label: clip.sourceName,
+        open: true,
+        depth: 1,
+        named: true),
   ];
   for (final fx in clip.effects) {
     final path = effectPath(cid, fx.id.toString());
@@ -1578,6 +1589,7 @@ List<LayerFoldRow> clipFoldRows({
       open: fxOpen,
       depth: 2,
       enabled: fx.enabled,
+      named: fx.customName != null,
     ));
     if (fxOpen) {
       final values = {for (final v in fx.values) v.id: v.value};
@@ -1845,6 +1857,7 @@ List<LayerFoldRow> layerFoldRows({
           label: animator.name,
           open: animatorOpen,
           depth: 2,
+          named: true,
         ));
         if (!animatorOpen) continue;
         for (final value in TextAnimatorValue.values) {
@@ -1957,6 +1970,7 @@ List<LayerFoldRow> layerFoldRows({
           label: fx.customName ?? effectLabelOf(fx.name),
           open: effectOpen,
           depth: 2,
+          named: fx.customName != null,
         ));
         if (effectOpen) {
           final values = {for (final v in fx.values) v.id: v.value};
@@ -1999,6 +2013,7 @@ List<LayerFoldRow> layerFoldRows({
           label: style.customName ?? effectLabelOf(style.name),
           open: styleOpen,
           depth: 2,
+          named: style.customName != null,
         ));
         if (styleOpen) {
           final values = {for (final v in style.values) v.id: v.value};

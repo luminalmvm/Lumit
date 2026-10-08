@@ -22,6 +22,7 @@ import 'package:lumit_flutter/src/rust/api/layer.dart' show BridgeBrushShape;
 
 import '../icons/icons.dart';
 import '../l10n/strings.dart';
+import 'keymap.dart' show chordLabel;
 import 'text_documents.dart';
 
 /// A cluster of tools that share one toolbar button, in the order the button's
@@ -49,10 +50,9 @@ enum ToolGroup {
 /// One tool.
 ///
 /// [ready] is honest bookkeeping rather than decoration: it says whether
-/// choosing this tool changes what a drag does *today*. The toolbar draws the
-/// unbuilt ones the same as the rest — they are the specified tool set, not a
-/// wish list — and only its tooltip mentions that the behaviour is still to
-/// come.
+/// choosing this tool changes what a drag does *today*. The unbuilt ones stay
+/// in this list, because they are the specified tool set and not a wish list,
+/// but a flyout leaves them out until they work.
 enum ToolMode {
   select(ToolGroup.select, LumitIcon.pointer, ready: true),
   hand(ToolGroup.hand, LumitIcon.move, ready: true),
@@ -162,6 +162,42 @@ enum ToolMode {
         ToolMode.cameraOrbit => l10n.toolCameraOrbit,
         ToolMode.cameraPan => l10n.toolCameraPan,
         ToolMode.cameraDolly => l10n.toolCameraDolly,
+      };
+
+  /// What its modifiers and keys do, for the status line's hint, or null for a
+  /// tool with nothing to add. Every claim here is one the tool's own handler
+  /// keeps today: change the handler and this line changes with it.
+  String? get hint => switch (this) {
+        ToolMode.select => l10n.statusHintSelect,
+        ToolMode.zoom => l10n.statusHintZoom,
+        ToolMode.rotate => l10n.statusHintRotate,
+        // The snap is on the platform's primary modifier, spelt as a chord
+        // spells it: Ctrl here, the command key on a Mac.
+        ToolMode.anchor =>
+          l10n.statusHintAnchor(chordLabel('Mod+').replaceAll('+', '')),
+        ToolMode.razor => l10n.statusHintRazor,
+        ToolMode.shapeRectangle ||
+        ToolMode.shapeRoundedRectangle ||
+        ToolMode.shapeEllipse ||
+        ToolMode.shapePolygon ||
+        ToolMode.shapeStar =>
+          l10n.statusHintShape,
+        ToolMode.pen => l10n.statusHintPen,
+        ToolMode.typeHorizontal => l10n.statusHintType,
+        ToolMode.brush || ToolMode.eraser => l10n.statusHintPaint,
+        ToolMode.cloneStamp => l10n.statusHintCloneStamp,
+        ToolMode.rotoBrush => l10n.statusHintRotoBrush,
+        ToolMode.puppetPosition ||
+        ToolMode.puppetStarch ||
+        ToolMode.puppetOverlap =>
+          l10n.statusHintPuppet,
+        ToolMode.puppetBend => l10n.statusHintPuppetBend,
+        ToolMode.cameraUnified => l10n.statusHintCameraUnified,
+        ToolMode.cameraOrbit => l10n.statusHintCameraOrbit,
+        ToolMode.cameraPan => l10n.statusHintCameraPan,
+        // The Hand, Refine edge and the dolly have no modifier, and the rest
+        // cannot be armed.
+        _ => null,
       };
 
   final LumitIcon icon;

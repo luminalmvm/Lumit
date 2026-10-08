@@ -88,8 +88,7 @@ void main() {
     await tester.pump();
     expect(find.text('Step gone'), findsNothing);
     expect(find.text('Step c'), findsOneWidget);
-    // The filled button sets its word in capitals.
-    expect(find.text('DONE'), findsOneWidget);
+    expect(find.text('Done'), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('tour-next')));
     await tester.pump();

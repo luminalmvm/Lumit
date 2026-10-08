@@ -1519,6 +1519,28 @@
       }
     }
   },
+  "exportLeftUnderMinute": "less than a minute left",
+  "@exportLeftUnderMinute": {
+    "description": "Bottom strip, during an export, after the frame count: an estimate of the time remaining when it is under a minute. Lower case on purpose, it follows the progress line."
+  },
+  "exportLeftMinutes": "about {minutes} min left",
+  "@exportLeftMinutes": {
+    "description": "Bottom strip, during an export, after the frame count: an estimate of the time remaining, in whole minutes. Lower case on purpose, it follows the progress line.",
+    "placeholders": {
+      "minutes": {
+        "type": "String"
+      }
+    }
+  },
+  "exportLeftHours": "about {hours} h left",
+  "@exportLeftHours": {
+    "description": "Bottom strip, during an export, after the frame count: an estimate of the time remaining, in whole hours, used from two hours up. Lower case on purpose, it follows the progress line.",
+    "placeholders": {
+      "hours": {
+        "type": "String"
+      }
+    }
+  },
   "exportingFrame": "Exporting frame {frame} of {total} ({encoder})",
   "@exportingFrame": {
     "description": "Bottom strip, during an export. {encoder} is a codec name and is not translated.",
@@ -1589,6 +1611,10 @@
   "firstRunAfterEffects": "Footage arrives as a layer, and the Retime graph shows the time value of the source.",
   "@firstRunAfterEffects": {
     "description": "First run: what choosing After Effects habits does. Retime is a Lumit product term."
+  },
+  "firstRunAfterEffectsKeys": "The After Effects shortcuts are loaded too.",
+  "@firstRunAfterEffectsKeys": {
+    "description": "First run: a second line on the After Effects card, saying that choosing it also switches the keyboard shortcuts to the After Effects preset."
   },
   "firstRunAutoUpdate": "Check for new versions of Lumit automatically.",
   "@firstRunAutoUpdate": {
@@ -1977,6 +2003,22 @@
   "styleChoice": "Style's choice",
   "@styleChoice": {
     "description": "Settings window, Appearance: the option in the Viewer bars and Toolbar position dropdowns that leaves the arrangement to the chosen interface style."
+  },
+  "settingsLabelCase": "Label case",
+  "@settingsLabelCase": {
+    "description": "Settings window, Appearance: the name of the row choosing how panel titles, headings and other labels are cased. Its first option leaves it to the interface style."
+  },
+  "labelCaseCaps": "All caps",
+  "@labelCaseCaps": {
+    "description": "Label case option: every label in capital letters."
+  },
+  "labelCaseSentence": "First letter",
+  "@labelCaseSentence": {
+    "description": "Label case option: only the first letter of a label is a capital."
+  },
+  "labelCaseLower": "Lower case",
+  "@labelCaseLower": {
+    "description": "Label case option: every label in small letters."
   },
   "settingsDeskRooms": "Rooms drawn for Desk",
   "@settingsDeskRooms": {
@@ -4116,7 +4158,7 @@
   },
   "keyExportTheComposition": "Export the composition",
   "@keyExportTheComposition": {
-    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. Also the tooltip of the Timeline's Export button."
   },
   "keyFitTheCurvesToThePane": "Fit the curves to the pane",
   "@keyFitTheCurvesToThePane": {
@@ -4801,6 +4843,10 @@
   "@menuAddMarkerAtPlayhead": {
     "description": "Menu item."
   },
+  "menuAddMarkerHere": "Add marker here",
+  "@menuAddMarkerHere": {
+    "description": "Timeline: a row of the right-click menu on the time ruler's own ground. It makes a composition marker at the frame under the pointer."
+  },
   "menuAddTextSelector": "Add text selector",
   "@menuAddTextSelector": {
     "description": "Menu item."
@@ -5143,6 +5189,15 @@
   "@menuRedo": {
     "description": "Menu item."
   },
+  "menuRedoStep": "Redo {step}",
+  "@menuRedoStep": {
+    "description": "The Edit menu's Redo row when there is a step to redo. {step} is that step's name as the Edit > History window shows it, for example Move layer.",
+    "placeholders": {
+      "step": {
+        "type": "String"
+      }
+    }
+  },
   "menuResetWorkspace": "Reset workspace",
   "@menuResetWorkspace": {
     "description": "Menu item."
@@ -5337,6 +5392,15 @@
   "@menuUndo": {
     "description": "Menu item."
   },
+  "menuUndoStep": "Undo {step}",
+  "@menuUndoStep": {
+    "description": "The Edit menu's Undo row when there is a step to undo. {step} is that step's name as the Edit > History window shows it, for example Move layer.",
+    "placeholders": {
+      "step": {
+        "type": "String"
+      }
+    }
+  },
   "menuView": "View",
   "@menuView": {
     "description": "Menu item."
@@ -5479,13 +5543,29 @@
   "@off": {
     "description": "A setting that is switched off."
   },
+  "paletteCommand": "Command",
+  "@paletteCommand": {
+    "description": "Command palette: the badge at the end of a row that runs a menu command, such as 'Layer › New › Solid'. Short: it sits in a narrow column."
+  },
   "paletteComps": "Comp",
   "@paletteComps": {
     "description": "Command palette: heading over the compositions you can jump to. Short — it sits in a narrow column."
   },
+  "paletteLayer": "Layer",
+  "@paletteLayer": {
+    "description": "Command palette: the badge at the end of a row that names a layer of the open composition. Choosing the row selects that layer. Short: it sits in a narrow column."
+  },
+  "paletteNeedsLayer": "Select a layer first",
+  "@paletteNeedsLayer": {
+    "description": "Command palette: shown greyed on an effect row while no layer is selected, in place of a shortcut, to say why the effect cannot be applied yet. Keep it short."
+  },
   "palettePanels": "Panel",
   "@palettePanels": {
     "description": "Command palette: heading over the panels you can focus."
+  },
+  "paletteSetting": "Setting",
+  "@paletteSetting": {
+    "description": "Command palette: the badge at the end of a row that names a Settings page or one setting on it. Choosing the row opens Settings there. Short: it sits in a narrow column."
   },
   "panelDebug": "Debug View",
   "@panelDebug": {
@@ -5703,6 +5783,24 @@
       }
     }
   },
+  "projectSummary": "{compositions, plural, =1{1 composition} other{{compositions} compositions}} · {footage} footage · {solids, plural, =1{1 solid} other{{solids} solids}} · {folders, plural, =1{1 folder} other{{folders} folders}}",
+  "@projectSummary": {
+    "description": "Project panel, the preview card at the top while nothing is selected: how many of each kind of item the panel lists. Footage counts footage items and has no plural.",
+    "placeholders": {
+      "compositions": {
+        "type": "int"
+      },
+      "footage": {
+        "type": "int"
+      },
+      "solids": {
+        "type": "int"
+      },
+      "folders": {
+        "type": "int"
+      }
+    }
+  },
   "projectItemInUse": "in use",
   "@projectItemInUse": {
     "description": "Badge beside a Project panel item that some composition places as a layer. Lower case on purpose — it sits in a line of facts.",
@@ -5787,6 +5885,14 @@
   "relinkEllipsis": "Relink…",
   "@relinkEllipsis": {
     "description": "Same as relink, with the ellipsis that means a file dialogue opens."
+  },
+  "replaceFootageEllipsis": "Replace footage…",
+  "@replaceFootageEllipsis": {
+    "description": "Project panel, a footage item's right-click menu: point the item at a different file. The same command as Relink, offered under this name when the file is not missing. The ellipsis means a file dialogue opens."
+  },
+  "tipOpenFolder": "Open folder",
+  "@tipOpenFolder": {
+    "description": "Hover text on a finished export's path in the bottom strip and on a finished row in the export queue: a click opens the folder the file was written to, in the desktop's own file manager. The same words as the export dialog's Open folder tick. Two words at most."
   },
   "removeEffect": "Remove effect",
   "@removeEffect": {
@@ -6619,6 +6725,15 @@
   "@switchSoloed": {
     "description": "Layer switch, when this layer is one of the soloed ones."
   },
+  "switchSoloAlone": "{label}. Alt-click to solo this layer alone",
+  "@switchSoloAlone": {
+    "description": "Tooltip on a layer row's solo switch in the Timeline. {label} is the switch's own name, Solo or Soloed. Alt-click turns solo on for this layer and off for every other.",
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
   "switchThreeD": "3D layer",
   "@switchThreeD": {
     "description": "Layer switch and its column heading: this layer lives in three-dimensional space."
@@ -6860,6 +6975,10 @@
   "@timelineEmpty": {
     "description": "Empty state in the Timeline panel."
   },
+  "timelineNoLayers": "No layers yet. Drag footage in, or use Layer > New.",
+  "@timelineNoLayers": {
+    "description": "One quiet line in the middle of the Timeline's lane area, shown while the open composition has no layers. Layer and New are the menu bar's own names."
+  },
   "timelineModeGraph": "Graph",
   "@timelineModeGraph": {
     "description": "Label on the right-hand mode segment in the Timeline's top row: the view showing each animated property as a curve. Drawn in capitals; one word."
@@ -6987,7 +7106,7 @@
   },
   "tipEasyEase": "Easy ease",
   "@tipEasyEase": {
-    "description": "Tooltip on the graph editor's Bezier button, naming the easing it applies. The F9 shortcut is not quoted here; the keymap teaches it."
+    "description": "Tooltip on the graph editor's Easy ease button, naming the easing it applies. The F9 shortcut is not quoted here; the keymap teaches it."
   },
   "tipEdgeHardness": "Edge hardness",
   "@tipEdgeHardness": {
@@ -7089,13 +7208,13 @@
   "@tipMaskMode": {
     "description": "Tooltip on the picker choosing how a mask combines with the ones above it — Add, Subtract, Intersect, Difference. One or two words."
   },
-  "tipMasterMotionBlurOff": "Blur off",
+  "tipMasterMotionBlurOff": "Motion blur",
   "@tipMasterMotionBlurOff": {
-    "description": "Tooltip on the composition's motion-blur switch, when it is off. One or two words."
+    "description": "Tooltip on the composition's motion-blur switch, when it is off. The control's name, two words at most; the glyph's colour says whether it is on."
   },
-  "tipMasterMotionBlurOn": "Blur on",
+  "tipMasterMotionBlurOn": "Motion blur",
   "@tipMasterMotionBlurOn": {
-    "description": "Tooltip on the composition's motion-blur switch, when it is on. One or two words."
+    "description": "Tooltip on the composition's motion-blur switch, when it is on. The control's name, two words at most; the glyph's colour says whether it is on."
   },
   "tipMatte": "Matte",
   "@tipMatte": {
@@ -7103,7 +7222,7 @@
   },
   "tipMeasureRenderTimes": "Measure times",
   "@tipMeasureRenderTimes": {
-    "description": "Tooltip on the stopwatch in the bottom strip, when measuring is off. One or two words."
+    "description": "Tooltip on the hourglass in the bottom strip, when measuring is off. One or two words."
   },
   "tipFilterColour": "Filter colour",
   "@tipFilterColour": {
@@ -7292,7 +7411,7 @@
   },
   "tipStopMeasuring": "Stop measuring",
   "@tipStopMeasuring": {
-    "description": "Tooltip on the stopwatch in the bottom strip, when measuring is on. One or two words."
+    "description": "Tooltip on the hourglass in the bottom strip, when measuring is on. One or two words."
   },
   "tipSwatchColour": "{label} colour",
   "@tipSwatchColour": {
@@ -7309,12 +7428,16 @@
   },
   "tipToggleColumns": "{column} column",
   "@tipToggleColumns": {
-    "description": "Tooltip on the Timeline bottom bar's column-group toggles. {column} is that group's own column heading — Switches, Modes, or Parent.",
+    "description": "Tooltip on the Timeline bottom bar's column-group toggles. {column} is that group's own column heading: Switches, Modes, Parent, or Render time.",
     "placeholders": {
       "column": {
         "type": "String"
       }
     }
+  },
+  "tipTimelineMore": "More commands",
+  "@tipTimelineMore": {
+    "description": "Tooltip on the three-dot button at the end of the Timeline's bottom bar, which opens a menu of commands: new layer, the razor, the work area, markers and beat detection. One or two words."
   },
   "tipTransparencyGrid": "Transparency grid",
   "@tipTransparencyGrid": {
@@ -8189,7 +8312,11 @@
   },
   "unsavedChanges": "Unsaved changes",
   "@unsavedChanges": {
-    "description": "Bottom strip: the project has edits that are not written to disk."
+    "description": "Bottom strip: the project has edits that are not written to disk. Also the title of the question asked before such a project is closed."
+  },
+  "unsavedQuestion": "This project has unsaved changes. Save them first?",
+  "@unsavedQuestion": {
+    "description": "The one sentence in the question asked before a project with unsaved changes is closed, replaced by another, or quit out of. Answered with Save, Discard or Cancel."
   },
   "updateAvailable": "{installed}. Lumit {version} is available.",
   "@updateAvailable": {
@@ -10009,7 +10136,7 @@
   },
   "keysEase": "Ease",
   "@keysEase": {
-    "description": "Timeline bottom bar: tooltip on the curve glyph that opens the Ease popover on the selected keyframes, between the Hold and Bezier glyphs."
+    "description": "Timeline bottom bar: tooltip on the curve glyph that opens the Ease popover on the selected keyframes, last of the four after the Hold glyph."
   },
   "welcomeNewProject": "New project",
   "@welcomeNewProject": {
@@ -10068,7 +10195,7 @@
   },
   "searchSettings": "Search settings",
   "@searchSettings": {
-    "description": "Placeholder in the search box in the Settings window's title strip; it hides the setting rows that do not match."
+    "description": "Placeholder in the search box in the Settings window's title strip; it finds settings by name on every page and lists them under their page names."
   },
   "settingsAccent": "Accent",
   "@settingsAccent": {
@@ -10128,7 +10255,7 @@
   },
   "settingsNoMatches": "No setting matches that.",
   "@settingsNoMatches": {
-    "description": "Settings window: shown in place of a page when the search box has hidden every row on it."
+    "description": "Settings window: shown in place of the pages when the search box finds no setting on any of them."
   },
   "settingsPageAudio": "Audio",
   "@settingsPageAudio": {
@@ -10242,9 +10369,41 @@
   "@tipTransportUnmute": {
     "description": "Tooltip on the Viewer deck's speaker mark while the output is silenced: pressing it lets sound play again."
   },
+  "viewerAlignBottom": "Bottom",
+  "@viewerAlignBottom": {
+    "description": "Entry in the Align submenu of the Viewer picture's right-click menu: moves each selected layer so the bottom edge of its box meets the bottom edge of the composition. One word."
+  },
+  "viewerAlignCentre": "Centre",
+  "@viewerAlignCentre": {
+    "description": "Entry in the Align submenu of the Viewer picture's right-click menu: moves each selected layer left or right so the middle of its box meets the middle of the composition. One word."
+  },
+  "viewerAlignLeft": "Left",
+  "@viewerAlignLeft": {
+    "description": "Entry in the Align submenu of the Viewer picture's right-click menu: moves each selected layer so the left edge of its box meets the left edge of the composition. One word."
+  },
+  "viewerAlignMiddle": "Middle",
+  "@viewerAlignMiddle": {
+    "description": "Entry in the Align submenu of the Viewer picture's right-click menu: moves each selected layer up or down so the middle of its box meets the middle of the composition. One word, and a different one from the horizontal Centre."
+  },
+  "viewerAlignRight": "Right",
+  "@viewerAlignRight": {
+    "description": "Entry in the Align submenu of the Viewer picture's right-click menu: moves each selected layer so the right edge of its box meets the right edge of the composition. One word."
+  },
+  "viewerAlignTop": "Top",
+  "@viewerAlignTop": {
+    "description": "Entry in the Align submenu of the Viewer picture's right-click menu: moves each selected layer so the top edge of its box meets the top edge of the composition. One word."
+  },
   "viewerColourToneMap": "Tone mapping",
   "@viewerColourToneMap": {
     "description": "Entry in the Viewer header's colour-pipeline menu, with a tick beside it when it is on. It folds very bright values back under 1 so they can be seen rather than clipping flat. Preview only, so it never changes an export."
+  },
+  "viewerMenuAlign": "Align",
+  "@viewerMenuAlign": {
+    "description": "Entry in the Viewer picture's right-click menu, shown while layers are selected. It opens a submenu of the six ways to line a layer up with the composition: Left, Centre, Right, Top, Middle, Bottom."
+  },
+  "viewerMenuSelect": "Select",
+  "@viewerMenuSelect": {
+    "description": "Entry in the Viewer picture's right-click menu. It opens a submenu naming every layer under the pointer, top to bottom, so a layer covered by another can be selected."
   },
   "viewerOverlayBackground": "Composition background…",
   "@viewerOverlayBackground": {
@@ -10282,53 +10441,38 @@
   "@viewerQualityResolution": {
     "description": "Heading over the first group in the Viewer header's quality menu: how many pixels the engine is asked to make for the preview."
   },
-  "viewerReadout": "{comp} · {time} · {source} → {preview} · {zoom}",
-  "@viewerReadout": {
-    "description": "The reading at the right-hand end of the Viewer's bottom bar, set in mono: which composition is on screen, the time shown, the composition's own pixel size, the pixel size the preview was actually made at, and the magnification it is drawn at. Every part is a number or a name, so only the separators are translatable.",
+  "viewerReadoutDegraded": "{source} → {preview}",
+  "@viewerReadoutDegraded": {
+    "description": "The size part of the Viewer bar's reading while the preview was made at fewer pixels than the composition has, set in mono and drawn in the warning colour: the composition's own pixel size, an arrow, and the pixel size the preview was actually made at. Both parts are numbers, so only the arrow is translatable.",
     "placeholders": {
-      "comp": {
-        "type": "String"
-      },
-      "time": {
-        "type": "String"
-      },
       "source": {
         "type": "String"
       },
       "preview": {
         "type": "String"
-      },
-      "zoom": {
-        "type": "String"
       }
     }
   },
-  "viewerReadoutNoComp": "{time} · {source} · {zoom}",
-  "@viewerReadoutNoComp": {
-    "description": "The Viewer bar's reading, third and shortest form, used when the bar is too narrow for the composition's name as well: the time shown, the composition's pixel size, and the magnification. Every part is a number, so only the separators are translatable.",
-    "placeholders": {
-      "time": {
-        "type": "String"
-      },
-      "source": {
-        "type": "String"
-      },
-      "zoom": {
-        "type": "String"
-      }
-    }
-  },
-  "viewerReadoutNoPreview": "{comp} · {time} · {source} · {zoom}",
-  "@viewerReadoutNoPreview": {
-    "description": "The Viewer bar's reading, second form, used when the bar is too narrow for the full one: the same line with the arrow and the preview's own pixel size dropped. Which composition is on screen, the time shown, the composition's pixel size, and the magnification. Every part is a number or a name, so only the separators are translatable.",
+  "viewerReadoutFull": "{comp} · {size} · {zoom}",
+  "@viewerReadoutFull": {
+    "description": "The reading at the right-hand end of the Viewer's bottom bar, set in mono: which composition is on screen, its pixel size (or the arrowed pair while the preview is made smaller), and the magnification it is drawn at. Every part is a number or a name, so only the separators are translatable.",
     "placeholders": {
       "comp": {
         "type": "String"
       },
-      "time": {
+      "size": {
         "type": "String"
       },
-      "source": {
+      "zoom": {
+        "type": "String"
+      }
+    }
+  },
+  "viewerReadoutShort": "{size} · {zoom}",
+  "@viewerReadoutShort": {
+    "description": "The Viewer bar's reading, shortest form, used when the bar is too narrow for the composition's name as well: the composition's pixel size and the magnification. Every part is a number, so only the separator is translatable.",
+    "placeholders": {
+      "size": {
         "type": "String"
       },
       "zoom": {
@@ -11363,6 +11507,21 @@
       }
     }
   },
+  "timelineBarDragHint": "f{inFrame}–f{outFrame} · {frames} f",
+  "@timelineBarDragHint": {
+    "description": "Timeline lanes: the small readout pill beside the pointer while a layer's bar is being moved or trimmed, saying the frame it now starts on, the frame it ends on, and how many frames long it is. Very small mono type; an en dash between the two ends, a middle dot before the length.",
+    "placeholders": {
+      "inFrame": {
+        "type": "int"
+      },
+      "outFrame": {
+        "type": "int"
+      },
+      "frames": {
+        "type": "int"
+      }
+    }
+  },
   "graphKeyKicker": "Key",
   "@graphKeyKicker": {
     "description": "Timeline, Graph mode: the label opening the readout row at the foot of the outline, which appears while exactly one keyframe is selected and says which frame and value it holds. Shown in small capitals."
@@ -11777,6 +11936,30 @@
   "@tipExportColourSpaceUnavailable": {
     "description": "Export dialog, Colour section: the hover reason on a colour-space row that is listed but cannot be chosen, because the configuration cannot work out the transform it would need."
   },
+  "tipExportFormatLimit": "Format limit",
+  "@tipExportFormatLimit": {
+    "description": "Export dialog: the hover reason on a control that is disabled because the format chosen in the Format list cannot carry that setting: an alpha channel, a second colour depth, a bit rate, a 24 bit sample. Two words at most."
+  },
+  "tipExportNeedsAlpha": "Needs alpha",
+  "@tipExportNeedsAlpha": {
+    "description": "Export dialog, Picture section: the hover reason on the disabled Alpha list when the format could carry alpha but the Channels list beside it is set to RGB, so the file has no alpha channel to describe. Two words at most."
+  },
+  "tipExportAudioOff": "Audio off",
+  "@tipExportAudioOff": {
+    "description": "Export dialog, Audio section: the hover reason on the sound settings that are disabled because the first list in the row is set to Off. Two words at most."
+  },
+  "tipExportNoPicture": "No picture",
+  "@tipExportNoPicture": {
+    "description": "Export dialog: the hover reason on the Composition, Picture and Colour sections when the chosen format is sound only. Two words at most."
+  },
+  "tipExportNoSound": "No sound",
+  "@tipExportNoSound": {
+    "description": "Export dialog: the hover reason on the Audio section when the chosen format cannot hold sound. Two words at most."
+  },
+  "tipExportNoMetadata": "No metadata",
+  "@tipExportNoMetadata": {
+    "description": "Export dialog: the hover reason on the Metadata section when the chosen format has nowhere to keep any. Two words at most."
+  },
   "exportColourConfigUntagged": "A file written through the colour configuration is left untagged rather than mis-tagged.",
   "@exportColourConfigUntagged": {
     "description": "Export dialog, Colour section: the line under the rows when the chosen space came out of the project's colour configuration. Such a file has no reliable header to state, so Lumit writes none rather than write a wrong one."
@@ -11784,6 +11967,10 @@
   "settingsLayerNamesOnLaneBars": "Layer names on lane bars",
   "@settingsLayerNamesOnLaneBars": {
     "description": "Settings window, Timeline page: the name of one setting - whether each layer bar in the Timeline lane area is labelled with the layer name. Off by default."
+  },
+  "settingsTimelineMinimap": "Minimap under the lanes",
+  "@settingsTimelineMinimap": {
+    "description": "Settings window, Timeline page: the name of one setting - whether a thin strip under the Timeline's lanes draws every layer's bar in miniature, with the part in view as a window that drags to scroll. On by default in the Lantern style, off in the others."
   },
   "settingsGroupNodeGraphs": "Node graphs",
   "@settingsGroupNodeGraphs": {
@@ -12789,6 +12976,75 @@
         "type": "String"
       }
     }
+  },
+  "statusHintSelect": "Shift adds to the selection, keeps a move to one axis and a scale in proportion · Arrow keys nudge a pixel, ten with Shift · Ctrl suspends snapping",
+  "@statusHintSelect": {
+    "description": "Right-hand end of the status bar while the Selection tool is armed: one quiet line saying what its keys do in the Viewer, one part per key. The parts are separated by a middle dot. Shift and Ctrl are key names."
+  },
+  "statusHintZoom": "Click zooms in · Alt zooms out · Drag a box to zoom to it",
+  "@statusHintZoom": {
+    "description": "Right-hand end of the status bar while the Zoom tool is armed: one quiet line saying what a click, the Alt key and a dragged box do in the Viewer. The parts are separated by a middle dot."
+  },
+  "statusHintRotate": "Drag turns the selected layers · Shift turns in 45° steps · Shift-click adds to the selection",
+  "@statusHintRotate": {
+    "description": "Right-hand end of the status bar while the Rotation tool is armed: one quiet line saying what a drag and the Shift key do in the Viewer. The parts are separated by a middle dot."
+  },
+  "statusHintAnchor": "Click or drag places the anchor point · Shift keeps a drag to one axis · {modifier} snaps to the layer's corners, edge midpoints and centre",
+  "@statusHintAnchor": {
+    "description": "Right-hand end of the status bar while the Anchor point tool is armed: one quiet line saying what a click, a drag and the modifier keys do in the Viewer. {modifier} is the name of the platform's main modifier key, Ctrl or the Mac command symbol. The parts are separated by a middle dot.",
+    "placeholders": {
+      "modifier": {
+        "type": "String"
+      }
+    }
+  },
+  "statusHintRazor": "Click a layer in the Timeline to cut it there · Shift cuts every layer at that frame",
+  "@statusHintRazor": {
+    "description": "Right-hand end of the status bar while the Razor tool is armed: one quiet line saying what a click and a Shift-click do in the Timeline. The parts are separated by a middle dot."
+  },
+  "statusHintShape": "Draws a mask on the selected layer, or a shape layer with nothing selected · Shift keeps the width and height equal",
+  "@statusHintShape": {
+    "description": "Right-hand end of the status bar while one of the five shape tools is armed: one quiet line saying what a drag makes in the Viewer and what the Shift key does to it. The parts are separated by a middle dot."
+  },
+  "statusHintPen": "Drag pulls out a point's handles · Alt pulls out one only · Backspace removes the last point · Esc abandons the path",
+  "@statusHintPen": {
+    "description": "Right-hand end of the status bar while the Pen tool is armed: one quiet line saying what a drag and the Alt, Backspace and Esc keys do while a path is being drawn in the Viewer. The parts are separated by a middle dot."
+  },
+  "statusHintType": "Shift+Enter starts a new line · Enter or Esc finishes the edit",
+  "@statusHintType": {
+    "description": "Right-hand end of the status bar while the Type tool is armed: one quiet line saying which keys break a line and end the edit while typing in the Viewer. The parts are separated by a middle dot."
+  },
+  "statusHintPaint": "Backspace removes the last stroke · Esc abandons a stroke in progress",
+  "@statusHintPaint": {
+    "description": "Right-hand end of the status bar while the Brush or the Eraser is armed: one quiet line saying what the Backspace and Esc keys do while painting in the Viewer. The parts are separated by a middle dot."
+  },
+  "statusHintCloneStamp": "Alt-click sets the source · Backspace removes the last stroke",
+  "@statusHintCloneStamp": {
+    "description": "Right-hand end of the status bar while the Clone stamp is armed: one quiet line saying what an Alt-click and the Backspace key do in the Viewer. The parts are separated by a middle dot."
+  },
+  "statusHintRotoBrush": "Alt marks the background · Esc abandons a stroke in progress",
+  "@statusHintRotoBrush": {
+    "description": "Right-hand end of the status bar while the Roto brush is armed: one quiet line saying what the Alt and Esc keys do while scribbling in the Viewer. The parts are separated by a middle dot."
+  },
+  "statusHintPuppet": "Click places a pin · Drag moves a pin · Delete removes the pin under the pointer",
+  "@statusHintPuppet": {
+    "description": "Right-hand end of the status bar while a Puppet position, starch or overlap pin tool is armed: one quiet line saying what a click, a drag and the Delete key do in the Viewer. The parts are separated by a middle dot."
+  },
+  "statusHintPuppetBend": "Click places a pin · Drag turns a bend pin · Alt scales it instead · Delete removes the pin under the pointer",
+  "@statusHintPuppetBend": {
+    "description": "Right-hand end of the status bar while the Puppet bend pin tool is armed: one quiet line saying what a click, a drag, the Alt key and the Delete key do in the Viewer. The parts are separated by a middle dot."
+  },
+  "statusHintCameraUnified": "Left button orbits, middle button tracks, right button dollies · Shift keeps orbiting and tracking to one axis",
+  "@statusHintCameraUnified": {
+    "description": "Right-hand end of the status bar while the Unified camera tool is armed: one quiet line saying which mouse button makes which camera move in the Viewer, and what the Shift key does. Tracks is the camera move the Track camera tool makes. The parts are separated by a middle dot."
+  },
+  "statusHintCameraOrbit": "Shift keeps the orbit to one axis",
+  "@statusHintCameraOrbit": {
+    "description": "Right-hand end of the status bar while the Orbit camera tool is armed: one quiet line saying what the Shift key does to a drag in the Viewer."
+  },
+  "statusHintCameraPan": "Shift keeps the move to one axis",
+  "@statusHintCameraPan": {
+    "description": "Right-hand end of the status bar while the Track camera tool is armed: one quiet line saying what the Shift key does to a drag in the Viewer."
   },
   "startupFailedTitle": "Lumit could not start",
   "@startupFailedTitle": {
@@ -13815,6 +14071,47 @@
   "panelGroupSolo": "One open at a time",
   "@panelGroupSolo": {
     "description": "The right-click menu on a panel's header in a stacked group: a tick that makes opening one panel shut the others."
+  },
+  "panelExpressions": "Expressions",
+  "@panelExpressions": {
+    "description": "The name of the panel that keeps the user's saved expressions and puts one on the selected properties. A panel name, so a noun."
+  },
+  "searchExpressions": "Search expressions",
+  "@searchExpressions": {
+    "description": "Placeholder in the Expressions panel's search box. It searches the saved expressions by name and by what their script says."
+  },
+  "noExpressionsYet": "No expressions saved yet",
+  "@noExpressionsYet": {
+    "description": "Empty-state line in the Expressions panel, before the user has saved an expression."
+  },
+  "newExpression": "New",
+  "@newExpression": {
+    "description": "Button in the Expressions panel: clear the editor to write a new expression. When the selected property already has an expression, the editor starts with that."
+  },
+  "selectAProperty": "Select a property",
+  "@selectAProperty": {
+    "description": "Shown beside the Expressions panel's Apply button when no property row is selected in the Timeline, so there is nowhere for the expression to go."
+  },
+  "fxFoldCompositing": "Compositing",
+  "@fxFoldCompositing": {
+    "description": "Effect controls panel: heading of the fold at the foot of every effect that holds its Mix and Matte rows. One word, drawn in capitals by the panel."
+  },
+  "fxCompositingMatte": "matte: {layer}",
+  "@fxCompositingMatte": {
+    "description": "Effect controls panel: part of the short muted summary on a shut Compositing fold, shown when the effect has a matte layer chosen. Lower case on purpose, it sits beside other values such as '50%' and 'Screen'. {layer} is the matte layer's name.",
+    "placeholders": {
+      "layer": {
+        "type": "String"
+      }
+    }
+  },
+  "tipFavouritesOnly": "Favourites only",
+  "@tipFavouritesOnly": {
+    "description": "Hover text on the star beside the search box in the Effects & presets panel. Pressing it narrows the list to the starred effects and presets; pressing it again shows everything."
+  },
+  "swatchRecent": "Recent colours",
+  "@swatchRecent": {
+    "description": "Hover text on the row of recently used colours inside the colour picker, above the project's colour shelf."
   },
   "menuShowTour": "Lumit tour",
   "@menuShowTour": {

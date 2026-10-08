@@ -43,6 +43,20 @@ noise(time * 2) * 50               // a smooth wander, the same on every run
 fit(layer().time, 0, 2, 0, 100)    // nought to a hundred over two seconds
 ```
 
+## Save expressions to use again
+
+**Window ▸ Expressions** opens a panel that keeps expressions between projects.
+
+- **New** clears the editor. With a property selected that already has an expression, the
+  editor starts with it.
+- **Save** stores the script under the name in the name field. A name already in the list
+  is replaced.
+- **Delete** removes the selected entry.
+- **Apply** puts the script on every property row selected in the Timeline. Double-clicking
+  an entry does the same.
+
+The search box matches names and scripts.
+
 ## Notes
 
 - **An expression that fails reads as −1.** Nothing is reported yet, so a property

@@ -255,14 +255,14 @@ Widget _gap(bool pills) =>
 
 /// The armed tool's own options, when it has any: After Effects puts them
 /// beside the tools, and the strip is empty for the tools that draw nothing.
-/// The Lantern pill stays on the row saying so, so the row keeps its shape as
-/// the tools are cycled.
+/// Lantern shows no pill then either: one that only said "no options" was a
+/// thing to read with nothing in it.
 Widget? _toolOptions(LumitTheme t, ToolsState tools,
     {required double height}) {
   final shows = toolOptionsFor(tools.tool);
-  if (shows == ToolOptions.none && !t.tokens.roomed) return null;
-  // The word is centred on the pill's height, as the workspace strip's are
-  // on theirs; a bare Text takes the top of the box it is given. The width
+  if (shows == ToolOptions.none) return null;
+  // The row is centred on the pill's height, as the workspace strip's are
+  // on theirs; a bare child takes the top of the box it is given. The width
   // stays the content's, so the flat strip's row is laid out as it was.
   return _pill(
     t,
@@ -270,34 +270,25 @@ Widget? _toolOptions(LumitTheme t, ToolsState tools,
     Align(
       alignment: Alignment.centerLeft,
       widthFactor: 1,
-      child: shows == ToolOptions.none
-          ? Text(
-              l10n.toolNoOptions,
-              key: const ValueKey('tool-no-options'),
-              style: t.body.copyWith(color: t.textMuted),
-              maxLines: 1,
-              overflow: TextOverflow.clip,
-            )
-          : SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // The mockup's hint word before the controls, under
-                  // Lantern.
-                  if (t.tokens.roomed) ...[
-                    Text(
-                      l10n.toolOptions,
-                      key: const ValueKey('tool-options-hint'),
-                      style:
-                          t.body.copyWith(fontSize: 12, color: t.textMuted),
-                    ),
-                    const SizedBox(width: 8),
-                  ],
-                  _ToolOptions(tools: tools, shows: shows),
-                ],
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // The mockup's hint word before the controls, under
+            // Lantern.
+            if (t.tokens.roomed) ...[
+              Text(
+                l10n.toolOptions,
+                key: const ValueKey('tool-options-hint'),
+                style: t.body.copyWith(fontSize: 12, color: t.textMuted),
               ),
-            ),
+              const SizedBox(width: 8),
+            ],
+            _ToolOptions(tools: tools, shows: shows),
+          ],
+        ),
+      ),
     ),
     height: height,
     padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -779,11 +770,13 @@ class _ToolButtonState extends State<_ToolButton> {
     final t = scope.theme;
     final member = widget.tools.memberOf(widget.group);
     final active = widget.tools.tool.group == widget.group;
-    final members = ToolMode.membersOf(widget.group);
+    // Only the built ones: the flyout leaves the rest out, so a group with one
+    // working tool is a plain button with no corner mark.
+    final members = ToolMode.builtMembersOf(widget.group);
     // A group nothing in which is built is on the strip but cannot be pressed:
     // the tool set is the specification, and a button that visibly
     // cannot be pressed says "coming" where a missing one says nothing.
-    final enabled = ToolMode.builtMembersOf(widget.group).isNotEmpty;
+    final enabled = members.isNotEmpty;
 
     // 15-DESIGN §5's icon states, exactly: secondary at rest, primary on hover,
     // accent when this is the tool in your hand — and muted for a group that
@@ -832,7 +825,8 @@ class _ToolButtonState extends State<_ToolButton> {
             : 36.0;
 
     return LumitTooltip(
-      message: _tooltip(context, member, members.length > 1),
+      message: _tooltip(member),
+      action: _actionFor(widget.group),
       child: MouseRegion(
         cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
         onEnter: (_) => setState(() => _hover = enabled),
@@ -895,20 +889,16 @@ class _ToolButtonState extends State<_ToolButton> {
     );
   }
 
-  /// The tooltip: the tool's name, its shortcut as this machine spells it, and
-  /// — for a tool whose behaviour is not built — the plain fact that arming it
-  /// changes nothing yet. Saying so is cheaper than a user discovering it by
-  /// dragging and getting silence.
-  String _tooltip(BuildContext context, ToolMode member, bool hasHidden) {
-    final chord =
-        context.read<LumitUiState>().keymap.chordFor(_actionFor(widget.group));
-    final parts = <String>[
-      chord == null ? member.label : '${member.label} ($chord)',
-      if (hasHidden) l10n.tipMoreInGroup,
-      if (!member.ready) l10n.tipNotBuiltYet,
-    ];
-    return parts.join(' · ');
-  }
+  /// The tooltip: the tool's name and, for a tool whose behaviour is not
+  /// built, the plain fact that arming it changes nothing yet. Saying so is
+  /// cheaper than a user discovering it by dragging and getting silence. The
+  /// shortcut is the tooltip's own to add, from the group's keymap action,
+  /// straight after the name. The "Hold" that used to follow a group's name
+  /// is gone: beside the chord it read as "hold Q", and the corner mark says
+  /// there is more.
+  String _tooltip(ToolMode member) => member.ready
+      ? member.label
+      : '${member.label} · ${l10n.tipNotBuiltYet}';
 
   void _openFlyout(BuildContext context) {
     final box = context.findRenderObject();
@@ -953,7 +943,9 @@ class _ToolFlyout extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          for (final member in ToolMode.membersOf(group))
+          // The tools not built yet are left out. They come back by themselves
+          // the day [ToolMode.ready] says they work.
+          for (final member in ToolMode.builtMembersOf(group))
             MenuRow(
               key: ValueKey<String>('tool-flyout-${member.name}'),
               selected: member == armed,
@@ -1022,20 +1014,22 @@ class _WorkspaceStrip extends StatelessWidget {
       key: const ValueKey('workspace-strip'),
       mainAxisSize: MainAxisSize.min,
       children: [
-        for (final preset in WorkspacePreset.values)
+        for (final (i, preset) in WorkspacePreset.values.indexed)
           _StripEntry(
             key: ValueKey<String>('workspace-${preset.name}'),
             label: preset.title,
+            slot: i + 1,
             active: preset == active,
             onPressed: () => ui.workspace.applyWorkspacePreset(preset),
           ),
         // The user's own, after the presets and in the same order the chords
         // count (docs/07 §1.4). Drawn by exactly the same rules — a workspace
         // somebody saved is a workspace, not a lesser kind of one.
-        for (final saved in ui.workspace.userWorkspaces)
+        for (final (i, saved) in ui.workspace.userWorkspaces.indexed)
           _StripEntry(
             key: ValueKey<String>('workspace-user-${saved.name}'),
             label: saved.name,
+            slot: WorkspacePreset.values.length + i + 1,
             active: saved.name == ui.workspace.activeUserWorkspace,
             onPressed: () => ui.workspace.applyUserWorkspace(saved.name),
           ),
@@ -1062,12 +1056,16 @@ class _WorkspaceStrip extends StatelessWidget {
 /// leaving a button that could be pressed and not read.
 class _StripEntry extends StatelessWidget {
   final String label;
+
+  /// Where it stands on the strip, from one: the slot its chord counts by.
+  final int slot;
   final bool active;
   final VoidCallback onPressed;
 
   const _StripEntry({
     super.key,
     required this.label,
+    required this.slot,
     required this.active,
     required this.onPressed,
   });
@@ -1140,7 +1138,13 @@ class _StripEntry extends StatelessWidget {
           ),
         ),
     };
-    return LumitTooltip(message: l10n.tipPanelLayout, child: button);
+    // The name and the chord that switches to it. A slot past the ninth has
+    // no chord, and the tooltip then shows the name alone.
+    return LumitTooltip(
+      message: label,
+      action: 'workspace.switch.$slot',
+      child: button,
+    );
   }
 }
 

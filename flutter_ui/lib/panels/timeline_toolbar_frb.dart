@@ -271,6 +271,8 @@ class Toolbar extends StatelessWidget {
     );
     return LumitTooltip(
       message: tip,
+      // One key flips between the two views, so both words teach it.
+      action: 'graph.toggle',
       // Grown to the chrome row's stated control height under Regular:
       // these three are the buttons the owner named as hard to hit.
       child: timelineChromeControl(
@@ -306,6 +308,13 @@ class Toolbar extends StatelessWidget {
   }
 }
 
+/// The rule between two groups of buttons on the outline's bottom strip: the
+/// key commands, the column toggles, the comp-wide switches and the menu.
+Widget _stripRule(LumitTheme t) => Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      child: Container(width: 1, height: 10, color: t.hairlineStrong),
+    );
+
 /// One comp-wide switch in the bottom bar: an icon that lights in `accent`
 /// while it is on.
 Widget _compToggleButton(
@@ -339,12 +348,18 @@ Widget _compToggleButton(
 /// It rides in the panel's bottom bar with the other comp-wide switches
 /// (§12A.1); it was in the timecode row until the redesign, and every command
 /// and key in it is the one it always was.
-Future<void> _showMoreMenu(
+///
+/// A right-click on empty lane ground opens it too, at [position], with
+/// [frame] under the pointer as the "here" of the two work-area rows. The
+/// razor row stays on the button: the ground has no razor to hand over.
+Future<void> showTimelineMoreMenu(
   BuildContext context, {
   required CompositionReference comp,
   required ValueListenable<int> playhead,
-  required bool razor,
-  required VoidCallback onToggleRazor,
+  Offset? position,
+  int? frame,
+  bool razor = false,
+  VoidCallback? onToggleRazor,
   required VoidCallback onChanged,
 }) async {
   final t = ThemeScope.of(context).theme;
@@ -356,18 +371,19 @@ Future<void> _showMoreMenu(
     // Anchored on the button. Opening from a *bottom* bar, the popup's own
     // layout pulls it back up on screen rather than running off below —
     // which is why the anchor no longer guesses at an offset.
-    position: box.localToGlobal(Offset.zero),
+    position: position ?? box.localToGlobal(Offset.zero),
     width: 190,
     rows: (close) => [
       MenuRow(
           key: const ValueKey('tl-add-layer'),
           onPressed: () => close('new-layer'),
           child: Text(l10n.newLayer)),
-      MenuRow(
-          key: const ValueKey('tl-razor'),
-          onPressed: () => close('razor'),
-          child: Text(razor ? l10n.disarmRazor : l10n.armRazor,
-              style: razor ? t.body.copyWith(color: t.accent) : null)),
+      if (onToggleRazor != null)
+        MenuRow(
+            key: const ValueKey('tl-razor'),
+            onPressed: () => close('razor'),
+            child: Text(razor ? l10n.disarmRazor : l10n.armRazor,
+                style: razor ? t.body.copyWith(color: t.accent) : null)),
       MenuRow(
           key: const ValueKey('tl-work-in'),
           onPressed: () => close('work-in'),
@@ -393,15 +409,15 @@ Future<void> _showMoreMenu(
   if (!context.mounted) return;
   switch (picked) {
     case 'new-layer':
-      await _showLayerMenu(context, comp, onChanged);
+      await _showLayerMenu(context, comp, onChanged, position);
     case 'razor':
-      onToggleRazor();
+      onToggleRazor?.call();
     case 'work-in' || 'work-out':
       comp.setWorkArea(
         span: workAreaWith(
           comp: comp,
           current: comp.getWorkArea(),
-          wanted: playheadNow,
+          wanted: frame ?? playheadNow,
           isStart: picked == 'work-in',
         ),
       );
@@ -436,13 +452,14 @@ Future<void> _showMoreMenu(
 Future<void> _showLayerMenu(
   BuildContext context,
   CompositionReference comp,
-  VoidCallback onChanged,
-) async {
+  VoidCallback onChanged, [
+  Offset? position,
+]) async {
   final box = context.findRenderObject();
   if (box is! RenderBox) return;
   final picked = await showMenuAt<VoidCallback>(
     context: context,
-    position: box.localToGlobal(Offset(0, box.size.height + 2)),
+    position: position ?? box.localToGlobal(Offset(0, box.size.height + 2)),
     width: 190,
     rows: (close) => [
       // The row carries what it does, not a word to switch on: the label is
@@ -476,9 +493,9 @@ Future<void> _showLayerMenu(
 /// with the two things that are about the lanes — the zoom and the scrollbar.
 ///
 /// The word *Interpolation* went with the move. It labelled the four words
-/// beside it, and Linear / Hold / Ease / Bezier need no telling what they are;
-/// a kicker naming a run of kickers only spent room the outline's foot has
-/// less of than the lane bar had.
+/// beside it, and Linear / Easy ease / Hold / Ease need no telling what they
+/// are; a kicker naming a run of kickers only spent room the outline's foot
+/// has less of than the lane bar had.
 ///
 /// Two shapes, one per view. In **Layers** it is the keyframe strip:
 /// the four interpolations — and nothing after them, since the owner removed
@@ -536,9 +553,11 @@ class KeyCommandStrip extends StatelessWidget {
     required String tip,
     required bool on,
     required VoidCallback onPressed,
+    String? action,
   }) =>
       LumitTooltip(
         message: tip,
+        action: action,
         child: HouseButton(
           key: ValueKey<String>(keyName),
           small: true,
@@ -556,18 +575,21 @@ class KeyCommandStrip extends StatelessWidget {
       );
 
   /// A strip command drawn as a glyph of the set: the interpolation
-  /// entries, whose shapes — a line, a step, a curve, a handled curve — say
-  /// more at 16px than four capitalised words did. The word is the tooltip,
-  /// which is the control's name, and the semantic label for a reader.
+  /// entries, whose shapes — a line, an eased curve, a step, a curve that
+  /// overshoots — say more at 16px than four capitalised words did. The word
+  /// is the tooltip, which is the control's name, and the semantic label for
+  /// a reader.
   Widget _glyphButton(
     LumitTheme t, {
     required String keyName,
     required String mark,
     required String word,
     required VoidCallback onPressed,
+    String? action,
   }) =>
       LumitTooltip(
         message: word,
+        action: action,
         child: HouseButton(
           key: ValueKey<String>(keyName),
           small: true,
@@ -613,6 +635,16 @@ class KeyCommandStrip extends StatelessWidget {
                   onPressed: () =>
                       onInterp?.call(const BridgeSideInterp.linear())),
               const SizedBox(width: 2),
+              // Easy ease, under the name the keyframe menus give it, and in
+              // the place the graph's strip gives it: second of the four.
+              // The bare eased curve: nothing here has a handle to drag.
+              _glyphButton(t,
+                  keyName: 'keys-interp-bezier',
+                  mark: LumitIcons.easeInOut,
+                  word: l10n.easeEasy,
+                  action: 'graph.ease',
+                  onPressed: () => onInterp?.call(easyEase)),
+              const SizedBox(width: 2),
               _glyphButton(t,
                   keyName: 'keys-interp-hold',
                   mark: LumitIcons.hold,
@@ -627,17 +659,10 @@ class KeyCommandStrip extends StatelessWidget {
               Builder(
                 builder: (buttonContext) => _glyphButton(t,
                     keyName: 'keys-interp-ease',
-                    mark: LumitIcons.easeInOut,
+                    mark: LumitIcons.ease,
                     word: l10n.keysEase,
                     onPressed: () => onEaseBlock?.call(buttonContext)),
               ),
-              const SizedBox(width: 2),
-              _glyphButton(t,
-                  keyName: 'keys-interp-bezier',
-                  mark: LumitIcons.bezier,
-                  word: l10n.easeBezier,
-                  onPressed: () => onInterp?.call(easyEase)),
-              const SizedBox(width: 12),
               // No second run: Reverse, Copy and Paste at playhead left the
               // strip on the owner's ruling (2026-08-31, desktop testing).
               // Copy and Paste keep their Ctrl+C / Ctrl+V roads; the four
@@ -656,8 +681,9 @@ class KeyCommandStrip extends StatelessWidget {
               const SizedBox(width: 2),
               _button(t,
                   keyName: 'graph-interp-bezier',
-                  label: l10n.easeBezier,
+                  label: l10n.easeEasy,
                   tip: l10n.tipEasyEase,
+                  action: 'graph.ease',
                   on: false,
                   onPressed: () => onInterp?.call(easyEase)),
               const SizedBox(width: 2),
@@ -747,7 +773,6 @@ class KeyCommandStrip extends StatelessWidget {
                       : l10n.tipBreakHandlesOff,
                   on: breakHandles,
                   onPressed: () => onToggleBreakHandles?.call()),
-              const SizedBox(width: 12),
             ],
           ],
         ),
@@ -816,16 +841,21 @@ class ColumnToggles extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     final mbOn = model.motionBlurEnabled;
+    final timings =
+        Provider.of<LumitUiState>(context, listen: false).renderTimings;
     return Container(
       height: t.density.secondaryRow,
       color: t.surface2,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
+      padding: const EdgeInsets.only(right: 10),
       // Scrolls sideways when the outline is narrow — the same answer the
       // toolbar and the lane bar give; an overflow stripe is a layout fault.
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
           children: [
+            // Left of this rule, what the key selection can be told to do.
+            // Right of it, which columns the outline draws.
+            _stripRule(t),
             for (final group in groups) ...[
               LumitTooltip(
                 message: l10n.tipToggleColumns(columnGroupLabel(group)),
@@ -855,6 +885,32 @@ class ColumnToggles extends StatelessWidget {
               ),
               const SizedBox(width: 4),
             ],
+            // The render-time column, which is there while the engine is
+            // measuring. The same switch the status line's hourglass flips.
+            ListenableBuilder(
+              listenable: timings,
+              builder: (context, _) => LumitTooltip(
+                message: l10n.tipToggleColumns(l10n.tipRenderTime),
+                child: HouseButton(
+                  key: const ValueKey('tl-column-timings'),
+                  small: true,
+                  frameless: true,
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  onPressed: () => timings.setMeasuring(!timings.measuring),
+                  child: labels == ChromeLabels.words
+                      ? Text(t.kickerCase(l10n.timeColumn),
+                          style: timings.measuring ? t.kickerOn : t.kicker)
+                      : glyph.LumitIcon(
+                          LumitIcons.renderTime,
+                          size: iconSize,
+                          colour:
+                              timings.measuring ? t.textPrimary : t.textMuted,
+                          semanticLabel: l10n.tipRenderTime,
+                        ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
             // The Animated filter, last of the outline's own marks (6.43). One
             // toggle rather than the withdrawn Keys sheet's *Show — All /
             // Animated* pair: two states are two states, and a word that reads
@@ -880,17 +936,13 @@ class ColumnToggles extends StatelessWidget {
                       ),
               ),
             ),
-            const SizedBox(width: 4),
             // **The two groups read apart** (§12A.1): everything left of this
             // rule says which *columns* the outline draws; everything right of
             // it is comp-wide — shy, master motion blur, and the overflow of
             // commands. They shared the timecode row until the redesign, where
             // a column toggle and a document switch sat shoulder to shoulder
             // with nothing to say they were different kinds of thing.
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: Container(width: 1, height: 10, color: t.hairlineStrong),
-            ),
+            _stripRule(t),
             _compToggleButton(
               context,
               keyName: 'tl-hide-shy',
@@ -912,21 +964,31 @@ class ColumnToggles extends StatelessWidget {
                 onChanged();
               },
             ),
-            Builder(
-              builder: (menuContext) => HouseButton(
-                key: const ValueKey('tl-more'),
-                small: true,
-                frameless: true,
-                padding: const EdgeInsets.symmetric(horizontal: 5),
-                onPressed: () => _showMoreMenu(
-                  menuContext,
-                  comp: comp,
-                  playhead: playhead,
-                  razor: razor,
-                  onToggleRazor: onToggleRazor,
-                  onChanged: onChanged,
+            // The menu is a list of commands, not a switch: a group of one.
+            _stripRule(t),
+            LumitTooltip(
+              message: l10n.tipTimelineMore,
+              child: Builder(
+                builder: (menuContext) => HouseButton(
+                  key: const ValueKey('tl-more'),
+                  small: true,
+                  frameless: true,
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  onPressed: () => showTimelineMoreMenu(
+                    menuContext,
+                    comp: comp,
+                    playhead: playhead,
+                    razor: razor,
+                    onToggleRazor: onToggleRazor,
+                    onChanged: onChanged,
+                  ),
+                  // The set's three dots. The character had no drawing in
+                  // the interface's face and came out as an empty box.
+                  child: glyph.LumitIcon(LumitIcons.more,
+                      size: iconSize,
+                      colour: t.textMuted,
+                      semanticLabel: l10n.tipTimelineMore),
                 ),
-                child: Text('⋯', style: t.small),
               ),
             ),
           ],

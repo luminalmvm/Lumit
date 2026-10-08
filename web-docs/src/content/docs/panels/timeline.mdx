@@ -59,23 +59,32 @@ times.
 | --- | --- |
 | **Switches** | Visibility, mute, solo, lock, shy, guide. |
 | **Layer** | Twirl, label colour, layer number, name. The one column that stretches. |
-| **Modes** | Collapse, flow, disable effects, motion blur, 3D, adjustment. |
+| **Modes** | Disable effects, 3D, motion blur, adjustment, flow, collapse. |
 | **Compose** | Matte and blend mode. |
 | **Parent** | The parent picker. |
 
 Drag a column heading to reorder the groups, and drag a seam to resize one. Toggles on the
-bottom bar show and hide **Switches**, **Modes** and **Parent**, you can also manually adjust
+bottom bar show and hide **Switches**, **Modes**, **Parent** and the render times, you can also manually adjust
 the column widths for several of these to hide items if they aren't needed.
+
+**Switches** opens on visibility, mute, solo and lock, and **Modes** on disable effects, 3D
+and motion blur. Drag the seam wider to show the rest. The order, the widths and the hidden
+columns are kept between launches.
 
 **Switches** is what the Timeline keeps about a layer, and **Modes** is how the layer is
 rendered. See [Layers](/use/layers/#switches).
+
+A matte, blend or parent picker still at its default reads as muted text. It draws as a
+picker once it is changed, or while the pointer is over its row.
 
 ## The lanes
 
 <Shot file="timeline-lanes.png" caption="A layer twirled open, showing its properties and keyframes." />
 
 Each layer has a bar showing when it draws. Drag the bar to move it, and either end to
-trim it. A trimmed layer keeps a faint outline of its full source extent.
+trim it. A trimmed layer keeps a faint outline of its full source extent. While the bar is
+moved or trimmed, a readout beside the pointer gives its in frame, its out frame and its
+length.
 
 Twirl a layer open and its transform, masks, effects, flow options, paint strokes and shape
 contents appear beneath it, each on a lane of its own.
@@ -85,12 +94,25 @@ A [Sequence layer](/use/sequence-layers/) draws its clips on one row.
 On a [node graph composition](/use/node-graphs/) the Timeline draws one row per box, with a
 lane per parameter once the box is twirled open. A box has no span, so there is no bar.
 
+### Right-click menus
+
+| Right-click | Offers |
+| --- | --- |
+| **A layer's bar** | The same menu as the layer's row in the outline. |
+| **Empty lane ground** | **New layer**, **Work area starts here**, **Work area ends here**, **Clear work area**, **Markers** and **Detect beats**. The three dots on the bottom bar open the same menu with **Arm razor** added. |
+| **The ruler** | **Add marker here**, **Work area starts here**, **Work area ends here** and **Clear work area**. |
+
+*Here* is the frame under the pointer.
+
 ## Moving about
 
 - **The wheel** scrolls the rows.
 - **Shift+wheel** scrolls sideways.
 - **Ctrl+wheel** zooms time, anchored on the pointer.
 - **A middle-button drag** pans both ways at once. The outline moves with the lanes.
+- **Minimap under the lanes**, in [Settings ▸ Timeline](/use/settings/), draws every layer's
+  bar as a thin line in a strip under the lanes. The part in view is a window on it, and
+  dragging the window scrolls. It is on by default in the Lantern shape.
 
 ## Editing keyframes in bulk
 
@@ -106,11 +128,11 @@ badge reading how many keys it holds and how many frames it spans.
 - The **magnet** on the bottom bar decides whether a dragged key snaps to whole frames.
 
 The strip along the bottom bar acts on whatever keys are selected: **Interpolation** —
-Linear, Hold, Ease, Bezier.
+Linear, Easy ease, Hold, Ease.
 
 ## Render times
 
-The stopwatch on the bottom strip turns on render-time measuring. Each layer's row shows how
+The hourglass on the bottom strip turns on render-time measuring. Each layer's row shows how
 long that layer took on the last measured frame in milliseconds, each effect's heading shows
 its own, and the column heading carries the whole frame's. A Precomp layer's number includes
 everything inside it.

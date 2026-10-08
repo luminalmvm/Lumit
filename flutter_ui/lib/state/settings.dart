@@ -8,7 +8,7 @@
 
 import 'package:lumit_flutter/src/rust/api/cache.dart';
 import 'package:lumit_flutter/icons/icon_style.dart' show IconSet;
-import 'package:lumit_flutter/theme/theme.dart' show ThemeShape;
+import 'package:lumit_flutter/theme/theme.dart' show LabelCase, ThemeShape;
 
 /// Which of the two playback behaviours the Viewer uses (docs/13 §B5).
 ///
@@ -200,8 +200,8 @@ enum ToolBarPosition {
 
 /// Which room Lantern's cards stand in.
 enum LanternRoom {
-  /// The style's own room: light for a dark scheme, dark for a light one,
-  /// so the cards are always the other way round from the room.
+  /// The style's own room, which is the night room for every scheme. A dark
+  /// scheme used to get the day room here, a bright frame round the picture.
   auto,
 
   /// A light neutral ground, the cards dark against it.
@@ -363,6 +363,11 @@ class InterfaceSettings {
   /// few pixels to the left. Turning it on gives the labels back, unchanged.
   bool layerNamesOnBars;
 
+  /// Whether the minimap of the bars is drawn under the Timeline's lanes.
+  ///
+  /// Null follows the style: Lantern draws it, Studio and Desk do not.
+  bool? timelineMinimap;
+
   /// Whether rows are drawn a pixel or two tighter than the approved mockups
   /// render them (`DensityTokens` in `theme/theme.dart`).
   ///
@@ -431,6 +436,10 @@ class InterfaceSettings {
   /// room is what the drawing draws. Read only while the shape is Lantern.
   LanternRoom room;
 
+  /// How labels are cased, or null to leave it to the style: Studio as
+  /// written, Desk lower case, Lantern capitals.
+  LabelCase? labelCase;
+
   /// What the chrome says: words, or the icon set's glyphs.
   ///
   /// [ChromeLabels.icons] by default — see the enum for why that is not Words.
@@ -465,6 +474,7 @@ class InterfaceSettings {
     this.showToneMap = false,
     this.easingInPopup = false,
     this.layerNamesOnBars = false,
+    this.timelineMinimap,
     this.compact = false,
     this.viewerBars = ViewerBars.auto,
     this.toolBarPosition = ToolBarPosition.auto,
@@ -475,6 +485,7 @@ class InterfaceSettings {
     this.shiftAOpensNodeSearch = true,
     this.iconSet = IconSet.styleChoice,
     this.room = LanternRoom.auto,
+    this.labelCase,
   });
 
   Map<String, dynamic> toJson() => {
@@ -496,6 +507,7 @@ class InterfaceSettings {
         'show_tone_map': showToneMap,
         'easing_in_popup': easingInPopup,
         'layer_names_on_bars': layerNamesOnBars,
+        'timeline_minimap': timelineMinimap,
         'compact': compact,
         'viewer_bars': viewerBars.name,
         'tool_bar_position': toolBarPosition.name,
@@ -506,6 +518,7 @@ class InterfaceSettings {
         'shift_a_opens_node_search': shiftAOpensNodeSearch,
         'icon_set': iconSet.name,
         'lantern_room': room.name,
+        if (labelCase != null) 'label_case': labelCase!.name,
       };
   factory InterfaceSettings.fromJson(Map<String, dynamic> j) =>
       InterfaceSettings(
@@ -571,6 +584,7 @@ class InterfaceSettings {
         // ruling on what the editor should look like, and the labels are one
         // click away for anyone who wants them back.
         layerNamesOnBars: j['layer_names_on_bars'] as bool? ?? false,
+        timelineMinimap: j['timeline_minimap'] as bool?,
         // Absent means off, which is the roomy default — and every settings
         // file written before this field existed was written by a build that
         // drew the tight rows. Those users get the extra pixel or two back,
@@ -613,5 +627,7 @@ class InterfaceSettings {
           (r) => r.name == j['lantern_room'],
           orElse: () => LanternRoom.auto,
         ),
+        // Absent, or a name no build wrote, means the style's own.
+        labelCase: LabelCase.values.asNameMap()[j['label_case']],
       );
 }

@@ -10,6 +10,7 @@ import 'package:flutter/widgets.dart';
 
 import '../icons/icons.dart';
 import '../l10n/strings.dart';
+import '../panels/viewer_strips.dart' show viewerPaneCorners;
 import '../state/dock.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
@@ -71,6 +72,7 @@ double panelMinWidth(Panel panel) => switch (panel) {
       // A label and a value well side by side, which is every row they have.
       Panel.text => 220,
       Panel.paragraph => 220,
+      Panel.expressions => 180,
       Panel.debug => 180,
     };
 
@@ -1061,17 +1063,19 @@ class _TabPillState extends State<_TabPill> {
   }
 }
 
+/// Whether a panel can be torn into its own window. Not yet, so the menu
+/// below leaves the row out; turning this on brings it back.
+const bool _popOutBuilt = false;
+
 /// A panel's right-click menu, on its tab or its header in a stack: close the
-/// panel, the pop-out that is not built yet, listed disabled rather than left
-/// off, and how the group it is in is drawn.
+/// panel, and how the group it is in is drawn.
 ///
-/// **Pop out is greyed and says why.** Tearing a panel into its own window
-/// needs real operating-system windows, and Flutter has not shipped those on
-/// a stable release (`docs/impl/multi-window.md`) — so the row names the
-/// gate in its tooltip instead of quietly doing something else. It is
+/// **Pop out is left off until it is built.** Tearing a panel into its own
+/// window needs real operating-system windows, and Flutter has not shipped
+/// those on a stable release (`docs/impl/multi-window.md`). It is
 /// deliberately *not* faked with a floating in-window panel: a panel that
 /// says it popped out and then cannot leave the app window is a worse answer
-/// than a disabled row.
+/// than no row.
 void _showPaneMenu(
   BuildContext context,
   Offset position, {
@@ -1098,18 +1102,19 @@ void _showPaneMenu(
               },
               child: Text(l10n.closePanel),
             ),
-            LumitTooltip(
-              message: l10n.popOutPanelBlocked,
-              child: Padding(
-                key: const ValueKey('tab-menu-pop-out'),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                child: Text(
-                  l10n.popOutPanel,
-                  style: t.body.copyWith(color: t.textDisabled),
+            if (_popOutBuilt)
+              LumitTooltip(
+                message: l10n.popOutPanelBlocked,
+                child: Padding(
+                  key: const ValueKey('tab-menu-pop-out'),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  child: Text(
+                    l10n.popOutPanel,
+                    style: t.body.copyWith(color: t.textDisabled),
+                  ),
                 ),
               ),
-            ),
             MenuRow(
               key: const ValueKey('tab-menu-stacked'),
               selected: group.stacked,
@@ -1402,11 +1407,13 @@ class _PaneChrome extends StatelessWidget {
     // Whether this pane is itself a card, with a card's corners and shadow.
     final card = round && !onRoom;
     final corner = Radius.circular(t.tokens.cardRadius);
-    final edgeRadius = round
-        ? BorderRadius.all(corner)
-        : t.tokens.roomed
-            ? BorderRadius.vertical(bottom: corner)
-            : null;
+    final edgeRadius = onRoom
+        ? viewerPaneCorners(context, t)
+        : round
+            ? BorderRadius.all(corner)
+            : t.tokens.roomed
+                ? BorderRadius.vertical(bottom: corner)
+                : null;
     final body = Stack(
       children: [
         // **Nothing paints outside its pane**, step 5 of the

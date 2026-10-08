@@ -1228,6 +1228,7 @@ fn a_negative_row_bytes_image_comes_back_the_right_way_up() {
 /// show for it.
 #[test]
 fn a_filter_request_hands_the_plugin_positive_row_bytes() {
+    let _ledger = image_ledger();
     let source = a_test_frame(6, 7);
     let request = RenderRequest::filter(0.0, source.clone());
     assert_eq!(request.order, RowOrder::BottomUp);
@@ -1566,7 +1567,6 @@ impl PluginHost for DeadHost {
         Rendering {
             frame: source,
             error: Some("the plugin is disabled for this session".to_owned()),
-            secret: None,
         }
     }
 
@@ -1586,7 +1586,7 @@ impl PluginHost for DeadHost {
         _params: &ParamSnapshot,
         _name: &str,
         _source: Frame16,
-    ) -> Result<ParamSnapshot, String> {
+    ) -> Result<crate::Settled, String> {
         Err("the plugin is disabled".to_owned())
     }
 }
@@ -1668,6 +1668,7 @@ fn a_plugin_registers_and_is_found_by_the_catalogue() {
 /// host owns.
 #[test]
 fn a_plugin_definition_renders_from_the_resolved_bag() {
+    let _ledger = image_ledger();
     let Some(_) = a_registered_plugin("a_plugin_definition_renders", "com.lumitlab.testplug", 2)
     else {
         return;
@@ -1849,7 +1850,6 @@ fn a_plugins_memory_reaches_its_render() {
             Rendering {
                 frame: source,
                 error: None,
-                secret: None,
             }
         }
 
@@ -1869,7 +1869,7 @@ fn a_plugins_memory_reaches_its_render() {
             _params: &ParamSnapshot,
             _name: &str,
             _source: Frame16,
-        ) -> Result<ParamSnapshot, String> {
+        ) -> Result<crate::Settled, String> {
             Err("not this test".to_owned())
         }
     }
@@ -1997,7 +1997,6 @@ fn a_plugin_is_told_its_frame_and_handed_its_neighbours() {
             Rendering {
                 frame: source,
                 error: None,
-                secret: None,
             }
         }
 
@@ -2017,7 +2016,7 @@ fn a_plugin_is_told_its_frame_and_handed_its_neighbours() {
             _params: &ParamSnapshot,
             _name: &str,
             _source: Frame16,
-        ) -> Result<ParamSnapshot, String> {
+        ) -> Result<crate::Settled, String> {
             Err("not this test".to_owned())
         }
     }
@@ -2193,9 +2192,10 @@ fn a_forgotten_ring_goes_with_its_process() {
 }
 
 /// A parameter the plugin marks secret keeps its row and starts hidden, and
-/// so does everything inside a secret group. After a render the rows follow
-/// what the plugin reports: spektrafilm shows its HDR output rows only once
-/// the output role says HDR, and Resolve draws whatever is not secret now.
+/// so does everything inside a secret group. Once the plugin has answered an
+/// edit the rows follow what it reports, kept on the instance: spektrafilm
+/// shows its HDR output rows only once the output role says HDR, and Resolve
+/// draws whatever is not secret now.
 #[test]
 fn a_secret_parameter_is_a_hidden_row_until_the_plugin_says_otherwise() {
     struct Reporting(std::collections::BTreeSet<String>);
@@ -2212,8 +2212,22 @@ fn a_secret_parameter_is_a_hidden_row_until_the_plugin_says_otherwise() {
             Rendering {
                 frame: source,
                 error: None,
-                secret: Some(self.0.clone()),
             }
+        }
+
+        fn settle(
+            &self,
+            _instance: uuid::Uuid,
+            _made_with: &ParamSnapshot,
+            handed: &ParamSnapshot,
+        ) -> Result<crate::Settled, String> {
+            Ok(crate::Settled {
+                params: handed.clone(),
+                controls: crate::Controls {
+                    secret: self.0.clone(),
+                    ..crate::Controls::default()
+                },
+            })
         }
 
         fn frames_needed(
@@ -2232,7 +2246,7 @@ fn a_secret_parameter_is_a_hidden_row_until_the_plugin_says_otherwise() {
             _params: &ParamSnapshot,
             _name: &str,
             _source: Frame16,
-        ) -> Result<ParamSnapshot, String> {
+        ) -> Result<crate::Settled, String> {
             Err("not this test".to_owned())
         }
     }
@@ -2303,32 +2317,32 @@ fn a_secret_parameter_is_a_hidden_row_until_the_plugin_says_otherwise() {
         extra: serde_json::Map::new(),
     };
     assert_eq!(
-        def.hidden_rows(&inst),
+        def.row_state(&inst).hidden,
         vec!["hidden", "inside", "nested"],
-        "before any render, the describe-time flags, groups included"
+        "before the plugin has answered, the describe-time flags, groups included"
     );
 
-    let mut rgba = vec![0.5_f32; 2 * 2 * 4];
-    def.apply_cpu_at(inst.id, 0.0, &mut rgba, 2, 2, Params::EMPTY);
+    let answer = def.settle(None, &inst).expect("the plugin answered");
+    inst.set_plugin_state(&answer.memory.expect("its controls are kept"));
     assert_eq!(
-        def.hidden_rows(&inst),
+        def.row_state(&inst).hidden,
         vec!["shown"],
-        "after a render, what the plugin reported"
+        "after an edit, what the plugin reported"
     );
     inst.id = uuid::Uuid::now_v7();
+    inst.plugin_state = None;
     assert_eq!(
-        def.hidden_rows(&inst),
+        def.row_state(&inst).hidden,
         vec!["hidden", "inside", "nested"],
-        "another instance has not rendered and starts from describe"
+        "another instance has not been answered and starts from describe"
     );
 }
 
 /// A value the host changes reaches the plugin as `kOfxActionInstanceChanged`,
 /// wrapped, before the next render's first question. A value that has not
-/// changed is not mentioned. A value the instance is created with counts as a
-/// change too, told after the create action, since spektrafilm's stock did
-/// nothing when nothing ever told it the stock had changed, and it ignores a
-/// change to the value it was created with.
+/// changed is not mentioned, and neither is one the instance was created
+/// with: it is in place for the create action, the way Resolve restores a
+/// saved project, and a plugin told about it would react as if to an edit.
 #[test]
 fn a_changed_value_is_told_to_the_plugin_before_the_next_render() {
     let _ledger = image_ledger();
@@ -2350,31 +2364,12 @@ fn a_changed_value_is_told_to_the_plugin_before_the_next_render() {
     let request = RenderRequest::filter(0.0, a_test_frame(4, 4));
     crate::render::render(plugin, &instance, &request, &token).expect("it rendered");
     let seen = action_log(&probe);
-    let changed = seen
-        .iter()
-        .position(|action| action == actions::INSTANCE_CHANGED)
-        .expect("the plugin was told");
-    assert_eq!(
-        seen.get(changed.wrapping_sub(1)).map(String::as_str),
-        Some(actions::BEGIN_INSTANCE_CHANGED),
-        "wrapped: {seen:?}"
+    assert!(
+        !seen
+            .iter()
+            .any(|action| action == actions::INSTANCE_CHANGED),
+        "a value it was created with is not a change: {seen:?}"
     );
-    assert_eq!(
-        seen.get(changed + 1).map(String::as_str),
-        Some(actions::END_INSTANCE_CHANGED),
-        "wrapped: {seen:?}"
-    );
-    let render = seen
-        .iter()
-        .position(|action| action == actions::BEGIN_SEQUENCE_RENDER)
-        .expect("it rendered");
-    assert!(changed < render, "told before the render, never inside it");
-
-    let create = seen
-        .iter()
-        .position(|action| action == actions::CREATE_INSTANCE)
-        .expect("it was created");
-    assert!(create < changed, "told after the create action, not before");
 
     // The same values again are nothing to tell.
     instance
@@ -2398,11 +2393,25 @@ fn a_changed_value_is_told_to_the_plugin_before_the_next_render() {
     probe_call(&probe, b"LumitTestPlugResetProbes ");
     crate::render::render(plugin, &instance, &request, &token).expect("it rendered");
     let seen = action_log(&probe);
-    assert!(
-        seen.iter()
-            .any(|action| action == actions::INSTANCE_CHANGED),
-        "a changed value is told: {seen:?}"
+    let changed = seen
+        .iter()
+        .position(|action| action == actions::INSTANCE_CHANGED)
+        .expect("a changed value is told");
+    assert_eq!(
+        seen.get(changed.wrapping_sub(1)).map(String::as_str),
+        Some(actions::BEGIN_INSTANCE_CHANGED),
+        "wrapped: {seen:?}"
     );
+    assert_eq!(
+        seen.get(changed + 1).map(String::as_str),
+        Some(actions::END_INSTANCE_CHANGED),
+        "wrapped: {seen:?}"
+    );
+    let render = seen
+        .iter()
+        .position(|action| action == actions::BEGIN_SEQUENCE_RENDER)
+        .expect("it rendered");
+    assert!(changed < render, "told before the render, never inside it");
 
     // A value that moves with time is the playhead's doing, not a person's.
     values.set("gain", PropValue::double(0.9));
@@ -2441,7 +2450,6 @@ fn a_plugins_window_is_asked_with_its_own_values() {
             Rendering {
                 frame: source,
                 error: None,
-                secret: None,
             }
         }
 
@@ -2465,7 +2473,7 @@ fn a_plugins_window_is_asked_with_its_own_values() {
             _params: &ParamSnapshot,
             _name: &str,
             _source: Frame16,
-        ) -> Result<ParamSnapshot, String> {
+        ) -> Result<crate::Settled, String> {
             Err("not this test".to_owned())
         }
     }

@@ -21,8 +21,8 @@
 //! parameter values while `kOfxActionCreateInstance` is still running, and a
 //! host that refuses there has the library throw before the instance exists —
 //! which from a layer looks like every plugin failing to apply, for a different
-//! reason each time. What the write does not do is reach the document;
-//! see [`write_param`].
+//! reason each time. How the write reaches the document is in
+//! [`write_param`].
 //!
 //! Keyframing, and the derivative and integral of an animated control, are
 //! still `kOfxStatErrUnsupported`: they need the animation to be the plugin's
@@ -282,6 +282,10 @@ fn param_property_set(name: &str, param_type: &str) -> PropertySet {
         // own affair; neither carries a default.
         _ => {}
     }
+
+    // Shown and live until the plugin says otherwise, which it reads back.
+    set.seed(keys::PARAM_SECRET, PropValue::int(0));
+    set.seed(keys::PARAM_ENABLED, PropValue::int(1));
 
     // Whether a parameter animates is the plugin's to say, and P3's to honour.
     set.seed(
@@ -606,19 +610,17 @@ unsafe fn value_from_slots(
 /// different status each time depending on what the vendor's own handler did
 /// with the exception (docs/impl/ofx-host.md §5).
 ///
-/// What the write does **not** do is reach the document. Lumit owns parameter
-/// storage (docs/12 §2.2), so the next render replaces the snapshot with the
-/// host's own rows and a plugin's write stands only until then. That is enough
-/// for the writes plugins actually make — settling their own controls as they
-/// are built — and giving one an undo step and a row in Effect Controls is the
-/// package docs/12 §2.2 describes.
+/// The write lands in the snapshot, and reaches the document from there.
+/// Lumit owns parameter storage (docs/12 §2.2), so nothing is written to it
+/// from inside a suite call: an edit at the panel asks the plugin what it
+/// holds afterwards ([`crate::instance::Instance::settle`]) and the rows it
+/// wrote go into the document in the same undo step as the edit.
 ///
 /// # Safety
 ///
 /// As [`value_from_slots`].
-// ponytail: the write reaches the snapshot and not the document, so a control a
-// plugin sets does not appear in Effect Controls or in undo. The upgrade is the
-// bridge seam docs/12 §2.2 names, not a different shape here.
+// ponytail: a write made in answer to a live drag or an undo, with no edit
+// behind it, stays in the snapshot until the next edit picks it up.
 unsafe fn write_param(param: OfxParamHandle, slots: [u64; 4]) -> StatusResult {
     let handle = Handle::from_ptr(param);
     let mut state = state();

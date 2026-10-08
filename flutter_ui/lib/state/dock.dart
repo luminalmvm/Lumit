@@ -56,7 +56,11 @@ enum Panel {
   text,
 
   /// Which side a text layer's lines line up on, and the room round them.
-  paragraph;
+  paragraph,
+
+  /// The user's saved expressions, and the editor that puts one on the
+  /// selected properties.
+  expressions;
 
   String get title => switch (this) {
         Panel.project => l10n.panelProject,
@@ -74,6 +78,7 @@ enum Panel {
         Panel.audioTimeline => l10n.panelAudioTimeline,
         Panel.text => l10n.panelText,
         Panel.paragraph => l10n.panelParagraph,
+        Panel.expressions => l10n.panelExpressions,
         Panel.debug => l10n.panelDebug
       };
 }

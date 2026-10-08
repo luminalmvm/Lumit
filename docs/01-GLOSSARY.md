@@ -118,6 +118,7 @@ Not interchangeable.
 | **Easing panel** | One curve shape applied to selected keyframe spans |
 | **Text panel** | Sets a text layer's font, size, spacing and outline |
 | **Paragraph panel** | Sets how a text layer's lines are aligned and spaced |
+| **Expressions panel** | Keeps saved expressions and puts one on the selected properties |
 | **Stack** (of panels) | A panel group drawn as twirled panels one above another, not as tabs |
 | **Flowchart** | A comp drawn between the comps that place it and the comps it places |
 

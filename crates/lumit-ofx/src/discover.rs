@@ -47,7 +47,7 @@ use crate::bundle::{self, Bundle};
 use crate::def::{BrokerHost, LocalHost, OfxEffectDef, PluginHost, Rendering, SharedBroker};
 use crate::describe::{describe_bundle, Context, PluginDescriptor};
 use crate::image::Frame16;
-use crate::instance::ParamSnapshot;
+use crate::instance::{ParamSnapshot, Settled};
 use crate::ipc::broker::{Broker, BrokerConfig};
 use crate::schema::schema_of;
 
@@ -203,7 +203,6 @@ impl PluginHost for Gated {
             return Rendering {
                 frame: source,
                 error: Some(DISABLED_REASON.to_owned()),
-                secret: None,
             };
         }
         self.inner.render(inst, time, params, source, neighbours)
@@ -223,11 +222,23 @@ impl PluginHost for Gated {
         params: &ParamSnapshot,
         name: &str,
         source: Frame16,
-    ) -> Result<ParamSnapshot, String> {
+    ) -> Result<Settled, String> {
         if is_disabled(&self.identifier) {
             return Err(DISABLED_REASON.to_owned());
         }
         self.inner.press(inst, time, params, name, source)
+    }
+
+    fn settle(
+        &self,
+        inst: Uuid,
+        made_with: &ParamSnapshot,
+        handed: &ParamSnapshot,
+    ) -> Result<Settled, String> {
+        if is_disabled(&self.identifier) {
+            return Err(DISABLED_REASON.to_owned());
+        }
+        self.inner.settle(inst, made_with, handed)
     }
 }
 
@@ -361,7 +372,6 @@ impl PluginHost for Absent {
     ) -> Rendering {
         Rendering {
             frame: source,
-            secret: None,
             error: Some("the plugin's bundle could not be opened".to_owned()),
         }
     }
@@ -377,7 +387,7 @@ impl PluginHost for Absent {
         _: &ParamSnapshot,
         _: &str,
         _: Frame16,
-    ) -> Result<ParamSnapshot, String> {
+    ) -> Result<Settled, String> {
         Err("the plugin's bundle could not be opened".to_owned())
     }
 }

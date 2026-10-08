@@ -1152,6 +1152,10 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
         fx.badgeDetail,
         fx.derivedParams,
         fx.hiddenRows,
+        fx.disabledRows,
+        [
+          for (final r in fx.rowOptions) [r.id, r.options],
+        ],
         fx.nodeGraphComp,
         info.trackCorrected,
         graphName,
@@ -1496,7 +1500,7 @@ Future<void> showAddEffectMenu(BuildContext context, ValueChanged<String> onAdd,
   final origin = box.localToGlobal(Offset(0, box.size.height + 4));
 
   // Grouped in schema order, so the headings come out in the order the engine
-  // declares rather than alphabetically by accident.
+  // declares. Within a heading the effects are sorted by name below.
   final grouped = <String, List<BridgeEffectInfo>>{};
   final headings = <String, String>{};
   for (final e in listEffects()) {
@@ -1516,6 +1520,9 @@ Future<void> showAddEffectMenu(BuildContext context, ValueChanged<String> onAdd,
               ? l10n.effectsAudioPlugins
               : l10n.effectsPlugins);
     }
+  }
+  for (final effects in grouped.values) {
+    effects.sort(byEffectLabel);
   }
 
   await showLumitPopup<void>(
@@ -1829,8 +1836,10 @@ class _EffectSection extends StatelessWidget {
   /// under the match name because it never changes; the derived half rides the
   /// read model beside the values, because it is a fact about the instance and
   /// a fetch per card per rebuild is the traffic the budget test forbids.
-  List<BridgeParamInfo> get _rows =>
-      [...cachedListParameters(info.name), ...info.derivedParams];
+  List<BridgeParamInfo> get _rows => relistedRows(
+        [...cachedListParameters(info.name), ...info.derivedParams],
+        info.rowOptions,
+      );
 
   /// Put every parameter back to the value its schema declares, and drop any
   /// curve on it — one op, so one undo step for the whole reset.
@@ -2042,7 +2051,11 @@ class _EffectSection extends StatelessWidget {
       for (final p in params)
         if ((stagedValue(id, p.id) ?? values[p.id]) case final v?) p.id: v,
     };
-    final disabled = disabledParams(info.name, shown);
+    // A plugin greys its own rows as well, and the instance says which.
+    final disabled = {
+      ...disabledParams(info.name, shown),
+      ...info.disabledRows,
+    };
 
     // The uniform Matte row and the Mix row: a Layer picker carries its Channel
     // and Invert beside it, a Mix slider its Blend, and no rider gets a row of
@@ -2051,9 +2064,21 @@ class _EffectSection extends StatelessWidget {
     List<BridgeParamInfo> ridersFor(BridgeParamInfo p) =>
         paramRidersFor(params, p);
 
+    // The Mix and Matte rows nearly every effect ends with fold away under
+    // one Compositing twirl at its foot. One the schema already keeps in a
+    // group of its own (the Lens flare's source matte) stays where it is.
+    final compositing = [
+      for (final p in params)
+        if (!memberOf.containsKey(p.id) &&
+            ((p.id == 'mix' && p.kind is BridgeParamKind_Float) ||
+                (p.id == 'matte' && p.kind is BridgeParamKind_Layer)))
+          p,
+    ];
+
     final folded = <String>{
       for (final p in params)
         for (final r in ridersFor(p)) r.id,
+      for (final p in compositing) p.id,
     };
 
     Widget rowFor(BridgeParamInfo param) {
@@ -2240,7 +2265,68 @@ class _EffectSection extends StatelessWidget {
         rows.addAll(foldRows(flat));
       }
     }
+    if (compositing.isNotEmpty) {
+      final path = 'fx-compositing-$id';
+      final open = isGroupOpen(path, true);
+      rows.add(_ParamGroupSection(
+        headerKey: ValueKey<String>(path),
+        label: l10n.fxFoldCompositing,
+        open: open,
+        onToggle: () => onToggleGroup(path, true),
+        // Shut, the heading still says what is off its default, so a mix or
+        // a matte is never hidden.
+        summary:
+            open ? null : _compositingSummary(compositing, ridersFor, shown),
+        rows: [for (final p in compositing) rowFor(p)],
+      ));
+    }
     return rows;
+  }
+
+  /// What a shut Compositing fold says about its rows: the mix, the blend and
+  /// the matte, each only when it is off its default. `50% · Screen · matte:
+  /// Title`, or null when there is nothing to say.
+  String? _compositingSummary(
+    List<BridgeParamInfo> hosts,
+    List<BridgeParamInfo> Function(BridgeParamInfo) ridersFor,
+    Map<String, BridgeEffectValue> shown,
+  ) {
+    final parts = <String>[];
+    for (final host in hosts) {
+      final value = shown[host.id];
+      if (value != defaultEffectValue(host.kind)) {
+        switch (value) {
+          case BridgeEffectValue_Float(
+              field0: BridgeScalar_Static(:final field0)
+            ):
+            final whole = field0 == field0.roundToDouble();
+            parts.add('${field0.toStringAsFixed(whole ? 0 : 1)}'
+                '${l10n.unitSymbolPercent}');
+          // Keyed, or an expression: there is no one number to give.
+          case BridgeEffectValue_Float():
+            parts.add(l10n.animated);
+          case BridgeEffectValue_Layer(:final field0?):
+            parts.add(l10n.fxCompositingMatte(allLayers
+                    .where((l) => l.layer.internallayerId == field0)
+                    .map((l) => l.info.name)
+                    .firstOrNull ??
+                l10n.missingLayer));
+          default:
+        }
+      }
+      // The blend rides on the Mix row, so it reads straight after the mix.
+      if (host.id != 'mix') continue;
+      for (final rider in ridersFor(host)) {
+        if ((rider.kind, shown[rider.id])
+            case (
+              BridgeParamKind_Choice(:final options, :final default_),
+              BridgeEffectValue_Choice(:final field0)
+            ) when field0 != default_ && field0 < options.length) {
+          parts.add(engineLabel(options[field0]));
+        }
+      }
+    }
+    return parts.isEmpty ? null : parts.join(' · ');
   }
 
   /// A small text mark rather than an icon, matching v0's × for Remove — the
@@ -2421,12 +2507,19 @@ class _ParamGroupSection extends StatelessWidget {
   final bool open;
   final VoidCallback onToggle;
   final List<Widget> rows;
+
+  /// What the heading says about its rows while it is shut, and the key its
+  /// twirl row is found by. Both are the Compositing fold's.
+  final String? summary;
+  final Key? headerKey;
   const _ParamGroupSection({
     super.key,
     required this.label,
     required this.open,
     required this.onToggle,
     required this.rows,
+    this.summary,
+    this.headerKey,
   });
 
   @override
@@ -2442,6 +2535,8 @@ class _ParamGroupSection extends StatelessWidget {
             label: label,
             open: open,
             onToggle: onToggle,
+            summary: summary,
+            key: headerKey,
           ),
           if (open)
             Column(

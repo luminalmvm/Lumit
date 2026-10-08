@@ -12,7 +12,7 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::Device;
 use lumit_media::AudioBuffer;
 use parking_lot::RwLock;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 
 pub mod beat;
@@ -42,10 +42,61 @@ struct Shared {
     /// clock and the meters carry on as if it were heard. Not document data,
     /// so it never saves into a project or silences an export.
     muted: AtomicBool,
+    /// A scrub burst the callback has not picked up yet ([`pack_scrub`]), or
+    /// zero. Written by [`AudioEngine::scrub`] and taken by the callback.
+    scrub: AtomicU64,
     /// What the mix is doing, published once per callback for the mixer's
     /// bars (docs/09 §3.1). Written only here; read by anyone holding the
     /// `Arc`, which is why it is beside the clock rather than inside the plan.
     meters: Arc<meter::Meters>,
+}
+
+/// How many frames a scrub burst takes to fade in, and again to fade out. A
+/// burst starts and stops wherever the playhead happens to be, which is
+/// mid-wave nearly every time, and a wave cut off there is heard as a click.
+/// About 3 ms at 48 kHz.
+const SCRUB_FADE_FRAMES: usize = 128;
+
+/// The low bits of a scrub request that hold the burst's length in frames.
+/// 24 of them is nearly six minutes at 48 kHz, for a burst that is a fraction
+/// of a second.
+const SCRUB_LEN_BITS: u32 = 24;
+
+/// A scrub request as one number: the frame to start at above the length.
+/// One atomic rather than two, so the callback can never pair one burst's
+/// start with another's length. Zero is "nothing asked", which a burst of no
+/// length is anyway.
+fn pack_scrub(at: usize, len: usize) -> u64 {
+    let at = (at as u64).min(u64::MAX >> SCRUB_LEN_BITS);
+    let len = (len as u64).min((1 << SCRUB_LEN_BITS) - 1);
+    (at << SCRUB_LEN_BITS) | len
+}
+
+/// One burst of scrub sound, as the callback keeps it between buffers.
+#[derive(Debug, Clone, Copy, Default)]
+struct Burst {
+    /// The next frame of the mix to sound.
+    at: usize,
+    played: usize,
+    left: usize,
+}
+
+impl Burst {
+    /// Up from nothing over the first [`SCRUB_FADE_FRAMES`] and back down to
+    /// it over the last.
+    fn gain(&self) -> f32 {
+        (self.played.min(self.left) as f32 / SCRUB_FADE_FRAMES as f32).min(1.0)
+    }
+}
+
+/// The scrub as the callback holds it: the burst being heard, and the one it
+/// replaced, which fades out underneath it. Dragging the playhead asks for a
+/// burst per frame crossed, far faster than one finishes, and cutting each
+/// short for the next would click as often as the playhead moves.
+#[derive(Debug, Default)]
+struct Scrub {
+    now: Burst,
+    was: Burst,
 }
 
 /// A whole buffer as a trivial plan: one clip covering the strip 1:1.
@@ -185,14 +236,16 @@ impl AudioEngine {
             playhead: AtomicUsize::new(0),
             playing: AtomicBool::new(false),
             muted: AtomicBool::new(false),
+            scrub: AtomicU64::new(0),
             meters: Arc::new(meter::Meters::default()),
         });
         let cb = shared.clone();
+        let mut scrub = Scrub::default();
 
         let stream = device
             .build_output_stream(
                 &config.config(),
-                move |out: &mut [f32], _| fill(&cb, out, channels),
+                move |out: &mut [f32], _| fill(&cb, &mut scrub, out, channels),
                 |_err| { /* device hiccup: next callback continues; never panic */ },
                 None,
             )
@@ -269,6 +322,22 @@ impl AudioEngine {
         self.shared.playhead.store(frame, Ordering::Relaxed);
     }
 
+    /// Sound `len` seconds of the mix from `t`, once, while the transport is
+    /// stopped: what dragging the playhead with Ctrl held is heard through.
+    ///
+    /// The clock does not move and nothing starts playing. A burst asked for
+    /// while another is sounding fades in over it, so a drag is one run of
+    /// sound and not a click per frame. Asked for during playback it is
+    /// dropped, since the mix is already being heard.
+    pub fn scrub(&self, t: f64, len: f64) {
+        let rate = f64::from(self.device_rate);
+        let at = (t.max(0.0) * rate) as usize;
+        let len = (len.max(0.0) * rate) as usize;
+        self.shared
+            .scrub
+            .store(pack_scrub(at, len), Ordering::Relaxed);
+    }
+
     /// The playback clock (docs/06-RENDER-PIPELINE.md §A/V sync: audio is
     /// master). Output latency compensation arrives with the ring buffer
     /// work; at ±half a frame tolerance it is acceptable to omit for Gate 0.
@@ -328,12 +397,17 @@ impl ClockHandle {
 /// Each frame is summed live from the plan's covering clips
 /// ([`mix::MixPlan::frame_at`] — a handful of multiply-adds per frame), which
 /// is what lets an edit swap the plan and be heard immediately.
-fn fill(shared: &Shared, out: &mut [f32], channels: usize) {
+fn fill(shared: &Shared, scrub: &mut Scrub, out: &mut [f32], channels: usize) {
     out.fill(0.0);
     if !shared.playing.load(Ordering::Relaxed) {
         shared.meters.silence();
+        fill_scrub(shared, scrub, out, channels);
         return;
     }
+    // Playing: a burst cut off by the play button is not picked up again when
+    // playback stops, and one asked for meanwhile is not kept for then.
+    shared.scrub.store(0, Ordering::Relaxed);
+    *scrub = Scrub::default();
     let Some(guard) = shared.plan.try_read() else {
         return; // plan being swapped: one quiet buffer beats a glitch
     };
@@ -363,6 +437,57 @@ fn fill(shared: &Shared, out: &mut [f32], channels: usize) {
     // After the mix and the clock, so a mute changes what is heard and
     // nothing else: playback paces on this clock, and the meters keep
     // reading the mix.
+    if shared.muted.load(Ordering::Relaxed) {
+        out.fill(0.0);
+    }
+}
+
+/// The stopped transport's half of the callback: sound whatever scrub burst
+/// is in flight, and nothing otherwise. Under the same rules as [`fill`], and
+/// the clock is left where it is.
+fn fill_scrub(shared: &Shared, scrub: &mut Scrub, out: &mut [f32], channels: usize) {
+    let asked = shared.scrub.swap(0, Ordering::Relaxed);
+    if asked != 0 {
+        scrub.was = scrub.now;
+        scrub.was.left = scrub.was.left.min(SCRUB_FADE_FRAMES);
+        scrub.now = Burst {
+            at: (asked >> SCRUB_LEN_BITS) as usize,
+            played: 0,
+            left: (asked & ((1 << SCRUB_LEN_BITS) - 1)) as usize,
+        };
+    }
+    if scrub.now.left == 0 && scrub.was.left == 0 {
+        return;
+    }
+    let Some(guard) = shared.plan.try_read() else {
+        return; // plan being swapped: the burst carries on in the next buffer
+    };
+    let Some(plan) = guard.as_ref() else {
+        *scrub = Scrub::default();
+        return;
+    };
+    for frame in out.chunks_exact_mut(channels) {
+        let (mut l, mut r) = (0.0f32, 0.0f32);
+        for burst in [&mut scrub.now, &mut scrub.was] {
+            if burst.at >= plan.total_frames {
+                burst.left = 0;
+            }
+            if burst.left == 0 {
+                continue;
+            }
+            let gain = burst.gain();
+            let (bl, br) = plan.frame_at(burst.at);
+            l += bl * gain;
+            r += br * gain;
+            burst.at += 1;
+            burst.played += 1;
+            burst.left -= 1;
+        }
+        frame[0] = l;
+        if channels > 1 {
+            frame[1] = r;
+        }
+    }
     if shared.muted.load(Ordering::Relaxed) {
         out.fill(0.0);
     }
@@ -452,18 +577,20 @@ mod tests {
             playhead: AtomicUsize::new(0),
             playing: AtomicBool::new(false),
             muted: AtomicBool::new(false),
+            scrub: AtomicU64::new(0),
             meters: Arc::new(meter::Meters::default()),
         };
         let mut out = vec![1.0f32; 256 * 2];
+        let mut scrub = Scrub::default();
 
         // Paused: silence, clock still.
-        fill(&shared, &mut out, 2);
+        fill(&shared, &mut scrub, &mut out, 2);
         assert!(out.iter().all(|s| *s == 0.0));
         assert_eq!(shared.playhead.load(Ordering::Relaxed), 0);
 
         // Playing: exact samples, clock advances by frames written.
         shared.playing.store(true, Ordering::Relaxed);
-        fill(&shared, &mut out, 2);
+        fill(&shared, &mut scrub, &mut out, 2);
         assert_eq!(shared.playhead.load(Ordering::Relaxed), 256);
         assert!((out[0] - 0.0).abs() < 1e-6); // sin(0)·0.25
         let expected = (255.0f32 * 0.05).sin() * 0.25;
@@ -471,10 +598,60 @@ mod tests {
 
         // Run past the end: stops exactly at the last frame, playing=false.
         for _ in 0..10 {
-            fill(&shared, &mut out, 2);
+            fill(&shared, &mut scrub, &mut out, 2);
         }
         assert_eq!(shared.playhead.load(Ordering::Relaxed), 1000);
         assert!(!shared.playing.load(Ordering::Relaxed));
+    }
+
+    /// The scrub, through the callback: a burst sounds from where it was
+    /// asked for with the transport stopped and the clock unmoved, rises
+    /// from nothing so that it cannot click, and ends on its own. A second
+    /// burst takes over from the first, and pressing play drops the lot.
+    #[test]
+    fn a_scrub_burst_sounds_while_stopped_and_leaves_the_clock_alone() {
+        let steady = Arc::new(AudioBuffer {
+            rate: 48_000,
+            samples: vec![0.5; 4000 * 2],
+        });
+        let shared = Shared {
+            plan: RwLock::new(Some(plan_of(steady))),
+            playhead: AtomicUsize::new(0),
+            playing: AtomicBool::new(false),
+            muted: AtomicBool::new(false),
+            scrub: AtomicU64::new(pack_scrub(1000, 600)),
+            meters: Arc::new(meter::Meters::default()),
+        };
+        let mut scrub = Scrub::default();
+        let mut out = vec![0.0f32; 256 * 2];
+
+        fill(&shared, &mut scrub, &mut out, 2);
+        assert_eq!(out[0], 0.0, "the burst starts from nothing");
+        assert!((out[255 * 2] - 0.5).abs() < 1e-6, "and reaches the mix");
+        assert_eq!(scrub.now.at, 1256, "read from where it was asked for");
+        assert_eq!(shared.playhead.load(Ordering::Relaxed), 0);
+        assert!(!shared.playing.load(Ordering::Relaxed));
+
+        // A second burst before the first is over: the first fades out
+        // under it, and the two together are never louder than the mix.
+        shared.scrub.store(pack_scrub(2000, 600), Ordering::Relaxed);
+        fill(&shared, &mut scrub, &mut out, 2);
+        assert_eq!(scrub.now.at, 2256);
+        assert_eq!(scrub.was.left, 0, "the old burst has faded out");
+        assert!(out.iter().all(|s| *s <= 0.5 + 1e-6));
+
+        // Left alone, it ends, and the buffer after that is silent.
+        for _ in 0..3 {
+            fill(&shared, &mut scrub, &mut out, 2);
+        }
+        assert!(out.iter().all(|s| *s == 0.0), "a burst is not a loop");
+
+        // Pressing play drops a burst that was asked for and not yet heard.
+        shared.scrub.store(pack_scrub(2000, 600), Ordering::Relaxed);
+        shared.playing.store(true, Ordering::Relaxed);
+        fill(&shared, &mut scrub, &mut out, 2);
+        assert_eq!(shared.scrub.load(Ordering::Relaxed), 0);
+        assert_eq!(shared.playhead.load(Ordering::Relaxed), 256);
     }
 
     /// The instant-edit path: swapping the plan mid-play keeps the clock and
@@ -487,10 +664,12 @@ mod tests {
             playhead: AtomicUsize::new(0),
             playing: AtomicBool::new(true),
             muted: AtomicBool::new(false),
+            scrub: AtomicU64::new(0),
             meters: Arc::new(meter::Meters::default()),
         };
         let mut out = vec![0.0f32; 128 * 2];
-        fill(&shared, &mut out, 2);
+        let mut scrub = Scrub::default();
+        fill(&shared, &mut scrub, &mut out, 2);
         assert_eq!(shared.playhead.load(Ordering::Relaxed), 128);
 
         // "Mute": swap in a silent plan (no clips) of the same length.
@@ -499,7 +678,7 @@ mod tests {
             total_frames: 1000,
             master_gain: 1.0,
         }));
-        fill(&shared, &mut out, 2);
+        fill(&shared, &mut scrub, &mut out, 2);
         assert_eq!(
             shared.playhead.load(Ordering::Relaxed),
             256,

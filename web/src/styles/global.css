@@ -17,13 +17,14 @@
   --color-fg-4:     #5e666b;  /* text_disabled - the dimmest labels only */
   --color-accent:   #35785e;  /* spruce: link hover, focus, the active tab tick */
   --color-accent-2: #478a70;  /* accent_hover - spruce, +0x12 a channel */
+  --color-key:      #d8a24a;  /* animated - a keyframe, and what is in hand now */
 
   /* A control's corner is 2. Cards are the drawing's own 4. */
   --radius-ctl:  2px;
   --radius-card: 4px;
 
   --font-sans: "Hanken Grotesk Variable", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "Geist Mono", ui-monospace, monospace;
+  --font-mono: "Paper Mono", ui-monospace, monospace;
 }
 
 @layer base {
@@ -81,6 +82,19 @@
   }
   .card {
     @apply rounded-card border border-line bg-ink-2 p-7;
+  }
+  /* The hero's three lights, faint, at the head of every page. The home page's
+     own field is drawn over it. */
+  .page-glow {
+    position: absolute;
+    inset: 0 0 auto 0;
+    z-index: -1;
+    height: 520px;
+    pointer-events: none;
+    background:
+      radial-gradient(60% 100% at 20% -30%, rgb(56 81 156 / 0.32), transparent 70%),
+      radial-gradient(50% 90% at 82% -35%, rgb(45 123 137 / 0.28), transparent 70%),
+      radial-gradient(40% 70% at 55% -22%, rgb(68 154 120 / 0.2), transparent 70%);
   }
   .link {
     @apply text-fg underline decoration-line-2 underline-offset-4
