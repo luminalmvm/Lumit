@@ -15,6 +15,7 @@ A
 Accumulation motion blur
 Add
 Add grain
+Add input
 Align to motion
 All edges
 Alpha
@@ -653,6 +654,7 @@ Remainder
 Remap
 Remove background
 Remove edge leak
+Remove input
 Render
 Rendered
 Repeat

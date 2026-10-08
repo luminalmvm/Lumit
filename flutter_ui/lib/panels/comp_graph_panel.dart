@@ -698,16 +698,17 @@ class _CompGraphPanelState extends State<CompGraphPanel> {
             )) {
           return;
         }
-        if (node.matchName == 'expression' && param == 'edit') {
-          editExpressionOn(
-            context: context,
-            home: InstanceHome.graph(widget.comp),
-            effect: effect,
-            onApplied: () {
-              ui.model.refresh();
-              _reload();
-            },
-          );
+        if (node.matchName == 'expression' &&
+            editExpressionOn(
+              context: context,
+              home: InstanceHome.graph(widget.comp),
+              effect: effect,
+              param: param,
+              onApplied: () {
+                ui.model.refresh();
+                _reload();
+              },
+            )) {
           return;
         }
         _enterBox(node);

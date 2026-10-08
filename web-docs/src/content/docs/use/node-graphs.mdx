@@ -97,6 +97,11 @@ A **Matte** socket takes an image wire as well as a matte wire. A row that picks
 a layer's stack is an image socket here: Light wrap's **Background**, Texturize's
 **Texture** and Set matte's source all arrive on a wire.
 
+An effect with a view dropdown has an output socket for each view beside **Output**:
+Depth of field's **Rendered**, **Depth map** and **Focus map**, Motion blur's four views
+and Matte key's three. A view socket draws that view whatever the dropdown says, so the
+picture and a map can be wired at once. **Output** follows the dropdown.
+
 The points family has a socket of its own, and a wire from it feeds another box's points
 input.
 
