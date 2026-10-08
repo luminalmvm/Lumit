@@ -21,6 +21,11 @@ A [packed project](#packed-projects) also carries the files themselves.
 - **File ▸ Save as…** saves to a new path. If already saved, it creates a new copy at the location.
 - **File ▸ Open project…** opens a `.lum` file, **Open recent** lists the last few.
 
+With unsaved changes, Lumit asks before the project goes: on **New**, **Open project…**,
+**Open recent**, **Close project**, an After Effects import, and on quitting. **Save** saves
+first, **Discard** drops the changes, and **Cancel** keeps the project open. If the save is
+cancelled or fails, the project stays open.
+
 ## Packed projects
 
 A packed project carries its footage inside the `.lum` file. It opens on a machine that has
@@ -52,17 +57,21 @@ A project that has not changed since its last save or autosave writes nothing.
 
 ## Crash recovery
 
-Between saves, Lumit also records every edit. If Lumit crashes, the next launch offers a 
-dialogue with three choices:
+Between saves, Lumit also records every edit. After a crash, open the project and choose
+**File ▸ Recover…**. The dialogue has three choices:
 
 | Choice | Recovers |
 | --- | --- |
-| **Replay the edit journal** | Everything up to the moment things stopped. |
-| **Open the newest autosave** | The project as it was at the last autosave. |
-| **Open the saved file as it is** | The last time you manually saved. |
+| **Restore all changes** | Everything up to the moment things stopped. |
+| **Restore latest autosave** | The project as it was at the last autosave. |
+| **Don't restore changes** | Nothing. The project stays as it was opened. |
 
-**File ▸ Recover…** opens the same dialogue at any time. This is only available if a crash
-has occurred.
+The command is live once the project has been saved to a file, and does nothing while
+there is no autosave beside it.
+
+:::note[Not built yet]
+Lumit does not offer recovery by itself on the next launch.
+:::
 
 ## Related
 

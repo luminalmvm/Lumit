@@ -57,6 +57,38 @@ Select a layer and the Viewer draws its wireframe with a transform gizmo. The ha
 scale and rotate it. See [Transforming layers](/use/transform/). The tag at the top left
 names what is selected.
 
+### Moving a layer
+
+With the Selection tool armed:
+
+- **Drag** a layer to move it. Several selected layers move together, as one undo
+  step.
+- **Shift** keeps the drag to one axis.
+- **The arrow keys** nudge the selected layers one pixel, or ten with `Shift`, while the
+  Viewer is the active panel.
+- **Double-click** a text layer to edit it, or a Precomp layer to open its composition.
+
+While **Snap to guides** is on, a moved layer lands on the guides and, with **View ▸ Snap
+to grid** ticked, on the grid and the edges of the composition. A line across the picture
+marks what it landed on. `Ctrl` suspends snapping.
+
+A layer whose position is keyframed does not move under a drag or a nudge.
+
+### The right-click menu
+
+Right-click the picture.
+
+<Shot file="viewer-menu.png" caption="The picture's right-click menu, with Select listing the layers under the pointer." />
+
+| Row | Does |
+| --- | --- |
+| **Select** | Lists every layer under the pointer, top to bottom. Choosing one selects it, which reaches a layer covered by another. |
+| **Align** | Moves each selected layer so an edge or the middle of its box meets the composition's: **Left**, **Centre**, **Right**, **Top**, **Middle**, **Bottom**. |
+| **Fit**, **100%** | Set the magnification. |
+| **Grid**, **Title/action safe**, **Rulers**, **Snap to guides**, **Transparency grid** | The same switches as the bottom bar's. |
+
+**Select** appears with a layer under the pointer, and **Align** with a layer selected.
+
 ### Moving about
 
 - **The wheel** zooms, anchored on the pointer.

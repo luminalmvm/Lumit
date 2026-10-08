@@ -24,11 +24,15 @@ outside a timeline.
 Top to bottom the panel is a preview card for whatever is picked, a search well with the
 colour filter beside it, a row of column headings, the tree, and a bottom bar.
 
+Click a column heading to sort the tree by that column, and again to reverse the order. A
+folder keeps its own items. The sort lasts until the panel is closed.
+
 ## The preview card
 
 Select an item and the card at the top shows what Lumit knows about it: a thumbnail, the
 name, and the facts — resolution, frame rate, duration, codec. Sound reads its rate and
-channels; a folder reads how many items it holds.
+channels; a folder reads how many items it holds. With nothing selected it reads what the
+project holds: how many compositions, footage items, solids and folders.
 
 Move the pointer across the thumbnail to scrub the clip. Leaving it puts the first frame
 back. A still and a sound file have nothing to scrub.
@@ -45,6 +49,8 @@ selecting something else or playing a composition.
 - **Drop a folder** and it is read one level deep for files Lumit can take.
 - **Double-click empty space** in the tree to open the import dialogue.
 
+Files dropped anywhere else on the Lumit window are imported the same way.
+
 A `.lum` project, or an After Effects `.aep` or `.zip`, is *not* opened by dropping it —
 import those from the menu.
 
@@ -60,7 +66,7 @@ A click selects. A click on the row that is *already* the lone selection **opens
 | **Folder** | Shows or hides its children. |
 
 Footage and composition rows drag onto the Timeline; a composition lands as a Precomp
-layer. Dropped onto **COMPOSITION** on the bottom bar instead, they raise the same
+layer. Dropped onto **Composition** on the bottom bar instead, they raise the same
 New composition dialogue with the media's size, rate and length filled in, and every
 dropped item lands in the finished composition as a layer.
 
@@ -84,7 +90,7 @@ A **proxy** is a smaller stand-in that keeps previews fast. Attach one from the 
 background, **Use proxy** decides whether this item reads from it, and **Clear proxy**
 forgets it. A row reading from its proxy wears a `proxy` badge beside `in use`.
 
-**PROXIES** on the bottom bar is the master switch for the whole project — using proxies,
+**Proxies** on the bottom bar is the master switch for the whole project — using proxies,
 or using originals — and an export reads the originals whatever it is set to. See
 [Proxies](/use/proxies/).
 
@@ -93,6 +99,9 @@ or using originals — and an export reads the originals whatever it is set to. 
 If a file moves, its row has a `missing` badge and the glyph turns to a broken link. The
 badge *is* the relink control: click it and pick the new path, and every layer using the
 item recovers. **Find missing footage** on the row menu searches for it instead.
+
+**Replace footage…** on the row menu points a footage item whose file is not missing at a
+different file.
 
 The count at the right of the bottom bar reads `1 missing · 10 items` when anything is
 broken, and clicking it filters the tree down to the broken rows alone.
