@@ -1228,6 +1228,7 @@ fn a_negative_row_bytes_image_comes_back_the_right_way_up() {
 /// show for it.
 #[test]
 fn a_filter_request_hands_the_plugin_positive_row_bytes() {
+    let _ledger = image_ledger();
     let source = a_test_frame(6, 7);
     let request = RenderRequest::filter(0.0, source.clone());
     assert_eq!(request.order, RowOrder::BottomUp);
@@ -1668,6 +1669,7 @@ fn a_plugin_registers_and_is_found_by_the_catalogue() {
 /// host owns.
 #[test]
 fn a_plugin_definition_renders_from_the_resolved_bag() {
+    let _ledger = image_ledger();
     let Some(_) = a_registered_plugin("a_plugin_definition_renders", "com.lumitlab.testplug", 2)
     else {
         return;
