@@ -627,6 +627,7 @@ class TimelineSelection {
     this.properties = const [],
     this.highlighted,
     this.colours = const {},
+    this.others = const {},
   });
 
   /// The selected **layers**, as their ids in string form — the shell's list
@@ -647,6 +648,10 @@ class TimelineSelection {
 
   /// Each selected path's graph line colours, for tinting its label.
   final Map<String, List<Color>> colours;
+
+  /// What the other people in a shared project have selected: by layer id, the
+  /// colour of each person who has that layer selected.
+  final Map<String, List<int>> others;
 }
 
 /// One layer's share of [TimelineSelection] — everything its row and its fold
@@ -657,6 +662,7 @@ class LayerSelection {
     required this.highlighted,
     required this.properties,
     required this.colours,
+    this.others = const [],
   });
 
   /// Whether this layer is one of the selected ones — what its row and its bar
@@ -665,6 +671,9 @@ class LayerSelection {
   final bool highlighted;
   final List<String> properties;
   final Map<String, List<Color>> colours;
+
+  /// The colour of each other person who has this layer selected.
+  final List<int> others;
 
   static LayerSelection of(TimelineSelection all, String layerId) {
     final mine = [
@@ -681,6 +690,7 @@ class LayerSelection {
         for (final path in mine)
           if (all.colours[path] case final line?) path: line,
       },
+      others: all.others[layerId] ?? const [],
     );
   }
 
@@ -691,6 +701,7 @@ class LayerSelection {
     if (selected != other.selected) return false;
     if (highlighted != other.highlighted) return false;
     if (!listEquals(properties, other.properties)) return false;
+    if (!listEquals(others, other.others)) return false;
     if (colours.length != other.colours.length) return false;
     for (final entry in colours.entries) {
       if (!listEquals(entry.value, other.colours[entry.key])) return false;
@@ -987,6 +998,7 @@ class Outline extends StatelessWidget {
                   count: rows.length,
                   selected: mine.selected,
                   highlighted: mine.highlighted,
+                  others: mine.others,
                   open: rows[i].open,
                   hasAudio: rows[i].hasAudio,
                   hasPicture: rows[i].hasPicture,

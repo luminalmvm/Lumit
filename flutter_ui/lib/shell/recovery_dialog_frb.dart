@@ -77,6 +77,7 @@ Future<RecoveryChoice?> showRecoveryDialogFrb({
   switch (choice) {
     case RecoveryChoice.journal:
       state.project?.restoreJournal(projectPath: projectPath);
+      state.sharingLetGo();
     case RecoveryChoice.autosave:
       await state.openProject(autosaves.first.path);
     case RecoveryChoice.discard:

@@ -241,10 +241,28 @@ timebase!(
 );
 
 /// Rational frame rate, e.g. 60000/1001.
+///
+/// Read through [`FrameRate::new`], so a file or a peer cannot hand over a
+/// rate of nothing, which every frame count then divides by.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(try_from = "RateAsWritten")]
 pub struct FrameRate {
     num: u32,
     den: u32,
+}
+
+#[derive(Deserialize)]
+struct RateAsWritten {
+    num: u32,
+    den: u32,
+}
+
+impl TryFrom<RateAsWritten> for FrameRate {
+    type Error = TimeError;
+
+    fn try_from(rate: RateAsWritten) -> Result<Self, TimeError> {
+        Self::new(rate.num, rate.den)
+    }
 }
 
 impl FrameRate {

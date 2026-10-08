@@ -2851,6 +2851,54 @@ class PlayheadOverlay extends StatelessWidget {
   }
 }
 
+/// Where the other people in a shared project have their playheads in [comp]:
+/// a thin line each, in that person's colour.
+///
+/// It listens to the shared project itself, which fires for every move of
+/// someone else's playhead, so these lines are all that is rebuilt. Each is
+/// painted at its frame through a transform, on a layer of their own, for the
+/// reason [PlayheadOverlay] gives.
+class SharePlayheads extends StatelessWidget {
+  const SharePlayheads({super.key, required this.comp, required this.xOf});
+
+  final CompositionReference comp;
+
+  /// Where a frame falls in the view's own pixels.
+  final double Function(int frame) xOf;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    final share = Provider.of<LumitState>(context, listen: false).share;
+    final stem = PlayheadMarker.stemFor(t.shape);
+    return Positioned(
+      left: 0,
+      top: 0,
+      bottom: 0,
+      width: stem,
+      child: IgnorePointer(
+        child: RepaintBoundary(
+          child: ListenableBuilder(
+            listenable: share,
+            builder: (context, _) => Stack(
+              children: [
+                for (final person in share.inComp(comp))
+                  if (person.playhead case final frame?)
+                    Transform.translate(
+                      offset: Offset(xOf(frame) - stem / 2, 0),
+                      child: SizedBox.expand(
+                        child: ColoredBox(color: t.personColour(person.colour)),
+                      ),
+                    ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// The playhead's head: a downward triangle with the hairline carried up into
 /// it as a notch.
 class _PlayheadHeadPainter extends CustomPainter {

@@ -23,6 +23,7 @@ import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:lumit_flutter/src/rust/api/shell.dart' show revealInFolder;
 import 'package:provider/provider.dart';
 
+import '../icons/icons.dart';
 import '../l10n/strings.dart';
 import '../panels/audio_meters_feed.dart' show amplitudeDb;
 import '../theme/theme.dart';
@@ -32,6 +33,7 @@ import 'package:lumit_flutter/src/rust/api/audio.dart'
     show BridgeAudioMeter, audioMeters;
 
 import 'cache_confirm_frb.dart';
+import 'share_dialog_frb.dart';
 
 /// Bumped by whatever starts an export — the export dialogue, the console's
 /// snapshot — so the strip knows to start polling. Without a start signal the
@@ -251,6 +253,16 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
           // header, which is where nobody found it.
           _bubble(t, const RenderTimingsToggle()),
           _divider(t),
+          // A shared project's button, and nothing when it is not one.
+          ListenableBuilder(
+            listenable: state.share.roster,
+            builder: (context, _) => !state.share.active
+                ? const SizedBox.shrink()
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [_bubble(t, _shared(t, state)), _divider(t)],
+                  ),
+          ),
           // At most half the line, which is what these had, but no longer
           // holding the half they do not fill. The meter above takes what
           // is left, so it is cut only when the line is truly full.
@@ -434,6 +446,50 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
                       : t.small,
                 ),
               ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// The button a shared project puts on the strip: its mark and name, a
+  /// dot for each other person with their names on hover, and what wants
+  /// attention, a host out of reach or conflicts waiting. It opens the
+  /// conflicts when there are some and the Shared project window when not.
+  Widget _shared(LumitTheme t, LumitState state) {
+    final share = state.share;
+    return LumitTooltip(
+      message: share.others.isEmpty
+          ? l10n.shareNobodyElse
+          : share.others.map((p) => p.name).join(', '),
+      child: HouseButton(
+        key: const ValueKey('status-share'),
+        frameless: true,
+        small: true,
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        onPressed: () => share.held > 0
+            ? showShareConflictsFrb(context, state)
+            : showShareFrb(context, state),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            lumitIcon(LumitIcon.link,
+                size: iconSize, color: share.away ? t.warning : t.textMuted),
+            const SizedBox(width: 5),
+            Text(l10n.shareStatus, style: t.small),
+            for (final person in share.others) ...[
+              const SizedBox(width: 4),
+              sharePersonDot(t, person),
+            ],
+            if (share.away) ...[
+              const SizedBox(width: 6),
+              Text(l10n.shareHostUnreachable,
+                  style: t.small.copyWith(color: t.warning)),
+            ],
+            if (share.held > 0) ...[
+              const SizedBox(width: 6),
+              Text(l10n.shareConflictsWaiting(share.held), style: t.small),
+            ],
           ],
         ),
       ),

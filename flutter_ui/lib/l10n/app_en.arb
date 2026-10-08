@@ -14327,5 +14327,244 @@
   "firstRunContinue": "Continue",
   "@firstRunContinue": {
     "description": "First-run screen: the button that keeps the choices made and closes the screen. One word."
+  },
+  "shareAway": "The host cannot be reached. Keep working, and your changes are merged when it is back.",
+  "@shareAway": {
+    "description": "Bottom-strip notice in a shared project, shown to a guest when the connection to the host (the person sharing the project) drops. The guest can carry on editing."
+  },
+  "shareBack": "The host is back and your changes are merged",
+  "@shareBack": {
+    "description": "Bottom-strip notice in a shared project, shown to a guest when the connection to the host returns and the edits made meanwhile were merged."
+  },
+  "shareBackRefused": "{count, plural, =1{The host is back. 1 of your changes no longer applied and was dropped} other{The host is back. {count} of your changes no longer applied and were dropped}}",
+  "@shareBackRefused": {
+    "description": "Bottom-strip notice in a shared project, shown to a guest when the connection to the host returns but some edits made meanwhile could not be merged, for instance edits to a layer someone else deleted. {count} is how many edits were lost.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shareEndedClosed": "The host stopped sharing. This copy of the project is now yours alone.",
+  "@shareEndedClosed": {
+    "description": "Bottom-strip notice shown to a guest in a shared project when the person hosting it stops sharing. The guest keeps the project open as an ordinary unsaved project."
+  },
+  "shareVersionMismatch": "The host runs Lumit {version}. Both of you need the same version to share a project.",
+  "@shareVersionMismatch": {
+    "description": "Shown when joining a shared project is refused because the two computers run different versions of Lumit. {version} is the host's version number, such as 0.5.0.",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "shareFull": "That shared project already has as many people as it can take",
+  "@shareFull": {
+    "description": "Shown when joining a shared project is refused because the maximum number of people are already in it."
+  },
+  "shareUnsafe": "The host's project holds something this computer will not open",
+  "@shareUnsafe": {
+    "description": "Shown when a shared project is refused because the document the host sent breaks a safety limit, such as a composition far larger than Lumit composes."
+  },
+  "menuSharedProject": "Shared project…",
+  "@menuSharedProject": {
+    "description": "Row in the File menu and in the command palette. Opens the Shared project window, which shares the open project from this computer, joins somebody else's, and lists who is in it."
+  },
+  "shareStop": "Stop sharing",
+  "@shareStop": {
+    "description": "Button in the Shared project window for the host: the person sharing the project from their computer. It ends sharing for everyone, and each person keeps their own copy."
+  },
+  "shareTitle": "Shared project",
+  "@shareTitle": {
+    "description": "Title of the window that shares a project, joins somebody else's and lists who is in it, drawn in capitals by the style."
+  },
+  "shareYourName": "Your name",
+  "@shareYourName": {
+    "description": "Field label in the Shared project window: what the other people see this person called."
+  },
+  "shareDefaultName": "Someone",
+  "@shareDefaultName": {
+    "description": "The name the other people in a shared project see for a person who left the Your name field empty. Also that field's placeholder."
+  },
+  "sharePort": "Port",
+  "@sharePort": {
+    "description": "Field label in the Shared project window: the network port this computer listens on while it shares the project."
+  },
+  "shareStart": "Start sharing",
+  "@shareStart": {
+    "description": "The filled button in the Shared project window's footer, on the page that shares the open project."
+  },
+  "sharePortInUse": "Something else on this computer is using port {port}",
+  "@sharePortInUse": {
+    "description": "Line in the Shared project window when sharing could not start because the chosen network port is taken. {port} is the port number.",
+    "placeholders": {
+      "port": {
+        "type": "int"
+      }
+    }
+  },
+  "shareCouldNotStart": "Sharing could not start",
+  "@shareCouldNotStart": {
+    "description": "Line in the Shared project window when sharing failed to start for a reason other than the port being taken."
+  },
+  "shareAddress": "Address",
+  "@shareAddress": {
+    "description": "Field label in the Shared project window: this computer's network address, which goes into the invite. The person can type another over it."
+  },
+  "shareInvite": "Invite",
+  "@shareInvite": {
+    "description": "Label in the Shared project window beside the invite: the line of text a host sends and a guest pastes to join."
+  },
+  "shareCopyInvite": "Copy invite",
+  "@shareCopyInvite": {
+    "description": "Button in the Shared project window. Puts the invite on the clipboard."
+  },
+  "shareInviteCopied": "Invite copied",
+  "@shareInviteCopied": {
+    "description": "Bottom-strip notice after the Copy invite button is pressed."
+  },
+  "shareHostHint": "Anyone with the invite can join and edit until you stop sharing. People outside your network need a VPN, or this port forwarded to this computer.",
+  "@shareHostHint": {
+    "description": "Quiet lines under the invite in the Shared project window, shown to the host."
+  },
+  "sharePeople": "People",
+  "@sharePeople": {
+    "description": "Heading over the list of everyone in a shared project, in the Shared project window."
+  },
+  "shareYou": "you",
+  "@shareYou": {
+    "description": "Quiet marker after this person's own name in the Shared project window's list of people. Lower case on purpose."
+  },
+  "shareLeave": "Leave",
+  "@shareLeave": {
+    "description": "Button in the Shared project window for a guest. Leaves the shared project and keeps it open as their own copy."
+  },
+  "shareFootageFolder": "Footage folder",
+  "@shareFootageFolder": {
+    "description": "Row label on the Join page of the Shared project window, beside the folder the person chose and a Choose button. Optional."
+  },
+  "shareFootageHint": "Where this computer keeps the project's footage. Anything not found there can be relinked later.",
+  "@shareFootageHint": {
+    "description": "Quiet line under the Footage folder row on the Join page of the Shared project window."
+  },
+  "shareJoin": "Join",
+  "@shareJoin": {
+    "description": "The filled button in the Shared project window's footer, on its Join page."
+  },
+  "shareJoining": "Joining…",
+  "@shareJoining": {
+    "description": "What the Join button reads while the shared project is being fetched from the host. The button is disabled meanwhile."
+  },
+  "shareBadInvite": "That is not an invite",
+  "@shareBadInvite": {
+    "description": "Line in the Shared project window when the pasted text is not an invite at all."
+  },
+  "shareUnreachable": "Nobody answered. Check the invite, and that the host is still sharing.",
+  "@shareUnreachable": {
+    "description": "Line in the Shared project window when the host's computer could not be reached or did not accept the invite."
+  },
+  "shareCouldNotJoin": "The shared project could not be joined",
+  "@shareCouldNotJoin": {
+    "description": "Line in the Shared project window when joining failed for a reason Lumit has no better words for."
+  },
+  "shareConflictsTitle": "Conflicts",
+  "@shareConflictsTitle": {
+    "description": "Title of the window that lists a guest's changes that collided with other people's, drawn in capitals by the style."
+  },
+  "shareConflictsIntro": "These changes of yours touch something another person changed while this computer was away. Their version is in place until you choose otherwise.",
+  "@shareConflictsIntro": {
+    "description": "The two lines at the top of the Conflicts window. Away means this computer had lost the host of the shared project."
+  },
+  "shareConflictEdits": "{count, plural, =1{1 change} other{{count} changes}}",
+  "@shareConflictEdits": {
+    "description": "Quiet count on a row of the Conflicts window: how many of this person's changes that row holds.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shareKeepMine": "Keep mine",
+  "@shareKeepMine": {
+    "description": "Button on a row of the Conflicts window. Puts this person's held changes over the other person's version."
+  },
+  "shareKeepTheirs": "Keep theirs",
+  "@shareKeepTheirs": {
+    "description": "Button on a row of the Conflicts window. Drops this person's held changes and leaves the other person's version."
+  },
+  "shareResolveRefused": "{count, plural, =1{1 of those changes no longer applied and was dropped} other{{count} of those changes no longer applied and were dropped}}",
+  "@shareResolveRefused": {
+    "description": "Bottom-strip notice after Keep mine in the Conflicts window, when some of the held changes could not be put back, for instance on a layer someone else deleted. {count} is how many.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shareHostUnreachable": "Host cannot be reached",
+  "@shareHostUnreachable": {
+    "description": "On the bottom strip's Shared button while a guest has lost the host. Short: it shares one line with the notices."
+  },
+  "shareConflictsWaiting": "{count, plural, =1{1 conflict} other{{count} conflicts}}",
+  "@shareConflictsWaiting": {
+    "description": "On the bottom strip's Shared button and in the Shared project window: how many conflicts wait to be chosen between.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shareNobodyElse": "Nobody else is here",
+  "@shareNobodyElse": {
+    "description": "Hover text on the bottom strip's Shared button when this person is the only one in the project. Otherwise it lists the other people's names."
+  },
+  "shareStatus": "Shared",
+  "@shareStatus": {
+    "description": "Text of the button on the bottom strip while the open project is shared, beside a link icon and a dot for each other person. A click opens the Shared project window."
+  },
+  "shareTabShare": "Share this project",
+  "@shareTabShare": {
+    "description": "Page tab in the Shared project window, drawn in capitals by the style: the page that shares the open project from this computer."
+  },
+  "shareTabJoin": "Join a project",
+  "@shareTabJoin": {
+    "description": "Page tab in the Shared project window, drawn in capitals by the style: the page where an invite to somebody else's shared project is pasted."
+  },
+  "shareSameInvite": "The same invite as last time. Anyone still waiting for this project comes back by themselves.",
+  "@shareSameInvite": {
+    "description": "Quiet line under the invite in the Shared project window, shown to a host sharing a project they shared before without stopping it, for instance after restarting Lumit."
+  },
+  "shareRestored": "{count, plural, =1{1 change made since the last save was put back} other{{count} changes made since the last save were put back}}",
+  "@shareRestored": {
+    "description": "Bottom-strip notice shown to a host who shares a project again after closing it without saving, or after a crash. The changes everyone made after the last save were kept on this computer and have been put back, so the people coming back find the project as they left it. {count} is how many.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shareRemove": "Remove",
+  "@shareRemove": {
+    "description": "Small button beside a guest's name in the Shared project window's list of people, shown to the host. Takes that person out of the shared project."
+  },
+  "shareNewInvite": "New invite",
+  "@shareNewInvite": {
+    "description": "Field label in the Shared project window, shown to a guest while the host cannot be reached: where a fresh invite is pasted if the host has moved to another address."
+  },
+  "shareReconnect": "Reconnect",
+  "@shareReconnect": {
+    "description": "Button beside the New invite field in the Shared project window. Looks for the host by the invite just pasted."
+  },
+  "shareReview": "Review…",
+  "@shareReview": {
+    "description": "Button in the Shared project window beside the count of conflicts. Opens the Conflicts window."
+  },
+  "shareElsewhere": "That invite is for a different project",
+  "@shareElsewhere": {
+    "description": "Bottom-strip notice shown to a guest who has lost the host and pasted a new invite that leads to some other shared project. Lumit goes on looking."
+  },
+  "shareRemoved": "The host removed you from the shared project. This copy is now yours alone.",
+  "@shareRemoved": {
+    "description": "Bottom-strip notice shown to a guest the host has taken out of the shared project. The guest keeps the project open as an ordinary unsaved project."
   }
 }

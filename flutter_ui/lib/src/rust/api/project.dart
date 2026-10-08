@@ -12,9 +12,11 @@ import 'composition.dart';
 import 'effect.dart';
 import 'folder.dart';
 import 'footage.dart';
+import 'layer.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:uuid/uuid.dart';
 import 'project_item.dart';
+import 'share.dart';
 import 'shell.dart';
 import 'solid.dart';
 import 'state.dart';
@@ -699,8 +701,105 @@ class ProjectReference {
       BridgeLib.instance.api.crateApiProjectProjectReferenceSetUseProxies(
           that: this, useProxies: useProxies);
 
+  /// Share this project from this machine. Others join with the text
+  /// [`Self::share_invite`] gives.
+  ///
+  /// `name` is what the others see this person called. Port 0 takes any
+  /// free one. `key` is what the last [`BridgeShareStarted::Sharing`] for
+  /// this project gave, or `None` for a new invite. `events` is optional
+  /// the way a project's change stream is, and for the same reason: nothing
+  /// about sharing depends on someone watching.
+  BridgeShareStarted share(
+          {required String name,
+          required int port,
+          String? key,
+          RustStreamSink<BridgeShareEvent>? events}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceShare(
+          that: this, name: name, port: port, key: key, events: events);
+
+  /// The conflicts a merge left for this guest to choose between, in the
+  /// order [`Self::share_resolve`] indexes them.
+  List<BridgeShareConflict> shareConflicts() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceShareConflicts(
+        that: this,
+      );
+
+  /// Whether this machine is a guest of the project. True straight after
+  /// opening a guest's own copy that was closed with its host away: it
+  /// carries on looking for the host, and what it finds comes down the
+  /// events the open was given.
+  bool shareGuest() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceShareGuest(
+        that: this,
+      );
+
+  /// What this machine knows the project by from one run to the next, to
+  /// file the key of its invite under. Not the same as a guest's copy's.
+  String shareId() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceShareId(
+        that: this,
+      );
+
+  /// The invite for a host reached at `address`, to send to whoever is
+  /// joining. `None` when this machine is not hosting the project.
+  String? shareInvite({required String address}) => BridgeLib.instance.api
+      .crateApiProjectProjectReferenceShareInvite(that: this, address: address);
+
+  /// Everyone in the project right now, this person included. Empty when it
+  /// is not shared. The events carry the same list as it changes.
+  List<BridgeSharePerson> sharePeople() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceSharePeople(
+        that: this,
+      );
+
+  /// Tell the others what this person is looking at: the composition open,
+  /// the layers selected in it, the playhead's frame, and the pointer over
+  /// the Viewer in composition pixels. Does nothing when the project is not
+  /// shared. Latest wins, so call it as often as any of them changes.
+  void sharePresence(
+          {CompositionReference? comp,
+          required List<LayerReference> layers,
+          PlatformInt64? playhead,
+          double? cursorX,
+          double? cursorY}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceSharePresence(
+          that: this,
+          comp: comp,
+          layers: layers,
+          playhead: playhead,
+          cursorX: cursorX,
+          cursorY: cursorY);
+
+  /// Give a guest that has lost its host a new invite to look for it by,
+  /// for a host that has moved or made a new one. False when the text is
+  /// not an invite or this machine is not a guest of the project.
+  bool shareReinvite({required String invite}) => BridgeLib.instance.api
+      .crateApiProjectProjectReferenceShareReinvite(that: this, invite: invite);
+
+  /// Take a guest out of the project this machine hosts, by the id the
+  /// people list gives them. Their Lumit is told and stops coming back.
+  /// The invite still works for anyone who holds it.
+  void shareRemove({required int person}) => BridgeLib.instance.api
+      .crateApiProjectProjectReferenceShareRemove(that: this, person: person);
+
+  /// Settle the conflict at `index`. `mine` applies this guest's held edits
+  /// over the host's version, as one undo step. Otherwise they are dropped
+  /// and the host's version stands. Answers how many of the edits no longer
+  /// applied.
+  int shareResolve({required int index, required bool mine}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceShareResolve(
+          that: this, index: index, mine: mine);
+
   Stream<WorkerResponse> startWorker() =>
       BridgeLib.instance.api.crateApiProjectProjectReferenceStartWorker(
+        that: this,
+      );
+
+  /// Stop sharing this project for everyone, or leave it if someone else
+  /// hosts. The project stays open as it is. A host's invite is finished
+  /// with: sharing again makes a new one.
+  void stopSharing() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceStopSharing(
         that: this,
       );
 

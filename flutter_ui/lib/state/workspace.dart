@@ -775,6 +775,35 @@ class Workspace extends ChangeNotifier {
     save();
   }
 
+  /// What the others in a shared project see this person called, or null
+  /// until one has been typed. The person's, not the work's, so it lives here.
+  String? shareName;
+
+  void setShareName(String? name) {
+    shareName = name;
+    save();
+  }
+
+  /// The most projects [shareHosted] remembers.
+  static const int maxShareHosted = 16;
+
+  /// For each project this machine has shared and not stopped sharing, by the
+  /// engine's id for it: the port and the invite's secret, written
+  /// `port/key`. Sharing that project again with them makes the same invite,
+  /// so the people who hold it find their way back. Newest last, and the
+  /// oldest goes once there are [maxShareHosted].
+  final Map<String, String> shareHosted = {};
+
+  /// Remember how [project] is shared, or forget it for null.
+  void setShareHosted(String project, String? how) {
+    shareHosted.remove(project);
+    if (how != null) shareHosted[project] = how;
+    while (shareHosted.length > maxShareHosted) {
+      shareHosted.remove(shareHosted.keys.first);
+    }
+    save();
+  }
+
   /// How often Lumit writes a spare copy of every open project, in minutes,
   /// and how many copies it keeps (docs/10 §4). Zero minutes is off.
   ///
@@ -1527,6 +1556,8 @@ class Workspace extends ChangeNotifier {
         'last_update_check_ms': lastUpdateCheckMs,
         'keymap': keymapJson,
         'audio_device': audioDevice,
+        'share_name': shareName,
+        'share_hosted': shareHosted,
         'autosave_minutes': autosaveMinutes,
         'autosave_keep': autosaveKeep,
         'custom_themes': [for (final t in customThemes) t.toJson()],
@@ -1612,6 +1643,15 @@ class Workspace extends ChangeNotifier {
     // already doing.
     final device = j['audio_device'];
     audioDevice = device is String && device.isNotEmpty ? device : null;
+    final sharedAs = j['share_name'];
+    shareName = sharedAs is String && sharedAs.isNotEmpty ? sharedAs : null;
+    shareHosted.clear();
+    final hosted = j['share_hosted'];
+    if (hosted is Map) {
+      for (final MapEntry(:key, :value) in hosted.entries) {
+        if (key is String && value is String) shareHosted[key] = value;
+      }
+    }
     // Absent means the shipped cadence, which is what a file written before the
     // Autosave page existed was already getting. Zero minutes is off and is
     // kept; a negative number is a hand-edited file and reads as off too, since

@@ -186,6 +186,7 @@ One Cargo workspace. Every `crates/lumit-*` folder is a member, one job each.
 | `lumit-keymap` | Shortcuts |
 | `lumit-ingress` | Limits for reading untrusted input |
 | `lumit-peer` | Authenticating the plugin broker pipes |
+| `lumit-share` | Shared projects: the host's end, a guest's end, and the encrypted channel between them |
 | `lumit-fx-macros` | `#[derive(Effect)]` |
 | `lumit-ofx`, `-ofx-broker`, `-ofx-testplug` | The OFX host, the process a plugin runs in, test plugins |
 | `lumit-aplug`, `-aplug-broker`, `-aplug-testplug` | The same for CLAP and VST3 audio plugins |

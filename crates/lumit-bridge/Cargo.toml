@@ -68,6 +68,8 @@ lumit-keymap = { path = "../lumit-keymap" }
 # knows what the user asked for and what the folder holds at once.
 lumit-ml = { path = "../lumit-ml" }
 lumit-project = { path = "../lumit-project" }
+# Shared projects: the host and guest ends behind `api::share`.
+lumit-share = { path = "../lumit-share" }
 # The realtime preview-tier controller lives here as a pure,
 # tested decision core; the bridge feeds it measured render costs and reads the
 # tier back (see src/realtime.rs). An engine crate, so the docs/05 layering

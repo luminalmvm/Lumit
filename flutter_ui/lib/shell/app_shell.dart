@@ -19,6 +19,7 @@ import 'package:lumit_flutter/shell/fx_console_frb.dart'
 import 'package:lumit_flutter/shell/menu_bar_frb.dart';
 import 'package:lumit_flutter/shell/project_settings_frb.dart';
 import 'package:lumit_flutter/shell/settings_window_frb.dart';
+import 'package:lumit_flutter/shell/share_dialog_frb.dart';
 import 'package:lumit_flutter/shell/splash.dart';
 import 'package:lumit_flutter/shell/status_line_frb.dart';
 import 'package:lumit_flutter/shell/tool_bar_frb.dart';
@@ -34,6 +35,7 @@ import 'package:lumit_flutter/state/settings.dart' show ToolBarPosition;
 import 'package:lumit_flutter/src/rust/api/keymap.dart';
 import 'package:lumit_flutter/state/viewer_view.dart';
 import 'package:lumit_flutter/state/app_state.dart';
+import 'package:lumit_flutter/state/share.dart';
 import 'package:lumit_flutter/state/ui_state.dart';
 import 'package:lumit_flutter/state/viewer_views.dart';
 import 'package:lumit_flutter/theme/motion.dart';
@@ -316,12 +318,29 @@ class _LumitAppViewState extends State<LumitAppView> {
         }
       });
     });
+    _share = context.read<LumitState>().share..addListener(_offerConflicts);
   }
 
   AppLifecycleListener? _clipboardWatch;
 
+  late final ShareState _share;
+
+  /// How many conflicts were waiting the last time the share state spoke.
+  int _held = 0;
+
+  /// Conflicts a merge has just left open their window by themselves. Not
+  /// over another window: the status line carries the count until then.
+  void _offerConflicts() {
+    final fresh = _held == 0 && _share.held > 0;
+    _held = _share.held;
+    if (fresh && mounted && !lumitModalOpen) {
+      showShareConflictsFrb(context, context.read<LumitState>());
+    }
+  }
+
   @override
   void dispose() {
+    _share.removeListener(_offerConflicts);
     HardwareKeyboard.instance.removeHandler(_handleKey);
     GestureBinding.instance.pointerRouter.removeGlobalRoute(_trackPointer);
     _escapeRelease?.call();

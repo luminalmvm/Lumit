@@ -26,6 +26,7 @@ import 'api/project.dart';
 import 'api/project_item.dart';
 import 'api/retime.dart';
 import 'api/roto.dart';
+import 'api/share.dart';
 import 'api/shell.dart';
 import 'api/solid.dart';
 import 'api/state.dart';
@@ -116,6 +117,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   LumitBridgeState
       dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLumitBridgeState(
           dynamic raw);
+
+  @protected
+  RustStreamSink<BridgeShareEvent> dco_decode_StreamSink_bridge_share_event_Sse(
+      dynamic raw);
 
   @protected
   RustStreamSink<double> dco_decode_StreamSink_f_64_Sse(dynamic raw);
@@ -294,6 +299,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeShapeItem dco_decode_box_autoadd_bridge_shape_item(dynamic raw);
+
+  @protected
+  BridgeShareEnding dco_decode_box_autoadd_bridge_share_ending(dynamic raw);
 
   @protected
   BridgeSharedFrameInfo dco_decode_box_autoadd_bridge_shared_frame_info(
@@ -632,6 +640,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeInputRef dco_decode_bridge_input_ref(dynamic raw);
 
   @protected
+  BridgeJoinOutcome dco_decode_bridge_join_outcome(dynamic raw);
+
+  @protected
   BridgeKerning dco_decode_bridge_kerning(dynamic raw);
 
   @protected
@@ -910,6 +921,21 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeShapeItem dco_decode_bridge_shape_item(dynamic raw);
+
+  @protected
+  BridgeShareConflict dco_decode_bridge_share_conflict(dynamic raw);
+
+  @protected
+  BridgeShareEnding dco_decode_bridge_share_ending(dynamic raw);
+
+  @protected
+  BridgeShareEvent dco_decode_bridge_share_event(dynamic raw);
+
+  @protected
+  BridgeSharePerson dco_decode_bridge_share_person(dynamic raw);
+
+  @protected
+  BridgeShareStarted dco_decode_bridge_share_started(dynamic raw);
 
   @protected
   BridgeSharedFrameInfo dco_decode_bridge_shared_frame_info(dynamic raw);
@@ -1261,6 +1287,12 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   List<BridgeShapeItem> dco_decode_list_bridge_shape_item(dynamic raw);
 
   @protected
+  List<BridgeShareConflict> dco_decode_list_bridge_share_conflict(dynamic raw);
+
+  @protected
+  List<BridgeSharePerson> dco_decode_list_bridge_share_person(dynamic raw);
+
+  @protected
   List<BridgeStroke> dco_decode_list_bridge_stroke(dynamic raw);
 
   @protected
@@ -1352,6 +1384,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   OpenProgress dco_decode_open_progress(dynamic raw);
+
+  @protected
+  RustStreamSink<BridgeShareEvent>?
+      dco_decode_opt_StreamSink_bridge_share_event_Sse(dynamic raw);
 
   @protected
   RustStreamSink<double>? dco_decode_opt_StreamSink_f_64_Sse(dynamic raw);
@@ -1529,6 +1565,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   SolidReference dco_decode_solid_reference(dynamic raw);
 
   @protected
+  int dco_decode_u_16(dynamic raw);
+
+  @protected
   int dco_decode_u_32(dynamic raw);
 
   @protected
@@ -1598,6 +1637,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   LumitBridgeState
       sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLumitBridgeState(
           SseDeserializer deserializer);
+
+  @protected
+  RustStreamSink<BridgeShareEvent> sse_decode_StreamSink_bridge_share_event_Sse(
+      SseDeserializer deserializer);
 
   @protected
   RustStreamSink<double> sse_decode_StreamSink_f_64_Sse(
@@ -1812,6 +1855,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeShapeItem sse_decode_box_autoadd_bridge_shape_item(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeShareEnding sse_decode_box_autoadd_bridge_share_ending(
       SseDeserializer deserializer);
 
   @protected
@@ -2206,6 +2253,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeInputRef sse_decode_bridge_input_ref(SseDeserializer deserializer);
 
   @protected
+  BridgeJoinOutcome sse_decode_bridge_join_outcome(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeKerning sse_decode_bridge_kerning(SseDeserializer deserializer);
 
   @protected
@@ -2520,6 +2571,25 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeShapeItem sse_decode_bridge_shape_item(SseDeserializer deserializer);
+
+  @protected
+  BridgeShareConflict sse_decode_bridge_share_conflict(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeShareEnding sse_decode_bridge_share_ending(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeShareEvent sse_decode_bridge_share_event(SseDeserializer deserializer);
+
+  @protected
+  BridgeSharePerson sse_decode_bridge_share_person(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeShareStarted sse_decode_bridge_share_started(
+      SseDeserializer deserializer);
 
   @protected
   BridgeSharedFrameInfo sse_decode_bridge_shared_frame_info(
@@ -2937,6 +3007,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  List<BridgeShareConflict> sse_decode_list_bridge_share_conflict(
+      SseDeserializer deserializer);
+
+  @protected
+  List<BridgeSharePerson> sse_decode_list_bridge_share_person(
+      SseDeserializer deserializer);
+
+  @protected
   List<BridgeStroke> sse_decode_list_bridge_stroke(
       SseDeserializer deserializer);
 
@@ -3047,6 +3125,11 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   OpenProgress sse_decode_open_progress(SseDeserializer deserializer);
+
+  @protected
+  RustStreamSink<BridgeShareEvent>?
+      sse_decode_opt_StreamSink_bridge_share_event_Sse(
+          SseDeserializer deserializer);
 
   @protected
   RustStreamSink<double>? sse_decode_opt_StreamSink_f_64_Sse(
@@ -3249,6 +3332,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   SolidReference sse_decode_solid_reference(SseDeserializer deserializer);
 
   @protected
+  int sse_decode_u_16(SseDeserializer deserializer);
+
+  @protected
   int sse_decode_u_32(SseDeserializer deserializer);
 
   @protected
@@ -3319,6 +3405,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   void
       sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLumitBridgeState(
           LumitBridgeState self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_StreamSink_bridge_share_event_Sse(
+      RustStreamSink<BridgeShareEvent> self, SseSerializer serializer);
 
   @protected
   void sse_encode_StreamSink_f_64_Sse(
@@ -3537,6 +3627,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_box_autoadd_bridge_shape_item(
       BridgeShapeItem self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_bridge_share_ending(
+      BridgeShareEnding self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_bridge_shared_frame_info(
@@ -3973,6 +4067,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeInputRef self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_join_outcome(
+      BridgeJoinOutcome self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_kerning(BridgeKerning self, SseSerializer serializer);
 
   @protected
@@ -4332,6 +4430,26 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_shape_item(
       BridgeShapeItem self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_share_conflict(
+      BridgeShareConflict self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_share_ending(
+      BridgeShareEnding self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_share_event(
+      BridgeShareEvent self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_share_person(
+      BridgeSharePerson self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_share_started(
+      BridgeShareStarted self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_shared_frame_info(
@@ -4772,6 +4890,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       List<BridgeShapeItem> self, SseSerializer serializer);
 
   @protected
+  void sse_encode_list_bridge_share_conflict(
+      List<BridgeShareConflict> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_bridge_share_person(
+      List<BridgeSharePerson> self, SseSerializer serializer);
+
+  @protected
   void sse_encode_list_bridge_stroke(
       List<BridgeStroke> self, SseSerializer serializer);
 
@@ -4891,6 +5017,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   void sse_encode_open_progress(OpenProgress self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_StreamSink_bridge_share_event_Sse(
+      RustStreamSink<BridgeShareEvent>? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_StreamSink_f_64_Sse(
@@ -5092,6 +5222,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_solid_reference(
       SolidReference self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_u_16(int self, SseSerializer serializer);
 
   @protected
   void sse_encode_u_32(int self, SseSerializer serializer);

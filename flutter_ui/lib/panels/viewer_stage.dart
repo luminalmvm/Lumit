@@ -25,6 +25,7 @@ import '../l10n/strings.dart';
 import '../state/comp_time.dart' show sampledScalar, timeOfFrame;
 import '../state/layer_bounds.dart' show shapeContentsRect, textLayerBounds;
 import '../shell/tool_bar_frb.dart';
+import '../state/share.dart';
 import '../state/tools.dart';
 import '../state/workspace.dart' show ViewerOverlays;
 import '../theme/theme.dart';
@@ -339,12 +340,31 @@ class ViewerStage extends StatelessWidget {
     // The dropper is listened to beside the tools, and for the same reason: it
     // is armed from a parameter row in another panel, and arming it takes the
     // drag away from the pan below (see [_stage]).
+    final share = Provider.of<LumitState>(context, listen: false).share;
+    // Where this person is pointing, in composition pixels, for the others in
+    // a shared project.
+    void point(PointerEvent event) {
+      if (fitted.isEmpty) return;
+      final (x, y) = ShapeSpace.ofComp(
+        fitted: fitted,
+        compSize: Size(compSize.width.toDouble(), compSize.height.toDouble()),
+      ).ofScreen(event.localPosition);
+      share.point(x, y);
+    }
+
     return ListenableBuilder(
       listenable: Listenable.merge([uiState.tools, uiState.dropper]),
       builder: (context, _) => MouseRegion(
         // Which pointer the armed tool wears over the picture.
         cursor: viewerCursorFor(uiState.tools.tool),
-        child: _stage(context, t),
+        onExit: (_) => share.point(null, null),
+        // Moves as well as hovers, for the reason [DrawnPointerRegion] gives.
+        // A listener only watches, so the tools beneath lose nothing to it.
+        child: Listener(
+          onPointerHover: point,
+          onPointerMove: point,
+          child: _stage(context, t, share),
+        ),
       ),
     );
   }
@@ -365,7 +385,7 @@ class ViewerStage extends StatelessWidget {
     );
   }
 
-  Widget _stage(BuildContext context, LumitTheme t) {
+  Widget _stage(BuildContext context, LumitTheme t, ShareState share) {
     // **While a pick is armed, the drag is the dropper's** (docs/07
     // §6.1). Every tool layer in the stack below settles this by sitting above
     // the pan and taking the hit; the dropper cannot, because it reads raw
@@ -782,6 +802,27 @@ class ViewerStage extends StatelessWidget {
                 // picture: §3.2 names guides in its own exemption.
                 guideColour: t.accent,
               ),
+            // Where the others in a shared project are pointing. It repaints
+            // off the people themselves, on a layer of its own, so a pointer
+            // moving elsewhere rebuilds nothing and redraws only this.
+            Positioned.fill(
+              child: IgnorePointer(
+                child: RepaintBoundary(
+                  child: CustomPaint(
+                    painter: _PointersPainter(
+                      share: share,
+                      comp: comp,
+                      fitted: fitted,
+                      compSize: Size(
+                        compSize.width.toDouble(),
+                        compSize.height.toDouble(),
+                      ),
+                      theme: t,
+                    ),
+                  ),
+                ),
+              ),
+            ),
             // The held snapshot, over everything: while it is up the
             // Viewer is showing a second picture, and a wireframe belonging to
             // the live one drawn on top of it would be a lie about both. Fitted
@@ -1302,6 +1343,80 @@ class ViewerWireframePainter extends CustomPainter {
       old.layerLine != layerLine ||
       old.cameraLine != cameraLine ||
       old.lightLine != lightLine;
+}
+
+/// Where the other people in a shared project are pointing over [comp]'s
+/// picture: a dot in each person's colour, with their name beside it.
+class _PointersPainter extends CustomPainter {
+  final ShareState share;
+  final CompositionReference comp;
+  final Rect fitted;
+  final Size compSize;
+  final LumitTheme theme;
+
+  _PointersPainter({
+    required this.share,
+    required this.comp,
+    required this.fitted,
+    required this.compSize,
+    required this.theme,
+  }) : super(repaint: share);
+
+  /// The dot's radius, and how far the name stands off it.
+  static const double _dot = 4;
+  static const double _gap = 4;
+
+  /// The room round the name inside its plate.
+  static const double _padX = 4;
+  static const double _padY = 1;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final space = ShapeSpace.ofComp(fitted: fitted, compSize: compSize);
+    for (final person in share.inComp(comp)) {
+      final x = person.cursorX, y = person.cursorY;
+      if (x == null || y == null) continue;
+      final at = space.toScreen(x, y);
+      final colour = theme.personColour(person.colour);
+      // Ringed in the darkest surface, so the dot reads over any picture.
+      canvas.drawCircle(at, _dot + 1, Paint()..color = theme.surface0);
+      canvas.drawCircle(at, _dot, Paint()..color = colour);
+      // The name on a plate of its own, edged in the person's colour: the
+      // theme's own text on the theme's own ground stays legible whatever the
+      // picture underneath is.
+      final name = TextPainter(
+        text: TextSpan(
+          text: person.name,
+          style: theme.small.copyWith(color: theme.textPrimary),
+        ),
+        textDirection: TextDirection.ltr,
+        maxLines: 1,
+      )..layout();
+      final plate = RRect.fromRectAndRadius(
+        Rect.fromLTWH(at.dx + _dot + _gap, at.dy + _dot,
+            name.width + _padX * 2, name.height + _padY * 2),
+        Radius.circular(theme.tokens.controlRadius),
+      );
+      canvas.drawRRect(plate, Paint()..color = theme.surface0);
+      canvas.drawRRect(
+        plate,
+        Paint()
+          ..color = colour
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1,
+      );
+      name.paint(canvas, plate.outerRect.topLeft + const Offset(_padX, _padY));
+      name.dispose();
+    }
+  }
+
+  @override
+  bool shouldRepaint(_PointersPainter old) =>
+      old.share != share ||
+      old.comp != comp ||
+      old.fitted != fitted ||
+      old.compSize != compSize ||
+      old.theme != theme;
 }
 
 /// The transparency checkerboard behind the picture.

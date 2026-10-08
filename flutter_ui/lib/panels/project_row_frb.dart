@@ -36,6 +36,10 @@ const double _badgeTextSize = 9;
 /// resolves to that colour at 28% over the panel, on both badges.
 const double _badgeBorderAlpha = 0.28;
 
+/// The dot for each other person who has a composition open in a shared
+/// project, the Timeline's label dot's own size.
+const double _personDotSize = 6;
+
 /// The row's label square: an 8px hue-quartered mark in a 14px slot —
 /// the slot is the hit target, and its width is fixed so the squares
 /// stand in a column however deep the rows are indented.
@@ -155,6 +159,10 @@ class ProjectRowFrb extends StatefulWidget {
   /// This item's proxy, or null where it has none. Null on every kind
   /// but footage — nothing else has a media reference to stand in for.
   final BridgeProxy? proxy;
+
+  /// The other people in a shared project who have this composition open,
+  /// each as their colour and their name. Empty on every other kind of row.
+  final List<(int, String)> people;
   final bool selected;
 
   /// Whether this is one of the alternate rows, which stand on a slightly
@@ -235,6 +243,7 @@ class ProjectRowFrb extends StatefulWidget {
     this.nodeGraph = false,
     required this.inUse,
     required this.proxy,
+    this.people = const [],
     required this.selected,
     this.shaded = false,
     required this.renaming,
@@ -487,6 +496,22 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
                 // desk test). The indent and the badges come out of it exactly
                 // as they always did.
                 Expanded(child: _nameOrEditor(t)),
+                // Who else has this composition open, a dot each in their
+                // colour. The name is the tooltip.
+                for (final (colour, name) in widget.people) ...[
+                  const SizedBox(width: projectRowGap),
+                  LumitTooltip(
+                    message: name,
+                    child: Container(
+                      width: _personDotSize,
+                      height: _personDotSize,
+                      decoration: BoxDecoration(
+                        color: t.personColour(colour),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+                ],
                 // Placed somewhere (§12A.3a). Before the missing badge, so a
                 // broken file that is nonetheless *in* a comp reads left to
                 // right as "used, and lost" — which is the order those two

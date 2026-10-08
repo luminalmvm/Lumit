@@ -1,6 +1,6 @@
 ---
 title: Projects
-description: The .lum file, saving, packing, autosave, and crash recovery.
+description: The .lum file, saving, packing, sharing, autosave, and crash recovery.
 sidebar:
   order: 0
 ---
@@ -45,6 +45,73 @@ A file that has changed on disk since it was packed is packed again on the next 
 :::note
 Proxies and the OCIO config are not packed. Autosave copies hold the document only, and an
 autosave reads its footage from the project file it was written beside.
+:::
+
+## Shared projects
+
+A shared project is edited by several people at once. One person, the **host**, shares it
+from their computer and the others join as **guests**. Guests connect to the host's
+computer directly, over a local network or a VPN.
+
+**File ▸ Shared project…** opens the **Shared project** window, which has two pages.
+
+- **Share this project**: **Start sharing** shares the open project and shows its
+  **invite**.
+- **Join a project**: an invite is pasted, and **Join** opens the host's project in place of
+  the open one.
+
+While a project is shared, a **Shared** button sits on the bottom strip and opens the same
+window. It lists everyone in the project. The host can **Remove** a guest, and **Stop
+sharing** ends it for everyone. A guest has **Leave**.
+
+An invite holds the host's address, the port and a key. Anyone who has it can join and edit
+until the host stops sharing. **Address** starts as the host's address on its local
+network. For a guest outside that network it is the host's VPN address, or a public address
+with the port forwarded to the host's computer.
+
+An edit made by one person appears for everyone. Two people can work on the same layer at
+once: a change to one effect, mask or property leaves the others as they are. Where two
+people change the same value, the later change stands. Undo takes back a person's own
+edits, and skips a step that another person has changed since.
+
+The host's project file is the one that is saved. A guest's copy is a new, unsaved project.
+
+Each person has a colour. In the Project panel a dot marks a composition they have open. In
+the Timeline it marks the layers they have selected and their playhead, and in the Viewer
+their pointer.
+
+Footage is not sent. A guest chooses a **Footage folder** when joining, and each footage
+item is matched to a file in it by name and then by content. An item with no match shows as
+missing and can be relinked.
+
+### When the host goes away
+
+A guest that loses the host keeps working. When the host is reachable again the guest's
+edits are merged into the host's project. An edit to something another person also changed
+is held back and listed in the **Conflicts** window, where each is settled with **Keep
+mine** or **Keep theirs**. An edit to something that no longer exists is dropped.
+
+A guest's saved copy that is closed while the host is away is still a guest when it is
+opened again. It opens with every edit made while away, saved or not, looks for the host,
+and merges when it finds it. **Leave** ends that. A conflict not settled before the copy is
+closed is settled as **Keep theirs**.
+
+A host that closes the project, or Lumit, without **Stop sharing** keeps its invite. When
+it opens the project and shares it again on the same port, the guests who are waiting come
+back by themselves and their edits are merged. If the host's address has changed, a guest
+pastes the new invite under **New invite** in the Shared project window.
+
+A host keeps every edit made since its last save, its guests' included. If it closed
+without saving, or Lumit crashed, **Start sharing** puts those edits back. Closing a host
+project that was never saved stops sharing.
+
+**Stop sharing** finishes with the invite, and sharing again makes a new one. A removed
+guest keeps its copy, and the invite it holds still works until then.
+
+:::note
+Everyone needs the same version of Lumit. Proxies, files an effect reads such as a LUT, and
+the results of tracking, roto and depth analysis are not sent. A shared project takes up to
+16 people.
 :::
 
 ## Autosave

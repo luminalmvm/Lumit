@@ -55,6 +55,7 @@ import '../state/dock.dart';
 import '../state/drag_payloads.dart';
 import '../state/panel_folds.dart';
 import '../state/settings.dart';
+import '../state/share.dart';
 import '../state/timeline_columns.dart';
 import '../state/tools.dart';
 import '../theme/theme.dart';
@@ -1031,6 +1032,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   final ValueNotifier<TimelineSelection> _rowSelection =
       ValueNotifier(const TimelineSelection());
 
+  /// The shared project's people, whose selections mark the rows as well.
+  /// Held for the reason [_ui] is.
+  late final ShareState _share;
+
   /// Each selected path's graph line colours, keyed by path.
   Map<String, List<Color>> _colourOfChannels(List<GraphChannel> channels) {
     final t = ThemeScope.of(context).theme;
@@ -1045,6 +1050,13 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// Hand the rows the selection as it now stands. Silent when nothing they
   /// draw has changed, so a publish that says the same thing costs no repaint.
   void _publishRowSelection([Map<String, List<Color>>? colours]) {
+    // What the other people in a shared project have selected in this comp.
+    final others = <String, List<int>>{};
+    for (final person in _share.inComp(_ui?.selectedComp)) {
+      for (final layer in person.layers) {
+        (others[layer.internallayerId.toString()] ??= []).add(person.colour);
+      }
+    }
     final next = TimelineSelection(
       // The shell's list as the rows read it: strings, because that is
       // what a block is keyed by on both sides of the table.
@@ -1055,19 +1067,20 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       properties: List<String>.unmodifiable(_selectedProperties),
       highlighted: _highlighted,
       colours: colours ?? _colourOfChannels(_channelsNow()),
+      others: others,
     );
     final held = _rowSelection.value;
     if (held.highlighted == next.highlighted &&
         setEquals(held.layers, next.layers) &&
         listEquals(held.properties, next.properties) &&
-        _sameColours(held.colours, next.colours)) {
+        _sameColours(held.colours, next.colours) &&
+        _sameColours(held.others, next.others)) {
       return;
     }
     _rowSelection.value = next;
   }
 
-  static bool _sameColours(
-      Map<String, List<Color>> a, Map<String, List<Color>> b) {
+  static bool _sameColours<T>(Map<String, List<T>> a, Map<String, List<T>> b) {
     if (a.length != b.length) return false;
     for (final entry in a.entries) {
       if (!listEquals(entry.value, b[entry.key])) return false;
@@ -1857,6 +1870,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     _itemChanges =Provider.of<LumitState>(context, listen: false)
         .onChange
         .listen(_onItemsChanged);
+    // Someone else selecting a layer marks its row. The roster, not the whole
+    // notifier, which also fires for every playhead and pointer move.
+    _share = Provider.of<LumitState>(context, listen: false).share
+      ..roster.addListener(_publishRowSelection);
     // Chained, not overwritten: Effect controls may hold the claim already.
     _priorDeleteClaim = _ui!.deleteClaim;
     _priorCopyClaim = _ui!.copyClaim;
@@ -3066,6 +3083,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   void dispose() {
     _mixRetry?.cancel();
     _itemChanges?.cancel();
+    _share.roster.removeListener(_publishRowSelection);
     laneModes.removeListener(_onLaneMode);
     HardwareKeyboard.instance.removeHandler(_onKey);
     _ui?.workspace.presetApplied.removeListener(_onPresetApplied);
@@ -3326,6 +3344,13 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     if (now == _shownComp) return;
     final was = _shownComp;
     _shownComp = now;
+    // What the others in a shared project have selected is read per comp, so
+    // it is read again for this one. After the frame, as this is a build.
+    if (_share.active) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _publishRowSelection();
+      });
+    }
     if (was != null) {
       final position = positionOf(_hLane);
       final extent = position?.maxScrollExtent ?? 0;
