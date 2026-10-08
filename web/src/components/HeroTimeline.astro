@@ -1,0 +1,737 @@
+---
+// The hero's timeline: a small working one, and the clock of everything above
+// it. The wordmark (Wordmark.astro, `controlled`) is drawn at whatever pose
+// the Wordmark row's keyframes say, the field's light and the streak across
+// the lockup come off the Glow and Flare rows, and RGB split is a filter on
+// the wordmark itself. The visitor can drag any keyframe, drag the playhead,
+// drag or type the time, and turn a layer off, the way they would in Lumit.
+//
+// The loop closes because every row ends on the value it starts on and only a
+// keyframe's time can be dragged: the mark opens into the word, holds, and
+// goes back by the same road, played backwards.
+//
+// The rows wear the application's own label colours for their layer kinds
+// (flutter_ui/lib/theme/theme.dart, `_labelSet`), and a keyframe is the
+// application's amber.
+const layers = [
+  { id: "split", name: "RGB split", colour: "#d45cb8" }, // adjustment
+  { id: "glow", name: "Glow", colour: "#d45cb8" }, // adjustment
+  { id: "flare", name: "Flare", colour: "#e0a33c" }, // solid
+  { id: "word", name: "Wordmark", colour: "#46c98e" }, // text
+  { id: "field", name: "Field", colour: "#8b93a3" }, // the quiet default
+];
+---
+
+<div class="hc" data-hero-timeline>
+  {/* Red one way, blue the other, green where it was. Each channel is a
+      layer of its own colour whose alpha is how much of that colour the
+      picture has, and the three are added: with no offset that is the
+      picture again, so nothing jumps as the filter comes on. Units are CSS
+      pixels. */}
+  <svg class="hc-defs" width="0" height="0" aria-hidden="true" focusable="false">
+    <filter id="hc-split" x="-40%" y="-60%" width="180%" height="220%" color-interpolation-filters="sRGB">
+      <feColorMatrix in="SourceGraphic" type="matrix" values="0 0 0 0 1  0 0 0 0 0  0 0 0 0 0  1 0 0 0 0" result="r0"></feColorMatrix>
+      <feComposite in="r0" in2="SourceGraphic" operator="in" result="r1"></feComposite>
+      <feOffset in="r1" dx="0" data-split-r result="r"></feOffset>
+      <feColorMatrix in="SourceGraphic" type="matrix" values="0 0 0 0 0  0 0 0 0 1  0 0 0 0 0  0 1 0 0 0" result="g0"></feColorMatrix>
+      <feComposite in="g0" in2="SourceGraphic" operator="in" result="g"></feComposite>
+      <feColorMatrix in="SourceGraphic" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 1  0 0 1 0 0" result="b0"></feColorMatrix>
+      <feComposite in="b0" in2="SourceGraphic" operator="in" result="b1"></feComposite>
+      <feOffset in="b1" dx="0" data-split-b result="b"></feOffset>
+      <feComposite in="r" in2="g" operator="arithmetic" k1="0" k2="1" k3="1" k4="0" result="rg"></feComposite>
+      <feComposite in="rg" in2="b" operator="arithmetic" k1="0" k2="1" k3="1" k4="0"></feComposite>
+    </filter>
+  </svg>
+
+  <div class="hc-top">
+    <button class="hc-play" type="button" data-play aria-label="Pause"></button>
+    <input
+      class="hc-tc"
+      data-tc
+      type="text"
+      value="00:00:00:00"
+      readonly
+      spellcheck="false"
+      autocomplete="off"
+      title="Drag to scrub. Click to type a frame, or seconds:frames."
+      aria-label="Current time"
+    />
+    <span class="hc-fr" data-fr>F0/480</span>
+    <span class="hc-hint">Drag a keyframe or the playhead</span>
+    <button class="hc-reset" type="button" data-reset hidden>Reset</button>
+  </div>
+
+  <div class="hc-body">
+    <div class="hc-names">
+      <div class="hc-gap"></div>
+      {
+        layers.map((l) => (
+          <div class="hc-name" data-row={l.id}>
+            <button class="hc-eye" type="button" data-eye={l.id} aria-pressed="true" aria-label={`Show ${l.name}`}>
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
+                <path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8Z" />
+                <circle class="hc-pupil" cx="8" cy="8" r="2" fill="currentColor" stroke="none" />
+              </svg>
+            </button>
+            <i class="hc-dot" style={`background:${l.colour}`} />
+            <span>{l.name}</span>
+          </div>
+        ))
+      }
+    </div>
+    <div class="hc-lanes" data-lanes tabindex="0" role="slider" aria-label="Playhead" aria-valuemin="0" aria-valuemax="479" aria-valuenow="0">
+      <div class="hc-ruler" data-ruler></div>
+      {
+        layers.map((l) => (
+          <div class="hc-lane" data-row={l.id} data-lane={l.id}>
+            <div class="hc-bar" style={`background:${l.colour}`} />
+          </div>
+        ))
+      }
+      <div class="hc-head" data-head></div>
+    </div>
+  </div>
+</div>
+
+<style is:global>
+  /* Global, under one prefix: the keyframes are made by the script, and a
+     scoped rule would never reach them. */
+  .hc {
+    --names: 132px;
+    --key: var(--color-key);
+    display: none;
+    width: min(760px, 100%);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-card);
+    /* Nearly solid, and not a blur of what is behind: the field behind it
+       changes every frame, and blurring it again each time was a good part of
+       what the hero cost to draw. */
+    background: color-mix(in srgb, var(--color-ink-2) 94%, transparent);
+    color: var(--color-fg);
+    font-size: 11px;
+    line-height: 1;
+    text-align: left;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  /* Without script there is nothing for it to drive, so it is not shown. */
+  html.anim .hc {
+    display: block;
+  }
+  .hc-defs {
+    position: absolute;
+  }
+  .hc-top {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 32px;
+    padding: 0 8px;
+    border-bottom: 1px solid var(--color-line);
+  }
+  .hc-play {
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-ctl);
+    background: none;
+    color: var(--color-fg);
+    cursor: pointer;
+  }
+  .hc-play:hover {
+    background: var(--color-ink-3);
+  }
+  .hc-tc {
+    width: 13ch;
+    box-sizing: content-box;
+    padding: 4px 6px;
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-ctl);
+    background: var(--color-ink);
+    color: var(--color-fg);
+    font: 500 12px/1 var(--font-mono);
+    font-feature-settings: "zero";
+    text-align: center;
+    cursor: ew-resize;
+  }
+  .hc-tc:not([readonly]) {
+    border-color: var(--key);
+    cursor: text;
+    -webkit-user-select: text;
+    user-select: text;
+  }
+  .hc-fr,
+  .hc-hint,
+  .hc-reset,
+  .hc-ruler span {
+    font-family: var(--font-mono);
+    font-feature-settings: "zero";
+    color: var(--color-fg-3);
+  }
+  .hc-hint,
+  .hc-reset {
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+  .hc-hint {
+    margin-left: auto;
+    color: var(--color-fg-4);
+  }
+  .hc-reset {
+    padding: 4px 7px;
+    border: 1px solid var(--color-line-2);
+    border-radius: var(--radius-ctl);
+    background: none;
+    color: var(--color-fg-2);
+    cursor: pointer;
+  }
+  .hc-reset[hidden] {
+    display: none;
+  }
+  .hc-reset:hover {
+    color: var(--color-fg);
+    background: var(--color-ink-3);
+  }
+
+  .hc-body {
+    display: grid;
+    grid-template-columns: var(--names) minmax(0, 1fr);
+  }
+  .hc-gap,
+  .hc-ruler {
+    height: 18px;
+    border-bottom: 1px solid var(--color-line);
+  }
+  .hc-name,
+  .hc-lane {
+    height: 22px;
+    border-bottom: 1px solid var(--color-ink-3);
+  }
+  .hc-name:last-child,
+  .hc-lane:last-of-type {
+    border-bottom: 0;
+  }
+  .hc-name {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 0 8px;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  .hc-eye {
+    display: grid;
+    place-items: center;
+    width: 16px;
+    height: 16px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--color-fg-2);
+    cursor: pointer;
+  }
+  .hc-eye[aria-pressed="false"] {
+    color: var(--color-fg-4);
+  }
+  .hc-eye[aria-pressed="false"] .hc-pupil {
+    display: none;
+  }
+  .hc-dot {
+    flex: none;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+  }
+  .hc-name.off span {
+    color: var(--color-fg-4);
+  }
+
+  .hc-lanes {
+    position: relative;
+    cursor: ew-resize;
+    touch-action: pan-y;
+    outline-offset: -1px;
+  }
+  .hc-ruler {
+    position: relative;
+  }
+  .hc-ruler span {
+    position: absolute;
+    top: 4px;
+    height: 14px;
+    padding-left: 4px;
+    border-left: 1px solid var(--color-line-2);
+    font-size: 9px;
+  }
+  .hc-lane {
+    position: relative;
+  }
+  .hc-bar {
+    position: absolute;
+    inset: 4px 0;
+    border-radius: var(--radius-ctl);
+    opacity: 0.5;
+  }
+  .hc-lane.off .hc-bar {
+    opacity: 0.14;
+  }
+  .hc-lane.off .hc-key {
+    opacity: 0.35;
+  }
+  /* A keyframe is a bigger target than it looks: the button is 17 across and
+     the diamond inside it 7. */
+  .hc-key {
+    position: absolute;
+    top: 50%;
+    width: 17px;
+    height: 17px;
+    margin: -8.5px 0 0 -8.5px;
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: grab;
+    touch-action: none;
+  }
+  .hc-key::before {
+    content: "";
+    position: absolute;
+    inset: 5px;
+    background: var(--key);
+    transform: rotate(45deg);
+    transition: transform 0.12s;
+  }
+  .hc-key:hover::before,
+  .hc-key:focus-visible::before,
+  .hc-key.drag::before {
+    background: #fff;
+    transform: rotate(45deg) scale(1.3);
+  }
+  .hc-key:focus-visible {
+    outline: none;
+  }
+  .hc-key.drag {
+    cursor: grabbing;
+    z-index: 2;
+  }
+  /* Where it is being dropped, while it is in hand. */
+  .hc-key.drag::after {
+    content: attr(data-at);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    padding: 3px 5px;
+    border: 1px solid var(--color-line-2);
+    border-radius: var(--radius-ctl);
+    background: var(--color-ink);
+    color: var(--color-fg);
+    font: 400 10px/1 var(--font-mono);
+    font-feature-settings: "zero";
+    white-space: nowrap;
+    transform: translateX(-50%);
+  }
+  .hc-head {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 1px;
+    will-change: transform;
+    background: var(--color-accent-2);
+    pointer-events: none;
+  }
+  .hc-head::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: -4px;
+    border: 4.5px solid transparent;
+    border-top: 7px solid var(--color-accent-2);
+  }
+  @media (max-width: 520px) {
+    .hc {
+      --names: 110px;
+    }
+    .hc-hint {
+      display: none;
+    }
+    .hc-reset {
+      margin-left: auto;
+    }
+  }
+</style>
+
+<script>
+  import { hero } from "../scripts/hero-state";
+
+  type Key = [time: number, value: number];
+  type Tracks = Record<string, Key[]>;
+  type Lockup = SVGSVGElement & {
+    wmPose?: (t: number) => void;
+    wmTiming?: (x: number) => number;
+  };
+
+  const root = document.querySelector<HTMLElement>("[data-hero-timeline]");
+  const wm = document.querySelector<Lockup>(".wm[data-controlled]");
+
+  if (root && wm && wm.wmPose && wm.wmTiming) {
+    const pose = wm.wmPose;
+    const timing = wm.wmTiming;
+
+    const SECONDS = 8;
+    const FPS = 60;
+    const FRAMES = SECONDS * FPS;
+    const STEP = 1 / FPS;
+
+    // Time in seconds, then the value. On the Wordmark row 0 is the icon and
+    // 1 is the word; the move between them is the reference's own, at
+    // whatever length the two keyframes leave it.
+    const fresh = (): Tracks => ({
+      word: [[0.2, 0], [1.5, 1], [6.2, 1], [7.5, 0]],
+      glow: [[0.2, 0.9], [1.3, 0.5], [1.5, 1.8], [2.6, 0.8], [6.2, 0.8], [7.5, 0.9]],
+      flare: [[1.36, 0], [1.5, 1], [2.6, 0]],
+      split: [[1.36, 0], [1.5, 1], [2.1, 0], [6.2, 0], [6.34, 0.7], [6.9, 0]],
+      field: [],
+    });
+    let tracks = fresh();
+
+    const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+    const easeOut = (x: number) => 1 - Math.pow(1 - x, 3);
+
+    const valueAt = (track: Key[], t: number) => {
+      if (!track.length) return 0;
+      if (t <= track[0][0]) return track[0][1];
+      for (let i = 1; i < track.length; i++) {
+        const a = track[i - 1];
+        const b = track[i];
+        if (t <= b[0]) return a[1] + (b[1] - a[1]) * easeOut((t - a[0]) / (b[0] - a[0]));
+      }
+      return track[track.length - 1][1];
+    };
+    // Opening plays the reference forwards and closing plays it backwards,
+    // which is what lets the loop come back to exactly where it began.
+    const poseAt = (t: number) => {
+      const track = tracks.word;
+      if (t <= track[0][0]) return track[0][1];
+      for (let i = 1; i < track.length; i++) {
+        const a = track[i - 1];
+        const b = track[i];
+        if (t > b[0]) continue;
+        if (a[1] === b[1]) return a[1];
+        const x = (t - a[0]) / (b[0] - a[0]);
+        return b[1] > a[1] ? timing(x) : timing(1 - x);
+      }
+      return track[track.length - 1][1];
+    };
+
+    const $ = <T extends Element>(sel: string) => root.querySelector<T>(sel)!;
+    const lanes = $<HTMLElement>("[data-lanes]");
+    const head = $<HTMLElement>("[data-head]");
+    const tc = $<HTMLInputElement>("[data-tc]");
+    const fr = $<HTMLElement>("[data-fr]");
+    const play = $<HTMLButtonElement>("[data-play]");
+    const reset = $<HTMLButtonElement>("[data-reset]");
+    const splitR = $<SVGElement>("[data-split-r]");
+    const splitB = $<SVGElement>("[data-split-b]");
+
+    const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const on: Record<string, boolean> = { split: true, glow: true, flare: true, word: true, field: true };
+    // Standing on the finished word when nothing may move by itself.
+    let t = still ? 3 : 0;
+    let playing = !still;
+    let editing = false;
+
+    const two = (n: number) => String(n).padStart(2, "0");
+    const frameOf = (time: number) => clamp(Math.floor(time * FPS + 1e-6), 0, FRAMES - 1);
+    const stamp = (time: number) => {
+      const f = frameOf(time);
+      return `00:00:${two(Math.floor(f / FPS))}:${two(f % FPS)}`;
+    };
+
+    // The frame the word lands on is the cue the rest of the page arrives on,
+    // and it has a sound - once, and only if the browser will play it.
+    let landed = false;
+    const snap = new Audio("/audio/click.mp3");
+    snap.preload = "auto";
+    snap.volume = 0.25;
+
+    // This runs every frame while it plays, so it touches the page only where
+    // something has changed since the frame before: the wordmark when its
+    // pose has, the readouts when the frame number has, the filter when the
+    // split comes on or goes off. The playhead is moved by a transform, which
+    // costs no layout.
+    let drawnPose = -1;
+    let drawnFrame = -1;
+    let wordShown = true;
+    let splitOn = false;
+    let lanesWidth = lanes.clientWidth;
+    const render = () => {
+      const p = poseAt(t);
+      if (p !== drawnPose) {
+        pose(p);
+        drawnPose = p;
+      }
+      if (on.word !== wordShown) {
+        wordShown = on.word;
+        wm.style.visibility = wordShown ? "" : "hidden";
+      }
+      const split = on.split ? valueAt(tracks.split, t) : 0;
+      if (split > 0.01) {
+        splitR.setAttribute("dx", (split * 6).toFixed(2));
+        splitB.setAttribute("dx", (-split * 6).toFixed(2));
+      }
+      if (split > 0.01 !== splitOn) {
+        splitOn = !splitOn;
+        wm.style.filter = splitOn ? "url(#hc-split)" : "";
+      }
+      hero.pose = p;
+      hero.glow = on.glow ? valueAt(tracks.glow, t) : 0;
+      hero.flare = on.flare ? valueAt(tracks.flare, t) : 0;
+      hero.field = on.field ? 1 : 0;
+
+      head.style.transform = `translateX(${((t / SECONDS) * lanesWidth).toFixed(2)}px)`;
+      const f = frameOf(t);
+      if (f !== drawnFrame) {
+        drawnFrame = f;
+        if (!editing) tc.value = stamp(t);
+        fr.textContent = `F${f}/${FRAMES}`;
+      }
+
+      if (!landed && p >= 45 / 46) {
+        landed = true;
+        if (!still) snap.play().catch(() => {});
+        document.dispatchEvent(new Event("wordmark:home"));
+      }
+      if (still) hero.redraw?.();
+    };
+    new ResizeObserver(() => {
+      lanesWidth = lanes.clientWidth;
+      render();
+    }).observe(lanes);
+    // A screen reader is told where the playhead is when it is put somewhere,
+    // not sixty times a second while it plays.
+    const announce = () => {
+      lanes.setAttribute("aria-valuenow", String(frameOf(t)));
+      lanes.setAttribute("aria-valuetext", stamp(t));
+    };
+
+    const PLAY = '<svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor"><path d="M2 1l7 4-7 4z"/></svg>';
+    const PAUSE = '<svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor"><path d="M2 1h2.2v8H2zM5.8 1H8v8H5.8z"/></svg>';
+    const setPlaying = (next: boolean) => {
+      playing = next;
+      play.innerHTML = playing ? PAUSE : PLAY;
+      play.setAttribute("aria-label", playing ? "Pause" : "Play");
+      if (!playing) announce();
+    };
+    const seek = (time: number) => {
+      t = clamp(time, 0, SECONDS - STEP);
+      render();
+      announce();
+    };
+    play.addEventListener("click", () => setPlaying(!playing));
+
+    // ---- the ruler and the keyframes ----
+    const ruler = $<HTMLElement>("[data-ruler]");
+    for (let s = 0; s < SECONDS; s++) {
+      const tick = document.createElement("span");
+      tick.style.left = `${(s / SECONDS) * 100}%`;
+      tick.textContent = `${two(s)}s`;
+      ruler.append(tick);
+    }
+
+    const place = (key: HTMLElement, time: number) => {
+      key.style.left = `${(time / SECONDS) * 100}%`;
+      key.dataset.at = stamp(time).slice(6);
+    };
+    // A keyframe moves in time only, a frame at a go, and never past its
+    // neighbours: the order of a row's keyframes is what its values hang on.
+    const move = (name: string, i: number, time: number, key: HTMLElement) => {
+      const track = tracks[name];
+      const lo = i > 0 ? track[i - 1][0] + 2 * STEP : 0;
+      const hi = i < track.length - 1 ? track[i + 1][0] - 2 * STEP : SECONDS - STEP;
+      track[i][0] = clamp(Math.round(time * FPS) / FPS, lo, hi);
+      place(key, track[i][0]);
+      reset.hidden = false;
+      render();
+    };
+    const build = () => {
+      for (const lane of root.querySelectorAll<HTMLElement>("[data-lane]")) {
+        const name = lane.dataset.lane!;
+        lane.querySelectorAll(".hc-key").forEach((k) => k.remove());
+        tracks[name].forEach((k, i) => {
+          const key = document.createElement("button");
+          key.type = "button";
+          key.className = "hc-key";
+          key.setAttribute("aria-label", `Keyframe ${i + 1} on this row. Arrow keys move it.`);
+          place(key, k[0]);
+          let held = false;
+          key.addEventListener("pointerdown", (e) => {
+            e.stopPropagation();
+            held = true;
+            key.classList.add("drag");
+            key.setPointerCapture(e.pointerId);
+          });
+          key.addEventListener("pointermove", (e) => {
+            if (!held) return;
+            const r = lane.getBoundingClientRect();
+            move(name, i, ((e.clientX - r.left) / r.width) * SECONDS, key);
+          });
+          const drop = () => {
+            held = false;
+            key.classList.remove("drag");
+          };
+          key.addEventListener("pointerup", drop);
+          key.addEventListener("pointercancel", drop);
+          key.addEventListener("keydown", (e) => {
+            const step = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+            if (!step) return;
+            e.preventDefault();
+            e.stopPropagation();
+            move(name, i, tracks[name][i][0] + step * (e.shiftKey ? 10 : 1) * STEP, key);
+          });
+          lane.append(key);
+        });
+      }
+    };
+    reset.addEventListener("click", () => {
+      tracks = fresh();
+      build();
+      reset.hidden = true;
+      render();
+    });
+
+    // ---- the playhead ----
+    // Taking hold of it stops playback, as it does in the application.
+    let scrubbing = false;
+    const scrubTo = (e: PointerEvent) => {
+      const r = lanes.getBoundingClientRect();
+      seek(((e.clientX - r.left) / r.width) * SECONDS);
+    };
+    lanes.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      scrubbing = true;
+      setPlaying(false);
+      lanes.setPointerCapture(e.pointerId);
+      scrubTo(e);
+    });
+    lanes.addEventListener("pointermove", (e) => {
+      if (scrubbing) scrubTo(e);
+    });
+    const letGo = () => (scrubbing = false);
+    lanes.addEventListener("pointerup", letGo);
+    lanes.addEventListener("pointercancel", letGo);
+    lanes.addEventListener("keydown", (e) => {
+      if (e.key === " ") {
+        e.preventDefault();
+        setPlaying(!playing);
+        return;
+      }
+      const by = e.shiftKey ? 10 : 1;
+      const to =
+        e.key === "ArrowRight" ? t + by * STEP
+        : e.key === "ArrowLeft" ? t - by * STEP
+        : e.key === "Home" ? 0
+        : e.key === "End" ? SECONDS
+        : null;
+      if (to === null) return;
+      e.preventDefault();
+      setPlaying(false);
+      seek(to);
+    });
+
+    // ---- the time readout: drag it to scrub, click it to type ----
+    // One number is a frame; with a colon it is seconds and frames.
+    const parse = (text: string) => {
+      const parts = text.trim().split(/[:;\s]+/).filter(Boolean).map(Number);
+      if (!parts.length || parts.some(Number.isNaN)) return null;
+      if (parts.length === 1) return parts[0] / FPS;
+      const frames = parts.pop()!;
+      const seconds = parts.pop()!;
+      return (parts.pop() ?? 0) * 60 + seconds + frames / FPS;
+    };
+    let press: { x: number; t: number; moved: boolean } | null = null;
+    const stopTyping = (commit: boolean) => {
+      if (!editing) return;
+      const typed = commit ? parse(tc.value) : null;
+      editing = false;
+      tc.readOnly = true;
+      if (typed !== null) {
+        setPlaying(false);
+        seek(typed);
+      }
+      // Whatever was typed, the readout goes back to saying where it is.
+      drawnFrame = -1;
+      render();
+    };
+    tc.addEventListener("pointerdown", (e) => {
+      if (editing) return;
+      e.preventDefault();
+      press = { x: e.clientX, t, moved: false };
+      tc.setPointerCapture(e.pointerId);
+    });
+    tc.addEventListener("pointermove", (e) => {
+      if (!press) return;
+      const dx = e.clientX - press.x;
+      if (!press.moved && Math.abs(dx) < 3) return;
+      press.moved = true;
+      setPlaying(false);
+      seek(press.t + dx * STEP);
+    });
+    tc.addEventListener("pointerup", () => {
+      const clicked = press && !press.moved;
+      press = null;
+      if (!clicked) return;
+      editing = true;
+      setPlaying(false);
+      tc.readOnly = false;
+      tc.focus();
+      tc.select();
+    });
+    tc.addEventListener("pointercancel", () => (press = null));
+    tc.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        stopTyping(true);
+        tc.blur();
+      } else if (e.key === "Escape") {
+        stopTyping(false);
+        tc.blur();
+      }
+    });
+    tc.addEventListener("blur", () => stopTyping(true));
+
+    // ---- the eyes ----
+    for (const eye of root.querySelectorAll<HTMLButtonElement>("[data-eye]")) {
+      eye.addEventListener("click", () => {
+        const id = eye.dataset.eye!;
+        on[id] = !on[id];
+        eye.setAttribute("aria-pressed", String(on[id]));
+        for (const row of root.querySelectorAll(`[data-row="${id}"]`)) row.classList.toggle("off", !on[id]);
+        render();
+      });
+    }
+
+    // ---- the clock ----
+    let seen = true;
+    new IntersectionObserver((entries) => {
+      seen = entries[0].isIntersecting;
+    }).observe(wm);
+    let last = performance.now();
+    const frame = (now: number) => {
+      const dt = Math.min((now - last) / 1000, 0.1);
+      last = now;
+      if (playing && seen && !document.hidden && !hero.paused) {
+        t = (t + dt) % SECONDS;
+        render();
+      }
+      requestAnimationFrame(frame);
+    };
+
+    build();
+    setPlaying(playing);
+    render();
+    requestAnimationFrame(frame);
+  }
+</script>

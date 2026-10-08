@@ -94,18 +94,27 @@ edited on the GitHub release afterwards.
 
 ## Brand
 
-`web/src/components/Wordmark.astro` builds the wordmark out of the app icon on load,
-and it is the hero: the animation runs once, and without script (or under reduced
-motion) the markup is the finished lockup standing still. `web/public/lumit-wordmark.svg`
-is the same lockup as a static file, and that is what the header shows.
+`web/src/components/Wordmark.astro` builds the wordmark out of the app icon, and it is
+the hero. On the home page it is `controlled`: `HeroTimeline.astro` under it is a small
+working timeline whose keyframes say where the wordmark is between the icon and the
+word, how bright the field's light is (`HeroField.astro`), and when the flare and the
+RGB split fire. It loops, opening forwards and closing by the same move played
+backwards, and a visitor can drag the keyframes and the playhead. Without script (or
+under reduced motion) the markup is the finished lockup standing still.
+`web/public/lumit-wordmark.svg` is the same lockup as a static file, and that is what
+the header shows.
 
 Its "umi" is outlined letterforms, not live text - they were traced from Schibsted
 Grotesk, which the site no longer sets its copy in (Hanken Grotesk for text,
-Geist Mono for numbers and container labels). The logotype is fixed artwork now and
+Paper Mono for numbers and container labels). The logotype is fixed artwork now and
 does not follow the body face.
 
 The regeneration script is not checked in; the component is the source of truth. To
 change the geometry, edit the keyframes and the `viewBox` anchors directly.
+
+The social card every page shares is `web/public/og.png`, rasterised from
+`web/src/assets/og.svg` by `npm run og`. Its text is outlines too, so it comes out the
+same on any machine; changing the words means outlining them again.
 
 ## Screenshots
 

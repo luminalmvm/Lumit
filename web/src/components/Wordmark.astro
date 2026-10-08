@@ -28,11 +28,16 @@
 // the apex; from there the motion plays 1:1 until the snap home, which is
 // re-timed to accelerate into rest (about 1260ms total). Without script, or
 // under reduced motion, the markup is the finished wordmark standing still.
-interface Props { class?: string }
-const { class: klass } = Astro.props;
+//
+// `controlled` hands the clock to somebody else: nothing plays by itself, and
+// the element carries `wmPose(t)` (draw the lockup at t, 0 the icon and 1 the
+// word) and `wmTiming(x)` (the reference's own pacing over a stretch of wall
+// time). The hero's timeline is what drives it (HeroTimeline.astro).
+interface Props { class?: string; controlled?: boolean }
+const { class: klass, controlled = false } = Astro.props;
 ---
 
-<svg class:list={["wm", klass]} viewBox="-14 -92 297 106" role="img" aria-label="Lumit" fill="none">
+<svg class:list={["wm", klass]} viewBox="-14 -92 297 106" role="img" aria-label="Lumit" fill="none" data-controlled={controlled ? "" : undefined}>
   <defs>
     <linearGradient id="wm-a" gradientUnits="userSpaceOnUse"
         x1="0" y1="-70.31" x2="47.18" y2="0">
@@ -78,7 +83,8 @@ const { class: klass } = Astro.props;
     var svg = document.currentScript.previousElementSibling;
     if (!svg || !svg.classList.contains("wm") || svg.dataset.wmDone) return;
     svg.dataset.wmDone = "1";
-    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    var controlled = svg.hasAttribute("data-controlled");
+    if (!controlled && matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
     var ga = svg.querySelector('[data-key="a"]'), gb = svg.querySelector('[data-key="b"]');
     var pa = ga && ga.firstElementChild, pb = gb && gb.firstElementChild;
@@ -114,7 +120,7 @@ const { class: klass } = Astro.props;
       return d + "Z";
     }
 
-    function apply(t) {
+    function pose(t) {
       var s = samp(C.TR, t);
       var tf = "translate(" + s[0].toFixed(2) + " " + s[1].toFixed(2) + ") rotate(" + s[2].toFixed(2) + ")";
       var k = Math.min(1, Math.max(0, (t - 30/46)/(14/46)));
@@ -134,7 +140,10 @@ const { class: klass } = Astro.props;
         "translate(" + C.CX + " " + C.CY + ") scale(" + gs.toFixed(3) + ")");
       glow.setAttribute("opacity", (0.9*Math.pow(Math.min(1, dd/C.DMAX), 0.5)).toFixed(3));
       letters.setAttribute("opacity", t >= 45.5/46 ? 1 : t >= 44/46 ? ((t-44/46)*46/1.5).toFixed(3) : 0);
+    }
 
+    function apply(t) {
+      pose(t);
       // The lockup is home by the second-to-last of the reference's 46 frames.
       // Anything on the page that wants to arrive with the wordmark rather than
       // before it waits for this, so the moment stays defined here, next to the
@@ -154,7 +163,6 @@ const { class: klass } = Astro.props;
     snap.preload = "auto";
     snap.volume = 0.25;
 
-    apply(0);
     // The launch is stretched by 300ms: a power ramp that starts near-still and
     // reaches the reference's own speed exactly at the apex (C1 at the join),
     // then the motion plays 1:1 until the snap home.
@@ -168,20 +176,34 @@ const { class: klass } = Astro.props;
     var TL = C.DUR - C.TAIL;          // tail length in animation ms
     var TW = C.TA*TL;                 // ... and the wall time it now gets
     var TE = C.T1 + (C.TAIL - C.APEX);// wall time the tail starts at
+    var WALL = TE + TW;               // wall time of the whole move
 
-    var t0 = null;
-    function frame(now) {
-      if (t0 === null) t0 = now;
-      var e = now - t0, ms;
+    // How far the motion has got, 0 to 1, a fraction x of the way through its
+    // wall time.
+    function timing(x) {
+      var e = x*WALL, ms;
       if (e <= C.T1) {
         ms = C.APEX*Math.pow(e/C.T1, P);
       } else if (e <= TE) {
         ms = C.APEX + (e - C.T1);
       } else {
-        var x = Math.min(1, (e - TE)/TW);
-        ms = C.TAIL + TL*(C.TA*x + (1-C.TA)*Math.pow(x, C.TN));
+        var y = Math.min(1, (e - TE)/TW);
+        ms = C.TAIL + TL*(C.TA*y + (1-C.TA)*Math.pow(y, C.TN));
       }
-      var t = Math.min(ms/C.DUR, 1);
+      return Math.min(ms/C.DUR, 1);
+    }
+
+    if (controlled) {
+      svg.wmPose = pose;
+      svg.wmTiming = timing;
+      return;
+    }
+
+    apply(0);
+    var t0 = null;
+    function frame(now) {
+      if (t0 === null) t0 = now;
+      var t = timing(Math.min(1, (now - t0)/WALL));
       apply(t);
       if (t < 1) requestAnimationFrame(frame);
     }

@@ -2341,10 +2341,13 @@ class LumitTheme {
   static const List<String> fontFamilyFallback = ['Inter'];
 
   /// The face every number, timecode and container label is set in
-  /// (docs/15-DESIGN.md §7.1). The fallbacks only matter if the bundled asset
-  /// is missing, and both platform names resolve to a monospaced face.
-  static const String monoFontFamily = 'Geist Mono';
+  /// (docs/15-DESIGN.md §7.1). Paper Mono has no Cyrillic, so Geist Mono
+  /// stays bundled behind it the way Inter does behind Hanken Grotesk. The
+  /// two platform names only matter if a bundled asset is missing, and both
+  /// resolve to a monospaced face.
+  static const String monoFontFamily = 'Paper Mono';
   static const List<String> monoFontFamilyFallback = [
+    'Geist Mono',
     'Consolas',
     'monospace',
   ];
@@ -2352,6 +2355,13 @@ class LumitTheme {
   /// Tabular figures where the shape sets numbers in its sans.
   List<FontFeature>? get _figures =>
       tokens.tabularNumbers ? const [FontFeature.tabularFigures()] : null;
+
+  /// The same for the two mono styles. Paper Mono draws a plain zero unless
+  /// it is asked for the slashed one, and a frame readout of "F0" must not
+  /// read as "FO". Desk's Plex keeps its own dotted zero.
+  List<FontFeature>? get _monoFigures => tokens.tabularNumbers
+      ? _figures
+      : const [FontFeature.slashedZero()];
   TextStyle get heading => TextStyle(
       fontFamily: tokens.sansFamily,
       fontFamilyFallback: fontFamilyFallback,
@@ -2392,7 +2402,7 @@ class LumitTheme {
   /// headers, column headers, tab labels, dialog titles, attribution.
   ///
   /// In plain terms, a kicker is the small capitalised word above a thing that
-  /// says what the thing is. Lumit sets all of them in Geist Mono, small, with
+  /// says what the thing is. Lumit sets all of them in Paper Mono, small, with
   /// the letters spaced out, and quiet — so everything the *application* names
   /// looks unmistakably different from everything the *user* names, which stays
   /// sentence-case Hanken Grotesk.
@@ -2405,7 +2415,7 @@ class LumitTheme {
         fontFamily:
             tokens.tabularNumbers ? tokens.sansFamily : tokens.monoFamily,
         fontFamilyFallback: monoFontFamilyFallback,
-        fontFeatures: _figures,
+        fontFeatures: _monoFigures,
         // 9px at +0.12em, regular weight — **the approved mockups' own
         // `.kick`** (their metrics are canonical), and the bottom of §7.1's
         // 9–11px / 0.08–0.12em band rather than its middle. It was 10px at
@@ -2458,7 +2468,7 @@ class LumitTheme {
   TextStyle get mono => TextStyle(
       fontFamily: tokens.monoFamily,
       fontFamilyFallback: monoFontFamilyFallback,
-      fontFeatures: _figures,
+      fontFeatures: _monoFigures,
       fontSize: 12,
       color: textSecondary,
       decoration: TextDecoration.none);
