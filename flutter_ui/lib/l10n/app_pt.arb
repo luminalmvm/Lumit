@@ -1,3 +1,1294 @@
 {
-  "@@locale": "pt"
+  "@@locale": "pt",
+  "aboutBlurb": "Um editor de motion graphics e composição. Software gratuido sob o GNU General Public License, Versão 3",
+  "@aboutBlurb": {
+    "description": "About window: what Lumit is, and its licence. The licence name is a proper noun — keep it recognisable, and do not translate \"GNU\"."
+  },
+  "addAtPlayhead": "Adicionar no indicador de reprodução",
+  "@addAtPlayhead": {
+    "description": "Button that puts a marker where the playhead is."
+  },
+  "addAudioOnly": "Adicionar somento áudio",
+  "@addAudioOnly": {
+    "description": "Project panel context-menu item on a footage clip: put the clip's sound into the open composition as its own layer, without its picture."
+  },
+  "addEffect": "Adictionar Efeito",
+  "@addEffect": {
+    "description": "Button that opens the list of built-in effects."
+  },
+  "animated": "animado",
+  "@animated": {
+    "description": "Shown in place of a number when the value is animated rather than fixed. Lower case on purpose — it sits where a value would."
+  },
+  "apply": "Aplicar",
+  "@apply": {
+    "description": "Button that commits a picked value."
+  },
+  "armRazor": "Ferramenta de corte",
+  "@armRazor": {
+    "description": "Menu item: pick up the blade that cuts a layer where you click."
+  },
+  "bitsPerChannel": "{bits} por canal",
+  "@bitsPerChannel": {
+    "description": "A colour depth, shown in the project settings dropdown and the export dialogue. 'bpc' is bits per channel, the standard abbreviation across compositing applications. {bits} is 8, 16 or 32.",
+    "placeholders": {
+      "bits": {
+        "type": "String"
+      }
+    }
+  },
+  "bringForward": "Trazer para frente",
+  "@bringForward": {
+    "description": "Context-menu item: move a layer one place up the stack."
+  },
+  "brushShapeRound": "Redondo",
+  "@brushShapeRound": {
+    "description": "Brush shape choice in the paint tool options and on a stroke's Timeline row: a circular brush tip."
+  },
+  "brushShapeSquare": "Quadrado",
+  "@brushShapeSquare": {
+    "description": "Brush shape choice in the paint tool options and on a stroke's Timeline row: a square brush tip."
+  },
+  "cache": "Cache",
+  "@cache": {
+    "description": "Bottom strip: heading over the three cache meters."
+  },
+  "cacheLocationWithLumit": "Com Lumit",
+  "@cacheLocationWithLumit": {
+    "description": "Choice of where parked frames live: in Lumit's own application data folder."
+  },
+  "cameraAngleOfView": "Ângulo de Visão",
+  "@cameraAngleOfView": {
+    "description": "Camera settings row: how wide a view the lens takes in, in degrees."
+  },
+  "cameraAperture": "Abertura",
+  "@cameraAperture": {
+    "description": "A camera's aperture: how wide the lens opens, which decides how strong the depth-of-field blur is."
+  },
+  "cameraBlurLevel": "Nível de desfoque",
+  "@cameraBlurLevel": {
+    "description": "A camera's blur level, a percentage: how much of the depth-of-field blur is applied."
+  },
+  "cameraDepthOfField": "Profundidade de campo",
+  "@cameraDepthOfField": {
+    "description": "Camera settings row: whether layers away from the focus plane are blurred."
+  },
+  "cameraFStop": "Parada-F",
+  "@cameraFStop": {
+    "description": "Camera settings row: the aperture written the way a photographer writes it, such as 5.6."
+  },
+  "cameraFilmSize": "Tamanho do filme",
+  "@cameraFilmSize": {
+    "description": "Camera settings row: the width of the sensor the focal length is measured against, in millimetres."
+  },
+  "cameraFocalLength": "Distância focal",
+  "@cameraFocalLength": {
+    "description": "Camera settings row: the lens length in millimetres, such as 50."
+  },
+  "cameraFocusDistance": "Distância focal",
+  "@cameraFocusDistance": {
+    "description": "A camera's focus distance: how far in front of it the sharp plane sits."
+  },
+  "cameraLockToZoom": "Bloquear pra zoom",
+  "@cameraLockToZoom": {
+    "description": "Camera settings tick: keep the focus distance equal to the zoom, so what fills the frame is what is sharp."
+  },
+  "cameraOneNode": "Um nó",
+  "@cameraOneNode": {
+    "description": "Camera type: a camera that aims by its own rotation."
+  },
+  "cameraOptions": "Configurações da câmera",
+  "@cameraOptions": {
+    "description": "Heading in a camera's Transform group, over the rows about the lens rather than about where the camera stands."
+  },
+  "cameraPresetMm": "{mm}mm",
+  "@cameraPresetMm": {
+    "description": "One of the lens presets in the camera settings, named by its focal length.",
+    "placeholders": {
+      "mm": {
+        "type": "String"
+      }
+    }
+  },
+  "cameraSettings": "Configurações da câmera",
+  "@cameraSettings": {
+    "description": "Layer menu item, and the title of the window it opens: everything about a camera that is not animated."
+  },
+  "cameraTwoNode": "Dois nó",
+  "@cameraTwoNode": {
+    "description": "Camera type: a camera that aims at its point of interest."
+  },
+  "cameraType": "tipo",
+  "@cameraType": {
+    "description": "Camera settings row: whether the camera is one-node or two-node."
+  },
+  "cameraUnits": "unidades",
+  "@cameraUnits": {
+    "description": "Camera settings row: which units the distances in the window are shown in."
+  },
+  "cancel": "cancelar",
+  "@cancel": {
+    "description": "Button that abandons a dialogue or a running job."
+  },
+  "channelAlpha": "alfa",
+  "@channelAlpha": {
+    "description": "A viewing channel: transparency on its own. A technical term — keep it recognisable."
+  },
+  "clear": "limpiar",
+  "@clear": {
+    "description": "Tooltip on the button that empties a value."
+  },
+  "clipSpeedTitle": "velocidade de gravação",
+  "@clipSpeedTitle": {
+    "description": "Title of the small dialogue that asks for a Sequence clip's playback speed. Speed, never velocity (docs/01-GLOSSARY.md)."
+  },
+  "clipboardValueColumn": "valor",
+  "@clipboardValueColumn": {
+    "description": "Column heading in the keyframe data copied to the clipboard."
+  },
+  "close": "fechar",
+  "@close": {
+    "description": "Button that shuts a window."
+  },
+  "columnLayer": "camada",
+  "@columnLayer": {
+    "description": "Timeline column heading, over the layer names."
+  },
+  "columnMatte": "fosco",
+  "@columnMatte": {
+    "description": "Timeline column heading."
+  },
+  "columnModes": "modo",
+  "@columnModes": {
+    "description": "Timeline column heading, over the per-layer render modes (flow, effects, motion blur, 3D). Also the label of that column's show/hide toggle in the Timeline's bottom bar."
+  },
+  "columnNumber": "#",
+  "@columnNumber": {
+    "description": "Timeline column heading over the layer numbers. The number sign, or whatever stands for 'number' in this language — one or two characters, it sits in an 18px column."
+  },
+  "compositionSettings": "Configurações da composição",
+  "@compositionSettings": {
+    "description": "Title of the dialogue that edits an existing composition."
+  },
+  "compositionSettingsEllipsis": "Configuraçoes de Composião",
+  "@compositionSettingsEllipsis": {
+    "description": "Context-menu item; the ellipsis means a dialogue opens."
+  },
+  "copyEffect": "Copiar",
+  "@copyEffect": {
+    "description": "Context-menu item on an effect heading: put the effect on the clipboard."
+  },
+  "couldNotAddShapeLayer": "Não",
+  "@couldNotAddShapeLayer": {
+    "description": "Notice when making a shape layer failed."
+  },
+  "create": "Criar",
+  "@create": {
+    "description": "Button that confirms a dialogue by making something new."
+  },
+  "customiseEllipsis": "Customizar",
+  "@customiseEllipsis": {
+    "description": "Button that opens the theme editor."
+  },
+  "delete": "Excluir",
+  "@delete": {
+    "description": "Context-menu item."
+  },
+  "deleteAllMarkers": "Apagar todos os marcadores",
+  "@deleteAllMarkers": {
+    "description": "Context-menu item."
+  },
+  "deleteMarker": "Apagar marcador",
+  "@deleteMarker": {
+    "description": "Context-menu item."
+  },
+  "deleteMask": "Apagar máscara",
+  "@deleteMask": {
+    "description": "Context-menu item."
+  },
+  "deletePuppetPin": "Apagar pino",
+  "@deletePuppetPin": {
+    "description": "Context-menu item on a puppet pin's Timeline row: remove that pin."
+  },
+  "detachAudioNoSound": "Este camada não tem som pra separar",
+  "@detachAudioNoSound": {
+    "description": "One line in the status bar at the bottom of the window, after Detach audio was asked of a layer whose media carries no sound - a solid colour, a title, or footage with no audio track. Calm, not an error."
+  },
+  "discard": "Excluir",
+  "@discard": {
+    "description": "Button that throws away unsaved changes."
+  },
+  "diskTier": "Disco",
+  "@diskTier": {
+    "description": "Bottom strip: the name of the disk cache tier, beside RAM and VRAM."
+  },
+  "dropperReading": "Lendo...",
+  "@dropperReading": {
+    "description": "Shown while the eyedropper is taking its sample."
+  },
+  "dropperThatLayer": "Essa camada",
+  "@dropperThatLayer": {
+    "description": "Shown where a layer's name would be, when the eyedropper is sampling a layer that has none."
+  },
+  "duration": "Duração",
+  "@duration": {
+    "description": "Field label: how long a composition runs."
+  },
+  "easeBezier": "Bézier",
+  "@easeBezier": {
+    "description": "Keyframe easing with adjustable handles. Named after the curve — keep it recognisable."
+  },
+  "easeLinear": "Linear",
+  "@easeLinear": {
+    "description": "Keyframe easing: a straight line between two keys."
+  },
+  "easingSaveEllipsis": "Salva como",
+  "@easingSaveEllipsis": {
+    "description": "Easing editor: the button that keeps the drawn shape as one of the user's own presets. The ellipsis marks that it asks for a name first."
+  },
+  "editMarkerEllipsis": "Editar marcador",
+  "@editMarkerEllipsis": {
+    "description": "Context-menu item; the ellipsis means a dialogue opens."
+  },
+  "effectControls": "Controles de efeito",
+  "@effectControls": {
+    "description": "Name of the panel that edits the effects on a layer."
+  },
+  "exportAction": "Exportar",
+  "@exportAction": {
+    "description": "Button that starts the export."
+  },
+  "exportAudioBitRate": "Taxa de bits de áudio",
+  "@exportAudioBitRate": {
+    "description": "Export dialogue: how many bits per second the sound is given."
+  },
+  "exportBitRate": "Taxa de bits",
+  "@exportBitRate": {
+    "description": "Export dialogue: how many bits per second the video is given."
+  },
+  "exportCancel": "Cancelar Exportação",
+  "@exportCancel": {
+    "description": "Button that stops an export that is running."
+  },
+  "exportCancelled": "Exportação Cancelada",
+  "@exportCancelled": {
+    "description": "Bottom strip, when the user stopped an export."
+  },
+  "exportFrameOf": "Quadro {frame} de {total}({encoder})",
+  "@exportFrameOf": {
+    "description": "Export dialogue: progress. {encoder} is a codec name and is not translated.",
+    "placeholders": {
+      "frame": {
+        "type": "String"
+      },
+      "total": {
+        "type": "String"
+      },
+      "encoder": {
+        "type": "String"
+      }
+    }
+  },
+  "exportFromFrame": "De Quadro",
+  "@exportFromFrame": {
+    "description": "Export dialogue: the first frame to write."
+  },
+  "exportPreparing": "Preparando {encoder}",
+  "@exportPreparing": {
+    "description": "Export dialogue: shown before the first frame is written. {encoder} is a codec name and is not translated.",
+    "placeholders": {
+      "encoder": {
+        "type": "String"
+      }
+    }
+  },
+  "exportPreset": "Predefinições",
+  "@exportPreset": {
+    "description": "Export dialogue: a saved set of encoder options."
+  },
+  "exportedTo": "Exportado para {path}",
+  "@exportedTo": {
+    "description": "Bottom strip, when an export has finished. {path} is a file path.",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "exportingFrame": "Exportando Quadro {frame} de {total} ({encoder})",
+  "@exportingFrame": {
+    "description": "Bottom strip, during an export. {encoder} is a codec name and is not translated.",
+    "placeholders": {
+      "frame": {
+        "type": "String"
+      },
+      "total": {
+        "type": "String"
+      },
+      "encoder": {
+        "type": "String"
+      }
+    }
+  },
+  "expressionHint": "valor * 2",
+  "@expressionHint": {
+    "description": "Placeholder text in the Add expression dialogue's code well, standing in for a small Rhai expression while the well is empty. Not a translated sentence — it is example code."
+  },
+  "faultPanelWhere": "Gravado em {file}",
+  "@faultPanelWhere": {
+    "description": "Under the fault heading: where the full report was written, so it can be sent on. {file} is a path to a file on this machine.",
+    "placeholders": {
+      "file": {
+        "type": "String"
+      }
+    }
+  },
+  "fileTypeAeProject": "Projeto do After Effects",
+  "@fileTypeAeProject": {
+    "description": "A file type in the system's Open dialogue for the After Effects import: an .aep project, or a zipped Lumit Bridge bundle."
+  },
+  "fileTypeAllFiles": "Todos os Arquivos",
+  "@fileTypeAllFiles": {
+    "description": "A file type in the system's Import dialogue, offered beside Footage so a file with an unlisted extension can still be chosen."
+  },
+  "fileTypeFootage": "Gravação",
+  "@fileTypeFootage": {
+    "description": "A file type in the system's Import dialogue: video, images and sound."
+  },
+  "fileTypeProject": "Projeto do Lumit",
+  "@fileTypeProject": {
+    "description": "A file type in the system's Open dialogue: Lumit's own .lum project files."
+  },
+  "fileTypeShader": "WGSL Shader",
+  "@fileTypeShader": {
+    "description": "A file type in the system's file dialogues: a .wgsl shader loaded into a Custom shader effect by its 'Load from file…' button."
+  },
+  "fileTypeTheme": "Tema",
+  "@fileTypeTheme": {
+    "description": "A file type in the system’s file dialogues: a .lumtheme colour scheme."
+  },
+  "filterAnimated": "Animado",
+  "@filterAnimated": {
+    "description": "Label of the Animated filter, a toggle at the right-hand end of the Timeline outline’s bottom bar. On, the outline lists only the properties that carry keyframes."
+  },
+  "findMissingFootage": "Localizar gravações aussente",
+  "@findMissingFootage": {
+    "description": "Context-menu item: search a folder for files that have moved."
+  },
+  "firstMask": "Máscara primeira",
+  "@firstMask": {
+    "description": "Effect controls: the default entry of a mask picker, meaning whichever mask is first on the layer rather than one named mask."
+  },
+  "flowAlwaysOn": "Ativado sempre",
+  "@flowAlwaysOn": {
+    "description": "Flow group: the name of the switch that keeps frame synthesis on even at ordinary speeds."
+  },
+  "flowDetailHigh": "Alta",
+  "@flowDetailHigh": {
+    "description": "A choice of the Flow group's Vector detail option."
+  },
+  "flowDetailLow": "Baxio",
+  "@flowDetailLow": {
+    "description": "A choice of the Flow group's Vector detail option."
+  },
+  "flowDetailMedium": "Metade",
+  "@flowDetailMedium": {
+    "description": "A choice of the Flow group's Vector detail option."
+  },
+  "flowDetailUltra": "Muita Alta",
+  "@flowDetailUltra": {
+    "description": "A choice of the Flow group's Vector detail option."
+  },
+  "flowFallbackBlend": "mes",
+  "@flowFallbackBlend": {
+    "description": "A choice of the Flow group's Fallback option: cross-fade the two nearest frames."
+  },
+  "flowOcclusion": "Occlusão",
+  "@flowOcclusion": {
+    "description": "Flow group: the name of the option saying what happens where one thing moves behind another."
+  },
+  "flowOcclusionBlend": "Mesclagem",
+  "@flowOcclusionBlend": {
+    "description": "A choice of the Flow group's Occlusion option: mix both frames where the view is blocked."
+  },
+  "flowPresetAuto": "Auto",
+  "@flowPresetAuto": {
+    "description": "Input rate preset: use the footage's own frame rate."
+  },
+  "flowPresetCadence": "Em {n}s ({fps})",
+  "@flowPresetCadence": {
+    "description": "Input rate preset for animation drawn on 2s, 3s or 4s — each drawing held {n} frames. Animator's jargon; {fps} is the resulting frame rate.",
+    "placeholders": {
+      "n": {
+        "type": "String"
+      },
+      "fps": {
+        "type": "String"
+      }
+    }
+  },
+  "flowResolutionHalf": "Meio",
+  "@flowResolutionHalf": {
+    "description": "A choice of the Flow resolution option: estimate motion at half size."
+  },
+  "flowResolutionQuarter": "Quarto",
+  "@flowResolutionQuarter": {
+    "description": "A choice of the Flow resolution option: estimate motion at quarter size."
+  },
+  "flowVectorDetail": "detalhe vetor",
+  "@flowVectorDetail": {
+    "description": "Flow group: the name of the option saying how finely motion is estimated."
+  },
+  "foldContents": "Conteudo",
+  "@foldContents": {
+    "description": "Heading in a layer's fold-out, over what a shape layer is made of."
+  },
+  "foldMasks": "Máscaras",
+  "@foldMasks": {
+    "description": "Heading in a layer's fold-out, over its masks."
+  },
+  "foldPaint": "Pintura",
+  "@foldPaint": {
+    "description": "Heading in a layer's fold-out, over its brush strokes."
+  },
+  "foldStyles": "estilos",
+  "@foldStyles": {
+    "description": "Heading in a layer's fold-out and in the Effect controls panel, over the layer styles it wears."
+  },
+  "foldWaveform": "Onda de áudio",
+  "@foldWaveform": {
+    "description": "Heading in a layer's fold-out, over the picture of its sound; also the name of a scope."
+  },
+  "formatExrPicker": "imagen OpenEXR",
+  "@formatExrPicker": {
+    "description": "The file type shown in the system Save dialogue. OpenEXR stays as it is."
+  },
+  "formatExrSequence": "Sequência de Imagens OpenEXR",
+  "@formatExrSequence": {
+    "description": "Export format: one numbered OpenEXR per frame, holding scene-linear colour with values above white kept. OpenEXR stays as it is."
+  },
+  "formatH264": "Vídeo H.264 (.MP4)",
+  "@formatH264": {
+    "description": "Export format. H.264 and .mp4 are technical names and stay as they are."
+  },
+  "formatHevc": "Vídeo HEVC (.mp4)",
+  "@formatHevc": {
+    "description": "Export format. HEVC and .mp4 are technical names and stay as they are."
+  },
+  "formatMp4Picker": "Vídeo MP4",
+  "@formatMp4Picker": {
+    "description": "The file type shown in the system Save dialogue. MP4 stays as it is."
+  },
+  "formatPngPicker": "imagen PNG*",
+  "@formatPngPicker": {
+    "description": "The file type shown in the system Save dialogue. PNG stays as it is."
+  },
+  "formatPngSequence": "Sequência de Imagens PNG",
+  "@formatPngSequence": {
+    "description": "Export format: one numbered PNG per frame. PNG stays as it is."
+  },
+  "formatTiffSequence": "Sequência de Imagens TIFF",
+  "@formatTiffSequence": {
+    "description": "Export format: one numbered TIFF per frame. TIFF stays as it is."
+  },
+  "fxAlignToMotion": "Alinhar ao movimento",
+  "@fxAlignToMotion": {
+    "description": "Effect controls — a switch on Particulate: a particle turns to face the way it is travelling."
+  },
+  "fxAllEdges": "Todos as bordas",
+  "@fxAllEdges": {
+    "description": "Effect controls — a Pinning option on Turbulent displace."
+  },
+  "fxAlpha": "Alfa",
+  "@fxAlpha": {
+    "description": "Effect controls — a depth-channel option on Depth of field."
+  },
+  "fxAlphaBlur": "desfoque alfa",
+  "@fxAlphaBlur": {
+    "description": "Effect controls — a control on Channel blur."
+  },
+  "fxAmplitude": "Amplitude",
+  "@fxAmplitude": {
+    "description": "Effect controls — a control on Shake."
+  },
+  "fxAnchorX": "Ancoragem X",
+  "@fxAnchorX": {
+    "description": "Effect controls — a control on Transform."
+  },
+  "fxAnchorY": "Ancoragem Y",
+  "@fxAnchorY": {
+    "description": "Effect controls — a control on Transform."
+  },
+  "fxAngle": "Ângulo",
+  "@fxAngle": {
+    "description": "Effect controls — a control on Directional blur."
+  },
+  "fxAnimate": "Anima",
+  "@fxAnimate": {
+    "description": "Effect controls — a switch on Noise."
+  },
+  "fxAperture": "Abertura",
+  "@fxAperture": {
+    "description": "Effect controls — a control on Depth of field."
+  },
+  "fxAspectRatio": "Taxa de proporção de pixels",
+  "@fxAspectRatio": {
+    "description": "Effect controls — a control on Depth of field."
+  },
+  "fxBackground": "Fundo",
+  "@fxBackground": {
+    "description": "Effect controls — a control on Light wrap. Picks the layer whose light spills round the foreground's edge; normally the plate the subject was keyed onto."
+  },
+  "fxBackwards": "Para trás",
+  "@fxBackwards": {
+    "description": "Effect controls — a Flip direction option on Card wipe."
+  },
+  "fxBasic": "Básico",
+  "@fxBasic": {
+    "description": "Effect controls — a Fractal type option on Fractal noise."
+  },
+  "fxBeam": "feixe de luz",
+  "@fxBeam": {
+    "description": "Effect name in the Add effect menu — draws a tapered shaft of light."
+  },
+  "fxBevelAndEmboss": "Bisel e Relevo",
+  "@fxBevelAndEmboss": {
+    "description": "Name of the Bevel and emboss layer style, shown on its card and its Timeline row."
+  },
+  "fxBevelStyle": "Estilo de bisel",
+  "@fxBevelStyle": {
+    "description": "A Bevel and emboss layer style's Bevel style parameter: where the relief sits relative to the shape's edge."
+  },
+  "fxBlockGlitch": "Glitch de blocos",
+  "@fxBlockGlitch": {
+    "description": "Effect controls — the name of an effect."
+  },
+  "fxBlockSize": "Tamanho de bloco",
+  "@fxBlockSize": {
+    "description": "Effect controls — a control on Block glitch."
+  },
+  "fxBloom": "Brilho",
+  "@fxBloom": {
+    "description": "Effect controls — a control on Datamosh."
+  },
+  "fxBlue": "Azul",
+  "@fxBlue": {
+    "description": "Effect controls — a control on RGB split."
+  },
+  "fxBlueBlur": "Desfoque azul",
+  "@fxBlueBlur": {
+    "description": "Effect controls — a control on Channel blur."
+  },
+  "fxBlues": "Azuis",
+  "@fxBlues": {
+    "description": "Effect controls — a colour range on Hue and saturation."
+  },
+  "fxBlurAndSharpen": "Desfoque e Nitidez",
+  "@fxBlurAndSharpen": {
+    "description": "Add-effect menu category heading."
+  },
+  "fxBoth": "Ambos",
+  "@fxBoth": {
+    "description": "Effect controls — a Wipe option on Radial wipe: the wedge opens both ways at once."
+  },
+  "fxBrightness": "Brilho",
+  "@fxBrightness": {
+    "description": "Effect controls — the name of an effect, and its own first control."
+  },
+  "fxCancel": "cancelar",
+  "@fxCancel": {
+    "description": "Effect controls — the button that stops a running camera solve on Camera track."
+  },
+  "fxCentreX": "Centro X",
+  "@fxCentreX": {
+    "description": "Effect controls — a control on Radial blur."
+  },
+  "fxCentreY": "Centro Y",
+  "@fxCentreY": {
+    "description": "Effect controls — a control on Radial blur."
+  },
+  "fxChannel": "Canal",
+  "@fxChannel": {
+    "description": "Effect controls — a control on Set matte: which channel of the matte layer becomes the alpha."
+  },
+  "fxChannelBlur": "Desfoque de canal",
+  "@fxChannelBlur": {
+    "description": "Effect name in the Add effect menu — blurs each colour channel by its own amount."
+  },
+  "fxChromaticAberration": "Aberração cromática",
+  "@fxChromaticAberration": {
+    "description": "Effect controls — the name of an effect."
+  },
+  "fxColour": "Cor",
+  "@fxColour": {
+    "description": "Effect controls — a control on Flash."
+  },
+  "fxColour1": "Cor 1",
+  "@fxColour1": {
+    "description": "Effect controls — a control on RGB split."
+  },
+  "fxColour2": "Cor 2",
+  "@fxColour2": {
+    "description": "Effect controls — a control on RGB split."
+  },
+  "fxColour3": "Cor 3",
+  "@fxColour3": {
+    "description": "Effect controls — a control on RGB split."
+  },
+  "fxColourA": "cor A",
+  "@fxColourA": {
+    "description": "A Gradient overlay layer style's first colour, at the start of the ramp."
+  },
+  "fxColourB": "cor B",
+  "@fxColourB": {
+    "description": "A Gradient overlay layer style's second colour, at the end of the ramp."
+  },
+  "fxColourOverlay": "sobreposição de cor",
+  "@fxColourOverlay": {
+    "description": "Name of the Colour overlay layer style: one flat colour painted across the layer."
+  },
+  "fxConsoleKey": "Ctrl+Espaço",
+  "@fxConsoleKey": {
+    "description": "The keyboard shortcut named at the right of the FX console popover’s search row — the key that opened it. Keep as the key combination."
+  },
+  "fxConsolePresets": "Predefinições",
+  "@fxConsolePresets": {
+    "description": "The FX console popover: the category kicker worn by the user’s saved effect presets, in the strip and beside each preset row."
+  },
+  "fxConsoleSnapshotTip": "Obter instantâneo",
+  "@fxConsoleSnapshotTip": {
+    "description": "Tooltip on the FX console’s snapshot button."
+  },
+  "fxContrast": "Contraste",
+  "@fxContrast": {
+    "description": "Effect controls — the name of an effect."
+  },
+  "fxCreateTransformKeys": "Criar chaves de Transformação",
+  "@fxCreateTransformKeys": {
+    "description": "Effect controls — a button on Planar track: keyframes the chosen layer's own Position, and optionally Rotation and Scale, to the movement the track measured."
+  },
+  "fxCurves": "Curvas",
+  "@fxCurves": {
+    "description": "Effect controls — the name of an effect."
+  },
+  "fxCyans": "Cianos",
+  "@fxCyans": {
+    "description": "Effect controls — a colour range on Hue and saturation."
+  },
+  "fxDatamosh": "Datamosh",
+  "@fxDatamosh": {
+    "description": "Effect controls — the name of an effect."
+  },
+  "fxDetail": "det",
+  "@fxDetail": {
+    "description": "Effect controls — a control on Lens flare."
+  },
+  "fxDirectionX": "Direção X",
+  "@fxDirectionX": {
+    "description": "Effect controls — a control on Lightning: where the bolt is aimed, horizontally."
+  },
+  "fxDirectionY": "Direção Y",
+  "@fxDirectionY": {
+    "description": "Effect controls — a control on Lightning: where the bolt is aimed, vertically."
+  },
+  "fxDirectionZ": "Direção Z",
+  "@fxDirectionZ": {
+    "description": "Effect controls — a control on Particulate: how far particles lean out of the layer's own plane as they leave, towards or away from the camera."
+  },
+  "fxDirectionalBlur": "Desfoque direcional",
+  "@fxDirectionalBlur": {
+    "description": "Effect controls — the name of an effect."
+  },
+  "fxDispersion": "Disperção",
+  "@fxDispersion": {
+    "description": "Effect controls — a control on Lens flare."
+  },
+  "fxDisplacementMap": "Mapa de Deslocamento",
+  "@fxDisplacementMap": {
+    "description": "Effect name in the Add effect menu — another layer's channels push this one."
+  },
+  "fxDistortion": "Distorção",
+  "@fxDistortion": {
+    "description": "Add-effect menu category heading. Also the name of the audio effect that bends the sound out of shape."
+  },
+  "fxDivide": "Dividir",
+  "@fxDivide": {
+    "description": "Effect controls — a control on Echo."
+  },
+  "fxDown": "inferior",
+  "@fxDown": {
+    "description": "Option of a Bevel and emboss layer style's Direction: the relief reads as carved in."
+  },
+  "fxDuration": "Duração",
+  "@fxDuration": {
+    "description": "Effect controls — a control on Flash."
+  },
+  "fxEdges": "bordas",
+  "@fxEdges": {
+    "description": "Effect controls — a control on Radial blur."
+  },
+  "fxEllipse": "Elipse",
+  "@fxEllipse": {
+    "description": "Effect controls — one option in the Shape menu on Particulate: particles are born anywhere inside an ellipse."
+  },
+  "fxEnd": "Fim",
+  "@fxEnd": {
+    "description": "Effect controls — a control on Scribble and Stroke: where the drawing stops, as a per cent of its length."
+  },
+  "fxEvolution": "Evolução",
+  "@fxEvolution": {
+    "description": "Effect controls — a control on Fractal noise."
+  },
+  "fxExclusion": "Exclusão",
+  "@fxExclusion": {
+    "description": "Effect controls — a control on Echo."
+  },
+  "fxExpansion": "Expansão",
+  "@fxExpansion": {
+    "description": "Effect controls — a control on Radio waves: how fast a wave grows."
+  },
+  "fxExposure": "Exposição",
+  "@fxExposure": {
+    "description": "Effect controls — the name of an effect."
+  },
+  "fxExpression": "Expressão",
+  "@fxExpression": {
+    "description": "Driver name in the Graph panel — a box whose outputs are what an expression returns."
+  },
+  "fxFStop": "F-parada",
+  "@fxFStop": {
+    "description": "Effect controls — a control on Lens flare."
+  },
+  "fxFile": "Arquivo",
+  "@fxFile": {
+    "description": "Effect controls — a control on LUT."
+  },
+  "fxFlareOptions": "Opoções de flare",
+  "@fxFlareOptions": {
+    "description": "Effect controls — a control on Tint."
+  },
+  "fxFollow": "Seguir",
+  "@fxFollow": {
+    "description": "Effect controls — a control on Planar track: whether the analysis follows a flat surface, one point, or two points."
+  },
+  "fxFractalNoise": "Ruído fractal",
+  "@fxFractalNoise": {
+    "description": "Effect controls — the name of an effect."
+  },
+  "fxFractalType": "Tipo De Fractal",
+  "@fxFractalType": {
+    "description": "Effect controls — a control on Fractal noise."
+  },
+  "fxFrameRate": "Taxa de quadros",
+  "@fxFrameRate": {
+    "description": "Effect controls — a control on Posterize time."
+  },
+  "fxGamma": "Correção gama",
+  "@fxGamma": {
+    "description": "Effect controls — a control on Colour balance."
+  },
+  "fxGaussian": "Gaussiano",
+  "@fxGaussian": {
+    "description": "Effect controls — a Distribution option on Noise."
+  },
+  "fxGaussianBlur": "Desfoque gaussiano",
+  "@fxGaussianBlur": {
+    "description": "Effect controls — the name of an effect."
+  },
+  "fxGenerate": "gerar",
+  "@fxGenerate": {
+    "description": "Add-effect menu category heading."
+  },
+  "fxGlow": "Brilho",
+  "@fxGlow": {
+    "description": "Effect controls — the name of an effect."
+  },
+  "fxGlowColour": "Cor de brilho",
+  "@fxGlowColour": {
+    "description": "Effect controls — a control on Lightning: the halo's colour."
+  },
+  "fxGlowOpacity": "opacidade de brilho",
+  "@fxGlowOpacity": {
+    "description": "Effect controls — a control on Lightning: how strong the halo is."
+  },
+  "fxGlowRadius": "raio de brilho",
+  "@fxGlowRadius": {
+    "description": "Effect controls — a control on Lightning: how far the halo reaches."
+  },
+  "fxGreen": "Verde",
+  "@fxGreen": {
+    "description": "Effect controls — a control on RGB split."
+  },
+  "fxGreenBlur": "Desfoque verde",
+  "@fxGreenBlur": {
+    "description": "Effect controls — a control on Channel blur."
+  },
+  "fxGrid": "Grade",
+  "@fxGrid": {
+    "description": "Effect controls — the name of the Grid effect, which makes a lattice of points, and the heading of its first group of controls."
+  },
+  "fxHard": "I am",
+  "@fxHard": {
+    "description": "Effect controls — a control on Flash."
+  },
+  "fxHigh": "Alta",
+  "@fxHigh": {
+    "description": "Effect controls — a control on Lens flare."
+  },
+  "fxHorizontalChannel": "Canal horizontal",
+  "@fxHorizontalChannel": {
+    "description": "Effect controls — a control on Displacement map."
+  },
+  "fxImage": "imagen",
+  "@fxImage": {
+    "description": "Graph panel — the name of a socket that carries a picture."
+  },
+  "fxInsideColour": "Cor Interna",
+  "@fxInsideColour": {
+    "description": "Effect controls — a control on Beam: the colour of the beam's core."
+  },
+  "fxInsideMask": "Dentro de máscara",
+  "@fxInsideMask": {
+    "description": "Effect controls — a control on Matte key: a mask of this layer's whose inside is forced opaque."
+  },
+  "fxIntensity": "Intensidade",
+  "@fxIntensity": {
+    "description": "Effect controls — a control on Flash."
+  },
+  "fxInterpolation": "interpolção",
+  "@fxInterpolation": {
+    "description": "Effect controls — a control on Polar coordinates."
+  },
+  "fxInvert": "Inverter",
+  "@fxInvert": {
+    "description": "Effect controls — the name of an effect. Also the switch on Gain that flips the sound's polarity."
+  },
+  "fxIrisCentreX": "Centro da íris x",
+  "@fxIrisCentreX": {
+    "description": "Effect controls — a control on Iris wipe: where the iris opens, horizontally."
+  },
+  "fxIrisCentreY": "Centro da íris Y",
+  "@fxIrisCentreY": {
+    "description": "Effect controls — a control on Iris wipe: where the iris opens, vertically."
+  },
+  "fxLayer": "Camada",
+  "@fxLayer": {
+    "description": "Effect controls: the Audio level driver's source dropdown entry that measures one named layer of the mix."
+  },
+  "fxLayerPoints": "Pontos de camada",
+  "@fxLayerPoints": {
+    "description": "Graph panel — the name of the Layer points node, which brings another layer's points stream into this layer's graph."
+  },
+  "fxLeftToRight": "Esquerda pra a direita",
+  "@fxLeftToRight": {
+    "description": "Effect controls — a Flip order option on Card wipe."
+  },
+  "fxLightColour": "Cor de Luz",
+  "@fxLightColour": {
+    "description": "Mood lighting parameter — the colour of the light inside a pool."
+  },
+  "fxLightX": "Luz X",
+  "@fxLightX": {
+    "description": "Effect controls — a control on Lens flare."
+  },
+  "fxLightY": "Luz Y",
+  "@fxLightY": {
+    "description": "Effect controls — a control on Lens flare."
+  },
+  "fxLightning": "Relâmpago",
+  "@fxLightning": {
+    "description": "Effect name in the Add effect menu — draws a forked bolt of lightning."
+  },
+  "fxLights": "luzes",
+  "@fxLights": {
+    "description": "Effect controls — a control on Lens flare."
+  },
+  "fxLine": "linha",
+  "@fxLine": {
+    "description": "Effect controls — one option in the Shape menu on Particulate: particles are born along a straight line."
+  },
+  "fxLinear": "Linear",
+  "@fxLinear": {
+    "description": "Effect controls — a Shape option on Gradient."
+  },
+  "fxLinearWipe": "varredura linear",
+  "@fxLinearWipe": {
+    "description": "Effect name in the Add effect menu — sweeps a straight edge across the frame."
+  },
+  "fxLoadFromFile": "Carregar do arquivo",
+  "@fxLoadFromFile": {
+    "description": "Effect controls — the Custom shader row that loads shader source from a file on disk."
+  },
+  "fxLuminance": "Luminância",
+  "@fxLuminance": {
+    "description": "Effect controls — a depth-channel option on Depth of field."
+  },
+  "fxLuminanceOnly": "Somente luminância",
+  "@fxLuminanceOnly": {
+    "description": "Effect controls — a control on Unsharp mask."
+  },
+  "fxLut": "LUT",
+  "@fxLut": {
+    "description": "Effect controls — the name of an effect."
+  },
+  "fxManual": "Manual",
+  "@fxManual": {
+    "description": "Effect controls — a control on Flash."
+  },
+  "fxMapBlackTo": "Mapear preto para",
+  "@fxMapBlackTo": {
+    "description": "Effect controls — a control on Tint."
+  },
+  "fxMapWhiteTo": "Mapear brano para",
+  "@fxMapWhiteTo": {
+    "description": "Effect controls — a control on Tint."
+  },
+  "fxMask": "Máscara",
+  "@fxMask": {
+    "description": "Effect controls — a control on Scribble, Stroke and Vegas: which of the layer’s masks the effect draws along."
+  },
+  "fxMaskPath": "Caminho da Máscara",
+  "@fxMaskPath": {
+    "description": "Effect controls — an option of Vegas’ Source: run the dashes round a mask rather than round a contour found in the picture."
+  },
+  "fxMaskPathEmitter": "Caminho da máscara",
+  "@fxMaskPathEmitter": {
+    "description": "Effect controls — on Particulate, both the Shape option that has particles born along a mask you have drawn and the row saying which mask that is."
+  },
+  "fxMax": "Máximo",
+  "@fxMax": {
+    "description": "Effect controls — a control on Pixel sort: the top of the band of values that sorts."
+  },
+  "fxMaxConnections": "Conexões máxima",
+  "@fxMaxConnections": {
+    "description": "Effect controls — a control on Connect points: the most lines that may meet at any one point."
+  },
+  "fxMin": "Mínimo",
+  "@fxMin": {
+    "description": "Effect controls — a control on Pixel sort: the bottom of the band of values that sorts."
+  },
+  "fxMotionBlur": "Desfoque de movimento",
+  "@fxMotionBlur": {
+    "description": "Effect name in the Add effect menu and the Effect controls panel — the optical-flow motion blur that smears each pixel along the motion in footage. Also the Motion blur group and checkbox on Shake."
+  },
+  "fxOmni": "Onidirecional",
+  "@fxOmni": {
+    "description": "Effect controls — a Type option on Lightning: several bolts radiating from the origin."
+  },
+  "fxOnOriginal": "Em original",
+  "@fxOnOriginal": {
+    "description": "Effect controls — an option of Stroke’s Paint style: paint over the picture that arrived."
+  },
+  "fxOnTransparent": "Em transparente",
+  "@fxOnTransparent": {
+    "description": "Effect controls — an option of Stroke’s Paint style: keep the stroke and drop the picture."
+  },
+  "fxOnePoint": "Um ponto",
+  "@fxOnePoint": {
+    "description": "Option of a Planar track's Follow control: one small region is followed, giving a position and nothing else."
+  },
+  "fxOriginX": "Origem x",
+  "@fxOriginX": {
+    "description": "Effect controls — a control on Lightning: where the bolt leaves from, horizontally."
+  },
+  "fxOriginY": "Origem y",
+  "@fxOriginY": {
+    "description": "Effect controls — a control on Lightning: where the bolt leaves from, vertically."
+  },
+  "fxOuterGlow": "Brilho Externo",
+  "@fxOuterGlow": {
+    "description": "Name of the Outer glow layer style, shown on its card and its Timeline row."
+  },
+  "fxOuterRadius": "Raio externo",
+  "@fxOuterRadius": {
+    "description": "Effect controls — a control on Iris wipe: how far the corners reach."
+  },
+  "fxOutside": "Externo",
+  "@fxOutside": {
+    "description": "Option of a Stroke layer style's Position: the stroke's thickness sits outside the layer's edge."
+  },
+  "fxOutsideColour": "Cor externo",
+  "@fxOutsideColour": {
+    "description": "Effect controls — a control on Beam: the colour of the beam's rim."
+  },
+  "fxPaintStyle": "Estilo de pintura",
+  "@fxPaintStyle": {
+    "description": "Effect controls — a control on Stroke: what the brush is painted onto."
+  },
+  "fxPoint1X": "Ponto 1 x",
+  "@fxPoint1X": {
+    "description": "Effect controls — a control on Planar track: the horizontal position of the first followed point."
+  },
+  "fxPoint1Y": "Ponto 1 y",
+  "@fxPoint1Y": {
+    "description": "Effect controls — a control on Planar track: the vertical position of the first followed point."
+  },
+  "fxPoint2X": "Ponto 2 x",
+  "@fxPoint2X": {
+    "description": "Effect controls — a control on Planar track: the horizontal position of the second followed point."
+  },
+  "fxPoint2Y": "Ponto 2 y",
+  "@fxPoint2Y": {
+    "description": "Effect controls — a control on Planar track: the vertical position of the second followed point."
+  },
+  "fxPosition": "Posição",
+  "@fxPosition": {
+    "description": "A Stroke layer style's Position parameter: which side of the layer's edge the thickness is spent on."
+  },
+  "fxQuarter": "Quarto",
+  "@fxQuarter": {
+    "description": "Effect controls — a Flow resolution option on Roto brush: measure the flow at a quarter of the source size."
+  },
+  "fxRadioWaves": "Ondas de rádio",
+  "@fxRadioWaves": {
+    "description": "Effect name in the Add effect menu — emits expanding shapes from a point."
+  },
+  "fxRandom": "Aleatória",
+  "@fxRandom": {
+    "description": "Effect controls — a Flip axis and Flip direction option on Card wipe."
+  },
+  "fxRec709": "Rec. 709",
+  "@fxRec709": {
+    "description": "Effect controls — an Input space option on LUT: the ITU-R BT.709 transfer function."
+  },
+  "fxResult": "Resulto",
+  "@fxResult": {
+    "description": "Effect controls — a View option on Roto brush: draw the cut-out picture."
+  },
+  "fxRightToLeft": "direita pra esquerda",
+  "@fxRightToLeft": {
+    "description": "Effect controls — a Flip order option on Card wipe."
+  },
+  "fxRows": "linhas",
+  "@fxRows": {
+    "description": "Effect controls — a control on Card wipe: how many cards down the frame."
+  },
+  "fxSatin": "cetim",
+  "@fxSatin": {
+    "description": "Name of the Satin layer style, shown on its card and its Timeline row."
+  },
+  "fxSatinColour": "Cor de satim",
+  "@fxSatinColour": {
+    "description": "A Satin layer style's colour parameter: the colour of the sheen."
+  },
+  "fxScribble": "Rabisco",
+  "@fxScribble": {
+    "description": "Effect name — fills a mask with pencil strokes."
+  },
+  "fxShadowOpacity": "opacidade de sombra",
+  "@fxShadowOpacity": {
+    "description": "A Bevel and emboss layer style's Shadow opacity: how strong the shaded face is, per cent."
+  },
+  "fxSides": "lados",
+  "@fxSides": {
+    "description": "Effect controls — a control on Radio waves: how many corners the emitted shape has."
+  },
+  "fxSort": "Ordenar",
+  "@fxSort": {
+    "description": "Effect controls — a Span mode on Pixel sort: the span is simply put in order."
+  },
+  "fxSortBy": "Ordenar por",
+  "@fxSortBy": {
+    "description": "Effect controls — a control on Pixel sort: which property a span of pixels is put in order by."
+  },
+  "fxSpacing": "Espaçamento",
+  "@fxSpacing": {
+    "description": "Effect controls — a control on Scribble and Stroke: how far apart the strokes or the brush stamps are laid."
+  },
+  "fxSpacingX": "Espaçamento X",
+  "@fxSpacingX": {
+    "description": "Effect controls — a control on Grid: the gap between columns of the lattice."
+  },
+  "fxSpacingY": "Espaçamento Y",
+  "@fxSpacingY": {
+    "description": "Effect controls — a control on Grid: the gap between rows of the lattice."
+  },
+  "fxSpacingZ": "Espaçamento Z",
+  "@fxSpacingZ": {
+    "description": "Effect controls — a control on Grid: the gap between the lattice's planes, one behind another."
+  },
+  "fxSrgb": "sRGB",
+  "@fxSrgb": {
+    "description": "Effect controls — an Input space option on LUT: the sRGB transfer function."
+  },
+  "fxStar": "Estrela",
+  "@fxStar": {
+    "description": "Effect controls — a switch on Radio waves: make a star of the polygon."
+  },
+  "fxStart": "Incio",
+  "@fxStart": {
+    "description": "Effect controls — a control on Scribble and Stroke: where the drawing begins, as a per cent of its length."
+  },
+  "fxStatic": "Estático",
+  "@fxStatic": {
+    "description": "Effect controls — an option of Scribble’s Wiggle type: the waver holds still."
+  },
+  "fxStroke": "Contorno",
+  "@fxStroke": {
+    "description": "Effect name — walks a brush along a mask’s path."
+  },
+  "fxStrokeColour": "Cor de contorno",
+  "@fxStrokeColour": {
+    "description": "A Stroke layer style's colour parameter: the colour of the outline."
+  },
+  "fxStrokes": "Contornos",
+  "@fxStrokes": {
+    "description": "Effect controls - the Roto brush's Seed from option that reads the scribbles alone, which is the default."
+  },
+  "fxTime": "Tempo",
+  "@fxTime": {
+    "description": "Effect controls — a control on Beam and Radio waves: how far the effect has got, keyframed rather than read from the clock. Also how far behind the sound Delay's first repeat lands."
+  },
+  "fxTransitionWidth": "Lagura da transição",
+  "@fxTransitionWidth": {
+    "description": "Effect controls — a control on Card wipe: how much of the wipe one card's own flip takes."
+  },
+  "fxTwoPoints": "Dois Pontos",
+  "@fxTwoPoints": {
+    "description": "Option of a Planar track's Follow control: two small regions are followed separately, giving a position, a rotation and a scale."
+  },
+  "fxUp": "Superior",
+  "@fxUp": {
+    "description": "Option of a Bevel and emboss layer style's Direction: the relief reads as raised."
+  },
+  "fxUpperLeftX": "Superior esquerdo x",
+  "@fxUpperLeftX": {
+    "description": "Effect controls — a control on Corner pin."
+  },
+  "fxUpperLeftY": "Superior esquerdo y",
+  "@fxUpperLeftY": {
+    "description": "Effect controls — a control on Corner pin."
+  },
+  "fxUpperRightX": "Superior direito x",
+  "@fxUpperRightX": {
+    "description": "Effect controls — a control on Corner pin."
+  },
+  "fxUpperRightY": "superior direito y",
+  "@fxUpperRightY": {
+    "description": "Effect controls — a control on Corner pin."
+  },
+  "fxUseInnerRadius": "Usar raio interno",
+  "@fxUseInnerRadius": {
+    "description": "Effect controls — a switch on Iris wipe that turns the polygon into a star."
+  },
+  "fxVectorScale": "Escala vectorial",
+  "@fxVectorScale": {
+    "description": "Motion blur parameter label in the Effect Controls panel — how many pixels of movement a full channel of the Motion vectors layer stands for."
+  },
+  "fxVegas": "Vegas",
+  "@fxVegas": {
+    "description": "Effect name in the Add effect menu — runs marching lights along the picture's contours."
+  },
+  "fxVenetianBlinds": "Venezianas",
+  "@fxVenetianBlinds": {
+    "description": "Effect name in the Add effect menu — closes the frame with a rank of slats."
+  },
+  "histEditLayerStyles": "Editar estilo da camada",
+  "@histEditLayerStyles": {
+    "description": "A row of the Edit > History window: the name of one edit that was made — a layer style added, removed, switched off or dialled. Sent by the engine as English and looked up here."
+  },
+  "iconSetBold": "Negrito",
+  "@iconSetBold": {
+    "description": "Icon set option: heavy lines, 2 pixels."
+  },
+  "laneModeWave": "Onda",
+  "@laneModeWave": {
+    "description": "Chip on the Timeline's waveform row: the lane draws the plain single waveform. Tapping the chip cycles Wave, Stack, Spectral."
+  },
+  "openingPercent": "{percent}%",
+  "@openingPercent": {
+    "description": "The percentage beside the phase line on the card shown while a project is being opened. {percent} is a whole number.",
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "openingPreparingProject": "Preparando o projeto",
+  "@openingPreparingProject": {
+    "description": "Third phase line on the card shown while a project is being opened: the document is being made the open one."
+  },
+  "openingProject": "Abrindo o projeto...",
+  "@openingProject": {
+    "description": "Card shown over the interface while a project file is being read from disk."
+  },
+  "openingReadingFile": "Lendo o arquivo de Projeto",
+  "@openingReadingFile": {
+    "description": "First phase line on the card shown while a project is being opened: the .lum is being unzipped and read."
+  },
+  "openingResolvingMedia": "Localizando a mídia",
+  "@openingResolvingMedia": {
+    "description": "Second phase line on the card shown while a project is being opened: each footage item's file is being located on this machine."
+  },
+  "openingStartingPreview": "Iniciando a pré-visualização",
+  "@openingStartingPreview": {
+    "description": "Last phase line on the card shown while a project is being opened: waiting for the first frame of the new project."
+  },
+  "puppetPinPosition": "Pino de Posição",
+  "@puppetPinPosition": {
+    "description": "The name a new position pin is given, and the word its Timeline row is headed with."
+  },
+  "reloadIcons": "Recarrega os icos",
+  "@reloadIcons": {
+    "description": "Button in the custom icons row: reads the folder again so new or changed SVG files show up."
+  },
+  "roomDay": "Día",
+  "@roomDay": {
+    "description": "Settings window, Appearance: the light room for the Lantern shape's cards."
+  },
+  "roomNight": "Noite",
+  "@roomNight": {
+    "description": "Settings window, Appearance: the dark room for the Lantern shape's cards."
+  },
+  "rotoFailedModelMissing": "O modelo de  segmentação não está instalado",
+  "@rotoFailedModelMissing": {
+    "description": "Roto brush status line when the propagation was refused: the seed row asks for a segmentation model and this machine has no addon for it."
+  },
+  "rotoQueued": "Esperando pra Começar",
+  "@rotoQueued": {
+    "description": "Roto brush status line: the propagation has been accepted but has not begun."
+  },
+  "rotoSolving": "Quadro {done} of {total}",
+  "@rotoSolving": {
+    "description": "Roto brush status line while the matte is being carried through the shot. Both numbers are frame counts.",
+    "placeholders": {
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "rotoSolvingReusing": "Quadro {done} of {total}, {reused} reutilizados",
+  "@rotoSolvingReusing": {
+    "description": "Roto brush status line while re-propagating after a correction: {reused} counts the frames copied from the previous run instead of being worked out again.",
+    "placeholders": {
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      },
+      "reused": {
+        "type": "int"
+      }
+    }
+  },
+  "rotoSpanPartial": "Quadros {first} pra {last}",
+  "@rotoSpanPartial": {
+    "description": "Roto brush status line: the matte covers part of the clip, and outside that span the effect does nothing. Both numbers are source frame indices.",
+    "placeholders": {
+      "first": {
+        "type": "int"
+      },
+      "last": {
+        "type": "int"
+      }
+    }
+  },
+  "spectralRange": "0-12 kHz",
+  "@spectralRange": {
+    "description": "Caption on the spectrogram lane naming the frequency span its height covers. kHz is a unit symbol and stays as it is."
+  }
 }
