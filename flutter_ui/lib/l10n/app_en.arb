@@ -7222,7 +7222,7 @@
   },
   "tipMeasureRenderTimes": "Measure times",
   "@tipMeasureRenderTimes": {
-    "description": "Tooltip on the stopwatch in the bottom strip, when measuring is off. One or two words."
+    "description": "Tooltip on the hourglass in the bottom strip, when measuring is off. One or two words."
   },
   "tipFilterColour": "Filter colour",
   "@tipFilterColour": {
@@ -7411,7 +7411,7 @@
   },
   "tipStopMeasuring": "Stop measuring",
   "@tipStopMeasuring": {
-    "description": "Tooltip on the stopwatch in the bottom strip, when measuring is on. One or two words."
+    "description": "Tooltip on the hourglass in the bottom strip, when measuring is on. One or two words."
   },
   "tipSwatchColour": "{label} colour",
   "@tipSwatchColour": {

@@ -302,6 +302,13 @@ class Toolbar extends StatelessWidget {
   }
 }
 
+/// The rule between two groups of buttons on the outline's bottom strip: the
+/// key commands, the column toggles, the comp-wide switches and the menu.
+Widget _stripRule(LumitTheme t) => Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      child: Container(width: 1, height: 10, color: t.hairlineStrong),
+    );
+
 /// One comp-wide switch in the bottom bar: an icon that lights in `accent`
 /// while it is on.
 Widget _compToggleButton(
@@ -562,9 +569,10 @@ class KeyCommandStrip extends StatelessWidget {
       );
 
   /// A strip command drawn as a glyph of the set: the interpolation
-  /// entries, whose shapes — a line, a step, a curve, a handled curve — say
-  /// more at 16px than four capitalised words did. The word is the tooltip,
-  /// which is the control's name, and the semantic label for a reader.
+  /// entries, whose shapes — a line, an eased curve, a step, a curve that
+  /// overshoots — say more at 16px than four capitalised words did. The word
+  /// is the tooltip, which is the control's name, and the semantic label for
+  /// a reader.
   Widget _glyphButton(
     LumitTheme t, {
     required String keyName,
@@ -623,9 +631,10 @@ class KeyCommandStrip extends StatelessWidget {
               const SizedBox(width: 2),
               // Easy ease, under the name the keyframe menus give it, and in
               // the place the graph's strip gives it: second of the four.
+              // The bare eased curve: nothing here has a handle to drag.
               _glyphButton(t,
                   keyName: 'keys-interp-bezier',
-                  mark: LumitIcons.bezier,
+                  mark: LumitIcons.easeInOut,
                   word: l10n.easeEasy,
                   action: 'graph.ease',
                   onPressed: () => onInterp?.call(easyEase)),
@@ -644,11 +653,10 @@ class KeyCommandStrip extends StatelessWidget {
               Builder(
                 builder: (buttonContext) => _glyphButton(t,
                     keyName: 'keys-interp-ease',
-                    mark: LumitIcons.easeInOut,
+                    mark: LumitIcons.ease,
                     word: l10n.keysEase,
                     onPressed: () => onEaseBlock?.call(buttonContext)),
               ),
-              const SizedBox(width: 12),
               // No second run: Reverse, Copy and Paste at playhead left the
               // strip on the owner's ruling (2026-08-31, desktop testing).
               // Copy and Paste keep their Ctrl+C / Ctrl+V roads; the four
@@ -759,7 +767,6 @@ class KeyCommandStrip extends StatelessWidget {
                       : l10n.tipBreakHandlesOff,
                   on: breakHandles,
                   onPressed: () => onToggleBreakHandles?.call()),
-              const SizedBox(width: 12),
             ],
           ],
         ),
@@ -833,13 +840,16 @@ class ColumnToggles extends StatelessWidget {
     return Container(
       height: t.density.secondaryRow,
       color: t.surface2,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
+      padding: const EdgeInsets.only(right: 10),
       // Scrolls sideways when the outline is narrow — the same answer the
       // toolbar and the lane bar give; an overflow stripe is a layout fault.
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
           children: [
+            // Left of this rule, what the key selection can be told to do.
+            // Right of it, which columns the outline draws.
+            _stripRule(t),
             for (final group in groups) ...[
               LumitTooltip(
                 message: l10n.tipToggleColumns(columnGroupLabel(group)),
@@ -870,7 +880,7 @@ class ColumnToggles extends StatelessWidget {
               const SizedBox(width: 4),
             ],
             // The render-time column, which is there while the engine is
-            // measuring. The same switch the status line's stopwatch flips.
+            // measuring. The same switch the status line's hourglass flips.
             ListenableBuilder(
               listenable: timings,
               builder: (context, _) => LumitTooltip(
@@ -885,7 +895,7 @@ class ColumnToggles extends StatelessWidget {
                       ? Text(t.kickerCase(l10n.timeColumn),
                           style: timings.measuring ? t.kickerOn : t.kicker)
                       : glyph.LumitIcon(
-                          LumitIcons.stopwatch,
+                          LumitIcons.renderTime,
                           size: iconSize,
                           colour:
                               timings.measuring ? t.textPrimary : t.textMuted,
@@ -920,17 +930,13 @@ class ColumnToggles extends StatelessWidget {
                       ),
               ),
             ),
-            const SizedBox(width: 4),
             // **The two groups read apart** (§12A.1): everything left of this
             // rule says which *columns* the outline draws; everything right of
             // it is comp-wide — shy, master motion blur, and the overflow of
             // commands. They shared the timecode row until the redesign, where
             // a column toggle and a document switch sat shoulder to shoulder
             // with nothing to say they were different kinds of thing.
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: Container(width: 1, height: 10, color: t.hairlineStrong),
-            ),
+            _stripRule(t),
             _compToggleButton(
               context,
               keyName: 'tl-hide-shy',
@@ -952,6 +958,8 @@ class ColumnToggles extends StatelessWidget {
                 onChanged();
               },
             ),
+            // The menu is a list of commands, not a switch: a group of one.
+            _stripRule(t),
             LumitTooltip(
               message: l10n.tipTimelineMore,
               child: Builder(
@@ -959,7 +967,7 @@ class ColumnToggles extends StatelessWidget {
                   key: const ValueKey('tl-more'),
                   small: true,
                   frameless: true,
-                  padding: const EdgeInsets.symmetric(horizontal: 5),
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
                   onPressed: () => showTimelineMoreMenu(
                     menuContext,
                     comp: comp,
@@ -968,7 +976,12 @@ class ColumnToggles extends StatelessWidget {
                     onToggleRazor: onToggleRazor,
                     onChanged: onChanged,
                   ),
-                  child: Text('⋯', style: t.small),
+                  // The set's three dots. The character had no drawing in
+                  // the interface's face and came out as an empty box.
+                  child: glyph.LumitIcon(LumitIcons.more,
+                      size: iconSize,
+                      colour: t.textMuted,
+                      semanticLabel: l10n.tipTimelineMore),
                 ),
               ),
             ),

@@ -237,6 +237,12 @@ class _KeyedValueFieldState extends State<KeyedValueField> {
       );
 }
 
+/// The stopwatch a property row draws under [t]: the square-bodied one in
+/// Desk, where everything is square, and the round one in Studio and Lantern.
+String stopwatchGlyph(LumitTheme t) => t.shape == ThemeShape.desk
+    ? LumitIcons.stopwatch
+    : LumitIcons.stopwatchRound;
+
 class KeyframeControlsFrb extends StatelessWidget {
   /// The animations this control covers — one for a single value, several for a
   /// row that spans axes (Position's x and y).
@@ -354,26 +360,8 @@ class KeyframeControlsFrb extends StatelessWidget {
         // The one place the stopwatch has colour of its own: `animated` says
         // the property is keyed (§3.1's closed job list), never the accent,
         // which the redesign spends on the filled action and the playhead.
-        // Desk draws the switch as a square, filled when the value is
-        // keyed and outlined when it is not (15-DESIGN-DESK.md 3.2).
-        child: t.shape == ThemeShape.desk
-            ? SizedBox(
-                width: iconSize,
-                height: iconSize,
-                child: Center(
-                  child: Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: _animated ? t.accent : null,
-                      border: Border.all(
-                          color: _animated ? t.accent : t.textMuted),
-                    ),
-                  ),
-                ),
-              )
-            : LumitIcon(LumitIcons.stopwatch,
-                size: iconSize, colour: _animated ? t.animated : t.textMuted),
+        child: LumitIcon(stopwatchGlyph(t),
+            size: iconSize, colour: _animated ? t.animated : t.textMuted),
         onPressed: () => _toggleAnimated(playhead.value),
       ),
     );
@@ -662,7 +650,7 @@ class PathKeyframesFrb extends StatelessWidget {
           message: _animated ? l10n.tipStopAnimating : l10n.tipAnimate,
           child: button(
             keyName: 'kf-stopwatch-$rowKey',
-            child: LumitIcon(LumitIcons.stopwatch,
+            child: LumitIcon(stopwatchGlyph(t),
                 size: iconSize, colour: _animated ? t.animated : t.textMuted),
             onPressed: () => _toggleAnimated(playhead.value),
           ),

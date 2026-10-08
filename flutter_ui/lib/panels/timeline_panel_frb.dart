@@ -4245,8 +4245,14 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
           // width it takes exactly the room its buttons need and the toggles
           // keep the rest; squeezed, neither run overflows — each scrolls
           // inside its own share.
+          //
+          // In Layers the strip is four glyphs and never needs squeezing, so
+          // it is laid out at its own width and the toggles really do keep
+          // the rest. As a flexible half it left the toggles scrolling inside
+          // the other half with empty bar beside them.
           Row(children: [
             Flexible(
+              flex: _graph ? 1 : 0,
               child: KeyCommandStrip(
                 // The keyframe strip in Layers, the graph's own
                 // commands in graph view — the same seven or ten buttons that
