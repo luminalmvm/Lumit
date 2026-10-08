@@ -356,9 +356,12 @@ class _LumitAppViewState extends State<LumitAppView> {
               : const SizedBox.shrink(),
         ),
         // The same card for a job working on the document that is already open
-        // — beat detection. The two never overlap: nothing can be started
+        // — beat detection, packing the project. The two never overlap: nothing can be started
         // against a document that is still being read.
-        BusyOverlay(busy: state.busy, progress: state.busyProgress),
+        BusyOverlay(
+            busy: state.busy,
+            progress: state.busyProgress,
+            cancel: state.busyCancel),
       ]),
     );
   }

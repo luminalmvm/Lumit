@@ -83,7 +83,6 @@ flutter analyze
    adding another.
 3. `.\scripts\check.ps1` before a commit.
 4. If the change breaks a rule in these docs, change the doc in the same commit.
-5. New user-facing strings: list the new keys in the pull request.
 
 ### Testing notes
 
@@ -169,7 +168,7 @@ One Cargo workspace. Every `crates/lumit-*` folder is a member, one job each.
 | Crate | Does |
 |---|---|
 | `lumit-core` | Rational time, the document, ops and undo, the snapshot store, expressions, the effect declarations |
-| `lumit-project` | The `.lum` file, the op journal, autosave, crash recovery |
+| `lumit-project` | The `.lum` file and the footage packed into it, the op journal, autosave, crash recovery |
 | `lumit-eval` | Frame keys, the graph compiler, epochs, the worker pool, the scheduler core |
 | `lumit-render` | The pixel pass: decode worker, draw lists, compositor, effect dispatch, cache tiers, export, the headless renderer |
 | `lumit-gpu` | The one wgpu device, the WGSL kernels, the compositor, colour, readback |

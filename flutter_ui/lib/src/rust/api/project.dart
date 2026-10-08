@@ -19,8 +19,8 @@ import 'shell.dart';
 import 'solid.dart';
 import 'state.dart';
 
-// These functions are ignored because they are not marked as `pub`: `new_comp_ops`, `new_comp_with`, `next_comp_name_in`, `of`, `to_model`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `clone`, `clone`, `eq`, `eq`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `new_comp_ops`, `new_comp_with`, `next_comp_name_in`, `of`, `save_with`, `to_model`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `new`, `state`
 
 /// Whether undo and redo have anything to do, for greying the menu items.
@@ -72,6 +72,73 @@ class BridgeHistoryEntry {
           undone == other.undone;
 }
 
+/// How a save that packs ended.
+class BridgePackResult {
+  /// The file written. Empty when the save was cancelled, which leaves the
+  /// file on disk as it was.
+  final String path;
+  final bool cancelled;
+
+  /// How many footage items the file now carries.
+  final int packed;
+
+  /// How many it was asked to carry and does not, because their file could
+  /// not be found or read. They stay as they were, referenced by path.
+  final int leftOut;
+
+  const BridgePackResult({
+    required this.path,
+    required this.cancelled,
+    required this.packed,
+    required this.leftOut,
+  });
+
+  @override
+  int get hashCode =>
+      path.hashCode ^ cancelled.hashCode ^ packed.hashCode ^ leftOut.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgePackResult &&
+          runtimeType == other.runtimeType &&
+          path == other.path &&
+          cancelled == other.cancelled &&
+          packed == other.packed &&
+          leftOut == other.leftOut;
+}
+
+/// How much of the project's footage its `.lum` carries, for the File menu's
+/// packing rows (docs/01-GLOSSARY.md: Packed project).
+class BridgePackState {
+  /// How many footage items the project holds.
+  final int footage;
+
+  /// How many of them are packed.
+  final int packed;
+
+  /// Whether every save packs the footage imported since the last one.
+  final bool autoPack;
+
+  const BridgePackState({
+    required this.footage,
+    required this.packed,
+    required this.autoPack,
+  });
+
+  @override
+  int get hashCode => footage.hashCode ^ packed.hashCode ^ autoPack.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgePackState &&
+          runtimeType == other.runtimeType &&
+          footage == other.footage &&
+          packed == other.packed &&
+          autoPack == other.autoPack;
+}
+
 /// One colour on the project's shelf: four 0–1 channels and an
 /// optional name. Empty `name` means unnamed, which is the ordinary case — a
 /// shelf is read by eye.
@@ -104,6 +171,44 @@ class BridgeSwatch {
           b == other.b &&
           a == other.a &&
           name == other.name;
+}
+
+/// How an unpack ended.
+class BridgeUnpackResult {
+  /// True when the unpack was stopped. Files already written stay, and the
+  /// project still carries all of its footage.
+  final bool cancelled;
+
+  /// How many files were written beside the project.
+  final int written;
+
+  /// How many items are still packed because their file could not be
+  /// written out.
+  final int kept;
+
+  /// The folder the files were written to.
+  final String folder;
+
+  const BridgeUnpackResult({
+    required this.cancelled,
+    required this.written,
+    required this.kept,
+    required this.folder,
+  });
+
+  @override
+  int get hashCode =>
+      cancelled.hashCode ^ written.hashCode ^ kept.hashCode ^ folder.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeUnpackResult &&
+          runtimeType == other.runtimeType &&
+          cancelled == other.cancelled &&
+          written == other.written &&
+          kept == other.kept &&
+          folder == other.folder;
 }
 
 class ProjectReference {
@@ -209,6 +314,12 @@ class ProjectReference {
   bool canDeliverColourSpace({required String name}) => BridgeLib.instance.api
       .crateApiProjectProjectReferenceCanDeliverColourSpace(
           that: this, name: name);
+
+  /// Stop the pack or unpack in flight. Harmless when there is none.
+  void cancelPacking() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceCancelPacking(
+        that: this,
+      );
 
   void close() => BridgeLib.instance.api.crateApiProjectProjectReferenceClose(
         that: this,
@@ -423,6 +534,13 @@ class ProjectReference {
         that: this,
       );
 
+  /// How much of the project's footage is packed, and whether saves pack
+  /// automatically.
+  BridgePackState packState() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferencePackState(
+        that: this,
+      );
+
   /// Where this project was last saved, or null when it never has been. The
   /// menu bar needs it to decide between Save and Save as.
   String? path() => BridgeLib.instance.api.crateApiProjectProjectReferencePath(
@@ -465,8 +583,33 @@ class ProjectReference {
   /// so a project saved somewhere new keeps relative links that work.
   /// A successful save clears the crash journal: the journal covers work
   /// *between* saves, so once the document is on disk it is redundant.
+  ///
+  /// A packed project is saved with its footage still inside
+  /// ([`Self::save_packed`] is the same save with a progress stream).
   Future<String> save({required String path}) => BridgeLib.instance.api
       .crateApiProjectProjectReferenceSave(that: this, path: path);
+
+  /// [`Self::save`], with the footage inside the file (docs/01-GLOSSARY.md:
+  /// Packed project).
+  ///
+  /// `pack_all` packs every footage item, which is what Pack project file
+  /// does. Without it the save packs what the project packs already, and
+  /// everything when the project packs automatically. Footage on disk that
+  /// has changed since it was packed is packed again, so the file holds
+  /// what the project is showing.
+  ///
+  /// The copy is as long as the footage is big. `on_progress` hears how far
+  /// it has got, and [`Self::cancel_packing`] stops it with the file on disk
+  /// left as it was.
+  ///
+  /// Not an undo step. A save is not one, and which items the file carries
+  /// is a fact about the file.
+  Future<BridgePackResult> savePacked(
+          {required String path,
+          required bool packAll,
+          RustStreamSink<double>? onProgress}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceSavePacked(
+          that: this, path: path, packAll: packAll, onProgress: onProgress);
 
   /// Set how hard the renderer works at the edges of transformed layers.
   ///
@@ -479,6 +622,13 @@ class ProjectReference {
   void setAntiAliasing({required int samples}) =>
       BridgeLib.instance.api.crateApiProjectProjectReferenceSetAntiAliasing(
           that: this, samples: samples);
+
+  /// Set whether every save packs the project's footage. An ordinary op, so
+  /// it is undoable and travels in the `.lum`. Nothing is packed until the
+  /// next save.
+  void setAutoPack({required bool autoPack}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceSetAutoPack(
+          that: this, autoPack: autoPack);
 
   /// Give this project its own cache location, or clear it so the project
   /// follows the application-wide choice again (`location: None`).
@@ -569,6 +719,20 @@ class ProjectReference {
   void undo() => BridgeLib.instance.api.crateApiProjectProjectReferenceUndo(
         that: this,
       );
+
+  /// Write the packed footage back out as files and save the project
+  /// without it.
+  ///
+  /// An item whose original is still on disk goes back to reading it and
+  /// nothing is written for it. The rest land in a `media` folder beside
+  /// the project file, and their items are pointed there. Packing
+  /// automatically is switched off, or the save that ends this would pack
+  /// everything again.
+  ///
+  /// Not an undo step, for [`Self::save_packed`]'s reason.
+  Future<BridgeUnpackResult> unpack({RustStreamSink<double>? onProgress}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceUnpack(
+          that: this, onProgress: onProgress);
 
   /// The project-wide *use proxies* master switch.
   ///

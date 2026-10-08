@@ -654,6 +654,11 @@ enum OpenPhase {
   /// Unzipping the `.lum` and typing the document out of its JSON.
   readingFile,
 
+  /// Copying packed footage out of the `.lum`, for the files that are no
+  /// longer on disk. Only reported when there is something to copy, and the
+  /// one phase that says how far through itself it is.
+  readingPackedMedia,
+
   /// Pointing every footage reference at a file on this machine (docs/10 §2),
   /// including the one walk of the project's folder a lost item costs.
   resolvingMedia,

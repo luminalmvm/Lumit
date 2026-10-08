@@ -207,6 +207,31 @@ impl DocumentStore {
         self.current.store(Arc::new(doc));
     }
 
+    /// Record what a save packed into the `.lum`, or what an unpack wrote back
+    /// out: the new packed map, and the references of the items an unpack
+    /// moved to the files it wrote.
+    ///
+    /// **Not an op**, for [`Self::set_ui_state`]'s reasons and one of its own.
+    /// The map says what the file on disk holds, and the save that wrote the
+    /// file has already happened. An undo that took an item back out of the
+    /// map would have the next save leave its bytes out of the archive, and
+    /// for footage whose original is gone those are the only copy.
+    pub fn set_packed(
+        &self,
+        packed: std::collections::BTreeMap<uuid::Uuid, crate::model::PackedMedia>,
+        moved: Vec<(uuid::Uuid, crate::model::MediaRef)>,
+    ) {
+        let _journal = self.journal.lock();
+        let mut doc = Document::clone(&self.snapshot());
+        doc.packed = packed;
+        for (id, media) in moved {
+            if let Some(crate::model::ProjectItem::Footage(f)) = doc.item_mut(id) {
+                f.media = media;
+            }
+        }
+        self.current.store(Arc::new(doc));
+    }
+
     /// Push one finished step onto the undo stack, keeping it bounded.
     ///
     /// Compaction (docs/14 §5): the history stays at [`MAX_UNDO_DEPTH`] by

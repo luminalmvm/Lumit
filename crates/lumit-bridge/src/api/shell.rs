@@ -226,6 +226,10 @@ impl ProjectReference {
             }
             replayed += 1;
         }
+        // Packed footage whose file has gone is read from the copy the open
+        // made. Nothing is copied here unless that copy has been deleted.
+        let dir = path.parent().unwrap_or_else(|| std::path::Path::new(""));
+        crate::packing::restore(&mut doc, &path, dir, |_| {});
 
         let state = self.state()?;
         let mut state = state.write().map_err(|_| BridgeError::WriteFailed)?;

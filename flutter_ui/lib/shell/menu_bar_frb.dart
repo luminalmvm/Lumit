@@ -28,6 +28,8 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
+import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
+    show RustStreamSink;
 import 'package:lumit_flutter/main.dart';
 import 'package:provider/provider.dart';
 
@@ -607,6 +609,17 @@ class LumitMenuBarFrb extends StatelessWidget {
                 saveProjectFrb(app, ui, forcePicker: true, picker: savePicker),
           ),
           PaletteCommand(
+            label: l10n.menuPackProject,
+            category: l10n.menuFile,
+            run: () =>
+                saveProjectFrb(app, ui, picker: savePicker, pack: true),
+          ),
+          PaletteCommand(
+            label: l10n.menuUnpackProject,
+            category: l10n.menuFile,
+            run: () => unpackProjectFrb(app),
+          ),
+          PaletteCommand(
             label: l10n.menuImportFootage,
             category: l10n.menuFile,
             shortcut: keymap.chordFor('file.import'),
@@ -907,6 +920,32 @@ List<MenuSection> lumitMenus(
                     : () => saveProjectFrb(app, ui,
                         forcePicker: true, picker: savePicker),
                 action: 'file.save.as'),
+            // The footage inside the `.lum`, so the one file can be handed to
+            // somebody else. Read as the menu opens: a pack is a save, and
+            // nothing else tells the bar that one has happened.
+            MenuEntry.submenu(l10n.menuPackedProject, [
+              MenuEntry.toggle(
+                  l10n.menuPackAutomatically,
+                  project == null
+                      ? null
+                      : () {
+                          final on = _packState(project)?.autoPack ?? false;
+                          project.setAutoPack(autoPack: !on);
+                          app.notifyDocumentChanged();
+                        },
+                  checked: () => _packState(project)?.autoPack ?? false),
+              MenuEntry(
+                  l10n.menuPackProject,
+                  (_packState(project)?.footage ?? 0) == 0
+                      ? null
+                      : () => saveProjectFrb(app, ui,
+                          picker: savePicker, pack: true)),
+              MenuEntry(
+                  l10n.menuUnpackProject,
+                  (_packState(project)?.packed ?? 0) == 0
+                      ? null
+                      : () => unpackProjectFrb(app)),
+            ]),
             MenuEntry.divider(),
             // Import footage stands in the menu proper (owner, 2026-08-25,
             // superseding the one-Import-home grouping of 2026-08-21): it is the
@@ -1989,6 +2028,76 @@ Future<void> fileProjectThumbnail(String path,
   if (png != null) Workspace.writeThumbnail(path, png);
 }
 
+/// How much of the project's footage its file carries, or null for a project
+/// that is not there to ask.
+BridgePackState? _packState(ProjectReference? project) {
+  try {
+    return project?.packState();
+  } catch (_) {
+    return null;
+  }
+}
+
+/// Run a pack or an unpack with the card up over the shell, the engine's own
+/// progress on its bar and a Cancel that stops the copy.
+///
+/// [after] holds the card back for a job that is usually over at once: an
+/// ordinary save of a packed project copies its footage too, and a card that
+/// flashed up on every Ctrl+S of a small one would be noise.
+Future<T> _withPackingCard<T>(
+  LumitState app,
+  String label,
+  Future<T> Function(RustStreamSink<double> progress) start, {
+  Duration after = Duration.zero,
+}) async {
+  final project = app.project;
+  // Set before the card goes up: it keeps whichever bar it opened with.
+  app.busyProgress.value = 0;
+  app.busyCancel.value = () => project?.cancelPacking();
+  StreamSubscription<double>? watching;
+  Timer? raise;
+  try {
+    final progress = RustStreamSink<double>();
+    // The call is started before the sink is listened to, as an open's is: a
+    // sink has no stream until it has been handed to a call.
+    final pending = start(progress);
+    watching = progress.stream.listen((fraction) {
+      if (fraction >= (app.busyProgress.value ?? 0)) {
+        app.busyProgress.value = fraction;
+      }
+    });
+    raise = Timer(after, () => app.busy.value = label);
+    return await pending;
+  } finally {
+    raise?.cancel();
+    watching?.cancel();
+    app.busy.value = null;
+    app.busyProgress.value = null;
+    app.busyCancel.value = null;
+  }
+}
+
+/// Write the packed footage back out beside the project and save the project
+/// without it.
+Future<void> unpackProjectFrb(LumitState app) async {
+  final project = app.project;
+  if (project == null) return;
+  try {
+    final done = await _withPackingCard(app, l10n.unpackingProject,
+        (progress) => project.unpack(onProgress: progress));
+    if (done.cancelled) {
+      app.postNotice(l10n.unpackCancelled);
+    } else if (done.kept > 0) {
+      app.postNotice(l10n.unpackKept(done.kept), error: true);
+    } else {
+      app.postNotice(l10n.unpackedProject(done.written, done.folder));
+    }
+  } catch (_) {
+    app.postNotice(l10n.couldNotUnpackProject, error: true);
+  }
+  app.notifyDocumentChanged();
+}
+
 /// Save the project, asking for a location only when there is not one already
 /// — or always, for Save as.
 ///
@@ -1998,11 +2107,16 @@ Future<void> fileProjectThumbnail(String path,
 ///
 /// [picker] is the injectable seam a widget test needs: no plugin channel can
 /// open a real dialogue in one.
+///
+/// [pack] is Pack project file: the same save, with every footage item's file
+/// written into the `.lum`. A project that packs already, or packs
+/// automatically, takes the packing road without being asked.
 Future<void> saveProjectFrb(
   LumitState app,
   LumitUiState ui, {
   bool forcePicker = false,
   Future<String?> Function()? picker,
+  bool pack = false,
 }) async {
   final project = app.project;
   if (project == null) return;
@@ -2019,8 +2133,33 @@ Future<void> saveProjectFrb(
   // drag into the document would make moving furniture an unsaved change.
   project.setUiState(uiState: ui.sessionJson());
   try {
-    final written = await project.save(path: target);
-    app.postNotice(l10n.savedTo(written));
+    final packs = project.packState();
+    final String written;
+    if (!pack && !packs.autoPack && packs.packed == 0) {
+      written = await project.save(path: target);
+      app.postNotice(l10n.savedTo(written));
+    } else {
+      final saved = await _withPackingCard(
+        app,
+        l10n.packingProject,
+        (progress) => project.savePacked(
+            path: target, packAll: pack, onProgress: progress),
+        after: pack ? Duration.zero : const Duration(milliseconds: 300),
+      );
+      if (saved.cancelled) {
+        app.postNotice(l10n.packCancelled);
+        app.notifyDocumentChanged();
+        return;
+      }
+      written = saved.path;
+      if (saved.leftOut > 0) {
+        app.postNotice(l10n.packedProjectLeftOut(saved.leftOut), error: true);
+      } else if (pack) {
+        app.postNotice(l10n.packedProject(saved.packed, written));
+      } else {
+        app.postNotice(l10n.savedTo(written));
+      }
+    }
     // Save as gives the project a new path, and the session is filed by path —
     // and the title bar carries the name.
     ui.rememberSession();
@@ -2040,7 +2179,9 @@ Future<void> saveProjectFrb(
   } catch (_) {
     // The work is still in the document and the journal; say so calmly and let
     // the user pick somewhere writable.
-    app.postNotice(l10n.couldNotSaveProject, error: true);
+    app.postNotice(
+        pack ? l10n.couldNotPackProject : l10n.couldNotSaveProject,
+        error: true);
   }
   app.notifyDocumentChanged();
 }

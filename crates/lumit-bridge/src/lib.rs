@@ -43,6 +43,8 @@
 //! - [`beats`] — the beat-detection worker: one analysis at a time, on a
 //!   thread of its own, so a detection cannot sit on the pool every panel's
 //!   reads share.
+//! - `packing` — which files a save packs into the `.lum`, and where an open
+//!   reads them back out to.
 //! - [`peaks`] — the session's waveform peak cache: one multi-zoom summary per
 //!   audio file, so a lane redraws at any zoom without decoding again.
 //! - [`probe`] — the probe worker and the session's probe cache: footage is
@@ -87,6 +89,7 @@ mod framecache;
 mod layered;
 mod media;
 mod names;
+mod packing;
 mod peaks;
 mod playback;
 mod prefetch;

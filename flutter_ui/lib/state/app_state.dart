@@ -125,6 +125,10 @@ class LumitState extends ChangeNotifier {
   /// goes up and let go after it comes down.
   final ValueNotifier<double?> busyProgress = ValueNotifier(null);
 
+  /// How that job is stopped, or null for one that cannot be. Set before the
+  /// card goes up, like [busyProgress], and let go after it comes down.
+  final ValueNotifier<VoidCallback?> busyCancel = ValueNotifier(null);
+
   /// The Viewer has something to show, or there is nothing for it to show —
   /// either way the shell can come out from behind its progress bar.
   ///
