@@ -535,8 +535,9 @@ class Workspace extends ChangeNotifier {
 
   /// The custom theme in use, or null when a built-in scheme is selected or
   /// the named one has been deleted.
-  CustomTheme? get activeCustomTheme {
-    final name = customThemeName;
+  CustomTheme? get activeCustomTheme => _customThemeNamed(customThemeName);
+
+  CustomTheme? _customThemeNamed(String? name) {
     if (name == null) return null;
     for (final theme in customThemes) {
       if (theme.name == name) return theme;
@@ -835,6 +836,16 @@ class Workspace extends ChangeNotifier {
     recompose();
   }
 
+  /// The scheme being hovered in the colour scheme list. The interface is
+  /// drawn in it but nothing is saved, and null puts the saved one back.
+  ThemeChoice? _looking;
+
+  void previewChoice(ThemeChoice? choice) {
+    if (_looking == choice) return;
+    _looking = choice;
+    recompose();
+  }
+
   void recompose() {
     // Density rides on every theme this method can build, preview included:
     // it is a setting about rows rather than about colours, so no colour
@@ -854,7 +865,12 @@ class Workspace extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    final custom = activeCustomTheme;
+    // A hovered scheme is built the same way as the saved one, so the preview
+    // is what picking it would give.
+    final looking = _looking;
+    final custom = looking == null
+        ? activeCustomTheme
+        : _customThemeNamed(looking.customName);
     if (custom != null) {
       // A custom theme carries its own accent among its colours, so the
       // accent override does not apply on top — it would silently overwrite
@@ -862,7 +878,7 @@ class Workspace extends ChangeNotifier {
       _theme = _withRoom(custom.build(themeShape).copyWith(density: density));
     } else {
       _theme = _withRoom(LumitTheme.forScheme(
-        colorScheme,
+        looking?.scheme ?? colorScheme,
         themeShape,
         accentOverride: accentOverride,
       ).copyWith(density: density));

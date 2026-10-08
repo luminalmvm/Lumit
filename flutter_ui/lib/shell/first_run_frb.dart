@@ -208,6 +208,11 @@ class _FirstRunState extends State<_FirstRun> {
                                 label: (c) => c.label,
                                 group: (c) => c.group,
                                 onChanged: workspace.choose,
+                                // Hovering a row previews that scheme, on the
+                                // window behind too.
+                                onPreview: workspace.previewChoice,
+                                onPreviewEnd: () =>
+                                    workspace.previewChoice(null),
                               ),
                             ),
                             const SizedBox(width: 8),
