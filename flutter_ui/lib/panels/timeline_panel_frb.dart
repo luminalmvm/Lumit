@@ -928,7 +928,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   double? _masterDrag;
 
   /// The outline's column groups in their current order. Dragging a header
-  /// group reorders them as a unit; session-lived, like the twirl state.
+  /// group reorders them as a unit. The order, the widths and the hidden
+  /// groups are kept in the workspace store and come back on the next launch
+  /// ([_saveColumns]).
   List<TimelineGroup> _groupOrder = [...defaultGroupOrder];
 
   /// Each group's width. Dragging a header seam changes one of these and
@@ -937,10 +939,14 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
 
   /// The column groups the bottom bar has switched **off** (§12A.1),
   /// so the outline pares down to names and bars when the columns are not in
-  /// use. Session-lived, like the order and the widths. The identity group is
+  /// use. Kept with the order and the widths. The identity group is
   /// never in here: names and bars are what "pared down" means, and a table
   /// with no first column is a table of nothing.
   final Set<TimelineGroup> _hiddenGroups = <TimelineGroup>{};
+
+  /// Write the columns to the workspace store, after any change to them.
+  void _saveColumns() => _ui?.workspace.setTimelineColumns(
+      columnsToJson(_groupOrder, _groupWidths, _hiddenGroups));
 
   /// The groups a bottom-bar toggle offers, in the order the bar shows them.
   /// **Each toggle hides the columns its own word names** (owner, desktop
@@ -980,6 +986,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         _liveResize.value = null;
         if (groupIsFixedWidth(group)) return;
         _groupWidths = {..._groupWidths, group: _resizedWidth(group, delta)};
+        _saveColumns();
       });
 
   /// The same width, mid-drag: published for the outline to draw and not
@@ -1842,7 +1849,12 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // is kept, not looked up again: `dispose` runs after the element is
     // deactivated, where an ancestor lookup is no longer safe.
     _ui = Provider.of<LumitUiState>(context, listen: false);
-    _itemChanges = Provider.of<LumitState>(context, listen: false)
+    // The columns as they were left, or the defaults.
+    final columns = columnsFromJson(_ui!.workspace.timelineColumns);
+    _groupOrder = columns.order;
+    _groupWidths = columns.widths;
+    _hiddenGroups.addAll(columns.hidden);
+    _itemChanges =Provider.of<LumitState>(context, listen: false)
         .onChange
         .listen(_onItemsChanged);
     // Chained, not overwritten: Effect controls may hold the claim already.
@@ -3854,7 +3866,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                         frames: frames,
                                         width: laneViewport * _zoom,
                                         inset: _axisPad);
-                                    return _graph
+                                    final half = _graph
                                         ? _graphHalf(context, ui, comp,
                                             axis: axis,
                                             channels: channels,
@@ -3873,6 +3885,36 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                             frames: frames,
                                             fpsNum: fpsNum,
                                             fpsDen: fpsDen);
+                                    final t = ThemeScope.of(context).theme;
+                                    return Stack(
+                                      fit: StackFit.expand,
+                                      children: [
+                                        half,
+                                        // A composition with no layers at
+                                        // all says so, in the middle of the
+                                        // lane area: under the ruler, over
+                                        // the bottom bar, clear of the
+                                        // scroll gutter.
+                                        if (ui.model.layers.isEmpty)
+                                          Positioned(
+                                            top: t.density.ruler,
+                                            left: 12,
+                                            right: scrollGutterWidth + 12,
+                                            bottom: t.density.secondaryRow,
+                                            child: IgnorePointer(
+                                              child: Center(
+                                                child: Text(
+                                                  l10n.timelineNoLayers,
+                                                  key: const ValueKey(
+                                                      'tl-no-layers'),
+                                                  style: t.small,
+                                                  textAlign: TextAlign.center,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                      ],
+                                    );
                                   },
                                 ),
                               ),
@@ -3977,10 +4019,11 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                               matteToggles: matteToggles,
                               onResize: _resizeGroup,
                               onResizeLive: _liveResizeGroup,
-                              onReorder: (dragged, target) => setState(
-                                () => _groupOrder = reorderedGroups(
-                                    _groupOrder, dragged, target),
-                              ),
+                              onReorder: (dragged, target) => setState(() {
+                                _groupOrder = reorderedGroups(
+                                    _groupOrder, dragged, target);
+                                _saveColumns();
+                              }),
                             ),
                             // The rows scroll under the pinned toolbar
                             // and header, in step with the lanes.
@@ -4237,6 +4280,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
               hidden: _hiddenGroups,
               onToggle: (group) => setState(() {
                 if (!_hiddenGroups.remove(group)) _hiddenGroups.add(group);
+                _saveColumns();
               }),
               animatedOnly: _animatedOnly,
               onToggleAnimated: () =>

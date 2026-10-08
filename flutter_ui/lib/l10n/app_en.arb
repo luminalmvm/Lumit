@@ -6637,6 +6637,15 @@
   "@switchSoloed": {
     "description": "Layer switch, when this layer is one of the soloed ones."
   },
+  "switchSoloAlone": "{label}. Alt-click to solo this layer alone",
+  "@switchSoloAlone": {
+    "description": "Tooltip on a layer row's solo switch in the Timeline. {label} is the switch's own name, Solo or Soloed. Alt-click turns solo on for this layer and off for every other.",
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
   "switchThreeD": "3D layer",
   "@switchThreeD": {
     "description": "Layer switch and its column heading: this layer lives in three-dimensional space."
@@ -6877,6 +6886,10 @@
   "timelineEmpty": "Open a composition, or drop footage here to make one.",
   "@timelineEmpty": {
     "description": "Empty state in the Timeline panel."
+  },
+  "timelineNoLayers": "No layers yet. Drag footage in, or use Layer > New.",
+  "@timelineNoLayers": {
+    "description": "One quiet line in the middle of the Timeline's lane area, shown while the open composition has no layers. Layer and New are the menu bar's own names."
   },
   "timelineModeGraph": "Graph",
   "@timelineModeGraph": {

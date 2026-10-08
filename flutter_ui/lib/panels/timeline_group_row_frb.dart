@@ -474,8 +474,13 @@ class _GroupOutlineRowState extends State<GroupOutlineRow> {
       );
     }
 
+    // Only the cells the column has room for, as a layer's row does. A blank
+    // for each one put away overflowed a narrowed column.
     return Row(
-      children: [for (final which in SwitchCell.values) cell(which)],
+      children: [
+        for (final which in SwitchCell.values)
+          if (shown.contains(which)) cell(which),
+      ],
     );
   }
 

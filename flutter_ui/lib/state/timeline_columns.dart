@@ -88,6 +88,9 @@ const double identityGap = outlineGap;
 /// housekeeping marks in the column: one hides the row from this list, the
 /// other keeps the layer out of every file Lumit writes, and neither is a
 /// Modes-column question about *how* the layer is rendered.
+///
+/// This is the column with every cell showing. It opens narrower, with shy
+/// and guide put away ([defaultGroupWidths]).
 const double switchesGroupWidth = 6 * switchCellWidth;
 
 /// The render group's span: **its switch cells and nothing more** (owner,
@@ -103,6 +106,9 @@ const double switchesGroupWidth = 6 * switchCellWidth;
 /// blur · adjustment · flow · collapse ([ModeCell]). The span is the same on
 /// every row, including the kinds a given cell is not drawn on: a column that
 /// changed width by layer kind would take the pickers with it.
+///
+/// This is the column with every cell showing. It opens on its first three
+/// ([defaultGroupWidths]).
 const double renderGroupWidth = 6 * switchCellWidth;
 
 /// The A/V switch cells, in the order they are drawn.
@@ -124,13 +130,14 @@ const List<SwitchCell> switchHideOrder = [
 /// the column on a cell of its own, and flow stands immediately left of it.
 enum ModeCell { fx, threeD, motionBlur, adjustment, flow, collapse }
 
-/// The order the Modes column gives its cells up in (owner, T4): flow, then
-/// adjustment, then motion blur. Fx, 3D and collapse are what a shrunk Modes
-/// column keeps.
+/// The order the Modes column gives its cells up in: collapse, then flow, then
+/// adjustment. That is the drawn order from the right, so a narrowed column is
+/// always the first few cells as drawn, and fx, 3D and motion blur are what it
+/// keeps.
 const List<ModeCell> modeHideOrder = [
+  ModeCell.collapse,
   ModeCell.flow,
   ModeCell.adjustment,
-  ModeCell.motionBlur,
 ];
 
 /// Which cells a switch column of [width] draws: one per [switchCellWidth] it
@@ -219,10 +226,14 @@ const double scrollGutterWidth = 12;
 /// The width each group starts at. Dragging a header seam changes one of
 /// them and leaves the rest alone, so the outline grows or shrinks by exactly
 /// what the drag moved (docs/07 §4.2).
+///
+/// The two switch columns open short of their full set: Switches shows
+/// visibility, audio, solo and lock, and Modes shows fx, 3D and motion blur.
+/// The rest are one drag of the seam away.
 const Map<TimelineGroup, double> defaultGroupWidths = {
-  TimelineGroup.switches: switchesGroupWidth,
+  TimelineGroup.switches: 4 * switchCellWidth,
   TimelineGroup.identity: 250,
-  TimelineGroup.render: renderGroupWidth,
+  TimelineGroup.render: 3 * switchCellWidth,
   TimelineGroup.compose: composeGroupWidth,
   TimelineGroup.parent: parentGroupWidth,
   TimelineGroup.timings: timingsGroupWidth,
@@ -245,7 +256,7 @@ bool groupIsFixedWidth(TimelineGroup group) => group == TimelineGroup.timings;
 /// shrink — its icons, or a dropdown you can still read a name in.
 double minGroupWidth(TimelineGroup group) => switch (group) {
       // What the hide ladders never take away: visibility and audio, and fx,
-      // 3D and collapse.
+      // 3D and motion blur.
       TimelineGroup.switches =>
         (SwitchCell.values.length - switchHideOrder.length) * switchCellWidth,
       TimelineGroup.identity => 120,
@@ -283,6 +294,45 @@ double snapGroupWidth(TimelineGroup group, double width) {
   }
   final home = defaultGroupWidths[group] ?? settled;
   return (settled - home).abs() <= snapGrab ? home : settled;
+}
+
+/// The columns as the workspace store keeps them. By name, so a group added
+/// or dropped later does not shuffle the rest.
+Map<String, dynamic> columnsToJson(List<TimelineGroup> order,
+        Map<TimelineGroup, double> widths, Set<TimelineGroup> hidden) =>
+    {
+      'order': [for (final group in order) group.name],
+      'widths': {for (final e in widths.entries) e.key.name: e.value},
+      'hidden': [for (final group in hidden) group.name],
+    };
+
+/// The columns a stored map describes. Anything it does not say, or says
+/// wrongly, falls back to the default, so a file written before the columns
+/// were kept (null here) opens on the defaults whole.
+({
+  List<TimelineGroup> order,
+  Map<TimelineGroup, double> widths,
+  Set<TimelineGroup> hidden
+}) columnsFromJson(Map<String, dynamic>? j) {
+  final byName = TimelineGroup.values.asNameMap();
+  List<TimelineGroup> named(Object? raw) => [
+        if (raw is List)
+          for (final name in raw)
+            if (byName[name] case final group?) group,
+      ];
+  final widths = j?['widths'];
+  return (
+    // A group the file does not name takes its default place after the rest.
+    order: {...named(j?['order']), ...defaultGroupOrder}.toList(),
+    widths: {
+      for (final e in defaultGroupWidths.entries)
+        e.key: widths is Map && widths[e.key.name] is num
+            ? snapGroupWidth(e.key, (widths[e.key.name] as num).toDouble())
+            : e.value,
+    },
+    // The Layer column cannot be switched off.
+    hidden: named(j?['hidden']).toSet()..remove(TimelineGroup.identity),
+  );
 }
 
 /// The space at an outline row's **trailing** end: the row's own 8 of padding
@@ -375,10 +425,16 @@ double rightInsetOf(List<TimelineGroup> order,
 /// measurement is worth its plumbing.
 ValueColumn valueColumnFor(
     List<TimelineGroup> order, Map<TimelineGroup, double> widths) {
-  // The value cells span the render group *as it is now*, so dragging that
-  // group wider widens the fields under it.
-  return ValueColumn(widths[TimelineGroup.render] ?? renderGroupWidth,
-      rightInsetOf(order, widths, TimelineGroup.render));
+  // The value cells start under the render group and are never narrower than
+  // that group with every cell showing. The column now opens at three cells,
+  // which is less than a rotation's two boxes need, so a narrowed column's
+  // fields run on to the right, into room a property row has spare: it draws
+  // no matte, no blend and no parent. With nothing to the right they grow
+  // left instead, into the name.
+  final width = widths[TimelineGroup.render] ?? renderGroupWidth;
+  final right = rightInsetOf(order, widths, TimelineGroup.render);
+  final short = width < renderGroupWidth ? renderGroupWidth - width : 0.0;
+  return ValueColumn(width + short, short > right ? 0 : right - short);
 }
 
 /// Where a fold-out row puts its render-time readout so it sits under the

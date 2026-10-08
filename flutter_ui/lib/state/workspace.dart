@@ -620,6 +620,11 @@ class Workspace extends ChangeNotifier {
   bool precomposeAdjustDuration = true;
   bool precomposeOpenNewComp = false;
 
+  /// The Timeline outline's columns: the group order, each group's width and
+  /// the groups switched off, as the Timeline wrote them. Null until a column
+  /// is first moved, and the Timeline opens on its defaults.
+  Map<String, dynamic>? timelineColumns;
+
   PerformanceSettings performance = PerformanceSettings();
   InterfaceSettings interface = InterfaceSettings();
 
@@ -1010,6 +1015,13 @@ class Workspace extends ChangeNotifier {
     precomposeAdjustDuration = adjustDuration;
     precomposeOpenNewComp = openNewComp;
     settingsChanged();
+  }
+
+  /// Saved straight away and without notifying: the Timeline already shows
+  /// what it is writing.
+  void setTimelineColumns(Map<String, dynamic> columns) {
+    timelineColumns = columns;
+    save();
   }
 
   void setShape(ThemeShape s) {
@@ -1461,6 +1473,7 @@ class Workspace extends ChangeNotifier {
         'precompose_move_attributes': precomposeMoveAttributes,
         'precompose_adjust_duration': precomposeAdjustDuration,
         'precompose_open_new_comp': precomposeOpenNewComp,
+        'timeline_columns': timelineColumns,
         'last_project_path': lastProjectPath,
         'recent_projects': recentProjects,
         'recent_opened': _recentOpened,
@@ -1569,6 +1582,9 @@ class Workspace extends ChangeNotifier {
     precomposeMoveAttributes = j['precompose_move_attributes'] as bool? ?? true;
     precomposeAdjustDuration = j['precompose_adjust_duration'] as bool? ?? true;
     precomposeOpenNewComp = j['precompose_open_new_comp'] as bool? ?? false;
+    // Absent means a file written before the columns were kept: the defaults.
+    final columns = j['timeline_columns'];
+    timelineColumns = columns is Map<String, dynamic> ? columns : null;
     lastProjectPath = j['last_project_path'] is String
         ? j['last_project_path'] as String
         : null;

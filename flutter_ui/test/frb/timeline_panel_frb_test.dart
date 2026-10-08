@@ -2044,10 +2044,13 @@ void main() {
           reason: 'newest on top, as added');
 
       // The top row goes shy and the filter takes it off the screen, so the
-      // rows on show start one below the top of the stack.
-      final shy = p.comp.getLayers().first;
-      await tester
-          .tap(find.byKey(ValueKey<String>('tl-shy-${shy.internallayerId}')));
+      // rows on show start one below the top of the stack. Set through the
+      // engine: the Switches column opens with its shy cell put away.
+      p.comp
+          .getLayers()
+          .first
+          .setSwitch(switch_: BridgeLayerSwitch.shy, on_: true);
+      p.uiState.model.refresh();
       await tester.pump();
       await tester.tap(find.byKey(const ValueKey('tl-hide-shy')));
       await tester.pump();
