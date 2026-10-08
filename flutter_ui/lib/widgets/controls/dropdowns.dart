@@ -129,6 +129,18 @@ class BareDropdown<T> extends StatelessWidget {
   /// reader hunting for a name they know exists.
   final String? Function(T)? disabledReason;
 
+  /// Called with the option under the pointer while the list is open, so it
+  /// can be shown before it's picked. The colour scheme list uses it to draw
+  /// the interface in the hovered scheme. Only [onChanged] picks anything.
+  ///
+  /// The last option stays until the pointer is on another, so crossing a
+  /// heading doesn't flick back.
+  final ValueChanged<T>? onPreview;
+
+  /// Called when the pointer leaves the list and when the list closes, to
+  /// take down whatever [onPreview] put up. It runs before [onChanged].
+  final VoidCallback? onPreviewEnd;
+
   const BareDropdown({
     super.key,
     required this.value,
@@ -139,6 +151,8 @@ class BareDropdown<T> extends StatelessWidget {
     this.face,
     this.dense = false,
     this.disabledReason,
+    this.onPreview,
+    this.onPreviewEnd,
   });
 
   @override
@@ -147,12 +161,12 @@ class BareDropdown<T> extends StatelessWidget {
     return dropdownButton(
       t: t,
       dense: dense,
-      onPressed: onChanged == null ? null : () => _open(context, t),
+      onPressed: onChanged == null ? null : () => _open(context),
       face: dropdownFace(t, label(value), face: face),
     );
   }
 
-  Future<void> _open(BuildContext context, LumitTheme t) async {
+  Future<void> _open(BuildContext context) async {
     final box = context.findRenderObject()! as RenderBox;
     final origin = box.localToGlobal(Offset.zero);
     // A one-item list rather than the value itself. The popup answers null when
@@ -163,48 +177,62 @@ class BareDropdown<T> extends StatelessWidget {
     final picked = await showLumitPopup<List<T>>(
       context: context,
       position: origin + Offset(0, box.size.height + 2),
-      // IntrinsicWidth bounds the stretch: a float in the overlay has
-      // unbounded width, and a stretched Column inside one otherwise
-      // forces an infinite width (the settings-dropdown crash).
-      builder: (close) => FloatSurface(
-        child: IntrinsicWidth(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (var i = 0; i < options.length; i++) ...[
-                if (group != null &&
-                    group!(options[i]) != null &&
-                    (i == 0 || group!(options[i - 1]) != group!(options[i])))
-                  Padding(
-                    padding: EdgeInsets.fromLTRB(10, i == 0 ? 6 : 10, 10, 2),
-                    child: Text(
-                      group!(options[i])!,
-                      style: t.small.copyWith(color: t.textMuted),
-                    ),
-                  ),
-                if (disabledReason?.call(options[i]) case final why?)
-                  LumitTooltip(
-                    message: why,
-                    child: MenuRow(
-                      selected: options[i] == value,
-                      onPressed: () {},
-                      child: Text(label(options[i]),
-                          style: TextStyle(color: t.textDisabled)),
-                    ),
-                  )
-                else
-                  MenuRow(
-                    selected: options[i] == value,
-                    onPressed: () => close([options[i]]),
-                    child: Text(label(options[i])),
-                  ),
-              ],
-            ],
-          ),
+      builder: (close) => MouseRegion(
+        onExit: (_) => onPreviewEnd?.call(),
+        child: FloatSurface(
+          // The theme is read here and not passed in, so the headings change
+          // with the rows when a list previews themes.
+          child: Builder(builder: (context) {
+            final t = ThemeScope.of(context).theme;
+            // IntrinsicWidth bounds the stretch: a float in the overlay has
+            // unbounded width, and a stretched Column inside one otherwise
+            // forces an infinite width (the settings-dropdown crash).
+            return IntrinsicWidth(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (var i = 0; i < options.length; i++) ...[
+                    if (group != null &&
+                        group!(options[i]) != null &&
+                        (i == 0 ||
+                            group!(options[i - 1]) != group!(options[i])))
+                      Padding(
+                        padding:
+                            EdgeInsets.fromLTRB(10, i == 0 ? 6 : 10, 10, 2),
+                        child: Text(
+                          group!(options[i])!,
+                          style: t.small.copyWith(color: t.textMuted),
+                        ),
+                      ),
+                    if (disabledReason?.call(options[i]) case final why?)
+                      LumitTooltip(
+                        message: why,
+                        child: MenuRow(
+                          selected: options[i] == value,
+                          onPressed: () {},
+                          child: Text(label(options[i]),
+                              style: TextStyle(color: t.textDisabled)),
+                        ),
+                      )
+                    else
+                      MenuRow(
+                        selected: options[i] == value,
+                        onPressed: () => close([options[i]]),
+                        onEnter: onPreview == null
+                            ? null
+                            : () => onPreview!(options[i]),
+                        child: Text(label(options[i])),
+                      ),
+                  ],
+                ],
+              ),
+            );
+          }),
         ),
       ),
     );
+    onPreviewEnd?.call();
     if (picked != null) onChanged!(picked.single);
   }
 }

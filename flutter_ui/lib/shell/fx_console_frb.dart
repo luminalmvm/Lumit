@@ -136,6 +136,33 @@ Future<void> showFxConsoleFrb({
   return completer.future;
 }
 
+/// Put the console on screen as a thing to look at, and answer what takes it
+/// down again.
+///
+/// It is the same popover with the same list, but it is shown and not used:
+/// it takes no key, no click and no rung of the Escape ladder, and the panels'
+/// own keys are not stood down for it. The guided tour shows the node search
+/// this way (shell/tour_frb.dart), so the user sees the real one without the
+/// tour and the console both wanting the keyboard.
+VoidCallback showFxConsoleExhibitFrb({
+  required BuildContext context,
+  required FxConsoleModel model,
+  Offset? anchor,
+}) {
+  final at = anchor == null ? null : overlayLocal(context, anchor);
+  final entry = OverlayEntry(
+    builder: (context) => Entrance.fade(
+      spec: ThemeScope.of(context).motion.popup,
+      child:
+          _FxConsole(model: model, anchor: at, onClose: () {}, exhibit: true),
+    ),
+  );
+  Overlay.of(context).insert(entry);
+  return () {
+    if (entry.mounted) entry.remove();
+  };
+}
+
 /// How well `needle` matches `haystack` as a subsequence, or null for no
 /// match. Lower is better. Shared shape with the command palette's ranking
 /// (docs/07 §12): earlier and tighter wins, so the thing half-remembered comes
@@ -184,10 +211,14 @@ class _FxConsole extends StatefulWidget {
   final FxConsoleModel model;
   final Offset? anchor;
   final VoidCallback onClose;
+
+  /// Shown and not used: see [showFxConsoleExhibitFrb].
+  final bool exhibit;
   const _FxConsole({
     required this.model,
     required this.anchor,
     required this.onClose,
+    this.exhibit = false,
   });
 
   @override
@@ -222,6 +253,8 @@ class _FxConsoleState extends State<_FxConsole> {
   void initState() {
     super.initState();
     _query.addListener(() => setState(() => _highlighted = 0));
+    // One that is only being shown claims nothing.
+    if (widget.exhibit) return;
     // Escape has to work with focus anywhere. A handler on the search field's
     // node covers only the field, so this claims the ladder's dialogue rung
     // for the console's lifetime (widgets/escape_ladder.dart): one press is
@@ -248,7 +281,7 @@ class _FxConsoleState extends State<_FxConsole> {
   void dispose() {
     _escapeRelease?.call();
     _escapeRelease = null;
-    markModalUnmounted();
+    if (!widget.exhibit) markModalUnmounted();
     _queryFocus
       ..removeListener(_keepFocus)
       ..dispose();
@@ -358,7 +391,7 @@ class _FxConsoleState extends State<_FxConsole> {
     final matches = _matches;
     final width = _width(t);
 
-    return Focus(
+    final console = Focus(
       onKeyEvent: (node, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
         switch (event.logicalKey) {
@@ -434,6 +467,7 @@ class _FxConsoleState extends State<_FxConsole> {
         },
       ),
     );
+    return widget.exhibit ? IgnorePointer(child: console) : console;
   }
 
   static double _fit(double v, double lo, double hi) =>

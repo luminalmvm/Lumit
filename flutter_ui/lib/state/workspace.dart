@@ -535,8 +535,9 @@ class Workspace extends ChangeNotifier {
 
   /// The custom theme in use, or null when a built-in scheme is selected or
   /// the named one has been deleted.
-  CustomTheme? get activeCustomTheme {
-    final name = customThemeName;
+  CustomTheme? get activeCustomTheme => _customThemeNamed(customThemeName);
+
+  CustomTheme? _customThemeNamed(String? name) {
     if (name == null) return null;
     for (final theme in customThemes) {
       if (theme.name == name) return theme;
@@ -677,9 +678,12 @@ class Workspace extends ChangeNotifier {
   /// screen. Both settings move together here and separately in Settings — this
   /// is the pair the screen offers, not a mode the rest of the code reads.
   /// Marks the screen answered, so it is asked exactly once.
-  void setEditingStyle({required bool vegas}) {
+  ///
+  /// [sequenceLayers] is the Vegas answer's own tick: without it the Retime
+  /// graph opens to speed and video still arrives as an ordinary layer.
+  void setEditingStyle({required bool vegas, bool sequenceLayers = true}) {
     interface.retimeOpensToSpeed = vegas;
-    interface.videoAsSequenceLayer = vegas;
+    interface.videoAsSequenceLayer = vegas && sequenceLayers;
     firstRunDone = true;
     settingsChanged();
   }
@@ -688,6 +692,22 @@ class Workspace extends ChangeNotifier {
   /// defaults, docs/07 §13.1). Recorded so it is not asked again.
   void skipFirstRun() {
     firstRunDone = true;
+    settingsChanged();
+  }
+
+  /// Whether the guided tour has been finished or skipped (shell/tour.dart),
+  /// after which it only opens from the Help menu.
+  ///
+  /// True unless [load] finds no settings file, for the reason [firstRunDone]
+  /// is: a new machine is shown round once, and somebody who has been working
+  /// in Lumit for months is not.
+  bool tourDone = true;
+
+  /// The tour has been seen to its end, or skipped. Either way it does not
+  /// open by itself again.
+  void finishTour() {
+    if (tourDone) return;
+    tourDone = true;
     settingsChanged();
   }
 
@@ -816,6 +836,16 @@ class Workspace extends ChangeNotifier {
     recompose();
   }
 
+  /// The scheme being hovered in the colour scheme list. The interface is
+  /// drawn in it but nothing is saved, and null puts the saved one back.
+  ThemeChoice? _looking;
+
+  void previewChoice(ThemeChoice? choice) {
+    if (_looking == choice) return;
+    _looking = choice;
+    recompose();
+  }
+
   void recompose() {
     // Density rides on every theme this method can build, preview included:
     // it is a setting about rows rather than about colours, so no colour
@@ -835,7 +865,12 @@ class Workspace extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    final custom = activeCustomTheme;
+    // A hovered scheme is built the same way as the saved one, so the preview
+    // is what picking it would give.
+    final looking = _looking;
+    final custom = looking == null
+        ? activeCustomTheme
+        : _customThemeNamed(looking.customName);
     if (custom != null) {
       // A custom theme carries its own accent among its colours, so the
       // accent override does not apply on top — it would silently overwrite
@@ -843,7 +878,7 @@ class Workspace extends ChangeNotifier {
       _theme = _withRoom(custom.build(themeShape).copyWith(density: density));
     } else {
       _theme = _withRoom(LumitTheme.forScheme(
-        colorScheme,
+        looking?.scheme ?? colorScheme,
         themeShape,
         accentOverride: accentOverride,
       ).copyWith(density: density));
@@ -1486,6 +1521,7 @@ class Workspace extends ChangeNotifier {
         'performance': performance.toJson(),
         'interface': interface.toJson(),
         'first_run_done': firstRunDone,
+        'tour_done': tourDone,
         'auto_update': autoUpdate,
         'show_welcome_on_launch': showWelcomeOnLaunch,
         'last_update_check_ms': lastUpdateCheckMs,
@@ -1561,6 +1597,7 @@ class Workspace extends ChangeNotifier {
     }
     // Absent means an existing user, not a new one — see the field.
     firstRunDone = j['first_run_done'] as bool? ?? true;
+    tourDone = j['tour_done'] as bool? ?? true;
     // Absent means a settings file written before there were updates to check
     // for; the default is on, and an existing user gets the same offer a new
     // one does.
@@ -1689,6 +1726,7 @@ class Workspace extends ChangeNotifier {
         // used Lumit already, and losing their settings is enough of an insult
         // without being asked to introduce themselves again.
         firstRunDone = false;
+        tourDone = false;
         return;
       }
       final j = jsonDecode(f.readAsStringSync());

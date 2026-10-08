@@ -214,27 +214,33 @@ class Toolbar extends StatelessWidget {
           // names of two shapes of the same panel, and a word says which one
           // is in force where two small glyphs made the reader guess.
           // Lantern draws the pair on the header line instead.
-          if (t.shape != ThemeShape.lantern) ...[
-            _modeTab(
-              context,
-              keyName: 'tl-view-lanes',
-              label: l10n.timelineModeLayers,
-              tip: l10n.tipLaneView,
-              active: mode == TimelineMode.layers,
-              onPressed: () => onMode(TimelineMode.layers),
+          if (t.shape != ThemeShape.lantern)
+            Row(
+              key: const ValueKey('tl-mode-tabs'),
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _modeTab(
+                  context,
+                  keyName: 'tl-view-lanes',
+                  label: l10n.timelineModeLayers,
+                  tip: l10n.tipLaneView,
+                  active: mode == TimelineMode.layers,
+                  onPressed: () => onMode(TimelineMode.layers),
+                ),
+                const SizedBox(width: 2),
+                _modeTab(
+                  context,
+                  // Keeps the key the old Graph toolbar button had, so the
+                  // graph editor's own tests and muscle memory both still
+                  // find it.
+                  keyName: 'tl-graph',
+                  label: l10n.timelineModeGraph,
+                  tip: l10n.tipGraphView,
+                  active: mode == TimelineMode.graph,
+                  onPressed: () => onMode(TimelineMode.graph),
+                ),
+              ],
             ),
-            const SizedBox(width: 2),
-            _modeTab(
-              context,
-              // Keeps the key the old Graph toolbar button had, so the graph
-              // editor's own tests and muscle memory both still find it.
-              keyName: 'tl-graph',
-              label: l10n.timelineModeGraph,
-              tip: l10n.tipGraphView,
-              active: mode == TimelineMode.graph,
-              onPressed: () => onMode(TimelineMode.graph),
-            ),
-          ],
         ],
       ),
     );

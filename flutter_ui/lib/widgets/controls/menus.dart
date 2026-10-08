@@ -54,12 +54,17 @@ class MenuRow extends StatefulWidget {
   /// submenu row rather than to the plain row it draws itself with.
   final Object? hoverId;
 
+  /// Called when the pointer lands on the row, so a list can show what a row
+  /// would do before it's picked, like the colour scheme list does.
+  final VoidCallback? onEnter;
+
   const MenuRow({
     super.key,
     required this.child,
     required this.onPressed,
     this.selected = false,
     this.hoverId,
+    this.onEnter,
   }) : option = false;
 
   /// A row that picks one of several and leaves the menu up — see [option].
@@ -69,6 +74,7 @@ class MenuRow extends StatefulWidget {
     required this.onPressed,
     this.selected = false,
     this.hoverId,
+    this.onEnter,
   }) : option = true;
 
   @override
@@ -100,6 +106,7 @@ class _MenuRowState extends State<MenuRow> {
         // open flyout's safe triangle — the highlight above is immediate either
         // way; only the flyout switch waits.
         surface?._hoverRow(widget.hoverId ?? this, e.position);
+        widget.onEnter?.call();
       },
       onHover: (e) => surface?._hoverMoved(widget.hoverId ?? this, e.position),
       onExit: (_) => setState(() => _hover = false),

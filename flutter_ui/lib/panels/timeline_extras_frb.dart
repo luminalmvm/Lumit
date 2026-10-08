@@ -194,7 +194,7 @@ class CompTabsFrb extends StatelessWidget {
               ),
               const Spacer(),
               if (mode != null && onMode != null) ...[
-                Segment(children: [
+                Segment(key: const ValueKey('tl-mode-tabs'), children: [
                   for (final (keyName, label, tip, which) in [
                     (
                       'tl-view-lanes',

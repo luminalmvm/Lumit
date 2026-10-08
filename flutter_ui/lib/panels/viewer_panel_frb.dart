@@ -865,8 +865,11 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
         ),
     ];
 
+    // Keyed either way: the picture with its strips, which is only here while
+    // a composition is shown.
     if (!round) {
       return Column(
+        key: const ValueKey('viewer-comp-view'),
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [...above, Expanded(child: stage), ...below],
       );
@@ -874,6 +877,7 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
     // The room shows between the pills and the picture, the same ground that
     // shows between panels; the pane draws no card of its own under Lantern.
     return ColoredBox(
+      key: const ValueKey('viewer-comp-view'),
       color: t.room,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

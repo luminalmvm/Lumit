@@ -48,6 +48,9 @@ const Duration _ms120 = Duration(milliseconds: 120);
 const Duration _ms130 = Duration(milliseconds: 130);
 const Duration _ms140 = Duration(milliseconds: 140);
 const Duration _ms150 = Duration(milliseconds: 150);
+const Duration _ms200 = Duration(milliseconds: 200);
+const Duration _ms280 = Duration(milliseconds: 280);
+const Duration _ms320 = Duration(milliseconds: 320);
 
 /// The house ease-out: most of the distance early, a gentle stop.
 const Curve _out = Curves.easeOutCubic;
@@ -128,6 +131,12 @@ class Motion {
   /// One whole surface taking over from another: splash, welcome, shell.
   final MotionSpec swap;
 
+  /// The guided tour going from one step to the next: the hole crossing the
+  /// window and the card going with it. The one movement longer than 150ms,
+  /// because it carries the eye from one panel to another and a cut that far
+  /// loses it. Full only: at Minimal and None the next step is simply there.
+  final MotionSpec tour;
+
   const Motion._({
     required this.shape,
     required this.level,
@@ -155,6 +164,7 @@ class Motion {
     required this.reveal,
     required this.revealRise,
     required this.swap,
+    required this.tour,
   });
 
   /// Whether nothing moves at all.
@@ -209,6 +219,7 @@ class Motion {
         reveal: MotionSpec.still,
         revealRise: 0,
         swap: MotionSpec.still,
+        tour: MotionSpec.still,
       );
 
   /// Minimal is the same under every shape: what is left is too short to
@@ -245,6 +256,7 @@ class Motion {
       reveal: MotionSpec.still,
       revealRise: 0,
       swap: snap,
+      tour: MotionSpec.still,
     );
   }
 
@@ -275,6 +287,7 @@ class Motion {
     reveal: MotionSpec(_ms120, _out),
     revealRise: 4,
     swap: MotionSpec(_ms150, Curves.easeOut),
+    tour: MotionSpec(_ms280, Curves.easeInOutCubic),
   );
 
   static const Motion _desk = Motion._(
@@ -306,6 +319,7 @@ class Motion {
     reveal: MotionSpec(_ms80, Curves.easeOut),
     revealRise: 0,
     swap: MotionSpec(_ms100, Curves.easeOut),
+    tour: MotionSpec(_ms200, _detent),
   );
 
   static const Motion _lantern = Motion._(
@@ -335,5 +349,6 @@ class Motion {
     reveal: MotionSpec(_ms150, _out),
     revealRise: 6,
     swap: MotionSpec(_ms150, Curves.easeOut),
+    tour: MotionSpec(_ms320, Curves.easeInOutCubic),
   );
 }

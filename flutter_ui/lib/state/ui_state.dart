@@ -388,6 +388,13 @@ class LumitUiState extends ChangeNotifier {
 
   void requestConsole() => consoleRequest.value++;
 
+  /// Whether the Node graph panel is showing its search as a thing to look at:
+  /// the console over the middle of the canvas, with the list `Tab` would
+  /// bring, taking no keys and no clicks. The guided tour sets this for its
+  /// step about that search and clears it on the way out
+  /// (shell/tour_frb.dart). The panel listens, because the list is its own.
+  final ValueNotifier<bool> nodeSearchExhibit = ValueNotifier(false);
+
   /// A property row the Timeline has been asked to show — the layer and one of
   /// the `reveal.*` actions (docs/07 §4.3's P/S/R/T/A family). Set by the FX
   /// console's Keyframe ring after it plants a key, so the key just

@@ -116,8 +116,11 @@ class LumitState extends ChangeNotifier {
   }
 
   /// A new, empty project in place of the open one. Close project is this too.
-  Future<void> newProject() async {
-    if (unsavedNeedsAsking && !await askBeforeLeaving()) return;
+  ///
+  /// [ask] false skips the question about unsaved changes, for a project that
+  /// holds nothing of the user's.
+  Future<void> newProject({bool ask = true}) async {
+    if (ask && unsavedNeedsAsking && !await askBeforeLeaving()) return;
     _adopt(LumitBridgeState.newProject(onChangeStream: _changeSink()));
   }
 

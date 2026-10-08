@@ -439,6 +439,8 @@ class _SettingsWindowState extends State<_SettingsWindow> {
     required ValueChanged<T> onChanged,
     String? Function(T)? group,
     double width = _ddNarrow,
+    ValueChanged<T>? onPreview,
+    VoidCallback? onPreviewEnd,
   }) =>
       SizedBox(
         width: width,
@@ -450,6 +452,8 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           label: label,
           group: group,
           onChanged: onChanged,
+          onPreview: onPreview,
+          onPreviewEnd: onPreviewEnd,
         ),
       );
 
@@ -1030,6 +1034,9 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                   // light/dark is the first thing anyone is choosing by.
                   group: (c) => c.group,
                   onChanged: (c) => setState(() => ui.workspace.choose(c)),
+                  // Hovering a row previews that scheme without picking it.
+                  onPreview: ui.workspace.previewChoice,
+                  onPreviewEnd: () => ui.workspace.previewChoice(null),
                 ),
                 const SizedBox(width: 8),
                 // What the selection actually looks like, beside its name.
