@@ -71,6 +71,7 @@ double panelMinWidth(Panel panel) => switch (panel) {
       // A label and a value well side by side, which is every row they have.
       Panel.text => 220,
       Panel.paragraph => 220,
+      Panel.expressions => 180,
       Panel.debug => 180,
     };
 

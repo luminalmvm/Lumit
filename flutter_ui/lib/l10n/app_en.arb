@@ -13815,5 +13815,25 @@
   "panelGroupSolo": "One open at a time",
   "@panelGroupSolo": {
     "description": "The right-click menu on a panel's header in a stacked group: a tick that makes opening one panel shut the others."
+  },
+  "panelExpressions": "Expressions",
+  "@panelExpressions": {
+    "description": "The name of the panel that keeps the user's saved expressions and puts one on the selected properties. A panel name, so a noun."
+  },
+  "searchExpressions": "Search expressions",
+  "@searchExpressions": {
+    "description": "Placeholder in the Expressions panel's search box. It searches the saved expressions by name and by what their script says."
+  },
+  "noExpressionsYet": "No expressions saved yet",
+  "@noExpressionsYet": {
+    "description": "Empty-state line in the Expressions panel, before the user has saved an expression."
+  },
+  "newExpression": "New",
+  "@newExpression": {
+    "description": "Button in the Expressions panel: clear the editor to write a new expression. When the selected property already has an expression, the editor starts with that."
+  },
+  "selectAProperty": "Select a property",
+  "@selectAProperty": {
+    "description": "Shown beside the Expressions panel's Apply button when no property row is selected in the Timeline, so there is nowhere for the expression to go."
   }
 }

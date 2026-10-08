@@ -17,6 +17,7 @@ import 'audio_timeline_panel_frb.dart';
 import 'easing_panel_frb.dart';
 import 'effect_controls_panel_frb.dart';
 import 'effects_presets_panel_frb.dart';
+import 'expressions_panel_frb.dart';
 import 'graph_panel.dart';
 import 'hierarchy_panel_frb.dart';
 import 'mixer_panel_frb.dart';
@@ -46,5 +47,6 @@ Widget buildPanelBodyFrb(BuildContext context, PaneId pane) => switch (pane.pane
       Panel.audioTimeline => const AudioTimelinePanelFrb(),
       Panel.text => const TextPanelFrb(),
       Panel.paragraph => const ParagraphPanelFrb(),
+      Panel.expressions => const ExpressionsPanelFrb(),
       Panel.debug => const DebugPanel(),
     };
