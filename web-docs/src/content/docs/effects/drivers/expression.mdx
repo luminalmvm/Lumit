@@ -19,7 +19,14 @@ line of arithmetic instead of its keyframes. It is the same language a property'
 expression is written in, with the same names in scope: `time`, the comp's size and
 frame rate, `layer("…")` and `comp("…")`.
 
-The box always has four sockets - **Value**, **Colour**, **Point x** and **Point y** -
+The box can take numbers in as well. **Add input** gives it a number input named
+`input_1`, then `input_2`, and so on. Each input is a socket on the box and a row in the
+Node panel, and the expression reads it by that name: `(input_1 + input_2) * input_3`.
+A wired input carries what its wire carries. An unwired one holds the value on its row,
+which keyframes like any other number. **Remove input** takes the last input away, and
+its wire with it.
+
+The box always has four output sockets - **Value**, **Colour**, **Point x** and **Point y** -
 and what the expression returns decides which of them carry anything on a given frame.
 A number fills Value. A pair, `[x, y]`, fills Point x and Point y. Three or four numbers,
 `[r, g, b]` or `[r, g, b, a]`, fill Colour. The other sockets carry nothing, and a
@@ -40,14 +47,21 @@ on nothing else, so the preview and the export agree exactly.
 | Parameter | Control | Range | Default | Unit |
 | --- | --- | --- | --- | --- |
 | **Edit expression…** | Button | - | - | - |
+| **Add input** | Button | - | - | - |
+| **Remove input** | Button | - | - | - |
 
 {/* END GENERATED */}
 
 ## What each control does
 
 - **Edit expression…**: opens the editor for the text the box runs. The text itself is
-  not a parameter - it has no keyframes and nothing to wire into - which is why the box
-  has one button and no sliders.
+  not a parameter - it has no keyframes and nothing to wire into.
+- **Add input**: adds a number input. Inputs are named `input_1`, `input_2` and so on,
+  in the order they are added.
+- **Remove input**: removes the last input and unplugs its wire. An expression that
+  still reads that name stops running until the name is taken out of it.
+- **input_1**, **input_2** and so on: one row per input, holding the number the
+  expression reads when nothing is wired to that input.
 
 ## Related
 

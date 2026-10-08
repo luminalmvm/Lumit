@@ -165,11 +165,19 @@ fn with_engine<R>(f: impl FnOnce(&mut Engine) -> R) -> R {
 
 /// Run `expression` at `time` and hand back whatever it produced, untouched.
 /// The typed wrappers below decide what to make of it.
+///
+/// `vars` are extra numbers the expression can read by name, which is how an
+/// Expression box's inputs arrive. They go in first, so a name the context
+/// also gives (`time`) keeps the context's meaning.
 fn eval_dynamic(
     expression: &str,
     context: Option<Arc<ExpressionContext>>,
+    vars: &[(&str, f64)],
 ) -> Result<Dynamic, Box<rhai::EvalAltResult>> {
     let mut scope = Scope::new();
+    for (name, value) in vars {
+        scope.push_constant(*name, *value);
+    }
 
     if let Some(context) = context.as_ref() {
         if context.current_depth >= MAXIMUM_DEPTH {
@@ -212,11 +220,16 @@ const MAXIMUM_DEPTH: u32 = 100;
 /// import, where the keyframes underneath are still there to drive the
 /// property either way.
 pub fn is_runnable(expression: &str) -> bool {
-    eval_dynamic(expression, Some(Arc::new(ExpressionContext::detached()))).is_ok()
+    eval_dynamic(
+        expression,
+        Some(Arc::new(ExpressionContext::detached())),
+        &[],
+    )
+    .is_ok()
 }
 
 pub fn evaluate(expression: &str, context: Option<Arc<ExpressionContext>>) -> f64 {
-    convert_result(eval_dynamic(expression, context))
+    convert_result(eval_dynamic(expression, context, &[]))
 }
 
 /// Evaluate an expression for its **words** rather than its number — what a
@@ -230,7 +243,7 @@ pub fn evaluate(expression: &str, context: Option<Arc<ExpressionContext>>) -> f6
 /// typed against a live preview, where a half-written expression is invalid for
 /// most of the time it takes to write it.
 pub fn evaluate_text(expression: &str, context: Option<Arc<ExpressionContext>>) -> String {
-    match eval_dynamic(expression, context) {
+    match eval_dynamic(expression, context, &[]) {
         Ok(val) => val.to_string(),
         Err(_) => String::new(),
     }
@@ -306,11 +319,14 @@ pub enum ExprValue {
 /// rather than as a number that looks like an answer. Rhai's own message is
 /// kept whole - it names the line and the thing it could not find, which is
 /// what an editor needs to show.
+///
+/// `vars` are extra numbers in scope by name: an Expression box's inputs.
 pub fn evaluate_value(
     expression: &str,
     context: Option<Arc<ExpressionContext>>,
+    vars: &[(&str, f64)],
 ) -> Result<ExprValue, String> {
-    let value = eval_dynamic(expression, context).map_err(|e| e.to_string())?;
+    let value = eval_dynamic(expression, context, vars).map_err(|e| e.to_string())?;
     if let Some(n) = as_f64(value.clone()) {
         return Ok(ExprValue::Number(n));
     }
@@ -730,7 +746,7 @@ mod tests {
     /// answer under the old road.
     #[test]
     fn a_value_expression_answers_with_its_type_or_with_a_reason() {
-        let value = |src: &str| evaluate_value(src, None);
+        let value = |src: &str| evaluate_value(src, None, &[]);
 
         // Rhai keeps whole numbers and fractions apart, and a boolean is a
         // number here as it is everywhere else in this file.

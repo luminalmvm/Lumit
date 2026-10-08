@@ -3030,6 +3030,14 @@
   "@fxEditExpression": {
     "description": "Effect controls — the Expression driver's row that opens its expression for editing."
   },
+  "fxAddInput": "Add input",
+  "@fxAddInput": {
+    "description": "Button on the Expression driver, in the Node panel and on its box in a node graph. Gives the box one more number input, a socket the expression can read by name (input_1, input_2 and so on)."
+  },
+  "fxRemoveInput": "Remove input",
+  "@fxRemoveInput": {
+    "description": "Button on the Expression driver, beside Add input. Takes away the box's last number input, and the wire plugged into it."
+  },
   "fxEditShader": "Edit shader…",
   "@fxEditShader": {
     "description": "Effect controls — the Custom shader row that opens the shader's source for editing."

@@ -271,6 +271,11 @@ BridgeShaderGraphView shaderGraphView({required String graph}) =>
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<BridgeEffectInstance>>
 abstract class BridgeEffectInstance implements RustOpaqueInterface {
+  /// Stage one more number input on an Expression box and answer its name,
+  /// which is the word the expression reads it by. `None` when the box holds
+  /// as many as it can. The graph's own commit writes it.
+  String? addExpressionInput();
+
   /// Detach the inner graph (§4.1): keep the compiled text, drop the `graph`
   /// key, and leave an ordinary hand-written shader behind. One staged edit,
   /// committed with the stack, so it is one undo step — and it is not
@@ -345,6 +350,11 @@ abstract class BridgeEffectInstance implements RustOpaqueInterface {
   /// An effect this build does not know answers nothing either way: with no
   /// declaration to hold the stored rows against, none of them is unused.
   BridgeParamSync parameterSync();
+
+  /// Stage the removal of an Expression box's last input and answer its
+  /// name, so the caller can take its wire off in the same commit. `None`
+  /// for a box with no inputs.
+  String? removeExpressionInput();
 
   /// **Remove unused parameters** (registry §4 rule 1): take away every
   /// stored row that neither the declaration nor the derivation names, on

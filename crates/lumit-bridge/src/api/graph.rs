@@ -479,22 +479,28 @@ pub(crate) fn read_layer_graph(layer: &Layer) -> BridgeLayerGraph {
             // The parameter sockets, then the signature's **data inputs** — the
             // wire-only ones with no stored value and no panel row, of
             // which Points sample's Points is the first.
-            inputs: param_ports(schema, &[], NodeRef::Driver(driver.id), &input_wired)
-                .chain(
-                    def.map(|d| d.signature().inputs())
-                        .unwrap_or_default()
-                        .iter()
-                        .map(|port| {
-                            BridgePort::of(
-                                *port,
-                                input_wired(InputRef::Param {
-                                    node: NodeRef::Driver(driver.id),
-                                    port: port.id.to_owned(),
-                                }),
-                            )
-                        }),
-                )
-                .collect(),
+            // An Expression box's own inputs are rows the instance derives.
+            inputs: param_ports(
+                schema,
+                def.map_or(&[], |d| d.derived(driver)),
+                NodeRef::Driver(driver.id),
+                &input_wired,
+            )
+            .chain(
+                def.map(|d| d.signature().inputs())
+                    .unwrap_or_default()
+                    .iter()
+                    .map(|port| {
+                        BridgePort::of(
+                            *port,
+                            input_wired(InputRef::Param {
+                                node: NodeRef::Driver(driver.id),
+                                port: port.id.to_owned(),
+                            }),
+                        )
+                    }),
+            )
+            .collect(),
             outputs: def
                 .map(|d| d.signature().outputs())
                 .unwrap_or_default()
