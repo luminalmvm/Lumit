@@ -1917,6 +1917,9 @@ class LumitUiState extends ChangeNotifier {
     // no rebuild path ever asks (docs/impl/ocio.md §6.1).
     _app.addListener(refreshColourSummary);
     refreshColourSummary();
+    // What this person has open, for the others in a shared project.
+    selectedLayers.addListener(_look);
+    playheadFrame.addListener(_look);
     // Where the playhead was left is worth keeping, and it moves far too often
     // to write down each time. So it is captured when the user steps away from
     // the window and when they close it, alongside the deliberate acts below.
@@ -2111,6 +2114,13 @@ class LumitUiState extends ChangeNotifier {
     }
   }
 
+  /// Tell the others in a shared project what this person has open. The share
+  /// state keeps it and sends it once the project is shared.
+  void _look() => _app.share.look(
+      comp: _selectedComp,
+      layers: selectedLayers.value,
+      playhead: playheadFrame.value);
+
   @override
   void dispose() {
     _app.removeListener(_adoptProjectSession);
@@ -2236,6 +2246,7 @@ class LumitUiState extends ChangeNotifier {
     // exactly one view, for whatever the Viewer is showing.
     pushViewerLook();
     rememberSession();
+    _look();
     notifyListeners();
   }
 

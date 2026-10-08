@@ -44,6 +44,10 @@ const double _labelDotSize = 6;
 /// crosses takes too.
 typedef _SwitchPaint = ({String cell, UuidValue from, bool to});
 
+/// The bar at a row's leading edge that says someone else in a shared project
+/// has the layer selected.
+const double _othersBarWidth = 2;
+
 /// The inline rename a row turns into while it is being named: `Enter`
 /// commits, Escape throws the edit away, and a click anywhere else commits too
 /// (the field loses the row).
@@ -101,6 +105,10 @@ class OutlineRow extends StatefulWidget {
   /// A sub-item of this layer was last touched — drawn a shade dimmer than
   /// selection, so the two states read apart at a glance.
   final bool highlighted;
+
+  /// The colour of each other person in a shared project who has this layer
+  /// selected, drawn as a bar at the row's leading edge.
+  final List<int> others;
   final bool open;
 
   /// What this layer can do, so the switches column offers only that:
@@ -141,6 +149,7 @@ class OutlineRow extends StatefulWidget {
     required this.count,
     required this.selected,
     required this.highlighted,
+    this.others = const [],
     required this.open,
     this.hasAudio = false,
     this.hasPicture = true,
@@ -401,7 +410,7 @@ class _OutlineRowState extends State<OutlineRow> {
   Widget _rowBody(BuildContext context, LumitTheme t, BridgeLayerInfo info) {
     // The pitch outside, the drawn row inside: Lantern leaves a pixel of
     // ground at each edge of the row and rounds it, as the fold rows do.
-    return Container(
+    final body = Container(
         height: t.density.laneRow,
         padding: EdgeInsets.symmetric(vertical: laneRowGap(t)),
         child: Container(
@@ -466,6 +475,33 @@ class _OutlineRowState extends State<OutlineRow> {
                 ],
               ],
             )));
+    // What the others have selected: a bar at the row's leading edge, shared
+    // out between their colours. Over the fill, so it still shows on a row
+    // this person has selected too. The stack is there either way, so a mark
+    // arriving does not rebuild the row from nothing under a rename.
+    return Stack(
+      // The row keeps the tight width it was always laid out at, which is
+      // what makes it a layout boundary. Left loose, the edit row of
+      // `rebuild_budget_test` fails.
+      fit: StackFit.passthrough,
+      children: [
+        body,
+        if (widget.others.isNotEmpty)
+          Positioned(
+            left: 0,
+            top: laneRowGap(t),
+            bottom: laneRowGap(t),
+            width: _othersBarWidth,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (final colour in widget.others)
+                  Expanded(child: ColoredBox(color: t.personColour(colour))),
+              ],
+            ),
+          ),
+      ],
+    );
   }
 
   /// Group 1: visibility · audio · solo · lock · shy. The first two swap

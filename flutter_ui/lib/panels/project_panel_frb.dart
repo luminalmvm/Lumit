@@ -858,7 +858,8 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     final id = projectItemId(item);
     final missing = item is ItemReference_Footage && (_missing[id] ?? false);
     final audio = _mediaInfo[id] != null && _mediaInfo[id]!.videoCodec == null;
-    return _PickedRow(
+    final share = Provider.of<LumitState>(context, listen: false).share;
+    Widget picked() => _PickedRow(
       key: ValueKey<String>('project-row-$id'),
       picks: _rowPicks,
       id: id,
@@ -877,6 +878,10 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
             id,
             () =>
                 item is ItemReference_Footage ? item.field0.getProxy() : null),
+        people: [
+          if (item case ItemReference_Composition(:final field0))
+            for (final p in share.inComp(field0)) (p.colour, p.name),
+        ],
         selected: selected,
         shaded: shaded,
         renaming: _renamingId == id,
@@ -904,6 +909,13 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
         relinkPicker: widget.relinkPicker,
       ),
     );
+    // Only a composition row shows who has it open, so only those rows follow
+    // the people in a shared project, and the panel is not rebuilt for them.
+    return item is ItemReference_Composition
+        ? ValueListenableBuilder<int>(
+            valueListenable: share.roster,
+            builder: (context, _, __) => picked())
+        : picked();
   }
 
   /// The search well and its colour chips, with this panel's own controller,
