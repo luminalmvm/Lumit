@@ -1123,6 +1123,7 @@ Map<String, String> get _table => {
       "Set proxy": l10n.histSetProxy,
       "Use proxy": l10n.useProxy,
       "Use proxies": l10n.histUseProxies,
+      "Pack automatically": l10n.menuPackAutomatically,
       "Rename item": l10n.histRenameItem,
       "Set item colour": l10n.histSetItemColour,
       "Add layer": l10n.histAddLayer,

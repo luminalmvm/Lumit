@@ -724,6 +724,12 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeOutputRef dco_decode_bridge_output_ref(dynamic raw);
 
   @protected
+  BridgePackResult dco_decode_bridge_pack_result(dynamic raw);
+
+  @protected
+  BridgePackState dco_decode_bridge_pack_state(dynamic raw);
+
+  @protected
   BridgePaintMode dco_decode_bridge_paint_mode(dynamic raw);
 
   @protected
@@ -973,6 +979,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeUnit dco_decode_bridge_unit(dynamic raw);
+
+  @protected
+  BridgeUnpackResult dco_decode_bridge_unpack_result(dynamic raw);
 
   @protected
   BridgeUnusedParam dco_decode_bridge_unused_param(dynamic raw);
@@ -2283,6 +2292,12 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeOutputRef sse_decode_bridge_output_ref(SseDeserializer deserializer);
 
   @protected
+  BridgePackResult sse_decode_bridge_pack_result(SseDeserializer deserializer);
+
+  @protected
+  BridgePackState sse_decode_bridge_pack_state(SseDeserializer deserializer);
+
+  @protected
   BridgePaintMode sse_decode_bridge_paint_mode(SseDeserializer deserializer);
 
   @protected
@@ -2567,6 +2582,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeUnit sse_decode_bridge_unit(SseDeserializer deserializer);
+
+  @protected
+  BridgeUnpackResult sse_decode_bridge_unpack_result(
+      SseDeserializer deserializer);
 
   @protected
   BridgeUnusedParam sse_decode_bridge_unused_param(
@@ -4039,6 +4058,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeOutputRef self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_pack_result(
+      BridgePackResult self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_pack_state(
+      BridgePackState self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_paint_mode(
       BridgePaintMode self, SseSerializer serializer);
 
@@ -4359,6 +4386,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   void sse_encode_bridge_unit(BridgeUnit self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_unpack_result(
+      BridgeUnpackResult self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_unused_param(

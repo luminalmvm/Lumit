@@ -218,6 +218,9 @@ pub fn stress_document(p: &StressParams) -> Document {
         // switch is on like any new project.
         proxies: Default::default(),
         use_proxies: true,
+        // Nothing packed: the fixture names its media by path.
+        packed: Default::default(),
+        auto_pack: false,
         auto_folders: AutoFolders::default(),
         // The default, on, like any new project.
         anti_aliasing: Default::default(),
