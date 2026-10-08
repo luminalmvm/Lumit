@@ -338,7 +338,9 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
             decoration: BoxDecoration(
               color: t.surface1,
               borderRadius: BorderRadius.circular(t.tokens.actionRadius),
-              boxShadow: t.floatShadow,
+              // The shadow every pill on the room wears. A menu's float
+              // shadow fell 15 below a 26 pill and off the window's edge.
+              boxShadow: t.tokens.cardShadow,
             ),
             child: child,
           ),
