@@ -20,6 +20,7 @@ import 'package:lumit_flutter/src/rust/api/cache.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart' show pluginMessages;
 import 'package:lumit_flutter/src/rust/api/export.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart';
+import 'package:lumit_flutter/src/rust/api/shell.dart' show revealInFolder;
 import 'package:provider/provider.dart';
 
 import '../l10n/strings.dart';
@@ -553,11 +554,13 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
         BridgeExportState_Running(:final frame, :final total, :final encoder) =>
           [
             Flexible(
-              child: Text(
-                l10n.exportingFrame('$frame', '$total', encoder),
-                key: const ValueKey('status-export-progress'),
-                style: t.small,
-                overflow: TextOverflow.ellipsis,
+              // Twice the notice's share of the strip, now that this line
+              // carries the estimate as well as the count.
+              flex: 2,
+              child: _ExportProgress(
+                label: l10n.exportingFrame('$frame', '$total', encoder),
+                frame: frame.toInt(),
+                total: total.toInt(),
               ),
             ),
             const SizedBox(width: 8),
@@ -579,12 +582,22 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
             ),
           ],
         BridgeExportState_Done(:final path) => [
+            // The finished file is one click away: the line opens its folder.
             Flexible(
-              child: Text(
-                l10n.exportedTo(path),
-                key: const ValueKey('status-export-done'),
-                style: t.small,
-                overflow: TextOverflow.ellipsis,
+              child: LumitTooltip(
+                message: l10n.tipOpenFolder,
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: GestureDetector(
+                    key: const ValueKey('status-export-done'),
+                    onTap: () => revealInFolder(path: path),
+                    child: Text(
+                      l10n.exportedTo(path),
+                      style: t.small,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
               ),
             ),
           ],
@@ -601,6 +614,75 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
             ),
           ],
       };
+}
+
+/// How long a running export has left, in words for the strip, or null while
+/// there is too little to go on.
+///
+/// It is frames done over time taken since the strip first saw the export, so
+/// it follows the average speed and one slow frame does not move it. Nothing
+/// is said for the first five seconds, when that average is mostly noise.
+String? exportTimeLeft(
+    {required int done, required int left, required Duration taken}) {
+  if (done <= 0 || left <= 0 || taken < const Duration(seconds: 5)) return null;
+  final minutes = (taken.inMilliseconds / 60000 * left / done).round();
+  if (minutes < 1) return l10n.exportLeftUnderMinute;
+  return minutes < 120
+      ? l10n.exportLeftMinutes('$minutes')
+      : l10n.exportLeftHours('${(minutes / 60).round()}');
+}
+
+/// The export's frame count with the estimate after it. One line of text, so
+/// a narrow window cuts the estimate short before it touches the count. It
+/// holds the clock itself, so the clock lives exactly as long as the strip
+/// shows an export running.
+class _ExportProgress extends StatefulWidget {
+  final String label;
+  final int frame;
+  final int total;
+  const _ExportProgress(
+      {required this.label, required this.frame, required this.total});
+
+  @override
+  State<_ExportProgress> createState() => _ExportProgressState();
+}
+
+class _ExportProgressState extends State<_ExportProgress> {
+  /// Where the export stood when the strip first saw it, and the time since.
+  late int _from = widget.frame;
+  final Stopwatch _since = Stopwatch()..start();
+
+  @override
+  void didUpdateWidget(_ExportProgress old) {
+    super.didUpdateWidget(old);
+    // A new count, or the frame gone backwards, is the next item in the
+    // queue (or the count arriving after the preparation): start again.
+    if (widget.total != old.total || widget.frame < old.frame) {
+      _from = widget.frame;
+      _since
+        ..reset()
+        ..start();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    final left = exportTimeLeft(
+      done: widget.frame - _from,
+      left: widget.total - widget.frame,
+      taken: _since.elapsed,
+    );
+    return Text.rich(
+      TextSpan(text: widget.label, children: [
+        if (left != null)
+          TextSpan(text: ' · $left', style: TextStyle(color: t.textMuted)),
+      ]),
+      key: const ValueKey('status-export-progress'),
+      style: t.small,
+      overflow: TextOverflow.ellipsis,
+    );
+  }
 }
 
 /// How full each tier of the frame cache is — one bar per tier, with the

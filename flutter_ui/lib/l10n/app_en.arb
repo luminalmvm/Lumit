@@ -1519,6 +1519,28 @@
       }
     }
   },
+  "exportLeftUnderMinute": "less than a minute left",
+  "@exportLeftUnderMinute": {
+    "description": "Bottom strip, during an export, after the frame count: an estimate of the time remaining when it is under a minute. Lower case on purpose, it follows the progress line."
+  },
+  "exportLeftMinutes": "about {minutes} min left",
+  "@exportLeftMinutes": {
+    "description": "Bottom strip, during an export, after the frame count: an estimate of the time remaining, in whole minutes. Lower case on purpose, it follows the progress line.",
+    "placeholders": {
+      "minutes": {
+        "type": "String"
+      }
+    }
+  },
+  "exportLeftHours": "about {hours} h left",
+  "@exportLeftHours": {
+    "description": "Bottom strip, during an export, after the frame count: an estimate of the time remaining, in whole hours, used from two hours up. Lower case on purpose, it follows the progress line.",
+    "placeholders": {
+      "hours": {
+        "type": "String"
+      }
+    }
+  },
   "exportingFrame": "Exporting frame {frame} of {total} ({encoder})",
   "@exportingFrame": {
     "description": "Bottom strip, during an export. {encoder} is a codec name and is not translated.",
@@ -5745,6 +5767,24 @@
       }
     }
   },
+  "projectSummary": "{compositions, plural, =1{1 composition} other{{compositions} compositions}} · {footage} footage · {solids, plural, =1{1 solid} other{{solids} solids}} · {folders, plural, =1{1 folder} other{{folders} folders}}",
+  "@projectSummary": {
+    "description": "Project panel, the preview card at the top while nothing is selected: how many of each kind of item the panel lists. Footage counts footage items and has no plural.",
+    "placeholders": {
+      "compositions": {
+        "type": "int"
+      },
+      "footage": {
+        "type": "int"
+      },
+      "solids": {
+        "type": "int"
+      },
+      "folders": {
+        "type": "int"
+      }
+    }
+  },
   "projectItemInUse": "in use",
   "@projectItemInUse": {
     "description": "Badge beside a Project panel item that some composition places as a layer. Lower case on purpose — it sits in a line of facts.",
@@ -5829,6 +5869,14 @@
   "relinkEllipsis": "Relink…",
   "@relinkEllipsis": {
     "description": "Same as relink, with the ellipsis that means a file dialogue opens."
+  },
+  "replaceFootageEllipsis": "Replace footage…",
+  "@replaceFootageEllipsis": {
+    "description": "Project panel, a footage item's right-click menu: point the item at a different file. The same command as Relink, offered under this name when the file is not missing. The ellipsis means a file dialogue opens."
+  },
+  "tipOpenFolder": "Open folder",
+  "@tipOpenFolder": {
+    "description": "Hover text on a finished export's path in the bottom strip and on a finished row in the export queue: a click opens the folder the file was written to, in the desktop's own file manager. The same words as the export dialog's Open folder tick. Two words at most."
   },
   "removeEffect": "Remove effect",
   "@removeEffect": {
@@ -11871,6 +11919,30 @@
   "tipExportColourSpaceUnavailable": "Not available",
   "@tipExportColourSpaceUnavailable": {
     "description": "Export dialog, Colour section: the hover reason on a colour-space row that is listed but cannot be chosen, because the configuration cannot work out the transform it would need."
+  },
+  "tipExportFormatLimit": "Format limit",
+  "@tipExportFormatLimit": {
+    "description": "Export dialog: the hover reason on a control that is disabled because the format chosen in the Format list cannot carry that setting: an alpha channel, a second colour depth, a bit rate, a 24 bit sample. Two words at most."
+  },
+  "tipExportNeedsAlpha": "Needs alpha",
+  "@tipExportNeedsAlpha": {
+    "description": "Export dialog, Picture section: the hover reason on the disabled Alpha list when the format could carry alpha but the Channels list beside it is set to RGB, so the file has no alpha channel to describe. Two words at most."
+  },
+  "tipExportAudioOff": "Audio off",
+  "@tipExportAudioOff": {
+    "description": "Export dialog, Audio section: the hover reason on the sound settings that are disabled because the first list in the row is set to Off. Two words at most."
+  },
+  "tipExportNoPicture": "No picture",
+  "@tipExportNoPicture": {
+    "description": "Export dialog: the hover reason on the Composition, Picture and Colour sections when the chosen format is sound only. Two words at most."
+  },
+  "tipExportNoSound": "No sound",
+  "@tipExportNoSound": {
+    "description": "Export dialog: the hover reason on the Audio section when the chosen format cannot hold sound. Two words at most."
+  },
+  "tipExportNoMetadata": "No metadata",
+  "@tipExportNoMetadata": {
+    "description": "Export dialog: the hover reason on the Metadata section when the chosen format has nowhere to keep any. Two words at most."
   },
   "exportColourConfigUntagged": "A file written through the colour configuration is left untagged rather than mis-tagged.",
   "@exportColourConfigUntagged": {

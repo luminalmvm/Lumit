@@ -151,11 +151,15 @@ Future<void> showProjectMenuFrb({
             onPressed: () => close(_ProjectMenuAction.rename),
             child: Text(l10n.rename),
           ),
-          // Relink is offered only on a row that is actually broken.
-          if (isFootage && missing)
+          // One command under two names: a broken row is relinked, and a row
+          // whose file is there is pointed at another one. The engine takes
+          // either, so the menu only chooses the word.
+          if (isFootage)
             MenuRow(
+              key: const ValueKey('project-menu-relink'),
               onPressed: () => close(_ProjectMenuAction.relink),
-              child: Text(l10n.relinkEllipsis),
+              child: Text(
+                  missing ? l10n.relinkEllipsis : l10n.replaceFootageEllipsis),
             ),
           // **The rate of a run of stills** (docs/07 §3.1). Stills carry no
           // rate of their own, so an imported run plays at 25 until this
