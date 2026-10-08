@@ -369,6 +369,10 @@ impl Broker {
         command
             .arg(&self.config.bundle)
             .arg(&name)
+            // A plugin that writes a file without saying where writes it
+            // here. The OFX support library logs to `ofxTestLog.txt` that
+            // way, and it used to land in Lumit's own install folder.
+            .current_dir(std::env::temp_dir())
             // The secret goes down standard input, never on the command line
             // beside the pipe name: `/proc/<pid>/cmdline` is readable by every
             // process on the machine on Linux, and a command line is in every

@@ -57,6 +57,17 @@ add_subdirectory("runner")
 # them to the application.
 include(flutter/generated_plugins.cmake)
 
+# The libraries ship in lib\ rather than beside the exe, so the install folder
+# is not a wall of DLLs. Windows only looks beside the exe for the ones named
+# in its import table, so those are delay-loaded instead: nothing asks for
+# them until main.cpp has added lib\ to the search path.
+target_link_libraries(${BINARY_NAME} PRIVATE delayimp)
+target_link_options(${BINARY_NAME} PRIVATE "/DELAYLOAD:flutter_windows.dll")
+foreach(plugin ${FLUTTER_PLUGIN_LIST})
+  target_link_options(${BINARY_NAME} PRIVATE
+    "/DELAYLOAD:$<TARGET_FILE_NAME:${plugin}_plugin>")
+endforeach(plugin)
+
 
 # === Installation ===
 # Support files are copied into place next to the executable, so that it can
@@ -70,7 +81,7 @@ if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
 endif()
 
 set(INSTALL_BUNDLE_DATA_DIR "${CMAKE_INSTALL_PREFIX}/data")
-set(INSTALL_BUNDLE_LIB_DIR "${CMAKE_INSTALL_PREFIX}")
+set(INSTALL_BUNDLE_LIB_DIR "${CMAKE_INSTALL_PREFIX}/lib")
 
 install(TARGETS ${BINARY_NAME} RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}"
   COMPONENT Runtime)
@@ -87,10 +98,12 @@ if(PLUGIN_BUNDLED_LIBRARIES)
     COMPONENT Runtime)
 endif()
 
-# Copy the native assets provided by the build.dart from all packages.
+# Copy the native assets provided by the build.dart from all packages. These
+# stay beside the exe: Dart opens them by a path worked out from where the exe
+# is, not through the search path.
 set(NATIVE_ASSETS_DIR "${PROJECT_BUILD_DIR}native_assets/windows/")
 install(DIRECTORY "${NATIVE_ASSETS_DIR}"
-   DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+   DESTINATION "${CMAKE_INSTALL_PREFIX}"
    COMPONENT Runtime)
 
 # Fully re-copy the assets directory on each build to avoid having stale files
