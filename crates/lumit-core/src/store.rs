@@ -7,9 +7,11 @@
 
 use crate::model::Document;
 use crate::ops::{apply, Op, OpError};
+use crate::shared::{any_overlap, footprint, land, plan_merge, Conflict, Key};
 use arc_swap::{ArcSwap, ArcSwapOption};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, VecDeque};
 use std::sync::Arc;
 
 /// One journal entry: the op as applied, its exact inverse, and what the step
@@ -30,8 +32,107 @@ pub struct JournalEntry {
     /// ops, and a name is for the list on screen.
     #[serde(skip)]
     pub name: &'static str,
+    /// The store revision this step was made at. A shared project compares it
+    /// with when someone else last changed the same part of the document.
+    #[serde(skip)]
+    pub at: u64,
 }
 
+/// Who a remote edit came from, as whoever delivered it names them.
+/// The store carries it through to the tap and reads nothing into it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RemoteTag {
+    pub peer: u32,
+    pub id: u64,
+}
+
+/// What a shared store reports each time the document moves.
+pub enum Moved<'a> {
+    /// An edit made here. `id` is what the host's answer will quote, and
+    /// `was` is what the edit replaced, which the host lands it with.
+    Local { id: u64, op: &'a Op, was: &'a Op },
+    /// An edit from someone else, as it was applied, and what it replaced.
+    /// `as_sent` is false when that is not how its author sent it, so they
+    /// have to be told as well.
+    Remote {
+        tag: RemoteTag,
+        op: &'a Op,
+        was: &'a Op,
+        as_sent: bool,
+    },
+}
+
+/// Where a shared store reports to. Called in the order the document moved, which is
+/// the order every peer has to apply the same edits in.
+///
+/// **Called with the journal lock held**, because that lock is what gives the
+/// order. So it must not block and must not call back into the store: push to
+/// a bounded queue with `try_send` and return.
+pub type Tap = Arc<dyn Fn(Moved<'_>) + Send + Sync>;
+
+/// What a guest without its host has to merge later: the last document both
+/// had, and edits made here after it, each with what it replaced.
+pub type Apart = (Arc<Document>, Vec<(Op, Op)>);
+
+/// An edit made here that the host has not answered yet.
+struct Pending {
+    id: u64,
+    /// The edit as it was made, and what it replaced then.
+    op: Op,
+    was: Op,
+    /// How it sits on the document now: as applied, and the inverse of that.
+    /// Both change each time an edit from the host goes in underneath. `None`
+    /// while it does not apply at all.
+    landed: Option<(Op, Op)>,
+}
+
+/// Which end of a shared project this store is.
+enum Link {
+    /// The host. Every edit is ordered here.
+    Host,
+    /// A guest in step with its host, apart from `pending`, oldest first.
+    Guest { pending: VecDeque<Pending> },
+    /// A guest that has lost its host. `base` is the last document both had,
+    /// `since` every edit made here after it with what it replaced.
+    Adrift {
+        base: Arc<Document>,
+        since: Vec<(Op, Op)>,
+    },
+}
+
+/// Take a guest's unanswered edits off `doc`, newest first, which leaves the
+/// host's document as far as this guest has heard it.
+fn unwind(pending: &VecDeque<Pending>, doc: &mut Document) -> Result<(), OpError> {
+    for p in pending.iter().rev() {
+        if let Some((_, inverse)) = &p.landed {
+            apply(doc, inverse)?;
+        }
+    }
+    Ok(())
+}
+
+/// Put them back on top, oldest first, each cut down to what was changed here
+/// ([`land`]). The host lands them the same way on the same document, so both
+/// ends arrive at the same one.
+fn relay(pending: &mut VecDeque<Pending>, doc: &mut Document) {
+    for p in pending.iter_mut() {
+        p.landed = land(doc, &p.op, Some(&p.was)).ok();
+    }
+}
+
+/// The state a store holds while its project is shared.
+///
+/// `touched` is keyed by part of the document, so it is bounded by the
+/// document's own size, and it is dropped with the rest when sharing ends.
+/// `since` grows by one op per edit while the host is away, as the crash
+/// journal does between saves, and is emptied by [`DocumentStore::rejoin`].
+struct Shared {
+    link: Link,
+    tap: Tap,
+    next_id: u64,
+    /// The revision at which someone else last changed each part.
+    touched: BTreeMap<Key, u64>,
+}
 /// The most undo steps kept in memory (docs/14 §5 compaction story, below).
 /// Generous enough that no real editing session reaches it, small enough that
 /// the history can never grow without bound. Editing software the owner knows
@@ -73,6 +174,50 @@ struct Journal {
     /// fold happens when this returns to zero, so a grouped gesture that calls
     /// a helper which groups on its own account still ends as one step.
     depth: usize,
+    /// Present while the project is shared.
+    shared: Option<Shared>,
+}
+
+impl Journal {
+    /// An edit made here has moved the document. A guest queues it until the
+    /// host answers, a guest without its host keeps it for the merge, and the
+    /// tap is told either way.
+    fn moved_locally(&mut self, op: &Op, inverse: &Op) {
+        let Some(shared) = self.shared.as_mut() else {
+            return;
+        };
+        shared.next_id += 1;
+        let id = shared.next_id;
+        match &mut shared.link {
+            Link::Host => {}
+            Link::Guest { pending } => pending.push_back(Pending {
+                id,
+                op: op.clone(),
+                was: inverse.clone(),
+                landed: Some((op.clone(), inverse.clone())),
+            }),
+            Link::Adrift { since, .. } => {
+                since.push((op.clone(), inverse.clone()));
+                return;
+            }
+        }
+        let was = inverse;
+        (shared.tap)(Moved::Local { id, op, was });
+    }
+    /// Whether moving the document from `before` to `after` would write over
+    /// something another person changed after revision `at`. Undo and redo
+    /// skip a step that would.
+    fn overwrites_others(&self, before: &Document, after: &Document, at: u64) -> bool {
+        let Some(shared) = self.shared.as_ref() else {
+            return false;
+        };
+        if shared.touched.is_empty() {
+            return false;
+        }
+        let keys = footprint(before, after);
+        let later = shared.touched.iter().filter(|(_, rev)| **rev > at);
+        any_overlap(&keys, later.map(|(key, _)| key))
+    }
 }
 
 /// One row of the **History** list: what the step is called, and
@@ -299,12 +444,14 @@ impl DocumentStore {
                 // The gesture is named after the first thing it did, which is
                 // what `Op::name` says of any batch.
                 let name = held.first().map_or("Several changes", |e| e.name);
+                let at = held.first().map_or(0, |e| e.at);
                 JournalEntry {
                     op: Op::Batch {
                         ops: held.into_iter().map(|e| e.op).collect(),
                     },
                     inverse: Op::Batch { ops: inverses },
                     name,
+                    at,
                 }
             }
         };
@@ -313,13 +460,37 @@ impl DocumentStore {
 
     /// Apply an operation, journal it, publish the new snapshot.
     pub fn commit(&self, op: Op) -> Result<Arc<Document>, OpError> {
+        self.commit_as(op, None)
+    }
+
+    /// [`Self::commit`] for an edit made against an older document, such as
+    /// one a merge held back. Only what its author changed from `was` is
+    /// written ([`land`]).
+    pub fn commit_over(&self, op: Op, was: &Op) -> Result<Arc<Document>, OpError> {
+        self.commit_as(op, Some(was))
+    }
+
+    fn commit_as(&self, op: Op, was: Option<&Op>) -> Result<Arc<Document>, OpError> {
         let mut journal = self.journal.lock();
         let mut doc = Document::clone(&self.snapshot());
-        let inverse = apply(&mut doc, &op)?;
+        let (op, inverse) = match was {
+            Some(_) => land(&mut doc, &op, was)?,
+            None => {
+                let inverse = apply(&mut doc, &op)?;
+                (op, inverse)
+            }
+        };
 
         let observed = op.clone();
         let name = op.name();
-        let entry = JournalEntry { op, inverse, name };
+        journal.moved_locally(&op, &inverse);
+        let at = self.revision() + 1;
+        let entry = JournalEntry {
+            op,
+            inverse,
+            name,
+            at,
+        };
         // Inside a group the entry waits to be folded; outside one it is the
         // step. Redo is cleared either way — the document has moved, so the
         // forward history is gone whether or not a gesture is still running.
@@ -340,17 +511,39 @@ impl DocumentStore {
     /// Undo the most recent operation. Ok(None) when there is nothing to undo.
     pub fn undo(&self) -> Result<Option<Arc<Document>>, OpError> {
         let mut journal = self.journal.lock();
-        let Some(entry) = journal.undo.pop() else {
-            return Ok(None);
+        let shared = journal.shared.is_some();
+        let before = self.snapshot();
+        let (entry, doc, applied, op) = loop {
+            let Some(entry) = journal.undo.pop() else {
+                return Ok(None);
+            };
+            let mut doc = Document::clone(&before);
+            // Applying the inverse yields the original op again — symmetry by construction.
+            // In a shared project the step is landed, so it takes back what
+            // this person changed and leaves what anyone else has changed
+            // around it since.
+            let undone = if shared {
+                land(&mut doc, &entry.inverse, Some(&entry.op))
+            } else {
+                apply(&mut doc, &entry.inverse).map(|op| (entry.inverse.clone(), op))
+            };
+            match undone {
+                // In a shared project a step can stop applying because someone
+                // else removed what it changed, or would write over what they
+                // changed since. Either is dropped and the step before it tried.
+                Err(_) if shared => {}
+                Err(e) => return Err(e),
+                Ok(_) if journal.overwrites_others(&before, &doc, entry.at) => {}
+                Ok((applied, op)) => break (entry, doc, applied, op),
+            }
         };
-        let mut doc = Document::clone(&self.snapshot());
-        // Applying the inverse yields the original op again — symmetry by construction.
-        let op = apply(&mut doc, &entry.inverse)?;
-        let observed = entry.inverse.clone();
+        let observed = applied.clone();
+        journal.moved_locally(&applied, &op);
         journal.redo.push(JournalEntry {
             op,
-            inverse: entry.inverse.clone(),
+            inverse: applied,
             name: entry.name,
+            at: self.revision() + 1,
         });
         let arc = Arc::new(doc);
         self.current.store(arc.clone());
@@ -366,16 +559,33 @@ impl DocumentStore {
     /// Redo the most recently undone operation. Ok(None) when nothing to redo.
     pub fn redo(&self) -> Result<Option<Arc<Document>>, OpError> {
         let mut journal = self.journal.lock();
-        let Some(entry) = journal.redo.pop() else {
-            return Ok(None);
+        let shared = journal.shared.is_some();
+        let before = self.snapshot();
+        // The same landing and skipping as `undo`, for the same reasons.
+        let (entry, doc, applied, inverse) = loop {
+            let Some(entry) = journal.redo.pop() else {
+                return Ok(None);
+            };
+            let mut doc = Document::clone(&before);
+            let redone = if shared {
+                land(&mut doc, &entry.op, Some(&entry.inverse))
+            } else {
+                apply(&mut doc, &entry.op).map(|inverse| (entry.op.clone(), inverse))
+            };
+            match redone {
+                Err(_) if shared => {}
+                Err(e) => return Err(e),
+                Ok(_) if journal.overwrites_others(&before, &doc, entry.at) => {}
+                Ok((applied, inverse)) => break (entry, doc, applied, inverse),
+            }
         };
-        let mut doc = Document::clone(&self.snapshot());
-        let observed = entry.op.clone();
-        let inverse = apply(&mut doc, &entry.op)?;
+        let observed = applied.clone();
+        journal.moved_locally(&applied, &inverse);
         journal.undo.push(JournalEntry {
-            op: entry.op,
+            op: applied,
             inverse,
             name: entry.name,
+            at: self.revision() + 1,
         });
         let arc = Arc::new(doc);
         self.current.store(arc.clone());
@@ -384,6 +594,274 @@ impl DocumentStore {
         self.notify(observed);
 
         Ok(Some(arc))
+    }
+    /// Start sharing this project, as the host or as a guest of one. A guest
+    /// calls this on a store that holds exactly the host's document.
+    pub fn share(&self, guest: bool, tap: Tap) {
+        let link = if guest {
+            Link::Guest {
+                pending: VecDeque::new(),
+            }
+        } else {
+            Link::Host
+        };
+        self.journal.lock().shared = Some(Shared {
+            link,
+            tap,
+            next_id: 0,
+            touched: BTreeMap::new(),
+        });
+    }
+
+    /// Run `f` on the document with no edit able to land until it returns.
+    ///
+    /// How a host seats a new guest: the guest is put on the list for every
+    /// later edit in the same moment its copy of the document is taken, so it
+    /// misses none and gets none twice. `f` runs under the journal lock, so it
+    /// has the [`Tap`]'s rules: quick, and no calling back into the store.
+    pub fn frozen<R>(&self, f: impl FnOnce(Arc<Document>) -> R) -> R {
+        let _journal = self.journal.lock();
+        f(self.snapshot())
+    }
+
+    /// Carry on as a guest that lost its host before this store was made:
+    /// one whose edits since were kept and read back. `base` is the last
+    /// document both had, `since` the edits made here after it, and the store
+    /// holds `base` with those applied. [`Self::rejoin`] takes it from there.
+    pub fn share_apart(&self, tap: Tap, base: Arc<Document>, since: Vec<(Op, Op)>) {
+        self.journal.lock().shared = Some(Shared {
+            link: Link::Adrift { base, since },
+            tap,
+            next_id: 0,
+            touched: BTreeMap::new(),
+        });
+    }
+
+    /// What a guest without its host has to keep to merge later, with the
+    /// edits from number `from` on. `None` for anyone else.
+    #[must_use]
+    pub fn apart(&self, from: usize) -> Option<Apart> {
+        let journal = self.journal.lock();
+        match &journal.shared.as_ref()?.link {
+            Link::Adrift { base, since } => {
+                Some((base.clone(), since.get(from..).unwrap_or_default().to_vec()))
+            }
+            _ => None,
+        }
+    }
+
+    /// How many edits made here the host has not taken: a guest's unanswered
+    /// ones, or every one made since it lost its host.
+    #[must_use]
+    pub fn unanswered(&self) -> usize {
+        let journal = self.journal.lock();
+        match journal.shared.as_ref().map(|shared| &shared.link) {
+            Some(Link::Guest { pending }) => pending.len(),
+            Some(Link::Adrift { since, .. }) => since.len(),
+            _ => 0,
+        }
+    }
+
+    /// Stop sharing. The document stays as it is, unanswered edits included.
+    pub fn unshare(&self) {
+        self.journal.lock().shared = None;
+    }
+
+    /// Apply an edit someone else made, without it becoming an undo step here.
+    ///
+    /// The host is handed a guest's edit with what it replaced there, and
+    /// lands it on the document as it stands ([`land`]). A guest is handed
+    /// the host's edits as the host applied them, with no `was`. Its document
+    /// is the host's plus its own unanswered edits, and the host ordered this
+    /// edit before those, so they are taken off, the edit applied, and they
+    /// are landed back on top.
+    ///
+    /// An error on the host means the edit is refused. On a guest it means the
+    /// two documents have drifted apart and the guest has to ask for the
+    /// host's again.
+    pub fn commit_remote(&self, op: &Op, was: Option<&Op>, tag: RemoteTag) -> Result<(), OpError> {
+        let mut journal = self.journal.lock();
+        let Some(shared) = journal.shared.as_mut() else {
+            return Ok(());
+        };
+        let snapshot = self.snapshot();
+        let mut doc = Document::clone(&snapshot);
+        let (applied, replaced, keys) = match &mut shared.link {
+            Link::Adrift { .. } => return Ok(()),
+            Link::Host => {
+                let (applied, replaced) = land(&mut doc, op, was)?;
+                (applied, replaced, footprint(&snapshot, &doc))
+            }
+            Link::Guest { pending } => {
+                unwind(pending, &mut doc)?;
+                let theirs = (!pending.is_empty()).then(|| doc.clone());
+                let replaced = apply(&mut doc, op)?;
+                let keys = footprint(theirs.as_ref().unwrap_or(&snapshot), &doc);
+                relay(pending, &mut doc);
+                (op.clone(), replaced, keys)
+            }
+        };
+        let revision = self.revision() + 1;
+        shared
+            .touched
+            .extend(keys.into_iter().map(|k| (k, revision)));
+        (shared.tap)(Moved::Remote {
+            tag,
+            op: &applied,
+            was: &replaced,
+            as_sent: applied == *op,
+        });
+        self.current.store(Arc::new(doc));
+        self.bump_revision();
+        drop(journal);
+        self.notify(applied);
+        Ok(())
+    }
+
+    /// The host applied this guest's oldest unanswered edit just as it was
+    /// sent. False when that is not how the edit sits here, which means the
+    /// two documents have drifted apart.
+    pub fn acknowledge(&self, id: u64) -> bool {
+        let mut journal = self.journal.lock();
+        let Some(Shared {
+            link: Link::Guest { pending },
+            ..
+        }) = journal.shared.as_mut()
+        else {
+            return false;
+        };
+        let as_sent = pending.front().is_some_and(|p| {
+            p.id == id
+                && p.landed
+                    .as_ref()
+                    .is_some_and(|(applied, _)| *applied == p.op)
+        });
+        if as_sent {
+            pending.pop_front();
+        }
+        as_sent
+    }
+
+    /// The host applied this guest's edit `id` as `op`, which is not how it
+    /// was sent: an insert moved to the end, or a value cut down to what this
+    /// guest changed. The host's version goes in underneath the edits made
+    /// here since. An error means the documents have drifted apart.
+    pub fn commit_answer(&self, id: u64, op: &Op) -> Result<(), OpError> {
+        let mut journal = self.journal.lock();
+        let Some(Shared {
+            link: Link::Guest { pending },
+            ..
+        }) = journal.shared.as_mut()
+        else {
+            return Ok(());
+        };
+        // It usually landed here the way it landed there.
+        let same = pending.front().is_some_and(|p| {
+            p.id == id && p.landed.as_ref().is_some_and(|(applied, _)| applied == op)
+        });
+        if same {
+            pending.pop_front();
+            return Ok(());
+        }
+        let mut doc = Document::clone(&self.snapshot());
+        unwind(pending, &mut doc)?;
+        apply(&mut doc, op)?;
+        pending.retain(|p| p.id != id);
+        relay(pending, &mut doc);
+        self.current.store(Arc::new(doc));
+        self.bump_revision();
+        drop(journal);
+        self.notify(op.clone());
+        Ok(())
+    }
+
+    /// The host refused one of this guest's edits, so it is taken back out
+    /// from under the unanswered edits made after it. An error means the
+    /// documents have drifted apart.
+    pub fn reject(&self, id: u64) -> Result<(), OpError> {
+        let mut journal = self.journal.lock();
+        let Some(Shared {
+            link: Link::Guest { pending },
+            ..
+        }) = journal.shared.as_mut()
+        else {
+            return Ok(());
+        };
+        let Some(index) = pending.iter().position(|p| p.id == id) else {
+            return Ok(());
+        };
+        let mut doc = Document::clone(&self.snapshot());
+        unwind(pending, &mut doc)?;
+        let refused = pending.remove(index).and_then(|p| p.landed);
+        relay(pending, &mut doc);
+        self.current.store(Arc::new(doc));
+        self.bump_revision();
+        drop(journal);
+        if let Some((_, inverse)) = refused {
+            self.notify(inverse);
+        }
+        Ok(())
+    }
+
+    /// This guest has lost its host. Edits go on being made and are kept, so
+    /// [`Self::rejoin`] can bring them onto whatever the host has by then.
+    pub fn cast_adrift(&self) {
+        let mut journal = self.journal.lock();
+        let Some(shared) = journal.shared.as_mut() else {
+            return;
+        };
+        let Link::Guest { pending } = &shared.link else {
+            return;
+        };
+        let mut base = Document::clone(&self.snapshot());
+        let _ = unwind(pending, &mut base);
+        let since = pending.iter().map(|p| (p.op.clone(), p.was.clone()));
+        shared.link = Link::Adrift {
+            since: since.collect(),
+            base: Arc::new(base),
+        };
+    }
+
+    /// This guest has its host back, and `theirs` is the host's document now.
+    ///
+    /// Every edit made here since the host was lost is brought onto it
+    /// ([`plan_merge`]). The ones that touch nothing the host's side changed
+    /// are applied and sent like any other edit. The rest come back as
+    /// conflicts for the person to choose between, with a count of the edits
+    /// that no longer apply at all. The undo history is cleared, because its
+    /// steps were made against a document that is no longer this one.
+    pub fn rejoin(&self, theirs: Document) -> (Vec<Conflict>, usize) {
+        let mut journal = self.journal.lock();
+        let Some(shared) = journal.shared.as_mut() else {
+            return (Vec::new(), 0);
+        };
+        let Link::Adrift { base, since } = &shared.link else {
+            return (Vec::new(), 0);
+        };
+        let merge = plan_merge(base, theirs, since);
+        let mut pending = VecDeque::with_capacity(merge.clean.len());
+        for (op, was) in merge.clean {
+            shared.next_id += 1;
+            let id = shared.next_id;
+            (shared.tap)(Moved::Local {
+                id,
+                op: &op,
+                was: &was,
+            });
+            pending.push_back(Pending {
+                id,
+                op: op.clone(),
+                was: was.clone(),
+                landed: Some((op, was)),
+            });
+        }
+        shared.link = Link::Guest { pending };
+        shared.touched.clear();
+        journal.undo.clear();
+        journal.redo.clear();
+        self.current.store(Arc::new(merge.merged));
+        self.bump_revision();
+        (merge.conflicts, merge.refused)
     }
 
     /// The retained undo ops, oldest first (at most [`MAX_UNDO_DEPTH`] after
@@ -2559,5 +3037,294 @@ mod tests {
             "every step walked back leaves the document as it began"
         );
         let _: CompGraph = graph;
+    }
+
+    /// What a tap was told.
+    enum Heard {
+        /// An edit made at this end: its number, the edit, and what it replaced.
+        Local(u64, Op, Box<Op>),
+        /// Someone else's as it was applied, and whether that is how it was sent.
+        Remote(RemoteTag, Op, bool),
+    }
+
+    /// One end of a shared project: a store, and what its tap was told.
+    struct End {
+        store: DocumentStore,
+        heard: Arc<Mutex<Vec<Heard>>>,
+    }
+
+    fn end(doc: &Document, guest: bool) -> End {
+        let heard = Arc::new(Mutex::new(Vec::new()));
+        let store = DocumentStore::new(doc.clone());
+        let sink = heard.clone();
+        store.share(
+            guest,
+            Arc::new(move |moved| {
+                sink.lock().push(match moved {
+                    Moved::Local { id, op, was } => {
+                        Heard::Local(id, op.clone(), Box::new(was.clone()))
+                    }
+                    Moved::Remote {
+                        tag, op, as_sent, ..
+                    } => Heard::Remote(tag, op.clone(), as_sent),
+                });
+            }),
+        );
+        End { store, heard }
+    }
+
+    /// What the host sends one guest.
+    enum Wire {
+        Applied(RemoteTag, Box<Op>),
+        Accepted(u64),
+        Rejected(u64),
+    }
+
+    /// Carry edits the way sharing does: the host's own first, then each
+    /// guest's in the order given, every one answered to every guest.
+    fn deliver(host: &End, guests: &[&End], order: &[usize]) {
+        let mut wires: Vec<Vec<Wire>> = guests.iter().map(|_| Vec::new()).collect();
+        let broadcast = |wires: &mut Vec<Vec<Wire>>| {
+            for heard in host.heard.lock().drain(..) {
+                let (tag, op, as_sent) = match heard {
+                    Heard::Local(id, op, _) => (RemoteTag { peer: 0, id }, op, false),
+                    Heard::Remote(tag, op, as_sent) => (tag, op, as_sent),
+                };
+                for (g, wire) in wires.iter_mut().enumerate() {
+                    // Its author is not sent an edit back that went in as sent.
+                    wire.push(if as_sent && tag.peer == g as u32 + 1 {
+                        Wire::Accepted(tag.id)
+                    } else {
+                        Wire::Applied(tag, Box::new(op.clone()))
+                    });
+                }
+            }
+        };
+        broadcast(&mut wires);
+        for &g in order {
+            let sent: Vec<_> = guests[g].heard.lock().drain(..).collect();
+            for heard in sent {
+                let Heard::Local(id, op, was) = heard else {
+                    continue;
+                };
+                let tag = RemoteTag {
+                    peer: g as u32 + 1,
+                    id,
+                };
+                match host.store.commit_remote(&op, Some(&was), tag) {
+                    Ok(()) => broadcast(&mut wires),
+                    Err(_) => wires[g].push(Wire::Rejected(id)),
+                }
+            }
+        }
+        for (g, wire) in wires.into_iter().enumerate() {
+            let guest = &guests[g].store;
+            for message in wire {
+                match message {
+                    Wire::Applied(tag, op) if tag.peer == g as u32 + 1 => {
+                        guest.commit_answer(tag.id, &op).unwrap();
+                    }
+                    Wire::Applied(tag, op) => guest.commit_remote(&op, None, tag).unwrap(),
+                    Wire::Accepted(id) => assert!(guest.acknowledge(id), "in step with the host"),
+                    Wire::Rejected(id) => guest.reject(id).unwrap(),
+                }
+            }
+            guests[g].heard.lock().clear();
+        }
+    }
+
+    fn rename(id: Uuid, name: &str) -> Op {
+        Op::RenameItem {
+            id,
+            name: name.into(),
+        }
+    }
+
+    fn name_of(store: &DocumentStore, id: Uuid) -> Option<String> {
+        match store.snapshot().item(id)? {
+            ProjectItem::Solid(s) => Some(s.name.clone()),
+            _ => None,
+        }
+    }
+
+    /// Two solids to edit, in a document every end starts from.
+    fn two_solids() -> (Document, Uuid, Uuid) {
+        let seed = DocumentStore::new(Document::new());
+        let (x, y) = (loose_item(&seed), loose_item(&seed));
+        (Document::clone(&seed.snapshot()), x, y)
+    }
+
+    /// The whole point of the host ordering edits: three people edit the same
+    /// things at once, and whichever guest's edits arrive first, everyone ends
+    /// on the same document. One run has a rename refused because the item was
+    /// deleted, and an insert moved because the list got shorter.
+    #[test]
+    fn a_shared_project_converges_whichever_order_edits_arrive_in() {
+        for order in [[0, 1], [1, 0]] {
+            let (doc, x, y) = two_solids();
+            let host = end(&doc, false);
+            let (a, b) = (end(&doc, true), end(&doc, true));
+
+            a.store.commit(rename(x, "a first")).unwrap();
+            let added = loose_item(&a.store);
+            a.store.commit(rename(x, "a second")).unwrap();
+            b.store.commit(Op::RemoveItem { id: x }).unwrap();
+            b.store.commit(rename(y, "b")).unwrap();
+            host.store.commit(rename(y, "host")).unwrap();
+
+            deliver(&host, &[&a, &b], &order);
+
+            let settled = host.store.snapshot();
+            assert_eq!(*a.store.snapshot(), *settled, "guest a, order {order:?}");
+            assert_eq!(*b.store.snapshot(), *settled, "guest b, order {order:?}");
+            assert!(settled.item(added).is_some(), "the new item survives");
+            assert_eq!(name_of(&host.store, y).as_deref(), Some("b"));
+        }
+    }
+
+    /// Undo in a shared project is each person's own. A step someone else has
+    /// since written over is skipped rather than taking their change away, and
+    /// the step before it is undone instead.
+    #[test]
+    fn undo_leaves_what_someone_else_has_since_changed() {
+        let (doc, x, y) = two_solids();
+        let host = end(&doc, false);
+        host.store.commit(rename(y, "mine")).unwrap();
+        host.store.commit(rename(x, "mine")).unwrap();
+        let tag = RemoteTag { peer: 1, id: 1 };
+        let theirs = rename(x, "theirs");
+        host.store.commit_remote(&theirs, None, tag).unwrap();
+
+        host.store.undo().unwrap();
+
+        assert_eq!(name_of(&host.store, x).as_deref(), Some("theirs"));
+        assert_eq!(name_of(&host.store, y).as_deref(), Some("White solid"));
+        assert!(!host.store.can_undo());
+    }
+
+    /// Edits made while the host was away come back onto the host's document.
+    /// The ones that touch nothing the host's side changed are applied and
+    /// sent. The one that does is held back with the host's version in place.
+    #[test]
+    fn edits_made_apart_are_merged_and_a_collision_is_held_back() {
+        let (doc, x, y) = two_solids();
+        let guest = end(&doc, true);
+        guest.store.cast_adrift();
+        guest.store.commit(rename(x, "mine")).unwrap();
+        guest.store.commit(rename(y, "mine")).unwrap();
+        let added = loose_item(&guest.store);
+        assert!(guest.heard.lock().is_empty(), "nothing is sent while away");
+
+        let mut theirs = doc.clone();
+        apply(&mut theirs, &rename(x, "theirs")).unwrap();
+        let (conflicts, refused) = guest.store.rejoin(theirs);
+
+        assert_eq!(refused, 0);
+        assert_eq!(conflicts.len(), 1);
+        let held: Vec<&Op> = conflicts[0].ops.iter().map(|(op, _)| op).collect();
+        assert_eq!(held, vec![&rename(x, "mine")]);
+        assert_eq!(name_of(&guest.store, x).as_deref(), Some("theirs"));
+        assert_eq!(name_of(&guest.store, y).as_deref(), Some("mine"));
+        assert!(guest.store.snapshot().item(added).is_some());
+        assert_eq!(guest.heard.lock().len(), 2, "the clean edits are sent");
+    }
+
+    /// An edit made on top of a held one is held with it. Deleting an item
+    /// the host's side renamed and then undoing the delete comes to nothing,
+    /// so the undo is not judged on the host's document, where the item was
+    /// never gone. Keeping mine puts my item back, and does not take it out.
+    #[test]
+    fn an_edit_made_on_top_of_a_held_one_is_held_with_it() {
+        let (doc, x, _) = two_solids();
+        let guest = end(&doc, true);
+        guest.store.cast_adrift();
+        guest.store.commit(Op::RemoveItem { id: x }).unwrap();
+        guest.store.undo().unwrap();
+
+        let mut theirs = doc.clone();
+        apply(&mut theirs, &rename(x, "theirs")).unwrap();
+        let (conflicts, refused) = guest.store.rejoin(theirs);
+
+        assert_eq!((conflicts.len(), refused), (1, 0));
+        assert_eq!(conflicts[0].ops.len(), 2, "the delete and its undo");
+        assert_eq!(name_of(&guest.store, x).as_deref(), Some("theirs"));
+        for (op, was) in &conflicts[0].ops {
+            guest.store.commit_over(op.clone(), was).unwrap();
+        }
+        assert_eq!(name_of(&guest.store, x).as_deref(), Some("White solid"));
+    }
+
+    /// An op writes a layer's whole effect stack, and here two people each
+    /// change a different effect on one layer. Both changes stand: at the
+    /// same moment, through an undo, and when one was made while the host was
+    /// away. Only the same parameter changed by both is a collision.
+    #[test]
+    fn two_people_can_change_different_effects_on_one_layer() {
+        use crate::anim::Property;
+        let (seed, comp, layer) = doc_with_layer();
+        let blur = || crate::fx::instantiate("blur").expect("the catalogue knows it");
+        let stack = vec![blur(), blur()];
+        let (first, second) = (stack[0].id, stack[1].id);
+        let write = |store: &DocumentStore, effects: Vec<EffectInstance>| {
+            let op = Op::SetLayerEffects {
+                comp,
+                layer,
+                effects,
+            };
+            store.commit(op).unwrap();
+        };
+        write(&seed, stack.clone());
+        let doc = Document::clone(&seed.snapshot());
+
+        let read = |store: &DocumentStore| -> Vec<EffectInstance> {
+            let doc = store.snapshot();
+            let layers = &doc.comp(comp).unwrap().layers;
+            layers
+                .iter()
+                .find(|l| l.id == layer)
+                .unwrap()
+                .effects
+                .clone()
+        };
+        let with = |mut effects: Vec<EffectInstance>, effect: Uuid, radius: f64| {
+            let on = effects.iter_mut().find(|e| e.id == effect).unwrap();
+            let param = on.params.iter_mut().find(|p| p.id == "radius").unwrap();
+            param.value = EffectValue::Float(Property::fixed(radius));
+            effects
+        };
+        let set = |store: &DocumentStore, effect: Uuid, radius: f64| {
+            write(store, with(read(store), effect, radius));
+        };
+
+        let (host, guest) = (end(&doc, false), end(&doc, true));
+        set(&host.store, first, 3.0);
+        set(&guest.store, second, 7.0);
+        deliver(&host, &[&guest], &[0]);
+        let both = with(with(stack.clone(), first, 3.0), second, 7.0);
+        assert_eq!(read(&host.store), both);
+        assert_eq!(read(&guest.store), both);
+
+        guest.store.undo().unwrap();
+        deliver(&host, &[&guest], &[0]);
+        let hosts = with(stack.clone(), first, 3.0);
+        assert_eq!(read(&host.store), hosts, "undo takes back the guest's own");
+        assert_eq!(read(&guest.store), hosts);
+
+        let away = end(&doc, true);
+        away.store.cast_adrift();
+        set(&away.store, second, 7.0);
+        set(&away.store, first, 5.0);
+        let (conflicts, refused) = away.store.rejoin(Document::clone(&host.store.snapshot()));
+        assert_eq!((conflicts.len(), refused), (1, 0));
+        assert_eq!(
+            read(&away.store),
+            both,
+            "the host's stands where both changed"
+        );
+
+        let (op, was) = conflicts[0].ops[0].clone();
+        away.store.commit_over(op, &was).unwrap();
+        let mine = with(with(stack, first, 5.0), second, 7.0);
+        assert_eq!(read(&away.store), mine, "keeping mine leaves the rest");
     }
 }
