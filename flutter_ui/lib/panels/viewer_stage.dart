@@ -112,6 +112,9 @@ class ViewerStage extends StatelessWidget {
   final void Function(Offset at, {required bool out}) onZoomAt;
   final void Function(Rect box, {required bool out}) onZoomBox;
 
+  /// A named magnification, null for fit, for the picture's right-click menu.
+  final ValueChanged<double?>? onZoom;
+
   const ViewerStage({
     super.key,
     required this.comp,
@@ -131,6 +134,7 @@ class ViewerStage extends StatelessWidget {
     required this.onChanged,
     required this.onZoomAt,
     required this.onZoomBox,
+    this.onZoom,
   });
 
   /// The tracked layer whose solved point cloud is drawn, and whether it is
@@ -530,6 +534,8 @@ class ViewerStage extends StatelessWidget {
                           compSize.height.toDouble(),
                         ),
                         onChanged: onChanged,
+                        viewId: viewId,
+                        onZoom: onZoom,
                       ),
                       // The shape tools and the Pen: a drag draws a mask on
                       // the selected layer, and the Pen builds one point by
@@ -566,6 +572,7 @@ class ViewerStage extends StatelessWidget {
                         ),
                         accent: t.accent,
                         onChanged: onChanged,
+                        viewId: viewId,
                       ),
                       // The painting tools: a drag paints a stroke on the
                       // selected layer, under their brush ring.

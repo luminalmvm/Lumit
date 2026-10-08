@@ -364,7 +364,13 @@ class FoldRow extends StatelessWidget {
             },
           ),
         ),
-      FoldGroupRow(:final path, :final label, :final open, :final enabled) =>
+      FoldGroupRow(
+        :final path,
+        :final label,
+        :final open,
+        :final enabled,
+        :final named
+      ) =>
         GestureDetector(
           key: ValueKey<String>('tl-group-$path'),
           behavior: HitTestBehavior.opaque,
@@ -436,7 +442,7 @@ class FoldRow extends StatelessWidget {
               if (effectIdOfPath(path) case final String effectId
                   when timingsColumn.width > 0) ...[
                 Expanded(
-                  child: Text(label,
+                  child: Text(named ? label : t.propertyCase(label),
                       style: t.body, overflow: TextOverflow.ellipsis),
                 ),
                 Padding(
@@ -448,7 +454,7 @@ class FoldRow extends StatelessWidget {
                 ),
               ] else
                 Flexible(
-                  child: Text(label,
+                  child: Text(named ? label : t.propertyCase(label),
                       style: t.body, overflow: TextOverflow.ellipsis),
                 ),
               // The glyph that fills the rack this heading names, where a
@@ -830,7 +836,9 @@ class _FlowRow extends StatelessWidget {
             behavior: HitTestBehavior.opaque,
             onTap: onLabelTap,
             child: Row(children: [
-              Flexible(child: Text(row.kind.label, style: t.body)),
+              Flexible(
+                  child:
+                      Text(t.propertyCase(row.kind.label), style: t.body)),
             ]),
           ),
         ),
@@ -943,7 +951,8 @@ class _VolumeRowState extends State<_VolumeRow> {
               },
             ),
             const SizedBox(width: 4),
-            Expanded(child: Text(l10n.volume, style: t.body)),
+            Expanded(
+                child: Text(t.propertyCase(l10n.volume), style: t.body)),
             SizedBox(
               width: widget.valueColumn.width,
               // Animated: the change lands in the key under the playhead (or

@@ -377,7 +377,7 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel> {
         context: context,
         anchor: lastKnownPointerPosition,
         model: FxConsoleModel(
-          keyHint: byKey ? l10n.fxConsoleKey : null,
+          keyHint: byKey ? _ui?.keymap.chordFor('console.open') : null,
           footer: l10n.shaderSearchAdds,
           entries: [
             for (final k in kinds)

@@ -65,10 +65,9 @@ void main() {
             reason: 'the workspaces ride the line under $shape');
         if (shape == ThemeShape.lantern) {
           expect(inTopLine('workspace-pill'), findsOneWidget);
-          expect(inTopLine('tool-options-pill'), findsOneWidget);
-          expect(inTopLine('tool-no-options'), findsOneWidget,
-              reason: 'the Selection tool has no options, and the pill says'
-                  ' so on the line');
+          expect(inTopLine('tool-options-pill'), findsNothing,
+              reason: 'the Selection tool has no options, so there is no'
+                  ' pill on the line');
         }
         // A tool with options puts them on the line, keyed as they always
         // were on the strip.

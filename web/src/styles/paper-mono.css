@@ -1,0 +1,10 @@
+/* Paper Mono (https://github.com/paper-design/paper-mono, SIL OFL 1.1, v1.000).
+   It is not on npm, so the variable file is checked in under src/assets/fonts
+   with its licence beside it. One file covers every weight from 100 to 800. */
+@font-face {
+  font-family: "Paper Mono";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 800;
+  src: url("../assets/fonts/PaperMono-Variable.woff2") format("woff2-variations");
+}

@@ -127,8 +127,8 @@ void main() {
       addTearDown(() => p.uiState.workspace.deleteUserWorkspace('Grading'));
       await tester.pumpAndSettle();
 
-      expect(find.text('GRADING'), findsOneWidget,
-          reason: 'saved names join the strip as mono-caps kickers');
+      expect(find.text('Grading'), findsOneWidget,
+          reason: 'saved names join the strip as kickers');
       // After the last preset, which is where the chords count them from.
       final last = tester.getRect(find.byKey(
           ValueKey<String>('workspace-${WorkspacePreset.values.last.name}')));

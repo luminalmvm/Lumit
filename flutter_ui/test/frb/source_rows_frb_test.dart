@@ -49,8 +49,8 @@ void main() {
       p.uiState.selectedLayer.value = text;
       await mount(tester, p);
 
-      // A kicker now: capitals on the way to the screen.
-      expect(find.text('SOURCE'), findsOneWidget);
+      // A kicker now, which Studio draws as written.
+      expect(find.text('Source'), findsOneWidget);
       expect(find.byKey(const ValueKey('src-text')), findsOneWidget);
 
       await tester.enterText(find.byKey(const ValueKey('src-text')), 'Hello');

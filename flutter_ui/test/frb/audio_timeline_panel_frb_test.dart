@@ -163,7 +163,7 @@ void main() {
       (tester) async {
     final p = await mount(tester);
 
-    expect(find.text(l10n.panelAudioTimeline.toUpperCase()), findsOneWidget,
+    expect(find.text(l10n.panelAudioTimeline), findsOneWidget,
         reason: 'the tab strip names this panel, not the Timeline');
     expect(find.byKey(ValueKey<String>('atl-row-${p.music}')), findsOneWidget,
         reason: 'the music layer is a track');

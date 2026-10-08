@@ -222,7 +222,7 @@ class _PuppetPinValueRowState extends State<PuppetPinValueRow> {
         ),
         const SizedBox(width: 4),
         Expanded(
-          child: Text(puppetValueLabel(widget.value),
+          child: Text(t.propertyCase(puppetValueLabel(widget.value)),
               style: t.body, overflow: TextOverflow.ellipsis),
         ),
         SizedBox(

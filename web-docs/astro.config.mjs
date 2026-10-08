@@ -32,13 +32,12 @@ export default defineConfig({
       logo: { src: "./src/assets/lumit-mark.svg", alt: "Lumit" },
       favicon: "/lumit-mark.svg",
       // The marketing site's two faces, shipped the same way it ships them
-      // (web/src/layouts/Base.astro): the variable sans, and the two weights of
-      // the mono that are actually used. theme.css comes last so its tokens sit
-      // after the @font-face rules that name them.
+      // (web/src/layouts/Base.astro): the variable sans, and the variable mono
+      // from a checked-in file. theme.css comes last so its tokens sit after
+      // the @font-face rules that name them.
       customCss: [
         "@fontsource-variable/hanken-grotesk",
-        "@fontsource/geist-mono/400.css",
-        "@fontsource/geist-mono/500.css",
+        "./src/styles/paper-mono.css",
         "./src/styles/theme.css",
       ],
       // The before-and-after wipe on every effect page. Each figure carries a

@@ -172,7 +172,7 @@ class _RetimeRowState extends State<RetimeRow> {
                 key: const ValueKey('tl-retime-name'),
                 behavior: HitTestBehavior.opaque,
                 onTap: widget.onLabelTap,
-                child: Text(l10n.retime, style: t.body),
+                child: Text(t.propertyCase(l10n.retime), style: t.body),
               ),
             ),
             SizedBox(

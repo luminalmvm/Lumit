@@ -487,6 +487,85 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
         _columnWidths = {..._columnWidths, column: next};
       });
 
+  /// The column the list is sorted by, and which way. Null is the project's
+  /// own order, which is how the panel opens. Kept only while the panel is
+  /// up, like the column widths, and never written to the settings file.
+  ProjectColumn? _sortColumn;
+  bool _sortAscending = true;
+
+  /// What the walk last counted, for the card while nothing is picked.
+  String _summary = '';
+
+  /// A click on a heading: sort by it, or turn the sort round if it already is.
+  void _sortBy(ProjectColumn column) => setState(() {
+        _sortAscending = _sortColumn != column || !_sortAscending;
+        _sortColumn = column;
+      });
+
+  Widget _columnHeader(LumitTheme t, ProjectColumns cols) =>
+      projectColumnHeader(t, cols,
+          onResize: _resizeColumn,
+          sort: _sortColumn,
+          ascending: _sortAscending,
+          onSort: _sortBy);
+
+  /// The rows in the order the sorted column asks for. A row keeps the rows
+  /// under it, so a folder still holds its own items and only siblings swap.
+  List<_TreeRow> _sortRows(List<_TreeRow> rows, int from, int to) {
+    // Each sibling, as where it starts and where the rows under it end. A row
+    // whose folder a filter has hidden counts as a sibling where it stands.
+    final runs = <(int, int)>[];
+    for (var i = from; i < to;) {
+      var end = i + 1;
+      while (end < to && rows[end].depth > rows[i].depth) {
+        end++;
+      }
+      runs.add((i, end));
+      i = end;
+    }
+    final keys = {for (final (head, _) in runs) head: _sortKey(rows[head])};
+    final way = _sortAscending ? 1 : -1;
+    runs.sort((a, b) {
+      final order = Comparable.compare(keys[a.$1]!, keys[b.$1]!) * way;
+      // Rows that tie keep the project's own order.
+      return order != 0 ? order : a.$1 - b.$1;
+    });
+    return [
+      for (final (head, end) in runs) ...[
+        rows[head],
+        ..._sortRows(rows, head + 1, end),
+      ],
+    ];
+  }
+
+  /// What a row sorts by under the column in force: words for Name and Path,
+  /// a number for the rest, and a row with nothing to state goes first.
+  ///
+  /// ponytail: names compare letter by letter, so "Shot 10" sorts before
+  /// "Shot 2". Compare the runs of digits as numbers if that gets in the way.
+  Comparable<dynamic> _sortKey(_TreeRow row) {
+    final item = row.item;
+    final id = projectItemId(item);
+    ProjectCells cells() => _cellsFor(item, id,
+        item is ItemReference_Footage && (_missing[id] ?? false));
+    return switch (_sortColumn!) {
+      ProjectColumn.name => (_names[id] ?? '').toLowerCase(),
+      ProjectColumn.items => _childCounts[id] ?? -1,
+      ProjectColumn.size => _cellNumber(cells().size),
+      ProjectColumn.fps => _cellNumber(cells().fps),
+      ProjectColumn.path => (cells().path ?? '').toLowerCase(),
+    };
+  }
+
+  /// A Size or fps cell as a number: the pixel count of `1920×1080`, and the
+  /// leading figure of anything else (`25`, `48 kHz`).
+  static double _cellNumber(String? cell) {
+    if (cell == null) return -1;
+    final sides = cell.split('×').map(double.tryParse).toList();
+    if (sides case [final w?, final h?]) return w * h;
+    return double.tryParse(cell.split(' ').first) ?? -1;
+  }
+
   /// The folders the user has shut, by id. Closed rather than open, so
   /// a project opens showing everything it has — which is what the panel did
   /// before folders could be shut at all. Session state, like the search text:
@@ -557,7 +636,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _searchRow(t),
-          projectColumnHeader(t, cols, onResize: _resizeColumn),
+          _columnHeader(t, cols),
           Expanded(
             child: _importOnDoubleTap(
               child: Center(
@@ -588,6 +667,9 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     final rows = <_TreeRow>[];
     _visibleIds.clear();
     var itemCount = 0;
+    // How many compositions, footage items, solids and folders the walk
+    // meets, for the line the card shows while nothing is picked.
+    final kinds = [0, 0, 0, 0];
 
     // A row shows when its own name matches, or an ancestor folder's did —
     // searching a folder finds what it holds (docs/07 §3.1). Missing-only is
@@ -603,6 +685,12 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
       final id = projectItemId(item);
       _itemById[id] = item;
       itemCount++;
+      kinds[switch (item) {
+        ItemReference_Composition() => 0,
+        ItemReference_Footage() => 1,
+        ItemReference_Solid() => 2,
+        ItemReference_Folder() => 3,
+      }]++;
       // Cached like every other row fact beside it: nothing asks the engine
       // twice for an answer that only a document change can alter.
       // The name was the one that was not, and it is the dearest of them:
@@ -680,6 +768,18 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     for (final item in roots) {
       walk(item, 0, false, 0);
     }
+    _summary = l10n.projectSummary(kinds[0], kinds[1], kinds[2], kinds[3]);
+    // Sorted after the walk, off what the walk cached, so the project's own
+    // order costs nothing extra and a sorted one asks the engine no more.
+    if (_sortColumn != null) {
+      final sorted = _sortRows(rows, 0, rows.length);
+      rows
+        ..clear()
+        ..addAll(sorted);
+      _visibleIds
+        ..clear()
+        ..addAll([for (final row in rows) projectItemId(row.item)]);
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -693,7 +793,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
             builder: (context, _, __) => _previewCard(t),
           ),
         _searchRow(t),
-        projectColumnHeader(t, cols, onResize: _resizeColumn),
+        _columnHeader(t, cols),
         Expanded(
           // The import sits **behind** the list, and the list takes the pointer
           // only where a row actually is. That is what makes the gesture the
@@ -727,7 +827,10 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
                     hitTestBehavior: HitTestBehavior.deferToChild,
                     itemExtent: projectRowHeight,
                     itemCount: rows.length,
-                    itemBuilder: (context, i) => _treeRow(rows[i], cols),
+                    // Every other row on screen is shaded, whatever is open,
+                    // filtered or sorted.
+                    itemBuilder: (context, i) =>
+                        _treeRow(rows[i], cols, shaded: i.isOdd),
                   ),
                 ),
               ),
@@ -750,7 +853,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   /// what it draws and nothing at the bridge. The one thing it does not take
   /// from above is whether it is picked: that arrives through [_rowPicks], so
   /// a click redraws the rows whose shading moved and leaves the rest alone.
-  Widget _treeRow(_TreeRow row, ProjectColumns cols) {
+  Widget _treeRow(_TreeRow row, ProjectColumns cols, {required bool shaded}) {
     final item = row.item;
     final id = projectItemId(item);
     final missing = item is ItemReference_Footage && (_missing[id] ?? false);
@@ -775,6 +878,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
             () =>
                 item is ItemReference_Footage ? item.field0.getProxy() : null),
         selected: selected,
+        shaded: shaded,
         renaming: _renamingId == id,
         loneSelection: lone,
         columns: cols,
@@ -859,6 +963,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     return projectPreviewCard(
       t,
       item: item,
+      summary: _summary,
       name: item == null ? '' : (_names[id!] ??= _nameOf(item)),
       nodeGraph: item != null && (_nodeGraphs[id!] ??= _isNodeGraph(item)),
       missing: item is ItemReference_Footage && (_missing[id] ?? false),

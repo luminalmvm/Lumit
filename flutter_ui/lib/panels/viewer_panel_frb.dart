@@ -694,6 +694,8 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
             onSnapshotHold: _holdSnapshot,
             detached: round,
             transport: !deck,
+            loop: ui.workspace.performance.loop,
+            onLoop: ui.workspace.setLoopMode,
             // Gathered: the header's contents lead the one strip, in the
             // order the two strips read.
             leading: split
@@ -809,6 +811,7 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
                 compSize: Size(size.width.toDouble(), size.height.toDouble()),
                 panel: _pictureArea(constraints),
               )),
+              onZoom: goToNamedZoom,
             ),
           ),
         );

@@ -39,11 +39,17 @@ to all of them at once.
 Selection applies across the application. For instance, picking a layer in the Viewer 
 selects it everywhere.
 
+Double-click a layer's name in the Timeline to rename it. On a Precomp layer the
+double-click opens its composition, and on a [Sequence layer](/use/sequence-layers/) its
+clips. `Enter` renames either.
+
 ## Copy and paste
 
 **Edit ▸ Cut / Copy / Paste** can copy whole layers if selected and can be pasted into
 other compositions as well. A copied layer retains all information: transform, keyframes, 
 masks, paint, effects, switches, markers, and retime values.
+
+**Edit ▸ Duplicate** (`Ctrl+D`) duplicates every selected layer.
 
 By default a pasted layer starts at the playhead. To paste at the time it was copied from
 instead, turn on *Paste layers at their original time* in [Settings ▸
@@ -60,9 +66,19 @@ The **switches** column holds what the Timeline keeps about a layer: visibility,
 lock, shy, and guide. The **modes** column holds how the layer is rendered: collapse, flow,
 disable effects, motion blur, 3D, and adjustment.
 
+The columns open on visibility, mute, solo and lock, and on disable effects, 3D and motion
+blur. Drag a column's seam wider to show the rest.
+
 A row shows only the switches its layer can use. An [Audio layer](/use/audio/) has no
 visibility switch, and a layer that can never be heard has no mute switch. Guide is drawn
 on every row.
+
+- Click a switch on a selected layer and every selected layer takes the same state.
+- Press a switch and drag up or down its column, and every row the pointer crosses takes
+  that state too. The drag is one undo step.
+- `Alt`-click a solo switch to solo that layer alone.
+
+A switch that is off is drawn dimmer than one that is on.
 
 The **motion blur switch** blurs a layer from its own animated transform. The Motion blur
 effect is different, see [Effects](/use/effects/).

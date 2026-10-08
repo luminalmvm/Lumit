@@ -30,10 +30,13 @@
 import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
+import 'package:lumit_flutter/main.dart' show LumitUiState;
 import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/state.dart';
+import 'package:provider/provider.dart';
 
 import '../l10n/strings.dart';
+import '../state/workspace.dart';
 import '../theme/theme.dart';
 import 'controls.dart';
 
@@ -261,6 +264,12 @@ Future<void> showColourPicker({
   SwatchShelf? shelf,
 }) async {
   shelf ??= SwatchShelf.open();
+  // The workspace keeps the recent colours. A host with no workspace above
+  // it, a bare test, has no row of them.
+  Workspace? workspace;
+  try {
+    workspace = Provider.of<LumitUiState>(context, listen: false).workspace;
+  } catch (_) {}
   await showLumitPopup<PickedColour>(
     context: context,
     position: position,
@@ -274,6 +283,11 @@ Future<void> showColourPicker({
           initial: initial,
           presets: presets,
           shelf: shelf,
+          recents: [
+            for (final c in workspace?.recentColours ?? const <List<double>>[])
+              PickedColour(c[0], c[1], c[2]),
+          ],
+          onApplied: (c) => workspace?.rememberColour(c.r, c.g, c.b),
           scale: scale,
           min: min,
           max: max,
@@ -349,6 +363,11 @@ class _ColourPickerBody extends StatefulWidget {
 
   /// The project's colour shelf, or null when no project is open.
   final SwatchShelf? shelf;
+
+  /// The last colours applied through the picker, newest first, and where the
+  /// one this picker closes on is sent to join them.
+  final List<PickedColour> recents;
+  final ValueChanged<PickedColour> onApplied;
   final ColourScale scale;
   final double min, max;
 
@@ -364,6 +383,8 @@ class _ColourPickerBody extends StatefulWidget {
     required this.initial,
     required this.presets,
     required this.shelf,
+    required this.recents,
+    required this.onApplied,
     required this.scale,
     required this.min,
     required this.max,
@@ -410,6 +431,10 @@ class _ColourPickerBodyState extends State<_ColourPickerBody> {
 
   @override
   void dispose() {
+    // Closed on a colour other than the one it opened with, by Apply, Escape
+    // or a click away: that colour was applied, so it joins the recent ones.
+    // Cancel puts the first colour back, and so adds nothing.
+    if (_colour != widget.initial) widget.onApplied(_colour);
     _hexController.dispose();
     _hexFocus.dispose();
     super.dispose();
@@ -612,6 +637,22 @@ class _ColourPickerBodyState extends State<_ColourPickerBody> {
           const SizedBox(height: 8),
           _presetRow(t),
         ],
+        // The last eight colours applied anywhere, newest first.
+        if (widget.recents.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          LumitTooltip(
+            message: l10n.swatchRecent,
+            child: Wrap(
+              key: const Key('colour-picker-recent'),
+              spacing: 4,
+              runSpacing: 4,
+              children: [
+                for (final (i, colour) in widget.recents.indexed)
+                  _chip(t, Key('colour-picker-recent-$i'), colour),
+              ],
+            ),
+          ),
+        ],
         // The project's own colours, and the way to keep one. Only with a
         // project open: with none there is no shelf to keep them on.
         if (widget.shelf != null) ...[
@@ -628,6 +669,7 @@ class _ColourPickerBodyState extends State<_ColourPickerBody> {
               onPressed: () {
                 // Put back what the picker opened with: the live changes have
                 // already landed, so closing alone would keep them.
+                _colour = widget.initial;
                 widget.onCommit(widget.initial);
                 widget.onClose();
               },
@@ -753,7 +795,12 @@ class _ColourPickerBodyState extends State<_ColourPickerBody> {
         runSpacing: 4,
         children: [
           for (var i = 0; i < _shelf.length; i++)
-            _shelfSwatch(t, i, PickedColour(_shelf[i].r, _shelf[i].g, _shelf[i].b)),
+            _chip(
+              t,
+              Key('colour-picker-shelf-$i'),
+              PickedColour(_shelf[i].r, _shelf[i].g, _shelf[i].b),
+              onMenu: (at) => _forgetMenu(at, i),
+            ),
           LumitTooltip(
             message: l10n.swatchKeep,
             child: GestureDetector(
@@ -789,12 +836,17 @@ class _ColourPickerBodyState extends State<_ColourPickerBody> {
         ],
       );
 
-  Widget _shelfSwatch(LumitTheme t, int index, PickedColour colour) =>
+  /// One colour to click: a kept one on the shelf, which has a menu, or a
+  /// recent one, which has none.
+  Widget _chip(LumitTheme t, Key key, PickedColour colour,
+          {ValueChanged<Offset>? onMenu}) =>
       GestureDetector(
-        key: Key('colour-picker-shelf-$index'),
+        key: key,
         onTap: () => _setColour(colour, settled: true),
-        onSecondaryTapDown: (d) => _forgetMenu(d.globalPosition, index),
-        onLongPressStart: (d) => _forgetMenu(d.globalPosition, index),
+        onSecondaryTapDown:
+            onMenu == null ? null : (d) => onMenu(d.globalPosition),
+        onLongPressStart:
+            onMenu == null ? null : (d) => onMenu(d.globalPosition),
         child: MouseRegion(
           cursor: SystemMouseCursors.click,
           child: Container(

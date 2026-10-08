@@ -1163,7 +1163,8 @@ class _CompGraphPanelState extends State<CompGraphPanel> {
         context: context,
         anchor: lastKnownPointerPosition,
         model: FxConsoleModel(
-          keyHint: wire == null ? l10n.fxConsoleKey : null,
+          keyHint:
+              wire == null ? _ui?.keymap.chordFor('console.open') : null,
           footer: wire == null ? l10n.graphConsoleAdds : l10n.graphSearchWires,
           entries: entries,
         ),

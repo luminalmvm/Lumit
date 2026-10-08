@@ -36,16 +36,17 @@ The panel's name sits at the left. Three pickers sit at the right.
 | **Show snapshot** | Puts the photograph back over the live picture while it is held. |
 | **Transport** | First frame, previous frame, play or pause, next frame, last frame. |
 | **Clock** | The playhead's time. Click it to type one; a time past either end clamps. |
-| **Reading** | The composition, the time, the source size, the size the preview was made at, and the magnification. |
+| **Loop** | What playback does at the end of the work area: loop, play once, or ping-pong. Click to step through the three. |
+| **Reading** | The composition, its size, and the magnification. While the preview is made smaller than the composition, the size reads as the pair, source → preview, in the warning colour. |
 
 The snapshot photographs **what is on screen**, at the resolution it is drawn at. Holding
 Show puts it back over exactly the part of the picture it came from.
 
 ### When the Viewer is narrow
 
-A Viewer docked into a sidebar has less width than the bar wants, so pieces leave in order
-— the reading, the ways of looking, the clock — and the five transport buttons are the
-last items remaining.
+A Viewer docked into a sidebar has less width than the bar wants, so pieces leave in
+order: the reading, the loop mark, the ways of looking, then the clock. The five transport
+buttons are the last items remaining.
 
 The two strips can also be gathered into one, at the top or at the bottom, under
 **Edit ▸ Settings ▸ Appearance ▸ Viewer**.
@@ -55,6 +56,38 @@ The two strips can also be gathered into one, at the top or at the bottom, under
 Select a layer and the Viewer draws its wireframe with a transform gizmo. The handles move,
 scale and rotate it. See [Transforming layers](/use/transform/). The tag at the top left
 names what is selected.
+
+### Moving a layer
+
+With the Selection tool armed:
+
+- **Drag** a layer to move it. Several selected layers move together, as one undo
+  step.
+- **Shift** keeps the drag to one axis.
+- **The arrow keys** nudge the selected layers one pixel, or ten with `Shift`, while the
+  Viewer is the active panel.
+- **Double-click** a text layer to edit it, or a Precomp layer to open its composition.
+
+While **Snap to guides** is on, a moved layer lands on the guides and, with **View ▸ Snap
+to grid** ticked, on the grid and the edges of the composition. A line across the picture
+marks what it landed on. `Ctrl` suspends snapping.
+
+A layer whose position is keyframed does not move under a drag or a nudge.
+
+### The right-click menu
+
+Right-click the picture.
+
+<Shot file="viewer-menu.png" caption="The picture's right-click menu, with Select listing the layers under the pointer." />
+
+| Row | Does |
+| --- | --- |
+| **Select** | Lists every layer under the pointer, top to bottom. Choosing one selects it, which reaches a layer covered by another. |
+| **Align** | Moves each selected layer so an edge or the middle of its box meets the composition's: **Left**, **Centre**, **Right**, **Top**, **Middle**, **Bottom**. |
+| **Fit**, **100%** | Set the magnification. |
+| **Grid**, **Title/action safe**, **Rulers**, **Snap to guides**, **Transparency grid** | The same switches as the bottom bar's. |
+
+**Select** appears with a layer under the pointer, and **Align** with a layer selected.
 
 ### Moving about
 

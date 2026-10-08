@@ -67,24 +67,24 @@ void main() {
           .getRect(find.descendant(of: header, matching: find.text(word)))
           .width;
 
-      // The seam right of NAME — the one drawn before the Items column.
+      // The seam right of Name, the one drawn before the Items column.
       final seam = find.byKey(const ValueKey<String>('project-seam-name'));
       expect(seam, findsOneWidget);
       await tester.drag(seam, const Offset(40, 0));
       await tester.pump();
 
-      expect(heading('NAME'), projectNameColumn + 40,
+      expect(heading('Name'), projectNameColumn + 40,
           reason: 'the seam widened the column it follows');
-      expect(heading('SIZE'), projectSizeColumn,
+      expect(heading('Size'), projectSizeColumn,
           reason: 'and left the columns between alone');
-      expect(heading('PATH'), projectPathColumn + 128 - 40,
+      expect(heading('Path'), projectPathColumn + 128 - 40,
           reason: 'Path gave up exactly what Name took, since it holds the '
               'panel\'s slack');
 
       // Back past its minimum: the column stops there rather than vanishing.
       await tester.drag(seam, const Offset(-400, 0));
       await tester.pump();
-      expect(heading('NAME'), minProjectColumnWidth(ProjectColumn.name),
+      expect(heading('Name'), minProjectColumnWidth(ProjectColumn.name),
           reason: 'a column stops at what its cells need');
     });
   });

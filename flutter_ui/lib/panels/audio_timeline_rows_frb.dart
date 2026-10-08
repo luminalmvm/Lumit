@@ -144,10 +144,15 @@ List<LayerFoldRow> audioTimelineFoldRows({
     switch (row) {
       case FoldVolumeRow(:final scalar):
         volume.add(FoldVolumeRow(scalar: scalar, depth: 1));
-      case FoldGroupRow(:final path, :final label, open: final isOpen)
+      case FoldGroupRow(
+            :final path,
+            :final label,
+            open: final isOpen,
+            :final named
+          )
           when audio.contains(effectIdOfPath(path)):
-        effects.add(
-            FoldGroupRow(path: path, label: label, open: isOpen, depth: 2));
+        effects.add(FoldGroupRow(
+            path: path, label: label, open: isOpen, depth: 2, named: named));
       case FoldEffectParamRow(
             :final info,
             :final param,

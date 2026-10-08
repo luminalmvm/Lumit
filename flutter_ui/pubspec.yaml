@@ -57,13 +57,21 @@ flutter:
     - assets/data/grammar/
   fonts:
     # The two redesign faces (docs/15-DESIGN.md §7.1): Hanken Grotesk
-    # for UI text, Geist Mono for every number, timecode and container label.
+    # for UI text, Paper Mono for every number, timecode and container label.
     - family: Hanken Grotesk
       fonts:
         - asset: assets/fonts/HankenGrotesk-Regular.otf
           weight: 400
         - asset: assets/fonts/HankenGrotesk-Medium.otf
           weight: 500
+    - family: Paper Mono
+      fonts:
+        - asset: assets/fonts/PaperMono-Regular.otf
+          weight: 400
+        - asset: assets/fonts/PaperMono-Medium.otf
+          weight: 500
+    # Paper Mono has no Cyrillic, so Geist Mono (the mono face before it)
+    # stays as its fallback for the Ukrainian and Kazakh locales.
     - family: Geist Mono
       fonts:
         - asset: assets/fonts/GeistMono-Regular.otf

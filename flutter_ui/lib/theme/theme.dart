@@ -294,7 +294,7 @@ class ShapeTokens {
     tileGap: 1.0,
     windowInset: 0.0,
     cardShadow: [],
-    labelCase: LabelCase.caps,
+    labelCase: LabelCase.sentence,
     titleCentred: false,
     headerDot: false,
     strokeWeight: 1.5,
@@ -834,9 +834,9 @@ class LumitTheme {
   /// pale scrim over pale panels would say nothing.
   final Color scrim;
 
-  /// The ground panes stand on when the shape is roomed. A light neutral for
-  /// a dark scheme, so the cards read as objects lit inside a room; a light
-  /// scheme's own canvas otherwise. Studio and Desk never draw it.
+  /// The ground panes stand on when the shape is roomed: the night room
+  /// unless the Room setting or a custom theme says otherwise. Studio and
+  /// Desk never draw it.
   final Color room;
 
   /// The three Timeline tokens default from the mode rather than being spelled
@@ -883,18 +883,14 @@ class LumitTheme {
         selectionFill = selectionFill ?? defaultSelectionFill(mode, surface2),
         marker = marker ?? defaultMarker(mode),
         scrim = scrim ?? defaultScrim(mode),
-        room = room ?? defaultRoom(mode, surface0),
+        room = room ?? nightRoom,
         waveform = waveform ?? defaultWaveform(mode);
 
-  /// The room a dark scheme's cards stand in: the light neutral the Lantern
-  /// drawing calls the day room. A light scheme already is a room, so its own
-  /// canvas serves.
-  static Color defaultRoom(ThemeMode2 mode, Color surface0) =>
-      mode == ThemeMode2.dark ? dayRoom : nightRoom;
-
-  /// The two rooms Lantern's cards can stand in: a light neutral the dark
-  /// schemes get by default, and a near-black the light schemes get, so the
-  /// cards are always the other way round from the room.
+  /// The two rooms Lantern's cards can stand in: a near-black every scheme
+  /// gets when nobody has chosen, and a light neutral that is there to be
+  /// chosen. A dark scheme used to get the light one, which put a bright frame
+  /// round the picture, the very thing the neutral Viewer surround is there to
+  /// prevent.
   static Color get dayRoom => _rgb(0xd9, 0xd9, 0xd6);
   static Color get nightRoom => _rgb(0x0b, 0x0c, 0x0e);
 
@@ -2303,7 +2299,9 @@ class LumitTheme {
         surface2: _rgb(0x2e, 0x2e, 0x2c),
         surface3: _rgb(0x38, 0x38, 0x36),
         surface4: _rgb(0x45, 0x45, 0x42),
-        viewerSurround: _rgb(0x7f, 0x7f, 0x7f),
+        // Dark and neutral, as every dark scheme's is. Mid grey here was the
+        // brightest large area on the screen.
+        viewerSurround: _rgb(0x1c, 0x1c, 0x1c),
         textPrimary: _rgb(0xf0, 0xef, 0xeb),
         textSecondary: _rgb(0xc4, 0xc2, 0xbc),
         textMuted: _rgb(0x91, 0x8f, 0x89),
@@ -2343,10 +2341,13 @@ class LumitTheme {
   static const List<String> fontFamilyFallback = ['Inter'];
 
   /// The face every number, timecode and container label is set in
-  /// (docs/15-DESIGN.md §7.1). The fallbacks only matter if the bundled asset
-  /// is missing, and both platform names resolve to a monospaced face.
-  static const String monoFontFamily = 'Geist Mono';
+  /// (docs/15-DESIGN.md §7.1). Paper Mono has no Cyrillic, so Geist Mono
+  /// stays bundled behind it the way Inter does behind Hanken Grotesk. The
+  /// two platform names only matter if a bundled asset is missing, and both
+  /// resolve to a monospaced face.
+  static const String monoFontFamily = 'Paper Mono';
   static const List<String> monoFontFamilyFallback = [
+    'Geist Mono',
     'Consolas',
     'monospace',
   ];
@@ -2354,6 +2355,13 @@ class LumitTheme {
   /// Tabular figures where the shape sets numbers in its sans.
   List<FontFeature>? get _figures =>
       tokens.tabularNumbers ? const [FontFeature.tabularFigures()] : null;
+
+  /// The same for the two mono styles. Paper Mono draws a plain zero unless
+  /// it is asked for the slashed one, and a frame readout of "F0" must not
+  /// read as "FO". Desk's Plex keeps its own dotted zero.
+  List<FontFeature>? get _monoFigures => tokens.tabularNumbers
+      ? _figures
+      : const [FontFeature.slashedZero()];
   TextStyle get heading => TextStyle(
       fontFamily: tokens.sansFamily,
       fontFamilyFallback: fontFamilyFallback,
@@ -2394,7 +2402,7 @@ class LumitTheme {
   /// headers, column headers, tab labels, dialog titles, attribution.
   ///
   /// In plain terms, a kicker is the small capitalised word above a thing that
-  /// says what the thing is. Lumit sets all of them in Geist Mono, small, with
+  /// says what the thing is. Lumit sets all of them in Paper Mono, small, with
   /// the letters spaced out, and quiet — so everything the *application* names
   /// looks unmistakably different from everything the *user* names, which stays
   /// sentence-case Hanken Grotesk.
@@ -2407,7 +2415,7 @@ class LumitTheme {
         fontFamily:
             tokens.tabularNumbers ? tokens.sansFamily : tokens.monoFamily,
         fontFamilyFallback: monoFontFamilyFallback,
-        fontFeatures: _figures,
+        fontFeatures: _monoFigures,
         // 9px at +0.12em, regular weight — **the approved mockups' own
         // `.kick`** (their metrics are canonical), and the bottom of §7.1's
         // 9–11px / 0.08–0.12em band rather than its middle. It was 10px at
@@ -2418,7 +2426,14 @@ class LumitTheme {
         // 1.08 written out, not `9 * 0.12`: the product is 0.12000000000000001
         // in binary floating point, which lands a hair outside the band the
         // spec states and the primitives test checks.
-        letterSpacing: tokens.kickerTracking,
+        //
+        // That tracking was drawn for capitals. Small letters at it read as
+        // loose single characters, so a label not in capitals takes the
+        // drawings' sentence-case 0.06em, unless the shape is tighter still.
+        letterSpacing:
+            labelCase == LabelCase.caps || tokens.kickerTracking < 0.54
+                ? tokens.kickerTracking
+                : 0.54,
         color: textMuted,
         decoration: TextDecoration.none,
         fontWeight: FontWeight.w400,
@@ -2430,17 +2445,30 @@ class LumitTheme {
   /// moves (§7.1 — state reads from colour, never from size or weight).
   TextStyle get kickerOn => kicker.copyWith(color: textPrimary);
 
-  /// A container label cased the way the shape wants it: Studio and Lantern
-  /// shout, Desk whispers.
-  String kickerCase(String s) => switch (tokens.labelCase) {
+  /// The label case chosen in Settings, or null to leave it to the shape. Set
+  /// by the workspace as it builds the theme, the way the icon weight is.
+  static LabelCase? labelCaseChoice;
+
+  /// The label case in force: the one chosen in Settings, else the shape's.
+  LabelCase get labelCase => labelCaseChoice ?? tokens.labelCase;
+
+  /// A container label cased the way [labelCase] says: Lantern shouts, Desk
+  /// whispers, Studio leaves the words as they were written.
+  String kickerCase(String s) => switch (labelCase) {
         LabelCase.caps => s.toUpperCase(),
         LabelCase.lower => s.toLowerCase(),
         LabelCase.sentence => s,
       };
+
+  /// A property's name in a row: small with the labels when they are lower
+  /// case, and as written otherwise. A row is not a label, so capitals never
+  /// reach it.
+  String propertyCase(String s) =>
+      labelCase == LabelCase.lower ? s.toLowerCase() : s;
   TextStyle get mono => TextStyle(
       fontFamily: tokens.monoFamily,
       fontFamilyFallback: monoFontFamilyFallback,
-      fontFeatures: _figures,
+      fontFeatures: _monoFigures,
       fontSize: 12,
       color: textSecondary,
       decoration: TextDecoration.none);

@@ -43,10 +43,9 @@ void main() {
     /// A section or parameter-group heading, by the words in it.
     ///
     /// Every container label in the panel is a kicker (docs/15 §7.1) and a
-    /// kicker capitalises **on the way to the screen**, so the schema label
-    /// and the arb string both stay sentence case and only the finder knows
-    /// about the capitals.
-    Finder heading(String label) => find.text(label.toUpperCase());
+    /// kicker is cased **on the way to the screen**, so the schema label and
+    /// the arb string both stay sentence case. Studio draws them as written.
+    Finder heading(String label) => find.text(label);
 
     /// A project with one comp, one layer in it, and that layer selected — the
     /// state the panel needs before it draws anything at all.
@@ -648,6 +647,9 @@ void main() {
       await mount(tester, p, transform: false);
 
       final id = p.layer.getEffects().single.id();
+      // The Mix and Matte rows sit under the Compositing fold, shut by default.
+      await tester.tap(find.byKey(ValueKey<String>('fx-compositing-$id')));
+      await tester.pumpAndSettle();
       final picker = find.byKey(ValueKey<String>('fx-layer-$id-matte'));
       final invert = find.byKey(ValueKey<String>('fx-bool-$id-matte_invert'));
       expect(picker, findsOneWidget,
@@ -705,6 +707,9 @@ void main() {
       await mount(tester, p, transform: false);
 
       final id = p.layer.getEffects().single.id();
+      // Both rows sit under the Compositing fold, shut by default.
+      await tester.tap(find.byKey(ValueKey<String>('fx-compositing-$id')));
+      await tester.pumpAndSettle();
       final channel =
           find.byKey(ValueKey<String>('fx-choice-$id-matte_channel'));
       final blend = find.byKey(ValueKey<String>('fx-choice-$id-blend'));
