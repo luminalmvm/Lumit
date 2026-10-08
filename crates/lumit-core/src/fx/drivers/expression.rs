@@ -32,6 +32,14 @@
 //! order, no shared state. The same box at the same time hands out the same
 //! value in the preview and in the export, on every machine.
 //!
+//! **Inputs are numbers the text reads by name.** A box holds as many as the
+//! user adds, `input_1`, `input_2` and so on. Each is an ordinary number row
+//! the instance derives, as a Custom shader derives its own, so it has a
+//! socket in both graphs, a value to fall back on when nothing is wired, and
+//! keyframes if anyone wants them. `(input_1 + input_2) * input_3` reads three.
+//! How many there are is stored beside the text, under
+//! `extra["expression"]["inputs"]`.
+//!
 //! **The text is not a parameter.** It lives on the instance in
 //! `EffectInstance.extra`, under `extra["expression"]["source"]`, exactly where
 //! the Custom shader keeps its WGSL: a string is not `Copy`, two expressions
@@ -39,9 +47,12 @@
 //! rather than one of them. [`source_of`] and [`set_source`] are the two ways
 //! in, so nothing outside this file needs to know the key.
 
+use std::sync::OnceLock;
+
 use crate::expression::{evaluate_value, ExprValue};
 use crate::fx::{
-    DriverCx, EffectDef, EffectMetadata, EffectSchema, Port, PortType, Signature, Value,
+    DriverCx, EffectDef, EffectMetadata, EffectSchema, ParamId, ParamKind, ParamSchema, Port,
+    PortType, Signature, Unit, Value,
 };
 use crate::model::EffectInstance;
 use lumit_fx_macros::Effect;
@@ -51,11 +62,11 @@ pub const EXTRA_KEY: &str = "expression";
 
 /// Expression's controls.
 ///
-/// One row, and it is a button rather than a value: the text the box runs is
-/// not a parameter (see the module doc), so there is nothing here to keyframe.
-/// The row is the Custom shader's `edit` row again — the place the panel puts
-/// a way into the text — and it is what keeps the manual's page for the box
-/// from describing no control at all.
+/// Three rows, and each is a button rather than a value: the text the box runs
+/// is not a parameter (see the module doc), so there is nothing here to
+/// keyframe. The first is the Custom shader's `edit` row again, the place the
+/// panel puts a way into the text. The other two add and remove an input, and
+/// the inputs themselves are rows the instance derives ([`input_count`]).
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "expression",
@@ -73,6 +84,94 @@ pub struct Expression {
     /// parameter, so this row carries none.
     #[action(label = "Edit expression…")]
     pub edit: (),
+    /// Give the box one more number input. A button, not a value.
+    #[action(label = "Add input")]
+    pub add_input: (),
+    /// Take the last input away again.
+    #[action(label = "Remove input")]
+    pub remove_input: (),
+}
+
+/// The most inputs one box holds. A ceiling rather than a design, as the
+/// Switch's is: the count comes out of the document, and a hand-edited one
+/// must not ask for a million rows.
+pub const MAX_INPUTS: usize = 64;
+
+/// One number row per input a box may hold, `input_1` upwards. A box draws the
+/// first [`input_count`] of them.
+fn input_rows() -> &'static [ParamSchema] {
+    static ROWS: OnceLock<Vec<ParamSchema>> = OnceLock::new();
+    ROWS.get_or_init(|| {
+        (1..=MAX_INPUTS)
+            .map(|n| {
+                // The row wears the name the expression reads it by.
+                let name: &'static str = Box::leak(format!("input_{n}").into_boxed_str());
+                ParamSchema {
+                    id: name,
+                    label: name,
+                    kind: ParamKind::Float {
+                        default: 0.0,
+                        slider: (-100.0, 100.0),
+                        hard: (None, None),
+                    },
+                    unit: Unit::Raw,
+                }
+            })
+            .collect()
+    })
+}
+
+/// How many inputs this box holds.
+#[must_use]
+pub fn input_count(inst: &EffectInstance) -> usize {
+    inst.extra
+        .get(EXTRA_KEY)
+        .and_then(|block| block.get("inputs"))
+        .and_then(serde_json::Value::as_u64)
+        .map_or(0, |n| {
+            usize::try_from(n).map_or(MAX_INPUTS, |n| n.min(MAX_INPUTS))
+        })
+}
+
+/// Give the box one more input and answer its name, or `None` when it holds as
+/// many as it can.
+pub fn add_input(inst: &mut EffectInstance) -> Option<&'static str> {
+    let count = input_count(inst);
+    let row = input_rows().get(count)?;
+    set_input_count(inst, count + 1);
+    Some(row.id)
+}
+
+/// Take the box's last input away, its stored value with it, and answer its
+/// name so the caller can take its wire off too. `None` for a box with none.
+pub fn remove_input(inst: &mut EffectInstance) -> Option<&'static str> {
+    let count = input_count(inst).checked_sub(1)?;
+    let row = input_rows().get(count)?;
+    set_input_count(inst, count);
+    inst.params.retain(|p| p.id != row.id);
+    Some(row.id)
+}
+
+fn set_input_count(inst: &mut EffectInstance, count: usize) {
+    let Some(block) = block_mut(inst) else { return };
+    if count == 0 {
+        // A box with no inputs is stored as one that never had any.
+        block.remove("inputs");
+    } else {
+        block.insert("inputs".to_owned(), serde_json::Value::from(count));
+    }
+}
+
+/// The expression block on `inst`, made if it is not there yet.
+fn block_mut(inst: &mut EffectInstance) -> Option<&mut serde_json::Map<String, serde_json::Value>> {
+    let block = inst
+        .extra
+        .entry(EXTRA_KEY.to_owned())
+        .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
+    if !block.is_object() {
+        *block = serde_json::Value::Object(serde_json::Map::new());
+    }
+    block.as_object_mut()
 }
 
 /// The port a number leaves by.
@@ -99,15 +198,8 @@ pub fn source_of(inst: &EffectInstance) -> &str {
 /// other key under the block is kept, so a later field beside the source
 /// survives an edit of the text.
 pub fn set_source(inst: &mut EffectInstance, source: &str) {
-    let block = inst
-        .extra
-        .entry(EXTRA_KEY.to_owned())
-        .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
-    if !block.is_object() {
-        *block = serde_json::Value::Object(serde_json::Map::new());
-    }
-    if let Some(map) = block.as_object_mut() {
-        map.insert(
+    if let Some(block) = block_mut(inst) {
+        block.insert(
             "source".to_owned(),
             serde_json::Value::String(source.to_owned()),
         );
@@ -124,6 +216,12 @@ impl EffectDef for ExpressionDef {
 
     fn is_image_op(&self) -> bool {
         false
+    }
+
+    /// One number row per input, which is what gives each a socket and a value
+    /// to fall back on when nothing is wired.
+    fn derived(&self, inst: &EffectInstance) -> &'static [ParamSchema] {
+        input_rows().get(..input_count(inst)).unwrap_or_default()
     }
 
     fn signature(&self) -> Signature {
@@ -163,9 +261,19 @@ impl EffectDef for ExpressionDef {
         if source.trim().is_empty() {
             return;
         }
+        // Each input is in scope under its own name, holding what its wire
+        // carries or the row's own value.
+        let inputs: Vec<(&str, f64)> = self
+            .derived(cx.inst)
+            .iter()
+            .map(|row| {
+                let value = cx.params.float(ParamId::new(row.id), 0.0);
+                (row.id, f64::from(value))
+            })
+            .collect();
         // A refusal is `Err`, and it pushes nothing: the sentence is the
         // editor's to show, and the parameter's keyframes are the calm degrade.
-        let Ok(result) = evaluate_value(source, Some(cx.context.clone())) else {
+        let Ok(result) = evaluate_value(source, Some(cx.context.clone()), &inputs) else {
             return;
         };
         match result {
