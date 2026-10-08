@@ -351,6 +351,42 @@ pub fn video_memory_bytes() -> u64 {
     }
 }
 
+/// Which adapter was picked, as one line, published the first time a context
+/// opens one.
+///
+/// The same "first context wins" shape as [`ADAPTER_SAMPLE_FLAGS`], and
+/// legitimate for the same reason: the backend is pinned and the adapter is
+/// chosen deterministically, so every context in a process opens the same card.
+/// It exists so the bridge can write the line into the diagnostics file a bug
+/// report is written from, which this crate can't reach and shouldn't: a
+/// graphics context has no business knowing where Lumit keeps its files.
+static ADAPTER_SUMMARY: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+/// The adapter the first context opened, in the words of the
+/// `lumit-gpu: adapter selected:` line, or `None` before any context exists.
+#[must_use]
+pub fn adapter_summary() -> Option<&'static str> {
+    ADAPTER_SUMMARY.get().map(String::as_str)
+}
+
+/// Which card the first context opened, as the kernel names it (see [`drm`]).
+/// Published once beside [`ADAPTER_SUMMARY`] and for the same reason: the
+/// adapter is only in hand inside [`GpuContext::headless`], and the Linux
+/// Viewer hand-off needs the answer every time it makes a texture.
+static ADAPTER_DRM_DEVICE: std::sync::OnceLock<drm::DrmDevice> = std::sync::OnceLock::new();
+
+/// The device nodes of the card the renderer is on, or
+/// [`drm::DrmDevice::UNKNOWN`] where that can't be asked: before any context
+/// has opened, off Linux, or on a driver that doesn't report them. Unknown is
+/// never a reason to refuse anything, it means the comparison isn't made.
+#[must_use]
+pub fn adapter_drm_device() -> drm::DrmDevice {
+    ADAPTER_DRM_DEVICE
+        .get()
+        .copied()
+        .unwrap_or(drm::DrmDevice::UNKNOWN)
+}
+
 /// [`supported_sample_count`] against an already-fetched flag set — the shared
 /// rule, so the adapter-side check and [`GpuContext::sample_count`] cannot
 /// drift apart.
@@ -1113,20 +1149,36 @@ impl GpuContext {
             .map_err(|e| GpuError::Device(e.to_string()))?;
 
         // Which adapter was picked is the first thing anyone asks when the
-        // Viewer is black or a hybrid-GPU machine chose the wrong card — but it
-        // is noise on every test and every shipped run, so it is opt-in. The
-        // crate has no logging framework (diagnostics go out through `note!`),
-        // so the gate is an environment variable: set `LUMIT_GPU_DEBUG` to
-        // anything to get the line.
-        if std::env::var_os("LUMIT_GPU_DEBUG").is_some() {
+        // Viewer is black or a hybrid-GPU machine chose the wrong card, so the
+        // line is printed on every run. It used to be opt-in behind
+        // `LUMIT_GPU_DEBUG`, on the grounds that it was noise. Then a laptop
+        // with two cards crashed on its first frame, and the report had to go
+        // round twice because the one line that explained it was the one
+        // nobody had been told to ask for. One line per context is a price
+        // worth paying for a report that answers itself.
+        //
+        // On Linux the line ends with the card's device node, which is what the
+        // Flutter runner compares against the card *it* is on before it takes
+        // the Viewer's texture (see [`drm`]). Read here because the adapter is
+        // in hand here and nowhere else.
+        #[cfg(all(target_os = "linux", feature = "shared-texture-linux"))]
+        let drm_device = shared_linux::drm_device(&adapter);
+        #[cfg(all(target_os = "linux", feature = "shared-texture-linux"))]
+        let _ = ADAPTER_DRM_DEVICE.set(drm_device);
+        {
             let info = adapter.get_info();
-            note!(
-                "lumit-gpu: adapter selected: {} ({:?}, backend {:?}, driver {})",
-                info.name,
-                info.device_type,
-                info.backend,
-                info.driver_info,
+            #[cfg(all(target_os = "linux", feature = "shared-texture-linux"))]
+            let node = format!(", {drm_device}");
+            #[cfg(not(all(target_os = "linux", feature = "shared-texture-linux")))]
+            let node = "";
+            let summary = format!(
+                "{} ({:?}, backend {:?}, driver {}{node})",
+                info.name, info.device_type, info.backend, info.driver_info,
             );
+            note!("lumit-gpu: adapter selected: {summary}");
+            // Kept for the bridge, which writes it to the diagnostics file once
+            // a session (see [`adapter_summary`]).
+            let _ = ADAPTER_SUMMARY.set(summary);
         }
         // wgpu's defaults for both of these panic. An engine crate may not panic
         // (docs/14-ENGINEERING-RULES.md), and neither condition is recoverable
@@ -3111,6 +3163,7 @@ mod tests {
 }
 
 pub mod composite;
+pub mod drm;
 pub mod fx;
 pub mod scope;
 /// The Windows-only zero-copy Viewer target. Present only in the opt-in

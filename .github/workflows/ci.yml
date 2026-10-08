@@ -135,14 +135,13 @@ jobs:
       # and the cure until the fixture existed was three separate
       # single-threaded runs that cost fifty minutes.
       #
-      # `LUMIT_GPU_DEBUG` names the adapter, which is the first question anyone
-      # asks about a GPU failure on a runner with no graphics card; the
-      # backtrace is for the failure this job has actually had, the process
-      # dying rather than a test failing.
+      # The backtrace is for the failure this job has actually had, the process
+      # dying rather than a test failing. Which adapter was picked, the first
+      # question about a GPU failure on a runner with no graphics card, is
+      # printed by every context as it opens.
       - run: cargo test --workspace
         env:
           RUST_BACKTRACE: 1
-          LUMIT_GPU_DEBUG: 1
 
   linux:
     name: tests (Linux, with media)
@@ -598,6 +597,17 @@ jobs:
       - name: flutter build linux --release
         working-directory: flutter_ui
         run: flutter build linux --release
+      # The runner's two decisions about a machine with two graphics cards:
+      # whether to take the engine's texture, and whether to ask for the NVIDIA
+      # card. Wrong answers crash a laptop nobody here has, so they sit in a
+      # header with no GTK or EGL in it and this runs them. Not part of the
+      # Flutter build, which has no test step for runner code.
+      - name: Test the runner's graphics card decisions
+        working-directory: flutter_ui/linux/runner
+        run: |
+          out="$RUNNER_TEMP/gpu_device_match_test"
+          c++ -std=c++17 -Wall -Wextra -Werror gpu_device_match_test.cc -o "$out"
+          "$out"
 
   flutter-macos:
     name: flutter frontend (macOS runner build)

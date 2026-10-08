@@ -2064,7 +2064,13 @@ class LumitUiState extends ChangeNotifier {
             stride: f.stride,
             offset: f.offset,
             fourcc: f.drmFourcc,
-            modifier: f.modifier.toInt())
+            modifier: f.modifier.toInt(),
+            // Which card the buffer is on, for the runner to compare with the
+            // card Flutter is drawing with.
+            renderMajor: f.renderNode?.major,
+            renderMinor: f.renderNode?.minor,
+            primaryMajor: f.primaryNode?.major,
+            primaryMinor: f.primaryNode?.minor)
         .then((id) => _adoptTexture(id, f.frame.toInt(), f.view));
   }
 

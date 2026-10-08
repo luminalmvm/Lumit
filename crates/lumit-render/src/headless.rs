@@ -443,6 +443,16 @@ pub struct SharedFrameInfoLinux {
     pub drm_fourcc: u32,
     /// The DRM modifier (`DRM_FORMAT_MOD_LINEAR` = 0 on the linear-tiling path).
     pub modifier: u64,
+    /// Which card the buffer is on, as the kernel names it: the `(major, minor)`
+    /// of its render node (`/dev/dri/renderD*`). The runner compares it with
+    /// the card Flutter draws with and refuses a texture from another one,
+    /// which a laptop with two cards otherwise crashes on (see
+    /// `lumit_gpu::drm`). `None` when the driver does not say.
+    pub render_node: Option<(u32, u32)>,
+    /// The same card's primary node (`/dev/dri/card*`), for a display driver
+    /// that can only name its own primary node. The two kinds are different
+    /// files with different numbers, so each is only compared with its own.
+    pub primary_node: Option<(u32, u32)>,
 }
 
 /// The inputs one export needs beyond the document itself: the comp's audio
@@ -2505,6 +2515,8 @@ impl HeadlessRenderer {
             offset: info.offset,
             drm_fourcc: info.drm_fourcc,
             modifier: info.modifier,
+            render_node: info.device.render.map(|node| (node.major, node.minor)),
+            primary_node: info.device.primary.map(|node| (node.major, node.minor)),
         })
     }
 

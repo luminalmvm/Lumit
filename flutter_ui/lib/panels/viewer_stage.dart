@@ -28,6 +28,7 @@ import '../shell/tool_bar_frb.dart';
 import '../state/tools.dart';
 import '../state/workspace.dart' show ViewerOverlays;
 import '../theme/theme.dart';
+import 'viewer_texture_controller.dart';
 import '../widgets/controls.dart';
 import 'viewer_anchor.dart';
 import 'viewer_camera.dart';
@@ -432,6 +433,9 @@ class ViewerStage extends StatelessWidget {
                 ),
               ),
             ),
+            // Why there is no picture, on a machine where the runner had to
+            // refuse it. Over the picture's place and under everything else.
+            const Positioned.fill(child: ViewerGpuMismatchNotice()),
             // The grid and the safe areas: over the picture, under the
             // layer controls, and worked out from the picture's own rectangle
             // so they zoom and pan with the shot.
@@ -903,6 +907,51 @@ class _MissingBadgeState extends State<_MissingBadge> {
       ),
     );
   }
+}
+
+/// The message the Viewer shows in place of a picture when the picture is on
+/// one graphics card and Flutter is drawing with another.
+///
+/// In plain terms: a laptop with two graphics cards can give the renderer one
+/// and the window the other, and NVIDIA's driver can't share a picture with
+/// another card. The Linux runner refuses that hand-off, since taking it
+/// crashed the application, and this says so where the picture would have
+/// been, with what to do about it. Nothing is drawn on any machine where the
+/// runner hasn't refused, which is every Windows and macOS machine and nearly
+/// every Linux one.
+class ViewerGpuMismatchNotice extends StatelessWidget {
+  const ViewerGpuMismatchNotice({super.key});
+
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<bool>(
+        valueListenable: ViewerTextureController.gpuMismatch,
+        builder: (context, refused, _) {
+          if (!refused) return const SizedBox.shrink();
+          final t = ThemeScope.of(context).theme;
+          return IgnorePointer(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 440),
+                child: Container(
+                  key: const ValueKey('viewer-gpu-mismatch'),
+                  margin: const EdgeInsets.all(12),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: t.surface2,
+                    borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+                  ),
+                  child: Text(
+                    l10n.viewerGpuMismatch,
+                    textAlign: TextAlign.center,
+                    style: t.small.copyWith(color: t.warning),
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      );
 }
 
 /// How the picture's texture is sampled, given how much of it lands on how
