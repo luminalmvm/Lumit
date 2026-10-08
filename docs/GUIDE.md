@@ -83,7 +83,6 @@ flutter analyze
    adding another.
 3. `.\scripts\check.ps1` before a commit.
 4. If the change breaks a rule in these docs, change the doc in the same commit.
-5. New user-facing strings: list the new keys in the pull request.
 
 ### Testing notes
 
