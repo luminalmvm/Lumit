@@ -23,6 +23,7 @@ import 'package:lumit_flutter/shell/share_dialog_frb.dart';
 import 'package:lumit_flutter/shell/splash.dart';
 import 'package:lumit_flutter/shell/status_line_frb.dart';
 import 'package:lumit_flutter/shell/tool_bar_frb.dart';
+import 'package:lumit_flutter/shell/tour_frb.dart';
 import 'package:lumit_flutter/shell/unsaved_changes_frb.dart';
 import 'package:lumit_flutter/shell/welcome_frb.dart';
 import 'package:lumit_flutter/shell/window_drop_frb.dart';
@@ -300,15 +301,22 @@ class _LumitAppViewState extends State<LumitAppView> {
       onShow: () => context.read<LumitUiState>().adoptSystemClipboard(),
       onRestart: () => context.read<LumitUiState>().adoptSystemClipboard(),
     );
-    // The first-run question, after the first frame so there is an
-    // Overlay to put it in. It asks nothing on any later launch.
+    // The first-run questions, after the first frame so there is an
+    // Overlay to put them in. They ask nothing on any later launch.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final ui = context.read<LumitUiState>();
-      // The update check follows the question rather than racing it: the
-      // setup screen is where somebody may have just switched it off.
       maybeShowFirstRunFrb(context, ui.workspace, keymap: ui.keymap)
-          .then((_) => ui.maybeCheckForUpdates());
+          .then((_) {
+        // The update check follows the questions rather than racing them:
+        // the setup screen is where somebody may have just switched it off.
+        ui.maybeCheckForUpdates();
+        // And the tour follows them too, in the look just chosen. Like the
+        // questions it opens by itself once.
+        if (mounted) {
+          maybeShowTourFrb(context, context.read<LumitState>(), ui);
+        }
+      });
     });
     _share = context.read<LumitState>().share..addListener(_offerConflicts);
   }

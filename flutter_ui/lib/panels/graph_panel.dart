@@ -1013,6 +1013,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     // graph wants it too when it is the panel's face.
     if (ui.consoleClaim != _consoleClaim) _priorConsoleClaim = ui.consoleClaim;
     ui.consoleClaim = _consoleClaim;
+    ui.nodeSearchExhibit.addListener(_onSearchExhibit);
     // **Delete means the picked boxes while this panel is the focused one**,
     // claimed rather than left to the canvas's own focus handler: the shell
     // answers Delete on the hardware keyboard, which runs *before* the focus
@@ -1076,6 +1077,9 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
   }
 
   void _unbind() {
+    _ui?.nodeSearchExhibit.removeListener(_onSearchExhibit);
+    _exhibitDown?.call();
+    _exhibitDown = null;
     _ui?.selectedLayer.removeListener(_reload);
     _ui?.model.removeListener(_reload);
     _ui?.shaderGraphEntry.removeListener(_onShaderEntry);
@@ -1723,64 +1727,94 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
   Future<void> _openSearch(Offset at, {GraphSocket? wire}) async {
     if (_searching) return;
     setState(() => _searching = true);
+    try {
+      await showFxConsoleFrb(
+        context: context,
+        anchor: lastKnownPointerPosition,
+        model: _searchModel(at, wire: wire),
+      );
+    } finally {
+      if (mounted) setState(() => _searching = false);
+    }
+  }
+
+  /// What the console lists over this canvas, for a box that would land on
+  /// [at] and ride [wire] when there is one in hand.
+  FxConsoleModel _searchModel(Offset at, {GraphSocket? wire}) {
     final all = (widget.driversLister ?? listDrivers)();
     // `listEffects` carries the drivers too; here they come from the
     // drivers listing instead, because the canvas's own add places the box on
     // the drop spot and rides the wire in one commit.
     final driverNames = {for (final driver in all) driver.name};
-    try {
-      await showFxConsoleFrb(
-        context: context,
-        anchor: lastKnownPointerPosition,
-        model: FxConsoleModel(
-          // A wire summoned this by a drop, not by a key, so it wears none.
-          keyHint:
-              wire == null ? _ui?.keymap.chordFor('console.open') : null,
-          footer: wire == null ? l10n.graphConsoleAdds : l10n.graphSearchWires,
-          entries: [
-            // The drivers first — the graph's own family. With a wire in hand
-            // the list is the entries that wire could actually land on, which
-            // is what makes the foot's sentence true: pick one and it is
-            // connected.
-            for (final driver in all)
-              if (wire == null || _fitsWire(driver, wire))
-                FxConsoleEntry(
-                  label: engineLabel(driver.label),
-                  kind: FxConsoleKind.effect,
-                  group: engineLabel(driver.categoryLabel),
-                  run: () => _addDriver(driver, at, wire),
-                ),
-            // Then every effect: chosen, it joins the layer's stack,
-            // and the stack is the chain — so the box appears wired into the
-            // picture's own path, auto-wired by construction. Only
-            // with no wire in hand: a dragged wire is a value looking for a
-            // socket, and the chain's sockets take no wire.
-            if (wire == null)
-              for (final effect in listEffects())
-                if (!driverNames.contains(effect.name))
-                  FxConsoleEntry(
-                    label: engineLabel(effect.label),
-                    kind: FxConsoleKind.effect,
-                    group: engineLabel(effect.categoryLabel),
-                    run: () => _addEffect(effect.name),
-                  ),
-            // The saved groups, beside the drivers they are made of.
-            // Only with no wire in hand: a group is a rig, not a socket, so
-            // there is nothing for the wire to land on.
-            if (wire == null)
-              for (final saved in (widget.groupsLister ?? listNodeGroups)())
-                FxConsoleEntry(
-                  label: saved.name,
-                  kind: FxConsoleKind.effect,
-                  group: l10n.graphGroup,
-                  run: () => _insertGroup(saved.path, at),
-                ),
-          ],
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _searching = false);
-    }
+    return FxConsoleModel(
+      // A wire summoned this by a drop, not by a key, so it wears none.
+      keyHint: wire == null ? _ui?.keymap.chordFor('console.open') : null,
+      footer: wire == null ? l10n.graphConsoleAdds : l10n.graphSearchWires,
+      entries: [
+        // The drivers first — the graph's own family. With a wire in hand
+        // the list is the entries that wire could actually land on, which
+        // is what makes the foot's sentence true: pick one and it is
+        // connected.
+        for (final driver in all)
+          if (wire == null || _fitsWire(driver, wire))
+            FxConsoleEntry(
+              label: engineLabel(driver.label),
+              kind: FxConsoleKind.effect,
+              group: engineLabel(driver.categoryLabel),
+              run: () => _addDriver(driver, at, wire),
+            ),
+        // Then every effect: chosen, it joins the layer's stack,
+        // and the stack is the chain — so the box appears wired into the
+        // picture's own path, auto-wired by construction. Only
+        // with no wire in hand: a dragged wire is a value looking for a
+        // socket, and the chain's sockets take no wire.
+        if (wire == null)
+          for (final effect in listEffects())
+            if (!driverNames.contains(effect.name))
+              FxConsoleEntry(
+                label: engineLabel(effect.label),
+                kind: FxConsoleKind.effect,
+                group: engineLabel(effect.categoryLabel),
+                run: () => _addEffect(effect.name),
+              ),
+        // The saved groups, beside the drivers they are made of.
+        // Only with no wire in hand: a group is a rig, not a socket, so
+        // there is nothing for the wire to land on.
+        if (wire == null)
+          for (final saved in (widget.groupsLister ?? listNodeGroups)())
+            FxConsoleEntry(
+              label: saved.name,
+              kind: FxConsoleKind.effect,
+              group: l10n.graphGroup,
+              run: () => _insertGroup(saved.path, at),
+            ),
+      ],
+    );
+  }
+
+  /// What takes the shown search down, while it is up.
+  VoidCallback? _exhibitDown;
+
+  /// The search shown and not used ([LumitUiState.nodeSearchExhibit]): the
+  /// console with this canvas's own list, over the middle of the canvas and
+  /// near its top so the list has the canvas to open over. Nothing is shown
+  /// while the panel's face is something other than a layer's graph.
+  void _onSearchExhibit() {
+    _exhibitDown?.call();
+    _exhibitDown = null;
+    final ui = _ui;
+    if (!mounted || ui == null || !ui.nodeSearchExhibit.value) return;
+    final canvas = _canvasKey.currentContext?.findRenderObject();
+    if (_graph == null || canvas is! RenderBox || !canvas.hasSize) return;
+    _exhibitDown = showFxConsoleExhibitFrb(
+      context: context,
+      anchor: canvas
+          .localToGlobal(Offset(canvas.size.width / 2, canvas.size.height / 5)),
+      model: _searchModel(graphClearSpot(
+        _toCanvas(Offset(_viewport.width / 2, _viewport.height / 2)),
+        [for (final b in _boxesNow()) b.rect],
+      )),
+    );
   }
 
   /// The stack's own add, which is the graph's add for an effect: the chain

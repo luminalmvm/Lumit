@@ -111,9 +111,10 @@ Future<(LumitState, LumitUiState)> bootLumit() async {
       '${Directory.systemTemp.createTempSync('lumit-shots').path}/workspace.json';
   final state = LumitState()..newProject();
   final ui = LumitUiState(state);
-  // A fresh store reads as a first run, and the first-run dialogue would sit
-  // over every shot in the sweep.
+  // A fresh store reads as a first run, and the first-run dialogue and the
+  // tour after it would sit over every shot in the sweep.
   ui.workspace.skipFirstRun();
+  ui.workspace.finishTour();
   ui.workspace.setShape(shotShape);
   return (state, ui);
 }

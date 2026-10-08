@@ -82,6 +82,7 @@ import 'settings_window_frb.dart';
 import 'share_dialog_frb.dart';
 import 'theme_name_dialog.dart';
 import 'tool_bar_frb.dart' show LumitTopLineToolsFrb;
+import 'tour_frb.dart';
 import 'update_dialog_frb.dart';
 import 'workspace_shortcut_frb.dart';
 
@@ -1606,6 +1607,7 @@ List<MenuSection> lumitMenus(
             MenuEntry(l10n.menuLumitHelp, () => _openLink(app, lumitDocsUrl)),
             MenuEntry(l10n.menuLumitOnlineGuides,
                 () => _openLink(app, lumitGuidesUrl)),
+            MenuEntry(l10n.menuShowTour, () => showTourFrb(context, app, ui)),
             MenuEntry.divider(),
             MenuEntry.toggle(
               l10n.menuEnableDebugPanel,

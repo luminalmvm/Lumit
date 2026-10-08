@@ -13,6 +13,7 @@ import 'package:uuid/uuid.dart';
 import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
+import '../state/drag_payloads.dart';
 import '../state/timeline_columns.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
@@ -723,11 +724,17 @@ class LayerBlock extends StatefulWidget {
     required this.layerId,
     required this.builder,
     this.onlyLit = false,
+    this.onEffectDropped,
   });
 
   final ValueListenable<TimelineSelection> selection;
   final String layerId;
   final Widget Function(BuildContext context, LayerSelection mine) builder;
+
+  /// An effect dragged from Effects & presets and let go on this layer, by
+  /// the name `addEffect` takes. Both halves of the table take the drop, so
+  /// the row and its bar are the same target.
+  final ValueChanged<String>? onEffectDropped;
 
   /// Watch the lit state alone, not the whole slice — what the lane half
   /// wants: a bar draws a layer's span and whether the layer is chosen, and a
@@ -785,8 +792,29 @@ class _LayerBlockState extends State<LayerBlock> {
   /// (docs/impl/ui-performance.md §4.3). With a layer per block the click
   /// re-records the two blocks whose light moved and the rest translate.
   @override
-  Widget build(BuildContext context) =>
-      RepaintBoundary(child: widget.builder(context, _mine));
+  Widget build(BuildContext context) {
+    final block = RepaintBoundary(child: widget.builder(context, _mine));
+    final dropped = widget.onEffectDropped;
+    if (dropped == null) return block;
+    return DragTarget<EffectDragData>(
+      onAcceptWithDetails: (details) => dropped(details.data.name),
+      builder: (context, candidate, _) {
+        final t = ThemeScope.of(context).theme;
+        // Always there, lit or not: a box that came and went with the drag
+        // would rebuild the row under the pointer from nothing.
+        return DecoratedBox(
+          position: DecorationPosition.foreground,
+          decoration: candidate.isEmpty
+              ? const BoxDecoration()
+              : BoxDecoration(
+                  border: Border.all(color: t.accent),
+                  color: t.accent.withValues(alpha: 0.06),
+                ),
+          child: block,
+        );
+      },
+    );
+  }
 }
 
 /// The left column: one row per layer, with its switches and columns.
@@ -901,6 +929,15 @@ class Outline extends StatelessWidget {
         child: LayerBlock(
           selection: selection,
           layerId: rows[i].id,
+          onEffectDropped: (name) {
+            try {
+              rows[i].entry.layer.addEffect(name: name);
+            } catch (_) {
+              // A name this build does not know: the engine refused calmly
+              // and the drop did nothing.
+            }
+            onChanged();
+          },
           builder: (context, mine) => Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [

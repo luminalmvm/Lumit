@@ -857,6 +857,15 @@ class LayerArea extends StatelessWidget {
                                           // selection moves: picking a key row
                                           // must not redraw the bar above it.
                                           onlyLit: true,
+                                          onEffectDropped: (name) {
+                                            try {
+                                              rows[i]
+                                                  .entry
+                                                  .layer
+                                                  .addEffect(name: name);
+                                            } catch (_) {}
+                                            onChanged();
+                                          },
                                           builder: (context, mine) => Bar(
                                             key: ValueKey<String>(
                                                 'tl-bar-${rows[i].id}'),

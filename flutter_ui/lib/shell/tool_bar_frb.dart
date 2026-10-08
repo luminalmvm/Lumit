@@ -133,6 +133,7 @@ class LumitToolBarFrb extends StatelessWidget {
           // The tool pill keeps the magnet at its end; the flat strip keeps
           // the magnet after the options, where it has always stood.
           final tools = Row(
+            key: const ValueKey('tool-bar-tools'),
             mainAxisSize: MainAxisSize.min,
             children: [
               // Scrolls rather than overflowing: a narrow window has less
@@ -359,6 +360,7 @@ class LumitToolRailFrb extends StatelessWidget {
           t,
           'tool-pill',
           Column(
+            key: const ValueKey('tool-bar-tools'),
             children: [
               Expanded(
                 child: SingleChildScrollView(
@@ -1009,6 +1011,7 @@ class _WorkspaceStrip extends StatelessWidget {
     final ui = context.watch<LumitUiState>();
     final active = ui.workspace.activePreset;
     return Row(
+      key: const ValueKey('workspace-strip'),
       mainAxisSize: MainAxisSize.min,
       children: [
         for (final (i, preset) in WorkspacePreset.values.indexed)
