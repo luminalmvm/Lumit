@@ -25,8 +25,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/panels/effect_controls_panel_frb.dart';
-import 'package:lumit_flutter/panels/effect_param_row_frb.dart'
-    show EffectParamRowFrb;
 import 'package:lumit_flutter/panels/timeline_panel_frb.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
@@ -558,12 +556,14 @@ void main() {
       final top = p.layer.getEffects().first.id();
       expect(find.byKey(ValueKey<String>('fx-card-$top')), findsOneWidget,
           reason: 'the card under it is still on screen');
+      // Invert's only rows are Mix and Matte, which sit under the Compositing
+      // fold, so the fold's heading is what the card has to show for itself.
       expect(
         find.descendant(
           of: find.byKey(ValueKey<String>('fx-card-$top')),
-          matching: find.byType(EffectParamRowFrb),
+          matching: find.byKey(ValueKey<String>('fx-compositing-$top')),
         ),
-        findsWidgets,
+        findsOneWidget,
         reason: 'the card that was kept stopped drawing its rows',
       );
 

@@ -742,14 +742,23 @@ Widget fxTwoColumnRow({
 /// column's x, so the fold reads as belonging to the rows beneath it and the
 /// panel keeps one straight label edge from top to bottom. The label is
 /// a kicker, as every container label is (§7.1).
+///
+/// [summary] is what a shut fold says about the rows inside it, drawn muted
+/// in the value column. Without one the label has the whole row to itself.
 Widget fxGroupHeaderRow(
   BuildContext context, {
   required String label,
   required bool open,
   required VoidCallback onToggle,
+  String? summary,
   Key? key,
 }) {
   final t = ThemeScope.of(context).theme;
+  final name = Text(
+    t.kickerCase(label),
+    style: open ? t.kickerOn : t.kicker,
+    overflow: TextOverflow.ellipsis,
+  );
   return GestureDetector(
     key: key,
     behavior: HitTestBehavior.opaque,
@@ -777,15 +786,19 @@ Widget fxGroupHeaderRow(
               ),
             ),
             const SizedBox(width: 4),
-            SizedBox(
-              width: fxLabelWidthFor(constraints.maxWidth),
-              child: Text(
-                t.kickerCase(label),
-                style: open ? t.kickerOn : t.kicker,
-                overflow: TextOverflow.ellipsis,
+            if (summary == null)
+              Expanded(child: name)
+            else ...[
+              SizedBox(
+                  width: fxLabelWidthFor(constraints.maxWidth), child: name),
+              Expanded(
+                child: Text(
+                  summary,
+                  style: t.small.copyWith(color: t.textMuted),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-            ),
-            const Expanded(child: SizedBox.shrink()),
+            ],
           ],
         ),
       ),

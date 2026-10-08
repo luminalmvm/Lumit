@@ -45,6 +45,7 @@ import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
+import '../panels/effect_param_row_frb.dart' show byEffectLabel;
 import '../panels/layer_fold_frb.dart' show RevealFilter;
 import '../panels/timeline_extras_frb.dart';
 import '../panels/timeline_group_row_frb.dart';
@@ -1641,7 +1642,7 @@ List<MenuEntry> _effectMenu(LumitState app, List<LayerReference> layers) => [
         ]),
     ];
 
-/// Every built-in effect, grouped by its heading, in the engine's own order.
+/// Every built-in effect, grouped by its heading, each group sorted by name.
 ///
 /// Read once: the catalogue is fixed for the run, and the menu bar rebuilds on
 /// every document change — a bridge call per rebuild is exactly the cost the
@@ -1652,7 +1653,7 @@ Map<String, List<BridgeEffectInfo>> _effectGroups() =>
       for (final effect in listEffects()) {
         groups.putIfAbsent(effect.categoryLabel, () => []).add(effect);
       }
-      return groups;
+      return groups..forEach((_, effects) => effects.sort(byEffectLabel));
     }();
 
 Map<String, List<BridgeEffectInfo>>? _effectGroupsCache;

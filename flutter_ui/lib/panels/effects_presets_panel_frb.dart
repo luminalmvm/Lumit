@@ -6,9 +6,10 @@
 // dragging it onto the Effect controls panel, which carries an `EffectDragData`
 // and lands on that panel's one layer.
 //
-// The list comes from `listEffects`, which is the engine's own schema order, so
-// the panel never holds a copy of what effects exist. Adding a built-in to the
-// engine puts it here with no Dart change at all.
+// The list comes from `listEffects`, so the panel never holds a copy of what
+// effects exist. Adding a built-in to the engine puts it here with no Dart
+// change at all. The headings keep the engine's order and the effects under
+// each are sorted by name.
 //
 // **Plugins are in that same list** (docs/12 §2.6). An OFX plugin the
 // engine found on this machine arrives as one more entry, under a heading that
@@ -17,8 +18,9 @@
 // one difference the spec asks for is a small provenance tag in the row's
 // context menu, which is also where the plugin can be switched off.
 //
-// **Favourites** (owner, desk test). A star on every row, and the ones starred
-// gather under a Favourites heading above everything else — the effects you
+// **Favourites** (owner, desk test). A star on the row under the pointer and
+// on every row already starred, and the ones starred gather under a
+// Favourites heading above everything else: the effects you
 // reach for are four or five of the forty, and hunting them down their
 // categories every time is the panel's oldest annoyance. A star is a
 // *preference*, so it lives in the workspace and survives a restart, not in
@@ -49,6 +51,7 @@ import '../theme/theme.dart';
 import '../state/drag_payloads.dart';
 import '../state/file_dialogs.dart';
 import '../widgets/controls.dart';
+import 'effect_param_row_frb.dart' show byEffectLabel;
 
 class EffectsPresetsPanelFrb extends StatefulWidget {
   /// The preset file seams, injected by tests so no plugin channel opens.
@@ -105,6 +108,10 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
   /// The Favourites group's name in [_shut], on the same footing.
   static const String _favouritesKey = '*favourites';
 
+  /// The star by the search box is on: only the favourites are listed. How
+  /// the panel is being looked at, like the folds, so it is not saved.
+  bool _favouritesOnly = false;
+
   /// A saved preset's key in the workspace's favourites. An effect is starred
   /// under its own match name, which no preset can collide with because a
   /// preset's carries this prefix.
@@ -156,7 +163,7 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
     final needle = _search.text.trim().toLowerCase();
 
     // Grouped in schema order, so the headings come out in the order the engine
-    // declares rather than alphabetically by accident.
+    // declares. Under a heading the effects are sorted by name below.
     final grouped = <String, List<BridgeEffectInfo>>{};
     final headings = <String, String>{};
     for (final effect in (widget.effectsLister ?? listEffects)()) {
@@ -189,6 +196,10 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
         headings.putIfAbsent(effect.category, () => heading);
       }
     }
+    // By name under each heading, as the menus list them.
+    for (final effects in grouped.values) {
+      effects.sort(byEffectLabel);
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -199,8 +210,22 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
           padding: const EdgeInsets.symmetric(horizontal: 6),
           child: Row(
             children: [
-              lumitIcon(LumitIcon.star, size: iconSize, color: t.textMuted),
-              const SizedBox(width: 6),
+              // The star by the search box narrows the list to the favourites.
+              LumitTooltip(
+                message: l10n.tipFavouritesOnly,
+                child: HouseButton(
+                  key: const ValueKey('fx-favourites-only'),
+                  frameless: true,
+                  small: true,
+                  padding: const EdgeInsets.all(1),
+                  onPressed: () =>
+                      setState(() => _favouritesOnly = !_favouritesOnly),
+                  child: lumitIcon(LumitIcon.star,
+                      size: iconSize,
+                      color: _favouritesOnly ? t.accent : t.textMuted),
+                ),
+              ),
+              const SizedBox(width: 4),
               Expanded(
                 child: HouseTextField(
                   key: const ValueKey('fx-search'),
@@ -222,8 +247,16 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
           child: Builder(builder: (context) {
             final favouriteRows = _favouriteRows(t, ui, grouped, needle);
             final presetRows = _presetRows(t, ui, needle);
-            if (grouped.isEmpty && presetRows.isEmpty) {
+            if (_favouritesOnly
+                ? favouriteRows.isEmpty
+                : grouped.isEmpty && presetRows.isEmpty) {
               return Center(child: Text(l10n.noEffectsMatch, style: t.small));
+            }
+            if (_favouritesOnly) {
+              return ListView(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                children: favouriteRows,
+              );
             }
             return ListView(
               padding: const EdgeInsets.symmetric(vertical: 4),
@@ -313,8 +346,8 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
     setState(() {});
   }
 
-  /// The Favourites heading and its rows — the starred effects in the engine's
-  /// own schema order, then the starred presets.
+  /// The Favourites heading and its rows: the starred effects in the order
+  /// the list below has them, then the starred presets.
   ///
   /// It draws nothing at all until something is starred: a permanently empty
   /// heading at the top of the panel would be a standing instruction to use a
@@ -339,9 +372,12 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
           preset,
     ];
     if (effects.isEmpty && presets.isEmpty) return const [];
-    final open = _isOpen(_favouritesKey, needle);
+    // Narrowed to the favourites, the list is them: no heading, and nothing
+    // a fold could hide.
+    final open = _favouritesOnly || _isOpen(_favouritesKey, needle);
     return [
-      _heading(t, group: _favouritesKey, label: l10n.favourites, open: open),
+      if (!_favouritesOnly)
+        _heading(t, group: _favouritesKey, label: l10n.favourites, open: open),
       if (open) ...[
         for (final effect in effects)
           _EffectRow(
@@ -417,11 +453,14 @@ const double _starColumn = 22;
 
 /// One row's star, and the tap that turns it on or off.
 ///
-/// Filled with the accent when it is on, drawn in the hairline when it is not:
-/// an unstarred row still shows where its star would be, because a control
-/// that only appears on hover is a control most people never find.
+/// Filled with the accent when it is on. Off, it is drawn in the hairline and
+/// only while [hovered]: an outlined star on every row was a column of noise
+/// down the panel. The target is there either way.
 Widget _star(BuildContext context,
-    {required bool on, required VoidCallback onToggle, required String name}) {
+    {required bool on,
+    required bool hovered,
+    required VoidCallback onToggle,
+    required String name}) {
   final t = ThemeScope.of(context).theme;
   return LumitTooltip(
     message: on ? l10n.tipUnfavourite : l10n.tipFavourite,
@@ -432,13 +471,15 @@ Widget _star(BuildContext context,
       child: SizedBox(
         width: _starColumn,
         height: 20,
-        child: Center(
-          child: lumitIcon(
-            LumitIcon.star,
-            size: iconSize,
-            color: on ? t.accent : t.hairlineStrong,
-          ),
-        ),
+        child: on || hovered
+            ? Center(
+                child: lumitIcon(
+                  LumitIcon.star,
+                  size: iconSize,
+                  color: on ? t.accent : t.hairlineStrong,
+                ),
+              )
+            : null,
       ),
     ),
   );
@@ -455,29 +496,54 @@ Widget _libraryRow(
   required String starKey,
 }) {
   final t = ThemeScope.of(context).theme;
-  return SizedBox(
-    height: 20,
-    child: Row(
-      children: [
-        _star(context,
-            on: favourite, onToggle: onToggleFavourite, name: starKey),
-        Expanded(
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onDoubleTap: onApply,
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Padding(
-                padding: const EdgeInsets.only(right: 6),
-                child:
-                    Text(label, style: t.body, overflow: TextOverflow.ellipsis),
+  return _Hovered(
+    builder: (context, hovered) => SizedBox(
+      height: 20,
+      child: Row(
+        children: [
+          _star(context,
+              on: favourite,
+              hovered: hovered,
+              onToggle: onToggleFavourite,
+              name: starKey),
+          Expanded(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onDoubleTap: onApply,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: Text(label,
+                      style: t.body, overflow: TextOverflow.ellipsis),
+                ),
               ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     ),
   );
+}
+
+/// Whether the pointer is over a row, for the star that only shows then.
+class _Hovered extends StatefulWidget {
+  final Widget Function(BuildContext context, bool hovered) builder;
+  const _Hovered({required this.builder});
+
+  @override
+  State<_Hovered> createState() => _HoveredState();
+}
+
+class _HoveredState extends State<_Hovered> {
+  bool _over = false;
+
+  @override
+  Widget build(BuildContext context) => MouseRegion(
+        onEnter: (_) => setState(() => _over = true),
+        onExit: (_) => setState(() => _over = false),
+        child: widget.builder(context, _over),
+      );
 }
 
 /// A saved preset's row: the same shape an effect's has, so the two halves of

@@ -160,6 +160,9 @@ class KeyedValueField extends StatefulWidget {
   final int decimals;
   final String? suffix;
 
+  /// The property's default, where it has one: what the field's Reset keys.
+  final double? resetTo;
+
   /// The finished edit: a released drag, or a typed value. Called once.
   final ValueChanged<double> onCommit;
 
@@ -189,6 +192,7 @@ class KeyedValueField extends StatefulWidget {
     this.speed = 1,
     this.decimals = 2,
     this.suffix,
+    this.resetTo,
   });
 
   @override
@@ -216,6 +220,7 @@ class _KeyedValueFieldState extends State<KeyedValueField> {
         speed: widget.speed,
         decimals: widget.decimals,
         suffix: widget.suffix,
+        resetTo: widget.resetTo,
         // Typed, reset and pasted values are already one-shot edits.
         onChanged: _commit,
         onChangeStart: () {

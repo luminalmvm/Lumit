@@ -1,6 +1,8 @@
 // The value well: the modifier ladder a scrub runs on, the chip that shows it,
 // and the field itself.
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -371,6 +373,7 @@ class _DragValueFieldState extends State<DragValueField>
     // The chip lives in the Overlay rather than under this field, so a field
     // disposed mid-drag would leave it on screen over whatever came next.
     _hideLadder();
+    _refusal?.cancel();
     _factor.dispose();
     _controller.dispose();
     _focus.dispose();
@@ -417,13 +420,37 @@ class _DragValueFieldState extends State<DragValueField>
     return widget.suffix == null ? s : '$s${widget.suffix}';
   }
 
-  void _commitText() {
+  /// [submitted] is Enter, as against clicking or tabbing away.
+  void _commitText({bool submitted = false}) {
     final raw = _controller.text.replaceAll(widget.suffix ?? '', '').trim();
     final parsed = parseNumberField(raw);
     if (parsed != null) {
       widget.onChanged(parsed.clamp(widget.min, widget.max));
+    } else if (raw.isNotEmpty) {
+      // Neither a number nor a sum. The edge says so, and on Enter the
+      // editor stays open with what was typed, so it can be put right.
+      // Pressing Enter has already asked to drop the focus, and asking for
+      // it back is what cancels that.
+      _refuse();
+      if (submitted) {
+        _focus.requestFocus();
+        return;
+      }
     }
     setState(() => _editing = false);
+  }
+
+  /// What was typed could not be read: the edge takes the error colour for a
+  /// moment and then lets go. No message, the same as a well has always been.
+  bool _refused = false;
+  Timer? _refusal;
+
+  void _refuse() {
+    _refusal?.cancel();
+    setState(() => _refused = true);
+    _refusal = Timer(const Duration(milliseconds: 900), () {
+      if (mounted) setState(() => _refused = false);
+    });
   }
 
   /// The plain numeric string (no suffix) — what Copy puts on the clipboard and
@@ -512,7 +539,8 @@ class _DragValueFieldState extends State<DragValueField>
             // `animated`, not `accent`: the focused value field is the one
             // focus that means "you are about to change a value" (§3.1). Drawn
             // at the resting face's own width so the edge does not move either.
-            border: Border.all(color: t.animated, width: 1),
+            border:
+                Border.all(color: _refused ? t.error : t.animated, width: 1),
           ),
           // The selection gestures, so a press puts the caret down and a drag
           // highlights — without this the editor took keys but a drag over the
@@ -553,7 +581,7 @@ class _DragValueFieldState extends State<DragValueField>
                     backgroundCursorColor: t.surface2,
                     selectionColor: t.accent.withValues(alpha: 0.5),
                     selectionControls: desktopTextSelectionHandleControls,
-                    onSubmitted: (_) => _commitText(),
+                    onSubmitted: (_) => _commitText(submitted: true),
                   ),
                 ),
               ),
@@ -662,20 +690,25 @@ class _DragValueFieldState extends State<DragValueField>
                 ? BorderRadius.circular(t.tokens.wellRadius)
                 : wellCorners(t),
             border: widget.bare
-                ? Border.all(color: const Color(0x00000000), width: 1)
+                ? Border.all(
+                    color: _refused ? t.error : const Color(0x00000000),
+                    width: 1)
                 : wellBorder(
                     t,
-                    _dragging
-                        ? t.accent
-                        // The one focus ring that is `animated` rather than
-                        // `accent`: it means "you are about to change a value"
-                        // (§3.1, §6.5).
-                        : _focused
-                            ? t.animated
-                            : _hover
-                                ? t.hairlineStrong
-                                : t.hairline,
-                    lit: _dragging || _focused || _hover,
+                    // Refused text, typed just now and then clicked away from.
+                    _refused
+                        ? t.error
+                        : _dragging
+                            ? t.accent
+                            // The one focus ring that is `animated` rather
+                            // than `accent`: it means "you are about to change
+                            // a value" (§3.1, §6.5).
+                            : _focused
+                                ? t.animated
+                                : _hover
+                                    ? t.hairlineStrong
+                                    : t.hairline,
+                    lit: _refused || _dragging || _focused || _hover,
                   ),
           ),
           child: Align(

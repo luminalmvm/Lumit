@@ -585,6 +585,20 @@ class Workspace extends ChangeNotifier {
     if (savedExpressions.remove(name) != null) settingsChanged();
   }
 
+  /// The last eight colours applied through the colour picker, newest first,
+  /// each as red, green and blue. Kept here so they outlast a restart.
+  final List<List<double>> recentColours = [];
+
+  /// Put a colour at the front of [recentColours]. Saved at once and nobody
+  /// is told: the picker reads the list when it opens.
+  void rememberColour(double r, double g, double b) {
+    recentColours
+      ..removeWhere((c) => c[0] == r && c[1] == g && c[2] == b)
+      ..insert(0, [r, g, b]);
+    if (recentColours.length > 8) recentColours.length = 8;
+    save();
+  }
+
   /// Whether an effect's own graph — Levels' histogram, a Curves channel —
   /// draws entirely in the theme's colours (owner, desk test). Off by default,
   /// and for the same reason the scopes toggle is: a red curve should be red.
@@ -1466,6 +1480,7 @@ class Workspace extends ChangeNotifier {
         'themed_scopes': themedScopes,
         'favourite_effects': favouriteEffects.toList()..sort(),
         'saved_expressions': savedExpressions,
+        'recent_colours': [...recentColours],
         'themed_effect_graphs': themedEffectGraphs,
         'curve_plot_size': curvePlotSize,
         'themed_viewer_surround': themedViewerSurround,
@@ -1574,6 +1589,14 @@ class Workspace extends ChangeNotifier {
           for (final MapEntry(:key, :value) in saved.entries)
             if (key is String && value is String) key: value,
       });
+    recentColours
+      ..clear()
+      ..addAll([
+        if (j['recent_colours'] case final List<dynamic> colours)
+          for (final c in colours.take(8))
+            if (c case [final num r, final num g, final num b])
+              [r.toDouble(), g.toDouble(), b.toDouble()],
+      ]);
     themedEffectGraphs = j['themed_effect_graphs'] == true;
     // Absent means a file written before the size could be chosen: medium.
     curvePlotSize = (j['curve_plot_size'] as num?)?.toDouble() ?? 150;

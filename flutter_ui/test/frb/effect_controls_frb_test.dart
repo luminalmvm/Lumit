@@ -648,6 +648,9 @@ void main() {
       await mount(tester, p, transform: false);
 
       final id = p.layer.getEffects().single.id();
+      // The Mix and Matte rows sit under the Compositing fold, shut by default.
+      await tester.tap(find.byKey(ValueKey<String>('fx-compositing-$id')));
+      await tester.pumpAndSettle();
       final picker = find.byKey(ValueKey<String>('fx-layer-$id-matte'));
       final invert = find.byKey(ValueKey<String>('fx-bool-$id-matte_invert'));
       expect(picker, findsOneWidget,
@@ -705,6 +708,9 @@ void main() {
       await mount(tester, p, transform: false);
 
       final id = p.layer.getEffects().single.id();
+      // Both rows sit under the Compositing fold, shut by default.
+      await tester.tap(find.byKey(ValueKey<String>('fx-compositing-$id')));
+      await tester.pumpAndSettle();
       final channel =
           find.byKey(ValueKey<String>('fx-choice-$id-matte_channel'));
       final blend = find.byKey(ValueKey<String>('fx-choice-$id-blend'));

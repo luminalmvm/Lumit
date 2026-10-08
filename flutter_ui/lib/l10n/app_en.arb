@@ -13914,5 +13914,26 @@
   "selectAProperty": "Select a property",
   "@selectAProperty": {
     "description": "Shown beside the Expressions panel's Apply button when no property row is selected in the Timeline, so there is nowhere for the expression to go."
+  },
+  "fxFoldCompositing": "Compositing",
+  "@fxFoldCompositing": {
+    "description": "Effect controls panel: heading of the fold at the foot of every effect that holds its Mix and Matte rows. One word, drawn in capitals by the panel."
+  },
+  "fxCompositingMatte": "matte: {layer}",
+  "@fxCompositingMatte": {
+    "description": "Effect controls panel: part of the short muted summary on a shut Compositing fold, shown when the effect has a matte layer chosen. Lower case on purpose, it sits beside other values such as '50%' and 'Screen'. {layer} is the matte layer's name.",
+    "placeholders": {
+      "layer": {
+        "type": "String"
+      }
+    }
+  },
+  "tipFavouritesOnly": "Favourites only",
+  "@tipFavouritesOnly": {
+    "description": "Hover text on the star beside the search box in the Effects & presets panel. Pressing it narrows the list to the starred effects and presets; pressing it again shows everything."
+  },
+  "swatchRecent": "Recent colours",
+  "@swatchRecent": {
+    "description": "Hover text on the row of recently used colours inside the colour picker, above the project's colour shelf."
   }
 }
