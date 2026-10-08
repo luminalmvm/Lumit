@@ -5,6 +5,8 @@ import 'package:flutter/gestures.dart' show GestureBinding;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lumit_flutter/l10n/strings.dart';
+import 'package:lumit_flutter/panels/graph_channels.dart' show keyFrame;
+import 'package:lumit_flutter/panels/layer_fold_frb.dart' show layerKeys;
 import 'package:lumit_flutter/panels/panels_frb.dart';
 import 'package:lumit_flutter/panels/timeline_extras_frb.dart';
 import 'package:lumit_flutter/panels/timeline_group_row_frb.dart';
@@ -503,6 +505,59 @@ class _LumitAppViewState extends State<LumitAppView> {
         ui.stepFrame(-1);
       case 'playback.frame.next' || 'playback.shuttle.forward':
         ui.stepFrame(1);
+      // `K` stops the transport the way Space does, and is left for anything
+      // else that wants it when nothing is playing.
+      case 'playback.shuttle.pause':
+        if (ui.playing.value) {
+          ui.stopPlayback();
+        } else {
+          handled = false;
+        }
+      // `,` and `.` go to the keyframe either side of the playhead, and with
+      // Ctrl to the edit point: on the selected layers, or on every layer when
+      // none is selected. Found the way a property's own arrows find theirs,
+      // by frame and never the one the playhead is on.
+      case 'keyframe.prev' ||
+            'keyframe.next' ||
+            'edit.point.prev' ||
+            'edit.point.next':
+        final ids = ui.selectedLayerIds;
+        final before = action.endsWith('prev');
+        final at = ui.playheadFrame.value;
+        int? to;
+        for (final entry in ui.model.layers) {
+          if (ids.isNotEmpty && !ids.contains(entry.layer.internallayerId)) {
+            continue;
+          }
+          final frames = action.startsWith('keyframe')
+              ? [
+                  for (final key in layerKeys(
+                    entry: entry,
+                    flowParams:
+                        entry.info.flow ? entry.layer.getFlowParams() : null,
+                    volumeDb: entry.info.volumeDb,
+                  ))
+                    keyFrame(key, ui.model.fps).round(),
+                ]
+              // A cut between clips, so only a Sequence layer has any.
+              : [
+                  for (final clip in entry.layer.getClips()) ...[
+                    clip.startFrame,
+                    clip.endFrame,
+                  ],
+                ];
+          for (final frame in frames) {
+            // One outside the composition is nowhere for a playhead to stand.
+            if (frame < 0 || frame >= ui.model.durationFrames) continue;
+            if (before ? frame >= at : frame <= at) continue;
+            if (to == null || (before ? frame > to : frame < to)) to = frame;
+          }
+        }
+        if (to == null) {
+          handled = false;
+        } else {
+          ui.scrubTo(to);
+        }
       case 'playback.comp.start':
         ui.playheadFrame.value = 0;
       case 'playback.comp.end':
@@ -693,12 +748,14 @@ class _LumitAppViewState extends State<LumitAppView> {
           );
           state.notifyDocumentChanged();
         }
+      // Every selected layer, through the call the Edit menu and the Timeline
+      // row's own menu make.
       case 'layer.duplicate':
-        final layer = ui.selectedLayer.value;
-        if (layer == null) {
+        final layers = ui.selectedLayers.value;
+        if (layers.isEmpty) {
           handled = false;
         } else {
-          layer.duplicate();
+          duplicateLayersFrb(layers);
           state.notifyDocumentChanged();
         }
       // The light fold, beside the heavy one below it. Ctrl+G gathers

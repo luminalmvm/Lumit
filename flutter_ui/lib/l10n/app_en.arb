@@ -5143,6 +5143,15 @@
   "@menuRedo": {
     "description": "Menu item."
   },
+  "menuRedoStep": "Redo {step}",
+  "@menuRedoStep": {
+    "description": "The Edit menu's Redo row when there is a step to redo. {step} is that step's name as the Edit > History window shows it, for example Move layer.",
+    "placeholders": {
+      "step": {
+        "type": "String"
+      }
+    }
+  },
   "menuResetWorkspace": "Reset workspace",
   "@menuResetWorkspace": {
     "description": "Menu item."
@@ -5336,6 +5345,15 @@
   "menuUndo": "Undo",
   "@menuUndo": {
     "description": "Menu item."
+  },
+  "menuUndoStep": "Undo {step}",
+  "@menuUndoStep": {
+    "description": "The Edit menu's Undo row when there is a step to undo. {step} is that step's name as the Edit > History window shows it, for example Move layer.",
+    "placeholders": {
+      "step": {
+        "type": "String"
+      }
+    }
   },
   "menuView": "View",
   "@menuView": {

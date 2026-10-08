@@ -18,6 +18,7 @@ import 'dart:io';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lumit_flutter/l10n/engine_labels.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/state/dock.dart';
 import 'package:lumit_flutter/shell/menu_bar_frb.dart';
@@ -293,28 +294,30 @@ void main() {
       expect(colourOf('Redo'), t.textDisabled);
       await dismiss(tester);
 
-      // One edit, and Undo lights up.
+      // One edit, and Undo lights up and names it, in the History window's
+      // own words.
       await makeComp(tester);
       expect(p.state.project!.history().canUndo, isTrue);
+      final step = engineLabel(p.state.project!.historyEntries().last.name);
 
       await tester.tap(find.byKey(const ValueKey<String>('menu-Edit')));
       await tester.pump();
-      expect(colourOf('Undo'), isNot(t.textDisabled),
+      expect(colourOf('Undo $step'), isNot(t.textDisabled),
           reason:
               'an item you can see is disabled tells you the document state');
-      await tester.tap(find.text('Undo'));
+      await tester.tap(find.text('Undo $step'));
       await tester.pump();
 
       expect(p.state.project!.getItems(), isEmpty,
           reason: 'Undo reached the engine, not just the menu');
       expect(p.state.project!.history().canRedo, isTrue);
 
-      // Undone: the pair swaps over.
+      // Undone: the pair swaps over, and the name goes with it.
       await tester.tap(find.byKey(const ValueKey<String>('menu-Edit')));
       await tester.pump();
       expect(colourOf('Undo'), t.textDisabled);
-      expect(colourOf('Redo'), isNot(t.textDisabled));
-      await tester.tap(find.text('Redo'));
+      expect(colourOf('Redo $step'), isNot(t.textDisabled));
+      await tester.tap(find.text('Redo $step'));
       await tester.pump();
 
       expect(allItems(p.state).whereType<ItemReference_Composition>().length, 1,

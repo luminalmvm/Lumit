@@ -10,9 +10,9 @@
 // cannot drift apart.
 //
 // **What a row can say.** Every engine-backed item calls straight through a
-// reference handle. An item with no action yet is still *listed*, marked
-// "(Not implemented)" and disabled, so the shape of the finished application is
-// visible while it is being built and nobody has to guess whether a command is
+// reference handle. An item with no action yet stays in the tree as a
+// [MenuEntry.todo] and is left off the menus until it is built, so a menu
+// offers only what works and nobody has to guess whether a listed command is
 // missing or broken. An item whose command needs something that is not there —
 // no project, no composition, no selected layer — greys out rather than failing
 // when pressed: an item you can see is disabled tells you the state of the
@@ -181,8 +181,8 @@ List<MenuEntry> _userWorkspaceRows(
 ///
 /// [action] is a keymap action id, not a callback — the chord beside the row is
 /// looked up from the live keymap when the bar is built. [todo] marks a command
-/// that is specified but not built; it draws disabled with "(Not implemented)"
-/// after its name. [checked] makes the row a toggle, drawn with a tick column.
+/// that is specified but not built; neither renderer shows it ([shown]).
+/// [checked] makes the row a toggle, drawn with a tick column.
 class MenuEntry {
   final String? label;
   final VoidCallback? onPressed;
@@ -332,6 +332,11 @@ class MenuEntry {
 
   /// What the row reads as, suffix and all.
   String get text => todo ? l10n.notImplemented(label ?? '') : (label ?? '');
+
+  /// The rows of [items] a menu draws: all but the commands not built yet.
+  /// Both renderers ask here, so an unbuilt row is hidden in one place.
+  static List<MenuEntry> shown(List<MenuEntry> items) =>
+      items.where((item) => !item.todo).toList();
 
   /// Whether pressing this row does anything. A submenu is never "pressed" but
   /// is still live, so it counts as enabled when it has children.
@@ -989,11 +994,22 @@ List<MenuSection> lumitMenus(
     ),
     (
       title: l10n.menuEdit,
-      items: () => [
-            MenuEntry(l10n.menuUndo,
+      items: () {
+        // Undo and Redo name the step they would take. Read as the menu
+        // opens, like the pack state above, so the bar's own rebuilds cost
+        // nothing for it.
+        final steps = _historySteps(project);
+        return [
+            MenuEntry(
+                steps.undo == null
+                    ? l10n.menuUndo
+                    : l10n.menuUndoStep(steps.undo!),
                 (history?.canUndo ?? false) ? () => undoFrb(app) : null,
                 action: 'edit.undo'),
-            MenuEntry(l10n.menuRedo,
+            MenuEntry(
+                steps.redo == null
+                    ? l10n.menuRedo
+                    : l10n.menuRedoStep(steps.redo!),
                 (history?.canRedo ?? false) ? () => redoFrb(app) : null,
                 action: 'edit.redo'),
             // The journal as a list you can read and click. Undo and redo above it
@@ -1032,10 +1048,15 @@ List<MenuSection> lumitMenus(
                       },
                 action: 'edit.delete.selection'),
             MenuEntry.divider(),
-            MenuEntry(l10n.menuDuplicate, onLayer((l) {
-              l.duplicate();
-              app.notifyDocumentChanged();
-            }), action: 'layer.duplicate'),
+            MenuEntry(
+                l10n.menuDuplicate,
+                layers.isEmpty
+                    ? null
+                    : () {
+                        duplicateLayersFrb(layers);
+                        app.notifyDocumentChanged();
+                      },
+                action: 'layer.duplicate'),
             MenuEntry(l10n.menuSplitLayer, onComp((c) => _splitAtPlayhead(ui)),
                 action: 'layer.split'),
             MenuEntry(l10n.menuSelectAll,
@@ -1050,7 +1071,8 @@ List<MenuSection> lumitMenus(
             // application *those* users know puts it.
             MenuEntry(l10n.menuSettings, () => showSettingsWindowFrb(context),
                 action: 'app.settings'),
-          ]
+          ];
+      }
     ),
     (
       title: l10n.menuComposition,
@@ -1422,9 +1444,11 @@ List<MenuSection> lumitMenus(
             // same switch under its own name — they are one switch until the full
             // wireframe display mode of §2.2 item 5 gives this row something of
             // its own to turn on.
-            MenuEntry(l10n.menuShowWireframe,
-                () => ui.setViewerLayerControls(!ui.viewerLayerControls),
-                checked: ui.viewerLayerControls),
+            MenuEntry.toggle(
+              l10n.menuShowWireframe,
+              () => ui.setViewerLayerControls(!ui.viewerLayerControls),
+              checked: () => ui.viewerLayerControls,
+            ),
             // Whether the grid's own lines are things a dragged layer lands on,
             // over and above the guides. The magnet on the toolbar is what decides
             // whether *any* of it engages; this says what is in the list.
@@ -1808,6 +1832,35 @@ void undoFrb(LumitState app) {
 void redoFrb(LumitState app) {
   app.project?.redo();
   app.notifyDocumentChanged();
+}
+
+/// What Undo and Redo would each do, in the History window's own words, or
+/// null where there is nothing that way.
+({String? undo, String? redo}) _historySteps(ProjectReference? project) {
+  try {
+    final steps = project?.historyEntries() ?? const <BridgeHistoryEntry>[];
+    final applied = project?.appliedSteps() ?? 0;
+    return (
+      undo: applied > 0 && applied <= steps.length
+          ? engineLabel(steps[applied - 1].name)
+          : null,
+      redo: applied < steps.length ? engineLabel(steps[applied].name) : null,
+    );
+  } catch (_) {
+    // A project that has just gone: the plain words, greyed.
+    return (undo: null, redo: null);
+  }
+}
+
+/// Duplicate every layer in [layers]. One function for the Edit menu, the
+/// chord and the Timeline row's own menu, so they all copy the same set. A
+/// layer that refuses leaves the rest standing.
+void duplicateLayersFrb(Iterable<LayerReference> layers) {
+  for (final layer in layers) {
+    try {
+      layer.duplicate();
+    } catch (_) {}
+  }
 }
 
 /// Whether Cut and Copy have anything to act on — an effect picked out of a
@@ -2244,7 +2297,7 @@ List<PlatformMenuItem> platformMenusFor(
       group = [];
     }
 
-    for (final raw in items) {
+    for (final raw in MenuEntry.shown(items)) {
       if (raw.isDivider) {
         flush();
         continue;
@@ -2492,7 +2545,7 @@ class _MenuList extends StatefulWidget {
 class _MenuListState extends State<_MenuList> {
   @override
   Widget build(BuildContext context) {
-    final items = widget.items;
+    final items = MenuEntry.shown(widget.items);
     final close = widget.close;
     final t = ThemeScope.of(context).theme;
     final keymap = context.read<LumitUiState>().keymap;

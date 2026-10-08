@@ -17,6 +17,7 @@ import '../icons/icons.dart';
 import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
+import '../shell/menu_bar_frb.dart' show duplicateLayersFrb;
 import '../shell/stretch_dialog_frb.dart';
 import '../state/timeline_columns.dart';
 import '../theme/theme.dart';
@@ -1078,11 +1079,7 @@ class _OutlineRowState extends State<OutlineRow> {
     switch (picked) {
       case 'duplicate':
         // Offered on a locked layer too: copying is not editing.
-        for (final target in targets) {
-          try {
-            target.layer.duplicate();
-          } catch (_) {}
-        }
+        duplicateLayersFrb([for (final target in targets) target.layer]);
       case 'up' || 'down':
         final delta = picked == 'up' ? -1 : 1;
         final ids = {
