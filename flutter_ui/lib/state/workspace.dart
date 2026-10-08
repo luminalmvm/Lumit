@@ -570,6 +570,21 @@ class Workspace extends ChangeNotifier {
     settingsChanged();
   }
 
+  /// The expressions saved from the Expressions panel, script by name.
+  // ponytail: kept in the settings file, move to a folder of files if people
+  // want to share them.
+  final Map<String, String> savedExpressions = <String, String>{};
+
+  /// Save [text] under [name], over whatever that name held.
+  void saveExpression(String name, String text) {
+    savedExpressions[name] = text;
+    settingsChanged();
+  }
+
+  void deleteExpression(String name) {
+    if (savedExpressions.remove(name) != null) settingsChanged();
+  }
+
   /// Whether an effect's own graph — Levels' histogram, a Curves channel —
   /// draws entirely in the theme's colours (owner, desk test). Off by default,
   /// and for the same reason the scopes toggle is: a red curve should be red.
@@ -1438,6 +1453,7 @@ class Workspace extends ChangeNotifier {
         'custom_theme': customThemeName,
         'themed_scopes': themedScopes,
         'favourite_effects': favouriteEffects.toList()..sort(),
+        'saved_expressions': savedExpressions,
         'themed_effect_graphs': themedEffectGraphs,
         'curve_plot_size': curvePlotSize,
         'themed_viewer_surround': themedViewerSurround,
@@ -1538,6 +1554,13 @@ class Workspace extends ChangeNotifier {
           for (final key in starred)
             if (key is String) key,
       ]);
+    savedExpressions
+      ..clear()
+      ..addAll({
+        if (j['saved_expressions'] case final Map<dynamic, dynamic> saved)
+          for (final MapEntry(:key, :value) in saved.entries)
+            if (key is String && value is String) key: value,
+      });
     themedEffectGraphs = j['themed_effect_graphs'] == true;
     // Absent means a file written before the size could be chosen: medium.
     curvePlotSize = (j['curve_plot_size'] as num?)?.toDouble() ?? 150;
