@@ -178,6 +178,8 @@ impl ProjectReference {
 
     #[frb(sync)]
     pub fn close(&self) -> Result<(), BridgeError> {
+        // A shared project stops being shared when it closes.
+        crate::api::share::stop(self.id);
         // One registry at a time, never nested — the lock order rule in
         // `state.rs`. The state's last strong reference is usually the one
         // removed here; binding it keeps the drop (and the worker channel's
@@ -868,6 +870,10 @@ impl ProjectReference {
         // 9d96a24f). This is the shape the autosave sweep already writes in
         // (`crate::autosave::sweep_one`); the lock comes back at the end only
         // to record where the file went.
+        // A host's document comes with how many of the edits it keeps are in
+        // it. Asked before this project's own lock, which is the order the
+        // share registry is always taken in.
+        let hosted = crate::api::share::saving(self.id);
         let (document, target, revision, previous) = {
             let state = project.read().map_err(|_| BridgeError::ReadFailed)?;
             let target = if path.trim().is_empty() {
@@ -885,12 +891,16 @@ impl ProjectReference {
                 }
                 target
             };
-            (
-                state.store.snapshot(),
-                target,
-                state.store.revision(),
-                state.path.clone(),
-            )
+            // The document and its revision in one moment. Other people's
+            // edits arrive without this project's lock, and one landing
+            // between the two would read as saved and not be in the file.
+            let (document, revision) = match &hosted {
+                Some((document, revision, _)) => (document.clone(), *revision),
+                None => state
+                    .store
+                    .frozen(|document| (document, state.store.revision())),
+            };
+            (document, target, revision, state.path.clone())
         };
 
         // Everything from here is outside the lock.
@@ -951,6 +961,8 @@ impl ProjectReference {
         };
 
         result.path = target.to_string_lossy().into_owned();
+        // A host keeps its edits since the last save, and that is now.
+        crate::api::share::saved(self.id, document.id, hosted.map(|(_, _, mark)| mark));
         let mut state = project.write().map_err(|_| BridgeError::WriteFailed)?;
         if let Some(mut packed) = packed {
             // An item deleted since it was packed keeps its entry in the open

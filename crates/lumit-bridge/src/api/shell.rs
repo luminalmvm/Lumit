@@ -211,6 +211,11 @@ impl ProjectReference {
     /// first op that no longer applies — see [`BridgeRecovery::replayed`].
     #[frb(sync)]
     pub fn restore_journal(&self, project_path: String) -> Result<BridgeRecovery, BridgeError> {
+        // The document is about to be swapped for another, which nobody else
+        // in a shared project would hear of. Sharing is let go of as it is
+        // when a project closes, and starting it again merges with whoever
+        // was here.
+        crate::api::share::stop(self.id);
         let path = std::path::PathBuf::from(project_path);
         let (mut doc, _manifest) =
             lumit_project::open(&path).map_err(|_| BridgeError::ReadFailed)?;

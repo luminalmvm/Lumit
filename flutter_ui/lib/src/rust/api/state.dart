@@ -15,6 +15,7 @@ import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 import 'package:uuid/uuid.dart';
 import 'project.dart';
 import 'project_item.dart';
+import 'share.dart';
 import 'solid.dart';
 part 'state.freezed.dart';
 
@@ -67,14 +68,21 @@ abstract class LumitBridgeState implements RustOpaqueInterface {
   /// phase says it has begun, and the frontend draws the share of the whole
   /// open that is behind it. Optional, because nothing about opening a project
   /// depends on someone watching.
+  ///
+  /// `share_events` is for a file that is a guest's own copy of a shared
+  /// project, closed while its host was away. It opens as it was left and
+  /// carries on looking for the host, and [`ProjectReference::share_guest`]
+  /// says so.
   static Future<ProjectReference?> openProject(
           {required String path,
           RustStreamSink<ScopedChange>? onChangeStream,
-          RustStreamSink<OpenProgress>? onProgressStream}) =>
+          RustStreamSink<OpenProgress>? onProgressStream,
+          RustStreamSink<BridgeShareEvent>? shareEvents}) =>
       BridgeLib.instance.api.crateApiStateLumitBridgeStateOpenProject(
           path: path,
           onChangeStream: onChangeStream,
-          onProgressStream: onProgressStream);
+          onProgressStream: onProgressStream,
+          shareEvents: shareEvents);
 }
 
 /// One Linux graphics device node, as the kernel numbers it: what `stat()`

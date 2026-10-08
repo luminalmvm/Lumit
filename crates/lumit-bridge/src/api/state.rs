@@ -19,7 +19,9 @@ use crate::{
 };
 #[frb(ignore_all)]
 pub struct LumitBridgeState {
-    pub store: DocumentStore,
+    /// Shared, so a shared project's network threads can apply the edits
+    /// other people make without going through this project's lock.
+    pub store: Arc<DocumentStore>,
     pub path: Option<PathBuf>,
     /// The store revision the last save wrote (or the revision the project
     /// opened at). `is_dirty` is "the store has moved past this" — an undo
@@ -764,7 +766,7 @@ impl LumitBridgeState {
 
         let document = Document::new();
         let journal = journal_for(&document);
-        let store = DocumentStore::new(document);
+        let store = Arc::new(DocumentStore::new(document));
         let state = LumitBridgeState {
             saved_revision: store.revision(),
             store,
@@ -862,18 +864,31 @@ impl LumitBridgeState {
     /// phase says it has begun, and the frontend draws the share of the whole
     /// open that is behind it. Optional, because nothing about opening a project
     /// depends on someone watching.
+    ///
+    /// `share_events` is for a file that is a guest's own copy of a shared
+    /// project, closed while its host was away. It opens as it was left and
+    /// carries on looking for the host, and [`ProjectReference::share_guest`]
+    /// says so.
     pub fn open_project(
         path: &str,
         on_change_stream: Option<CallbackStream>,
         on_progress_stream: Option<OpenProgressStream>,
+        share_events: Option<StreamSink<crate::api::share::BridgeShareEvent>>,
     ) -> Result<Option<ProjectReference>, BridgeError> {
         let progress = on_progress_stream.as_ref();
         report_phase(progress, OpenPhase::ReadingFile);
         let path = PathBuf::from(path);
-        let Ok((doc, _manifest)) = lumit_project::open(&path) else {
+        let Ok((mut doc, _manifest)) = lumit_project::open(&path) else {
             // Not an error to report: a `.lum` that will not open is the file
             // picker's problem, and Dart shows its own notice for None.
             return Ok(None);
+        };
+        // What was kept holds every edit made while the host was away, saved
+        // or not, so it is what opens.
+        let beside = path.parent().unwrap_or_else(|| Path::new(""));
+        let (doc, resuming) = match lumit_share::resume(&mut doc, beside) {
+            Some((kept, resuming)) => (kept, Some(resuming)),
+            None => (doc, None),
         };
 
         // Relative media paths resolve against the project's own directory. A
@@ -882,6 +897,9 @@ impl LumitBridgeState {
         // rather than a panic.
         let project_dir = path.parent().unwrap_or_else(|| Path::new("")).to_path_buf();
         let (project, _missing) = adopt(doc, Some(path), &project_dir, on_change_stream, progress)?;
+        if let Some(resuming) = resuming {
+            crate::api::share::resume(&project, resuming, share_events)?;
+        }
         report_phase(progress, OpenPhase::StartingPreview);
         Ok(Some(project))
     }
@@ -979,7 +997,7 @@ pub(crate) fn adopt(
     let planes = lumit_render::planes::warm_jobs(&doc);
 
     let journal = journal_for(&doc);
-    let store = DocumentStore::new(doc);
+    let store = Arc::new(DocumentStore::new(doc));
     let state = LumitBridgeState {
         saved_revision: store.revision(),
         store,
@@ -997,6 +1015,10 @@ pub(crate) fn adopt(
         let mut s = STREAMS.write().map_err(|_| BridgeError::WriteFailed)?;
         s.insert(id, Arc::new(stream));
     }
+
+    // A shared project that is being replaced stops being shared, before its
+    // store is let go of.
+    crate::api::share::stop_all();
 
     {
         let mut p = PROJECTS.write().map_err(|_| BridgeError::WriteFailed)?;
