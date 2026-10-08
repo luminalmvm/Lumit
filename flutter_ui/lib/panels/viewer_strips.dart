@@ -89,9 +89,11 @@ Widget viewerBarMark({
   required Color colour,
   required VoidCallback? onPressed,
   required String tip,
+  String? action,
 }) =>
     LumitTooltip(
       message: tip,
+      action: action,
       child: HouseButton(
         key: key,
         frameless: true,

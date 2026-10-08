@@ -108,15 +108,20 @@ class CompTabsFrb extends StatelessWidget {
           // click from the composition it would write.
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: HouseButton(
-              key: const ValueKey('tl-export'),
-              small: true,
-              primary: true,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-              onPressed: onExport,
-              // `primary` sets the label's own style, kicker in `surface_0` on
-              // the accent fill (§7.1), and cases the word for the shape.
-              child: Text(l10n.exportAction),
+            child: LumitTooltip(
+              message: l10n.keyExportTheComposition,
+              action: 'file.export',
+              child: HouseButton(
+                key: const ValueKey('tl-export'),
+                small: true,
+                primary: true,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                onPressed: onExport,
+                // `primary` sets the label's own style, kicker in `surface_0`
+                // on the accent fill (§7.1), and cases the word for the shape.
+                child: Text(l10n.exportAction),
+              ),
             ),
           ),
         ],
@@ -206,6 +211,7 @@ class CompTabsFrb extends StatelessWidget {
                   ])
                     LumitTooltip(
                       message: tip,
+                      action: 'graph.toggle',
                       child: SegmentOption(
                         key: ValueKey<String>(keyName),
                         active: mode == which,
@@ -217,14 +223,18 @@ class CompTabsFrb extends StatelessWidget {
                 ]),
                 const SizedBox(width: 6),
               ],
-              HouseButton(
-                key: const ValueKey('tl-export'),
-                small: true,
-                primary: true,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                onPressed: onExport,
-                child: Text(l10n.exportAction),
+              LumitTooltip(
+                message: l10n.keyExportTheComposition,
+                action: 'file.export',
+                child: HouseButton(
+                  key: const ValueKey('tl-export'),
+                  small: true,
+                  primary: true,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  onPressed: onExport,
+                  child: Text(l10n.exportAction),
+                ),
               ),
             ],
           ),

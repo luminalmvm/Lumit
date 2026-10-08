@@ -4142,7 +4142,7 @@
   },
   "keyExportTheComposition": "Export the composition",
   "@keyExportTheComposition": {
-    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. Also the tooltip of the Timeline's Export button."
   },
   "keyFitTheCurvesToThePane": "Fit the curves to the pane",
   "@keyFitTheCurvesToThePane": {
@@ -12961,9 +12961,9 @@
       }
     }
   },
-  "statusHintSelect": "Shift adds to the selection · Shift on a scale handle keeps proportions · Ctrl suspends snapping",
+  "statusHintSelect": "Shift adds to the selection, keeps a move to one axis and a scale in proportion · Arrow keys nudge a pixel, ten with Shift · Ctrl suspends snapping",
   "@statusHintSelect": {
-    "description": "Right-hand end of the status bar while the Selection tool is armed: one quiet line saying what its modifier keys do in the Viewer. The parts are separated by a middle dot. Shift and Ctrl are key names."
+    "description": "Right-hand end of the status bar while the Selection tool is armed: one quiet line saying what its keys do in the Viewer, one part per key. The parts are separated by a middle dot. Shift and Ctrl are key names."
   },
   "statusHintZoom": "Click zooms in · Alt zooms out · Drag a box to zoom to it",
   "@statusHintZoom": {

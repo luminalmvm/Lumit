@@ -265,6 +265,8 @@ class Toolbar extends StatelessWidget {
     );
     return LumitTooltip(
       message: tip,
+      // One key flips between the two views, so both words teach it.
+      action: 'graph.toggle',
       // Grown to the chrome row's stated control height under Regular:
       // these three are the buttons the owner named as hard to hit.
       child: timelineChromeControl(
@@ -538,9 +540,11 @@ class KeyCommandStrip extends StatelessWidget {
     required String tip,
     required bool on,
     required VoidCallback onPressed,
+    String? action,
   }) =>
       LumitTooltip(
         message: tip,
+        action: action,
         child: HouseButton(
           key: ValueKey<String>(keyName),
           small: true,
@@ -567,9 +571,11 @@ class KeyCommandStrip extends StatelessWidget {
     required String mark,
     required String word,
     required VoidCallback onPressed,
+    String? action,
   }) =>
       LumitTooltip(
         message: word,
+        action: action,
         child: HouseButton(
           key: ValueKey<String>(keyName),
           small: true,
@@ -621,6 +627,7 @@ class KeyCommandStrip extends StatelessWidget {
                   keyName: 'keys-interp-bezier',
                   mark: LumitIcons.bezier,
                   word: l10n.easeEasy,
+                  action: 'graph.ease',
                   onPressed: () => onInterp?.call(easyEase)),
               const SizedBox(width: 2),
               _glyphButton(t,
@@ -662,6 +669,7 @@ class KeyCommandStrip extends StatelessWidget {
                   keyName: 'graph-interp-bezier',
                   label: l10n.easeEasy,
                   tip: l10n.tipEasyEase,
+                  action: 'graph.ease',
                   on: false,
                   onPressed: () => onInterp?.call(easyEase)),
               const SizedBox(width: 2),

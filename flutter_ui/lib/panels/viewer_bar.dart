@@ -379,6 +379,7 @@ List<Widget> viewerTransportMarks(
     colour: playFilled ? t.surface0 : t.textPrimary,
     onPressed: onPlayPause,
     tip: playing ? l10n.tipTransportPause : l10n.tipTransportPlay,
+    action: 'playback.toggle',
   );
   final buttons = <Widget>[
     viewerBarMark(
@@ -387,6 +388,7 @@ List<Widget> viewerTransportMarks(
       colour: t.textMuted,
       onPressed: () => onSeek(0),
       tip: l10n.tipTransportStart,
+      action: 'playback.comp.start',
     ),
     viewerBarGapBox(viewerTransportGap),
     viewerBarMark(
@@ -395,6 +397,7 @@ List<Widget> viewerTransportMarks(
       colour: t.textMuted,
       onPressed: () => onSeek(frame - 1),
       tip: l10n.tipTransportPrevious,
+      action: 'playback.frame.prev',
     ),
     viewerBarGapBox(viewerTransportGap),
     if (playFilled)
@@ -430,6 +433,7 @@ List<Widget> viewerTransportMarks(
       colour: t.textMuted,
       onPressed: () => onSeek(frame + 1),
       tip: l10n.tipTransportNext,
+      action: 'playback.frame.next',
     ),
     viewerBarGapBox(viewerTransportGap),
     viewerBarMark(
@@ -438,6 +442,7 @@ List<Widget> viewerTransportMarks(
       colour: t.textMuted,
       onPressed: () => onSeek(durationFramesOf(settings) - 1),
       tip: l10n.tipTransportEnd,
+      action: 'playback.comp.end',
     ),
   ];
   return [

@@ -341,7 +341,10 @@ class _HoverTipState extends State<_HoverTip> {
     if (!mounted || _entry != null) return;
     final box = context.findRenderObject() as RenderBox?;
     if (box == null || !box.attached) return;
-    final origin = box.localToGlobal(Offset(0, box.size.height + 4));
+    // In the overlay's own space, or the UI scale puts the tip further from
+    // its control the further the control is from the window's corner.
+    final origin = overlayLocal(
+        context, box.localToGlobal(Offset(0, box.size.height + 4)));
     final scope = ThemeScope.of(context);
     final t = scope.theme;
     // Null outside the shell (a bare widget test), where there is no keymap.
