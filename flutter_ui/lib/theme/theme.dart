@@ -1001,6 +1001,11 @@ class LumitTheme {
 
   Color labelColour(int i) => _labelSet[i % _labelSet.length];
 
+  /// The colour for a person in a shared project. [colour] counts from 1 in
+  /// joining order, and the neutral first chip is skipped so nobody is grey.
+  Color personColour(int colour) =>
+      _labelSet[1 + (colour - 1) % (_labelSet.length - 1)];
+
   /// This theme with a user-picked accent: hover brightens by 0x12 per
   /// channel on a dark surface, darkens by the same on a light one.
   LumitTheme withAccent(Color rgb) {

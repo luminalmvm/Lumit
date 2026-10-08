@@ -16,7 +16,11 @@ import 'package:lumit_flutter/src/rust/api/import.dart' show BridgeImportReport;
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
+import 'package:lumit_flutter/src/rust/api/share.dart' as bridge_share;
+import 'package:lumit_flutter/src/rust/api/share.dart'
+    hide joinSharedProject, shareDefaultPort, shareLocalAddress;
 import 'package:lumit_flutter/src/rust/api/state.dart';
+import 'package:lumit_flutter/state/share.dart';
 import 'package:lumit_flutter/state/ui_state.dart';
 import 'package:lumit_flutter/state/workspace.dart';
 import 'package:provider/provider.dart';
@@ -121,6 +125,119 @@ class LumitState extends ChangeNotifier {
     _adopt(LumitBridgeState.newProject(onChangeStream: _changeSink()));
   }
 
+  /// The shared project this is one end of, when it is.
+  final ShareState share = ShareState();
+
+  StreamSubscription<BridgeShareEvent>? _shareEvents;
+
+  /// Share the open project from this machine, under [name], listening on
+  /// [port]. [key] is the secret of the invite this project was last shared
+  /// by, to make the same invite again, or null for a new one. Null when
+  /// there is no project open or it is already shared.
+  BridgeShareStarted? startSharing(
+      {required String name, required int port, String? key}) {
+    final open = project;
+    if (open == null || share.active) return null;
+    final events = RustStreamSink<BridgeShareEvent>();
+    final BridgeShareStarted started;
+    try {
+      started = open.share(name: name, port: port, key: key, events: events);
+    } catch (_) {
+      return null;
+    }
+    if (started case BridgeShareStarted_Sharing(:final port, :final restored)) {
+      _shareEvents = events.stream.listen(_onShareEvent);
+      share.begin(ShareRole.host, open, onPort: port);
+      // The project was closed without saving, and the engine has put back
+      // what everyone did after the last save.
+      if (restored > 0) postNotice(l10n.shareRestored(restored));
+    }
+    return started;
+  }
+
+  /// Join the shared project [invite] names and make it the open one. It
+  /// arrives unsaved, so saving writes this person's own copy. [footage] is
+  /// the folder this machine keeps the project's footage in.
+  ///
+  /// Null when another project is already on its way in. Anything else the
+  /// caller shows: the previous project stays loaded unless this joined.
+  Future<BridgeJoinOutcome?> joinShared(
+      {required String invite, required String name, String? footage}) async {
+    // One at a time, for [openProject]'s reason.
+    if (opening.value) return null;
+    opening.value = true;
+    _openProgressWatch?.cancel();
+    _openProgressWatch = null;
+    openProgress.value = null;
+    final events = RustStreamSink<BridgeShareEvent>();
+    BridgeJoinOutcome outcome;
+    try {
+      outcome = await bridge_share.joinSharedProject(
+          invite: invite,
+          name: name,
+          footage: footage,
+          onChangeStream: _changeSink(),
+          events: events);
+    } catch (_) {
+      outcome = const BridgeJoinOutcome.failed();
+    }
+    if (outcome case BridgeJoinOutcome_Joined(:final project)) {
+      // Deliberately still `opening`: the document is in, the picture is not.
+      _adopt(project);
+      _shareEvents = events.stream.listen(_onShareEvent);
+      share.begin(ShareRole.guest, project);
+    } else {
+      opening.value = false;
+    }
+    return outcome;
+  }
+
+  /// Stop sharing, or leave if someone else hosts. The project stays open.
+  void stopSharing() {
+    try {
+      project?.stopSharing();
+    } catch (_) {
+      // Already closed, which stops it too.
+    }
+    _forgetShare();
+  }
+
+  /// The engine has let go of sharing without anyone being told, as it does
+  /// when the document is swapped for a recovered one.
+  void sharingLetGo() => _forgetShare();
+
+  void _forgetShare() {
+    _shareEvents?.cancel();
+    _shareEvents = null;
+    share.end();
+  }
+
+  void _onShareEvent(BridgeShareEvent event) {
+    switch (event) {
+      case BridgeShareEvent_People(:final people):
+        share.setPeople(people);
+      case BridgeShareEvent_Away():
+        share.setAway(true);
+        postNotice(l10n.shareAway);
+      case BridgeShareEvent_Back(:final held, :final refused):
+        share.setAway(false, conflicts: held);
+        // The engine put the host's document in place of this one, so every
+        // panel reads again, the way it does when a project is swapped.
+        final open = project;
+        if (open != null) {
+          handleChange(ScopedChange(project: open, items: true));
+        }
+        postNotice(refused > 0 ? l10n.shareBackRefused(refused) : l10n.shareBack,
+            error: refused > 0);
+      case BridgeShareEvent_Elsewhere():
+        postNotice(l10n.shareElsewhere, error: true);
+      case BridgeShareEvent_Ended(:final reason):
+        stopSharing();
+        postNotice(shareEndingText(reason),
+            error: reason is! BridgeShareEnding_Closed);
+    }
+  }
+
   /// True from the moment a document starts being read until the Viewer has
   /// something to show of it. The shell draws its progress bar over the
   /// previous project and swaps nothing until this goes back to false.
@@ -221,8 +338,12 @@ class LumitState extends ChangeNotifier {
     // what opens the port; nothing is lost in between, because the stream
     // buffers what arrives before the first listener (`listenAndBuffer`). The
     // change sink beside it is attached the same way, after its own call.
+    final shareEvents = RustStreamSink<BridgeShareEvent>();
     final pending = LumitBridgeState.openProject(
-        path: path, onChangeStream: _changeSink(), onProgressStream: progress);
+        path: path,
+        onChangeStream: _changeSink(),
+        onProgressStream: progress,
+        shareEvents: shareEvents);
     _openProgressWatch?.cancel();
     _openProgressWatch = progress.stream.listen(_reportOpenProgress);
     // Null means the file would not open; the previous project stays loaded
@@ -236,6 +357,21 @@ class LumitState extends ChangeNotifier {
     }
     // Deliberately still `opening`: the document is in, the picture is not.
     _adopt(opened);
+    // A guest's own copy, closed while its host was away, opens still a guest
+    // and still looking. What it has found since comes down the events.
+    var guest = false;
+    try {
+      guest = opened.shareGuest();
+    } catch (_) {
+      // Closed again already.
+    }
+    if (guest) {
+      _shareEvents = shareEvents.stream.listen(_onShareEvent);
+      share.begin(ShareRole.guest, opened);
+    } else {
+      // Nothing will come down it, so its port is let go of.
+      shareEvents.stream.listen((_) {}).cancel();
+    }
   }
 
   /// Import an After Effects project and make it the open one (docs/11) —
@@ -332,6 +468,8 @@ class LumitState extends ChangeNotifier {
     if (previous != null && previous.internalid != opened.internalid) {
       previous.close();
     }
+    // The engine stops sharing a project that is replaced or closed.
+    _forgetShare();
     project = opened;
     // The comp list is cached per document and invalidated when the
     // item tree changes — but adopting another project is not a change to the

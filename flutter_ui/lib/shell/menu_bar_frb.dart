@@ -79,6 +79,7 @@ import 'export_queue_frb.dart';
 import 'recovery_dialog_frb.dart';
 import 'project_settings_frb.dart';
 import 'settings_window_frb.dart';
+import 'share_dialog_frb.dart';
 import 'theme_name_dialog.dart';
 import 'tool_bar_frb.dart' show LumitTopLineToolsFrb;
 import 'update_dialog_frb.dart';
@@ -970,6 +971,10 @@ List<MenuSection> lumitMenus(
             MenuEntry(
                 l10n.menuExport, comp == null ? null : () => exportFrb(context),
                 action: 'file.export'),
+            MenuEntry.divider(),
+            // Sharing this project, joining somebody else's, and who is here.
+            MenuEntry(
+                l10n.menuSharedProject, () => showShareFrb(context, app)),
             MenuEntry.divider(),
             // The project's own settings, kept apart from Settings because Settings
             // is this machine's and these travel in the `.lum`.
