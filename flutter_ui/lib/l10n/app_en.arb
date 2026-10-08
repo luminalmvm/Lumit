@@ -14095,6 +14095,7 @@
   "viewerGpuMismatch": "The preview can't be shown, because Lumit is rendering on the NVIDIA graphics card and drawing its window with the other one. Switch to NVIDIA Performance mode, or start Lumit with PRIME render offload.",
   "@viewerGpuMismatch": {
     "description": "Shown in the middle of the Viewer, in place of the picture, on a Linux laptop with two graphics cards when the picture and the window have ended up on different cards and cannot be shared. 'NVIDIA Performance mode' and 'PRIME render offload' are the names the NVIDIA driver and Linux desktops use for the two fixes, so keep them recognisable."
+  },
   "fxFoldCompositing": "Compositing",
   "@fxFoldCompositing": {
     "description": "Effect controls panel: heading of the fold at the foot of every effect that holds its Mix and Matte rows. One word, drawn in capitals by the panel."
