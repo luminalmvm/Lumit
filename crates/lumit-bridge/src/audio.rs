@@ -69,6 +69,11 @@ enum Cmd {
     /// The monitor mute: silence at the device, the mix and clock untouched.
     Mute(bool),
     Seek(f64),
+    /// Sound `len` seconds from `at` once, with the transport stopped.
+    Scrub {
+        at: f64,
+        len: f64,
+    },
     Unload,
 }
 
@@ -143,6 +148,11 @@ struct AudioState {
     /// the Timeline's Sound mix row can summarise the mix ([`mix_peaks`])
     /// without a second mixer. Goes with `loaded_comp`.
     loaded_plan: Option<(Arc<MixPlan>, u32)>,
+    /// The document the last [`scrub`] asked for a mix of. A scrub arrives
+    /// once per frame the playhead crosses, and only the first one after an
+    /// edit has anything new to prepare. Weak, so remembering it does not
+    /// keep a document alive that nothing else is holding.
+    scrub_doc: std::sync::Weak<lumit_core::Document>,
 }
 
 impl AudioState {
@@ -163,6 +173,7 @@ impl AudioState {
             decoded: HashMap::new(),
             meter_strips: Vec::new(),
             loaded_plan: None,
+            scrub_doc: std::sync::Weak::new(),
         }
     }
 }
@@ -520,6 +531,7 @@ fn ensure_device() -> Option<(Sender<Cmd>, u32, u64)> {
                 Cmd::Pause => engine.pause(),
                 Cmd::Mute(m) => engine.set_muted(m),
                 Cmd::Seek(s) => engine.seek_seconds(s),
+                Cmd::Scrub { at, len } => engine.scrub(at, len),
                 Cmd::Unload => engine.unload(),
             }
         }
@@ -918,6 +930,58 @@ pub(crate) fn resume() {
 pub(crate) fn seek(secs: f64) {
     let st = lock();
     send(&st, Cmd::Seek(secs.max(0.0)));
+}
+
+/// How long one scrub burst sounds, in seconds, unless the comp's frame is
+/// longer. A twelfth of a second is what After Effects plays for each move of
+/// its playhead: long enough to tell a kick from a snare, short enough that
+/// the beat is heard on the frame it falls on and not three frames early.
+const SCRUB_BURST_S: f64 = 1.0 / 12.0;
+
+/// Sound `comp`'s mix at `frame` in one short burst, with the transport
+/// stopped: the playhead dragged with Ctrl held.
+///
+/// When the mix is loaded this is one message to the audio thread. When it is
+/// not, it is prepared in the background and the bursts start once it lands,
+/// so the first drag of a session is silent for as long as the decode takes.
+/// The first burst after an edit prepares again too, so scrubbing straight
+/// after moving a clip is never the mix from before the move.
+pub(crate) fn scrub(comp: Uuid, frame: u64, doc: Arc<lumit_core::Document>) {
+    let Some(fps) = doc
+        .comp(comp)
+        .map(|c| c.frame_rate.fps())
+        .filter(|fps| *fps > 0.0)
+    else {
+        return;
+    };
+    let mut st = lock();
+    // The comp is what the user wants to hear now, as in `play`.
+    st.wanted_preview = None;
+    let loaded = st.loaded_comp == Some(comp);
+    if loaded {
+        send(
+            &st,
+            Cmd::Scrub {
+                at: frame as f64 / fps,
+                len: (1.0 / fps).max(SCRUB_BURST_S),
+            },
+        );
+    } else if st.loaded_comp.is_some() {
+        // Another comp's mix, or a footage preview, is in the engine. Silence
+        // it, and leave the transport stopped so this comp's mix does not
+        // start playing by itself when it lands.
+        send(&st, Cmd::Unload);
+        st.playing = false;
+        st.loaded_comp = None;
+        st.loaded_sig = None;
+        st.meter_strips.clear();
+        st.loaded_plan = None;
+    }
+    let seen = Arc::downgrade(&doc);
+    if !loaded || !st.scrub_doc.ptr_eq(&seen) {
+        st.scrub_doc = seen;
+        kick_prepare(&mut st, comp, doc);
+    }
 }
 
 /// Stop: pause and rewind to the start (the transport's stop semantics).
