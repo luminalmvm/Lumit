@@ -1,0 +1,293 @@
+---
+import SectionHead from "../SectionHead.astro";
+
+// Three stages. The last one is drawn dashed and hollow: past the near work
+// the order is a guess and the site should say so.
+const roadmap = [
+  {
+    label: "Completed",
+    state: "done",
+    count: "shipped",
+    items: [
+      "Layers, masks, mattes and blend modes",
+      "Keyframes and the graph editor",
+      "Sequence layers and the Retime system",
+      "Optical-flow frame interpolation",
+      "Beat detection and markers",
+      "Over 100 GPU effects",
+      "Presets, saved and shared",
+      "2.5D camera and 3D layers",
+      "Roto brush and Puppet",
+      "Camera and planar tracking",
+      "Text layers with animators",
+      "Shape layers and paint",
+      "Expressions",
+      "The node graph",
+      "OFX plugin hosting",
+      "After Effects import, bundle and .aep",
+      "Export queue with hardware encoding",
+      "Proxies and background caching",
+      "Autosave and crash recovery",
+      "Windows, macOS and Linux builds",
+    ],
+  },
+  {
+    label: "In progress",
+    state: "now",
+    count: "under way",
+    items: [
+      "The Audio workspace",
+      "Custom shader nodes",
+      "Colour management",
+      "Tone mapping",
+      "Interface performance at 60 and 120 fps",
+    ],
+  },
+  {
+    label: "Long run",
+    state: "next",
+    count: "planned",
+    items: [
+      "Lumit's own effect format",
+      "Lights and camera depth of field",
+      "Particle simulator",
+      "Scripting",
+      "Blender scene import",
+      "Lottie export",
+      "OpenTimelineIO interchange",
+      "Render-farm and command-line export",
+    ],
+  },
+];
+---
+
+<section id="roadmap" class="wrap flex scroll-mt-20 flex-col gap-12 pb-20 sm:pb-28">
+  <SectionHead kicker="Roadmap" title="What we are building." no="05 / 06">
+    <Fragment slot="lede">
+      Lumit is in public beta. Here is what is built, what is being worked on now, and
+      what comes after.
+    </Fragment>
+  </SectionHead>
+
+  {/* The roadmap as one layer bar: each stage as long as its list, and the
+      playhead standing where the work is now. */}
+  <div class="track" data-reveal aria-hidden="true">
+    {
+      roadmap.map((stage) => (
+        <div class:list={["seg", `seg-${stage.state}`]} style={`flex:${stage.items.length}`}>
+          <i />
+          <span>
+            <em>{stage.label}</em>
+            <b>{stage.items.length}</b>
+          </span>
+        </div>
+      ))
+    }
+  </div>
+
+  <div class="flex flex-col gap-5">
+    {
+      roadmap.map((stage) => (
+        <div class:list={["stage", `stage-${stage.state}`]} data-reveal>
+          <div class="head">
+            <h3 class="kicker">
+              <i class:list={["key", stage.state === "next" && "key-hollow"]} />
+              {stage.label}
+              {stage.state === "now" && <span class="now">Now</span>}
+            </h3>
+            <p class="count">{stage.items.length} {stage.count}</p>
+          </div>
+          <ul class="items">
+            {stage.items.map((item) => (
+              <li>
+                <i class:list={["key", stage.state === "next" && "key-hollow"]} />
+                {item}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))
+    }
+  </div>
+</section>
+
+<style>
+  /* Each stage has one colour: the accent for what is done, the amber of a
+     keyed value for what is in hand, grey for what is only planned. */
+  .seg-done,
+  .stage-done {
+    --k: var(--color-accent-2);
+  }
+  .seg-now,
+  .stage-now {
+    --k: var(--color-key);
+  }
+  .seg-next,
+  .stage-next {
+    --k: var(--color-fg-4);
+  }
+
+  .track {
+    display: flex;
+    gap: 3px;
+  }
+  .seg {
+    position: relative;
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .seg i {
+    height: 14px;
+    border: 1px solid var(--k);
+    border-radius: var(--radius-ctl);
+    background: color-mix(in srgb, var(--k) 55%, var(--color-ink));
+  }
+  .seg-now i {
+    background: repeating-linear-gradient(
+      -45deg,
+      color-mix(in srgb, var(--k) 70%, var(--color-ink)) 0 6px,
+      color-mix(in srgb, var(--k) 35%, var(--color-ink)) 6px 12px
+    );
+    background-size: 16.97px 100%;
+    box-shadow: 0 0 18px color-mix(in srgb, var(--k) 35%, transparent);
+  }
+  /* The work in hand is the part that moves. 16.97 is one stripe pair along
+     the bar: 12 across the stripes, at 45 degrees. */
+  @media (prefers-reduced-motion: no-preference) {
+    .seg-now i {
+      animation: stripes 1.4s linear infinite;
+    }
+  }
+  @keyframes stripes {
+    to { background-position: 16.97px 0; }
+  }
+  .seg-next i {
+    border-style: dashed;
+    background: none;
+  }
+  /* The playhead, on the cut between done and now. */
+  .seg-now::before {
+    content: "";
+    position: absolute;
+    top: -8px;
+    left: -2px;
+    width: 1px;
+    height: 30px;
+    background: var(--color-fg);
+  }
+  .seg-now::after {
+    content: "";
+    position: absolute;
+    top: -9px;
+    left: -6.5px;
+    border: 5px solid transparent;
+    border-top: 7px solid var(--color-fg);
+  }
+  .seg span {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    overflow: hidden;
+    color: var(--color-fg-3);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    line-height: 1;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .seg em {
+    font-style: normal;
+  }
+  .seg b {
+    color: var(--color-fg);
+    font-weight: 400;
+    font-feature-settings: "zero";
+  }
+
+  /* A stage is a card: its name and count on the left, its list in columns
+     beside it. */
+  .stage {
+    display: grid;
+    gap: 22px;
+    padding: 26px 28px 28px;
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-card);
+    background: var(--color-ink-2);
+  }
+  .stage-now {
+    border-color: color-mix(in srgb, var(--color-key) 40%, var(--color-line));
+    background:
+      radial-gradient(60% 120% at 0% 0%, color-mix(in srgb, var(--color-key) 9%, transparent), transparent 70%),
+      var(--color-ink-2);
+  }
+  .stage-next {
+    border-style: dashed;
+    background: none;
+  }
+  .head .kicker {
+    color: var(--color-fg);
+  }
+  .now {
+    padding: 3px 6px;
+    border: 1px solid color-mix(in srgb, var(--color-key) 50%, transparent);
+    border-radius: var(--radius-ctl);
+    color: var(--color-key);
+    font-size: 10px;
+  }
+  .count {
+    margin-top: 12px;
+    color: var(--color-fg-4);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1;
+  }
+  .items {
+    margin: 0;
+    padding: 0;
+    column-gap: 32px;
+    list-style: none;
+  }
+  .items li {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    padding: 6px 0;
+    break-inside: avoid;
+    color: var(--color-fg-2);
+    font-size: 14.5px;
+    line-height: 1.35;
+  }
+  .items .key {
+    position: relative;
+    top: -1px;
+    width: 6px;
+    height: 6px;
+  }
+  .stage-next .items li {
+    color: var(--color-fg-3);
+  }
+  @media (min-width: 640px) {
+    .items {
+      columns: 2;
+    }
+  }
+  @media (min-width: 1024px) {
+    .stage {
+      grid-template-columns: 200px minmax(0, 1fr);
+      gap: 40px;
+    }
+    .items {
+      columns: 3;
+    }
+  }
+  @media (max-width: 639px) {
+    /* A phone has no room for a name under a bar a fifth of its width, so
+       the bar keeps its counts and the cards below carry the names. */
+    .seg em {
+      display: none;
+    }
+  }
+</style>

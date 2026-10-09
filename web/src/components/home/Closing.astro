@@ -1,0 +1,82 @@
+---
+// The last thing on the page: the same light the page opened in, and the
+// download once more. The button's words and where it points are set by the
+// hero's own platform check, which finds every [data-dl] on the page.
+const platforms = ["Windows", "macOS", "Linux"];
+---
+
+<section class="closing grain">
+  <div class="wrap flex flex-col items-center text-center" data-reveal>
+    <div class="sec-rule w-full"><p class="kicker pl-3">Download</p><span class="sec-no">06 / 06</span></div>
+    <img src="/lumit-mark.svg" alt="" width="56" height="56" class="mt-16 block" />
+    <h2 class="mt-7 text-[clamp(40px,6.4vw,76px)] leading-[1]">Free, forever.</h2>
+    <p class="lede mx-auto mt-6">
+      Open source under GPLv3, and yours to keep. Windows, Linux and macOS builds are
+      all ready now - no account, no licence key.
+    </p>
+    <div class="mt-9 flex flex-wrap justify-center gap-3">
+      <a class="btn border-white" href="/download" data-dl>
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+          <path d="M8 2v9M4 7l4 4 4-4M2 13h12"></path>
+        </svg>
+        <span data-dl-label>Download Lumit</span>
+      </a>
+      <a class="btn btn-ghost" href="https://docs.lumitlab.com">Read the docs</a>
+    </div>
+    <script is:inline>
+      (function () {
+        // The hero has already worked the platform out and left it on <html>.
+        var os = document.documentElement.dataset.os;
+        var label = document.currentScript.parentElement.querySelector("[data-dl-label]");
+        if (os && label) label.textContent = "Download for " + os;
+      })();
+    </script>
+    <ul class="mt-8 flex flex-wrap justify-center gap-x-6 gap-y-2 p-0">
+      {
+        platforms.map((p) => (
+          <li class="tag list-none">
+            <i class="key" style="--k:var(--color-accent-2)" />
+            {p}
+          </li>
+        ))
+      }
+    </ul>
+  </div>
+</section>
+
+<style>
+  /* The close stands in the same light the page opened in. */
+  .closing {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    padding: 0 0 clamp(96px, 12vw, 150px);
+  }
+  .closing::before {
+    content: "";
+    position: absolute;
+    /* Wider than the section, so it can drift without showing an edge. */
+    inset: 0 -10%;
+    z-index: -1;
+    background:
+      radial-gradient(55% 80% at 22% 112%, rgb(68 154 120 / 0.5), transparent 62%),
+      radial-gradient(50% 80% at 78% 116%, rgb(56 81 156 / 0.55), transparent 62%),
+      radial-gradient(40% 60% at 52% 122%, rgb(45 123 137 / 0.5), transparent 62%),
+      var(--color-ink);
+    pointer-events: none;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .closing::before {
+      animation: drift 16s ease-in-out infinite alternate;
+    }
+  }
+  @keyframes drift {
+    from { transform: translateX(-4%) scale(1.02); }
+    to { transform: translateX(4%) scale(1.14); }
+  }
+  .closing.grain::after {
+    z-index: -1;
+    -webkit-mask-image: linear-gradient(to top, #000, transparent 60%);
+    mask-image: linear-gradient(to top, #000, transparent 60%);
+  }
+</style>

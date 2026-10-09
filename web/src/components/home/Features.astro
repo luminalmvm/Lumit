@@ -1,0 +1,756 @@
+---
+import SectionHead from "../SectionHead.astro";
+
+// Ten reasons, each with a small drawing above it. The drawings are diagrams
+// in the timeline's own marks - bars, curves, keyframes - and not pictures of
+// the interface, which the captures further up the page are for.
+//
+// `art` names the drawing, and `span` is how many of the grid's six columns
+// the card takes on a wide screen.
+const features = [
+  {
+    art: "retime",
+    span: 3,
+    h: "Retime, two ways",
+    p: "One retime, read as a value graph or as a speed graph. With support for both After Effects and Vegas styles of retiming, and switch at any point.",
+  },
+  {
+    art: "effects",
+    span: 3,
+    h: "Over 100 effects, built in",
+    p: "Glow, motion blur, camera shake, RGB split, smooth zoom, colour grading, roto brush and puppet. All GPU-rendered, each with a documentation page for details.",
+  },
+  {
+    art: "graph",
+    span: 2,
+    h: "A graph editor to work in",
+    p: "Value and speed views of the same curves, with support for easing, linear holding, and ways to alter multiple keyframes at once.",
+  },
+  {
+    art: "cuts",
+    span: 2,
+    h: "Cuts inside a layer",
+    p: "A Sequence layer holds clips cut back-to-back on one row, each with its own retime, inside a layer, just like an NLE.",
+  },
+  {
+    art: "ofx",
+    span: 2,
+    h: "OFX plugin support",
+    p: "Any OFX plugin is supported: Sapphire, Twixtor, and the rest are found at start-up and sit beside built-in effects.",
+  },
+  {
+    art: "import",
+    span: 2,
+    h: "Bring your After Effects projects",
+    p: "Import After Effects projects directly across into Lumit. Keyframes carry across value for value, with support for all base effects and OFX plugins that Lumit can access.",
+  },
+  {
+    art: "music",
+    span: 4,
+    h: "Let music guide you",
+    p: "Beat detection marks the audio, cuts and retime features snap to the markers, and any parameter can be driven from a layer's sound.",
+  },
+  {
+    art: "journal",
+    span: 2,
+    h: "Your work survives the crash",
+    p: "Every edit goes through an operation journal, and the project autosaves beside it. Kill Lumit mid-edit and the recovered project is offered on the next launch.",
+  },
+  {
+    art: "responsive",
+    span: 2,
+    h: "The interface never blocks",
+    p: "Rendering runs on the GPU, cached work is reused, and preview quality drops when a frame is late. The interface answers while an export runs.",
+  },
+  {
+    art: "open",
+    span: 2,
+    h: "Open source, GPLv3",
+    p: "The whole engine and interface, in the open. No subscription, no per-seat licence, and no plugin tax on the basics.",
+  },
+];
+
+// A feature card wears a layer's label colour, taken in turn from the
+// application's own set (flutter_ui/lib/theme/theme.dart, `_labelSet`).
+const labels = ["azure", "amber", "violet", "mint", "teal", "indigo", "magenta", "coral"];
+
+// Three rows of effect names, as the manual titles them. Each row is written
+// out twice so it can slide by half its own width and land where it started.
+const effectRows = [
+  ["Gaussian blur", "Glow", "Motion blur", "RGB split", "Shake", "Lens flare", "Curves", "Levels", "LUT", "Roto brush", "Datamosh", "Pixel sort", "Chromatic aberration", "Turbulent displace", "Remove background"],
+  ["Depth of field", "Light wrap", "Add grain", "Echo", "Fractal noise", "Lightning", "Block glitch", "Vignette", "Twirl", "Camera track", "Planar track", "Matte key", "Hue and saturation", "Wave warp", "Mood lighting"],
+  ["Corner pin", "Displacement map", "Lens distort", "Scanlines", "Tritone", "Drop shadow", "Find edges", "Mosaic", "Radial blur", "Directional blur", "Radio waves", "Particulate", "Polar coordinates", "Colour balance", "Posterize time"],
+];
+
+// A waveform that is the same on every build: two slow swells and a hash for
+// the roughness, with a beat every eighth bar standing taller than the rest.
+const BARS = 96;
+const wave = Array.from({ length: BARS }, (_, i) => {
+  const rough = Math.abs(Math.sin(i * 12.9898) * 43758.5453) % 1;
+  const swell = 0.5 + 0.3 * Math.sin(i / 7) + 0.2 * Math.sin(i / 2.3 + 1);
+  const beat = i % 8 === 4;
+  const h = beat ? 0.5 + rough * 0.22 : 0.1 + swell * 0.4 * (0.4 + rough * 0.6);
+  return { h: Math.round(h * 100), beat };
+});
+
+const journal = ["Add Glow", "Set keyframe", "Trim layer"];
+---
+
+<section class="wrap flex flex-col gap-12 pb-20 sm:pb-28">
+  <SectionHead kicker="Why Lumit exists" title="Editing should not be a chore." no="04 / 06">
+    <Fragment slot="lede">
+      Preview lag, interfaces that stop responding, and large external plugin suites
+      that slow down your device. Lumit replaces all of this in a single application,
+      with support for OFX plugins should you still require them.
+    </Fragment>
+    <a class="go" href="https://docs.lumitlab.com/effects/">Browse the effects</a>
+  </SectionHead>
+
+  <div class="bento">
+    {
+      features.map((f, i) => (
+        <article class="feat lit" data-reveal style={`--i:${i % 3};--span:${f.span};--c:var(--label-${labels[i % labels.length]})`}>
+          <div class:list={["art", `art-${f.art}`]} aria-hidden="true">
+            {f.art === "retime" && (
+              <>
+                <div class="pane">
+                  <span class="tag">Value</span>
+                  <svg viewBox="0 0 260 100" fill="none">
+                    <path d="M16 82H84M244 22H176" stroke="var(--color-fg-4)" />
+                    <path d="M16 82C100 82 160 22 244 22" stroke="var(--label-mint)" stroke-width="1.5" />
+                    <circle cx="84" cy="82" r="2.5" fill="var(--color-fg-3)" />
+                    <circle cx="176" cy="22" r="2.5" fill="var(--color-fg-3)" />
+                    <path d="M12 78h8v8h-8zM240 18h8v8h-8z" fill="var(--label-mint)" />
+                  </svg>
+                </div>
+                <div class="pane">
+                  <span class="tag">Speed</span>
+                  <svg viewBox="0 0 260 100" fill="none">
+                    <path d="M16 34Q54 104 92 34Q130 104 168 34Q206 104 244 34" stroke="var(--label-azure)" stroke-width="1.5" />
+                    <path d="M16 34h0M92 34h0M168 34h0M244 34h0" stroke="var(--label-azure)" stroke-width="7" stroke-linecap="round" />
+                  </svg>
+                </div>
+                <i class="sweep" />
+              </>
+            )}
+            {f.art === "effects" &&
+              effectRows.map((row) => (
+                <div class="belt">
+                  {[...row, ...row].map((name) => (
+                    <span>{name}</span>
+                  ))}
+                </div>
+              ))}
+            {f.art === "graph" && (
+              <svg viewBox="0 0 300 100" fill="none">
+                <path d="M24 58C96 58 170 40 276 72" stroke="var(--color-fg-4)" />
+                <path d="M24 80H112M276 20H168" stroke="var(--color-fg-4)" />
+                <path d="M24 80C112 80 168 20 276 20" stroke="var(--label-violet)" stroke-width="1.5" />
+                <circle cx="112" cy="80" r="2.5" fill="var(--color-fg-3)" />
+                <circle cx="168" cy="20" r="2.5" fill="var(--color-fg-3)" />
+                <path d="M24 74l6 6-6 6-6-6zM276 14l6 6-6 6-6-6z" fill="var(--color-key)" />
+                <circle class="rider" r="4" fill="var(--color-fg)" />
+              </svg>
+            )}
+            {f.art === "cuts" && (
+              <div class="lane">
+                <span class="tag">Sequence layer</span>
+                <div class="clips">
+                  <i style="flex:3" />
+                  <i style="flex:2" />
+                  <i style="flex:4" />
+                  <i style="flex:2" />
+                  <i style="flex:3" />
+                  <b class="head" />
+                </div>
+              </div>
+            )}
+            {f.art === "ofx" && (
+              <div class="chips">
+                <span>Glow</span>
+                <span class="plug">Sapphire<b>OFX</b></span>
+                <span>Levels</span>
+                <span class="plug">Twixtor<b>OFX</b></span>
+              </div>
+            )}
+            {f.art === "import" && (
+              <div class="carry">
+                <span class="file">.aep</span>
+                <span class="wire">
+                  <i class="key" />
+                  <i class="key" />
+                  <i class="key" />
+                </span>
+                <span class="file file-lum">.lum</span>
+              </div>
+            )}
+            {f.art === "music" && (
+              <div class="wave">
+                {wave.map((b, i) => (
+                  <i class:list={[b.beat && "beat"]} style={`--h:${b.h}%;--at:${(i / BARS).toFixed(4)}`} />
+                ))}
+                <b class="head" />
+              </div>
+            )}
+            {f.art === "journal" && (
+              <ul class="log">
+                {journal.map((line, i) => (
+                  <li style={`--n:${i}`}>
+                    <i class="key" />
+                    {line}
+                    <b>saved</b>
+                  </li>
+                ))}
+                <li class="back" style={`--n:${journal.length + 1}`}>
+                  <i class="key" />
+                  Project recovered
+                </li>
+              </ul>
+            )}
+            {f.art === "responsive" && (
+              <div class="meters">
+                <span class="tag">Interface</span>
+                <i class="ticks" />
+                <span class="tag">Export</span>
+                <i class="fill" />
+              </div>
+            )}
+            {f.art === "open" && (
+              <div class="licence">
+                <b>GPLv3</b>
+                <span>github.com/luminalmvm/Lumit<i class="caret" /></span>
+              </div>
+            )}
+          </div>
+          <div class="p-7">
+            <p class="feat-id"><i />{String(i + 1).padStart(2, "0")}</p>
+            <h3 class="mt-3 font-mono text-[15px] text-fg">{f.h}</h3>
+            <p class="mt-2.5 text-[15px] leading-[1.4] text-fg-3">{f.p}</p>
+          </div>
+        </article>
+      ))
+    }
+  </div>
+</section>
+
+<style>
+  /* Six columns on a wide screen, two on a tablet, one on a phone. A card
+     says how many it takes; on a tablet a wide card takes the whole row. */
+  .bento {
+    display: grid;
+    gap: 20px;
+  }
+  .feat {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-card);
+    background: var(--color-ink-2);
+  }
+  @media (min-width: 640px) {
+    .bento {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .feat:nth-child(-n + 2),
+    .feat:nth-child(7),
+    .feat:nth-child(10) {
+      grid-column: span 2;
+    }
+  }
+  @media (min-width: 1024px) {
+    .bento {
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+    }
+    .bento .feat {
+      grid-column: span var(--span);
+    }
+  }
+  .feat-id {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--color-fg-4);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1;
+    font-feature-settings: "zero";
+  }
+  .feat-id i {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--c);
+  }
+
+  /* The well a drawing sits in: darker than its card, on the graph editor's
+     faint grid. */
+  .art {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 132px;
+    overflow: hidden;
+    border-bottom: 1px solid var(--color-line);
+    background-color: var(--color-ink);
+    background-image:
+      linear-gradient(color-mix(in srgb, var(--color-line) 55%, transparent) 1px, transparent 1px),
+      linear-gradient(90deg, color-mix(in srgb, var(--color-line) 55%, transparent) 1px, transparent 1px);
+    background-size: 33px 33px;
+    background-position: -1px -1px;
+  }
+  .art svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+  .art .tag {
+    color: var(--color-fg-4);
+  }
+
+  /* Retime: the same move as a value graph and as a speed graph, and a
+     playhead that crosses both. */
+  .art-retime .pane {
+    position: relative;
+    flex: 1;
+    height: 100%;
+    padding: 14px 8px;
+  }
+  .art-retime .pane + .pane {
+    border-left: 1px solid var(--color-line);
+  }
+  .art-retime .tag {
+    position: absolute;
+    top: 12px;
+    left: 14px;
+  }
+  .sweep {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 30%;
+    width: 1px;
+    background: var(--color-accent-2);
+  }
+
+  /* Effects: belts of names going opposite ways, fading out at the ends. */
+  .art-effects {
+    flex-direction: column;
+    gap: 10px;
+    -webkit-mask-image: linear-gradient(to right, transparent, #000 12%, #000 88%, transparent);
+    mask-image: linear-gradient(to right, transparent, #000 12%, #000 88%, transparent);
+  }
+  .belt {
+    display: flex;
+    gap: 8px;
+    width: max-content;
+    align-self: flex-start;
+  }
+  /* Each belt starts somewhere of its own, so the rows do not line up. */
+  .belt:nth-child(2) {
+    margin-left: -90px;
+  }
+  .belt:nth-child(3) {
+    margin-left: -40px;
+  }
+  .belt span,
+  .chips span {
+    padding: 7px 10px;
+    border: 1px solid var(--color-line-2);
+    border-radius: var(--radius-ctl);
+    background: var(--color-ink-2);
+    color: var(--color-fg-2);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .art-graph {
+    padding: 14px 10px;
+  }
+  /* A point that rides the curve, where the browser can move one along a
+     path. Where it cannot, there is no point. */
+  .rider {
+    display: none;
+  }
+  @supports (offset-path: path("M0 0")) {
+    .rider {
+      display: block;
+      offset-path: path("M24 80C112 80 168 20 276 20");
+      offset-distance: 100%;
+    }
+  }
+
+  /* Cuts: one layer's bar, with clips cut back to back inside it. */
+  .lane {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+    padding: 0 22px;
+  }
+  .clips {
+    position: relative;
+    display: flex;
+    gap: 2px;
+    height: 30px;
+    padding: 3px;
+    border: 1px solid color-mix(in srgb, var(--label-mint) 55%, transparent);
+    border-radius: var(--radius-ctl);
+    background: color-mix(in srgb, var(--label-mint) 10%, transparent);
+  }
+  .clips i {
+    border-radius: 1px;
+    background: color-mix(in srgb, var(--label-mint) 50%, var(--color-ink));
+  }
+  .clips i:nth-child(even) {
+    background: color-mix(in srgb, var(--label-indigo) 55%, var(--color-ink));
+  }
+  /* The playhead: a line with the marker on top, the hero timeline's own. */
+  .head {
+    position: absolute;
+    top: -9px;
+    bottom: -5px;
+    left: 34%;
+    width: 1px;
+    background: var(--color-fg);
+  }
+  .head::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: -4.5px;
+    border: 5px solid transparent;
+    border-top: 6px solid var(--color-fg);
+  }
+
+  /* OFX: plugins in the same list as what is built in. */
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+    padding: 0 18px;
+  }
+  .chips .plug {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    border-color: color-mix(in srgb, var(--label-teal) 55%, transparent);
+    color: var(--color-fg);
+  }
+  .chips b {
+    color: var(--label-teal);
+    font-size: 9px;
+    font-weight: 400;
+    letter-spacing: 0.1em;
+  }
+
+  /* Import: keyframes on their way from one file to the other. */
+  .carry {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    width: 100%;
+    padding: 0 26px;
+  }
+  .file {
+    padding: 10px 12px;
+    border: 1px solid var(--color-line-2);
+    border-radius: var(--radius-ctl);
+    background: var(--color-ink-2);
+    color: var(--color-fg-2);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 1;
+  }
+  .file-lum {
+    border-color: var(--color-accent-2);
+    color: var(--color-fg);
+  }
+  .wire {
+    position: relative;
+    flex: 1;
+    height: 1px;
+    background: var(--color-line-2);
+  }
+  .wire .key {
+    position: absolute;
+    top: -3px;
+    left: 20%;
+    margin-left: -4px;
+  }
+  .wire .key:nth-child(2) {
+    left: 50%;
+  }
+  .wire .key:nth-child(3) {
+    left: 80%;
+  }
+
+  /* Music: a waveform, with the beats marked. */
+  .wave {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    width: 100%;
+    height: 100%;
+    padding: 0 22px;
+  }
+  .wave i {
+    position: relative;
+    flex: 1;
+    height: var(--h);
+    border-radius: 1px;
+    background: var(--color-fg-4);
+  }
+  .wave .beat {
+    background: var(--label-magenta);
+  }
+  /* A marker on each beat: a line the height of the well and a flag at its
+     top. The bar is centred in the well, so half the well above its middle is
+     the well's top edge. */
+  .wave .beat::before {
+    content: "";
+    position: absolute;
+    top: calc(50% - 66px);
+    left: 50%;
+    width: 1px;
+    height: 132px;
+    margin-left: -0.5px;
+    background: color-mix(in srgb, var(--label-magenta) 30%, transparent);
+  }
+  .wave .beat::after {
+    content: "";
+    position: absolute;
+    top: calc(50% - 66px);
+    left: 50%;
+    margin-left: -4px;
+    border: 4px solid transparent;
+    border-top: 6px solid var(--label-magenta);
+  }
+
+  /* The journal: each edit written down as it is made. */
+  .log {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    width: 100%;
+    margin: 0;
+    padding: 0 22px;
+    list-style: none;
+    color: var(--color-fg-3);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1;
+  }
+  .log li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .log .key {
+    --k: var(--color-fg-4);
+    width: 5px;
+    height: 5px;
+  }
+  .log b {
+    margin-left: auto;
+    color: var(--color-fg-4);
+    font-weight: 400;
+  }
+  .log .back {
+    padding-top: 9px;
+    border-top: 1px solid var(--color-line);
+    color: var(--color-fg);
+  }
+  .log .back .key {
+    --k: var(--label-coral);
+  }
+  .wave .head {
+    top: 0;
+    bottom: 0;
+    left: 22px;
+    opacity: 0;
+  }
+  .wave .head::before {
+    display: none;
+  }
+
+  /* Never blocks: the interface keeps its frames while the export fills. */
+  .meters {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    gap: 16px 14px;
+    width: 100%;
+    padding: 0 22px;
+  }
+  .meters i {
+    height: 10px;
+    border-radius: 1px;
+  }
+  .ticks {
+    background: repeating-linear-gradient(to right, var(--label-azure) 0 3px, transparent 3px 7px);
+  }
+  .fill {
+    position: relative;
+    overflow: hidden;
+    background: var(--color-ink-3);
+  }
+  .fill::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: var(--color-fg-4);
+    transform: scaleX(0.62);
+    transform-origin: left;
+  }
+
+  .licence {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--font-mono);
+  }
+  .licence b {
+    color: var(--color-fg);
+    font-size: 30px;
+    font-weight: 400;
+    line-height: 1;
+    letter-spacing: -0.03em;
+  }
+  .licence span {
+    color: var(--color-fg-3);
+    font-size: 11px;
+  }
+  .caret {
+    display: inline-block;
+    width: 6px;
+    height: 12px;
+    margin-left: 3px;
+    vertical-align: -2px;
+    background: var(--color-fg-3);
+  }
+
+  /* The drawings move only for a visitor who has not asked for stillness, and
+     each one stands as a finished picture without its animation. */
+  @media (prefers-reduced-motion: no-preference) {
+    .sweep {
+      animation: sweep 7s linear infinite;
+    }
+    .belt {
+      animation: belt 60s linear infinite;
+    }
+    .belt:nth-child(2) {
+      animation-direction: reverse;
+    }
+    .wire .key {
+      animation: carry 3.6s linear infinite;
+    }
+    .wire .key:nth-child(2) {
+      animation-delay: -1.2s;
+    }
+    .wire .key:nth-child(3) {
+      animation-delay: -2.4s;
+    }
+    .fill::before {
+      animation: fill 6s ease-in-out infinite;
+    }
+    .ticks {
+      animation: ticks 0.7s linear infinite;
+    }
+    .rider {
+      animation: ride 4.6s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+    }
+    .clips .head {
+      animation: cross 5s linear infinite;
+    }
+    /* Each clip lifts as the playhead comes on to it. */
+    .clips i {
+      animation: lift 5s linear infinite;
+    }
+    .clips i:nth-child(2) { animation-delay: 1.07s; }
+    .clips i:nth-child(3) { animation-delay: 1.79s; }
+    .clips i:nth-child(4) { animation-delay: 3.21s; }
+    .clips i:nth-child(5) { animation-delay: 3.93s; }
+    .plug {
+      animation: found 4.5s ease-out infinite;
+    }
+    .plug:nth-child(4) {
+      animation-delay: 0.9s;
+    }
+    /* The playhead crosses the waveform, and each beat jumps as it passes:
+       a bar's delay is its place along the wave. */
+    .wave .head {
+      opacity: 1;
+      animation: play 6.4s linear infinite;
+    }
+    .wave .beat {
+      animation: beat 6.4s linear infinite;
+      animation-delay: calc(var(--at) * 6.4s);
+    }
+    /* The journal fills a line at a time, and then the project is back. */
+    .log li {
+      animation: logged 7s linear infinite;
+      animation-delay: calc(var(--n) * 0.8s);
+    }
+    .caret {
+      animation: blink 1.1s steps(1) infinite;
+    }
+  }
+  @keyframes sweep {
+    from { left: 0; }
+    to { left: 100%; }
+  }
+  @keyframes belt {
+    to { transform: translateX(calc(-50% - 4px)); }
+  }
+  @keyframes carry {
+    0% { left: 0; opacity: 0; }
+    15%, 85% { opacity: 1; }
+    100% { left: 100%; opacity: 0; }
+  }
+  @keyframes fill {
+    0% { transform: scaleX(0); }
+    85%, 100% { transform: scaleX(1); }
+  }
+  @keyframes ticks {
+    to { background-position: 7px 0; }
+  }
+  @keyframes ride {
+    0%, 8% { offset-distance: 0%; }
+    46%, 58% { offset-distance: 100%; }
+    96%, 100% { offset-distance: 0%; }
+  }
+  @keyframes cross {
+    from { left: 0; }
+    to { left: 100%; }
+  }
+  @keyframes lift {
+    0%, 3% { filter: brightness(1.7); }
+    14%, 100% { filter: none; }
+  }
+  @keyframes found {
+    0%, 6% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--label-teal) 70%, transparent); }
+    30%, 100% { box-shadow: 0 0 0 9px transparent; }
+  }
+  @keyframes play {
+    from { left: 22px; }
+    to { left: calc(100% - 22px); }
+  }
+  @keyframes beat {
+    0% { transform: scaleY(1.45); filter: brightness(1.5); }
+    7%, 100% { transform: none; filter: none; }
+  }
+  @keyframes logged {
+    0%, 2% { opacity: 0; transform: translateX(-6px); }
+    7%, 84% { opacity: 1; transform: none; }
+    90%, 100% { opacity: 0; transform: none; }
+  }
+  @keyframes blink {
+    50% { opacity: 0; }
+  }
+</style>
