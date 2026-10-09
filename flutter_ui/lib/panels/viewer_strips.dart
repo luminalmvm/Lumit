@@ -18,6 +18,7 @@ import 'package:provider/provider.dart';
 import '../icons/icons.dart';
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
+import '../shell/dock_widget.dart' show DockPaneHandle;
 import '../state/settings.dart';
 import '../state/viewer_view.dart';
 import '../state/workspace.dart' show ViewerLook;
@@ -259,27 +260,35 @@ class ViewerHeader extends StatelessWidget {
             // Lantern centres the title on the strip, with the pickers still
             // at the right; the pickers sit over it only on a strip too
             // narrow for both, which is under the minimum and slides.
+            // The title and the empty strip round it lift the pane, since a
+            // Viewer standing alone has no tab to drag.
             if (t.tokens.titleCentred) {
               return Stack(children: [
-                Center(child: title),
+                DockPaneHandle(child: Center(child: title)),
                 Align(
                   alignment: Alignment.centerRight,
                   child: Row(mainAxisSize: MainAxisSize.min, children: pickers),
                 ),
               ]);
             }
-            // The title is not flexible here: it and the `Spacer` would then
-            // share the free space between them, and the pickers would stop
-            // at the strip's right-hand *padding*. Above the minimum there is
+            // The title takes all the free space itself, so the pickers still
+            // reach the strip's right-hand padding. Above the minimum there is
             // room for the whole word anyway — below it, the strip slides.
-            return Row(children: [title, const Spacer(), ...pickers]);
+            return Row(children: [
+              Expanded(
+                child: DockPaneHandle(
+                  child: Align(alignment: Alignment.centerLeft, child: title),
+                ),
+              ),
+              ...pickers,
+            ]);
           }
           return SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                title,
+                DockPaneHandle(child: title),
                 const SizedBox(width: _headerGatheredGap),
                 ...pickers,
               ],

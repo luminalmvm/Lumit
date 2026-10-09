@@ -63,6 +63,7 @@ import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
 import '../l10n/strings.dart';
+import '../shell/dock_widget.dart' show DockPaneHandle;
 import '../shell/welcome_frb.dart' show EmptyStageFrb;
 import '../state/dock.dart';
 import '../state/settings.dart';
@@ -701,7 +702,10 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
             leading: split
                 ? const []
                 : [
-                    Text(t.kickerCase(l10n.panelViewer), style: t.kickerOn),
+                    DockPaneHandle(
+                      child: Text(t.kickerCase(l10n.panelViewer),
+                          style: t.kickerOn),
+                    ),
                     viewerBarGapBox(viewerBarGap),
                     ...viewerPickers(
                       zoom: _zoom,
