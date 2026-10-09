@@ -3,7 +3,8 @@
 // bare, and the Sharp/Round pane chrome. A tab drags to re-dock (dock.rs
 // drag-to-redock, via egui_tiles): a ghost pill follows the cursor, the
 // hovered pane shows a drop-zone preview, and release commits the move through
-// movePanel. Every pane is a drop target, bare ones included.
+// movePanel. Every pane is a drop target, bare ones included. A pane standing
+// alone has no tab, so its title lifts it instead (DockPaneHandle).
 
 import 'package:flutter/rendering.dart' show RenderOffstage;
 import 'package:flutter/widgets.dart';
@@ -235,6 +236,7 @@ class _DockWidgetState extends State<DockWidget> {
                 pane: maximised,
                 activePanel: widget.activePanel,
                 drag: _drag,
+                onClose: _closePanel,
                 header: _bareTitle(t, maximised.panel),
                 child: widget.buildPanel(context, maximised),
               )
@@ -253,11 +255,13 @@ class _DockWidgetState extends State<DockWidget> {
         panel == Panel.audioTimeline) {
       return null;
     }
-    return _TitleLine(
-      child: Text(
-        t.kickerCase(panel.title),
-        key: const ValueKey('pane-title'),
-        style: t.tokens.titleCentred ? t.kickerOn : t.kicker,
+    return DockPaneHandle(
+      child: _TitleLine(
+        child: Text(
+          t.kickerCase(panel.title),
+          key: const ValueKey('pane-title'),
+          style: t.tokens.titleCentred ? t.kickerOn : t.kicker,
+        ),
       ),
     );
   }
@@ -267,6 +271,7 @@ class _DockWidgetState extends State<DockWidget> {
             pane: pane.id,
             activePanel: widget.activePanel,
             drag: _drag,
+            onClose: _closePanel,
             header: _bareTitle(ThemeScope.of(context).theme, pane.id.panel),
             child: widget.buildPanel(context, pane.id),
           ),
@@ -1067,8 +1072,9 @@ class _TabPillState extends State<_TabPill> {
 /// below leaves the row out; turning this on brings it back.
 const bool _popOutBuilt = false;
 
-/// A panel's right-click menu, on its tab or its header in a stack: close the
-/// panel, and how the group it is in is drawn.
+/// A panel's right-click menu, on its tab, its header in a stack or its own
+/// title when it stands alone: close the panel, and how the group it is in is
+/// drawn. A pane standing alone has no group, so it gets the close and no more.
 ///
 /// **Pop out is left off until it is built.** Tearing a panel into its own
 /// window needs real operating-system windows, and Flutter has not shipped
@@ -1080,9 +1086,9 @@ void _showPaneMenu(
   BuildContext context,
   Offset position, {
   required PaneId pane,
-  required DockTabs group,
   required void Function(PaneId) onClose,
-  required VoidCallback onGroupChanged,
+  DockTabs? group,
+  VoidCallback? onGroupChanged,
 }) {
   final t = ThemeScope.of(context).theme;
   showLumitPopup<void>(
@@ -1115,22 +1121,23 @@ void _showPaneMenu(
                   ),
                 ),
               ),
-            MenuRow(
-              key: const ValueKey('tab-menu-stacked'),
-              selected: group.stacked,
-              onPressed: () {
-                close(null);
-                group.stacked = !group.stacked;
-                // A stack with nothing open is a column of headers, so the
-                // panel that was in front opens with it.
-                if (group.stacked && group.open.isEmpty) {
-                  group.setOpen(group.activePane.id, true);
-                }
-                onGroupChanged();
-              },
-              child: Text(l10n.panelGroupStacked),
-            ),
-            if (group.stacked)
+            if (group != null)
+              MenuRow(
+                key: const ValueKey('tab-menu-stacked'),
+                selected: group.stacked,
+                onPressed: () {
+                  close(null);
+                  group.stacked = !group.stacked;
+                  // A stack with nothing open is a column of headers, so the
+                  // panel that was in front opens with it.
+                  if (group.stacked && group.open.isEmpty) {
+                    group.setOpen(group.activePane.id, true);
+                  }
+                  onGroupChanged?.call();
+                },
+                child: Text(l10n.panelGroupStacked),
+              ),
+            if (group != null && group.stacked)
               MenuRow(
                 key: const ValueKey('tab-menu-solo'),
                 selected: group.solo,
@@ -1144,7 +1151,7 @@ void _showPaneMenu(
                   } else if (group.solo && group.open.length > 1) {
                     group.setOpen(group.open.first, true);
                   }
-                  onGroupChanged();
+                  onGroupChanged?.call();
                 },
                 child: Text(l10n.panelGroupSolo),
               ),
@@ -1389,6 +1396,10 @@ class _PaneChrome extends StatelessWidget {
   /// of its own and its accent boundary rounds only the bottom corners.
   final bool inCard;
 
+  /// Take this pane out of the arrangement, for a pane standing alone. Null
+  /// in a group, where the tab or the stack header closes it.
+  final void Function(PaneId)? onClose;
+
   const _PaneChrome({
     required this.pane,
     required this.activePanel,
@@ -1396,6 +1407,7 @@ class _PaneChrome extends StatelessWidget {
     required this.child,
     this.header,
     this.inCard = false,
+    this.onClose,
   });
 
   @override
@@ -1473,11 +1485,71 @@ class _PaneChrome extends StatelessWidget {
             // outer half of the Viewer's pills (a 16 corner off a capsule of
             // 14) and cut their shadows off at the pane's edge.
             clipBehavior: card ? Clip.antiAlias : Clip.none,
-            child: header == null
-                ? body
-                : Column(children: [header!, Expanded(child: body)]),
+            // Always there, alone or in a group, so a pane dragged from one
+            // to the other keeps the same shape under its key and its State.
+            child: _PaneScope(
+              pane: pane,
+              drag: drag,
+              onClose: onClose,
+              child: header == null
+                  ? body
+                  : Column(children: [header!, Expanded(child: body)]),
+            ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// What a pane hands down to its panel, so the panel's own title can lift it.
+class _PaneScope extends InheritedWidget {
+  final PaneId pane;
+  final _DragController drag;
+
+  /// Null in a group, where there is a tab to drag instead.
+  final void Function(PaneId)? onClose;
+
+  const _PaneScope({
+    required this.pane,
+    required this.drag,
+    required this.onClose,
+    required super.child,
+  });
+
+  @override
+  bool updateShouldNotify(_PaneScope old) =>
+      old.pane != pane || old.drag != drag || old.onClose != onClose;
+}
+
+/// The part of a panel's own header that lifts its pane.
+///
+/// A pane standing alone has no tab, so its title does the tab's job: a drag
+/// re-docks it and a right-click offers Close panel. In a tab group or a
+/// stack the tab already does both, and this is its child and nothing more.
+class DockPaneHandle extends StatelessWidget {
+  final Widget child;
+  const DockPaneHandle({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final scope = context.dependOnInheritedWidgetOfExactType<_PaneScope>();
+    final onClose = scope?.onClose;
+    if (scope == null || onClose == null) return child;
+    return _DragSource(
+      pane: scope.pane,
+      drag: scope.drag,
+      child: GestureDetector(
+        // The whole of the handle, so the empty strip beside the word lifts
+        // the pane as well as the word does.
+        behavior: HitTestBehavior.opaque,
+        onSecondaryTapUp: (d) => _showPaneMenu(
+          context,
+          d.globalPosition,
+          pane: scope.pane,
+          onClose: onClose,
+        ),
+        child: child,
       ),
     );
   }
@@ -1574,9 +1646,8 @@ class _DropPainter extends CustomPainter {
 /// sat over the right-hand end of that panel's own header strip — so the one
 /// dock affordance drawn on the picture was also the one covering a picker.
 ///
-/// What still carries re-docking: a **tab pill** drags its panel (`_TabPill`),
+/// What carries re-docking now: a **tab pill** drags its panel (`_TabPill`),
 /// every pane is still a **drop target** (`_DropPreview`), and Window →
 /// Workspace holds the presets, the reset and the per-panel toggles. A pane
-/// that is alone in its slot can no longer be lifted; the natural home for that,
-/// if it is wanted back, is the panel's own header strip rather than a mark
-/// floating over its content.
+/// that is alone in its slot is lifted by its own title (`DockPaneHandle`),
+/// which sits in the panel's header strip rather than floating over its content.

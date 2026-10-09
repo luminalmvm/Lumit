@@ -29,6 +29,7 @@ import '../icons/lumit_icons.dart';
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../shell/comp_settings_frb.dart';
+import '../shell/dock_widget.dart' show DockPaneHandle;
 import '../state/comp_time.dart';
 import '../state/timeline_columns.dart';
 import '../theme/theme.dart';
@@ -97,10 +98,13 @@ class CompTabsFrb extends StatelessWidget {
           // The panel's own name, ahead of the tabs (§12A.1). A kicker like
           // every other panel title (§7.1), and lit because the Timeline is
           // the container these tabs belong to rather than one of them.
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Text(t.kickerCase(title ?? l10n.panelTimeline),
-                style: t.kickerOn),
+          // It lifts the pane too, since a Timeline standing alone has no tab.
+          DockPaneHandle(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Text(t.kickerCase(title ?? l10n.panelTimeline),
+                  style: t.kickerOn),
+            ),
           ),
           Expanded(child: _strip(context, t, comps, selected)),
           // The single filled action this surface is allowed (§3.1, §12A.1):
@@ -170,9 +174,10 @@ class CompTabsFrb extends StatelessWidget {
       child: Stack(
         alignment: Alignment.centerLeft,
         children: [
-          // Behind the controls, so the words centre on the line itself.
+          // Behind the controls, so the words centre on the line itself. The
+          // empty line round them lifts the pane.
           Positioned.fill(
-            child: IgnorePointer(
+            child: DockPaneHandle(
               child: Center(
                 child: Text(t.kickerCase(title ?? l10n.panelTimeline),
                     key: const ValueKey('tl-title'), style: t.kickerOn),
