@@ -14,7 +14,9 @@ const links = [
 ];
 ---
 
-<header class="sticky top-0 z-20">
+{/* Clipped sideways, or the playhead's marker hangs off the right edge at the
+    foot of a page and the whole page scrolls sideways by its width. */}
+<header class="sticky top-0 z-20 [overflow-x:clip]">
   <div class="blur-stack" aria-hidden="true">
     <div></div>
     <div></div>

@@ -1,12 +1,40 @@
 ---
 import Base from "../layouts/Base.astro";
+import SectionHead from "../components/SectionHead.astro";
+import ReleaseDate from "../components/ReleaseDate.astro";
+import { releasesNewestFirst } from "../scripts/releases";
 
 const RELEASES = "https://github.com/luminalmvm/Lumit/releases";
+const DOCS = "https://docs.lumitlab.com";
 
+// `ext` is the file a card hands over, and `note` is the one thing to know
+// before running it. `code` is a command to copy, where there is one.
 const platforms = [
-  { key: "win", name: "Windows", meta: "10 / 11, 64-bit · installer", cta: "Download .exe", soft: false },
-  { key: "lin", name: "Linux", meta: "x86-64 · Flatpak", cta: "Download .flatpak", soft: false },
-  { key: "mac", name: "macOS", meta: "Apple silicon · signed dmg", cta: "Download .dmg", soft: false },
+  {
+    key: "win",
+    name: "Windows",
+    ext: ".exe",
+    meta: "10 / 11, 64-bit · installer",
+    cta: "Download .exe",
+    note: "Run the installer. SmartScreen will warn on first run - the build is not code-signed.",
+  },
+  {
+    key: "lin",
+    name: "Linux",
+    ext: ".flatpak",
+    meta: "x86-64 · Flatpak",
+    cta: "Download .flatpak",
+    note: "Any distribution with Flatpak. Install with the command below, then launch from your applications menu. FFmpeg ships inside the bundle.",
+    code: "flatpak install lumit-*.flatpak",
+  },
+  {
+    key: "mac",
+    name: "macOS",
+    ext: ".dmg",
+    meta: "Apple silicon · signed dmg",
+    cta: "Download .dmg",
+    note: "macOS supports Apple silicon only.",
+  },
 ];
 
 const notes = [
@@ -15,59 +43,86 @@ const notes = [
     td: "A GPU with Vulkan, Direct3D 12 or Metal. Lumit is GPU-first; there is no software-rendering fallback.",
   },
   {
-    th: "Windows",
-    td: "Run the installer. SmartScreen will warn on first run - the build is not code-signed.",
-  },
-  {
-    th: "Linux",
-    td: 'Distributions with Flatpak supported. Install via "flatpak install lumit-*.flatpak", then launch from your applications menu. FFmpeg ships inside the bundle.',
-  },
-  {
-    th: "macOS",
-    td: "macOS supports Apple silicon only.",
-  },
-  {
     th: "Building it yourself",
     td: "Clone the repository and follow the README. The engine is Rust, the interface is Flutter; CI builds these same artefacts on every tagged release.",
   },
 ];
+
+// Where to go once it is installed: the manual's three opening pages, under
+// the titles and descriptions the manual gives them.
+const next = [
+  {
+    href: `${DOCS}/start/install/`,
+    h: "Installation",
+    p: "Install Lumit on Windows, Linux or macOS.",
+  },
+  {
+    href: `${DOCS}/start/first-composition/`,
+    h: "Your first composition",
+    p: "Make a composition, add a layer, animate it, and export it.",
+  },
+  {
+    href: `${DOCS}/start/coming-from/`,
+    h: "Coming from After Effects or Vegas",
+    p: "Coming from After Effects and Vegas to Lumit.",
+  },
+];
+
+// The newest release note stands in for the version and date until GitHub
+// answers, and is where the notes link goes.
+const [latest] = await releasesNewestFirst();
 ---
 
 <Base
   title="Download Lumit"
   description="Download Lumit for Windows, Linux and macOS. Free and open source under GPLv3."
 >
-  <section class="py-16 sm:py-24">
-    <div class="wrap">
-      <p class="kicker">Download</p>
-      <h2 class="mt-4 text-[clamp(28px,3.4vw,36px)] leading-[1.1]">Install Lumit.</h2>
-      <p class="mt-4 max-w-[620px]">
-        Free and open source under GPLv3. No account, no licence key. Latest release
-        <span class="font-mono tabular-nums text-fg" data-tag>-</span>, published
-        <span data-date>-</span>.
+  <section class="pt-14 pb-20 sm:pt-20 sm:pb-28">
+    <div class="wrap flex flex-col gap-12">
+      <SectionHead page kicker="Download" title="Install Lumit.">
+        <Fragment slot="lede">
+          Free and open source under GPLv3. No account, no licence key.
+        </Fragment>
+      </SectionHead>
+
+      <p class="strip">
+        <span>
+          Latest release
+          <b class="tabular-nums" data-tag>{latest ? `v${latest.data.versionNumber}` : "-"}</b>
+        </span>
+        <span>
+          Published
+          <b data-date>{latest ? <ReleaseDate date={latest.data.date} /> : "-"}</b>
+        </span>
+        {latest && <a class="go sm:ml-auto" href={`/releases/${latest.id}`}>Release notes</a>}
       </p>
 
-      <div class="mt-11 grid gap-4.5 lg:grid-cols-3">
+      <div class="grid gap-5 lg:grid-cols-3">
         {
           platforms.map((p) => (
-            <div class="card flex flex-col gap-1.5" data-plat={p.key}>
-              <h3 class="text-[18px] tracking-[-0.02em]">{p.name}</h3>
-              <p class="mb-4 text-[13px] text-fg-3">
+            <article class="plat lit" data-plat={p.key}>
+              <div class="flex items-start justify-between gap-3">
+                <span class="ext">{p.ext}</span>
+                <span class="tag mine"><i class="key" style="--k:var(--color-accent-2)" />This computer</span>
+              </div>
+              <h2 class="mt-9 text-[28px] leading-none tracking-[-0.03em]">{p.name}</h2>
+              <p class="mt-3 text-[13px] text-fg-3">
                 {p.meta} · <span class="font-mono tabular-nums" data-size={p.key}>-</span>
               </p>
-              <a
-                class:list={["btn mt-auto", p.soft && "btn-ghost"]}
-                href={RELEASES + "/latest"}
-                data-link={p.key}
-              >
+              <a class="btn mt-7 w-full" href={RELEASES + "/latest"} data-link={p.key}>
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                  <path d="M8 2v9M4 7l4 4 4-4M2 13h12"></path>
+                </svg>
                 {p.cta}
               </a>
-            </div>
+              <p class="mt-6 border-t border-line pt-5 text-[14px] leading-[1.5] text-fg-3">{p.note}</p>
+              {p.code && <code class="cmd">{p.code}</code>}
+            </article>
           ))
         }
       </div>
 
-      <p class="mt-6 text-[13.5px] text-fg-3">
+      <p class="text-[13.5px] text-fg-3">
         All builds can be found on the
         <a href={RELEASES} class="text-fg-2 underline underline-offset-2 hover:text-fg">
           GitHub releases page</a
@@ -76,23 +131,125 @@ const notes = [
     </div>
   </section>
 
-  <section class="border-t border-line bg-ink-2 py-16 sm:py-24">
-    <div class="wrap">
-      <p class="kicker">Before you install</p>
-      <h2 class="mt-4 text-[clamp(28px,3.4vw,36px)] leading-[1.1]">Notes and requirements.</h2>
-      <dl class="mt-7 max-w-[820px]">
+  <section class="pb-20 sm:pb-28">
+    <div class="wrap flex flex-col gap-12">
+      <SectionHead kicker="Before you install" title="Notes and requirements." />
+      <dl class="m-0 grid gap-5 md:grid-cols-2">
         {
           notes.map((n) => (
-            <div class="grid gap-1 border-b border-line py-3.5 sm:grid-cols-[190px_1fr] sm:gap-4">
-              <dt class="text-fg">{n.th}</dt>
-              <dd class="m-0 text-[14.5px]">{n.td}</dd>
+            <div class="card">
+              <dt class="font-mono text-[15px] text-fg">{n.th}</dt>
+              <dd class="m-0 mt-2.5 text-[15px] leading-[1.45] text-fg-3">{n.td}</dd>
             </div>
           ))
         }
       </dl>
     </div>
   </section>
+
+  <section class="pb-24 sm:pb-32">
+    <div class="wrap flex flex-col gap-12">
+      <SectionHead kicker="After you install" title="Where to start.">
+        <a class="go" href={DOCS}>Read the docs</a>
+      </SectionHead>
+      <div class="grid gap-5 md:grid-cols-3">
+        {
+          next.map((n, i) => (
+            <a class="card lit step" href={n.href}>
+              <span class="tag">{String(i + 1).padStart(2, "0")}</span>
+              <span class="mt-8 block font-mono text-[15px] text-fg">{n.h}</span>
+              <span class="mt-2.5 block text-[15px] leading-[1.45] text-fg-3">{n.p}</span>
+            </a>
+          ))
+        }
+      </div>
+    </div>
+  </section>
 </Base>
+
+<style>
+  /* The release on one line: which, when, and where its notes are. */
+  .strip {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 32px;
+    margin: 0;
+    padding: 14px 18px;
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-card);
+    background: var(--color-ink-2);
+    color: var(--color-fg-3);
+    font-family: var(--font-mono);
+    font-size: 12px;
+  }
+  .strip b {
+    margin-left: 8px;
+    color: var(--color-fg);
+    font-weight: 400;
+  }
+
+  .plat {
+    display: flex;
+    flex-direction: column;
+    padding: 28px;
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-card);
+    background: var(--color-ink-2);
+  }
+  /* The file a card hands over, drawn as the file. */
+  .ext {
+    padding: 11px 13px;
+    border: 1px solid var(--color-line-2);
+    border-radius: var(--radius-ctl);
+    background: var(--color-ink);
+    color: var(--color-fg);
+    font-family: var(--font-mono);
+    font-size: 15px;
+    line-height: 1;
+  }
+  /* The card for the system the visitor is on. Set by the script, so without
+     script no card claims it. */
+  .mine {
+    display: none;
+    padding-top: 6px;
+    color: var(--color-fg-2);
+  }
+  .plat.is-mine {
+    border-color: var(--color-accent-2);
+    background:
+      radial-gradient(80% 70% at 0% 0%, color-mix(in srgb, var(--color-accent) 22%, transparent), transparent 70%),
+      var(--color-ink-2);
+  }
+  .plat.is-mine .mine {
+    display: inline-flex;
+  }
+  .plat.is-mine .btn {
+    border-color: #fff;
+  }
+  .cmd {
+    display: block;
+    margin-top: 14px;
+    padding: 10px 12px;
+    overflow-x: auto;
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-ctl);
+    background: var(--color-ink);
+    color: var(--color-fg-2);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    white-space: nowrap;
+    user-select: all;
+  }
+  .step {
+    display: block;
+    text-decoration: none;
+    transition: border-color 0.15s;
+  }
+  .step:hover {
+    border-color: var(--color-line-2);
+  }
+</style>
 
 <script>
   // Point the three buttons at the newest release's assets. Each href already falls
@@ -110,6 +267,15 @@ const notes = [
     const el = document.querySelector(sel);
     if (el) el.textContent = text;
   };
+
+  // Mark the card for the system this is. Not on a phone or tablet, which name
+  // a desktop system in passing (see the hero's own check in index.astro), and
+  // not waiting on GitHub, which may not answer.
+  const ua = navigator.userAgent;
+  const handheld =
+    /Android|iPhone|iPad|iPod/.test(ua) || (/Mac/.test(ua) && navigator.maxTouchPoints > 1);
+  const mine = handheld ? null : /Win/.test(ua) ? "win" : /Mac/.test(ua) ? "mac" : /Linux|X11/.test(ua) ? "lin" : null;
+  if (mine) document.querySelector(`[data-plat="${mine}"]`)?.classList.add("is-mine");
 
   fetch("https://api.github.com/repos/luminalmvm/Lumit/releases/latest")
     .then((r) => {
@@ -134,14 +300,6 @@ const notes = [
         if (link) link.href = asset.browser_download_url;
         set(`[data-size="${key}"]`, `${Math.round(asset.size / 1048576)} MB`);
       }
-
-      const ua = navigator.userAgent;
-      // Not on a phone or tablet, which name a desktop system in passing
-      // (see the hero's own check in index.astro).
-      const handheld =
-        /Android|iPhone|iPad|iPod/.test(ua) || (/Mac/.test(ua) && navigator.maxTouchPoints > 1);
-      const mine = handheld ? null : /Win/.test(ua) ? "win" : /Mac/.test(ua) ? "mac" : /Linux|X11/.test(ua) ? "lin" : null;
-      if (mine) document.querySelector(`[data-plat="${mine}"]`)?.classList.add("border-line-2");
     })
     .catch(() => {
       /* the releases-page fallback in each href stands */

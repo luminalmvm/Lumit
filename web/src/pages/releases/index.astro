@@ -1,26 +1,11 @@
 ---
-import { getCollection, render } from "astro:content";
+import { render } from "astro:content";
 import Base from "../../layouts/Base.astro";
+import SectionHead from "../../components/SectionHead.astro";
 import ReleaseEntry from "../../components/ReleaseEntry.astro";
+import { releasesNewestFirst } from "../../scripts/releases";
 
-// Newest first. Two releases can share a day - 0.3.0 and 0.3.1 did - and a
-// sort on the date alone then leaves them in whatever order the loader read
-// the files, which put 0.3.1 under 0.3.0. So the date decides, and the version
-// breaks the tie, compared as numbers so 0.10.0 sorts above 0.9.0.
-const versionParts = (v) => v.split(".").map((n) => parseInt(n, 10) || 0);
-const byVersionDesc = (a, b) => {
-  const [pa, pb] = [versionParts(a), versionParts(b)];
-  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-    const d = (pb[i] ?? 0) - (pa[i] ?? 0);
-    if (d !== 0) return d;
-  }
-  return 0;
-};
-const releases = (await getCollection("releases")).sort(
-  (a, b) =>
-    +b.data.date - +a.data.date ||
-    byVersionDesc(a.data.versionNumber, b.data.versionNumber),
-);
+const releases = await releasesNewestFirst();
 const rendered = await Promise.all(
   releases.map(async (release) => ({ release, Content: (await render(release)).Content })),
 );
@@ -30,17 +15,15 @@ const rendered = await Promise.all(
   title="Releases - Lumit"
   description="Lumit changelog"
 >
-  <section class="pt-16 pb-24 sm:pt-24 sm:pb-32">
+  <section class="pt-14 pb-24 sm:pt-20 sm:pb-32">
     <div class="wrap">
-      <p class="kicker">Releases</p>
-      <h1 class="mt-4 text-[clamp(30px,3.8vw,42px)] leading-[1.05]">
-        Changelog.
-      </h1>
-      <p class="mt-4 max-w-[58ch]">
-        Every release of Lumit. 
-        For the newest release update Lumit or download from <a class="link" href="/download">download page</a>.
-        There is an <a class="link" href="/releases/rss.xml">RSS feed</a> too.
-      </p>
+      <SectionHead page kicker="Releases" title="Changelog.">
+        <Fragment slot="lede">
+          Every release of Lumit.
+          For the newest release update Lumit or download from <a class="link" href="/download">download page</a>.
+          There is an <a class="link" href="/releases/rss.xml">RSS feed</a> too.
+        </Fragment>
+      </SectionHead>
 
       {
         rendered.length === 0 ? (
@@ -53,20 +36,70 @@ const rendered = await Promise.all(
             </p>
           </div>
         ) : (
-          <div class="mt-10">
-            {rendered.map(({ release, Content }, i) => (
-              <ReleaseEntry
-                id={release.id}
-                versionNumber={release.data.versionNumber}
-                date={release.data.date}
-                last={i === rendered.length - 1}
-              >
-                <Content />
-              </ReleaseEntry>
-            ))}
-          </div>
+          <>
+            {/* Every version on one line, since the page under it is long. */}
+            <nav class="jump" aria-label="Versions">
+              <span class="tag">Jump to</span>
+              {releases.map((r, i) => (
+                <a href={`#v${r.data.versionNumber}`} class:list={[i === 0 && "newest"]}>
+                  v{r.data.versionNumber}
+                </a>
+              ))}
+            </nav>
+            <div class="mt-4">
+              {rendered.map(({ release, Content }, i) => (
+                <ReleaseEntry
+                  id={release.id}
+                  versionNumber={release.data.versionNumber}
+                  date={release.data.date}
+                  latest={i === 0}
+                  last={i === rendered.length - 1}
+                >
+                  <Content />
+                </ReleaseEntry>
+              ))}
+            </div>
+          </>
         )
       }
     </div>
   </section>
 </Base>
+
+<style>
+  .jump {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-top: 40px;
+    padding: 12px 14px;
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-card);
+    background: var(--color-ink-2);
+  }
+  .jump .tag {
+    margin-right: 8px;
+  }
+  .jump a {
+    padding: 6px 9px;
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-ctl);
+    color: var(--color-fg-2);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1;
+    text-decoration: none;
+    transition:
+      color 0.15s,
+      border-color 0.15s;
+  }
+  .jump a:hover {
+    border-color: var(--color-line-2);
+    color: var(--color-fg);
+  }
+  .jump .newest {
+    border-color: var(--color-accent-2);
+    color: var(--color-fg);
+  }
+</style>

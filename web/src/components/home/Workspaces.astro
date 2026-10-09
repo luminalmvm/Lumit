@@ -1,0 +1,174 @@
+---
+import { Image, getImage } from "astro:assets";
+import SectionHead from "../SectionHead.astro";
+import workspaceShot from "../../assets/shots/workspace.png";
+import graphShot from "../../assets/shots/graph-workspace.png";
+import nodesShot from "../../assets/shots/nodes-workspace.png";
+import audioShot from "../../assets/shots/audio-workspace.png";
+
+const fullSize = async (src: ImageMetadata) => ({
+  url: (await getImage({ src, width: src.width, quality: 90 })).src,
+  w: src.width,
+  h: src.height,
+});
+
+// Meet the interface: one picture at a time, chosen by name.
+const tabs = [
+  {
+    src: workspaceShot,
+    full: await fullSize(workspaceShot),
+    alt: "The Lumit workspace: effect controls, the viewer and scopes, the effects search open over a full timeline",
+    h: "Timeline",
+    p: "Layers, keyframes, effect controls, and the Viewer in one window.",
+  },
+  {
+    src: graphShot,
+    full: await fullSize(graphShot),
+    alt: "The Graph workspace: effect controls, the viewer and scopes, with a property's curve open in the timeline",
+    h: "Graph",
+    p: "A property's curve open in the Timeline, as a value graph or a speed graph.",
+  },
+  {
+    src: nodesShot,
+    full: await fullSize(nodesShot),
+    alt: "The Nodes workspace: a wired effect chain across the window, the viewer beside it",
+    h: "Nodes",
+    p: "The same effects as a wired chain, with the Viewer beside it.",
+  },
+  {
+    src: audioShot,
+    full: await fullSize(audioShot),
+    alt: "The Audio workspace: mixer strips and levels at the left, beat detection at the right, a waveform under the timeline",
+    h: "Audio",
+    p: "Mixer strips, levels, and beat detection, with the waveform under the Timeline.",
+  },
+];
+---
+
+<section class="wrap flex flex-col gap-12 pb-20 sm:pb-28">
+  <SectionHead kicker="Workspaces" title="Meet the interface." no="02 / 06">
+    <Fragment slot="lede">
+      Each workspace arranges the window for one kind of work. Switch between them at any point.
+    </Fragment>
+  </SectionHead>
+
+  {/* The names sit on the picture's own strip, the way a workspace's tabs sit
+      on the window. One is always open, so the frame is never empty and the
+      row never reads as four things you have not chosen yet. */}
+  <div class="shot overflow-hidden rounded-card border border-line-2 bg-ink-2" data-tabs data-reveal>
+    <div class="shot-bar bar">
+      <div class="flex self-stretch" role="tablist" aria-label="Meet the interface">
+        {
+          tabs.map((c, i) => (
+            <button
+              type="button"
+              role="tab"
+              id={`tab-${i}`}
+              aria-controls={`panel-${i}`}
+              aria-selected={i === 0 ? "true" : "false"}
+              tabindex={i === 0 ? 0 : -1}
+              class="tab"
+            >
+              {c.h}
+            </button>
+          ))
+        }
+      </div>
+      <span class="max-sm:hidden">Click to bring forward</span>
+    </div>
+    {
+      tabs.map((c, i) => (
+        <div id={`panel-${i}`} role="tabpanel" aria-labelledby={`tab-${i}`} hidden={i !== 0}>
+          <button type="button" class="zoom" data-zoom={c.full.url} data-w={c.full.w} data-h={c.full.h} aria-label="Enlarge this screenshot">
+            <Image
+              class="block w-full"
+              src={c.src}
+              alt={c.alt}
+              widths={[720, 1200, 1800]}
+              sizes="(min-width: 1360px) 1200px, 100vw"
+              loading="lazy"
+              quality={90}
+            />
+          </button>
+          <p class="cap">
+            <span class="cap-no">{String(i + 1).padStart(2, "0")}</span>
+            {c.p}
+          </p>
+        </div>
+      ))
+    }
+  </div>
+</section>
+
+<style>
+  .bar {
+    min-height: 40px;
+    padding-left: 0;
+  }
+  /* The open workspace's name takes the full text colour and a tick of the
+     accent along its top edge, the application's own mark for the tab you are
+     on. Nothing changes size, so the row never shifts as you switch. */
+  .tab {
+    position: relative;
+    padding: 0 16px;
+    border: 0;
+    border-right: 1px solid var(--color-line);
+    background: none;
+    color: var(--color-fg-3);
+    font: inherit;
+    letter-spacing: inherit;
+    text-transform: inherit;
+    cursor: pointer;
+    transition:
+      color 0.15s,
+      background-color 0.15s;
+  }
+  .tab::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 2px;
+    background: var(--color-accent-2);
+    transform: scaleX(0);
+    transition: transform 0.2s ease-out;
+  }
+  .tab:hover {
+    color: var(--color-fg-2);
+  }
+  .tab[aria-selected="true"] {
+    background: var(--color-ink-2);
+    color: var(--color-fg);
+  }
+  .tab[aria-selected="true"]::before {
+    transform: scaleX(1);
+  }
+  .cap {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin: 0;
+    padding: 14px 16px 15px;
+    border-top: 1px solid var(--color-line);
+    color: var(--color-fg-2);
+    font-size: 15px;
+    line-height: 1.4;
+  }
+  .cap-no {
+    color: var(--color-fg-4);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-feature-settings: "zero";
+  }
+  @media (max-width: 639px) {
+    .tab {
+      flex: 1;
+      padding: 0 12px;
+    }
+    .bar > div {
+      flex: 1;
+    }
+    .tab:last-child {
+      border-right: 0;
+    }
+  }
+</style>

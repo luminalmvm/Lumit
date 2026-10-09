@@ -1,0 +1,29 @@
+---
+// How a section opens: the ruled line with its name on it, the heading, and a
+// line or two under it. `no` is the section's place in the page ("02 / 06").
+// The default slot sits beside the heading on a wide screen, for a link.
+interface Props {
+  kicker: string;
+  title: string;
+  no?: string;
+  /** The page's own heading rather than a section's. */
+  page?: boolean;
+  class?: string;
+}
+const { kicker, title, no, page = false, class: extra } = Astro.props;
+const Heading = page ? "h1" : "h2";
+---
+
+<header class:list={["flex flex-col", extra]} data-reveal>
+  <div class="sec-rule">
+    <p class="kicker pl-3">{kicker}</p>
+    {no && <span class="sec-no">{no}</span>}
+  </div>
+  <div class="mt-7 flex flex-wrap items-end justify-between gap-x-10 gap-y-5">
+    <div class="flex min-w-0 flex-col gap-4">
+      <Heading class="sec-title">{title}</Heading>
+      {Astro.slots.has("lede") && <p class="lede"><slot name="lede" /></p>}
+    </div>
+    <slot />
+  </div>
+</header>

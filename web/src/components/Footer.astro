@@ -1,29 +1,76 @@
 ---
-const links = [
-  { href: "/download", label: "Download" },
-  { href: "/releases", label: "Releases" },
-  { href: "https://docs.lumitlab.com", label: "Docs" },
-  { href: "/translate", label: "Translate" },
-  { href: "/sponsor", label: "Sponsor" },
-  { href: "https://github.com/luminalmvm/Lumit", label: "GitHub" },
-  { href: "https://discord.gg/dc3p3XC7mM", label: "Discord" },
-  { href: "https://github.com/luminalmvm/Lumit/blob/main/LICENSE", label: "GPLv3" },
+// The foot of every page: the mark and the line it stands for on the left,
+// every destination on the site in three short columns beside it.
+const columns = [
+  {
+    h: "Lumit",
+    links: [
+      { href: "/download", label: "Download" },
+      { href: "/releases", label: "Releases" },
+      { href: "/#roadmap", label: "Roadmap" },
+      { href: "/media", label: "Media" },
+    ],
+  },
+  {
+    h: "Learn",
+    links: [
+      { href: "https://docs.lumitlab.com", label: "Docs" },
+      { href: "https://docs.lumitlab.com/start/first-composition/", label: "First composition" },
+      { href: "https://docs.lumitlab.com/effects/", label: "Effects" },
+    ],
+  },
+  {
+    h: "Take part",
+    links: [
+      { href: "https://github.com/luminalmvm/Lumit", label: "GitHub" },
+      { href: "https://discord.gg/dc3p3XC7mM", label: "Discord" },
+      { href: "/translate", label: "Translate" },
+      { href: "/sponsor", label: "Sponsor" },
+    ],
+  },
 ];
 ---
 
-<footer class="border-t border-line py-11 text-sm text-fg-3">
-  <div class="mx-auto flex w-full max-w-[1080px] flex-wrap items-center gap-x-8 gap-y-4 px-5 sm:px-10">
-    <a href="/" class="flex items-center gap-2.5 no-underline">
-      <img src="/lumit-mark.svg" alt="" width="22" height="22" class="block" />
-      <span class="font-semibold tracking-[-0.035em] text-fg">Lumit</span>
-    </a>
-    <span class="ml-auto"></span>
-    {
-      links.map((l) => (
-        <a href={l.href} class="text-fg-2 no-underline transition-colors hover:text-fg">
-          {l.label}
+<footer class="border-t border-line text-fg-3">
+  <div class="wrap grid gap-x-10 gap-y-12 py-14 md:grid-cols-[minmax(0,1fr)_auto]">
+    <div class="flex flex-col items-start gap-5">
+      {/* The wordmark's file has room at its left for the mark to open into,
+          so it is pulled back to stand on the column's edge. */}
+      <a href="/" class="-ml-[15px] flex items-center no-underline">
+        <img src="/lumit-wordmark.svg" alt="Lumit" height="22" class="block h-[22px] w-auto" />
+      </a>
+      <p class="max-w-[300px] text-[15px] leading-[1.45]">
+        Let your creativity flow. Free and open-source, forever.
+      </p>
+    </div>
+    <nav class="grid grid-cols-2 gap-x-14 gap-y-10 sm:grid-cols-3" aria-label="Site">
+      {
+        columns.map((c) => (
+          <div class="flex flex-col gap-3.5">
+            <p class="kicker text-fg-4">{c.h}</p>
+            {c.links.map((l) => (
+              <a href={l.href} class="text-[15px] text-fg-2 no-underline transition-colors hover:text-fg">
+                {l.label}
+              </a>
+            ))}
+          </div>
+        ))
+      }
+    </nav>
+  </div>
+  <div class="border-t border-line">
+    <div class="wrap flex flex-wrap items-center justify-between gap-x-8 gap-y-3 py-5 font-mono text-[11px] text-fg-4">
+      <span class="flex items-center gap-2.5">
+        <img src="/lumit-mark.svg" alt="" width="16" height="16" class="block" />
+        Open source under
+        <a
+          href="https://github.com/luminalmvm/Lumit/blob/main/LICENSE"
+          class="text-fg-3 no-underline transition-colors hover:text-fg"
+        >
+          GPLv3
         </a>
-      ))
-    }
+      </span>
+      <a href="/releases/rss.xml" class="text-fg-4 no-underline transition-colors hover:text-fg">Release feed</a>
+    </div>
   </div>
 </footer>
