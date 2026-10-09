@@ -19,6 +19,7 @@ import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
 import '../shell/menu_bar_frb.dart' show duplicateLayersFrb;
+import '../shell/precompose_dialog_frb.dart' show showPrecomposeDialogFrb;
 import '../shell/stretch_dialog_frb.dart';
 import '../state/timeline_columns.dart';
 import '../theme/theme.dart';
@@ -1252,6 +1253,12 @@ class _OutlineRowState extends State<OutlineRow> {
                 onPressed: () => close('freeze'),
                 child: Text(l10n.menuFreezeFrame)),
           ],
+          // The Layer menu's own Pre-compose…, where the hand already is. It
+          // opens the same dialogue, so the two questions get asked here too.
+          MenuRow(
+              key: const ValueKey('tl-row-precompose'),
+              onPressed: () => close('precompose'),
+              child: Text(l10n.menuPreCompose)),
         ],
         // The shape — the cuts, the gaps and the ramps, with no media in
         // it — from the layer itself, so carrying a cut onto a depth pass
@@ -1420,6 +1427,23 @@ class _OutlineRowState extends State<OutlineRow> {
             target.layer.freezeAtPlayhead(frame: frame);
           } catch (_) {}
         }
+      case 'precompose':
+        if (!mounted) return;
+        final ui = Provider.of<LumitUiState>(this.context, listen: false);
+        await showPrecomposeDialogFrb(
+          context: this.context,
+          comp: widget.comp,
+          // A locked layer stays where it is, like in the rest of this menu.
+          selectedLayers: [
+            for (final target in targets)
+              if (!target.info.switches.locked) target.layer,
+          ],
+          ui: ui,
+          workspace: ui.workspace,
+        );
+        // The dialogue refreshes the document itself, and by now this row may
+        // be inside the new comp.
+        return;
       case 'copy-shape':
         // Singular by nature: a clipboard holds one shape, and copying four
         // would mean choosing which one survives.
