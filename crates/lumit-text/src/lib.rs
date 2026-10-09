@@ -1194,6 +1194,7 @@ mit",
             closed,
             feather: 0.0,
             expansion: 0.0,
+            corners: Vec::new(),
         }
     }
 

@@ -3,11 +3,13 @@ title: Clone to points
 description: "Stamps a layer's picture at every point of a stream."
 ---
 
+import Compare from "../../../../components/Compare.astro";
+
 Clone to points is a **Generate** effect.
 
 {/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-
+<Compare label="Clone to points" category="generate" slug="clone-to-points" />
 
 {/* END GENERATED */}
 
@@ -17,6 +19,18 @@ Wire a producer's **Points** socket into this effect, pick a layer, and that lay
 picture is stamped once per point at the point's position, turned by its rotation, sized by
 its size and tinted by its colour.
 
+Up to four layers can be set, and **Choose by** says which of them a point takes. **Time
+offset** shows each stamp its layer at another moment. A
+[Clone index](/effects/drivers/clone-index/) driver anywhere in what a clone layer shows
+makes that layer render once per stamp, each copy reading its own number.
+
+A clone layer that is outside its in and out points at a stamp's moment draws nothing for
+the points that take it.
+
+One Clone to points asks for at most 32 pictures of its clone layers: layers times moments,
+or one a clone. With several layers set, **Time samples** gives way, and four layers get
+eight moments each.
+
 ## Parameters
 
 {/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
@@ -24,8 +38,26 @@ its size and tinted by its colour.
 | Parameter | Control | Range | Default | Unit |
 | --- | --- | --- | --- | --- |
 | **Clone layer** | Layer | Any layer in the composition | None | - |
+| **Clone layer 2** | Layer | Any layer in the composition | None | - |
+| **Clone layer ...** | Layer | Any layer in the composition | None | - |
+| **Clone layer 4** | Layer | Any layer in the composition | None | - |
+| **Choose by** | Dropdown | In order · Random · Number · Every layer | In order | - |
+| **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
+| **Time offset** | Dropdown | Off · In order · Random · Number · Point age | Off | - |
+| **Time step** | Slider | 0 to 1; higher | 0.067 | Seconds |
+| **Time samples** | Slider, whole numbers | 1 to 32 | 8 | - |
+| **Per clone** | Dropdown | Auto · Off | Auto | - |
+| **Max renders** | Slider, whole numbers | 1 to 32 | 32 | - |
+| **Apply to** | Dropdown | All points · Picked · Not picked | All points | - |
+| **Size** | Dropdown | Point size · Layer size · Fit cell · Fill cell | Point size | - |
+| **Cell width** | Slider | 1 to 2000; higher | 200 | Pixels at composition size |
+| **Cell height** | Slider | 1 to 2000; higher | 200 | Pixels at composition size |
 | **Scale** | Slider | 0 to 1000; higher | 100 | Per cent |
 | **Rotation** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
+| **Anchor x** | Slider | 0 to 100; any value by typing | 50 | Per cent |
+| **Anchor y** | Slider | 0 to 100; any value by typing | 50 | Per cent |
+| **Corner radius** | Slider | 0 to 500; higher | 0 | Pixels at composition size |
+| **Opacity** | Slider | 0 to 100 | 100 | Per cent |
 | **Tint** | Slider | 0 to 100 | 100 | Per cent |
 | **Depth sort** | Checkbox | On or off | On | - |
 | **Max clones** | Slider, whole numbers | 1 to 200000; up to 1000000 | 2000 | - |
@@ -37,6 +69,12 @@ its size and tinted by its colour.
 
 In the Effect Controls panel:
 
+- **More layers** groups **Clone layer 2**, **Clone layer 3**, **Clone layer 4**, **Choose by**, **Seed**, and starts closed.
+- **Time** groups **Time offset**, **Time step**, **Time samples**, and starts closed.
+- **Clone index** groups **Per clone**, **Max renders**, and starts closed.
+- **Time step** is editable while **Time offset** is anything but Off.
+- **Time samples** is editable while **Time offset** is anything but Off.
+- **Max renders** is editable while **Per clone** is set to Auto.
 - **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
 
 {/* END GENERATED */}
@@ -44,12 +82,46 @@ In the Effect Controls panel:
 ## What each control does
 
 - **Clone layer**: the layer whose picture is stamped.
+- **Clone layer 2**, **Clone layer 3** and **Clone layer 4**: more layers to stamp. With
+  more than one set, each point takes one of them.
+- **Choose by**: how a point takes its layer when more than one is set. **In order** takes
+  each in turn down the stream. **Random** rolls for it, the same every frame. **Number**
+  reads the number the point carries. **Every layer** stamps them all at every point, the
+  first row at the bottom. See [Pick points](/effects/generate/pick-points/) for the number.
+- **Seed**: which roll a Random choice of layer and a Random time offset give.
+- **Time offset**: shows each stamp its layer at another moment. **In order** steps back
+  once a stamp. **Random** shuffles the same steps by the Seed. **Number** steps back by
+  the number the point carries. **Point age** plays the layer from its start as the point
+  ages.
+- **Time step**: how far apart two steps are.
+- **Time samples**: the most moments a layer is rendered at. Steps past the last wrap round
+  to the first, and a point older than the last holds it. Each moment is another render of
+  the layer.
+- **Per clone**: **Auto** renders a layer once per stamp when a
+  [Clone index](/effects/drivers/clone-index/) driver is anywhere in what it shows. **Off**
+  renders every copy alike. Under Point age the copies are alike too.
+- **Max renders**: the most copies rendered with a number of their own. Stamps past it
+  share them in turn. Each is another render of the layer.
+- **Apply to**: which points get a stamp.
+- **Size**: what a stamp's size is. **Point size** is a square of the point's own size with
+  the whole layer squeezed into it. **Layer size** is the layer at its own size and shape.
+  **Fit cell** and **Fill cell** scale the layer into a cell and keep its shape. Fit leaves
+  the rest of the cell empty and Fill cuts off what overhangs. For the last three a point's
+  size is a per cent, and a point of size 100 is the layer's or the cell's own size.
+- **Cell width** and **Cell height**: the cell's size. They show for Fit cell and Fill
+  cell.
 - **Scale**: multiplies each point's own size.
 - **Rotation**: added to each point's own rotation.
+- **Anchor x** and **Anchor y**: which place on the stamp sits on the point, as a per cent
+  across and down it. The stamp turns about this place.
+- **Corner radius**: rounds the stamp's corners. It is measured on the stamp of a point
+  whose size is 100, and turns and scales with the stamp.
+- **Opacity**: multiplies every stamp's opacity.
 - **Tint**: how much of the point's colour the stamp takes on.
 - **Depth sort**: draws the stamps furthest from the camera first, and near ones cover far
   ones. Off draws them in the stream's own order. It shows only on a 3D layer with a camera.
-- **Max clones**: the most points that may be stamped.
+- **Max clones**: the most stamps that may be drawn. Under Every layer a point counts once
+  for each layer.
 - **Mix**: how much of the result replaces the picture underneath.
 - **Matte** and **Invert** drive the strength of the effect from another layer's brightness;
   see [Effects](/use/effects/).
@@ -59,6 +131,7 @@ In the Effect Controls panel:
 - [Particulate](/effects/generate/particulate/)
 - [Grid](/effects/generate/grid/)
 - [Layer points](/effects/drivers/layer-points/)
+- [Clone index](/effects/drivers/clone-index/)
 - [The node graph](/use/nodes/)
 - [Generate](/effects/#generate)
 - [Effects](/use/effects/)

@@ -3,11 +3,13 @@ title: Vary points
 description: "Makes the points of a stream differ from one another."
 ---
 
+import Compare from "../../../../components/Compare.astro";
+
 Vary points is a **Generate** effect.
 
 {/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-
+<Compare label="Vary points" category="generate" slug="vary-points" />
 
 {/* END GENERATED */}
 
@@ -23,13 +25,21 @@ above still draws its own unchanged points while its **Mix** is above nought.
 Two Vary points in a row have a seed each. On Random, one on **Offset x** and one on
 **Offset y** scatter the points both ways.
 
+**Apply to** changes only the picked points, and **Set number** writes the number each
+point carries. See [Pick points](/effects/generate/pick-points/) for both.
+
+With the **Image** pattern or **Colour from image** on, its points depend on a picture. The
+points effects below it in the same layer's stack can read them.
+[Points sample](/effects/drivers/points-sample/) cannot, and neither can
+[Layer points](/effects/drivers/layer-points/) from another layer.
+
 ## Parameters
 
 {/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
 | Parameter | Control | Range | Default | Unit |
 | --- | --- | --- | --- | --- |
-| **Pattern** | Dropdown | Index · Random · Noise · Distance · Age | Random | - |
+| **Pattern** | Dropdown | Index · Random · Noise · Distance · Age · Constant · Across · Down · Image · Picked · Number · Stripes · Checker · Waves | Random | - |
 | **Curve** | Curve | 2 to 16 points in the unit square | The identity diagonal | - |
 | **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
 | **Noise scale** | Slider | 10 to 1000; down to 1 and higher | 200 | Pixels at composition size |
@@ -37,13 +47,33 @@ Two Vary points in a row have a seed each. On Random, one on **Offset x** and on
 | **Centre X** | Slider | 0 to 3840; any value by typing | 960 | Pixels at composition size |
 | **Centre Y** | Slider | 0 to 2160; any value by typing | 540 | Pixels at composition size |
 | **Radius** | Slider | 0 to 2000; higher | 400 | Pixels at composition size |
+| **Number range** | Slider | 1 to 100; down to 0.001 and higher | 1 | - |
+| **Spacing** | Slider | 1 to 1000; down to 0 and higher | 100 | Pixels at composition size |
+| **Angle** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
+| **Width** | Slider | 0 to 100 | 50 | Per cent |
+| **Wave** | Dropdown | Sine · Triangle · Square · Sawtooth | Sine | - |
+| **Rings** | Checkbox | On or off | Off | - |
+| **Image layer** | Layer | Any layer in the composition | None | - |
+| **Colour from image** | Checkbox | On or off | Off | - |
+| **Apply to** | Dropdown | All points · Picked · Not picked | All points | - |
 | **Size** | Slider | 0 to 400; higher | 100 | Per cent |
 | **Opacity** | Slider | 0 to 100 | 100 | Per cent |
-| **Rotation** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
+| **Stretch x** | Slider | 0 to 400; higher | 100 | Per cent |
+| **Stretch y** | Slider | 0 to 400; higher | 100 | Per cent |
+| **Start colour** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
+| **Use middle colour** | Checkbox | On or off | Off | - |
+| **Middle colour** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
 | **Colour** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
+| **Both ways** | Checkbox | On or off | Off | - |
+| **Rotation** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
 | **Offset x** | Slider | -1000 to 1000; any value by typing | 0 | Pixels at composition size |
 | **Offset y** | Slider | -1000 to 1000; any value by typing | 0 | Pixels at composition size |
 | **Offset z** | Slider | -1000 to 1000; any value by typing | 0 | Pixels at composition size |
+| **Offset forward** | Slider | -1000 to 1000; any value by typing | 0 | Pixels at composition size |
+| **Offset sideways** | Slider | -1000 to 1000; any value by typing | 0 | Pixels at composition size |
+| **Set number** | Checkbox | On or off | Off | - |
+| **Number from** | Slider | 0 to 100; any value by typing | 0 | - |
+| **Number to** | Slider | 0 to 100; any value by typing | 1 | - |
 | **Feather** | Slider | 0 to 100 | 100 | Per cent |
 | **Mix** | Slider | 0 to 100 | 100 | Per cent |
 | **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
@@ -54,8 +84,13 @@ Two Vary points in a row have a seed each. On Random, one on **Offset x** and on
 In the Effect Controls panel:
 
 - **Pattern** groups **Pattern**, **Curve**.
-- **Change** groups **Size**, **Opacity**, **Rotation**, **Colour**, **Offset x**, **Offset y**, **Offset z**.
+- **Image** groups **Image layer**, **Colour from image**.
+- **Change** groups **Apply to**, **Size**, **Opacity**, **Stretch x**, **Stretch y**, **Start colour**, **Use middle colour**, **Middle colour**, **Colour**, **Both ways**, **Rotation**, **Offset x**, **Offset y**, **Offset z**, **Offset forward**, **Offset sideways**.
+- **Number** groups **Set number**, **Number from**, **Number to**.
 - **Point** groups **Feather**.
+- **Middle colour** is editable while **Use middle colour** is on.
+- **Number from** is editable while **Set number** is on.
+- **Number to** is editable while **Set number** is on.
 - **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
 
 {/* END GENERATED */}
@@ -65,22 +100,60 @@ In the Effect Controls panel:
 - **Pattern**: where a point's number comes from. **Index** is its place in the stream, 0
   for the first point and 1 for the last. **Random** is a roll of its own, the same every
   frame. **Noise** is a smooth noise read at its position. **Distance** is how far it is
-  from the centre, reaching 1 at **Radius**. **Age** is how far through its life it is, and
-  only [Particulate](/effects/generate/particulate/)'s points age.
+  from the centre, reaching 1 at **Radius**. **Age** is how far through its life it is. The
+  points of [Particulate](/effects/generate/particulate/) and
+  [Track points](/effects/generate/track-points/) age, and the rest do not. **Constant** is
+  always 1. **Across** runs from 0 at Radius left of the centre to 1 at Radius right of it,
+  and **Down** does the same from top to bottom. **Image** is how bright the picture under
+  the point is. **Picked** is 1 for a picked point and 0 for the rest. **Number** is the
+  number the point carries over Number range, held to 0 to 1. **Stripes** is 1 inside a
+  band and 0 between. **Checker** is 1 and 0 in alternate squares. **Waves** is a wave that
+  repeats over space and can travel over time.
 - **Curve**: reshapes the pattern's number before the changes read it.
 - **Seed**: which roll, or which noise. It shows for Random and Noise.
 - **Noise scale**: how far apart two points must be to differ. It shows for Noise.
-- **Noise speed**: how fast the noise changes over time. At nought it holds still. It shows
-  for Noise.
-- **Centre X**, **Centre Y** and **Radius**: the place Distance is measured from, and how
-  far from it the number reaches 1. They show for Distance.
+- **Noise speed**: how fast the noise changes over time, and how many waves pass a point
+  each second. At nought they hold still. It shows for Noise and Waves.
+- **Centre X** and **Centre Y**: the place Distance, Across and Down are measured from, and
+  where the stripes, squares and waves start.
+- **Radius**: how far from the centre the number reaches 1. It shows for Distance, Across
+  and Down.
+- **Number range**: the number that reads as 1. A point's number is divided by it, and with
+  word numbers 0 to 4 a range of 4 spreads the words from 0 to 1. It shows for Number.
+- **Spacing**: how far it is from one stripe, square or wave to the next. It shows for
+  Stripes, Checker and Waves.
+- **Angle**: how far the stripes and squares are turned about the centre, and the way the
+  waves travel. At 0 the stripes lie across and the waves travel to the right. Rings take
+  no notice of it.
+- **Width**: how much of each Spacing a stripe fills. It shows for Stripes.
+- **Wave**: the shape of each wave. It shows for Waves.
+- **Rings**: the waves run out from the centre as rings, not across as bands.
+- **Image layer**: the layer whose picture the Image pattern and Colour from image read.
+  Unset reads this effect's own input picture.
+- **Colour from image**: the point takes the colour of the picture under it. Its own alpha
+  still multiplies it.
+- **Apply to**: which points are changed. The rest pass through as they came.
 - **Size**: the size a point takes where the pattern reads 1, as a per cent of its own.
 - **Opacity**: the opacity a point takes where the pattern reads 1, as a per cent of its
   own.
-- **Rotation**: the turn added where the pattern reads 1.
+- **Stretch x** and **Stretch y**: how far a point is stretched across and down where the
+  pattern reads 1, in its own turned frame.
+- **Start colour**: multiplies the point's colour where the pattern reads 0.
+- **Use middle colour**: runs the colours from Start colour through Middle colour to
+  Colour.
+- **Middle colour**: multiplies the point's colour where the pattern reads a half.
 - **Colour**: multiplies the point's colour where the pattern reads 1.
+- **Both ways**: Rotation and the Offsets read the pattern as -1 to 1 in place of 0 to 1. A
+  Random or Noise pattern rolls again for each Offset.
+- **Rotation**: the turn added where the pattern reads 1.
 - **Offset x**, **Offset y** and **Offset z**: how far the point is moved where the pattern
   reads 1.
+- **Offset forward** and **Offset sideways**: how far the point is moved along the way it
+  faces, and at right angles to it, where the pattern reads 1. The way it faces is its
+  rotation, with Rotation above added.
+- **Set number**: writes the number each point carries.
+- **Number from** and **Number to**: the number a point gets where the pattern reads 0, and
+  where it reads 1.
 - **Feather**: how soft the edge of a drawn disc is.
 - **Mix**: how much of the drawing lands on the picture. At nought the points are still
   handed on.

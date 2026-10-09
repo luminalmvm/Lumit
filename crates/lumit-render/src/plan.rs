@@ -250,6 +250,30 @@ pub(crate) fn moment_offset(tau: f64, t: f64, comp_dt: f64) -> f64 {
     (tau - t) / comp_dt
 }
 
+/// The other moments a Clone to points shows its clone layers at, as the
+/// layer and the comp time. It is the list the builder renders, asked of the
+/// same code, so the footage fetched is the footage drawn. `lt` is the time of
+/// the layer the effect is on. Empty for any other effect, and with Time
+/// offset off.
+fn clone_moments_of(
+    e: &lumit_core::model::EffectInstance,
+    doc: &Document,
+    comp: &Composition,
+    t: f64,
+    lt: f64,
+) -> Vec<(Uuid, f64)> {
+    use lumit_core::fx::effects::clone_to_points::CloneToPoints;
+    if e.effect.match_name != "clone_to_points" {
+        return Vec::new();
+    }
+    CloneToPoints::planned(e, doc, comp, t, lt, None)
+        .into_iter()
+        .flatten()
+        .filter(|p| p.time.to_bits() != t.to_bits())
+        .map(|p| (p.layer, p.time))
+        .collect()
+}
+
 /// Recursively collect the decode jobs comp `comp` needs at comp time `t`
 /// (docs/06-RENDER-PIPELINE.md: Precomp evaluation). Cycle-guarded through
 /// `visited`, which must already contain `comp.id`.
@@ -285,7 +309,7 @@ pub fn collect_comp_jobs(
     if let Some(graph) = &comp.graph {
         // Viewed on its own or placed as a Precomp layer, so a picture Input's
         // preview item is drawn and has to be decoded (§5.11).
-        collect_graph_jobs(ctx, comp, graph, t, jobs, visited, false);
+        collect_graph_jobs(ctx, comp, graph, t, moments, jobs, visited, false);
         return;
     }
     let in_span =
@@ -309,6 +333,9 @@ pub fn collect_comp_jobs(
     // layer, which is the shape of a session that ends without a message.
     let any_solo = lumit_core::model::any_picture_solo(comp);
     let mut wanted: Vec<Uuid> = Vec::new();
+    // The other moments a Clone to points shows its clone layers at, as the
+    // layer and the comp time. Empty unless one has a time offset on.
+    let mut clone_moments: Vec<(Uuid, f64)> = Vec::new();
     for (idx, l) in comp.layers.iter().enumerate() {
         if occluder.is_some_and(|o| idx > o) {
             continue;
@@ -347,6 +374,11 @@ pub fn collect_comp_jobs(
                         }
                     }
                 }
+                // Clone to points with a time offset: the list the builder
+                // renders, asked of the same code, so a clone layer's footage
+                // is fetched at every moment a stamp shows.
+                let lt = lumit_core::time::layer_time(t, l.start_offset.0);
+                clone_moments.extend(clone_moments_of(e, doc, comp, t, lt));
                 // **A Node graph effect** (docs/impl/node-graph-comp.md §2.4)
                 // brings a whole comp's footage in through this layer's stack,
                 // so the graph it names is planned under the guard a Precomp
@@ -365,6 +397,22 @@ pub fn collect_comp_jobs(
                 );
                 nested_graph_jobs(ctx, e, lt, jobs, visited);
             }
+        }
+    }
+    // A layer read only as another effect's picture is not drawn, so the walk
+    // above passed over its stack. Its Node graph effects still run when it
+    // is read, and the footage their graphs read is planned here.
+    for (idx, l) in comp.layers.iter().enumerate() {
+        let drawn = !occluder.is_some_and(|o| idx > o)
+            && !l.audio_only
+            && l.switches.visible
+            && !(any_solo && !l.switches.solo);
+        if drawn || !wanted.contains(&l.id) || !in_span(l) || !l.switches.fx {
+            continue;
+        }
+        let lt = lumit_core::time::layer_time(t, l.start_offset.0);
+        for e in l.effects.iter().filter(|e| e.enabled) {
+            nested_graph_jobs(ctx, e, lt, jobs, visited);
         }
     }
     // **And the same effect on a live group's header** (docs/impl/
@@ -400,7 +448,15 @@ pub fn collect_comp_jobs(
     let mut rebuilt = moments.to_vec();
     let mut layer_moments = Vec::with_capacity(comp.layers.len());
     for l in &comp.layers {
-        layer_moments.push(rebuilt.clone());
+        // And the moments a Clone to points shows this layer at.
+        let cloned = clone_moments.iter().filter(|(id, _)| *id == l.id);
+        layer_moments.push(
+            rebuilt
+                .iter()
+                .copied()
+                .chain(cloned.map(|(_, tau)| *tau))
+                .collect::<Vec<f64>>(),
+        );
         if l.is_adjustment()
             && l.switches.visible
             && !l.graph.out_unwired
@@ -415,8 +471,15 @@ pub fn collect_comp_jobs(
             );
         }
     }
+    // A clone layer out of its span now may be in it at a moment a stamp
+    // shows, so it is planned all the same.
+    let cloned_in_span = |l: &lumit_core::model::Layer| {
+        clone_moments.iter().any(|(id, tau)| {
+            *id == l.id && *tau >= l.in_point.0.to_f64() && *tau < l.out_point.0.to_f64()
+        })
+    };
     for (idx, layer) in comp.layers.iter().enumerate() {
-        if !wanted.contains(&layer.id) || !in_span(layer) {
+        if !wanted.contains(&layer.id) || !(in_span(layer) || cloned_in_span(layer)) {
             continue;
         }
         let lt = lumit_core::time::layer_time(sample_times[idx], layer.start_offset.0);
@@ -471,6 +534,37 @@ pub fn collect_comp_jobs(
                     let target_width = fit_texture(target_width, nat_w, nat_h);
                     let (source_frame, blend) =
                         lumit_core::pixels::frame_pick(st, fps, src_frames, blend_on, sample_fps);
+                    // The moments a Clone to points shows this layer at, one
+                    // real frame each. Only where the moment falls in a clip
+                    // of the same footage, since a job reads one file: a
+                    // moment in another clip's footage, or in a gap, holds
+                    // the picture under the playhead.
+                    let mut shutter: Vec<crate::decode::ShutterSample> = Vec::new();
+                    for (_, tau) in clone_moments.iter().filter(|(id, _)| *id == layer.id) {
+                        let offset = moment_offset(*tau, t, comp_dt);
+                        if sample_times[idx] != t
+                            || shutter
+                                .iter()
+                                .any(|s| s.offset.to_bits() == offset.to_bits())
+                        {
+                            continue;
+                        }
+                        let tlt = lumit_core::time::layer_time(*tau, layer.start_offset.0);
+                        if let Some((_, lumit_core::sequence::ClipSource::Footage(there), sst)) =
+                            lumit_core::sequence::resolve(clips, tlt)
+                        {
+                            if there == item {
+                                let (source_frame, _) = lumit_core::pixels::frame_pick(
+                                    sst, fps, src_frames, false, None,
+                                );
+                                shutter.push(crate::decode::ShutterSample {
+                                    offset,
+                                    source_frame,
+                                    blend: None,
+                                });
+                            }
+                        }
+                    }
                     jobs.push(CompJob {
                         layer: layer.id,
                         item,
@@ -492,7 +586,7 @@ pub fn collect_comp_jobs(
                             &layer.effects,
                             layer.switches.fx,
                         ),
-                        shutter: Vec::new(),
+                        shutter,
                         shutter_flow: None,
                     });
                 }
@@ -767,11 +861,17 @@ pub fn collect_comp_jobs(
 /// draws as a Read of that item - unless `pictures_fed` says a host is feeding
 /// the pictures, where no preview stands in and nothing of it is decoded
 /// (§5.11).
+///
+/// `moments` are the other times this comp is built again at, as
+/// [`collect_comp_jobs`] takes them, so a Read of footage is fetched at those
+/// too, one real frame each.
+#[allow(clippy::too_many_arguments)]
 fn collect_graph_jobs(
     ctx: &PlanContext<'_>,
     comp: &Composition,
     graph: &lumit_core::comp_graph::CompGraph,
     t: f64,
+    moments: &[f64],
     jobs: &mut Vec<CompJob>,
     visited: &mut Vec<Uuid>,
     pictures_fed: bool,
@@ -816,12 +916,14 @@ fn collect_graph_jobs(
                     continue;
                 };
                 // A held nested frame wants no decodes: the realiser will
-                // serve the texture and never look at the pixels.
-                if held.is_some_and(|held| held(nested, t, None)) {
+                // serve the texture and never look at the pixels. A rebuild
+                // at another moment is made from pixels, so only when there
+                // is none.
+                if moments.is_empty() && held.is_some_and(|held| held(nested, t, None)) {
                     continue;
                 }
                 visited.push(*nested_id);
-                collect_comp_jobs(ctx, nested, t, &[], jobs, visited, false);
+                collect_comp_jobs(ctx, nested, t, moments, jobs, visited, false);
                 visited.pop();
             }
             LayerKind::Footage { item } => {
@@ -859,6 +961,27 @@ fn collect_graph_jobs(
                 };
                 let (source_frame, blend) =
                     lumit_core::pixels::frame_pick(t, fps, src_frames, false, None);
+                // The clip at each moment the comp is built again at, filed
+                // by the offset the builder looks it up by.
+                let comp_dt = 1.0 / comp.frame_rate.fps().max(1.0);
+                let mut shutter: Vec<crate::decode::ShutterSample> = Vec::new();
+                for &tau in moments {
+                    let offset = moment_offset(tau, t, comp_dt);
+                    if offset == 0.0
+                        || shutter
+                            .iter()
+                            .any(|s| s.offset.to_bits() == offset.to_bits())
+                    {
+                        continue;
+                    }
+                    let (source_frame, _) =
+                        lumit_core::pixels::frame_pick(tau, fps, src_frames, false, None);
+                    shutter.push(crate::decode::ShutterSample {
+                        offset,
+                        source_frame,
+                        blend: None,
+                    });
+                }
                 jobs.push(CompJob {
                     channels: None,
                     layer: *id,
@@ -873,7 +996,7 @@ fn collect_graph_jobs(
                     temporal: Vec::new(),
                     flow_neighbours: Vec::new(),
                     slate: false,
-                    shutter: Vec::new(),
+                    shutter,
                     shutter_flow: None,
                 });
             }
@@ -916,7 +1039,7 @@ fn nested_graph_jobs(
     match nested.graph.as_ref() {
         // Applied or nested, so every picture Input arrives on a socket and no
         // preview item is drawn or decoded (§5.11).
-        Some(graph) => collect_graph_jobs(ctx, nested, graph, t, jobs, visited, true),
+        Some(graph) => collect_graph_jobs(ctx, nested, graph, t, &[], jobs, visited, true),
         // A comp with layers: the dangling reference the walk renders as a
         // passthrough, planned as the Precomp it looks like.
         None => collect_comp_jobs(ctx, nested, t, &[], jobs, visited, false),

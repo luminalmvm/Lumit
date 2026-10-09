@@ -218,7 +218,16 @@ pub(super) struct ParticulateParams {
     /// The size of the "who stood" target, or 0 for an ordinary draw.
     pub(super) probe_w: u32,
     pub(super) probe_h: u32,
-    pub(super) _pad: [u32; 2],
+    /// How a sprite sits on its point, each as the amount past the plain
+    /// square of the point's size, so all nought is that square. Only the
+    /// generic points draw writes them.
+    pub(super) stamp_unit: [f32; 2],
+
+    pub(super) stamp_anchor: [f32; 2],
+    pub(super) stamp_uv: [f32; 2],
+
+    pub(super) stamp_corner: f32,
+    pub(super) _pad: [u32; 3],
 }
 
 /// The scan's block width — the same 256 the kernel declares.
@@ -226,7 +235,7 @@ const SCAN_BLOCK: u32 = 256;
 
 /// Words of stream per particle: position 3, speed 3, age, life, size,
 /// rotation, colour 2 (half pairs), id 2, and the draw's own tail 3.
-pub(super) const STREAM_WORDS: u64 = 17;
+pub(super) const STREAM_WORDS: u64 = 19;
 
 impl FxEngine {
     /// Draw one Particulate over a working texture, returning a new texture of
@@ -437,7 +446,11 @@ impl FxEngine {
             field_threshold: 0.0,
             probe_w: 0,
             probe_h: 0,
-            _pad: [0; 2],
+            stamp_unit: [0.0; 2],
+            stamp_anchor: [0.0; 2],
+            stamp_uv: [0.0; 2],
+            stamp_corner: 0.0,
+            _pad: [0; 3],
         };
         let ubuf = ctx
             .device

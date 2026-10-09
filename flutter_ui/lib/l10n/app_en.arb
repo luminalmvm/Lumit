@@ -541,7 +541,7 @@
   },
   "fxFollow": "Follow",
   "@fxFollow": {
-    "description": "Effect controls — a control on Planar track: whether the analysis follows a flat surface, one point, or two points."
+    "description": "Effect controls — a control on Planar track: whether the analysis follows a flat surface, one point, or two points. Also on Points along path and Particulate: whether the points follow one of the layer’s masks or a Shape layer’s own paths."
   },
   "fxSurface": "Surface",
   "@fxSurface": {
@@ -749,7 +749,7 @@
   },
   "fxMask": "Mask",
   "@fxMask": {
-    "description": "Effect controls — a control on Scribble, Stroke and Vegas: which of the layer’s masks the effect draws along."
+    "description": "Effect controls — a control on Scribble, Stroke and Vegas: which of the layer’s masks the effect draws along. Also the Follow option on Points along path and Particulate that follows a mask."
   },
   "fxMaskPath": "Mask/Path",
   "@fxMaskPath": {
@@ -2364,6 +2364,518 @@
   "@fxDepthSort": {
     "description": "Effect controls — a checkbox on Clone to points: draw the stamps furthest from the camera first, so near ones cover far ones."
   },
+  "fxPointsField": "Points field",
+  "@fxPointsField": {
+    "description": "Effect controls — the name of the Points field effect, which draws a picture of a stream wired into it: at every pixel, how near the nearest point is, which way it lies, its colour or its number."
+  },
+  "fxNumber": "Number",
+  "@fxNumber": {
+    "description": "Effect controls — an Output option on Points field, and a Pattern option on Vary points and Pick points: the number each point carries. A noun."
+  },
+  "fxNumberRange": "Number range",
+  "@fxNumberRange": {
+    "description": "Effect controls — a control on Points field: the point number that draws as white when Output is Number."
+  },
+  "fxLimitToRadius": "Limit to radius",
+  "@fxLimitToRadius": {
+    "description": "Effect controls — a checkbox on Points field: leave the picture transparent further than Radius from every point, instead of filling the frame."
+  },
+  "fxHexagons": "Hexagons",
+  "@fxHexagons": {
+    "description": "Effect controls — a Layout option on Grid: offset rows packed as a honeycomb, so every point is the same distance from its six neighbours."
+  },
+  "fxFitToSize": "Fit to size",
+  "@fxFitToSize": {
+    "description": "Effect controls — a checkbox on Grid: fit the layout into the Width and Height rows instead of spacing the points by the Spacing rows."
+  },
+  "fxEven": "Even",
+  "@fxEven": {
+    "description": "Effect controls — a Placement option on Points along path: the points are evenly spaced along the path. An adjective."
+  },
+  "fxCorners": "Corners",
+  "@fxCorners": {
+    "description": "Effect controls — a Placement option on Points along path: one point on each vertex of the mask."
+  },
+  "fxWrap": "Wrap",
+  "@fxWrap": {
+    "description": "Effect controls — a checkbox on Points along path: a point pushed past one end of an open path comes back in at the other end."
+  },
+  "fxNearest": "Nearest",
+  "@fxNearest": {
+    "description": "Effect controls — a Mode option on Connect points: join each point to the few points nearest to it, however far away they are."
+  },
+  "fxBetween": "Between",
+  "@fxBetween": {
+    "description": "Effect controls — a control on Connect points: which points a line may run between. Its options are All points, Picked, and Picked and the rest."
+  },
+  "fxPickedAndTheRest": "Picked and the rest",
+  "@fxPickedAndTheRest": {
+    "description": "Effect controls — a Between option on Connect points: draw only the lines that run from a picked point to one that is not picked."
+  },
+  "fxClosed": "Closed",
+  "@fxClosed": {
+    "description": "Effect controls — a checkbox on Connect points: join the last point back to the first, so the line through the points is a closed loop."
+  },
+  "fxFadePower": "Fade power",
+  "@fxFadePower": {
+    "description": "Effect controls — a control on Trail: how the fade is spread along a tail. Higher keeps the tail solid near the point and fades it late."
+  },
+  "fxUsePointColour": "Use point colour",
+  "@fxUsePointColour": {
+    "description": "Effect controls — a checkbox on Trail: draw each tail in its own point's colour. Off, every tail is drawn in the Colour row's colour."
+  },
+  "fxConstant": "Constant",
+  "@fxConstant": {
+    "description": "Effect controls — a Pattern option on Vary points and Pick points: every point gets the same number, so each takes the whole of a change. An adjective."
+  },
+  "fxAcross": "Across",
+  "@fxAcross": {
+    "description": "Effect controls — a Pattern option on Vary points and Pick points: a point's number is where it sits from left to right."
+  },
+  "fxPicked": "Picked",
+  "@fxPicked": {
+    "description": "Effect controls — a Pattern option on Vary points and Pick points, and an Apply to option: the points an earlier Pick points marked. An adjective."
+  },
+  "fxImageLayer": "Image layer",
+  "@fxImageLayer": {
+    "description": "Effect controls — a control on Vary points and Pick points: the layer whose picture is read under each point."
+  },
+  "fxColourFromImage": "Colour from image",
+  "@fxColourFromImage": {
+    "description": "Effect controls — a checkbox on Vary points: each point takes the colour of the picture under it."
+  },
+  "fxApplyTo": "Apply to",
+  "@fxApplyTo": {
+    "description": "Effect controls — a control on the points effects: which points the effect acts on (all of them, the picked ones, or the ones not picked)."
+  },
+  "fxAllPoints": "All points",
+  "@fxAllPoints": {
+    "description": "Effect controls — an Apply to option on the points effects: act on every point."
+  },
+  "fxNotPicked": "Not picked",
+  "@fxNotPicked": {
+    "description": "Effect controls — an Apply to option on the points effects: act only on the points an earlier Pick points did not mark."
+  },
+  "fxStretchX": "Stretch x",
+  "@fxStretchX": {
+    "description": "Effect controls — a control on Vary points: how far each point is stretched across."
+  },
+  "fxStretchY": "Stretch y",
+  "@fxStretchY": {
+    "description": "Effect controls — a control on Vary points: how far each point is stretched down."
+  },
+  "fxBothWays": "Both ways",
+  "@fxBothWays": {
+    "description": "Effect controls — a checkbox on Vary points: Rotation and the Offsets push points in both directions (backwards as well as forwards) instead of one."
+  },
+  "fxOffsetForward": "Offset forward",
+  "@fxOffsetForward": {
+    "description": "Effect controls — a control on Vary points: how far each point is moved along the way it faces."
+  },
+  "fxOffsetSideways": "Offset sideways",
+  "@fxOffsetSideways": {
+    "description": "Effect controls — a control on Vary points: how far each point is moved at right angles to the way it faces."
+  },
+  "fxSetNumber": "Set number",
+  "@fxSetNumber": {
+    "description": "Effect controls — a checkbox on Vary points: write the number each point carries for the effects below it. A verb phrase."
+  },
+  "fxNumberFrom": "Number from",
+  "@fxNumberFrom": {
+    "description": "Effect controls — a control on Vary points: the number a point is given where the pattern is at its lowest."
+  },
+  "fxNumberTo": "Number to",
+  "@fxNumberTo": {
+    "description": "Effect controls — a control on Vary points: the number a point is given where the pattern is at its highest."
+  },
+  "fxDropTheRest": "Drop the rest",
+  "@fxDropTheRest": {
+    "description": "Effect controls — a Result option on Pick points: remove every point that fails the test."
+  },
+  "fxPick": "Pick",
+  "@fxPick": {
+    "description": "Effect controls — a Result option on Pick points: remove nothing, and mark the points that pass as picked. A verb."
+  },
+  "fxAddToPicked": "Add to picked",
+  "@fxAddToPicked": {
+    "description": "Effect controls — a Result option on Pick points: mark the points that pass as picked, beside the ones picked already."
+  },
+  "fxRemoveFromPicked": "Remove from picked",
+  "@fxRemoveFromPicked": {
+    "description": "Effect controls — a Result option on Pick points: the points that pass stop being picked."
+  },
+  "fxKeepInPicked": "Keep in picked",
+  "@fxKeepInPicked": {
+    "description": "Effect controls — a Result option on Pick points: only the points that pass and were picked already stay picked."
+  },
+  "fxCloneLayer2": "Clone layer 2",
+  "@fxCloneLayer2": {
+    "description": "Effect controls — a control on Clone to points: a second layer to stamp. With more than one set, each point is stamped with one of them."
+  },
+  "fxCloneLayer3": "Clone layer 3",
+  "@fxCloneLayer3": {
+    "description": "Effect controls — a control on Clone to points: a third layer to stamp."
+  },
+  "fxCloneLayer4": "Clone layer 4",
+  "@fxCloneLayer4": {
+    "description": "Effect controls — a control on Clone to points: a fourth layer to stamp."
+  },
+  "fxMoreLayers": "More layers",
+  "@fxMoreLayers": {
+    "description": "Effect controls — a group heading on Clone to points, over the extra layers to stamp and how each point chooses between them."
+  },
+  "fxChooseBy": "Choose by",
+  "@fxChooseBy": {
+    "description": "Effect controls — a control on Clone to points: how each point chooses which of several layers it is stamped with (in order, at random, or by the number it carries)."
+  },
+  "fxPointSize": "Point size",
+  "@fxPointSize": {
+    "description": "Effect controls — a Size option on Clone to points: each stamp is a square the size of its point, with the whole layer squeezed into it."
+  },
+  "fxLayerSize": "Layer size",
+  "@fxLayerSize": {
+    "description": "Effect controls — a Size option on Clone to points: each stamp is the layer at its own size and shape."
+  },
+  "fxFitCell": "Fit cell",
+  "@fxFitCell": {
+    "description": "Effect controls — a Size option on Clone to points: the layer is scaled to fit inside a cell, keeping its shape, and the rest of the cell is left empty."
+  },
+  "fxFillCell": "Fill cell",
+  "@fxFillCell": {
+    "description": "Effect controls — a Size option on Clone to points: the layer is scaled to cover a cell, keeping its shape, and what overhangs is cut off."
+  },
+  "fxCellWidth": "Cell width",
+  "@fxCellWidth": {
+    "description": "Effect controls — a control on Clone to points: how wide the cell a layer is fitted into is."
+  },
+  "fxCellHeight": "Cell height",
+  "@fxCellHeight": {
+    "description": "Effect controls — a control on Clone to points: how tall the cell a layer is fitted into is."
+  },
+  "fxCornerRadius": "Corner radius",
+  "@fxCornerRadius": {
+    "description": "Effect controls — a control on Clone to points: how far each stamp's corners are rounded."
+  },
+  "fxTransformPoints": "Transform points",
+  "@fxTransformPoints": {
+    "description": "Effect controls — the name of the Transform points effect, which moves, scales and turns a whole points stream wired into it about an anchor."
+  },
+  "fxAnchorToPoints": "Anchor to points",
+  "@fxAnchorToPoints": {
+    "description": "Effect controls — a switch on Transform points: the anchor is the middle of the points being moved, not a fixed place in the frame."
+  },
+  "fxScaleSizes": "Scale sizes",
+  "@fxScaleSizes": {
+    "description": "Effect controls — a switch on Transform points: the points themselves grow and shrink with the stream, not only the gaps between them."
+  },
+  "fxTurnPoints": "Turn points",
+  "@fxTurnPoints": {
+    "description": "Effect controls — a switch on Transform points: each point's own rotation turns with the stream."
+  },
+  "fxMergePoints": "Merge points",
+  "@fxMergePoints": {
+    "description": "Effect controls — the name of the Merge points effect, which joins up to four points streams into one."
+  },
+  "fxNumberByInput": "Number by input",
+  "@fxNumberByInput": {
+    "description": "Effect controls — a switch on Merge points: the number each point carries becomes which input it came in on, so effects below can tell the streams apart."
+  },
+  "fxPointsB": "Points B",
+  "@fxPointsB": {
+    "description": "Graph panel — the second points socket on Merge points."
+  },
+  "fxPointsC": "Points C",
+  "@fxPointsC": {
+    "description": "Graph panel — the third points socket on Merge points."
+  },
+  "fxPointsD": "Points D",
+  "@fxPointsD": {
+    "description": "Graph panel — the fourth points socket on Merge points."
+  },
+  "fxRelaxPoints": "Relax points",
+  "@fxRelaxPoints": {
+    "description": "Effect controls — the name of the Relax points effect, which pushes the points of a stream apart until they stop overlapping."
+  },
+  "fxUsePointSize": "Use point size",
+  "@fxUsePointSize": {
+    "description": "Effect controls — a switch on Relax points: each point's space is its own size, not the Radius row."
+  },
+  "fxIterations": "Iterations",
+  "@fxIterations": {
+    "description": "Effect controls — a control on Relax points: how many times the points are pushed apart."
+  },
+  "fxStrength": "Strength",
+  "@fxStrength": {
+    "description": "Effect controls — a control on Relax points: how much of an overlap each pass removes."
+  },
+  "fxBounds": "Bounds",
+  "@fxBounds": {
+    "description": "Effect controls — a control on Relax points: whether the points may drift anywhere or are held in the box they started in."
+  },
+  "fxFree": "Free",
+  "@fxFree": {
+    "description": "Effect controls — a Bounds option on Relax points: the points may drift anywhere."
+  },
+  "fxKeepInside": "Keep inside",
+  "@fxKeepInside": {
+    "description": "Effect controls — a Bounds option on Relax points: the points are held inside the box they started in."
+  },
+  "fxFlowPoints": "Flow points",
+  "@fxFlowPoints": {
+    "description": "Effect controls — the name of the Flow points effect, which carries the points of a stream along a field over time."
+  },
+  "fxField": "Field",
+  "@fxField": {
+    "description": "Effect controls — a control and a group heading on Flow points: what carries the points (a swirling noise, a vortex, a pull or a wind)."
+  },
+  "fxCurlNoise": "Curl noise",
+  "@fxCurlNoise": {
+    "description": "Effect controls — a Field option on Flow points: a swirling noise that carries points without bunching them up."
+  },
+  "fxVortex": "Vortex",
+  "@fxVortex": {
+    "description": "Effect controls — a Field option on Flow points: the points turn round a centre."
+  },
+  "fxPull": "Pull",
+  "@fxPull": {
+    "description": "Effect controls — a Field option on Flow points: the points are drawn towards a centre, or pushed away from it."
+  },
+  "fxWind": "Wind",
+  "@fxWind": {
+    "description": "Effect controls — a Field option on Flow points: the points are all blown one way."
+  },
+  "fxSpeed": "Speed",
+  "@fxSpeed": {
+    "description": "Effect controls — a control on Flow points: how fast the field carries a point, in pixels a second."
+  },
+  "fxClock": "Clock",
+  "@fxClock": {
+    "description": "Effect controls — a control on Flow points: which time says how long each point has been carried for."
+  },
+  "fxLayerTime": "Layer time",
+  "@fxLayerTime": {
+    "description": "Effect controls — a Clock option on Flow points: every point has been carried for as long as the layer has been running."
+  },
+  "fxPointAge": "Point age",
+  "@fxPointAge": {
+    "description": "Effect controls — a Clock option on Flow points: each point has been carried for as long as it has been alive."
+  },
+  "fxStepsPerSecond": "Steps per second",
+  "@fxStepsPerSecond": {
+    "description": "Effect controls — a control on Flow points: how finely the path each point follows is worked out."
+  },
+  "fxTextToPoints": "Text to points",
+  "@fxTextToPoints": {
+    "description": "Effect controls — the name of the Text to points effect, which makes one point for each character, word or line of a Text layer."
+  },
+  "fxLabelPoints": "Label points",
+  "@fxLabelPoints": {
+    "description": "Effect controls — the name of the Label points effect, which writes a short piece of text beside every point of a stream wired into it."
+  },
+  "fxText": "Text",
+  "@fxText": {
+    "description": "Effect controls — the heading over the controls on Text to points that say which text the points are made from."
+  },
+  "fxTextLayer": "Text layer",
+  "@fxTextLayer": {
+    "description": "Effect controls — a control on Text to points and Label points: the Text layer the effect reads its text from."
+  },
+  "fxPer": "Per",
+  "@fxPer": {
+    "description": "Effect controls — a control on Text to points: whether each character, each word or each line of the text gets a point."
+  },
+  "fxCharacter": "Character",
+  "@fxCharacter": {
+    "description": "Effect controls — a Per option on Text to points: one point for each character of the text."
+  },
+  "fxWord": "Word",
+  "@fxWord": {
+    "description": "Effect controls — a Per option on Text to points: one point for each word of the text."
+  },
+  "fxPlace": "Place",
+  "@fxPlace": {
+    "description": "Effect controls — a control on Text to points: where on its character, word or line a point sits. A noun, not a verb."
+  },
+  "fxOrigin": "Origin",
+  "@fxOrigin": {
+    "description": "Effect controls — a Place option on Text to points: the point sits where its character, word or line starts on the baseline."
+  },
+  "fxDecimals": "Decimals",
+  "@fxDecimals": {
+    "description": "Effect controls — a control on Label points: how many decimal places the numbers in a label are written to."
+  },
+  "fxAnchor": "Anchor",
+  "@fxAnchor": {
+    "description": "Effect controls — a control on Label points: which part of a label sits beside its point, its left end, its centre or its right end."
+  },
+  "fxLeft": "Left",
+  "@fxLeft": {
+    "description": "Effect controls — an Anchor option on Label points: the label's left end sits beside the point and its text runs to the right."
+  },
+  "fxRight": "Right",
+  "@fxRight": {
+    "description": "Effect controls — an Anchor option on Label points: the label's right end sits beside the point and its text runs to the left."
+  },
+  "fxMaxLabels": "Max labels",
+  "@fxMaxLabels": {
+    "description": "Effect controls — a control on Label points: the most labels it draws in a frame."
+  },
+  "fxTrackPoints": "Track points",
+  "@fxTrackPoints": {
+    "description": "Effect controls — the name of the Track points effect, which follows things in a layer's footage and hands them out as points."
+  },
+  "fxFeatures": "Features",
+  "@fxFeatures": {
+    "description": "Effect controls — a Mode option on Track points: follow distinct corners in the picture."
+  },
+  "fxBlobs": "Blobs",
+  "@fxBlobs": {
+    "description": "Effect controls — a Mode option on Track points: follow whole bright or dark regions by their centres."
+  },
+  "fxMinArea": "Min area",
+  "@fxMinArea": {
+    "description": "Effect controls — a control on Track points: the smallest blob it follows, in pixels."
+  },
+  "fxMaxArea": "Max area",
+  "@fxMaxArea": {
+    "description": "Effect controls — a control on Track points: the largest blob it follows, in pixels."
+  },
+  "fxCloneIndex": "Clone index",
+  "@fxCloneIndex": {
+    "description": "Effect controls — the name of the Clone index driver, which tells a layer being stamped by Clone to points which copy it is, and the header over the rows on Clone to points that answer to it."
+  },
+  "fxNormalised": "Normalised",
+  "@fxNormalised": {
+    "description": "Node graph — an output of the Clone index driver: the copy's number as a fraction, 0 at the first copy and 1 at the last."
+  },
+  "fxOff": "Off",
+  "@fxOff": {
+    "description": "Effect controls — a dropdown option on Clone to points: no time offset, or no render per clone."
+  },
+  "fxAuto": "Auto",
+  "@fxAuto": {
+    "description": "Effect controls — a Per clone option on Clone to points: render a copy per stamp when the layer has a Clone index driver."
+  },
+  "fxTimeStep": "Time step",
+  "@fxTimeStep": {
+    "description": "Effect controls — a control on Clone to points: how far apart in time two steps of the time offset are, in seconds."
+  },
+  "fxTimeSamples": "Time samples",
+  "@fxTimeSamples": {
+    "description": "Effect controls — a control on Clone to points: the most moments a clone layer is rendered at."
+  },
+  "fxPerClone": "Per clone",
+  "@fxPerClone": {
+    "description": "Effect controls — a control on Clone to points: whether a clone layer is rendered once for each stamp, so each copy can differ."
+  },
+  "fxMaxRenders": "Max renders",
+  "@fxMaxRenders": {
+    "description": "Effect controls — a control on Clone to points: the most copies of a clone layer rendered with a number of their own."
+  },
+  "fxStripes": "Stripes",
+  "@fxStripes": {
+    "description": "Effect controls — a Pattern option on Vary points and Pick points: parallel bands across the frame, with a gap between each."
+  },
+  "fxChecker": "Checker",
+  "@fxChecker": {
+    "description": "Effect controls — a Pattern option on Vary points and Pick points: a chequerboard of alternate squares."
+  },
+  "fxWaves": "Waves",
+  "@fxWaves": {
+    "description": "Effect controls — a Pattern option on Vary points and Pick points: a wave that repeats across the frame and can travel over time."
+  },
+  "fxUseMiddleColour": "Use middle colour",
+  "@fxUseMiddleColour": {
+    "description": "Effect controls — a switch on Vary points: the points are coloured from Start colour through Middle colour to Colour, not straight from one to the other."
+  },
+  "fxMiddleColour": "Middle colour",
+  "@fxMiddleColour": {
+    "description": "Effect controls — a control on Vary points: the colour a point takes halfway along the pattern, between Start colour and Colour."
+  },
+  "fxCombined": "Combined",
+  "@fxCombined": {
+    "description": "Effect controls — a Field option on Flow points: the curl noise, the vortex, the pull and the wind added together, each by its own share."
+  },
+  "fxAnchorOnPointsX": "Anchor on points x",
+  "@fxAnchorOnPointsX": {
+    "description": "Effect controls — a control on Transform points: how far across the box round the points the anchor sits, as a percentage. x is the horizontal axis."
+  },
+  "fxAnchorOnPointsY": "Anchor on points y",
+  "@fxAnchorOnPointsY": {
+    "description": "Effect controls — a control on Transform points: how far down the box round the points the anchor sits, as a percentage. y is the vertical axis."
+  },
+  "fxAnchorIn": "Anchor in",
+  "@fxAnchorIn": {
+    "description": "Effect controls — a control on Transform points: whether the anchor's place in the frame is given in pixels or as a share of the frame."
+  },
+  "fxPixels": "Pixels",
+  "@fxPixels": {
+    "description": "Effect controls — an Anchor in option on Transform points: the anchor's place is given in pixels."
+  },
+  "fxShareOfFrame": "Share of frame",
+  "@fxShareOfFrame": {
+    "description": "Effect controls — an Anchor in option and a Place option on Transform points: the place is given as a percentage of the composition's width and height."
+  },
+  "fxPinned": "Pinned",
+  "@fxPinned": {
+    "description": "Effect controls — a Place option on Transform points: the points are placed a distance in pixels from a corner, an edge or the centre of the composition."
+  },
+  "fxPinTo": "Pin to",
+  "@fxPinTo": {
+    "description": "Effect controls — a control on Transform points: which corner, edge or centre of the composition the points are pinned to."
+  },
+  "fxTopLeft": "Top left",
+  "@fxTopLeft": {
+    "description": "Effect controls — a Pin to option on Transform points: the top left corner of the composition."
+  },
+  "fxTop": "Top",
+  "@fxTop": {
+    "description": "Effect controls — a Pin to option on Transform points: the middle of the composition's top edge."
+  },
+  "fxTopRight": "Top right",
+  "@fxTopRight": {
+    "description": "Effect controls — a Pin to option on Transform points: the top right corner of the composition."
+  },
+  "fxBottomLeft": "Bottom left",
+  "@fxBottomLeft": {
+    "description": "Effect controls — a Pin to option on Transform points: the bottom left corner of the composition."
+  },
+  "fxBottom": "Bottom",
+  "@fxBottom": {
+    "description": "Effect controls — a Pin to option on Transform points: the middle of the composition's bottom edge."
+  },
+  "fxBottomRight": "Bottom right",
+  "@fxBottomRight": {
+    "description": "Effect controls — a Pin to option on Transform points: the bottom right corner of the composition."
+  },
+  "fxIncludeSpaces": "Include spaces",
+  "@fxIncludeSpaces": {
+    "description": "Effect controls — a switch on Text to points: a space in the text gets a point as well as each letter."
+  },
+  "fxCountNestedInputs": "Count nested inputs",
+  "@fxCountNestedInputs": {
+    "description": "Effect controls — a switch on Merge points: streams that were merged once already keep their own numbers when they are merged again."
+  },
+  "fxEveryLayer": "Every layer",
+  "@fxEveryLayer": {
+    "description": "Effect controls — a Choose by option on Clone to points: stamp every clone layer at every point, one on top of the other."
+  },
+  "fxSameAsPer": "Same as Per",
+  "@fxSameAsPer": {
+    "description": "Effect controls — a Number option on Text to points: a point's number counts whatever the Per control is set to, characters, words or lines. Per is the name of that control."
+  },
+  "fxSizeFromWidth": "Size from width",
+  "@fxSizeFromWidth": {
+    "description": "Effect controls — a switch on Text to points: each point is as big as its character, word or line is wide, instead of the Size control's value."
+  },
+  "fxPlaceX": "Place x",
+  "@fxPlaceX": {
+    "description": "Effect controls — a control on Transform points: how far across the composition the points' anchor lands, per cent. Pairs with Place y."
+  },
+  "fxPlaceY": "Place y",
+  "@fxPlaceY": {
+    "description": "Effect controls — a control on Transform points: how far down the composition the points' anchor lands, per cent. Pairs with Place x."
+  },
   "fxClockwise": "Clockwise",
   "@fxClockwise": {
     "description": "Effect controls — a Wipe option on Radial wipe."
@@ -3674,7 +4186,7 @@
   },
   "fxShape": "Shape",
   "@fxShape": {
-    "description": "Effect controls — a control on Flash. Also which curve Distortion bends the sound with, and which cycle Tremolo and Vibrato run."
+    "description": "Effect controls — a control on Flash. Also which curve Distortion bends the sound with, and which cycle Tremolo and Vibrato run. Also the Follow option on Points along path and Particulate that follows the paths of a Shape layer."
   },
   "fxSharpen": "Sharpen",
   "@fxSharpen": {

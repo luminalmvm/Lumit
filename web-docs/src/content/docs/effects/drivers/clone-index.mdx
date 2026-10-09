@@ -1,0 +1,47 @@
+---
+title: Clone index
+description: "Tells a layer which copy Clone to points is stamping it as."
+---
+
+Clone index is a **Drivers** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Sits anywhere in what a clone layer shows: the layer's own graph, the layers of a precomp it
+shows and the precomps inside that, or a node graph any of them shows or applies.
+[Clone to points](/effects/generate/clone-to-points/) then draws that layer once per stamp,
+and each copy reads its own number here. It has four sockets: **Index**, the copy's number
+counted from 0, **Count**, how many copies there are, **Normalised**, 0 at the first copy
+and 1 at the last, and **Random**, a roll of the copy's own from 0 to 1.
+
+Anywhere else, the layer drawn on its own included, it reads as the first copy of one.
+
+Clone to points draws at most 32 copies with a number of their own. Stamps past that share
+them in turn.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Seed**: which roll Random gives.
+
+## Related
+
+- [Clone to points](/effects/generate/clone-to-points/)
+- [The node graph](/use/nodes/)
+- [Drivers](/effects/#drivers)
+- [Effects](/use/effects/)

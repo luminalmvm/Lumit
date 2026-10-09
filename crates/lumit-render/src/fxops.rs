@@ -509,19 +509,49 @@ pub enum LayerInput {
     ThisLayer,
     /// Another layer, already rendered alone at this raster.
     Texture(Tex),
+    /// One op's whole list of layers, for an effect with more than one layer
+    /// row. Each entry has the layer's own size beside it, px at composition
+    /// size, where it is another layer's picture.
+    Several(Vec<(LayerInput, Option<[f32; 2]>)>),
+    /// A list that can only be made once the op's points stream exists
+    /// ([`crate::draw::LayerInputDraw::Late`]). [`Side::late`] makes it when
+    /// the op comes round.
+    Late,
 }
 
 impl LayerInput {
     /// The texture this slot names, given the texture the chain currently
-    /// holds. `None` for [`LayerInput::Absent`] — the passthrough.
+    /// holds. `None` for [`LayerInput::Absent`] — the passthrough. A list
+    /// names no one texture, so it answers `None` too.
     #[must_use]
     pub fn texture<'a>(&'a self, current: &'a Tex) -> Option<&'a Tex> {
         match self {
-            LayerInput::Absent => None,
+            LayerInput::Absent | LayerInput::Several(_) | LayerInput::Late => None,
             LayerInput::ThisLayer => Some(current),
             LayerInput::Texture(t) => Some(t),
         }
     }
+
+    /// Whether this slot brings in another layer's picture, which nothing in
+    /// the op's own parameters names.
+    fn binds_a_picture(&self) -> bool {
+        match self {
+            LayerInput::Absent | LayerInput::ThisLayer => false,
+            // A late list is pictures nothing names yet.
+            LayerInput::Texture(_) | LayerInput::Late => true,
+            LayerInput::Several(list) => list.iter().any(|(l, _)| l.binds_a_picture()),
+        }
+    }
+}
+
+/// One layer picture as an op is handed it, at the op's own raster.
+#[derive(Clone)]
+pub struct LayerPicture {
+    pub tex: Tex,
+    /// The layer's own width and height, px at composition size. `None` for
+    /// the effect's own input and for a picture nobody measured, which are
+    /// the size of the frame.
+    pub size: Option<[f32; 2]>,
 }
 
 /// Render one referenced layer alone into the depth input a depth-of-field
@@ -603,6 +633,10 @@ pub struct Side<'a> {
     /// One slot per planes-tier op (docs/impl/addons.md §6.1), holding the
     /// plane its analysis filed for this layer's source frame.
     pub planes: &'a [Option<Tex>],
+    /// Makes a [`LayerInput::Late`] list: handed which of the stack's
+    /// layer-input slots it is and how many points the op's stream holds, it
+    /// answers the rendered list. `None` leaves such a slot absent.
+    pub late: Option<&'a dyn Fn(usize, usize) -> LayerInput>,
 }
 
 impl Side<'static> {
@@ -611,6 +645,7 @@ impl Side<'static> {
     pub const NONE: Side<'static> = Side {
         roto: &[],
         planes: &[],
+        late: None,
     };
 }
 
@@ -741,7 +776,7 @@ pub fn run_ops(
     // because an op below reads it and it depends on a picture.
     let late_wanted: Vec<u32> = points_schedules
         .iter()
-        .filter_map(|s| s.late_from)
+        .flat_map(|s| s.late.iter().map(|(_, slot)| *slot))
         .collect();
     // ponytail: such an op and everything after it run every frame, because a
     // held picture has no stream beside it. File the stream with the picture
@@ -884,12 +919,21 @@ pub fn run_ops(
         };
         // A stream an op above made on the card takes the place of the empty
         // one the builder had to leave.
-        let late_input = schedule.and_then(|s| {
-            let (_, stream) = late_streams.iter().find(|(k, _)| Some(*k) == s.late_from)?;
-            Some(lumit_core::fx::points::PointsSchedule {
-                input: vec![stream.clone()],
-                ..s.clone()
-            })
+        let late_input = schedule.filter(|s| !s.late.is_empty()).and_then(|s| {
+            let mut filled = s.clone();
+            let mut any = false;
+            for (entry, slot) in &s.late {
+                let Some((_, stream)) = late_streams.iter().find(|(k, _)| k == slot) else {
+                    continue;
+                };
+                let entry = *entry as usize;
+                if filled.input.len() <= entry {
+                    filled.input.resize(entry + 1, Default::default());
+                }
+                filled.input[entry] = stream.clone();
+                any = true;
+            }
+            any.then_some(filled)
         });
         let schedule = late_input.as_ref().or(schedule);
         let matte = if role.param().is_some() {
@@ -1027,11 +1071,35 @@ pub fn run_ops(
             };
             let mut blend_input = blend.as_ref().map(|_| tex.clone());
             // As above: a Light wrap's background plate, sized to the
-            // layer, grown into the margin an earlier op added.
-            let fitted_layer_input = layer_input
-                .and_then(|l| l.texture(&tex))
-                .cloned()
-                .map(|t| lumit_gpu::fx::fit_centred(ctx, t, w, h));
+            // layer, grown into the margin an earlier op added. One picture
+            // for most effects, a list for one with several layer rows.
+            let fitted = |l: &LayerInput, size: Option<[f32; 2]>| {
+                l.texture(&tex).cloned().map(|t| LayerPicture {
+                    tex: lumit_gpu::fx::fit_centred(ctx, t, w, h),
+                    size,
+                })
+            };
+            // A list that waited for this op's points is made now that the
+            // stream above has been.
+            let late = match layer_input {
+                Some(LayerInput::Late) => {
+                    let points = schedule
+                        .and_then(|s| s.input.first())
+                        .map_or(0, |s| s.len());
+                    side.late
+                        .filter(|_| points > 0)
+                        .map(|make| make(dof_i.saturating_sub(1), points))
+                }
+                _ => None,
+            };
+            let layer_input = late.as_ref().or(layer_input);
+            let layer_pictures: Vec<Option<LayerPicture>> = match layer_input {
+                Some(LayerInput::Several(list)) => {
+                    list.iter().map(|(l, size)| fitted(l, *size)).collect()
+                }
+                Some(l) => vec![fitted(l, None)],
+                None => Vec::new(),
+            };
             let data = match gpu.aux() {
                 AuxKind::None => AuxData::None,
                 AuxKind::Lut => {
@@ -1066,7 +1134,7 @@ pub fn run_ops(
                 data,
                 own_matte,
                 matte.as_ref(),
-                fitted_layer_input.as_ref(),
+                &layer_pictures,
                 mask_paths_of_op,
                 schedule,
                 resolved.instance,
@@ -1453,7 +1521,22 @@ fn op_keys(
                     // producer the wire names, or whether one is drawn at all:
                     // cut the wire and nothing in the consumer's own bag moves.
                     h.update(&sched.input_from.unwrap_or(u32::MAX).to_le_bytes());
+                    for from in &sched.ports_from {
+                        h.update(&from.to_le_bytes());
+                    }
                     h.update(&(sched.input.len() as u32).to_le_bytes());
+                    // The Text layer two of the family read is another
+                    // layer's words, which nothing above has named.
+                    for g in &sched.text {
+                        for v in [g.origin, g.end, g.up].as_flattened() {
+                            h.update(&v.to_le_bytes());
+                        }
+                        h.update(&g.word.to_le_bytes());
+                        h.update(&g.line.to_le_bytes());
+                    }
+                    if let Some(label) = &sched.label {
+                        h.update(&serde_json::to_vec(label).unwrap_or_default());
+                    }
                     for row in sched.projection.unwrap_or_default().m {
                         for v in row {
                             h.update(&v.to_le_bytes());
@@ -1474,7 +1557,10 @@ fn op_keys(
             // an AuxKind. A bound plate is a picture nobody named - it breaks
             // the chain exactly as a bound matte does.
             if schema.layer_input().is_some() {
-                if let Some(LayerInput::Texture(_)) = layer_inputs.get(dof_i) {
+                if layer_inputs
+                    .get(dof_i)
+                    .is_some_and(LayerInput::binds_a_picture)
+                {
                     broken = true;
                 }
                 dof_i += 1;

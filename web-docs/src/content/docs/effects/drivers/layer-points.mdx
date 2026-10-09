@@ -15,10 +15,13 @@ Layer points is a **Drivers** effect.
 
 Lets you use points that are contained on another layer, similar to Audio level using another layers audio.
 
-It reads that layer's points after any [Vary points](/effects/generate/vary-points/) or
-[Pick points](/effects/generate/pick-points/) wired after its first producer. It cannot read
-the points of [Scatter](/effects/generate/scatter/) or
-[Emit from image](/effects/generate/emit-from-image/).
+It reads that layer's points after any effect wired after its first producer that changes
+the stream, such as [Vary points](/effects/generate/vary-points/) or
+[Pick points](/effects/generate/pick-points/). It cannot read the points of
+[Scatter](/effects/generate/scatter/), [Emit from image](/effects/generate/emit-from-image/)
+or [Text to points](/effects/generate/text-to-points/), nor those of a Vary points or Pick
+points that reads a picture. It can read
+[Track points](/effects/generate/track-points/).
 
 ## Parameters
 

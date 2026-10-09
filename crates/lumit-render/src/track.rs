@@ -59,6 +59,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
 
+use lumit_core::fx::effects::track_points::{self, Analysis, Baked, Followed};
 use lumit_core::model::{
     CameraPose, Composition, Document, EffectInstance, EffectValue, Fingerprint, Layer, LayerKind,
 };
@@ -68,9 +69,9 @@ use lumit_core::track::{
 use lumit_track::{
     detect_zoom, point_outlines, points_quad, quad_outline, segment_dynamic_tracks,
     select_keyframes, solve_camera_cancellable, solve_planar_cancellable, solve_points_cancellable,
-    CameraSolve, ExclusionMask, FramePlane, GeometrySettings, Mat3, PlanarError, PlanarSettings,
-    PlanarTrack, PointSettings, SegmentSettings, SolveError, SolveSettings, SolvedPose, TrackError,
-    TrackSettings, Tracker, ZoomSettings,
+    BlobSettings, BlobTracker, CameraSolve, ExclusionMask, FramePlane, GeometrySettings, Mat3,
+    PlanarError, PlanarSettings, PlanarTrack, PointSettings, SegmentSettings, SolveError,
+    SolveSettings, SolvedPose, TrackError, TrackSettings, Tracker, ZoomSettings,
 };
 use uuid::Uuid;
 
@@ -384,6 +385,32 @@ impl AnalysisKey {
         AnalysisKey(*h.finalize().as_bytes())
     }
 
+    /// The key for a Track points analysis: the file's content and every row
+    /// the analysis reads. Which footage item shows the file is left out, so
+    /// two projects on the same clip share one analysis.
+    #[must_use]
+    pub fn points(fingerprint: &Fingerprint, analysis: &Analysis) -> Self {
+        let mut h = blake3::Hasher::new();
+        h.update(b"lumit-track/points/");
+        h.update(&FORMAT_VERSION.to_le_bytes());
+        h.update(&fingerprint.size.to_le_bytes());
+        h.update(fingerprint.head_tail_hash.as_bytes());
+        h.update(&[u8::from(analysis.blobs), u8::from(analysis.invert)]);
+        h.update(&analysis.density.to_le_bytes());
+        for v in [
+            analysis.quality,
+            analysis.spacing,
+            analysis.window,
+            analysis.threshold,
+            analysis.min_area,
+            analysis.max_area,
+            analysis.max_distance,
+        ] {
+            h.update(&v.to_le_bytes());
+        }
+        AnalysisKey(*h.finalize().as_bytes())
+    }
+
     fn file_name(&self) -> String {
         let mut name = String::with_capacity(68);
         for byte in self.0 {
@@ -438,6 +465,11 @@ pub enum JobKind {
     /// [`PlanarTrack`] shape: the region box under whatever warp the points can
     /// honestly support — a slide from one, a similarity from two.
     Points { regions: PointRegions },
+    /// Many points followed for their own sake, for a Track points effect:
+    /// corners or blobs, as its rows say. It shares the frame source, the
+    /// progress readings and the sidecar with the others, and has a frame
+    /// loop of its own ([`follow_points`]).
+    TrackPoints(Analysis),
 }
 
 /// A point track's search regions, in the analysis's own pixels.
@@ -680,6 +712,8 @@ const MAGIC: &[u8; 7] = b"LUMTRK\0";
 pub enum Answer {
     Camera(Box<CameraSolve>),
     Planar(Box<PlanarTrack>),
+    /// A Track points analysis: every followed point's path, in id order.
+    Points(Vec<Followed>),
 }
 
 /// What one sidecar file holds.
@@ -1035,6 +1069,7 @@ pub fn clear() {
     if let Ok(mut held) = planars().write() {
         held.clear();
     }
+    track_points::retain(|_| false);
     if let Ok(mut held) = jobs().lock() {
         held.progress.clear();
     }
@@ -1052,6 +1087,7 @@ pub fn forget(ids: &[Uuid]) {
     if let Ok(mut held) = planars().write() {
         held.retain(|id, _| !ids.contains(id));
     }
+    track_points::retain(|id| !ids.contains(id));
     if let Ok(mut held) = jobs().lock() {
         held.progress.retain(|id, _| !ids.contains(id));
     }
@@ -1070,7 +1106,10 @@ pub fn owned_ids(doc: &Document) -> Vec<Uuid> {
                 comp.layers
                     .iter()
                     .flat_map(|layer| &layer.effects)
-                    .filter(|e| e.effect.match_name == PLANAR_TRACK)
+                    .filter(|e| {
+                        e.effect.match_name == PLANAR_TRACK
+                            || e.effect.match_name == track_points::MATCH_NAME
+                    })
                     .map(|e| e.id),
             ),
             _ => {}
@@ -1154,7 +1193,10 @@ pub fn warm_jobs(doc: &Document) -> Vec<Job> {
             let LayerKind::Footage { item: media } = layer.kind else {
                 continue;
             };
-            if camera_track_effect(layer).is_none() && planar_track_effect(layer).is_none() {
+            if camera_track_effect(layer).is_none()
+                && planar_track_effect(layer).is_none()
+                && track_points_effects(layer).next().is_none()
+            {
                 continue;
             }
             let Some(footage) = doc.items.iter().find_map(|i| match i {
@@ -1178,6 +1220,10 @@ pub fn warm_jobs(doc: &Document) -> Vec<Job> {
                 if let Some(job) = job_for(layer, path.clone(), fingerprint, false) {
                     out.push(job);
                 }
+            }
+            // One per Track points instance, for the Planar track's reason.
+            for fx in track_points_effects(layer) {
+                out.extend(points_job_for(layer, fx, path.clone(), fingerprint, false));
             }
             if let Some(job) = planar_job_for(layer, path, fingerprint, false) {
                 out.push(job);
@@ -1260,13 +1306,14 @@ fn finish(media: Uuid, outcome: Option<Progress>) {
 fn run(job: Job, cancel: &AtomicBool) {
     let media = job.media;
     let key = job.key;
+    let kind = job.kind;
     let dir = cache_dir();
 
     if let Some((fps, clip_frames, answer)) = key
         .zip(dir.as_deref())
         .and_then(|(key, d)| read_sidecar(d, key))
     {
-        file(media, fps, clip_frames, answer);
+        file(media, kind, fps, clip_frames, answer);
         finish(media, Some(Progress::Done));
         return;
     }
@@ -1290,7 +1337,7 @@ fn run(job: Job, cancel: &AtomicBool) {
             if let (Some(key), Some(dir)) = (key, dir.as_deref()) {
                 write_sidecar(dir, key, fps, clip_frames, &answer);
             }
-            file(media, fps, clip_frames, answer);
+            file(media, kind, fps, clip_frames, answer);
             finish(media, Some(Progress::Done));
         }
         Err(AnalysisError::Cancelled) => finish(media, Some(Progress::Cancelled)),
@@ -1300,10 +1347,26 @@ fn run(job: Job, cancel: &AtomicBool) {
 
 /// Put whichever kind of answer this is into whichever table holds it — the one
 /// place a finished analysis and a cache hit both come through.
-fn file(id: Uuid, fps: f64, clip_frames: usize, answer: Answer) {
+fn file(id: Uuid, kind: JobKind, fps: f64, clip_frames: usize, answer: Answer) {
     match answer {
         Answer::Camera(solve) => publish(id, fps, clip_frames, *solve),
         Answer::Planar(track) => publish_planar(id, fps, clip_frames, *track),
+        // The rows it was analysed under come from the job and not from the
+        // sidecar, so a file another project wrote is filed under this
+        // project's own footage item.
+        Answer::Points(tracks) => {
+            if let JobKind::TrackPoints(analysis) = kind {
+                track_points::publish(
+                    id,
+                    Baked {
+                        analysis,
+                        fps,
+                        frames: u32::try_from(clip_frames).unwrap_or(u32::MAX),
+                        tracks,
+                    },
+                );
+            }
+        }
     }
 }
 
@@ -1336,6 +1399,9 @@ fn analyse(
     report: &dyn Fn(Progress),
 ) -> Result<(f64, usize, Answer), AnalysisError> {
     let kind = job.kind;
+    if let JobKind::TrackPoints(analysis) = kind {
+        return follow_points(job, analysis, cancel, report);
+    }
     let (fps, clip_frames, mut set, scale) = track_frames(job, cancel, report)?;
 
     report(Progress::Solving);
@@ -1394,6 +1460,120 @@ fn analyse(
         )?;
     rescale(&mut solve, scale);
     Ok((fps, clip_frames, Answer::Camera(Box::new(solve))))
+}
+
+/// The most blobs followed on one frame.
+///
+/// ponytail: one number rather than a row. It bounds what a noisy clip can
+/// cost: this many points a frame in the sidecar at twelve bytes each. A Max
+/// points row is the upgrade if somebody needs more.
+const MAX_BLOBS: usize = 1000;
+
+/// A Track points analysis: every frame of the clip through the feature
+/// tracker or the blob tracker, and each followed point's whole path back.
+///
+/// [`track_frames`] is not reused because it stops where a camera solve would
+/// have nothing to stand on, and there is no solve here: a frame with three
+/// points on it is three points.
+fn follow_points(
+    job: Job,
+    analysis: Analysis,
+    cancel: &AtomicBool,
+    report: &dyn Fn(Progress),
+) -> Result<(f64, usize, Answer), AnalysisError> {
+    let mut frames = (job.open)().ok_or(AnalysisError::Unreadable)?;
+    let (total, width, height, fps) = frames.info();
+    if total == 0 || width == 0 || height == 0 || fps <= 0.0 || !fps.is_finite() {
+        return Err(AnalysisError::NoFrames);
+    }
+    let (w, h) = (width as usize, height as usize);
+
+    // The Camera track's own mapping of Feature density, and the tracker's
+    // defaults for everything the effect has no row for.
+    let (across, down, per_bucket) =
+        lumit_core::fx::effects::camera_track::density(analysis.density);
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let mut features = Tracker::new(TrackSettings {
+        grid: (across, down),
+        per_bucket,
+        quality: analysis.quality,
+        min_separation: f64::from(analysis.spacing),
+        // The row is the whole window, which is twice this and one more.
+        half_window: (((analysis.window - 1.0) / 2.0).round().clamp(2.0, 31.0)) as usize,
+        ..TrackSettings::default()
+    });
+    let mut blobs = BlobTracker::new(BlobSettings {
+        threshold: analysis.threshold,
+        invert: analysis.invert,
+        min_area: f64::from(analysis.min_area),
+        max_area: f64::from(analysis.max_area),
+        max_move: f64::from(analysis.max_distance),
+        max_blobs: MAX_BLOBS,
+    });
+
+    let mut pushed = 0usize;
+    for n in 0..total {
+        if cancel.load(Ordering::Relaxed) {
+            return Err(AnalysisError::Cancelled);
+        }
+        report(Progress::Tracking { done: n, total });
+        let Some(luma) = frames.luma(n) else {
+            break;
+        };
+        let plane = FramePlane::new(&luma, w, h).map_err(AnalysisError::Tracking)?;
+        if analysis.blobs {
+            blobs.push(n as i64, plane)
+        } else {
+            features.push(n as i64, plane, None)
+        }
+        .map_err(AnalysisError::Tracking)?;
+        pushed += 1;
+    }
+    report(Progress::Tracking {
+        done: pushed,
+        total,
+    });
+
+    // The frames are numbered from nought, so a first frame always fits.
+    let first = |frame: i64| u32::try_from(frame).unwrap_or(0);
+    #[allow(clippy::cast_possible_truncation)]
+    let tracks: Vec<Followed> = if analysis.blobs {
+        blobs
+            .finish()
+            .iter()
+            .map(|t| Followed {
+                id: t.id,
+                first: first(t.points.first().map_or(0, |p| p.frame)),
+                at: t
+                    .points
+                    .iter()
+                    .map(|p| [p.x as f32, p.y as f32, p.area as f32])
+                    .collect(),
+            })
+            .collect()
+    } else {
+        features
+            .finish()
+            .tracks()
+            .iter()
+            // A feature seen on one frame and lost on the next was never
+            // followed anywhere. Empty buckets throw up a few of those every
+            // frame, and they would only flicker.
+            .filter(|t| t.points.len() > 1)
+            .map(|t| Followed {
+                id: t.id,
+                first: first(t.first_frame()),
+                // How well the patch still matched the one the track began
+                // with. The first frame is that patch, so it matches fully.
+                at: std::iter::once(1.0)
+                    .chain(t.steps.iter().map(|s| s.ncc.clamp(0.0, 1.0)))
+                    .zip(&t.points)
+                    .map(|(ncc, p)| [p.x as f32, p.y as f32, ncc as f32])
+                    .collect(),
+            })
+            .collect()
+    };
+    Ok((fps, total, Answer::Points(tracks)))
 }
 
 /// [`rescale`], for a planar track: the corners are the whole of its geometry,
@@ -1696,6 +1876,41 @@ pub fn planar_job_for(
         settings,
         kind,
         masks,
+        open: Box::new(move || MediaLuma::open(&path).map(|s| Box::new(s) as Box<dyn LumaFrames>)),
+        analyse,
+    })
+}
+
+/// The enabled Track points instances on `layer`, in stack order.
+pub fn track_points_effects(layer: &Layer) -> impl Iterator<Item = &EffectInstance> {
+    layer
+        .effects
+        .iter()
+        .filter(|e| e.enabled && e.effect.match_name == track_points::MATCH_NAME)
+}
+
+/// Build the job for the Track points instance `fx` on `layer`.
+///
+/// Filed under the effect instance, as a Planar track is and for its reason:
+/// two of them on one clip, one following features and one blobs, are two
+/// answers. The layer's masks are not read.
+///
+/// `None` when the layer is not footage.
+#[must_use]
+pub fn points_job_for(
+    layer: &Layer,
+    fx: &EffectInstance,
+    path: PathBuf,
+    fingerprint: &Fingerprint,
+    analyse: bool,
+) -> Option<Job> {
+    let analysis = Analysis::of(fx, layer)?;
+    Some(Job {
+        media: fx.id,
+        key: Some(AnalysisKey::points(fingerprint, &analysis)),
+        settings: AnalysisSettings::default(),
+        kind: JobKind::TrackPoints(analysis),
+        masks: MaskTrack::default(),
         open: Box::new(move || MediaLuma::open(&path).map(|s| Box::new(s) as Box<dyn LumaFrames>)),
         analyse,
     })
@@ -2139,7 +2354,7 @@ mod tests {
         let (out, log) = run_here_answer(job, cancel);
         let camera = out.map(|(fps, frames, answer)| match answer {
             Answer::Camera(solve) => (fps, frames, *solve),
-            Answer::Planar(_) => panic!("this job asked for a camera solve"),
+            _ => panic!("this job asked for a camera solve"),
         });
         (camera, log)
     }

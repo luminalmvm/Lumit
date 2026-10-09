@@ -13,13 +13,16 @@
 8 kHz
 A
 Accumulation motion blur
+Across
 Add
 Add grain
 Add input
+Add to picked
 Age
 Align to motion
 Align to path
 All edges
+All points
 Alpha
 Alpha bias
 Alpha blur
@@ -29,6 +32,11 @@ Amount
 Amplitude
 Analyse
 Anamorphic squeeze
+Anchor
+Anchor in
+Anchor on points x
+Anchor on points y
+Anchor to points
 Anchor x
 Anchor y
 Angle
@@ -36,6 +44,7 @@ Angle control
 Animate
 Anticlockwise
 Aperture
+Apply to
 Arc
 Arc lower
 Arc upper
@@ -46,6 +55,7 @@ Asymmetric
 Attack
 Audio
 Audio level
+Auto
 B
 Background
 Backwards
@@ -79,6 +89,7 @@ Basic
 Beam
 Behind
 Bend
+Between
 Bevel and emboss
 Bevel style
 Bezier warp
@@ -86,6 +97,7 @@ BiRefNet
 Black and white
 Blades
 Blend
+Blobs
 Block glitch
 Block size
 Bloom
@@ -96,13 +108,18 @@ Blues
 Blur & sharpen
 Border
 Both
+Both ways
+Bottom
 Bottom edge
+Bottom left
 Bottom left tangent x
 Bottom left tangent y
+Bottom right
 Bottom right tangent x
 Bottom right tangent y
 Bottom to top
 Boundary
+Bounds
 Brightness
 Broadband, amber
 Broadband, blue
@@ -116,6 +133,8 @@ Camera track
 Cancel
 Card wipe
 Ceiling
+Cell height
+Cell width
 Centre
 Centre X
 Centre Y
@@ -123,11 +142,14 @@ Change
 Channel
 Channel blur
 Channel offset
+Character
 Checkbox
 Checkbox control
+Checker
 Chisel hard
 Chisel soft
 Choke
+Choose by
 Chorus
 Chromatic aberration
 Circle
@@ -136,9 +158,15 @@ Clip
 Clip black
 Clip rollback
 Clip white
+Clock
 Clockwise
+Clone index
 Clone layer
+Clone layer 2
+Clone layer 3
+Clone layer 4
 Clone to points
+Closed
 Coating
 Colour
 Colour 1
@@ -153,12 +181,14 @@ Colour correction
 Colour cycle
 Colour dodge
 Colour edge
+Colour from image
 Colour noise
 Colour overlay
 Columns
 Combine
 Combine channels
 Combine with existing alpha
+Combined
 Completion
 Complexity
 Composite
@@ -169,6 +199,7 @@ Conductivity state
 Confidence
 Connect points
 Connections
+Constant
 Contrast
 Controls
 Conversion
@@ -178,9 +209,13 @@ Cooling filter (LBB)
 Core colour
 Core radius
 Corner pin
+Corner radius
+Corners
 Count
+Count nested inputs
 Create corner pin
 Create transform keys
+Curl noise
 Curve
 Curves
 Custom
@@ -195,6 +230,7 @@ Darken
 Darker colour
 Datamosh
 Decay
+Decimals
 Deep blue
 Deep emerald
 Deep red
@@ -239,6 +275,7 @@ Drift
 Drive
 Drivers
 Drop shadow
+Drop the rest
 Dry
 Duration
 Echo
@@ -282,7 +319,9 @@ End colour
 End thickness
 End x
 End y
+Even
 Every Nth beat
+Every layer
 Every nth
 Evolution
 Evolution options
@@ -295,25 +334,32 @@ F-stop
 Fade
 Fade in
 Fade out
+Fade power
 Falloff
 Far blur
 Feather
 Feature density
+Features
 Feedback
+Field
 Field of view
 File
 Fill
+Fill cell
 Filter
 Final result
 Find edges
 Fish
 Fisheye
+Fit cell
+Fit to size
 Flag
 Flare options
 Flash
 Flip axis
 Flip direction
 Flip order
+Flow points
 Flow resolution
 Flow smoothness
 Focus (m)
@@ -331,6 +377,7 @@ Fractal influence
 Fractal noise
 Fractal type
 Frame rate
+Free
 Frequency
 From
 Full body
@@ -370,6 +417,7 @@ Hard light
 Hard mix
 Hardness
 Height
+Hexagons
 High
 High cut
 Highlight amount
@@ -393,10 +441,12 @@ Hue and saturation
 Hue shift
 Hysteresis
 Image
+Image layer
 In front
 In high
 In low
 In order
+Include spaces
 Index
 Inflate
 Initial speed
@@ -424,19 +474,26 @@ Iris centre x
 Iris centre y
 Iris points
 Iris wipe
+Iterations
 Jagged
 Jitter x
 Jitter y
 Jitter z
+Keep in picked
+Keep inside
 Key out safe
 Key out unsafe
 Knee
 LUT
+Label points
 Layer
 Layer knocks out shadow
 Layer out
 Layer points
+Layer size
+Layer time
 Layout
+Left
 Left and right
 Left bottom tangent x
 Left bottom tangent y
@@ -468,6 +525,7 @@ Lighter colour
 Lightness
 Lightning
 Lights
+Limit to radius
 Limiter
 Line
 Line period
@@ -503,21 +561,27 @@ Matte inverted
 Matte key
 Matte mode
 Max
+Max area
 Max clones
 Max connections
 Max distance
 Max ghosts
+Max labels
 Max particles
 Max points
+Max renders
 Max trails
 Maximum
 Maximum signal
 Maximum span length
 Median
 Merge
+Merge points
+Middle colour
 Midtone contrast
 Midtones
 Min
+Min area
 Minimum
 Mirror
 Mirror edges
@@ -527,6 +591,7 @@ Model
 Mono below
 Monochrome
 Mood lighting
+More layers
 More options
 Mosaic
 Motion blur
@@ -536,6 +601,7 @@ NTSC
 Native
 Near blur
 Nearby
+Nearest
 Nearest distance
 Node graph
 Noise
@@ -544,14 +610,24 @@ Noise speed
 Noise type
 None
 Normal
+Normalised
+Not picked
 Note
+Number
+Number by input
+Number from
+Number range
+Number to
 OCIO colour space transform
 OCIO configuration
 OCIO display transform
 OCIO file transform
 OCIO look transform
+Off
 Offset
+Offset forward
 Offset rows
+Offset sideways
 Offset x
 Offset y
 Offset z
@@ -567,6 +643,7 @@ Operate on alpha
 Operation
 Orange
 Orientation
+Origin
 Origin x
 Origin y
 Out high
@@ -594,19 +671,30 @@ Path
 Path overlap
 Pattern
 Peak
+Per
+Per clone
 Per-axis wobble
 Perlin
 Phase
 Phase offset
 Phaser
 Photo filter
+Pick
 Pick points
+Picked
+Picked and the rest
 Pillow emboss
 Pin layer
 Pin light
+Pin to
 Ping-pong
+Pinned
 Pinning
 Pixel sort
+Pixels
+Place
+Place x
+Place y
 Placement
 Planar track
 Planes
@@ -615,11 +703,17 @@ Point 1 x
 Point 1 y
 Point 2 x
 Point 2 y
+Point age
 Point control
+Point size
 Point x
 Point y
 Points
+Points B
+Points C
+Points D
 Points along path
+Points field
 Points layer
 Points sample
 Polar coordinates
@@ -638,6 +732,7 @@ Preserve luminosity
 Producer x
 Producer y
 Propagate
+Pull
 Quality
 Quarter
 RGB split
@@ -666,6 +761,7 @@ Reduce brightness
 Reduce saturation
 Refine radius
 Region size
+Relax points
 Release
 Relief
 Reload channels
@@ -673,6 +769,7 @@ Remainder
 Remap
 Remove background
 Remove edge leak
+Remove from picked
 Remove input
 Render
 Rendered
@@ -686,6 +783,7 @@ Result
 Reveal original
 Reverb
 Reverse
+Right
 Right bottom tangent x
 Right bottom tangent y
 Right edge
@@ -710,6 +808,7 @@ Roughen edges
 Roundness
 Rows
 Rows/columns jitter
+Same as Per
 Samples
 Satin
 Satin colour
@@ -717,6 +816,7 @@ Saturation
 Sawtooth
 Scale
 Scale height
+Scale sizes
 Scale width
 Scale x %
 Scale y %
@@ -741,6 +841,7 @@ Sensitivity
 Sepia
 Set channels
 Set matte
+Set number
 Shade colour
 Shadow amount
 Shadow colour
@@ -751,6 +852,7 @@ Shadow tonal width
 Shadows
 Shake
 Shape
+Share of frame
 Sharp colours
 Sharpen
 Shift x
@@ -763,6 +865,7 @@ Sides
 Sine
 Single layer, straw
 Size
+Size from width
 Size jitter
 Size over life
 Skew
@@ -790,6 +893,7 @@ Spacing x
 Spacing y
 Spacing z
 Span mode
+Speed
 Speed jitter
 Spherize
 Spiky
@@ -817,6 +921,7 @@ Start x
 Start y
 Static
 Status
+Steps per second
 Stereo phase
 Stereo width
 Stops
@@ -824,8 +929,12 @@ Streak
 Streak angle
 Streak intensity
 Streak length
+Strength
 Stretch
+Stretch x
+Stretch y
 Strike
+Stripes
 Strobe
 Stroke
 Stroke colour
@@ -846,6 +955,9 @@ Taper
 Technique
 Temperature
 Temporal
+Text
+Text layer
+Text to points
 Texture
 Texture contrast
 Texturize
@@ -859,19 +971,26 @@ Tile height
 Tile width
 Time
 Time offset
+Time samples
+Time step
 Tint
 Tint colour
 To
 Tone
+Top
 Top and bottom
 Top edge
+Top left
 Top left tangent x
 Top left tangent y
+Top right
 Top right tangent x
 Top right tangent y
 Top to bottom
+Track points
 Trail
 Transform
+Transform points
 Transition
 Transition width
 Transparent
@@ -886,6 +1005,7 @@ Turbulence scale
 Turbulence speed
 Turbulent
 Turbulent displace
+Turn points
 Twirl
 Twist
 Two layer, magenta
@@ -906,6 +1026,9 @@ Upper right y
 Use focus point
 Use inner radius
 Use masks
+Use middle colour
+Use point colour
+Use point size
 Use source colour
 Utility
 Value
@@ -927,6 +1050,7 @@ Violet
 Vivid light
 Voices
 Volume
+Vortex
 Wah
 Warming filter (81)
 Warming filter (85)
@@ -938,12 +1062,14 @@ Wave type
 Wave warp
 Wave width
 Wavelength
+Waves
 Wet
 Width
 Wiggle
 Wiggle type
 Wiggles per second
 Wiggly
+Wind
 Wind x
 Wind y
 Wind z
@@ -952,6 +1078,8 @@ Wipe
 Wipe angle
 Wipe centre x
 Wipe centre y
+Word
+Wrap
 X amount
 X frequency
 Y amount

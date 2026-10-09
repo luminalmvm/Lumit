@@ -1243,6 +1243,11 @@ pub struct MaskPolyline {
     /// The mask's own grow (+) / shrink (−) at this frame, px@comp — where the
     /// edge sits relative to the drawn curve. Zero for an unexpanded mask.
     pub expansion: f32,
+    /// Which of [`Self::points`] are the path's own vertices, as indices into
+    /// it, in path order. The rest were added to follow the curves. A closed
+    /// path's repeated last point is not listed. Empty when nobody recorded
+    /// them.
+    pub corners: Vec<usize>,
 }
 
 impl MaskPolyline {
@@ -1291,8 +1296,16 @@ impl MaskPolyline {
         if self.is_empty() {
             return [1.0, 0.0];
         }
-        let (i, _) = self.edge_at(s);
-        let (a, b) = (self.points[i], self.points[i + 1]);
+        self.edge_tangent(self.edge_at(s).0)
+    }
+
+    /// The unit direction of the edge that starts at point `i`. `[1.0, 0.0]`
+    /// where there is no such edge or it has no length.
+    #[must_use]
+    pub fn edge_tangent(&self, i: usize) -> [f32; 2] {
+        let (Some(a), Some(b)) = (self.points.get(i), self.points.get(i + 1)) else {
+            return [1.0, 0.0];
+        };
         let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
         let len = dx.hypot(dy);
         if len > 0.0 {
@@ -1300,6 +1313,25 @@ impl MaskPolyline {
         } else {
             [1.0, 0.0]
         }
+    }
+
+    /// Adds `next` on the end, as one more path of the same run. The step
+    /// from one path to the next has no length, so nothing placed by distance
+    /// ever lands on it, and `corners` gains only the vertices `next` had. The
+    /// run counts as closed only while every path in it is.
+    pub fn append(&mut self, next: &MaskPolyline) {
+        if next.is_empty() {
+            return;
+        }
+        if self.is_empty() {
+            *self = next.clone();
+            return;
+        }
+        let (base, far) = (self.points.len(), self.length());
+        self.points.extend_from_slice(&next.points);
+        self.arc.extend(next.arc.iter().map(|a| far + a));
+        self.corners.extend(next.corners.iter().map(|c| base + c));
+        self.closed &= next.closed;
     }
 
     /// The edge `s` px along the path lands on, and how far along that edge it
@@ -1344,7 +1376,10 @@ pub fn flatten_path(path: &BezierPath, tolerance_px: f64) -> MaskPolyline {
     // An open path has n-1 segments; a closed one has n, the last joining back.
     let segments = if path.closed { n } else { n - 1 };
     let mut points: Vec<[f32; 2]> = Vec::with_capacity(segments * 8);
+    let mut corners: Vec<usize> = Vec::with_capacity(n);
     for i in 0..segments {
+        // Each segment starts on one of the path's own vertices.
+        corners.push(points.len());
         let a = &path.vertices[i];
         let b = &path.vertices[(i + 1) % n];
         let p0 = a.pos;
@@ -1387,6 +1422,9 @@ pub fn flatten_path(path: &BezierPath, tolerance_px: f64) -> MaskPolyline {
     } else {
         path.vertices[n - 1].pos
     };
+    if !path.closed {
+        corners.push(points.len());
+    }
     points.push([last.0 as f32, last.1 as f32]);
 
     let mut arc = Vec::with_capacity(points.len());
@@ -1405,6 +1443,7 @@ pub fn flatten_path(path: &BezierPath, tolerance_px: f64) -> MaskPolyline {
         // widths in (see `mask_path_at`); flattening a bare path does not.
         feather: 0.0,
         expansion: 0.0,
+        corners,
     }
 }
 
@@ -1465,6 +1504,40 @@ pub fn mask_path_at(
         }
         None => MaskPolyline::default(),
     }
+}
+
+/// The polyline the mask-path row `param` of `effect` follows at `t`: one of
+/// the layer's masks, or the outlines of a Shape layer's own art where the
+/// effect's Follow row says Shape. `layer` is the layer the effect sits on,
+/// and a group header's stack has none.
+///
+/// The driver walk and the draw builder both ask here, so the stream a wire
+/// reads is the stream the picture draws. A row the panel hides or greys is a
+/// row nobody meant, and comes to the empty polyline.
+#[must_use]
+pub fn effect_path_at(
+    effect: &crate::model::EffectInstance,
+    param: &str,
+    self_default: bool,
+    layer: Option<&crate::model::Layer>,
+    t: f64,
+) -> MaskPolyline {
+    use crate::model::{EffectValue, LayerKind};
+    if !crate::fx::param_visible(effect, param) {
+        return MaskPolyline::default();
+    }
+    // Shape greys the mask row, so it is asked before the greyed rule.
+    if matches!(effect.param("path_from"), Some(EffectValue::Choice(1))) {
+        return match layer.map(|l| &l.kind) {
+            Some(LayerKind::Shape { contents }) => crate::shape::outline_at(contents, t),
+            _ => MaskPolyline::default(),
+        };
+    }
+    if !crate::fx::param_enabled(effect, param) {
+        return MaskPolyline::default();
+    }
+    let masks = layer.map_or(&[][..], |l| &l.masks);
+    mask_path_at(masks, effect.mask_ref(param), self_default, t)
 }
 
 #[cfg(test)]

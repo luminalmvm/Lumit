@@ -9,7 +9,9 @@
 //!
 //! Mode chooses the pairs instead: each point to the next, a mesh of
 //! triangles, or only the lines round the outside. Max distance still drops a
-//! line that is too long.
+//! line that is too long. Nearest joins each point to its closest few however
+//! far off they are. Between keeps the lines to the picked points, or to the
+//! ones that run from a picked point to one that is not.
 //!
 //! **A line is a capsule, and a capsule is a disc that has been stretched.**
 //! Nothing new is drawn here: the shared points draw already runs a dab from a
@@ -65,8 +67,10 @@ pub const CONNECT_GROUPS: &[ParamGroup] = &[
         "Connections",
         &[
             "mode",
+            "between",
             "max_distance",
             "max_links",
+            "closed",
             "depth",
             "taper",
             "fade",
@@ -75,12 +79,23 @@ pub const CONNECT_GROUPS: &[ParamGroup] = &[
     group("Line", &["width", "feather", "colour", "max_points"]),
 ];
 
-/// Max connections only limits Nearby. The other modes name their pairs.
-pub const CONNECT_ENABLED_WHEN: &[EnabledWhen] = &[EnabledWhen {
-    param: "max_links",
-    on: "mode",
-    cond: EnabledCond::ChoiceIs(0),
-}];
+const fn grey(param: &'static str, cond: EnabledCond) -> EnabledWhen {
+    EnabledWhen {
+        param,
+        on: "mode",
+        cond,
+    }
+}
+
+/// Max connections is read by Nearby and Nearest, and the other modes name
+/// their pairs. Nearest has no Max distance, and only In order can close.
+pub const CONNECT_ENABLED_WHEN: &[EnabledWhen] = &[
+    grey("max_links", EnabledCond::ChoiceIsNot(1)),
+    grey("max_links", EnabledCond::ChoiceIsNot(2)),
+    grey("max_links", EnabledCond::ChoiceIsNot(3)),
+    grey("max_distance", EnabledCond::ChoiceIsNot(4)),
+    grey("closed", EnabledCond::ChoiceIs(1)),
+];
 
 /// Which pairs of points are joined.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -88,18 +103,22 @@ pub enum ConnectMode {
     /// Every pair within Max distance, up to Max connections at each point.
     #[default]
     Nearby,
-    /// Each point to the next one in the stream.
+    /// Each point to the next one, in the order of the number each carries,
+    /// which is its place in the stream until something above sets it.
     InOrder,
     /// The edges of a triangulation of the points.
     Triangles,
     /// Only the edges round the outside of them.
     Outline,
+    /// Each point to its Max connections nearest, however far off they are.
+    Nearest,
 }
 
 impl ConnectMode {
     /// The Choice option labels, in code order. A Choice is stored as its
     /// index, so a new mode goes on the end.
-    pub const OPTIONS: &'static [&'static str] = &["Nearby", "In order", "Triangles", "Outline"];
+    pub const OPTIONS: &'static [&'static str] =
+        &["Nearby", "In order", "Triangles", "Outline", "Nearest"];
 
     /// The mode for a stored Choice index. Anything unknown is Nearby.
     #[must_use]
@@ -108,7 +127,36 @@ impl ConnectMode {
             1 => ConnectMode::InOrder,
             2 => ConnectMode::Triangles,
             3 => ConnectMode::Outline,
+            4 => ConnectMode::Nearest,
             _ => ConnectMode::Nearby,
+        }
+    }
+}
+
+/// Which points a line may run between.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Between {
+    /// Any two.
+    #[default]
+    All,
+    /// Two picked points. The rest are left out altogether.
+    Picked,
+    /// A picked point and one that is not, so two sets join each other and
+    /// neither joins itself.
+    PickedAndRest,
+}
+
+impl Between {
+    /// The Choice option labels, in code order.
+    pub const OPTIONS: &'static [&'static str] = &["All points", "Picked", "Picked and the rest"];
+
+    /// The rule for a stored Choice index. Anything unknown is All.
+    #[must_use]
+    pub const fn from_code(code: u32) -> Self {
+        match code {
+            1 => Between::Picked,
+            2 => Between::PickedAndRest,
+            _ => Between::All,
         }
     }
 }
@@ -133,9 +181,14 @@ impl ConnectMode {
 )]
 pub struct ConnectPoints {
     /// Which pairs are joined. Max distance drops a line that is too long in
-    /// every mode.
+    /// every mode but Nearest.
     #[choice(label = "Mode", options = *ConnectMode::OPTIONS, default = 0)]
     pub mode: u32,
+
+    /// Which points a line may run between, by what a Pick points above
+    /// picked.
+    #[choice(label = "Between", options = *Between::OPTIONS, default = 0)]
+    pub between: u32,
 
     /// How far apart two points may be and still be joined, px@comp measured on
     /// the frame. **Nought joins nothing**, which is the documented no-op.
@@ -151,7 +204,8 @@ pub struct ConnectPoints {
 
     /// The most lines that may meet at any one point. A pair is joined only
     /// when **both** ends still have room, so the dial means what it says at
-    /// every point rather than only at the one being walked.
+    /// every point rather than only at the one being walked. In Nearest it is
+    /// how many neighbours each point reaches for.
     #[counter(
         label = "Max connections",
         min = 0,
@@ -163,6 +217,10 @@ pub struct ConnectPoints {
     )]
     pub max_links: i32,
 
+    /// Join the last point of In order back to the first.
+    #[toggle(label = "Closed", default = false)]
+    pub closed: bool,
+
     /// Measure Max distance between the points themselves, in all three axes,
     /// rather than between where the camera puts them on the frame.
     #[toggle(label = "Depth", default = false)]
@@ -170,6 +228,7 @@ pub struct ConnectPoints {
 
     /// How much a line thins out as it lengthens, per cent: at 0 every line is
     /// the same Width, at 100 a line at exactly Max distance has no width left.
+    /// Nearest runs Taper and Fade from its shortest line to its longest.
     #[slider(
         label = "Taper",
         min = 0.0,
@@ -283,6 +342,11 @@ impl ConnectPoints {
     #[must_use]
     pub fn links(self, in_stream: &PointsStream) -> (PointsStream, Vec<[f32; 3]>) {
         let mut points = in_stream.clone();
+        let between = Between::from_code(self.between);
+        // Picked alone is the same web drawn over the picked points only.
+        if between == Between::Picked {
+            points.retain(|i| in_stream.picked(i));
+        }
         // The newest by birth index, which is the cap rule the whole family
         // applies — and here it is the ceiling on the pairing as much as on
         // the drawing.
@@ -296,9 +360,13 @@ impl ConnectPoints {
         let mode = ConnectMode::from_code(self.mode);
         let links = self.max_links.clamp(0, 64) as u32;
         let n = points.len();
-        if reach <= 0.0 || n < 2 || (mode == ConnectMode::Nearby && links == 0) {
+        let nearest = mode == ConnectMode::Nearest;
+        let counted = nearest || mode == ConnectMode::Nearby;
+        if n < 2 || (reach <= 0.0 && !nearest) || (counted && links == 0) {
             return (out, tails);
         }
+        let across = between == Between::PickedAndRest;
+        let allowed = |i: usize, j: usize| !across || points.picked(i) != points.picked(j);
         // Where each point is *seen*, which is where "near enough" is judged.
         // On a 2D layer this is the pair the stream already holds.
         let seen: Vec<[f32; 2]> = (0..n).map(|i| points.projected(i)).collect();
@@ -330,11 +398,16 @@ impl ConnectPoints {
             self.colour[2] * a,
             a,
         ];
-        // One line from point `i` to point `j`, `d` apart.
-        let mut join = |i: usize, j: usize, d: f32| {
+        // One line from point `i` to point `j`, `d` apart, where `span` is
+        // the length that reads as fully faded.
+        let mut join = |i: usize, j: usize, d: f32, span: f32| {
             // How far along its own reach this line is: 0 for two points on
             // top of each other, 1 at exactly Max distance.
-            let u = (d / reach).clamp(0.0, 1.0);
+            let u = if span > 0.0 {
+                (d / span).clamp(0.0, 1.0)
+            } else {
+                0.0
+            };
             let dim = 1.0 - fade * u;
             let mut colour = [0.0f32; 4];
             for (c, k) in colour.iter_mut().zip(0..4) {
@@ -357,15 +430,37 @@ impl ConnectPoints {
         if mode != ConnectMode::Nearby {
             // The other modes name their pairs outright. A pair further apart
             // than Max distance is still not joined.
-            let pairs = match mode {
-                ConnectMode::InOrder => (1..n).map(|j| (j - 1, j)).collect(),
+            let mut pairs = match mode {
+                ConnectMode::InOrder => {
+                    // By the number each point carries. The sort keeps the
+                    // stream's own order where two carry the same.
+                    let mut order: Vec<usize> = (0..n).collect();
+                    order.sort_by(|a, b| points.index_of(*a).total_cmp(&points.index_of(*b)));
+                    let mut pairs: Vec<(usize, usize)> =
+                        order.windows(2).map(|w| (w[0], w[1])).collect();
+                    // Two points are already joined, so only three or more
+                    // have a gap left to close.
+                    let ends = order.first().zip(order.last());
+                    let ends = ends.filter(|_| self.closed && n > 2);
+                    pairs.extend(ends.map(|(first, last)| (*last, *first)));
+                    pairs
+                }
                 ConnectMode::Triangles => Self::mesh(&seen, false),
+                ConnectMode::Nearest => Self::nearest(&flat, links as usize, &apart, &allowed),
                 _ => Self::mesh(&seen, true),
             };
-            for (i, j) in pairs {
-                let d = apart(i, j);
-                if d <= reach {
-                    join(i, j, d);
+            pairs.retain(|(i, j)| allowed(*i, *j));
+            let lengths: Vec<f32> = pairs.iter().map(|(i, j)| apart(*i, *j)).collect();
+            // Nearest has no Max distance, so Taper and Fade run from its
+            // shortest line to its longest. Lines all one length, as on an
+            // even grid, are then all drawn in full rather than all faded out.
+            let longest = lengths.iter().copied().fold(0.0, f32::max);
+            let shortest = lengths.iter().copied().fold(longest, f32::min);
+            for ((i, j), d) in pairs.into_iter().zip(lengths) {
+                if nearest {
+                    join(i, j, d - shortest, longest - shortest);
+                } else if d <= reach {
+                    join(i, j, d, reach);
                 }
             }
             return (out, tails);
@@ -396,7 +491,7 @@ impl ConnectPoints {
                         // Each pair once, and never a point with itself: the
                         // walk is ascending, so the later index owns the pair.
                         let j = j as usize;
-                        if j <= i {
+                        if j <= i || !allowed(i, j) {
                             continue;
                         }
                         let d = apart(i, j);
@@ -420,10 +515,75 @@ impl ConnectPoints {
                 degree[i] += 1;
                 degree[j] += 1;
                 made += 1;
-                join(i, j, d);
+                join(i, j, d, reach);
             }
         }
         (out, tails)
+    }
+
+    /// Each point's `k` nearest of the points it may join, as pairs, each
+    /// once and in a fixed order. `flat` is where the points sit across and
+    /// down, and `apart` how far two of them are from each other.
+    ///
+    /// The points are sorted across, and each one looks left and right only
+    /// until the gap across is already more than its `k`-th best.
+    fn nearest(
+        flat: &[[f32; 2]],
+        k: usize,
+        apart: &dyn Fn(usize, usize) -> f32,
+        allowed: &dyn Fn(usize, usize) -> bool,
+    ) -> Vec<(usize, usize)> {
+        // ponytail: a sorted sweep, not a tree. The ceiling is a stream that
+        // is tall and thin, where every point is close across to every other
+        // and the sweep asks all of them, so n points cost n² distances. A
+        // k-d tree is the upgrade if a column of points has to be fast.
+        let x = |i: usize| flat.get(i).map_or(0.0, |p| p[0]);
+        let mut by_x: Vec<usize> = (0..flat.len()).collect();
+        by_x.sort_by(|a, b| x(*a).total_cmp(&x(*b)).then(a.cmp(b)));
+        let mut pairs: Vec<(usize, usize)> = Vec::new();
+        // The nearest so far, closest first, and the lower index first at
+        // equal distance.
+        let mut best: Vec<(f32, usize)> = Vec::with_capacity(k + 1);
+        for (at, &i) in by_x.iter().enumerate() {
+            if pairs.len() >= points::CAP_HARD as usize {
+                break;
+            }
+            best.clear();
+            // False once `j` is too far across for anything beyond it to be
+            // nearer than what is already held.
+            let mut consider = |j: usize| {
+                let kth = best.get(k.saturating_sub(1)).map_or(f32::INFINITY, |b| b.0);
+                if (x(j) - x(i)).abs() > kth {
+                    return false;
+                }
+                if allowed(i, j) {
+                    let d = apart(i, j);
+                    let slot =
+                        best.partition_point(|b| b.0.total_cmp(&d).then(b.1.cmp(&j)).is_lt());
+                    if slot < k {
+                        best.insert(slot, (d, j));
+                        best.truncate(k);
+                    }
+                }
+                true
+            };
+            let (left, right) = by_x.split_at(at);
+            for &j in right.iter().skip(1) {
+                if !consider(j) {
+                    break;
+                }
+            }
+            for &j in left.iter().rev() {
+                if !consider(j) {
+                    break;
+                }
+            }
+            pairs.extend(best.iter().map(|b| (i.min(b.1), i.max(b.1))));
+        }
+        // Two points that chose each other are one line.
+        pairs.sort_unstable();
+        pairs.dedup();
+        pairs
     }
 
     /// The pairs a triangulation of `seen` joins, each once and in a fixed

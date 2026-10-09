@@ -48,10 +48,12 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use lumit_core::anim::Property;
+use lumit_core::graph::{Edge, InputRef, NodeRef, OutputRef};
 use lumit_core::mask::{BezierPath, Mask, MaskMode, Vertex};
 use lumit_core::model::{
-    Composition, Document, EffectInstance, EffectValue, FileParam, FootageItem, Layer, LayerKind,
-    LinearColour, MediaRef, MotionBlur, ProjectItem, Switches, TransformGroup,
+    Composition, Document, EffectInstance, EffectValue, FileParam, Fingerprint, FootageItem, Layer,
+    LayerKind, LinearColour, MediaRef, MotionBlur, ProjectItem, Switches, TextDocument,
+    TransformGroup,
 };
 use lumit_core::retime::Interpolation;
 use lumit_core::time::{CompTime, Duration, FrameRate, Rational};
@@ -230,6 +232,73 @@ fn showcase(match_name: &str) -> Vec<(&'static str, EffectValue)> {
             ("max_points", f(400_000.0)),
         ],
 
+        // --- the ones that read a points stream, staged by points_above ---
+        // Big in the middle and small at the edge, warm to cool. The curve is
+        // turned over because Distance counts up from the centre.
+        "vary_points" => vec![
+            ("pattern", choice(3)),
+            ("curve", EffectValue::Curve(vec![[0.0, 1.0], [1.0, 0.0]])),
+            ("centre_y", f(f64::from(H) / 2.0)),
+            ("radius", f(820.0)),
+            ("size", f(330.0)),
+            ("colour_start", colour([0.1, 0.35, 1.0, 1.0])),
+            ("colour", colour([1.0, 0.4, 0.05, 1.0])),
+        ],
+        // Keeps the points inside a circle. The lattice above is drawn faint,
+        // so the ones dropped are still there to compare against.
+        "pick_points" => vec![
+            ("pattern", choice(3)),
+            ("to", f(99.0)),
+            ("centre_y", f(f64::from(H) / 2.0)),
+            ("radius", f(300.0)),
+        ],
+        "transform_points" => vec![
+            ("anchor_y", f(f64::from(H) / 2.0)),
+            ("rotation", f(25.0)),
+            ("scale_x", f(70.0)),
+            ("scale_y", f(70.0)),
+        ],
+        // Large discs that would lie on top of each other as Scatter left them.
+        "relax_points" => vec![
+            ("use_size", on(true)),
+            ("iterations", f(40.0)),
+            ("strength", f(100.0)),
+        ],
+        // A second of a vortex, which twists the lattice about the middle.
+        "flow_points" => vec![
+            ("field", choice(1)),
+            ("speed", f(170.0)),
+            ("centre_y", f(f64::from(H) / 2.0)),
+            ("radius", f(700.0)),
+        ],
+        // Fit cell, so each copy of the plate is the size of its cell.
+        "clone_to_points" => vec![
+            ("fit", choice(2)),
+            ("cell_width", f(280.0)),
+            ("cell_height", f(130.0)),
+            ("corner_radius", f(14.0)),
+        ],
+        "connect_points" => vec![("max_distance", f(190.0)), ("width", f(3.0))],
+        "trail" => vec![
+            ("back_samples", f(24.0)),
+            ("style", choice(2)),
+            ("scale", f(100.0)),
+        ],
+        "label_points" => vec![("offset_x", f(22.0))],
+        "points_field" => vec![("radius", f(170.0))],
+        "points_along_path" => vec![("count", f(40.0)), ("size", f(18.0))],
+        // The corners it followed, drawn large enough to find on the plate.
+        "track_points" => vec![
+            ("spacing", f(40.0)),
+            ("size", f(26.0)),
+            ("colour", colour([1.0, 0.4, 0.05, 1.0])),
+        ],
+        "text_to_points" => vec![
+            ("place", choice(1)),
+            ("size", f(64.0)),
+            ("colour", colour([1.0, 0.4, 0.05, 1.0])),
+        ],
+
         // --- the ones that read a second picture, wired in wire_aux ---
         "light_wrap" => vec![("width", f(70.0)), ("intensity", f(2.2))],
         "set_matte" => vec![("channel", choice(0))],
@@ -290,7 +359,6 @@ fn showcase(match_name: &str) -> Vec<(&'static str, EffectValue)> {
         // four-pixel particles from a four-hundred-pixel emitter is a faint
         // sprinkle at figure size. Bigger particles, more of them, and a wider
         // mouth make a picture a reader can name.
-        "points_along_path" => vec![("count", f(40.0)), ("size", f(18.0))],
         "particulate" => vec![
             ("emit_rate", f(900.0)),
             ("size", f(14.0)),
@@ -515,6 +583,89 @@ fn animate_speed_up(plate: &mut Layer) {
     });
 }
 
+/// A points producer with its rows set, and its seed pinned so the figure is
+/// the same on every run.
+fn producer(match_name: &str, rows: Vec<(&str, EffectValue)>) -> EffectInstance {
+    let mut e = lumit_core::fx::instantiate(match_name).expect("a points producer");
+    set(&mut e, "seed", EffectValue::Seed(7));
+    for (row, value) in rows {
+        set(&mut e, row, value);
+    }
+    e
+}
+
+/// A Grid centred on this frame. Mix says how strongly it draws its own
+/// points: faint where the figure wants a before to compare against, and
+/// nought where the effect below is the only thing to look at.
+fn lattice(columns: f64, rows: f64, spacing: f64, mix: f64) -> EffectInstance {
+    producer(
+        "grid",
+        vec![
+            ("columns", f(columns)),
+            ("rows", f(rows)),
+            ("spacing_x", f(spacing)),
+            ("spacing_y", f(spacing)),
+            ("position_y", f(f64::from(H) / 2.0)),
+            ("size", f(22.0)),
+            ("mix", f(mix)),
+        ],
+    )
+}
+
+/// What sits above a points effect on its layer, and the socket each one's
+/// stream is wired into. An effect that reads a stream draws nothing without
+/// one, so its figure is the effect, a producer and the wire between them.
+fn points_above(match_name: &str) -> Vec<(&'static str, EffectInstance)> {
+    let scatter = |density: f64, size: f64, mix: f64| {
+        let rows = vec![("density", f(density)), ("size", f(size)), ("mix", f(mix))];
+        producer("scatter", rows)
+    };
+    match match_name {
+        "vary_points" => vec![("points", lattice(16.0, 7.0, 105.0, 0.0))],
+        "flow_points" => vec![("points", lattice(24.0, 10.0, 70.0, 0.0))],
+        "pick_points" | "transform_points" => {
+            vec![("points", lattice(16.0, 7.0, 105.0, 30.0))]
+        }
+        "label_points" => vec![("points", lattice(8.0, 4.0, 200.0, 100.0))],
+        // Under Fit cell a point's size is a per cent of the cell.
+        "clone_to_points" => {
+            let mut cells = lattice(6.0, 5.0, 300.0, 0.0);
+            set(&mut cells, "spacing_y", f(140.0));
+            set(&mut cells, "size", f(100.0));
+            vec![("points", cells)]
+        }
+        // A lattice and a set of rings in two colours, drawn as one stream.
+        "merge_points" => {
+            let mut rows = lattice(16.0, 7.0, 105.0, 0.0);
+            set(&mut rows, "colour", colour([0.1, 0.35, 1.0, 1.0]));
+            let mut rings = lattice(24.0, 3.0, 105.0, 0.0);
+            set(&mut rings, "layout", choice(2));
+            set(&mut rings, "colour", colour([1.0, 0.4, 0.05, 1.0]));
+            vec![("points", rows), ("points_b", rings)]
+        }
+        "relax_points" => vec![("points", scatter(1.6, 46.0, 0.0))],
+        "connect_points" => vec![("points", scatter(1.0, 16.0, 100.0))],
+        "points_field" => vec![("points", scatter(0.5, 16.0, 0.0))],
+        // Something that moves, since a trail is where a point has been: a
+        // fountain, so the tails bend.
+        "trail" => vec![(
+            "points",
+            producer(
+                "particulate",
+                vec![
+                    ("position_y", f(f64::from(H) * 0.8)),
+                    ("emit_rate", f(40.0)),
+                    ("spread", f(80.0)),
+                    ("initial_speed", f(900.0)),
+                    ("gravity", f(900.0)),
+                    ("size", f(16.0)),
+                ],
+            ),
+        )],
+        _ => Vec::new(),
+    }
+}
+
 /// Effects the example frame cannot honestly illustrate. Posterize time holds
 /// one frame for several, which is a change to the clock and shows only in
 /// motion. Matte key wants a screen to pull, and this frame has none, so every
@@ -536,7 +687,7 @@ fn unillustrable(match_name: &str) -> Option<&'static str> {
         // points for something else to use, and reaches whatever it drives
         // through a wire in the node graph. There is no picture of one.
         "wiggle" | "smooth" | "math" | "remap" | "audio_level" | "colour_cycle"
-        | "points_sample" | "layer_points" | "split" | "combine" | "expression" => {
+        | "points_sample" | "layer_points" | "split" | "combine" | "expression" | "clone_index" => {
             Some("a driver: it answers with a value, not a picture")
         }
         // The Compositing family. Merge lays one picture over another, Switch
@@ -552,14 +703,6 @@ fn unillustrable(match_name: &str) -> Option<&'static str> {
         // And the effect that applies a graph: it shows whatever graph it is
         // bound to, and this harness has no node graph composition to bind.
         "node_graph" => Some("applies a node graph, and there is none in this project"),
-        // The points effects that *consume* a stream. Their points arrive on a
-        // wire-only input (points-stream.md §4.1), which exists in the node
-        // graph and nowhere else, and this harness stages one effect on one
-        // layer with no graph behind it. With no stream in they draw nothing,
-        // and a showcase entry cannot supply one — only a wire can.
-        "clone_to_points" | "trail" | "connect_points" | "vary_points" | "pick_points" => {
-            Some("draws what a wired points stream gives it, and there is no graph here")
-        }
         // **Not a nature — a defect.** The physical flare adds nothing to a
         // headless render: the frame comes back bit-identical to the plate at
         // the defaults and still bit-identical with Intensity at 3.5 and an
@@ -699,16 +842,54 @@ fn example_doc(
     // hidden-layer-still-answers rule the depth pass rides. What the page then
     // shows is exactly what the effect keeps: the highlights as a cloud of
     // points, on nothing.
+    //
+    // The effects that read a points stream are staged the same way, for the
+    // same reason, with their producers above them on the solid and a wire
+    // from each. Clone to points stamps the hidden plate. The producers that
+    // need no picture under them sit there alone.
     let mut fx = fx;
     let mut board = None;
-    if fx
-        .as_ref()
-        .is_some_and(|f| f.effect.match_name == "emit_from_image")
-    {
+    let mut words = None;
+    let name = fx.as_ref().map(|f| f.effect.match_name.clone());
+    let above = points_above(name.as_deref().unwrap_or(""));
+    let alone = matches!(
+        name.as_deref(),
+        Some("emit_from_image" | "text_to_points" | "points_along_path")
+    );
+    if alone || !above.is_empty() {
         let mut f = fx.take().expect("checked above");
         plate.switches.visible = false;
-        if let Some(p) = f.params.iter_mut().find(|p| p.id == "source") {
-            p.value = EffectValue::Layer(Some(id("Plate")));
+        for row in ["source", "clone_layer"] {
+            set(&mut f, row, EffectValue::Layer(Some(id("Plate"))));
+        }
+        // The two that read a Text layer get one. Label points only reads its
+        // wording, so that one is hidden.
+        if f.params.iter().any(|p| p.id == "text_layer") {
+            let labels = name.as_deref() == Some("label_points");
+            let mut t = layer(
+                "Words",
+                LayerKind::Text {
+                    document: TextDocument {
+                        text: if labels { "{index}" } else { "Lumit" }.into(),
+                        expression: None,
+                        size: if labels { 44.0 } else { 300.0 },
+                        fill: LinearColour([1.0, 1.0, 1.0, 1.0]),
+                        path: None,
+                        path_offset: Property::zero(),
+                        animators: Vec::new(),
+                        style: Default::default(),
+                        paragraph: Default::default(),
+                        extra: serde_json::Map::new(),
+                    },
+                },
+                span,
+            );
+            t.switches.visible = !labels;
+            // Text sits in the top left corner until it is moved.
+            t.transform.position_x = Property::fixed(570.0);
+            t.transform.position_y = Property::fixed(290.0);
+            set(&mut f, "text_layer", EffectValue::Layer(Some(t.id)));
+            words = Some(t);
         }
         let mut b = layer(
             "Board",
@@ -717,7 +898,27 @@ fn example_doc(
             },
             span,
         );
-        b.effects = vec![f];
+        // The path Points along path follows goes with it.
+        b.masks = std::mem::take(&mut plate.masks);
+        b.graph.edges = above
+            .iter()
+            .map(|(port, p)| Edge {
+                from: OutputRef::EffectData {
+                    effect: p.id,
+                    port: "points".into(),
+                },
+                to: InputRef::Param {
+                    node: NodeRef::Effect(f.id),
+                    port: (*port).into(),
+                },
+            })
+            .collect();
+        // Text to points goes on the Text layer itself, so its points sit on
+        // the letters wherever the layer is.
+        match words.as_mut().filter(|t| t.switches.visible) {
+            Some(t) => t.effects = vec![f],
+            None => b.effects = above.into_iter().map(|(_, p)| p).chain([f]).collect(),
+        }
         board = Some(b);
     }
 
@@ -737,6 +938,7 @@ fn example_doc(
 
     let mut layers = Vec::new();
     layers.extend(adjustment);
+    layers.extend(words);
     layers.extend(board);
     layers.push(plate);
     if let Some(aux) = aux_layer(depth, span) {
@@ -916,6 +1118,27 @@ fn render_every_effect_example() {
         }
         for (row, value) in showcase(e.match_name) {
             set(&mut inst, row, value);
+        }
+        // Track points draws what an analysis found, so the plate is analysed
+        // first. It is two seconds of clip, read once.
+        if e.match_name == "track_points" {
+            use lumit_render::track::{points_job_for, progress, request, Progress};
+            let item = id("plate.mp4");
+            let plate = layer("Plate", LayerKind::Footage { item }, rat(DURATION_S, 1));
+            let print = Fingerprint {
+                size: std::fs::metadata(&clip).map_or(0, |m| m.len()),
+                mtime_secs: 0,
+                head_tail_hash: String::new(),
+            };
+            let job = points_job_for(&plate, &inst, clip.clone(), &print, true)
+                .expect("the plate is footage");
+            request(job);
+            while matches!(
+                progress(inst.id),
+                Some(Progress::Queued | Progress::Tracking { .. } | Progress::Solving)
+            ) {
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
         }
 
         let (doc, comp_id) = example_doc(&clip, depth.as_deref(), Some(inst));

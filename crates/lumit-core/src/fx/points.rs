@@ -342,6 +342,7 @@ pub fn outline_polyline(e: &Emitter) -> MaskPolyline {
         closed: true,
         feather: 0.0,
         expansion: 0.0,
+        corners: Vec::new(),
     }
 }
 
@@ -505,9 +506,102 @@ pub struct PointsStream {
     /// not a second thing to thread beside it. [`Projection::FLAT`] on a 2D
     /// layer, and in the driver walk's px@comp evaluation of a 2D layer.
     pub projection: Projection,
+    /// How far each point's size is stretched across and down, in its own
+    /// turned frame. 1 is unstretched. **Empty means no point is**, which is
+    /// what every producer hands out.
+    pub stretch: Vec<[f32; 2]>,
+    /// Which points are picked, 1 or 0, for the effects that act on only some
+    /// of a stream. **Empty means all of them.**
+    pub pick: Vec<f32>,
+    /// A number each point carries for the effects below to read: which of
+    /// several layers to stamp, how far to offset it in time, where it comes
+    /// in an order. **Empty means its place in the stream.**
+    pub index: Vec<f32>,
 }
 
 impl PointsStream {
+    /// Point `i`'s stretch, `[1, 1]` where none was set.
+    #[must_use]
+    pub fn stretch_of(&self, i: usize) -> [f32; 2] {
+        self.stretch.get(i).copied().unwrap_or([1.0; 2])
+    }
+
+    /// Whether point `i` is picked. Every point is until something says not.
+    #[must_use]
+    pub fn picked(&self, i: usize) -> bool {
+        self.pick.get(i).is_none_or(|p| *p > 0.5)
+    }
+
+    /// The number point `i` carries, its place in the stream where none was
+    /// set.
+    #[must_use]
+    pub fn index_of(&self, i: usize) -> f32 {
+        self.index.get(i).copied().unwrap_or(i as f32)
+    }
+
+    /// The stretch column, filled in for every point so it can be written.
+    pub fn stretch_mut(&mut self) -> &mut Vec<[f32; 2]> {
+        let n = self.len();
+        self.stretch.resize(n, [1.0; 2]);
+        &mut self.stretch
+    }
+
+    /// The pick column, filled in for every point so it can be written.
+    pub fn pick_mut(&mut self) -> &mut Vec<f32> {
+        let n = self.len();
+        self.pick.resize(n, 1.0);
+        &mut self.pick
+    }
+
+    /// The index column, filled in for every point so it can be written.
+    pub fn index_mut(&mut self) -> &mut Vec<f32> {
+        let n = self.len();
+        for i in self.index.len()..n {
+            self.index.push(i as f32);
+        }
+        self.index.truncate(n);
+        &mut self.index
+    }
+
+    /// `other`'s points added after this stream's own. The camera stays this
+    /// stream's. The result is no longer in `id` order.
+    pub fn append(&mut self, other: &PointsStream) {
+        // Fill the optional columns in first if either side carries one.
+        // Decided here and not from the column in the loop, since a stream
+        // with no points yet has every column empty.
+        let stretch = !self.stretch.is_empty() || !other.stretch.is_empty();
+        let pick = !self.pick.is_empty() || !other.pick.is_empty();
+        let index = !self.index.is_empty() || !other.index.is_empty();
+        if stretch {
+            self.stretch_mut();
+        }
+        if pick {
+            self.pick_mut();
+        }
+        if index {
+            self.index_mut();
+        }
+        for i in 0..other.len() {
+            if stretch {
+                self.stretch.push(other.stretch_of(i));
+            }
+            if pick {
+                self.pick.push(if other.picked(i) { 1.0 } else { 0.0 });
+            }
+            if index {
+                self.index.push(other.index_of(i));
+            }
+        }
+        self.position.extend_from_slice(&other.position);
+        self.speed.extend_from_slice(&other.speed);
+        self.age.extend_from_slice(&other.age);
+        self.life.extend_from_slice(&other.life);
+        self.size.extend_from_slice(&other.size);
+        self.rotation.extend_from_slice(&other.rotation);
+        self.colour.extend_from_slice(&other.colour);
+        self.id.extend_from_slice(&other.id);
+    }
+
     /// How many particles are live this frame.
     #[must_use]
     pub fn len(&self) -> usize {
@@ -577,6 +671,9 @@ impl PointsStream {
             colour: self.colour.clone(),
             id: self.id.clone(),
             projection: self.projection.rescaled(s),
+            stretch: self.stretch.clone(),
+            pick: self.pick.clone(),
+            index: self.index.clone(),
         }
     }
 
@@ -606,17 +703,35 @@ impl PointsStream {
         let near: Vec<f32> = (0..self.len()).map(|i| self.depth_scale(i)).collect();
         let mut order: Vec<usize> = (0..self.len()).collect();
         order.sort_by(|a, b| near[*a].total_cmp(&near[*b]));
+        self.reorder(&order);
+    }
+
+    /// The points in ascending `id` order, which is the order Trail and the
+    /// other readers walk a stream in. Points with the same `id` keep the
+    /// order they were in.
+    pub fn sort_by_id(&mut self) {
+        let mut order: Vec<usize> = (0..self.len()).collect();
+        order.sort_by_key(|i| self.id.get(*i).copied().unwrap_or(0));
+        self.reorder(&order);
+    }
+
+    /// The same points in another order: place `k` takes the point that was
+    /// at `order[k]`.
+    fn reorder(&mut self, order: &[usize]) {
         fn pick<T: Copy>(v: &mut Vec<T>, order: &[usize]) {
             *v = order.iter().filter_map(|i| v.get(*i).copied()).collect();
         }
-        pick(&mut self.position, &order);
-        pick(&mut self.speed, &order);
-        pick(&mut self.age, &order);
-        pick(&mut self.life, &order);
-        pick(&mut self.size, &order);
-        pick(&mut self.rotation, &order);
-        pick(&mut self.colour, &order);
-        pick(&mut self.id, &order);
+        pick(&mut self.position, order);
+        pick(&mut self.speed, order);
+        pick(&mut self.age, order);
+        pick(&mut self.life, order);
+        pick(&mut self.size, order);
+        pick(&mut self.rotation, order);
+        pick(&mut self.colour, order);
+        pick(&mut self.id, order);
+        pick(&mut self.stretch, order);
+        pick(&mut self.pick, order);
+        pick(&mut self.index, order);
     }
 
     /// Keep the points `keep` answers true for, by index, in the order they
@@ -638,6 +753,15 @@ impl PointsStream {
         sift(&mut self.rotation, &flags);
         sift(&mut self.colour, &flags);
         sift(&mut self.id, &flags);
+        if !self.stretch.is_empty() {
+            sift(&mut self.stretch, &flags);
+        }
+        if !self.pick.is_empty() {
+            sift(&mut self.pick, &flags);
+        }
+        if !self.index.is_empty() {
+            sift(&mut self.index, &flags);
+        }
     }
 
     /// Keep the **newest `n`** particles by birth index, dropping the rest.
@@ -661,6 +785,14 @@ impl PointsStream {
         self.rotation.drain(..cut);
         self.colour.drain(..cut);
         self.id.drain(..cut);
+        for column in [&mut self.pick, &mut self.index] {
+            if column.len() == len {
+                column.drain(..cut);
+            }
+        }
+        if self.stretch.len() == len {
+            self.stretch.drain(..cut);
+        }
     }
 }
 
@@ -978,7 +1110,7 @@ pub struct PointsSchedule {
     /// per sample per frame, memoised per producer. points-stream.md §3.3
     /// designs a GPU arena carriage for when a profile shows a real comp
     /// spending it.) A producer whose points depend on a picture leaves this
-    /// empty and the walk fills it, see [`late_from`](Self::late_from).
+    /// empty and the walk fills it, see [`late`](Self::late).
     pub input: Vec<PointsStream>,
     /// Which effect in the layer's stack the wire came from, by index — folded
     /// into the frame key, and read for nothing else.
@@ -991,10 +1123,39 @@ pub struct PointsSchedule {
     /// so a duplicated layer still hits the per-effect cache: a key
     /// names content, never which row it came from.
     pub input_from: Option<u32>,
-    /// The slot in this list of the op whose stream this one reads, when that
-    /// stream could not be made before the render: its points depend on a
-    /// picture. The walk asks that op for it on the card and fills `input`.
-    pub late_from: Option<u32>,
+    /// The entries of `input` that could not be made before the render,
+    /// because their points depend on a picture: which entry, and the slot in
+    /// this list of the op that makes it. The walk asks that op for it on the
+    /// card and fills the entry in.
+    pub late: Vec<(u32, u32)>,
+    /// For an effect with several Points inputs: which effect in the stack
+    /// each input after the first is wired from, by index, and `u32::MAX` for
+    /// none. Folded into the frame key as `input_from` is. `input` then holds
+    /// one stream per input instead of a history.
+    pub ports_from: Vec<u32>,
+    /// For Text to points: the letters of the Text layer its row names, laid
+    /// out at this frame's time. The text engine sits above this crate, so
+    /// the draw builder lays them out and the effect reads them here.
+    pub text: Vec<TextGlyph>,
+    /// For Label points: the Text layer its row names, with `text` already
+    /// the words it reads at this frame's time. Folded into the frame key.
+    pub label: Option<Box<crate::model::TextDocument>>,
+}
+
+/// One letter of a Text layer as it is laid out, in the layer's own px. A
+/// line break is not one, and a space only when the effect asks for spaces.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TextGlyph {
+    /// Where its pen starts, on the baseline.
+    pub origin: [f32; 2],
+    /// Where its pen ends, on the baseline.
+    pub end: [f32; 2],
+    /// From the baseline to the middle of the line's height. Straight up for
+    /// a straight line, and turned with the curve for text on a path.
+    pub up: [f32; 2],
+    /// Which word it is in and which line it is on, counted from 0.
+    pub word: u32,
+    pub line: u32,
 }
 
 /// One producer's cached birth scan (particulate.md §3.1,
@@ -1423,6 +1584,33 @@ pub struct Sprite<'a> {
     pub h: u32,
 }
 
+/// How a sprite sits on its point. The default is what Particulate stamps: a
+/// square of the point's size with the whole picture across it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SpriteFit {
+    /// The stamp's width and height, as multiples of the point's size.
+    pub unit: [f32; 2],
+    /// The place on the stamp that sits on the point, 0 to 1 from its top
+    /// left corner. The stamp turns about it.
+    pub anchor: [f32; 2],
+    /// How many times the picture's width and height the stamp is. Above 1
+    /// leaves the stamp empty round the picture, below 1 cuts the picture off.
+    pub uv: [f32; 2],
+    /// Corner radius, px on the stamp of a point whose size is 100.
+    pub corner: f32,
+}
+
+impl Default for SpriteFit {
+    fn default() -> Self {
+        Self {
+            unit: [1.0; 2],
+            anchor: [0.5; 2],
+            uv: [1.0; 2],
+            corner: 0.0,
+        }
+    }
+}
+
 /// The shortest distance from `p` to the segment `a`–`b`.
 ///
 /// The one shape all three modes share: with `a == b` it is the distance to a
@@ -1495,6 +1683,7 @@ pub fn scale_path(poly: &MaskPolyline, px_scale: f32) -> MaskPolyline {
         // by a different amount at every preview divisor.
         feather: poly.feather * k,
         expansion: poly.expansion * k,
+        corners: poly.corners.clone(),
     }
 }
 
@@ -1564,6 +1753,22 @@ pub fn draw_stream(
     style: &DrawStyle,
     sprite: Option<Sprite<'_>>,
 ) {
+    draw_stream_fit(rgba, w, h, s, tails, style, sprite, &SpriteFit::default());
+}
+
+/// [`draw_stream`], with a say in how a sprite sits on its point. Clone to
+/// points' reference draw. `fit` is unread in the other two modes.
+#[allow(clippy::too_many_arguments)]
+pub fn draw_stream_fit(
+    rgba: &mut [f32],
+    w: u32,
+    h: u32,
+    s: &PointsStream,
+    tails: &[[f32; 3]],
+    style: &DrawStyle,
+    sprite: Option<Sprite<'_>>,
+    fit: &SpriteFit,
+) {
     let feather = style.feather.clamp(0.0, 1.0);
     let mix = style.mix.clamp(0.0, 1.0);
     // Sprite with nothing to stamp falls back to the disc, here and in the
@@ -1599,10 +1804,18 @@ pub fn draw_stream(
         // the lens.
         let tail = tails.get(i).map_or(head, |t| s.projection.apply(*t).0);
         let (rot_s, rot_c) = s.rotation.get(i).copied().unwrap_or(0.0).sin_cos();
-        // A rotated square reaches √2 of its half-side at the corners; a
-        // capsule reaches its radius past either end.
+        let stretch = s.stretch_of(i);
+        // A stretched dot is an ellipse in the point's own turned frame. A
+        // capsule keeps its round ends.
+        let oval = (stretch != [1.0; 2] && tail == head).then_some(stretch);
+        let widest = stretch[0].max(stretch[1]);
+        // A turned stamp reaches as far as its furthest corner from the
+        // point, a capsule its radius past either end.
+        let far = |k: usize| size * stretch[k] * fit.unit[k] * (0.5 + (fit.anchor[k] - 0.5).abs());
         let reach = if sprite.is_some() {
-            radius * std::f32::consts::SQRT_2
+            far(0).hypot(far(1))
+        } else if oval.is_some() {
+            radius * widest
         } else {
             radius
         };
@@ -1627,18 +1840,60 @@ pub fn draw_stream(
                         // then measure across a square of its size.
                         let lx = dx * rot_c + dy * rot_s;
                         let ly = -dx * rot_s + dy * rot_c;
-                        let (u, v) = (lx / size + 0.5, ly / size + 0.5);
+                        let (u, v) = (
+                            lx / (size * stretch[0] * fit.unit[0]) + 0.5 + (fit.anchor[0] - 0.5),
+                            ly / (size * stretch[1] * fit.unit[1]) + 0.5 + (fit.anchor[1] - 0.5),
+                        );
                         if !(0.0..=1.0).contains(&u) || !(0.0..=1.0).contains(&v) {
                             continue;
                         }
-                        let t = sprite_tap(sp, u, v);
+                        // Rounded corners, measured on the stamp of a point
+                        // whose size is 100 so they turn and scale with it.
+                        let mut cover = 1.0;
+                        if fit.corner > 0.0 {
+                            let b = [50.0 * fit.unit[0], 50.0 * fit.unit[1]];
+                            let r = fit.corner.min(b[0]).min(b[1]);
+                            let d = [
+                                (u - 0.5).abs() * 100.0 * fit.unit[0] - (b[0] - r),
+                                (v - 0.5).abs() * 100.0 * fit.unit[1] - (b[1] - r),
+                            ];
+                            if d[0] > 0.0 && d[1] > 0.0 {
+                                // Half a pixel of ramp, as a disc's edge has.
+                                let px = size * stretch[0].min(stretch[1]) / 100.0;
+                                cover = ((r - d[0].hypot(d[1])) * px + 0.5).clamp(0.0, 1.0);
+                            }
+                        }
+                        // More or less of the picture across the stamp. Past
+                        // the picture's own edge the stamp is empty.
+                        let (tu, tv) = (
+                            u + (u - 0.5) * (fit.uv[0] - 1.0),
+                            v + (v - 0.5) * (fit.uv[1] - 1.0),
+                        );
+                        if !(0.0..=1.0).contains(&tu) || !(0.0..=1.0).contains(&tv) {
+                            continue;
+                        }
+                        let t = sprite_tap(sp, tu, tv);
                         // Both are premultiplied, so the tint is the plain
                         // product: the sprite's own colour times the
                         // particle's, its alpha times the particle's.
-                        [t[0] * src[0], t[1] * src[1], t[2] * src[2], t[3] * src[3]]
+                        [
+                            t[0] * src[0] * cover,
+                            t[1] * src[1] * cover,
+                            t[2] * src[2] * cover,
+                            t[3] * src[3] * cover,
+                        ]
                     }
                     None => {
-                        let cov = ((radius - seg_distance(p, tail, head)) / edge).clamp(0.0, 1.0);
+                        let cov = match oval {
+                            Some(st) => {
+                                let (dx, dy) = (p[0] - head[0], p[1] - head[1]);
+                                let lx = (dx * rot_c + dy * rot_s) / st[0];
+                                let ly = (-dx * rot_s + dy * rot_c) / st[1];
+                                (radius - lx.hypot(ly)) * st[0].min(st[1]) / edge
+                            }
+                            None => (radius - seg_distance(p, tail, head)) / edge,
+                        }
+                        .clamp(0.0, 1.0);
                         if cov <= 0.0 {
                             continue;
                         }

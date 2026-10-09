@@ -3,11 +3,13 @@ title: Connect points
 description: "Joins points that are near each other with lines."
 ---
 
+import Compare from "../../../../components/Compare.astro";
+
 Connect points is a **Generate** effect.
 
 {/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-
+<Compare label="Connect points" category="generate" slug="connect-points" />
 
 {/* END GENERATED */}
 
@@ -25,9 +27,11 @@ Each line takes the average of the colours of its two points. **Colour** multipl
 
 | Parameter | Control | Range | Default | Unit |
 | --- | --- | --- | --- | --- |
-| **Mode** | Dropdown | Nearby · In order · Triangles · Outline | Nearby | - |
+| **Mode** | Dropdown | Nearby · In order · Triangles · Outline · Nearest | Nearby | - |
+| **Between** | Dropdown | All points · Picked · Picked and the rest | All points | - |
 | **Max distance** | Slider | 0 to 1000; higher | 120 | Pixels at composition size |
 | **Max connections** | Slider, whole numbers | 0 to 32; up to 64 | 4 | - |
+| **Closed** | Checkbox | On or off | Off | - |
 | **Depth** | Checkbox | On or off | Off | - |
 | **Taper** | Slider | 0 to 100 | 0 | Per cent |
 | **Fade** | Slider | 0 to 100 | 100 | Per cent |
@@ -43,9 +47,13 @@ Each line takes the average of the colours of its two points. **Colour** multipl
 
 In the Effect Controls panel:
 
-- **Connections** groups **Mode**, **Max distance**, **Max connections**, **Depth**, **Taper**, **Fade**.
+- **Connections** groups **Mode**, **Between**, **Max distance**, **Max connections**, **Closed**, **Depth**, **Taper**, **Fade**.
 - **Line** groups **Width**, **Feather**, **Colour**, **Max points**.
-- **Max connections** is editable while **Mode** is set to Nearby.
+- **Max connections** is editable while **Mode** is anything but In order.
+- **Max connections** is editable while **Mode** is anything but Triangles.
+- **Max connections** is editable while **Mode** is anything but Outline.
+- **Max distance** is editable while **Mode** is anything but Nearest.
+- **Closed** is editable while **Mode** is set to In order.
 - **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
 
 {/* END GENERATED */}
@@ -53,12 +61,19 @@ In the Effect Controls panel:
 ## What each control does
 
 - **Mode**: which points are joined. **Nearby** joins every pair closer than Max distance,
-  up to Max connections at each point. **In order** joins each point to the next one in the
-  stream. **Triangles** draws a mesh of triangles over the points. **Outline** draws only
-  the lines round the outside.
+  up to Max connections at each point. **In order** joins each point to the next, in the
+  order of the number each carries. **Triangles** draws a mesh of triangles over the points.
+  **Outline** draws only the lines round the outside. **Nearest** joins each point to its
+  closest few, however far off they are, and runs Taper and Fade from its shortest line to
+  its longest.
+- **Between**: which points a line may run between. **Picked** joins picked points only.
+  **Picked and the rest** joins a picked point to one that is not. See
+  [Pick points](/effects/generate/pick-points/).
 - **Max distance**: how far apart two points may be and still be joined. A longer line is
-  dropped in every mode.
-- **Max connections**: the most lines that may meet at any one point, in Nearby.
+  dropped in every mode but Nearest.
+- **Max connections**: the most lines that may meet at any one point, in Nearby. In Nearest
+  it is how many neighbours each point reaches for.
+- **Closed**: joins the last point of In order back to the first.
 - **Depth**: measures Max distance between the points themselves in all three axes, rather
   than between where the camera puts them on the frame. The two differ only on a 3D layer
   with a camera.

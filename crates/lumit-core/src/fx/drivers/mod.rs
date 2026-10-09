@@ -5,10 +5,10 @@
 //!
 //! A driver makes a *value* rather than a picture, and a wire from a driver
 //! into an effect's socket makes that parameter follow the value instead of its
-//! keyframes. This module holds the eleven of them — Wiggle, Audio level,
+//! keyframes. This module holds the twelve of them — Wiggle, Audio level,
 //! Colour cycle, Math, Remap, Smooth, Split, Combine, Points sample, Layer
-//! points, Expression — and the small walk that works out, at one frame, what
-//! every wire is carrying.
+//! points, Expression, Clone index — and the small walk that works out, at
+//! one frame, what every wire is carrying.
 //!
 //! **One of them carries no value at all.** Layer points is a *source*:
 //! it names another layer and hands out that layer's points stream, so what
@@ -55,6 +55,7 @@ use crate::graph::{InputRef, LayerGraph, NodeRef, OutputRef};
 use crate::model::EffectInstance;
 
 pub mod audio_level;
+pub mod clone_index;
 pub mod colour_cycle;
 pub mod combine;
 pub mod expression;
@@ -166,7 +167,15 @@ pub fn resolve_drivers_in(
     audio: Option<&dyn AudioTap>,
     stack: Option<&[EffectInstance]>,
 ) -> ResolvedDrivers {
-    resolved(graph, lt, context, audio, points::Projection::FLAT, stack)
+    resolved(
+        graph,
+        lt,
+        context,
+        audio,
+        points::Projection::FLAT,
+        stack,
+        NO_CLONE,
+    )
 }
 
 /// [`resolve_drivers`], told where the composition's camera puts a particle
@@ -190,10 +199,29 @@ pub fn resolve_drivers_projected(
     audio: Option<&dyn AudioTap>,
     projection: points::Projection,
 ) -> ResolvedDrivers {
-    resolved(graph, lt, context, audio, projection, None)
+    resolved(graph, lt, context, audio, projection, None, NO_CLONE)
 }
 
-/// The one body behind [`resolve_drivers`] and its two twins.
+/// [`resolve_drivers_projected`] for a layer being rendered as one copy of
+/// several, so its Clone index drivers read that copy's number. `clone` is
+/// the copy's index and how many copies there are.
+#[must_use]
+pub fn resolve_drivers_cloned(
+    graph: &LayerGraph,
+    lt: f64,
+    context: Arc<ExpressionContext>,
+    audio: Option<&dyn AudioTap>,
+    projection: points::Projection,
+    clone: (u32, u32),
+) -> ResolvedDrivers {
+    resolved(graph, lt, context, audio, projection, None, clone)
+}
+
+/// What a Clone index driver reads outside a per-clone render: the first copy
+/// of one.
+pub const NO_CLONE: (u32, u32) = (0, 1);
+
+/// The one body behind [`resolve_drivers`] and its twins.
 #[must_use]
 fn resolved(
     graph: &LayerGraph,
@@ -202,6 +230,7 @@ fn resolved(
     audio: Option<&dyn AudioTap>,
     projection: points::Projection,
     stack: Option<&[EffectInstance]>,
+    clone: (u32, u32),
 ) -> ResolvedDrivers {
     if graph.edges.is_empty() {
         return ResolvedDrivers::default();
@@ -216,6 +245,7 @@ fn resolved(
         arenas: RefCell::new(ArenaPool::default()),
         cross: true,
         stack,
+        clone,
     };
     let mut out = ResolvedDrivers::default();
     // Document order in, sorted order out: the wires a layer carries are a
@@ -288,6 +318,7 @@ pub fn driven_volume_db(
         arenas: RefCell::new(ArenaPool::default()),
         cross: true,
         stack: None,
+        clone: NO_CLONE,
     };
     match ev.output(*node, port, lt, 0)? {
         // The Volume property's own hard range (docs/09 §6: −∞ knee at −100,
@@ -325,12 +356,17 @@ pub fn effect_stream(
     audio: Option<&dyn AudioTap>,
     projection: points::Projection,
 ) -> Option<PointsStream> {
-    effect_stream_in(graph, effect, t, context, audio, projection, None)
+    effect_stream_in(graph, effect, t, context, audio, projection, None, NO_CLONE)
 }
 
 /// [`effect_stream`] over a **node graph's** boxes: the producer is found in
 /// `stack` rather than through the context's layer (§5.1).
+///
+/// `clone` is which copy of how many the layer is being rendered as, so a
+/// Clone index wired into the producer reads in the stream what it reads in
+/// the picture. [`NO_CLONE`] everywhere else.
 #[must_use]
+#[allow(clippy::too_many_arguments)]
 pub fn effect_stream_in(
     graph: &LayerGraph,
     effect: Uuid,
@@ -339,6 +375,7 @@ pub fn effect_stream_in(
     audio: Option<&dyn AudioTap>,
     projection: points::Projection,
     stack: Option<&[EffectInstance]>,
+    clone: (u32, u32),
 ) -> Option<PointsStream> {
     // The `Eval` is dropped before the stream is unwrapped, so its own memo is
     // not a second owner and the common case moves rather than copies eight
@@ -354,6 +391,7 @@ pub fn effect_stream_in(
             arenas: RefCell::new(ArenaPool::default()),
             cross: true,
             stack,
+            clone,
         };
         ev.stream(effect, t, 0)
     }?;
@@ -384,14 +422,17 @@ pub fn driver_stream(
     audio: Option<&dyn AudioTap>,
     projection: points::Projection,
 ) -> Option<PointsStream> {
-    driver_stream_in(graph, node, t, context, audio, projection, None)
+    driver_stream_in(graph, node, t, context, audio, projection, None, NO_CLONE)
 }
 
 /// [`driver_stream`] over a **node graph's** boxes. A graph has no layers to
 /// tap, so a Layer points box hand-edited into one reads the empty stream; the
 /// slice is carried all the same, because the wires the tap's own parameters
 /// take are resolved through the same walk.
+///
+/// `clone` is as [`effect_stream_in`] takes it.
 #[must_use]
+#[allow(clippy::too_many_arguments)]
 pub fn driver_stream_in(
     graph: &LayerGraph,
     node: Uuid,
@@ -400,6 +441,7 @@ pub fn driver_stream_in(
     audio: Option<&dyn AudioTap>,
     projection: points::Projection,
     stack: Option<&[EffectInstance]>,
+    clone: (u32, u32),
 ) -> Option<PointsStream> {
     // The `Eval` is dropped before the stream is unwrapped, as `effect_stream`
     // does and for the same reason: the common case moves rather than copies
@@ -415,6 +457,7 @@ pub fn driver_stream_in(
             arenas: RefCell::new(ArenaPool::default()),
             cross: true,
             stack,
+            clone,
         };
         ev.tap_stream(node, t, 0)
     }?;
@@ -528,6 +571,9 @@ struct Eval<'a> {
     /// instances are taken as they are: a box has no fx switch and no mask
     /// list to gate it.
     stack: Option<&'a [EffectInstance]>,
+    /// Which copy of how many this layer is being rendered as, for the Clone
+    /// index driver. [`NO_CLONE`] on every walk but a per-clone render's.
+    clone: (u32, u32),
 }
 
 impl Eval<'_> {
@@ -635,6 +681,7 @@ impl Eval<'_> {
                 audio: self.audio,
                 sample_input: &sample,
                 points_input: &points,
+                clone: self.clone,
             };
             let mut found = None;
             def.eval_driver(&cx, &mut |id, value| {
@@ -786,6 +833,7 @@ impl Eval<'_> {
             cross: false,
             // The far side is a layer, whatever this side is.
             stack: None,
+            clone: self.clone,
         };
         let stream = far.stream(tapped, t, 0);
         self.budget.set(far.budget.get());
@@ -825,15 +873,15 @@ impl Eval<'_> {
         // and no fx switch or mask list to gate them.
         let doc = &self.context.document;
         let comp = doc.comp(self.context.comp?)?;
-        let (inst, masks): (&EffectInstance, &[crate::mask::Mask]) = match self.stack {
-            Some(boxes) => (boxes.iter().find(|e| e.id == effect)?, &[]),
+        let (inst, layer): (&EffectInstance, Option<&crate::model::Layer>) = match self.stack {
+            Some(boxes) => (boxes.iter().find(|e| e.id == effect)?, None),
             None => {
                 let layer_id = self.context.layer?;
                 let layer = comp.layers.iter().find(|l| l.id == layer_id)?;
                 if !layer.switches.fx {
                     return None;
                 }
-                (layer.effects.iter().find(|e| e.id == effect)?, &layer.masks)
+                (layer.effects.iter().find(|e| e.id == effect)?, Some(layer))
             }
         };
         // A bypassed producer draws nothing, so it hands out nothing: the
@@ -884,13 +932,32 @@ impl Eval<'_> {
 
         // An effect that changes a stream makes its own from the one wired
         // into it. Nothing wired is no stream.
-        if let Some(port) = def
-            .signature()
-            .inputs()
-            .iter()
-            .find(|p| p.ty == super::PortType::Points)
-        {
-            let input = self.points_input(NodeRef::Effect(effect), port.id, t, depth + 1)?;
+        if points::consumes_points(def.signature()) {
+            // One stream per Points input. An input with nothing wired reads
+            // as empty. One that is wired to a stream this walk cannot make
+            // leaves the whole stream to be made on the card, so a point
+            // that depends on a picture is never quietly missing.
+            let mut inputs: Vec<Rc<PointsStream>> = Vec::new();
+            let mut any = false;
+            for port in def.signature().inputs() {
+                if port.ty != super::PortType::Points {
+                    continue;
+                }
+                let to = InputRef::Param {
+                    node: NodeRef::Effect(effect),
+                    port: port.id.to_owned(),
+                };
+                if self.graph.wire_into(&to).is_none() {
+                    inputs.push(Rc::new(PointsStream::default()));
+                    continue;
+                }
+                inputs.push(self.points_input(NodeRef::Effect(effect), port.id, t, depth + 1)?);
+                any = true;
+            }
+            if !any {
+                return None;
+            }
+            let inputs: Vec<&PointsStream> = inputs.iter().map(|s| &**s).collect();
             let stream = Rc::new(self.with_arena(|bag| {
                 resolve_into_arena(
                     def,
@@ -904,7 +971,16 @@ impl Eval<'_> {
                     self.context.clone(),
                     &wired,
                 );
-                def.modify_points(bag.get(0)?.params, &input, t)
+                // No picture exists during this walk, so a modifier that
+                // reads one answers `None` here and is made on the card.
+                def.modify_points(
+                    bag.get(0)?.params,
+                    &super::ModifyCx {
+                        inputs: &inputs,
+                        t,
+                        sampled: None,
+                    },
+                )
             })?);
             self.streams.borrow_mut().push((effect, Rc::clone(&stream)));
             return Some(stream);
@@ -942,6 +1018,15 @@ impl Eval<'_> {
                 "points_along_path" => Some(Producer::AlongPath(
                     super::effects::points_along_path::PointsAlongPath::read(params),
                 )),
+                // Read back from the analysis, so it is finished here as a
+                // lattice is.
+                "track_points" => Some(Producer::Grid(Box::new(
+                    super::effects::track_points::TrackPoints::stream(
+                        params,
+                        effect,
+                        self.projection,
+                    ),
+                ))),
                 "particulate" => {
                     let particulate = super::effects::particulate::Particulate::read(params);
                     Some(Producer::Particulate {
@@ -969,16 +1054,13 @@ impl Eval<'_> {
             self.streams.borrow_mut().push((effect, Rc::clone(&stream)));
             return Some(stream);
         }
-        // The mask path's polyline, flattened at composition scale, by the
-        // rule the draw builder applies: a row the panel does not show, or
-        // shows greyed, is a row nobody meant.
+        // The path's polyline, flattened at composition scale, by the one
+        // rule the draw builder also asks.
         let path = match def.schema().mask_path() {
-            Some((param, self_default))
-                if super::param_visible(inst, param) && super::param_enabled(inst, param) =>
-            {
-                crate::mask::mask_path_at(masks, inst.mask_ref(param), self_default, t)
+            Some((param, self_default)) => {
+                crate::mask::effect_path_at(inst, param, self_default, layer, t)
             }
-            _ => crate::mask::MaskPolyline::default(),
+            None => crate::mask::MaskPolyline::default(),
         };
         let (points, window_frames) = match producer {
             Producer::Particulate {
@@ -2118,6 +2200,7 @@ mod tests {
             arenas: RefCell::new(ArenaPool::default()),
             cross: true,
             stack: Some(&stack),
+            clone: NO_CLONE,
         };
         assert!(ev.stream(producer.id, 1.0, 0).is_some());
         let spent = EVAL_BUDGET - ev.budget.get();
@@ -2175,6 +2258,7 @@ mod tests {
             arenas: RefCell::new(ArenaPool::default()),
             cross: true,
             stack: None,
+            clone: NO_CLONE,
         };
         for _ in 0..64 {
             assert!(ev.output(remap.id, "value", 0.0, 0).is_some());
@@ -2239,6 +2323,7 @@ mod tests {
             arenas: RefCell::new(ArenaPool::default()),
             cross: true,
             stack: None,
+            clone: NO_CLONE,
         };
         let _ = ev.output(sampler.id, points_sample::COUNT_PORT, 1.0, 0);
         assert!(

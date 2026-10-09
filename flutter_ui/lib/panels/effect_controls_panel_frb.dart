@@ -2810,7 +2810,8 @@ Widget? customEffectDisplay(
       // thing: a status, but about a *surface* rather than a camera,
       // and filed under this instance rather than under the media — which is
       // why it is the one custom display that needs its effect's own id.
-      'planar_track' => PlanarTrackDisplayFrb(
+      // Track points reports through the same status, so it shares the line.
+      'planar_track' || 'track_points' => PlanarTrackDisplayFrb(
           key: ValueKey<String>('fx-planar-track-display-$effectId'),
           layer: layer,
           effectId: effectId,

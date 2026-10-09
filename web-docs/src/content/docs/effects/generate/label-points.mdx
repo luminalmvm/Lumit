@@ -1,0 +1,83 @@
+---
+title: Label points
+description: "Writes a short piece of text beside every point of a stream."
+---
+
+import Compare from "../../../../components/Compare.astro";
+
+Label points is a **Generate** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+<Compare label="Label points" category="generate" slug="label-points" />
+
+{/* END GENERATED */}
+
+## What it does
+
+Reads the stream on its **Points** socket and writes a label beside every point. The
+wording and the look come from a Text layer. That layer's text is a template, and its font,
+size, colour and style are the labels' own. The Text layer can be hidden and still be read.
+
+| In the template | Written as |
+| --- | --- |
+| `{index}` | The point's place in the stream. |
+| `{number}` | The number it carries. |
+| `{x}` and `{y}` | Where it is seen on the frame, in pixels at composition size. |
+| `{id}` | Its id. |
+| `{size}` | Its size. |
+| `{age}` | Its age. |
+
+Any other text is written as it is, at every point.
+
+Labels follow where the points are seen and do not turn with them. A point behind the
+camera has no label.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Text layer** | Layer | Any layer in the composition | None | - |
+| **Decimals** | Slider, whole numbers | 0 to 4 | 0 | - |
+| **Offset x** | Slider | -200 to 200; any value by typing | 8 | Pixels at composition size |
+| **Offset y** | Slider | -200 to 200; any value by typing | 0 | Pixels at composition size |
+| **Anchor** | Dropdown | Left · Centre · Right | Left | - |
+| **Apply to** | Dropdown | All points · Picked · Not picked | All points | - |
+| **Max labels** | Slider, whole numbers | 1 to 2000 | 300 | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Text layer**: the Text layer whose text is the template and whose look the labels take.
+  Unset draws nothing, unless this effect is on a Text layer.
+- **Decimals**: how many decimal places the numbers in a label are written to.
+- **Offset x** and **Offset y**: how far across and down from its point a label sits.
+- **Anchor**: which part of the label sits at that offset. **Left** runs the text away to
+  the right of it, and **Right** to the left.
+- **Apply to**: which points get a label. See
+  [Pick points](/effects/generate/pick-points/).
+- **Max labels**: the most labels drawn. Past it the newest points keep theirs.
+- **Mix**: how much of the result replaces the picture underneath.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness.
+  See [Effects](/use/effects/).
+
+## Related
+
+- [Text](/use/text/)
+- [Text to points](/effects/generate/text-to-points/)
+- [Vary points](/effects/generate/vary-points/)
+- [The node graph](/use/nodes/)
+- [Generate](/effects/#generate)
+- [Effects](/use/effects/)

@@ -60,6 +60,8 @@ const _bannedWordIsAnotherSense = {
   'fxCameraTrack',
   // The planar tracker is the same verb sense as the camera's.
   'fxPlanarTrack',
+  // And Track points follows things in the picture, the verb again.
+  'fxTrackPoints',
   // The Audio timeline's own column header.
   'columnTrack',
 };

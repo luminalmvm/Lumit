@@ -31,6 +31,7 @@ A particle system.
 | **Height** | Slider | 0 to 2000; higher | 400 | Pixels at composition size |
 | **Depth** | Slider | 0 to 2000; higher | 0 | Pixels at composition size |
 | **Emitter angle** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
+| **Follow** | Dropdown | Mask · Shape | Mask | - |
 | **Mask path** | Masks | This layer's masks | First mask | - |
 | **Emit rate** | Slider | 0 to 1000; higher | 150 | - |
 | **Direction** | Dial | Any angle; snaps every 15° while a modifier is held | -90° | Degrees |
@@ -73,13 +74,14 @@ A particle system.
 
 In the Effect Controls panel:
 
-- **Emitter** groups **Shape**, **Position x**, **Position y**, **Position z**, **Width**, **Height**, **Depth**, **Emitter angle**, **Mask path**, **Emit rate**, **Direction**, **Direction z**, **Spread**, **Spread z**, **Initial speed**, **Speed jitter**.
+- **Emitter** groups **Shape**, **Position x**, **Position y**, **Position z**, **Width**, **Height**, **Depth**, **Emitter angle**, **Follow**, **Mask path**, **Emit rate**, **Direction**, **Direction z**, **Spread**, **Spread z**, **Initial speed**, **Speed jitter**.
 - **Particle** groups **Life**, **Life jitter**, **Size**, **Size jitter**, **Size over life**, **Opacity over life**, **Colour**, **End colour**, **Rotation**, **Rotation jitter**, **Spin**, **Align to motion**.
 - **Forces** groups **Gravity**, **Wind x**, **Wind y**, **Wind z**, **Drag**, **Turbulence amount**, **Turbulence scale**, **Turbulence speed**.
 - **Render** groups **Mode**, **Feather**, **Sprite layer**, **Streak length**, **Max particles**, **Seed**.
 - **Feather** is editable while **Mode** is set to Disc.
 - **Sprite layer** is editable while **Mode** is set to Sprite.
 - **Streak length** is editable while **Mode** is set to Streak.
+- **Mask path** is editable while **Follow** is anything but Shape.
 - **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
 
 {/* END GENERATED */}
@@ -93,6 +95,10 @@ The **Emitter** group — where particles come from and travel:
 - **Width** and **Height**: how big the emitter is.
 - **Depth**: how far the emitter reaches through the plane.
 - **Emitter angle**: turns Line, Ellipse and Rectangle about Position.
+- **Follow**: what a Mask path emitter walks. **Mask** is one of the layer's masks. **Shape**
+  is the outline the Shape layer the effect is on draws, after any trim, offset or combine,
+  one outline after another, repeater copies included. On any other layer Shape emits
+  nothing.
 - **Mask path**: which of the layer's masks particles are emitted from.
 - **Emit rate**: new particles per second.
 - **Direction**: which way particles travel.

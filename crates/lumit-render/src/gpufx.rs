@@ -83,7 +83,7 @@ pub struct AuxSlot<'a> {
     /// the matte *and* is dissolved by it applies it twice, which is the user's
     /// own arithmetic, visible in their own code.
     matte_all: Option<&'a Tex>,
-    layer: Option<&'a Tex>,
+    layers: &'a [Option<crate::fxops::LayerPicture>],
     paths: &'a [lumit_core::mask::MaskPolyline],
     schedule: Option<&'a lumit_core::fx::points::PointsSchedule>,
     /// Which effect instance this op is, and the layer time its
@@ -132,7 +132,7 @@ impl<'a> AuxSlot<'a> {
         data: AuxData<'a>,
         matte: Option<&'a Tex>,
         matte_all: Option<&'a Tex>,
-        layer: Option<&'a Tex>,
+        layers: &'a [Option<crate::fxops::LayerPicture>],
         paths: &'a [lumit_core::mask::MaskPolyline],
         schedule: Option<&'a lumit_core::fx::points::PointsSchedule>,
         instance: uuid::Uuid,
@@ -142,7 +142,7 @@ impl<'a> AuxSlot<'a> {
             data,
             matte,
             matte_all,
-            layer,
+            layers,
             paths,
             schedule,
             op: (instance, lt),
@@ -263,7 +263,14 @@ impl<'a> AuxSlot<'a> {
     /// effect that wanted two things would have to add. `None` for an unset,
     /// missing or cyclic reference: the labelled no-op.
     pub fn layer_input(self) -> Option<&'a Tex> {
-        self.layer
+        self.layers.first().and_then(|l| l.as_ref()).map(|l| &l.tex)
+    }
+
+    /// Every layer picture this op was handed, one entry per layer row the
+    /// effect declares, `None` where a row is unset. One entry for most
+    /// effects, which read [`Self::layer_input`] instead.
+    pub fn layer_inputs(self) -> &'a [Option<crate::fxops::LayerPicture>] {
+        self.layers
     }
 
     /// The decoded neighbour frames, empty when there are none — from either of
@@ -448,10 +455,18 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &CloneToPoints,
     &Trail,
     &ConnectPoints,
+    &PointsField,
     &EmitFromImage,
     &PointsAlongPath,
+    &TrackPoints,
+    &TextToPoints,
+    &LabelPoints,
     &PointsModifier("vary_points"),
     &PointsModifier("pick_points"),
+    &PointsModifier("transform_points"),
+    &PointsModifier("merge_points"),
+    &PointsModifier("relax_points"),
+    &PointsModifier("flow_points"),
     // The seven layer styles that render (docs/impl/layer-styles.md §8).
     // Satin and Bevel and emboss are declared in `lumit_core::fx::styles` but
     // have no pass here, so an instance of one resolves to an op this table
@@ -4540,6 +4555,12 @@ fn draw_points_tailed(
                 // cap.
                 id: u32::try_from(s.id.get(i).copied().unwrap_or(0)).unwrap_or(u32::MAX),
                 tail: tails.get(i).copied().unwrap_or(position),
+                // A capsule keeps its round ends, so only a dot is stretched.
+                stretch: if tails.get(i).is_some_and(|t| *t != position) {
+                    [1.0; 2]
+                } else {
+                    s.stretch_of(i)
+                },
             }
         })
         .collect()
@@ -4662,6 +4683,54 @@ impl GpuEffect for PointsAlongPath {
     }
 }
 
+/// Track points: the analysed tracks on this frame, read back on the host and
+/// drawn through the shared points draw, as Grid is.
+struct TrackPoints;
+impl GpuEffect for TrackPoints {
+    fn match_name(&self) -> &'static str {
+        "track_points"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        use lumit_core::fx::effects::track_points::TrackPoints as T;
+        let style = T::read(p).draw_style();
+        // The camera arrives in px@comp. The tracks do too, and the stream
+        // puts them in this raster itself.
+        let projection = aux
+            .schedule()
+            .and_then(|s| s.projection)
+            .map(|proj| proj.rescaled(T::px_scale_of(p)));
+        // Which analysis is this instance's, which the bag cannot say.
+        let stream = T::stream(p, aux.op().0, projection.unwrap_or_default());
+        let points = draw_points_of(&stream);
+        fx.points_draw(
+            ctx,
+            tex,
+            w,
+            h,
+            None,
+            &lumit_gpu::fx::PointsDrawOp {
+                points: &points,
+                feather: style.feather,
+                mix: style.mix,
+                projection: projection.map(|proj| proj.m),
+                field: lumit_gpu::fx::FieldTest::None,
+                seed: 0,
+                mode: 0,
+                sprite: None,
+            },
+        )
+    }
+}
+
 /// Vary points and Pick points: the wired stream with the effect's own change
 /// made, drawn as discs. The change is the declaration's `modify_points`, the
 /// same function a reader further down the wire goes through.
@@ -4683,7 +4752,7 @@ impl GpuEffect for PointsModifier {
         use lumit_core::fx::ParamId;
         let px_scale = p.float(ParamId::new("derived.px_scale"), 1.0);
         let mix = (p.float(ParamId::new("mix"), 100.0) / 100.0).clamp(0.0, 1.0);
-        let stream = self.modified(p, aux, px_scale);
+        let stream = self.modified(fx, ctx, tex, w, h, p, aux, px_scale);
         // Nothing wired, or nothing to show: the picture passes through.
         let Some(stream) = stream.filter(|_| mix > 0.0) else {
             return tex.clone();
@@ -4713,33 +4782,82 @@ impl GpuEffect for PointsModifier {
     }
     fn points_out(
         &self,
-        _fx: &FxEngine,
-        _ctx: &GpuContext,
-        _tex: &Tex,
-        _w: u32,
-        _h: u32,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
         p: Params<'_>,
         aux: AuxSlot<'_>,
     ) -> Option<lumit_core::fx::points::PointsStream> {
         let px_scale = p.float(lumit_core::fx::ParamId::new("derived.px_scale"), 1.0);
-        Some(
-            self.modified(p, aux, px_scale)?
-                .rescaled(1.0 / px_scale.max(1e-6)),
-        )
+        let made = self.modified(fx, ctx, tex, w, h, p, aux, px_scale)?;
+        Some(made.rescaled(1.0 / px_scale.max(1e-6)))
     }
 }
 
 impl PointsModifier {
-    /// The wired stream with this effect's change made, in raster pixels.
+    /// The wired streams with this effect's change made, in raster pixels.
+    /// A modifier that reads a picture has it sampled under the first
+    /// input's points here, where the picture is.
+    #[allow(clippy::too_many_arguments)]
     fn modified(
         &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
         p: Params<'_>,
         aux: AuxSlot<'_>,
         px_scale: f32,
     ) -> Option<lumit_core::fx::points::PointsStream> {
         let def = lumit_core::fx::BUILTIN_DEFS.get(self.0)?;
-        let input = points_input_at(aux, 0, px_scale)?;
-        def.modify_points(p, &input, aux.schedule().map_or(0.0, |s| s.t))
+        let sched = aux.schedule()?;
+        let ports = def
+            .signature()
+            .inputs()
+            .iter()
+            .filter(|port| port.ty == lumit_core::fx::PortType::Points)
+            .count();
+        // One stream per input, or just the first where the list is a history.
+        let inputs: Vec<lumit_core::fx::points::PointsStream> = sched
+            .input
+            .iter()
+            .take(ports.max(1))
+            .map(|s| s.rescaled(px_scale))
+            .collect();
+        let first = inputs.first()?;
+        let sampled = def.points_need_picture(p).then(|| {
+            let points = draw_points_of(first);
+            let projection = sched.projection.map(|proj| proj.rescaled(px_scale).m);
+            fx.points_sampled(
+                ctx,
+                tex,
+                w,
+                h,
+                aux.layer_input(),
+                &lumit_gpu::fx::PointsDrawOp {
+                    points: &points,
+                    feather: 0.0,
+                    mix: 1.0,
+                    projection,
+                    field: lumit_gpu::fx::FieldTest::None,
+                    seed: 0,
+                    mode: 0,
+                    sprite: None,
+                },
+            )
+        });
+        let inputs: Vec<&lumit_core::fx::points::PointsStream> = inputs.iter().collect();
+        def.modify_points(
+            p,
+            &lumit_core::fx::ModifyCx {
+                inputs: &inputs,
+                t: sched.t,
+                sampled: sampled.as_deref(),
+            },
+        )
     }
 }
 
@@ -4948,16 +5066,28 @@ impl GpuEffect for CloneToPoints {
         aux: AuxSlot<'_>,
     ) -> Tex {
         use lumit_core::fx::effects::clone_to_points::CloneToPoints as C;
-        let inst = C::read(p);
+        // Time step as the builder read it, so a point's age picks among the
+        // moments that were rendered.
+        let inst = C {
+            time_step: p.float(C::DERIVED_TIME_STEP, C::read(p).time_step),
+            ..C::read(p)
+        };
         let px_scale = C::px_scale_of(p);
         let style = inst.draw_style();
+        // The pictures the builder made, laid out as it laid them. A point's
+        // picture is a place in this list, and an empty place is a layer that
+        // is not there at that moment, which draws nothing.
+        let pictures = aux.layer_inputs();
+        let of = C::handed(p, pictures.len());
         // Nothing to stamp, or nothing to stamp it at: the picture passes
         // through, which is what an unset row and an unwired socket both mean.
-        let (Some(sprite), Some(stream)) = (aux.layer_input(), points_input_at(aux, 0, px_scale))
-        else {
+        let (true, Some(stream)) = (
+            pictures.iter().any(Option::is_some),
+            points_input_at(aux, 0, px_scale),
+        ) else {
             return tex.clone();
         };
-        let stamps = inst.stamps(&stream);
+        let stamps = inst.stamps(&stream, of);
         let points = draw_points_of(&stamps);
         // The camera, in the raster this frame is drawn at —
         // `None` on a 2D layer, where it is not the identity matrix but no
@@ -4966,23 +5096,48 @@ impl GpuEffect for CloneToPoints {
             .schedule()
             .and_then(|c| c.projection)
             .map(|proj| proj.rescaled(px_scale));
-        fx.points_draw(
-            ctx,
-            tex,
-            w,
-            h,
-            None,
-            &lumit_gpu::fx::PointsDrawOp {
-                points: &points,
-                feather: style.feather,
-                mix: style.mix,
-                projection: projection.map(|proj| proj.m),
-                field: lumit_gpu::fx::FieldTest::None,
-                seed: 0,
-                mode: 1,
-                sprite: Some(sprite),
-            },
-        )
+        // The effect's own input has no size of its own, so it takes the
+        // frame's.
+        let frame = [w as f32 / px_scale.max(1e-6), h as f32 / px_scale.max(1e-6)];
+        // One draw per run of neighbours that share a picture, so the stamps
+        // still go down in the stream's one order whichever layer each takes.
+        //
+        // ponytail: a pass and two small buffers per run, so a few thousand
+        // points choosing at random between layers is a few thousand passes.
+        // Bind the pictures as one array and choose per instance in the
+        // kernel if a profile shows that costing.
+        let mut runs = Vec::new();
+        let mut from = 0usize;
+        for to in 1..=points.len() {
+            let which = stamps.index_of(from);
+            if to < points.len() && stamps.index_of(to) == which {
+                continue;
+            }
+            let picture = pictures.get(which as usize).and_then(Option::as_ref);
+            if let (Some(run), Some(picture)) = (points.get(from..to), picture) {
+                let fit = inst.fit(picture.size.unwrap_or(frame), px_scale);
+                runs.push((
+                    lumit_gpu::fx::PointsDrawOp {
+                        points: run,
+                        feather: style.feather,
+                        mix: style.mix,
+                        projection: projection.map(|proj| proj.m),
+                        field: lumit_gpu::fx::FieldTest::None,
+                        seed: 0,
+                        mode: 1,
+                        sprite: Some(&picture.tex),
+                    },
+                    lumit_gpu::fx::SpriteFit {
+                        unit: fit.unit,
+                        anchor: fit.anchor,
+                        uv: fit.uv,
+                        corner: fit.corner,
+                    },
+                ));
+            }
+            from = to;
+        }
+        fx.points_draw_runs(ctx, tex, w, h, &runs)
     }
 }
 
@@ -5106,6 +5261,316 @@ impl GpuEffect for ConnectPoints {
     }
 }
 
+/// Points field: a picture of the wired stream's nearest point at every
+/// pixel. `PointsField::seeds` says which points count, and the kernel's
+/// `shade` is the twin of `PointsField::shade`.
+struct PointsField;
+impl GpuEffect for PointsField {
+    fn match_name(&self) -> &'static str {
+        "points_field"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        use lumit_core::fx::effects::points_field::PointsField as F;
+        let inst = F::read(p);
+        // Nothing wired: the picture passes through.
+        let Some(stream) = points_input_at(aux, 0, F::px_scale_of(p)) else {
+            return tex.clone();
+        };
+        fx.points_field(
+            ctx,
+            tex,
+            w,
+            h,
+            &points_field_op(inst, &field_points(inst, &stream)),
+        )
+    }
+}
+
+/// A stream's seeds as the card's pass takes them.
+fn field_points(
+    inst: lumit_core::fx::effects::points_field::PointsField,
+    stream: &lumit_core::fx::points::PointsStream,
+) -> Vec<lumit_gpu::fx::FieldPoint> {
+    inst.seeds(stream)
+        .iter()
+        .map(|s| lumit_gpu::fx::FieldPoint {
+            at: s.at,
+            number: s.number,
+            colour: s.colour,
+        })
+        .collect()
+}
+
+/// Points field's rows as the card's pass takes them.
+fn points_field_op(
+    inst: lumit_core::fx::effects::points_field::PointsField,
+    points: &[lumit_gpu::fx::FieldPoint],
+) -> lumit_gpu::fx::PointsFieldOp<'_> {
+    lumit_gpu::fx::PointsFieldOp {
+        points,
+        output: inst.output,
+        radius: inst.radius,
+        limit: inst.limit,
+        invert: inst.invert,
+        number_range: inst.number_range,
+        mix: inst.mix / 100.0,
+    }
+}
+
+/// Text to points' stream in the raster this frame is drawn at, and the
+/// camera it is seen through. The letters come laid out on the carriage, and
+/// `TextToPoints::stream` says which of them make a point.
+fn text_points(
+    p: Params<'_>,
+    aux: AuxSlot<'_>,
+) -> (
+    lumit_core::fx::points::PointsStream,
+    Option<lumit_core::fx::points::Projection>,
+) {
+    use lumit_core::fx::effects::text_to_points::TextToPoints as T;
+    let px_scale = T::px_scale_of(p);
+    let sched = aux.schedule();
+    let projection = sched
+        .and_then(|s| s.projection)
+        .map(|proj| proj.rescaled(px_scale));
+    let glyphs = sched.map_or(&[][..], |s| &s.text);
+    let stream = T::read(p).stream(glyphs, px_scale, projection.unwrap_or_default());
+    (stream, projection)
+}
+
+/// Text to points: a point per character, word or line of a Text layer,
+/// drawn through the shared points draw as Grid's are.
+struct TextToPoints;
+impl GpuEffect for TextToPoints {
+    fn match_name(&self) -> &'static str {
+        "text_to_points"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        use lumit_core::fx::effects::text_to_points::TextToPoints as T;
+        let style = T::read(p).draw_style();
+        let (stream, projection) = text_points(p, aux);
+        let points = draw_points_of(&stream);
+        fx.points_draw(
+            ctx,
+            tex,
+            w,
+            h,
+            None,
+            &lumit_gpu::fx::PointsDrawOp {
+                points: &points,
+                feather: style.feather,
+                mix: style.mix,
+                projection: projection.map(|proj| proj.m),
+                field: lumit_gpu::fx::FieldTest::None,
+                seed: 0,
+                mode: 0,
+                sprite: None,
+            },
+        )
+    }
+    /// The letters only exist while a frame is drawn, so the effects below
+    /// are handed the stream here, as Scatter's are.
+    fn points_out(
+        &self,
+        _fx: &FxEngine,
+        _ctx: &GpuContext,
+        _tex: &Tex,
+        _w: u32,
+        _h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Option<lumit_core::fx::points::PointsStream> {
+        use lumit_core::fx::effects::text_to_points::TextToPoints as T;
+        let back = 1.0 / T::px_scale_of(p).max(1e-6);
+        Some(text_points(p, aux).0.rescaled(back))
+    }
+}
+
+/// A label's document in a raster `k` times the size it was written for.
+/// Everything it measures in px takes the factor.
+fn label_document(
+    doc: &lumit_core::model::TextDocument,
+    k: f32,
+) -> lumit_core::model::TextDocument {
+    let mut d = doc.clone();
+    if k != 1.0 {
+        let k = f64::from(k);
+        d.size *= k;
+        d.style.leading = d.style.leading.map(|v| v * k);
+        d.style.baseline_shift *= k;
+        d.style.stroke_width *= k;
+        let p = &mut d.paragraph;
+        for v in [
+            &mut p.indent_left,
+            &mut p.indent_right,
+            &mut p.indent_first,
+            &mut p.space_before,
+            &mut p.space_after,
+        ] {
+            *v *= k;
+        }
+    }
+    d
+}
+
+/// Label points: a piece of text beside every point of a wired stream.
+///
+/// `LabelPoints::labels` says which wording goes where. Each different
+/// wording is drawn once by the text engine, the labels are laid over each
+/// other in one picture the size of the box round them all, and that picture
+/// is stamped over the frame by the shared points draw.
+struct LabelPoints;
+impl GpuEffect for LabelPoints {
+    fn match_name(&self) -> &'static str {
+        "label_points"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        use lumit_core::fx::effects::label_points::LabelPoints as L;
+        let inst = L::read(p);
+        let px_scale = L::px_scale_of(p);
+        let mix = (inst.mix / 100.0).clamp(0.0, 1.0);
+        let sched = aux.schedule();
+        // Nothing wired, no Text layer or nothing to show: the picture passes
+        // through.
+        let (Some(stream), Some(doc), true) = (
+            sched.and_then(|c| c.input.first()),
+            sched.and_then(|c| c.label.as_deref()),
+            mix > 0.0,
+        ) else {
+            return tex.clone();
+        };
+        let labels = inst.labels(stream, &doc.text, px_scale);
+        let doc = label_document(doc, px_scale);
+        // Labels that read the same share one drawing. Only ever looked up,
+        // so the map's order decides nothing.
+        let mut drawn: std::collections::HashMap<&str, lumit_text::RasterText> =
+            std::collections::HashMap::new();
+        for (text, _) in &labels {
+            drawn.entry(text.as_str()).or_insert_with(|| {
+                lumit_text::rasterise(&lumit_text::TextBlock::of(&doc, text), &[])
+            });
+        }
+        // Each label's top left corner on the frame, and its picture. The
+        // anchor is level with the middle of the label's height.
+        let along = inst.anchor_along();
+        let whole = |v: f32| v.round().clamp(-1e9, 1e9) as i64;
+        let placed: Vec<(i64, i64, &lumit_text::RasterText)> = labels
+            .iter()
+            .filter_map(|(text, at)| {
+                let r = drawn.get(text.as_str())?;
+                Some((
+                    whole(at[0] - along * r.width as f32),
+                    whole(at[1] - 0.5 * r.height as f32),
+                    r,
+                ))
+            })
+            .collect();
+        // The box round every label, kept to the frame.
+        let (mut x0, mut y0, mut x1, mut y1) = (i64::from(w), i64::from(h), 0i64, 0i64);
+        for (x, y, r) in &placed {
+            x0 = x0.min(*x);
+            y0 = y0.min(*y);
+            x1 = x1.max(x + i64::from(r.width));
+            y1 = y1.max(y + i64::from(r.height));
+        }
+        let (x0, y0) = (x0.max(0), y0.max(0));
+        let (x1, y1) = (x1.min(i64::from(w)), y1.min(i64::from(h)));
+        if x1 <= x0 || y1 <= y0 {
+            return tex.clone();
+        }
+        let (bw, bh) = (x1 - x0, y1 - y0);
+        // The text engine's pixels are sRGB bytes with plain alpha. The frame
+        // is linear and premultiplied.
+        let linear: [f32; 256] = std::array::from_fn(|v| lumit_core::pixels::srgb_decode(v as u8));
+        let mut px = vec![0.0f32; (bw * bh * 4) as usize];
+        for (x, y, r) in &placed {
+            let rw = i64::from(r.width.max(1));
+            for (i, texel) in r.rgba.chunks_exact(4).enumerate() {
+                let &[red, green, blue, alpha] = texel else {
+                    continue;
+                };
+                let (at_x, at_y) = (x + i as i64 % rw - x0, y + i as i64 / rw - y0);
+                if alpha == 0 || !(0..bw).contains(&at_x) || !(0..bh).contains(&at_y) {
+                    continue;
+                }
+                let d = ((at_y * bw + at_x) * 4) as usize;
+                let Some(under) = px.get_mut(d..d + 4) else {
+                    continue;
+                };
+                let a = f32::from(alpha) / 255.0;
+                let over = [red, green, blue].map(|c| linear[usize::from(c)] * a);
+                for (under, top) in under.iter_mut().zip(over.into_iter().chain([a])) {
+                    *under = top + *under * (1.0 - a);
+                }
+            }
+        }
+        let sprite = lumit_gpu::fx::upload_linear_f32(ctx, &px, bw as u32, bh as u32);
+        // One stamp, the size of the box and sitting exactly on it, so a
+        // pixel of the labels lands on a pixel of the frame.
+        let centre = [(x0 + x1) as f32 * 0.5, (y0 + y1) as f32 * 0.5, 0.0];
+        let stamp = [lumit_gpu::fx::DrawPoint {
+            position: centre,
+            size: bw as f32,
+            rotation: 0.0,
+            colour: [1.0; 4],
+            id: 0,
+            tail: centre,
+            stretch: [1.0; 2],
+        }];
+        fx.points_draw_runs(
+            ctx,
+            tex,
+            w,
+            h,
+            &[(
+                lumit_gpu::fx::PointsDrawOp {
+                    points: &stamp,
+                    feather: 0.0,
+                    mix,
+                    // The labels were put where the points are seen, so the
+                    // stamp itself is flat.
+                    projection: None,
+                    field: lumit_gpu::fx::FieldTest::None,
+                    seed: 0,
+                    mode: 1,
+                    sprite: Some(&sprite),
+                },
+                lumit_gpu::fx::SpriteFit {
+                    unit: [1.0, bh as f32 / bw as f32],
+                    ..Default::default()
+                },
+            )],
+        )
+    }
+}
+
 struct AddGrain;
 impl GpuEffect for AddGrain {
     fn match_name(&self) -> &'static str {
@@ -5197,6 +5662,7 @@ mod tests {
             width: 60.0,
             height: 40.0,
             emitter_angle: 20.0,
+            path_from: 0,
             mask_path: false,
             emit_rate: 220.0,
             direction: -90.0,
@@ -5518,6 +5984,9 @@ mod tests {
             spacing_x: 15.0,
             spacing_y: 17.0,
             spacing_z: 40.0,
+            fit: false,
+            width: 0.0,
+            height: 0.0,
             position_x: 60.0,
             position_y: 44.0,
             position_z: if planes > 1 { -20.0 } else { 0.0 },
@@ -5525,6 +5994,9 @@ mod tests {
             jitter_y: 6.0,
             jitter_z: 0.0,
             seed: 3,
+            start_angle: 0.0,
+            arc: 360.0,
+            inner_radius: 0.0,
             size: 7.0,
             feather: 55.0,
             colour: [0.8, 0.4, 0.9, 1.0],
@@ -5793,24 +6265,52 @@ mod tests {
         let sprite_px: Vec<f32> = vec![0.5; (8 * 8 * 4) as usize];
         let sprite_tex = lumit_gpu::fx::upload_linear_f32(&ctx, &sprite_px, 8, 8);
 
-        // The wire's own stream, made by a producer that is already tested.
-        let stream = grid_fixture(if projection.is_some() { 3 } else { 1 })
+        // The wire's own stream, made by a producer that is already tested,
+        // with every point stretched so the stamps are too.
+        let mut stream = grid_fixture(if projection.is_some() { 3 } else { 1 })
             .stream(projection.unwrap_or_default());
+        stream.stretch_mut().fill([1.5, 0.75]);
+        // Everything that shapes a stamp at once: a wide layer fitted into a
+        // cell, so the cell is empty above and below it, hung off-centre from
+        // its point with its corners rounded.
         let inst = lumit_core::fx::effects::clone_to_points::CloneToPoints {
             clone_layer: true,
-            scale: 160.0,
+            clone_layer_2: false,
+            clone_layer_3: false,
+            clone_layer_4: false,
+            choose_by: 0,
+            seed: 0,
+            time_offset: 0,
+            time_step: 0.067,
+            time_samples: 8,
+            per_clone: 0,
+            max_renders: 32,
+            apply_to: 0,
+            fit: 2,
+            cell_width: 40.0,
+            cell_height: 24.0,
+            scale: 700.0,
             rotation: 25.0,
+            anchor_x: 20.0,
+            anchor_y: 80.0,
+            corner_radius: 6.0,
+            opacity: 80.0,
             tint: 100.0,
             depth_sort: true,
             max_clones: 20_000,
             mix: 100.0,
         };
-        let stamps = inst.stamps(&stream);
+        let stamps = inst.stamps(
+            &stream,
+            lumit_core::fx::effects::clone_to_points::Pictures::plain(1),
+        );
         assert!(stamps.len() > 20, "the fixture stamped {}", stamps.len());
         let style = inst.draw_style();
+        let fit = inst.fit([80.0, 30.0], 1.0);
+        assert!(fit.uv[1] > 1.5, "the layer does not fit short of the cell");
 
         let mut cpu = vec![0.0f32; (w * h * 4) as usize];
-        lumit_core::fx::points::draw_stream(
+        lumit_core::fx::points::draw_stream_fit(
             &mut cpu,
             w,
             h,
@@ -5822,6 +6322,7 @@ mod tests {
                 w: 8,
                 h: 8,
             }),
+            &fit,
         );
         // A camera that changed nothing would make the comparison pass by
         // comparing two identical flat pictures.
@@ -5829,7 +6330,7 @@ mod tests {
             let mut flat_stamps = stamps.clone();
             flat_stamps.projection = lumit_core::fx::points::Projection::FLAT;
             let mut flat = vec![0.0f32; (w * h * 4) as usize];
-            lumit_core::fx::points::draw_stream(
+            lumit_core::fx::points::draw_stream_fit(
                 &mut flat,
                 w,
                 h,
@@ -5841,6 +6342,7 @@ mod tests {
                     w: 8,
                     h: 8,
                 }),
+                &fit,
             );
             assert_ne!(cpu, flat, "the camera moved nothing at all");
         }
@@ -5857,7 +6359,16 @@ mod tests {
             mode: 1,
             sprite: Some(&sprite_tex),
         };
-        let out = fx.points_draw(&ctx, &tex, w, h, None, &op);
+        let runs = [(
+            op,
+            lumit_gpu::fx::SpriteFit {
+                unit: fit.unit,
+                anchor: fit.anchor,
+                uv: fit.uv,
+                corner: fit.corner,
+            },
+        )];
+        let out = fx.points_draw_runs(&ctx, &tex, w, h, &runs);
         let gpu = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
 
         let drawn: f32 = gpu.iter().sum();
@@ -5871,9 +6382,57 @@ mod tests {
         assert!(worst < 2e-2, "worst |Δ| {worst}");
 
         // Bit-stable against itself (docs/08 §2.4).
-        let again = fx.points_draw(&ctx, &tex, w, h, None, &op);
+        let again = fx.points_draw_runs(&ctx, &tex, w, h, &runs);
         let twice = lumit_gpu::fx::readback_linear_f32(&ctx, &again, w, h).expect("readback");
         assert_eq!(gpu, twice, "the stamped draw is not bit-stable");
+    }
+
+    // ---------------------------------------------- Points field
+
+    /// The card's jump flooding finds the points the brute-force reference
+    /// finds. Compared on Distance, which runs smoothly across the edge
+    /// between two points' cells, so a pixel that settles on the other of two
+    /// nearly equal points still reads the same grey.
+    #[test]
+    fn a_points_field_matches_the_cpu_reference() {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
+            return;
+        };
+        let fx = ctx.fx();
+        let (w, h) = (128u32, 96u32);
+        let stream = grid_fixture(1).stream(Default::default());
+        let inst = lumit_core::fx::effects::points_field::PointsField {
+            output: 0,
+            // Wider than the lattice's pitch, so the fields overlap and the
+            // edges between cells are inside the falloff.
+            radius: 20.0,
+            limit: false,
+            invert: false,
+            number_range: 100.0,
+            max_points: 20_000,
+            mix: 100.0,
+        };
+        let mut cpu = vec![0.0f32; (w * h * 4) as usize];
+        inst.draw(&mut cpu, w, h, &stream);
+
+        let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &vec![0.0; (w * h * 4) as usize], w, h);
+        let points = field_points(inst, &stream);
+        assert!(points.len() > 20, "the fixture has {} points", points.len());
+        let out = fx.points_field(&ctx, &tex, w, h, &points_field_op(inst, &points));
+        let gpu = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
+
+        // Alpha is 1 everywhere, so the falloff has to be looked for in red.
+        let lit = gpu.chunks_exact(4).filter(|px| px[0] > 0.5).count();
+        assert!(lit > 100, "the field drew nothing ({lit} bright pixels)");
+        let worst = cpu
+            .iter()
+            .zip(&gpu)
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0f32, f32::max);
+        eprintln!("points field: worst |Δ| {worst:.3e}");
+        // Ten times the working format's own rounding near white. Without
+        // the pass's second look next door, one pixel here is past it.
+        assert!(worst < 5e-3, "worst |Δ| {worst}");
     }
 
     // ---------------------------------------------------- Trail
@@ -5925,6 +6484,9 @@ mod tests {
             scale: 80.0,
             feather: 60.0,
             fade: 100.0,
+            fade_power: 1.0,
+            point_colour: true,
+            colour: [1.0; 4],
             max_trails: 400,
             mix: 100.0,
         };

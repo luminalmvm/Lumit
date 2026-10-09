@@ -74,6 +74,37 @@ pub struct DrawPoint {
     /// **head** for a plain dot, which is what makes a disc a streak of no
     /// length and lets one kernel serve both without a branch.
     pub tail: [f32; 3],
+    /// How far the size is stretched across and down, in the point's own
+    /// turned frame. `[1, 1]` is unstretched.
+    pub stretch: [f32; 2],
+}
+
+/// How a sprite sits on its point, the twin of
+/// `lumit_core::fx::points::SpriteFit`. The default is what Particulate
+/// stamps: a square of the point's size with the whole picture across it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SpriteFit {
+    /// The stamp's width and height, as multiples of the point's size.
+    pub unit: [f32; 2],
+    /// The place on the stamp that sits on the point, 0 to 1 from its top
+    /// left corner. The stamp turns about it.
+    pub anchor: [f32; 2],
+    /// How many times the picture's width and height the stamp is. Above 1
+    /// leaves the stamp empty round the picture, below 1 cuts the picture off.
+    pub uv: [f32; 2],
+    /// Corner radius, px on the stamp of a point whose size is 100.
+    pub corner: f32,
+}
+
+impl Default for SpriteFit {
+    fn default() -> Self {
+        Self {
+            unit: [1.0; 2],
+            anchor: [0.5; 2],
+            uv: [1.0; 2],
+            corner: 0.0,
+        }
+    }
 }
 
 /// One generic points draw.
@@ -132,23 +163,33 @@ impl FxEngine {
         field: Option<&wgpu::Texture>,
         op: &PointsDrawOp<'_>,
     ) -> wgpu::Texture {
-        let out = work_texture(ctx, w, h, "fx-points-out");
-        {
-            let mut enc = ctx.encoder("fx-points-copy");
-            enc.copy_texture_to_texture(
-                src.as_image_copy(),
-                out.as_image_copy(),
-                wgpu::Extent3d {
-                    width: w,
-                    height: h,
-                    depth_or_array_layers: 1,
-                },
-            );
-        }
+        let out = points_copy(ctx, src, w, h);
         if op.points.is_empty() || op.mix <= 0.0 {
             return out;
         }
-        self.points_pass(ctx, src, w, h, field, op, &out, None);
+        let plain = SpriteFit::default();
+        self.points_pass(ctx, src, w, h, field, op, &out, None, &plain);
+        out
+    }
+
+    /// Several draws over one copy of the picture, laid down in the order
+    /// given, each with its own sprite and its own fit. Clone to points' draw:
+    /// a run of stamps per layer, and no field test.
+    pub fn points_draw_runs(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        runs: &[(PointsDrawOp<'_>, SpriteFit)],
+    ) -> wgpu::Texture {
+        let out = points_copy(ctx, src, w, h);
+        for (op, fit) in runs {
+            if op.points.is_empty() || op.mix <= 0.0 {
+                continue;
+            }
+            self.points_pass(ctx, src, w, h, None, op, &out, None, fit);
+        }
         out
     }
 
@@ -171,11 +212,54 @@ impl FxEngine {
         if count == 0 || op.field == FieldTest::None {
             return vec![true; count];
         }
+        // A kept point wrote white and a refused one nothing.
+        self.points_probe(ctx, src, w, h, field, op)
+            .iter()
+            .map(|px| px.iter().any(|v| *v > 0.0))
+            .collect()
+    }
+
+    /// The colour of `field` under each of `op`'s points, premultiplied RGBA,
+    /// one per point in order. `None` reads `src`. A point off the picture
+    /// reads its nearest edge. Costs one small synchronous readback.
+    pub fn points_sampled(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        field: Option<&wgpu::Texture>,
+        op: &PointsDrawOp<'_>,
+    ) -> Vec<[f32; 4]> {
+        let plain = PointsDrawOp {
+            field: FieldTest::None,
+            ..*op
+        };
+        self.points_probe(ctx, src, w, h, field, &plain)
+    }
+
+    /// One pixel per point, drawn by the vertex stage and read back: white or
+    /// nothing under a field test, the field's own colour without one. A
+    /// readback that fails answers black for every point.
+    fn points_probe(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        field: Option<&wgpu::Texture>,
+        op: &PointsDrawOp<'_>,
+    ) -> Vec<[f32; 4]> {
+        let count = op.points.len();
+        if count == 0 {
+            return Vec::new();
+        }
         // A square-ish target with a pixel per point.
         let pw = ((count as f64).sqrt().ceil() as u32).max(1);
         let ph = (count as u32).div_ceil(pw).max(1);
         let target = work_texture(ctx, pw, ph, "fx-points-stood");
-        self.points_pass(ctx, src, w, h, field, op, &target, Some((pw, ph)));
+        let plain = SpriteFit::default();
+        self.points_pass(ctx, src, w, h, field, op, &target, Some((pw, ph)), &plain);
 
         let bytes = target.format().block_copy_size(None).unwrap_or(8);
         let padded = (pw * bytes).div_ceil(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT)
@@ -208,22 +292,34 @@ impl FxEngine {
             let _ = tx.send(r);
         });
         ctx.device.poll(wgpu::Maintain::Wait);
-        let mut stood = vec![false; count];
+        let mut read = vec![[0.0f32; 4]; count];
         if matches!(rx.recv(), Ok(Ok(()))) {
             let data = slice.get_mapped_range();
-            for (i, kept) in stood.iter_mut().enumerate() {
+            for (i, out) in read.iter_mut().enumerate() {
                 let at = (i as u32 / pw * padded + i as u32 % pw * bytes) as usize;
-                // A kept point wrote white, and black is all zero bytes in
-                // every working format.
-                *kept = data
-                    .get(at..at + bytes as usize)
-                    .is_some_and(|px| px.iter().any(|b| *b != 0));
+                let Some(px) = data.get(at..at + bytes as usize) else {
+                    continue;
+                };
+                // Whichever of the three working formats the target is.
+                for (c, v) in out.iter_mut().enumerate() {
+                    *v = match bytes {
+                        16 => px
+                            .get(c * 4..c * 4 + 4)
+                            .and_then(|b| b.try_into().ok())
+                            .map_or(0.0, f32::from_le_bytes),
+                        8 => px
+                            .get(c * 2..c * 2 + 2)
+                            .and_then(|b| b.try_into().ok())
+                            .map_or(0.0, |b| super::f16_to_f32(u16::from_le_bytes(b))),
+                        _ => px.get(c).map_or(0.0, |b| f32::from(*b) / 255.0),
+                    };
+                }
             }
             drop(data);
             buffer.unmap();
         }
         ctx.recycle(target);
-        stood
+        read
     }
 
     /// The instanced draw behind both entry points: over `target` as it
@@ -239,6 +335,7 @@ impl FxEngine {
         op: &PointsDrawOp<'_>,
         out: &wgpu::Texture,
         probe: Option<(u32, u32)>,
+        fit: &SpriteFit,
     ) {
         use wgpu::util::DeviceExt;
         let count = u32::try_from(op.points.len()).unwrap_or(u32::MAX);
@@ -269,6 +366,11 @@ impl FxEngine {
             words[region(10) + i * 2] = half(pt.colour[0]) | (half(pt.colour[1]) << 16);
             words[region(10) + i * 2 + 1] = half(pt.colour[2]) | (half(pt.colour[3]) << 16);
             words[region(12) + i * 2] = pt.id;
+            // Stored as the amount past 1, so a region nobody wrote reads as
+            // unstretched. Particulate's own pass never writes it.
+            for c in 0..2 {
+                words[region(17) + i * 2 + c] = (pt.stretch[c] - 1.0).to_bits();
+            }
         }
         let proj = op.projection.unwrap_or([[0.0; 4]; 3]);
         let mut u: ParticulateParams = bytemuck::Zeroable::zeroed();
@@ -292,6 +394,12 @@ impl FxEngine {
             FieldTest::Luma { threshold } => threshold.clamp(0.0, 1.0),
             _ => 0.0,
         };
+        // Each as the amount past the plain square, so that nought is what
+        // Particulate's own draw gets by never writing them.
+        u.stamp_unit = [fit.unit[0] - 1.0, fit.unit[1] - 1.0];
+        u.stamp_anchor = [fit.anchor[0] - 0.5, fit.anchor[1] - 0.5];
+        u.stamp_uv = [fit.uv[0] - 1.0, fit.uv[1] - 1.0];
+        u.stamp_corner = fit.corner;
         let ubuf = ctx
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -366,4 +474,21 @@ impl FxEngine {
         }
         drop(enc);
     }
+}
+
+/// A copy of `src` for the points to be drawn over.
+fn points_copy(ctx: &GpuContext, src: &wgpu::Texture, w: u32, h: u32) -> wgpu::Texture {
+    let out = work_texture(ctx, w, h, "fx-points-out");
+    let mut enc = ctx.encoder("fx-points-copy");
+    enc.copy_texture_to_texture(
+        src.as_image_copy(),
+        out.as_image_copy(),
+        wgpu::Extent3d {
+            width: w,
+            height: h,
+            depth_or_array_layers: 1,
+        },
+    );
+    drop(enc);
+    out
 }

@@ -422,6 +422,28 @@ pub fn fire_effect_action(
             _ => Err(BridgeError::InvalidParam),
         };
     }
+    // Track points' two, filed under the instance as the Planar track's are.
+    if fx.effect.match_name == lumit_core::fx::effects::track_points::MATCH_NAME {
+        return match param.as_str() {
+            CANCEL => {
+                lumit_render::track::cancel(effect);
+                Ok(())
+            }
+            ANALYSE => {
+                let LayerKind::Footage { item: media } = item.kind else {
+                    return Err(BridgeError::NotFootage);
+                };
+                let (path, fingerprint) = media_source(&layer, media)?;
+                let job = lumit_render::track::points_job_for(&item, fx, path, &fingerprint, true)
+                    .ok_or(BridgeError::NotFootage)?;
+                match lumit_render::track::request(job) {
+                    lumit_render::track::Requested::Started => Ok(()),
+                    _ => Err(BridgeError::AnalysisBusy),
+                }
+            }
+            _ => Err(BridgeError::InvalidParam),
+        };
+    }
     // And the planes tier's two, on the one predicate `lumit_core::planes`
     // owns rather than a list of names here (docs/impl/addons.md §6.1).
     if lumit_core::planes::task_of(fx).is_some() {
@@ -988,13 +1010,16 @@ pub fn planar_status(layer: LayerReference, effect: Uuid) -> BridgePlanarStatus 
     let Ok(item) = layer.item() else {
         return status;
     };
-    if !item
-        .effects
-        .iter()
-        .any(|e| e.id == effect && e.effect.match_name == lumit_core::track::PLANAR_TRACK)
-    {
+    // Track points files its progress under its own id too, so the one status
+    // answers for both.
+    use lumit_core::fx::effects::track_points;
+    let Some(inst) = item.effects.iter().find(|e| {
+        e.id == effect
+            && (e.effect.match_name == lumit_core::track::PLANAR_TRACK
+                || e.effect.match_name == track_points::MATCH_NAME)
+    }) else {
         return status;
-    }
+    };
     match lumit_render::track::progress(effect) {
         Some(lumit_render::track::Progress::Queued) => status.stage = BridgeTrackStage::Queued,
         Some(lumit_render::track::Progress::Tracking { done, total }) => {
@@ -1020,6 +1045,14 @@ pub fn planar_status(layer: LayerReference, effect: Uuid) -> BridgePlanarStatus 
         status.frames = u32::try_from(tracked.track.frames.len()).unwrap_or(u32::MAX);
         status.clip_frames = u32::try_from(tracked.clip_frames).unwrap_or(u32::MAX);
         status.reanchors = tracked.track.reanchors;
+    }
+    // An analysis that matches the rows as they stand covers the whole clip.
+    if let Some(baked) = track_points::fresh(inst, &item) {
+        if status.stage == BridgeTrackStage::Idle {
+            status.stage = BridgeTrackStage::Done;
+        }
+        status.frames = baked.frames;
+        status.clip_frames = baked.frames;
     }
     status
 }

@@ -97,7 +97,17 @@ pub struct Realiser<'a> {
     /// Precomp layer degrades to the passthrough it was before this existed,
     /// which is exactly what an unavailable GPU flow does too.
     pub flow: Option<&'a std::cell::RefCell<CompositeFlow>>,
+    /// Makes Clone to points' pictures for a stream that was only made
+    /// during the render, handed where the list belongs and how many points
+    /// the stream holds ([`crate::build::late_clone_pictures`]). The render's
+    /// owner supplies it, since it holds the document and the decoded pixels
+    /// and this walk holds neither. `None`, which is every builder in the
+    /// tests, leaves such a list absent, so nothing is stamped.
+    pub late_clones: Option<&'a LateCloneMaker<'a>>,
 }
+
+/// What [`Realiser::late_clones`] calls.
+pub type LateCloneMaker<'a> = dyn Fn(&crate::draw::LateClones, usize) -> Vec<LayerInputDraw> + 'a;
 
 /// The flow backend for measuring a **composite's** motion (docs/08 §3.2),
 /// built on the render's own device the first time a layer actually asks for
@@ -346,6 +356,36 @@ impl Realiser<'_> {
     /// `run_ops` is 1:1 with the stack's ops and aligned with the layer
     /// texture the kernel reads. Export renders these identically.
     ///
+    /// One op's whole list of pictures, each rendered as it would be alone and
+    /// with its own size kept beside it.
+    fn several(&self, list: &[LayerInputDraw], w: u32, h: u32) -> crate::fxops::LayerInput {
+        crate::fxops::LayerInput::Several(
+            self.render_layer_inputs(list, w, h)
+                .into_iter()
+                .zip(list.iter().map(LayerInputDraw::size))
+                .collect(),
+        )
+    }
+
+    /// Clone to points' list for a stream that was only made during the
+    /// render: the builder is asked for the pictures now that the stream
+    /// holds `points` points, and they are rendered like any other list.
+    /// Absent where `slot` is not such a list or nobody can make one.
+    fn late_clones(
+        &self,
+        slot: Option<&LayerInputDraw>,
+        points: usize,
+        w: u32,
+        h: u32,
+    ) -> crate::fxops::LayerInput {
+        match (slot, self.late_clones) {
+            (Some(LayerInputDraw::Late(spec)), Some(make)) => {
+                self.several(&make(spec, points), w, h)
+            }
+            _ => crate::fxops::LayerInput::Absent,
+        }
+    }
+
     /// [`LayerInputDraw::ThisLayer`] renders nothing here: it names
     /// the texture `run_ops` is already carrying, which only `run_ops` can
     /// hand over, so it passes through as [`LayerInput::ThisLayer`].
@@ -362,6 +402,11 @@ impl Realiser<'_> {
                 let d = match slot {
                     LayerInputDraw::Absent => return LayerInput::Absent,
                     LayerInputDraw::ThisLayer => return LayerInput::ThisLayer,
+                    // Made when its op comes round (`late_clones`).
+                    LayerInputDraw::Late(_) => return LayerInput::Late,
+                    // An op's whole list: each layer rendered as it would be
+                    // alone, with its own size kept beside it.
+                    LayerInputDraw::Several(list) => return self.several(list, w, h),
                     LayerInputDraw::Layer(d) => d,
                 };
                 // A Precomp input realises its nested comp exactly as a
@@ -408,7 +453,26 @@ impl Realiser<'_> {
                     let side = crate::fxops::Side {
                         roto: &roto,
                         planes: &planes,
+                        late: None,
                     };
+                    // The graphs the referenced layer's own Node graph
+                    // effects apply, at the raster its stack runs on.
+                    let px = if d.natural[0] > 0.0 {
+                        d.tex_w as f32 / d.natural[0]
+                    } else {
+                        1.0
+                    };
+                    let plans: Vec<GraphClosure<'_>> = d
+                        .graph_fx
+                        .iter()
+                        .map(|plan| {
+                            Box::new(move |tex: wgpu::Texture, gw: u32, gh: u32| {
+                                self.realise_graph(plan, Some(&tex), gw, gh, px)
+                            }) as GraphClosure<'_>
+                        })
+                        .collect();
+                    let graphs: Vec<&dyn Fn(wgpu::Texture, u32, u32) -> wgpu::Texture> =
+                        plans.iter().map(|f| &**f).collect();
                     crate::fxops::run_ops(
                         self.fx,
                         &self.ctx,
@@ -431,7 +495,7 @@ impl Realiser<'_> {
                         // through.
                         &[],
                         &side,
-                        &[],
+                        &graphs,
                         // A matte's own stack is part of the effect that reads
                         // it, not a row of its own: its cost is inside that
                         // layer's span already.
@@ -1046,8 +1110,13 @@ impl Realiser<'_> {
                 &l.points_schedules,
                 // An adjustment layer has no source frames, so nothing was
                 // ever propagated through it: a Roto brush there passes
-                // through.
-                &crate::fxops::Side::NONE,
+                // through. It can still stamp clones over a late stream.
+                &crate::fxops::Side {
+                    late: Some(&|slot: usize, points: usize| {
+                        self.late_clones(l.dof_inputs.get(slot), points, tw, th)
+                    }),
+                    ..crate::fxops::Side::NONE
+                },
                 &graphs,
                 fx_ms.as_mut(),
                 // The composite below carries no name in v1.
@@ -1374,6 +1443,7 @@ impl Realiser<'_> {
             let side = crate::fxops::Side {
                 roto: &roto,
                 planes: &planes,
+                late: None,
             };
             crate::fxops::run_ops(
                 self.fx,
@@ -1695,9 +1765,13 @@ impl Realiser<'_> {
                     .iter()
                     .map(|slot| slot.as_ref().map(|p| self.plane_texture(p, w, h)))
                     .collect();
+                let late = |slot: usize, points: usize| {
+                    self.late_clones(l.dof_inputs.get(slot), points, w, h)
+                };
                 let side = crate::fxops::Side {
                     roto: &roto_mattes,
                     planes: &planes,
+                    late: Some(&late),
                 };
                 crate::fxops::run_ops(
                     self.fx,
@@ -2256,6 +2330,7 @@ mod tests {
             colour_inputs: None,
             colour_config: None,
             flow: None,
+            late_clones: None,
         }
     }
 

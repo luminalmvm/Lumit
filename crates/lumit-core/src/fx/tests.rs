@@ -6035,8 +6035,8 @@ fn every_derived_spatial_id_is_one_the_effect_actually_derives() {
         }
     }
     assert_eq!(
-        declaring, 2,
-        "Scanlines and the Lens flare are the two today"
+        declaring, 3,
+        "Scanlines, the Lens flare and Transform points are the three today"
     );
 }
 
@@ -6441,12 +6441,15 @@ fn every_parameter_declares_a_unit() {
             ("grid", "spacing_x"),
             ("grid", "spacing_y"),
             ("grid", "spacing_z"),
+            ("grid", "width"),
+            ("grid", "height"),
             ("grid", "position_x"),
             ("grid", "position_y"),
             ("grid", "position_z"),
             ("grid", "jitter_x"),
             ("grid", "jitter_y"),
             ("grid", "jitter_z"),
+            ("grid", "inner_radius"),
             ("grid", "size"),
             // Scatter: the disc a point is drawn as. Density is a count
             // per composition area and rescales nowhere — it is measured
@@ -6458,6 +6461,19 @@ fn every_parameter_declares_a_unit() {
             ("emit_from_image", "size"),
             // Points along path: the disc a point is drawn as, Grid's row.
             ("points_along_path", "size"),
+            // Text to points: the disc a point is drawn as, Grid's row.
+            ("text_to_points", "size"),
+            // Track points: the analysis's three distances, which are in the
+            // footage's own pixels, and the disc a point is drawn as.
+            ("track_points", "spacing"),
+            ("track_points", "window"),
+            ("track_points", "max_distance"),
+            ("track_points", "size"),
+            // Clone to points: the cell a layer is fitted into, and how far
+            // a stamp's corners are rounded.
+            ("clone_to_points", "cell_width"),
+            ("clone_to_points", "cell_height"),
+            ("clone_to_points", "corner_radius"),
             // Connect points: how far apart two points may be and
             // still be joined, and how thick the line between them is. Both
             // are distances in the picture and must travel with the stream —
@@ -6465,19 +6481,42 @@ fn every_parameter_declares_a_unit() {
             // would weave a different web from the export's.
             ("connect_points", "max_distance"),
             ("connect_points", "width"),
+            // Points field: how far from a point its field reaches.
+            ("points_field", "radius"),
+            // Label points: how far from its point a label sits.
+            ("label_points", "offset_x"),
+            ("label_points", "offset_y"),
             // Vary points and Pick points: the pattern's own distances, and
             // how far Vary points moves a point. All travel with the stream.
             ("vary_points", "noise_scale"),
             ("vary_points", "centre_x"),
             ("vary_points", "centre_y"),
             ("vary_points", "radius"),
+            ("vary_points", "spacing"),
             ("vary_points", "offset_x"),
             ("vary_points", "offset_y"),
             ("vary_points", "offset_z"),
+            ("vary_points", "offset_forward"),
+            ("vary_points", "offset_side"),
             ("pick_points", "noise_scale"),
             ("pick_points", "centre_x"),
             ("pick_points", "centre_y"),
             ("pick_points", "radius"),
+            ("pick_points", "spacing"),
+            // Transform points, Relax points and Flow points: where the
+            // stream is moved from and to, the space a point wants, and the
+            // field's own places and speed. All travel with the stream.
+            ("transform_points", "anchor_x"),
+            ("transform_points", "anchor_y"),
+            ("transform_points", "position_x"),
+            ("transform_points", "position_y"),
+            ("transform_points", "position_z"),
+            ("relax_points", "radius"),
+            ("flow_points", "speed"),
+            ("flow_points", "noise_scale"),
+            ("flow_points", "centre_x"),
+            ("flow_points", "centre_y"),
+            ("flow_points", "radius"),
             // What a full channel of a Motion vectors layer means, in pixels
             // of movement.
             ("motion_blur", "vector_scale"),
@@ -8617,6 +8656,7 @@ fn a_mask_path_emitter_with_no_path_emits_nothing() {
         points: vec![[0.0, 0.0], [100.0, 0.0]],
         arc: vec![0.0, 100.0],
         closed: false,
+        corners: Vec::new(),
     };
     let dt = 1.0 / 60.0;
     let sched = Schedule::scan(dt, 120, 600, &|_| 150.0);
@@ -8939,7 +8979,8 @@ fn clone_stamps(e: &EffectInstance, stream: &PointsStream) -> PointsStream {
         1.0,
         &MarkerContext::NONE,
     );
-    crate::fx::effects::clone_to_points::CloneToPoints::read(Params::new(&bag)).stamps(stream)
+    use crate::fx::effects::clone_to_points::{CloneToPoints, Pictures};
+    CloneToPoints::read(Params::new(&bag)).stamps(stream, Pictures::plain(1))
 }
 
 /// A small hand-made stream: two points, a known distance apart, with distinct
@@ -8955,6 +8996,7 @@ fn two_points() -> PointsStream {
         colour: vec![[1.0, 0.0, 0.0, 1.0], [0.0, 1.0, 0.0, 1.0]],
         id: vec![0, 1],
         projection: points::Projection::FLAT,
+        ..PointsStream::default()
     }
 }
 

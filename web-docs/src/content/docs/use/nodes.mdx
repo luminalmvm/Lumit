@@ -104,8 +104,12 @@ box to read the point stream.
 
 A points effect added below a producer is wired to the nearest one above it. The **Points**
 row at the top of its card in [Effect controls](/panels/effect-controls/) shows the same
-wire and changes it. [Vary points](/effects/generate/vary-points/) and
-[Pick points](/effects/generate/pick-points/) have a Points socket on both sides.
+wire and changes it.
+
+Some points effects, such as [Vary points](/effects/generate/vary-points/) and
+[Pick points](/effects/generate/pick-points/), take a stream and hand a changed one on.
+[Merge points](/effects/generate/merge-points/) has four Points sockets, and takes a
+different producer above it on each.
 
 ## Seeing the picture at a box
 
