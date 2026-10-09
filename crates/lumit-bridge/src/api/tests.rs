@@ -3739,13 +3739,16 @@ fn a_text_style_round_trips_and_undoes() {
     let comp = CompositionReference::new(project.id, layer.comp_id());
     let text = comp.add_text_layer(None).expect("a text layer");
     let plain = text.get_text().expect("text").expect("it is text");
-    assert_eq!(plain.style, crate::api::assets::default_text_style());
+    // New text is the default style with kerning on.
+    let mut kerned = crate::api::assets::default_text_style();
+    kerned.kerning = BridgeKerning::Metrics;
+    assert_eq!(plain.style, kerned);
 
     let mut styled = plain.clone();
     styled.style.family = "Arial".into();
     styled.style.face = "Bold".into();
     styled.style.leading = Some(90.0);
-    styled.style.kerning = BridgeKerning::Metrics;
+    styled.style.kerning = BridgeKerning::Off;
     styled.style.tracking = 50.0;
     styled.style.caps = BridgeCaps::Small;
     styled.style.stroke_on = true;

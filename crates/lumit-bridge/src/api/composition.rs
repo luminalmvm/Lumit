@@ -1523,29 +1523,29 @@ impl CompositionReference {
         use lumit_core::model::{LinearColour, TextDocument, TransformGroup};
 
         let comp = self.composition()?;
-        let size = 72.0_f64;
-        let text = "Text";
+        let document = TextDocument {
+            text: "Text".into(),
+            expression: None,
+            size: 72.0,
+            fill: LinearColour([1.0, 1.0, 1.0, 1.0]),
+            path: None,
+            path_offset: lumit_core::anim::Property::zero(),
+            animators: Vec::new(),
+            // New text is kerned. Only a file with no kerning key reads as off.
+            style: Box::new(lumit_core::text::TextStyle {
+                kerning: lumit_core::text::Kerning::Metrics,
+                ..Default::default()
+            }),
+            paragraph: Default::default(),
+            extra: serde_json::Map::new(),
+        };
         // The anchor sits in the middle of the line as the engine lays it out,
         // so the layer rotates and scales about itself.
-        #[allow(clippy::cast_possible_truncation)]
-        let line = lumit_text::line_layout(text, size as f32, false);
+        let line = lumit_text::layout(&lumit_text::TextBlock::of(&document, &document.text), false);
 
         let layer = crate::edits::base_layer(
             "Text".into(),
-            lumit_core::model::LayerKind::Text {
-                document: TextDocument {
-                    text: text.into(),
-                    expression: None,
-                    size,
-                    fill: LinearColour([1.0, 1.0, 1.0, 1.0]),
-                    path: None,
-                    path_offset: lumit_core::anim::Property::zero(),
-                    animators: Vec::new(),
-                    style: Default::default(),
-                    paragraph: Default::default(),
-                    extra: serde_json::Map::new(),
-                },
-            },
+            lumit_core::model::LayerKind::Text { document },
             comp.duration.0,
             TransformGroup {
                 anchor_x: Property::fixed(f64::from(line.width) * 0.5),
