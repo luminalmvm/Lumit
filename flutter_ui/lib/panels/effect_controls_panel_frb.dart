@@ -59,7 +59,7 @@ import '../l10n/strings.dart';
 import '../widgets/controls.dart';
 import '../widgets/curve_editor.dart';
 import 'effect_param_row_frb.dart';
-import 'graph_panel.dart' show drivenParamsOf, graphCompById;
+import 'graph_panel.dart' show DrivenParam, drivenParamsIn, graphCompById;
 import 'node_panel.dart' show NodePanelFrb;
 import 'camera_track_display_frb.dart';
 import 'plane_display_frb.dart';
@@ -246,6 +246,11 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
   /// them, and empty costs one call that answers "no drivers".
   Map<String, ({String driver, BridgePortType type, bool noStream})> _driven =
       const {};
+
+  /// Every Points input on the layer's effects, by `effectId/portId`, with
+  /// the port's label. Taken from the same read as [_driven], which already
+  /// names what each one is wired to.
+  Map<String, String> _points = const {};
   LumitUiState? _boundUi;
 
   @override
@@ -393,14 +398,28 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
   void _readDriven() {
     if (!mounted) return;
     final layer = _boundUi?.selectedLayer.value ?? _lastLayer;
-    if (layer == null) {
-      if (_driven.isNotEmpty) setState(() => _driven = const {});
-      return;
+    BridgeLayerGraph? graph;
+    try {
+      graph = layer?.getGraph();
+    } catch (_) {
+      // The layer has gone, so the rows draw their own controls again.
     }
     // The Timeline's fold-out takes the same reading from the same helper, so
     // a row cannot say *driven* in one panel and offer a spinner in the other.
-    final next = drivenParamsOf(layer);
-    if (!mapEquals(next, _driven)) setState(() => _driven = next);
+    final next =
+        graph == null ? const <String, DrivenParam>{} : drivenParamsIn(graph);
+    final points = {
+      for (final n in graph?.nodes ?? const <BridgeGraphNode>[])
+        if (n.node case BridgeNodeRef_Effect(:final field0))
+          for (final p in n.inputs)
+            if (p.portType == BridgePortType.points) '$field0/${p.id}': p.label,
+    };
+    if (!mapEquals(next, _driven) || !mapEquals(points, _points)) {
+      setState(() {
+        _driven = next;
+        _points = points;
+      });
+    }
   }
 
   @override
@@ -1166,6 +1185,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
         _actionPressed,
         _folds,
         _driven,
+        _points,
         layer.internallayerId,
         comp.internalid,
         ui.workspace.themedEffectGraphs,
@@ -1198,6 +1218,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                 effect: fx.id,
               ),
         driven: _driven,
+        points: _points,
         renaming: renaming,
         onRenamed: (name) {
           // Stage the name on a fresh handle and commit the list — one op,
@@ -1595,6 +1616,10 @@ class _EffectSection extends StatelessWidget {
   final Map<String, ({String driver, BridgePortType type, bool noStream})>
       driven;
 
+  /// The layer's Points inputs, by `effectId/portId`, with each port's label.
+  /// Read once by the panel beside [driven].
+  final Map<String, String> points;
+
   /// The drag in flight's staged value for (effect, param), or null — overlaid
   /// on the model's value so the number under the pointer is the staged one.
   final BridgeEffectValue? Function(UuidValue effect, String param) stagedValue;
@@ -1695,6 +1720,7 @@ class _EffectSection extends StatelessWidget {
     this.pick,
     required this.onSelect,
     this.driven = const {},
+    this.points = const {},
     required this.stagedValue,
     this.style = false,
     this.group,
@@ -2004,8 +2030,76 @@ class _EffectSection extends StatelessWidget {
                   style: ThemeScope.of(context).theme.body),
             ),
           ),
+        // A Points input takes a wire rather than a value, so it has no
+        // parameter row of its own.
+        for (final input in points.entries)
+          if (input.key.startsWith('$id/'))
+            _pointsRow(
+                context, input.key.substring('$id/'.length), input.value),
         ..._paramRows(id, values),
       ],
+    );
+  }
+
+  /// A Points input's row: what it is wired to, picked from the effects above
+  /// this one that hand points out.
+  ///
+  /// The list is read when the menu opens, as the layer picker's is. Which
+  /// effects sit above is a position, and a card can outlive one.
+  Widget _pointsRow(BuildContext context, String port, String label) {
+    final t = ThemeScope.of(context).theme;
+    final node = BridgeNodeRef.effect(info.id);
+    final to = BridgeInputRef.param(node: node, port: port);
+    return fxTwoColumnRow(
+      context: context,
+      name: Text(t.propertyCase(engineLabel(label)),
+          style: t.body, overflow: TextOverflow.ellipsis),
+      control: SizedBox(
+        width: effectCellWidth + 40,
+        child: BareLazyDropdown<BridgeOutputRef?>(
+          key: ValueKey<String>('fx-points-${info.id}-$port'),
+          // A wire from a driver in the graph is named here too, though the
+          // list only offers the stack.
+          label: driven['${info.id}/$port']?.driver ?? l10n.none,
+          options: () => [
+            (null, l10n.none),
+            for (final n
+                in layer.getGraph().nodes.takeWhile((n) => n.node != node))
+              if (n.node case BridgeNodeRef_Effect(:final field0))
+                for (final o in n.outputs)
+                  if (o.portType == BridgePortType.points)
+                    (
+                      BridgeOutputRef.effectData(effect: field0, port: o.id),
+                      n.customName ?? engineLabel(n.label)
+                    ),
+          ],
+          onChanged: (from) {
+            // The wiring is read, changed and written back whole, so the pick
+            // is one undo step.
+            try {
+              final w = layer.getGraph().wiring;
+              layer.setGraph(
+                drivers: layer.getGraphDrivers(),
+                wiring: BridgeGraphWiring(
+                  edges: [
+                    for (final e in w.edges)
+                      if (e.to != to) e,
+                    if (from != null) BridgeGraphEdge(from: from, to: to),
+                  ],
+                  layout: w.layout,
+                  exposed: w.exposed,
+                  groups: w.groups,
+                  outUnwired: w.outUnwired,
+                ),
+              );
+            } catch (_) {
+              // The graph changed under us, or the edit was refused. Reading
+              // it again is the recovery.
+            }
+            onStackChanged();
+          },
+        ),
+      ),
     );
   }
 

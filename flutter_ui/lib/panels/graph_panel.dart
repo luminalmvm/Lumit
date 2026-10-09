@@ -292,14 +292,19 @@ typedef DrivenParam = ({String driver, BridgePortType type, bool noStream});
 /// guards against. Empty for every layer that has never been wired,
 /// which is nearly all of them.
 Map<String, DrivenParam> drivenParamsOf(LayerReference layer) {
-  final out = <String, DrivenParam>{};
   final BridgeLayerGraph graph;
   try {
     graph = layer.getGraph();
   } catch (_) {
     // The layer has gone; the rows simply draw their own controls again.
-    return out;
+    return {};
   }
+  return drivenParamsIn(graph);
+}
+
+/// The same reading, for a panel that already holds the graph.
+Map<String, DrivenParam> drivenParamsIn(BridgeLayerGraph graph) {
+  final out = <String, DrivenParam>{};
   final byRef = {for (final n in graph.nodes) graphNodeKey(n.node): n};
   for (final edge in graph.wiring.edges) {
     if (edge.to case BridgeInputRef_Param(:final node, :final port)) {
