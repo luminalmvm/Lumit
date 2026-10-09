@@ -75,7 +75,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$script:Locales = @('ar', 'de', 'es', 'kk', 'pl', 'pt', 'uk', 'zh', 'zh_Hant')
+$script:Locales = @('ar', 'de', 'es', 'it', 'kk', 'pl', 'pt', 'uk', 'zh', 'zh_Hant')
 $script:StateName = 'translation-state.json'
 $script:Dir = $null
 
