@@ -372,6 +372,8 @@ abstract final class LumitIcons {
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 3.5h11M4.5 7.5h7M3.5 11.5h9"/></svg>';
   static const String alignRight =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 3.5h11M6.5 7.5h7M4.5 11.5h9"/></svg>';
+  static const String justify =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 3.5h11M2.5 7.5h11M2.5 11.5h11"/></svg>';
   static const String fauxBold =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 3.5h4a2 2 0 0 1 0 4h-4zM4.5 7.5h4.5a2.5 2.5 0 0 1 0 5H4.5z"/></svg>';
   static const String fauxItalic =
@@ -540,6 +542,7 @@ abstract final class LumitIcons {
     'Align left': alignLeft,
     'Align centre': alignCentre,
     'Align right': alignRight,
+    'Justify': justify,
     'Faux bold': fauxBold,
     'Faux italic': fauxItalic,
     'All caps': allCaps,

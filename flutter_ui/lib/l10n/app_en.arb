@@ -14044,6 +14044,14 @@
   "@tipParagraphAlignRight": {
     "description": "Tooltip on the Paragraph panel button that lines the text up on its right side."
   },
+  "tipParagraphJustify": "Justify",
+  "@tipParagraphJustify": {
+    "description": "Tooltip on the Paragraph panel button that stretches every line but a paragraph's last across the text's box. Greyed out until the text has a box width."
+  },
+  "paragraphBoxWidth": "Box width",
+  "@paragraphBoxWidth": {
+    "description": "Paragraph panel: label beside the width the words wrap to, in pixels. Nought means no box, so a line only ends where the user broke it."
+  },
   "paragraphIndentLeft": "Indent left",
   "@paragraphIndentLeft": {
     "description": "Paragraph panel: label beside how far the lines are moved in from the left, in pixels."

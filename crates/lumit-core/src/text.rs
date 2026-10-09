@@ -603,11 +603,19 @@ impl TextStyle {
 /// How the lines of a Text layer are laid out against each other.
 ///
 /// Each line the user breaks is its own paragraph, as it is for point text in
-/// After Effects, so the first line indent reaches every line.
+/// After Effects, so without a box the first line indent reaches every line.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct ParagraphStyle {
     #[serde(default, skip_serializing_if = "is_default")]
     pub align: TextAlign,
+    /// Px the words wrap to. Nought is point text, where a line only ends
+    /// where it was broken.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub box_width: f64,
+    /// Stretch every line but a paragraph's last to the box, by its spaces.
+    /// Does nothing without a box.
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub justify: bool,
     /// Px in from the left edge of the block.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub indent_left: f64,

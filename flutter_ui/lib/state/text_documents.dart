@@ -34,6 +34,7 @@ const BridgeTextStyle plainTextStyle = BridgeTextStyle(
 /// The paragraph of a layer nobody has styled, held the same way.
 const BridgeParagraphStyle plainParagraphStyle = BridgeParagraphStyle(
   align: BridgeTextAlign.left,
+  justify: false,
   indentLeft: 0,
   indentRight: 0,
   indentFirst: 0,
@@ -116,8 +117,13 @@ extension TextStyleCopy on BridgeTextStyle {
 }
 
 extension ParagraphStyleCopy on BridgeParagraphStyle {
+  /// [noBox] goes back to point text, since a null [boxWidth] means "leave it
+  /// alone".
   BridgeParagraphStyle copyWith({
     BridgeTextAlign? align,
+    double? boxWidth,
+    bool noBox = false,
+    bool? justify,
     double? indentLeft,
     double? indentRight,
     double? indentFirst,
@@ -126,6 +132,8 @@ extension ParagraphStyleCopy on BridgeParagraphStyle {
   }) =>
       BridgeParagraphStyle(
         align: align ?? this.align,
+        boxWidth: noBox ? null : (boxWidth ?? this.boxWidth),
+        justify: justify ?? this.justify,
         indentLeft: indentLeft ?? this.indentLeft,
         indentRight: indentRight ?? this.indentRight,
         indentFirst: indentFirst ?? this.indentFirst,

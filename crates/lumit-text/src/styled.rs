@@ -12,7 +12,6 @@
 //! left-to-right and right-to-left words needs the bidi algorithm.
 
 use std::collections::HashMap;
-use std::ops::Range;
 
 use lumit_core::mask::MaskPolyline;
 use lumit_core::model::LinearColour;
@@ -150,6 +149,52 @@ fn lines_of(text: &str) -> Vec<(usize, Vec<char>)> {
     out
 }
 
+/// One line as it will be drawn, measured from its own left end.
+struct Row {
+    /// The index of the line's first character in the whole text.
+    start: usize,
+    width: f32,
+    carets: Vec<f32>,
+    /// How many spaces come before each caret, which is how far along a
+    /// stretched line each letter has moved.
+    spaces: Vec<f32>,
+    /// The first and last line of a paragraph. A line nobody wrapped is both.
+    first: bool,
+    last: bool,
+}
+
+/// Where a paragraph wraps to fit `room`: the index of each space a line ends
+/// at. A word wider than the box is left whole and runs past it.
+///
+/// ponytail: breaks at spaces only. Chinese and Japanese need the Unicode line
+/// breaking rules.
+fn breaks(chars: &[char], carets: &[f32], room: f32, first_line: f32, tracking: f32) -> Vec<usize> {
+    let mut cuts = Vec::new();
+    let mut from = 0usize;
+    let mut space = None;
+    for (k, ch) in chars.iter().enumerate() {
+        if *ch == ' ' {
+            space = Some(k);
+            continue;
+        }
+        let room = if cuts.is_empty() {
+            room - first_line
+        } else {
+            room
+        };
+        let (Some(end), Some(line)) = (carets.get(k + 1), carets.get(from)) else {
+            break;
+        };
+        if end - tracking - line > room {
+            if let Some(at) = space.take() {
+                cuts.push(at);
+                from = at + 1;
+            }
+        }
+    }
+    cuts
+}
+
 fn lay(block: &TextBlock<'_>, face: &Face) -> Laid {
     let style = block.style;
     let paragraph = block.paragraph;
@@ -193,11 +238,18 @@ fn lay(block: &TextBlock<'_>, face: &Face) -> Laid {
     }
     let shaper = harfrust::ShaperFont::new(&face.shaper);
 
+    let (left, right, first_line) = (
+        finite(paragraph.indent_left),
+        finite(paragraph.indent_right),
+        finite(paragraph.indent_first),
+    );
+    let wrap = Some(finite(paragraph.box_width))
+        .filter(|w| *w > 0.0)
+        .map(|w| w.min(crate::MAX_PATH_BOX_PX));
+
     let mut glyphs: Vec<Placed> = Vec::new();
-    // Each line's glyphs, first character, width and carets, all measured from
-    // the line's own left end.
-    let mut rows: Vec<(usize, Range<usize>, f32, Vec<f32>)> = Vec::new();
-    for (line, (start, chars)) in lines_of(block.text).into_iter().enumerate() {
+    let mut rows: Vec<Row> = Vec::new();
+    for (start, chars) in lines_of(block.text) {
         let mut buffer = harfrust::Buffer::new();
         let mut small = vec![false; chars.len()];
         for (k, ch) in chars.iter().enumerate() {
@@ -257,7 +309,7 @@ fn lay(block: &TextBlock<'_>, face: &Face) -> Laid {
                 glyphs.push(Placed {
                     glyph: info.glyph_id,
                     ch: start + k,
-                    line,
+                    line: rows.len(),
                     x: pen + dx,
                     dy: -lift - dy,
                     advance,
@@ -297,47 +349,126 @@ fn lay(block: &TextBlock<'_>, face: &Face) -> Laid {
                 }
             }
         }
-        rows.push((start, first..glyphs.len(), width, carets));
+        // ponytail: a right-to-left paragraph isn't wrapped, its carets run
+        // the other way.
+        let cuts = match wrap {
+            Some(w) if !backwards => {
+                breaks(&chars, &carets, w - left - right, first_line, tracking)
+            }
+            _ => Vec::new(),
+        };
+        if cuts.is_empty() {
+            rows.push(Row {
+                start,
+                width,
+                carets,
+                spaces: Vec::new(),
+                first: true,
+                last: true,
+            });
+            continue;
+        }
+        // Each line is its characters up to the space it broke at. That space
+        // belongs to neither line, the same as a break the user typed.
+        let paragraph_first = rows.len();
+        let mut from = 0usize;
+        for to in cuts.iter().copied().chain([chars.len()]) {
+            let x0 = carets.get(from).copied().unwrap_or(0.0);
+            let end = if to == chars.len() {
+                width
+            } else {
+                carets.get(to).copied().unwrap_or(x0) - tracking
+            };
+            let mut count = 0.0f32;
+            let mut spaces = Vec::with_capacity(to - from + 1);
+            for ch in chars.get(from..to).into_iter().flatten() {
+                spaces.push(count);
+                if *ch == ' ' {
+                    count += 1.0;
+                }
+            }
+            spaces.push(count);
+            for glyph in glyphs.get_mut(first..).into_iter().flatten() {
+                if (from..=to).contains(&(glyph.ch - start)) {
+                    glyph.line = rows.len();
+                    glyph.x -= x0;
+                }
+            }
+            rows.push(Row {
+                start: start + from,
+                width: (end - x0).max(0.0),
+                carets: carets
+                    .get(from..=to)
+                    .into_iter()
+                    .flatten()
+                    .map(|x| x - x0)
+                    .collect(),
+                spaces,
+                first: rows.len() == paragraph_first,
+                last: to == chars.len(),
+            });
+            from = to + 1;
+        }
     }
 
-    let (left, right, first_line) = (
-        finite(paragraph.indent_left),
-        finite(paragraph.indent_right),
-        finite(paragraph.indent_first),
-    );
+    let indent = |row: &Row| left + if row.first { first_line } else { 0.0 };
     let width = rows
         .iter()
-        .map(|row| left + first_line + row.2 + right)
-        .fold(0.0f32, f32::max);
+        .map(|row| indent(row) + row.width + right)
+        .fold(wrap.unwrap_or(0.0), f32::max);
     let leading = style
         .leading
         .map_or(size * 1.2, finite)
         .clamp(0.0, MAX_SIZE * 4.0);
-    let gap = leading + finite(paragraph.space_before) + finite(paragraph.space_after);
+    let between = finite(paragraph.space_before) + finite(paragraph.space_after);
 
     let mut lines = Vec::with_capacity(rows.len());
+    // How far each line's glyphs move: the line as a whole, then each space.
+    let mut moves: Vec<(usize, f32, f32, Vec<f32>)> = Vec::with_capacity(rows.len());
     let mut baseline = ascent;
-    for (start, range, row_width, mut carets) in rows {
-        let free = width - (left + first_line + row_width + right);
-        let x = left
-            + first_line
-            + match paragraph.align {
-                TextAlign::Left => 0.0,
-                TextAlign::Centre => free * 0.5,
-                TextAlign::Right => free,
-            };
-        for glyph in glyphs.get_mut(range).into_iter().flatten() {
-            glyph.x += x;
+    for (i, mut row) in rows.into_iter().enumerate() {
+        if i > 0 {
+            baseline += leading + if row.first { between } else { 0.0 };
         }
-        for caret in &mut carets {
-            *caret += x;
+        let free = width - (indent(&row) + row.width + right);
+        let gaps = row.spaces.last().copied().unwrap_or(0.0);
+        // A justified line gives its spare room to its spaces. A paragraph's
+        // last line is left as it is, and so is a line with no spaces.
+        let stretch = if paragraph.justify && wrap.is_some() && !row.last && gaps > 0.0 {
+            free / gaps
+        } else {
+            0.0
+        };
+        let x = indent(&row)
+            + if stretch > 0.0 {
+                0.0
+            } else {
+                match paragraph.align {
+                    TextAlign::Left => 0.0,
+                    TextAlign::Centre => free * 0.5,
+                    TextAlign::Right => free,
+                }
+            };
+        for (k, caret) in row.carets.iter_mut().enumerate() {
+            *caret += x + stretch * row.spaces.get(k).copied().unwrap_or(0.0);
         }
         lines.push(Line {
-            start,
+            start: row.start,
             baseline,
-            carets,
+            carets: row.carets,
         });
-        baseline += gap;
+        moves.push((row.start, x, stretch, row.spaces));
+    }
+    for glyph in &mut glyphs {
+        if let Some((start, x, stretch, spaces)) = moves.get(glyph.line) {
+            let before = glyph
+                .ch
+                .checked_sub(*start)
+                .and_then(|k| spaces.get(k))
+                .copied()
+                .unwrap_or(0.0);
+            glyph.x += x + stretch * before;
+        }
     }
     let height = lines.last().map_or(ascent, |l| l.baseline) + descent;
 
@@ -965,6 +1096,31 @@ mod tests {
         };
         let l = layout(&block("short", &kerned(), &indented), false);
         assert!((l.lines[0].carets[0] - left.0 - 40.0).abs() < 0.01);
+    }
+
+    /// A box wraps the words at its spaces, and justifying stretches every
+    /// line but the last to the box.
+    #[test]
+    fn a_box_wraps_and_justifies() {
+        let text = "one two three four five six";
+        let boxed = |justify| ParagraphStyle {
+            box_width: 400.0,
+            justify,
+            ..ParagraphStyle::default()
+        };
+        let ragged = layout(&block(text, &kerned(), &boxed(false)), false);
+        assert!(ragged.lines.len() > 1);
+        assert!((ragged.right - ragged.left - 400.0).abs() < 0.01);
+        // The space a line broke at belongs to neither line.
+        let first = &ragged.lines[0];
+        assert_eq!(ragged.lines[1].start, first.start + first.carets.len());
+        assert!(first.carets.last().unwrap() - ragged.left < 400.0);
+
+        let full = layout(&block(text, &kerned(), &boxed(true)), false);
+        assert_eq!(full.lines.len(), ragged.lines.len());
+        assert!((full.lines[0].carets.last().unwrap() - full.right).abs() < 0.01);
+        let last = full.lines.last().unwrap();
+        assert!(last.carets.last().unwrap() < &(full.right - 1.0));
     }
 
     #[test]
