@@ -45,7 +45,10 @@ class ShareState extends ChangeNotifier {
   void _noteRoster() {
     final now = people
         .map((p) => '${p.id}|${p.name}|${p.colour}|${p.me}'
-            '|${p.comp?.internalid}|${p.layers.map((l) => l.internallayerId)}')
+            '|${p.comp?.internalid}|${p.layers.map((l) => l.internallayerId)}'
+            // A hash each, because a marquee can hold thousands of keyframes
+            // and this is run for every move of anyone's playhead.
+            '|${Object.hashAll(p.properties)}|${Object.hashAll(p.keys)}')
         .join(';');
     if (now == _rosterWas) return;
     _rosterWas = now;
@@ -73,6 +76,42 @@ class ShareState extends ChangeNotifier {
       comp == null
           ? const []
           : others.where((p) => p.comp?.internalid == comp.internalid);
+
+  /// What the others have in hand in [comp], for a panel to mark its rows
+  /// by: by layer id or row path, the colour of each person who has it. A
+  /// layer is in it too when it is a row or a keyframe on it they hold, so a
+  /// row that is out of sight still shows on its layer. Empty when the
+  /// project is not shared.
+  Map<String, List<int>> inHand(CompositionReference? comp) {
+    if (!active) return const {};
+    final out = <String, List<int>>{};
+    for (final person in inComp(comp)) {
+      void mark(String name) {
+        final holders = out[name] ??= [];
+        if (!holders.contains(person.colour)) holders.add(person.colour);
+      }
+
+      for (final layer in person.layers) {
+        mark(layer.internallayerId.toString());
+      }
+      for (final path in [...person.properties, ...person.keys]) {
+        final slash = path.indexOf('/');
+        if (slash > 0) mark(path.substring(0, slash));
+      }
+      person.properties.forEach(mark);
+    }
+    return out;
+  }
+
+  /// The colour of each other person who has [name] in hand, whichever
+  /// composition they have open: what the Project panel marks an item by.
+  List<int> holding(String name) {
+    if (!active) return const [];
+    return [
+      for (final person in others)
+        if (person.properties.contains(name)) person.colour,
+    ];
+  }
 
   void begin(ShareRole as, ProjectReference project, {int? onPort}) {
     role = as;
@@ -166,16 +205,56 @@ class ShareState extends ChangeNotifier {
   double? _x, _y;
   String? _sent;
 
-  /// The composition open, the layers selected in it and the playhead's
-  /// frame. Does nothing unless the project is shared.
+  /// The property rows and the keyframes this person has in hand, by the
+  /// names the panels' rows go by, what of them was last sent, and a count
+  /// that moves on when either changes. The count is what [_send] compares,
+  /// where the lists could be thousands long and it is asked for every frame
+  /// of playback. Held as they are handed over and compared only in [_send],
+  /// which is not reached unless the project is shared.
+  List<String> _properties = const [];
+  Set<String> _keys = const {};
+
+  /// The keyframes each panel has selected, by the panel. Two panels have
+  /// lanes with keyframes in them, and what the others see is both.
+  final Map<String, Set<String>> _keysBy = {};
+  List<String> _sentProperties = const [];
+  Set<String> _sentKeys = const {};
+  int _marks = 0;
+
+  /// The composition open, the layers and the property rows selected in it
+  /// and the playhead's frame. Does nothing unless the project is shared.
   void look(
       {required CompositionReference? comp,
       required List<LayerReference> layers,
-      required int? playhead}) {
+      required int? playhead,
+      List<String> properties = const []}) {
     _comp = comp;
     _layers = layers;
     _playhead = playhead;
+    _properties = properties;
     _send();
+  }
+
+  /// The keyframes selected in the panel called [from], as its lanes name
+  /// them. The set is kept, so it is one the caller will not change
+  /// afterwards. Does nothing unless the project is shared.
+  void keys(Set<String> keys, {String from = 'timeline'}) {
+    _keysBy[from] = keys;
+    _send();
+  }
+
+  /// The keyframes the others have selected in [comp], for a lane to ring:
+  /// by the name the lanes give each, the colour of each person who has it.
+  /// Empty when the project is not shared.
+  Map<String, List<int>> keysInHand(CompositionReference? comp) {
+    if (!active) return const {};
+    final out = <String, List<int>>{};
+    for (final person in inComp(comp)) {
+      for (final key in person.keys) {
+        (out[key] ??= []).add(person.colour);
+      }
+    }
+    return out;
   }
 
   /// The pointer over the Viewer in composition pixels, or nulls once it has
@@ -190,8 +269,20 @@ class ShareState extends ChangeNotifier {
     final project = _project;
     if (project == null) return;
     final layers = _comp == null ? const <LayerReference>[] : _layers;
+    if (!identical(_properties, _sentProperties) &&
+        !listEquals(_properties, _sentProperties)) {
+      _marks++;
+    }
+    _keys = _keysBy.length == 1
+        ? _keysBy.values.first
+        : {for (final held in _keysBy.values) ...held};
+    if (!identical(_keys, _sentKeys) && !setEquals(_keys, _sentKeys)) {
+      _marks++;
+    }
+    _sentProperties = _properties;
+    _sentKeys = _keys;
     final now = '${_comp?.internalid}|${layers.map((l) => l.internallayerId)}'
-        '|$_playhead|${_x?.round()}|${_y?.round()}';
+        '|$_playhead|${_x?.round()}|${_y?.round()}|$_marks';
     if (now == _sent) return;
     _sent = now;
     try {
@@ -200,7 +291,9 @@ class ShareState extends ChangeNotifier {
           layers: layers,
           playhead: _playhead,
           cursorX: _x,
-          cursorY: _y);
+          cursorY: _y,
+          properties: _comp == null ? const [] : _properties,
+          keys: _comp == null ? const [] : _keys.toList());
     } catch (_) {
       // The project closed between the gesture and the call.
     }

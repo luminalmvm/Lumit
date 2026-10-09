@@ -1721,7 +1721,9 @@ abstract class BridgeLibApi extends BaseApi {
       required List<LayerReference> layers,
       PlatformInt64? playhead,
       double? cursorX,
-      double? cursorY});
+      double? cursorY,
+      required List<String> properties,
+      required List<String> keys});
 
   BridgeShareReach crateApiProjectProjectReferenceShareReach(
       {required ProjectReference that});
@@ -14530,7 +14532,9 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       required List<LayerReference> layers,
       PlatformInt64? playhead,
       double? cursorX,
-      double? cursorY}) {
+      double? cursorY,
+      required List<String> properties,
+      required List<String> keys}) {
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
@@ -14540,6 +14544,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_opt_box_autoadd_i_64(playhead, serializer);
         sse_encode_opt_box_autoadd_f_64(cursorX, serializer);
         sse_encode_opt_box_autoadd_f_64(cursorY, serializer);
+        sse_encode_list_String(properties, serializer);
+        sse_encode_list_String(keys, serializer);
         return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 456)!;
       },
       codec: SseCodec(
@@ -14548,7 +14554,16 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
             sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBridgeError,
       ),
       constMeta: kCrateApiProjectProjectReferenceSharePresenceConstMeta,
-      argValues: [that, comp, layers, playhead, cursorX, cursorY],
+      argValues: [
+        that,
+        comp,
+        layers,
+        playhead,
+        cursorX,
+        cursorY,
+        properties,
+        keys
+      ],
       apiImpl: this,
     ));
   }
@@ -14556,7 +14571,16 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   TaskConstMeta get kCrateApiProjectProjectReferenceSharePresenceConstMeta =>
       const TaskConstMeta(
         debugName: "project_reference_share_presence",
-        argNames: ["that", "comp", "layers", "playhead", "cursorX", "cursorY"],
+        argNames: [
+          "that",
+          "comp",
+          "layers",
+          "playhead",
+          "cursorX",
+          "cursorY",
+          "properties",
+          "keys"
+        ],
       );
 
   @override
@@ -19124,8 +19148,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeSharePerson dco_decode_bridge_share_person(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 9)
-      throw Exception('unexpected arr length: expect 9 but see ${arr.length}');
+    if (arr.length != 11)
+      throw Exception('unexpected arr length: expect 11 but see ${arr.length}');
     return BridgeSharePerson(
       id: dco_decode_u_32(arr[0]),
       name: dco_decode_String(arr[1]),
@@ -19136,6 +19160,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       playhead: dco_decode_opt_box_autoadd_i_64(arr[6]),
       cursorX: dco_decode_opt_box_autoadd_f_64(arr[7]),
       cursorY: dco_decode_opt_box_autoadd_f_64(arr[8]),
+      properties: dco_decode_list_String(arr[9]),
+      keys: dco_decode_list_String(arr[10]),
     );
   }
 
@@ -24390,6 +24416,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_playhead = sse_decode_opt_box_autoadd_i_64(deserializer);
     var var_cursorX = sse_decode_opt_box_autoadd_f_64(deserializer);
     var var_cursorY = sse_decode_opt_box_autoadd_f_64(deserializer);
+    var var_properties = sse_decode_list_String(deserializer);
+    var var_keys = sse_decode_list_String(deserializer);
     return BridgeSharePerson(
         id: var_id,
         name: var_name,
@@ -24399,7 +24427,9 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         layers: var_layers,
         playhead: var_playhead,
         cursorX: var_cursorX,
-        cursorY: var_cursorY);
+        cursorY: var_cursorY,
+        properties: var_properties,
+        keys: var_keys);
   }
 
   @protected
@@ -29862,6 +29892,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_opt_box_autoadd_i_64(self.playhead, serializer);
     sse_encode_opt_box_autoadd_f_64(self.cursorX, serializer);
     sse_encode_opt_box_autoadd_f_64(self.cursorY, serializer);
+    sse_encode_list_String(self.properties, serializer);
+    sse_encode_list_String(self.keys, serializer);
   }
 
   @protected

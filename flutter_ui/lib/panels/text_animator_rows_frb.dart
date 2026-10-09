@@ -26,6 +26,7 @@ import '../state/comp_time.dart';
 import '../widgets/controls.dart';
 import 'fx_section.dart';
 import 'keyframe_controls_frb.dart';
+import 'layer_fold_frb.dart' show animatorsPath;
 
 /// Matches the Effect controls panel's own cell width, so the values line up
 /// down the panel.
@@ -110,6 +111,7 @@ class TextAnimatorRowsFrb extends StatelessWidget {
 
     return FxSection(
       title: l10n.textAnimatorsSection,
+      scope: animatorsPath(layer.internallayerId.toString()),
       open: open,
       onToggle: onToggle,
       rows: rows,
