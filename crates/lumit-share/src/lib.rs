@@ -9,13 +9,15 @@
 //! and the guests reach it directly, over a LAN or a VPN.
 //!
 //! Threads: sharing runs its own and none is the UI thread. The host has one
-//! that accepts, and a reader and a writer per guest. A guest has a reader and
-//! a writer.
+//! that accepts, a reader and a writer per guest, and one that keeps its
+//! router's port open when it was asked to. A guest has a reader and a
+//! writer.
 
 mod guest;
 mod host;
 mod kept;
 mod local;
+mod reach;
 mod wire;
 
 pub use guest::{join, resume, Guest, Joining, Resuming};
@@ -80,6 +82,27 @@ pub enum Refusal {
     Full,
 }
 
+/// Whether people outside the host's network can reach it.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum Reach {
+    /// The router was not asked. Only people on the host's own network, or
+    /// on a VPN with it, or through a port forwarded by hand, can join.
+    #[default]
+    Off,
+    /// The router is being asked.
+    Asking,
+    /// The router sends the port to this machine. `address` is the one it
+    /// has on the internet, which is what goes in an invite for someone
+    /// outside.
+    Open { address: String },
+    /// No router answered, or the one that did would not open the port.
+    Refused,
+    /// The router is not on the internet itself: it sits behind another, or
+    /// behind an address its provider shares between customers. Opening its
+    /// port would reach nobody.
+    Behind,
+}
+
 /// Why sharing stopped for a guest.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Ending {
@@ -110,6 +133,9 @@ pub enum Event {
     Elsewhere,
     /// Sharing is over for this guest. The document stays as it is.
     Ended(Ending),
+    /// For a host: what came of asking its router to let people outside
+    /// the network in.
+    Reach(Reach),
 }
 
 /// Where those events go. Called from the share threads with no lock held.

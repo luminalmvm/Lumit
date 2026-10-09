@@ -124,6 +124,13 @@ class _ShareDialogState extends State<_ShareDialog> {
   /// This time's invite is the one handed out last time.
   bool _sameInvite = false;
 
+  /// This machine's address on its own network, which the address field
+  /// starts as and people on that network join by.
+  late final String _localAddress;
+
+  /// Whether sharing asks the router to open the port.
+  late bool _outside;
+
   /// The invite for the address in the field, while this machine hosts.
   String? _invite;
 
@@ -155,13 +162,26 @@ class _ShareDialogState extends State<_ShareDialog> {
     if (widget.app.project == null) _page = _Page.join;
     _name = TextEditingController(text: _prefs.shareName);
     _port = TextEditingController(text: '${keptPort ?? _defaultPort}');
-    _address = TextEditingController(text: shareLocalAddress())
+    _localAddress = shareLocalAddress();
+    _outside = _prefs.shareOutside;
+    _address = TextEditingController(text: _localAddress)
       ..addListener(_readInvite);
+    widget.app.share.roster.addListener(_readReach);
+    _readReach();
     _invite = _inviteNow();
+  }
+
+  /// Once the router has opened the port, the invite carries the address it
+  /// has on the internet, unless another has been typed over this machine's.
+  void _readReach() {
+    if (widget.app.share.reach case BridgeShareReach_Open(:final address)) {
+      if (_address.text == _localAddress) _address.text = address;
+    }
   }
 
   @override
   void dispose() {
+    widget.app.share.roster.removeListener(_readReach);
     _name.dispose();
     _port.dispose();
     _address.dispose();
@@ -197,8 +217,8 @@ class _ShareDialogState extends State<_ShareDialog> {
     // Anything that is not a port number asks for the usual one.
     final asked =
         (int.tryParse(_port.text.trim()) ?? _defaultPort).clamp(0, 65535);
-    final started = widget.app
-        .startSharing(name: _nameNow(), port: asked, key: _keptKey);
+    final started = widget.app.startSharing(
+        name: _nameNow(), port: asked, key: _keptKey, outside: _outside);
     if (started case BridgeShareStarted_Sharing(:final port, :final key)) {
       // Kept until sharing is stopped, so the same project shared again after
       // a restart is found by the invite people already hold.
@@ -365,6 +385,25 @@ class _ShareDialogState extends State<_ShareDialog> {
           _field(t, 'share-port', _port, onSubmitted: _start),
           labelColumn: _labelColumn,
         ),
+        dialogRow(
+          t,
+          l10n.shareOutside,
+          Row(
+            children: [
+              HouseCheckbox(
+                key: const ValueKey('share-outside'),
+                value: _outside,
+                onChanged: (on) {
+                  _prefs.setShareOutside(on);
+                  setState(() => _outside = on);
+                },
+              ),
+              const SizedBox(width: 6),
+              Expanded(child: Text(l10n.shareOutsideAsk, style: t.small)),
+            ],
+          ),
+          labelColumn: _labelColumn,
+        ),
         _line(t, l10n.shareHostHint),
         if (_error case final error?) _line(t, error, warning: true),
       ];
@@ -439,7 +478,17 @@ class _ShareDialogState extends State<_ShareDialog> {
             selectionColor: t.accent.withValues(alpha: 0.5),
           ),
         ),
-        _line(t, _sameInvite ? l10n.shareSameInvite : l10n.shareHostHint),
+        if (_sameInvite) _line(t, l10n.shareSameInvite),
+        switch (widget.app.share.reach) {
+          BridgeShareReach_Off() => _line(t, l10n.shareReachOff),
+          BridgeShareReach_Asking() => _line(t, l10n.shareReachAsking),
+          BridgeShareReach_Open() =>
+            _line(t, l10n.shareReachOpen(_localAddress)),
+          BridgeShareReach_Refused() =>
+            _line(t, l10n.shareReachRefused, warning: true),
+          BridgeShareReach_Behind() =>
+            _line(t, l10n.shareReachBehind, warning: true),
+        },
         const SizedBox(height: dialogGroupGap),
       ];
 
