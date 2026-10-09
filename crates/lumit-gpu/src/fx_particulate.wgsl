@@ -116,6 +116,12 @@ struct Params {
     // Emit from image's Threshold, 0..1: how bright a pixel must be
     // before it stands any chance at all. Unread in the other two modes.
     field_threshold: f32,
+
+    // The size of the "who stood" target, or 0 for an ordinary draw. When set,
+    // point i fills pixel i of that target if the field kept it, so the host
+    // can read the answer back.
+    probe_w: u32,
+    probe_h: u32,
 };
 
 // The field-rejection modes, matching `lumit_gpu::fx::FieldTest`.
@@ -727,6 +733,21 @@ fn pt_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> Vs
     // `over` that is the dissolve exactly, so no second pass runs.
     out.colour = vec4<f32>(rg.x, rg.y, ba.x, ba.y) * dp.mix;
     out.geom = vec4<f32>(radius, edge, size, rot);
+    if (dp.probe_w != 0u) {
+        // One whole pixel per point, by index, white if the point stood.
+        let cell = vec2<f32>(f32(ii % dp.probe_w), f32(ii / dp.probe_w));
+        let at = cell + corner * 0.5 + vec2<f32>(0.5, 0.5);
+        out.clip = vec4<f32>(
+            at.x / f32(dp.probe_w) * 2.0 - 1.0,
+            1.0 - at.y / f32(dp.probe_h) * 2.0,
+            0.0,
+            1.0,
+        );
+        out.head = cell + vec2<f32>(0.5, 0.5);
+        out.tail = out.head;
+        out.colour = vec4<f32>(select(0.0, 1.0, size > 0.0));
+        out.geom = vec4<f32>(8.0, 1.0, 1.0, 0.0);
+    }
     return out;
 }
 

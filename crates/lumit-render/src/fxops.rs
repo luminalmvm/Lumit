@@ -737,9 +737,35 @@ pub fn run_ops(
     // to the last effect is the common case, and it is answered by the op
     // before it in one lookup.
     let mut start = 0usize;
+    // The carriage slots whose op has to make its points stream on the card,
+    // because an op below reads it and it depends on a picture.
+    let late_wanted: Vec<u32> = points_schedules
+        .iter()
+        .filter_map(|s| s.late_from)
+        .collect();
+    // ponytail: such an op and everything after it run every frame, because a
+    // held picture has no stream beside it. File the stream with the picture
+    // if a profile shows a stack like that re-running too much.
+    let held_limit = if late_wanted.is_empty() {
+        ops.len()
+    } else {
+        let mut slot = 0u32;
+        let mut first = ops.len();
+        for (i, op) in ops.iter().enumerate() {
+            if lumit_core::fx::points::wants_carriage(op.def.signature()) {
+                if late_wanted.contains(&slot) {
+                    first = first.min(i);
+                }
+                slot += 1;
+            }
+        }
+        first
+    };
+    // Streams made so far this walk, by the slot of the op that made them.
+    let mut late_streams: Vec<(u32, lumit_core::fx::points::PointsStream)> = Vec::new();
     if let Some((store, _)) = cache {
         let mut store = store.borrow_mut();
-        for i in (0..ops.len()).rev() {
+        for i in (0..held_limit).rev() {
             let Some(key) = keys.get(i).copied().flatten() else {
                 continue;
             };
@@ -849,13 +875,23 @@ pub fn run_ops(
             .get(path_i..(path_i + paths_n).min(mask_paths.len()))
             .unwrap_or(&[]);
         path_i += paths_n;
-        let schedule = if lumit_core::fx::points::wants_carriage(resolved.def.signature()) {
+        let (slot, schedule) = if lumit_core::fx::points::wants_carriage(resolved.def.signature()) {
             let slot = points_schedules.get(sched_i);
             sched_i += 1;
-            slot
+            (u32::try_from(sched_i - 1).ok(), slot)
         } else {
-            None
+            (None, None)
         };
+        // A stream an op above made on the card takes the place of the empty
+        // one the builder had to leave.
+        let late_input = schedule.and_then(|s| {
+            let (_, stream) = late_streams.iter().find(|(k, _)| Some(*k) == s.late_from)?;
+            Some(lumit_core::fx::points::PointsSchedule {
+                input: vec![stream.clone()],
+                ..s.clone()
+            })
+        });
+        let schedule = late_input.as_ref().or(schedule);
         let matte = if role.param().is_some() {
             let slot = mattes.get(matte_i);
             matte_i += 1;
@@ -1026,24 +1062,24 @@ pub fn run_ops(
                     neighbours,
                 },
             };
-            tex = gpu.run(
-                fx,
-                ctx,
-                &tex,
-                w,
-                h,
-                params,
-                AuxSlot::new(
-                    data,
-                    own_matte,
-                    matte.as_ref(),
-                    fitted_layer_input.as_ref(),
-                    mask_paths_of_op,
-                    schedule,
-                    resolved.instance,
-                    resolved.lt,
-                ),
+            let aux = AuxSlot::new(
+                data,
+                own_matte,
+                matte.as_ref(),
+                fitted_layer_input.as_ref(),
+                mask_paths_of_op,
+                schedule,
+                resolved.instance,
+                resolved.lt,
             );
+            // Asked before the op draws, because its points are read off the
+            // picture it is handed.
+            if let Some(slot) = slot.filter(|s| late_wanted.contains(s)) {
+                if let Some(stream) = gpu.points_out(fx, ctx, &tex, w, h, params, aux) {
+                    late_streams.push((slot, stream));
+                }
+            }
+            tex = gpu.run(fx, ctx, &tex, w, h, params, aux);
             // A grown raster. The two passes below and every op after
             // this one read texel by texel, so the pictures they compare against
             // — the input the Blend row lerps from, the input the generic matte

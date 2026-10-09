@@ -13,12 +13,14 @@
 //! same bilinear tap, the same premultiplied tint, reached through the shared
 //! points draw. What changes is only where the points came from.
 //!
-//! **Painter's order is `id` order** and nothing else. The stream arrives
-//! ordered by birth index ascending, which is a fact of the evaluation rather
-//! than an artefact of how it was scheduled (particulate.md §5), and the stamps
-//! are laid down in that order so a later point covers an earlier one. Two
-//! renders of one frame therefore lay the same picture down in the same order,
-//! on any machine.
+//! **Painter's order is `id` order**, or furthest first with Depth sort on.
+//! The stream arrives ordered by birth index ascending, which is a fact of the
+//! evaluation rather than an artefact of how it was scheduled (particulate.md
+//! §5), and the stamps are laid down in that order so a later point covers an
+//! earlier one. Depth sort reorders them by how far the camera sees each, and
+//! keeps `id` order between points the same distance off. Two renders of one
+//! frame therefore lay the same picture down in the same order, on any
+//! machine.
 //!
 //! **Nothing wired draws nothing** — the picture passes through unchanged, and
 //! the box wears the family's "no stream" mark. So does an unset Clone layer
@@ -87,6 +89,12 @@ pub struct CloneToPoints {
     /// everything between. At 0 a stamp is opaque wherever the layer is.
     #[slider(min = 0.0, max = 100.0, default = 100.0, hard_min = 0.0, hard_max = 100.0, unit = Percent)]
     pub tint: f32,
+
+    /// Lay the stamps down furthest from the camera first, so a near one
+    /// covers a far one. Off lays them in the stream's own order. Only shows
+    /// on a 3D layer with a camera.
+    #[toggle(label = "Depth sort", default = true)]
+    pub depth_sort: bool,
 
     /// **The budget dial**, the family's row: the most stamps that may
     /// be drawn at once. A stream longer than this is trimmed to its **newest**
@@ -157,6 +165,9 @@ impl CloneToPoints {
             for ch in c.iter_mut() {
                 *ch = 1.0 + (*ch - 1.0) * tint;
             }
+        }
+        if self.depth_sort {
+            out.sort_far_to_near();
         }
         out
     }

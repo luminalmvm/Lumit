@@ -1,0 +1,99 @@
+---
+title: Vary points
+description: "Makes the points of a stream differ from one another."
+---
+
+Vary points is a **Generate** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Reads the stream on its **Points** socket and changes each point's size, opacity, rotation,
+colour and position. A **Pattern** gives each point a number from 0 to 1, and that number
+sets how much of each change the point takes.
+
+The changed points go out on its own Points socket and are drawn as discs. The producer
+above still draws its own unchanged points while its **Mix** is above nought.
+
+Two Vary points in a row have a seed each. On Random, one on **Offset x** and one on
+**Offset y** scatter the points both ways.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Pattern** | Dropdown | Index · Random · Noise · Distance · Age | Random | - |
+| **Curve** | Curve | 2 to 16 points in the unit square | The identity diagonal | - |
+| **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
+| **Noise scale** | Slider | 10 to 1000; down to 1 and higher | 200 | Pixels at composition size |
+| **Noise speed** | Slider | 0 to 5; higher | 0 | - |
+| **Centre X** | Slider | 0 to 3840; any value by typing | 960 | Pixels at composition size |
+| **Centre Y** | Slider | 0 to 2160; any value by typing | 540 | Pixels at composition size |
+| **Radius** | Slider | 0 to 2000; higher | 400 | Pixels at composition size |
+| **Size** | Slider | 0 to 400; higher | 100 | Per cent |
+| **Opacity** | Slider | 0 to 100 | 100 | Per cent |
+| **Rotation** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
+| **Colour** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
+| **Offset x** | Slider | -1000 to 1000; any value by typing | 0 | Pixels at composition size |
+| **Offset y** | Slider | -1000 to 1000; any value by typing | 0 | Pixels at composition size |
+| **Offset z** | Slider | -1000 to 1000; any value by typing | 0 | Pixels at composition size |
+| **Feather** | Slider | 0 to 100 | 100 | Per cent |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Pattern** groups **Pattern**, **Curve**.
+- **Change** groups **Size**, **Opacity**, **Rotation**, **Colour**, **Offset x**, **Offset y**, **Offset z**.
+- **Point** groups **Feather**.
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Pattern**: where a point's number comes from. **Index** is its place in the stream, 0
+  for the first point and 1 for the last. **Random** is a roll of its own, the same every
+  frame. **Noise** is a smooth noise read at its position. **Distance** is how far it is
+  from the centre, reaching 1 at **Radius**. **Age** is how far through its life it is, and
+  only [Particulate](/effects/generate/particulate/)'s points age.
+- **Curve**: reshapes the pattern's number before the changes read it.
+- **Seed**: which roll, or which noise. It shows for Random and Noise.
+- **Noise scale**: how far apart two points must be to differ. It shows for Noise.
+- **Noise speed**: how fast the noise changes over time. At nought it holds still. It shows
+  for Noise.
+- **Centre X**, **Centre Y** and **Radius**: the place Distance is measured from, and how
+  far from it the number reaches 1. They show for Distance.
+- **Size**: the size a point takes where the pattern reads 1, as a per cent of its own.
+- **Opacity**: the opacity a point takes where the pattern reads 1, as a per cent of its
+  own.
+- **Rotation**: the turn added where the pattern reads 1.
+- **Colour**: multiplies the point's colour where the pattern reads 1.
+- **Offset x**, **Offset y** and **Offset z**: how far the point is moved where the pattern
+  reads 1.
+- **Feather**: how soft the edge of a drawn disc is.
+- **Mix**: how much of the drawing lands on the picture. At nought the points are still
+  handed on.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness.
+  See [Effects](/use/effects/).
+
+## Related
+
+- [Pick points](/effects/generate/pick-points/)
+- [Grid](/effects/generate/grid/)
+- [Clone to points](/effects/generate/clone-to-points/)
+- [Connect points](/effects/generate/connect-points/)
+- [Trail](/effects/generate/trail/)
+- [The node graph](/use/nodes/)
+- [Generate](/effects/#generate)
+- [Effects](/use/effects/)

@@ -438,6 +438,18 @@ pub trait EffectDef: Sync + Send + 'static {
         0.0
     }
 
+    /// The points stream this effect hands on, made from the one wired into
+    /// it. `None` for everything but a points modifier. `input` and the bag
+    /// are in the same units, and `t` is layer time in seconds.
+    fn modify_points(
+        &self,
+        _p: super::params::Params<'_>,
+        _input: &super::points::PointsStream,
+        _t: f64,
+    ) -> Option<super::points::PointsStream> {
+        None
+    }
+
     /// The source-relative frame offsets **this instance** reads at this layer
     /// frame, the picture-side twin of [`driver_window`](EffectDef::driver_window).
     ///

@@ -624,7 +624,8 @@ impl Eval<'_> {
             );
             let fx = bag.get(0)?;
             let sample = |socket: &str, at: f64| self.input(node, socket, at, depth + 1);
-            let points = |socket: &str| self.points_input(node, socket, t, depth + 1);
+            let points =
+                |socket: &str| self.points_input(NodeRef::Driver(node), socket, t, depth + 1);
             let cx = DriverCx {
                 node,
                 inst,
@@ -668,11 +669,18 @@ impl Eval<'_> {
         }
     }
 
-    /// The **points stream** feeding driver `node`'s data input `port`, or
-    /// `None` where the socket is unwired — the documented empty stream.
-    fn points_input(&self, node: Uuid, port: &str, t: f64, depth: u32) -> Option<Rc<PointsStream>> {
+    /// The **points stream** feeding `node`'s data input `port`, or `None`
+    /// where the socket is unwired, which reads as the empty stream. `node` is
+    /// a driver, or a stack effect that changes a stream and hands it on.
+    fn points_input(
+        &self,
+        node: NodeRef,
+        port: &str,
+        t: f64,
+        depth: u32,
+    ) -> Option<Rc<PointsStream>> {
         let from = self.graph.wire_into(&InputRef::Param {
-            node: NodeRef::Driver(node),
+            node,
             port: port.to_owned(),
         })?;
         match from {
@@ -732,8 +740,33 @@ impl Eval<'_> {
             e.enabled
                 && super::BUILTIN_DEFS
                     .get(&e.effect.match_name)
-                    .is_some_and(|def| points::wants_schedule(def.signature()))
+                    .is_some_and(|def| {
+                        points::wants_schedule(def.signature())
+                            && !points::consumes_points(def.signature())
+                    })
         })?;
+        // Then whatever is wired after it that changes the stream, so a tap
+        // reads the points that layer ends up with.
+        let mut tapped = producer.id;
+        for _ in 0..layer.effects.len() {
+            let reads_tapped = |e: &EffectInstance| {
+                let Some(def) = super::BUILTIN_DEFS.get(&e.effect.match_name) else {
+                    return false;
+                };
+                points::wants_schedule(def.signature())
+                    && def.signature().inputs().iter().any(|p| {
+                        let wire = layer.graph.wire_into(&InputRef::Param {
+                            node: NodeRef::Effect(e.id),
+                            port: p.id.to_owned(),
+                        });
+                        matches!(wire, Some(OutputRef::EffectData { effect, .. }) if *effect == tapped)
+                    })
+            };
+            match layer.effects.iter().find(|e| e.enabled && reads_tapped(e)) {
+                Some(next) => tapped = next.id,
+                None => break,
+            }
+        }
         // A fresh walk over **that** layer's graph and context, so the stream a
         // tap reads is the stream that layer draws — its producer's own wires
         // applied. The camera stays this layer's: the consumer draws into its
@@ -754,7 +787,7 @@ impl Eval<'_> {
             // The far side is a layer, whatever this side is.
             stack: None,
         };
-        let stream = far.stream(producer.id, t, 0);
+        let stream = far.stream(tapped, t, 0);
         self.budget.set(far.budget.get());
         let stream = stream?;
         self.streams.borrow_mut().push((node, Rc::clone(&stream)));
@@ -849,10 +882,39 @@ impl Eval<'_> {
             source_matte: Vec::new(),
         };
 
+        // An effect that changes a stream makes its own from the one wired
+        // into it. Nothing wired is no stream.
+        if let Some(port) = def
+            .signature()
+            .inputs()
+            .iter()
+            .find(|p| p.ty == super::PortType::Points)
+        {
+            let input = self.points_input(NodeRef::Effect(effect), port.id, t, depth + 1)?;
+            let stream = Rc::new(self.with_arena(|bag| {
+                resolve_into_arena(
+                    def,
+                    inst,
+                    NodeRef::Effect(effect),
+                    t,
+                    0.0,
+                    1.0,
+                    &MarkerContext::NONE,
+                    bag,
+                    self.context.clone(),
+                    &wired,
+                );
+                def.modify_points(bag.get(0)?.params, &input, t)
+            })?);
+            self.streams.borrow_mut().push((effect, Rc::clone(&stream)));
+            return Some(stream);
+        }
+
         // Resolve into a checked-out arena, but reduce the borrowed parameters
         // to owned stream inputs before returning it to the reentrant pool.
         enum Producer {
             Grid(Box<PointsStream>),
+            AlongPath(super::effects::points_along_path::PointsAlongPath),
             Particulate {
                 points: Box<points::PointsParams>,
                 window_frames: i64,
@@ -877,6 +939,9 @@ impl Eval<'_> {
                 "grid" => Some(Producer::Grid(Box::new(
                     super::effects::grid::Grid::read(params).stream(self.projection),
                 ))),
+                "points_along_path" => Some(Producer::AlongPath(
+                    super::effects::points_along_path::PointsAlongPath::read(params),
+                )),
                 "particulate" => {
                     let particulate = super::effects::particulate::Particulate::read(params);
                     Some(Producer::Particulate {
@@ -884,6 +949,12 @@ impl Eval<'_> {
                         window_frames: particulate.window_frames(dt),
                     })
                 }
+                // Scatter and Emit from image fall out here: their points
+                // depend on a picture, and none exists when this walk runs.
+                // The wire reads the empty stream, and nothing is memoised.
+                // The render walk makes their stream on the card for the
+                // effects below them. Anything else this build cannot
+                // evaluate falls out here too.
                 _ => None,
             }
         })?;
@@ -898,25 +969,8 @@ impl Eval<'_> {
             self.streams.borrow_mut().push((effect, Rc::clone(&stream)));
             return Some(stream);
         }
-        // **The picture-dependent producers cannot be sampled here, and that is
-        // the recorded answer** to points-stream.md §2.2's constraint:
-        // Scatter's stream is a function of the input picture and Emit
-        // from image's is a function of a Source layer's, and at resolve time —
-        // which is when this walk runs — no picture exists. The wire reads the
-        // documented empty stream rather than a guess at one, and nothing is
-        // memoised, so a future carriage that can answer will not find a wrong
-        // answer cached in front of it. Anything else this build does not know
-        // how to evaluate falls out here too, which is the same calm.
-        let Producer::Particulate {
-            points,
-            window_frames,
-        } = producer
-        else {
-            return None;
-        };
-
-        // The mask-path emitter's polyline, flattened at composition scale, by
-        // the rule the draw builder applies: a row the panel does not show, or
+        // The mask path's polyline, flattened at composition scale, by the
+        // rule the draw builder applies: a row the panel does not show, or
         // shows greyed, is a row nobody meant.
         let path = match def.schema().mask_path() {
             Some((param, self_default))
@@ -925,6 +979,18 @@ impl Eval<'_> {
                 crate::mask::mask_path_at(masks, inst.mask_ref(param), self_default, t)
             }
             _ => crate::mask::MaskPolyline::default(),
+        };
+        let (points, window_frames) = match producer {
+            Producer::Particulate {
+                points,
+                window_frames,
+            } => (points, window_frames),
+            Producer::AlongPath(along) => {
+                let stream = Rc::new(along.stream(&path, self.projection));
+                self.streams.borrow_mut().push((effect, Rc::clone(&stream)));
+                return Some(stream);
+            }
+            Producer::Grid(_) => return None,
         };
 
         // **The birth schedule follows the authored Emit rate track**, which is

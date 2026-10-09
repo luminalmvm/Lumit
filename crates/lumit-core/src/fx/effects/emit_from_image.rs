@@ -20,12 +20,10 @@
 //! is *there*" divides the coverage back out first. Threshold is then the floor
 //! and full white the ceiling, so the field is a proper chance again.
 //!
-//! **Its stream cannot be sampled by a driver or by a stack consumer**, which
-//! is points-stream.md §2.2's recorded constraint answered the same way
-//! Scatter answers it: the stream is a function of a picture, and at
-//! resolve time — when the driver walk runs, and when the draw builder fills a
-//! consumer's carriage — no picture exists. Both read the documented empty
-//! stream rather than a guess.
+//! **Its stream cannot be sampled by a driver**, for Scatter's reason: the
+//! stream is a function of a picture, and when the driver walk runs no picture
+//! exists. A driver reads the empty stream. An effect below it in the stack
+//! does get the stream, made on the card as the op is drawn.
 
 use crate::fx::effects::scatter::DENSITY_CELL;
 use crate::fx::points::{self, DrawStyle, PointsStream, Projection, RenderMode};

@@ -42,6 +42,7 @@ pub const GRID_GROUPS: &[ParamGroup] = &[
     group(
         "Grid",
         &[
+            "layout",
             "columns",
             "rows",
             "planes",
@@ -68,6 +69,37 @@ mod attr {
     pub const JITTER_Z: u32 = 2;
 }
 
+/// How the cells are laid out across the layer's plane.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum GridLayout {
+    /// Rows and columns.
+    #[default]
+    Rows,
+    /// Rows and columns, with every other row moved across by half a cell.
+    OffsetRows,
+    /// Rows become rings about the centre, and Columns the points on each.
+    Rings,
+    /// One spiral out from the centre, evenly dense, as a sunflower's seeds.
+    Spiral,
+}
+
+impl GridLayout {
+    /// The Choice option labels, in code order. A Choice is stored as its
+    /// index, so a new layout goes on the end.
+    pub const OPTIONS: &'static [&'static str] = &["Rows", "Offset rows", "Rings", "Spiral"];
+
+    /// The layout for a stored Choice index. Anything unknown is Rows.
+    #[must_use]
+    pub const fn from_code(code: u32) -> Self {
+        match code {
+            1 => GridLayout::OffsetRows,
+            2 => GridLayout::Rings,
+            3 => GridLayout::Spiral,
+            _ => GridLayout::Rows,
+        }
+    }
+}
+
 /// Grid's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
@@ -89,6 +121,11 @@ mod attr {
     groups = GRID_GROUPS,
 )]
 pub struct Grid {
+    /// How the cells are laid out. Every layout has Columns times Rows points
+    /// on each plane, and reads the two spacings as its own two sizes.
+    #[choice(label = "Layout", options = *GridLayout::OPTIONS, default = 0)]
+    pub layout: u32,
+
     /// Cells across.
     #[counter(
         label = "Columns",
@@ -312,6 +349,30 @@ impl Grid {
             a,
         ];
         let half = |n: i32| (n - 1) as f32 * 0.5;
+        let layout = GridLayout::from_code(self.layout);
+        // Where cell (column, row) sits from the centre, before the spacings.
+        let cell = |c: i32, j: i32| -> (f32, f32) {
+            match layout {
+                GridLayout::Rows => (c as f32 - half(cols), j as f32 - half(rows)),
+                GridLayout::OffsetRows => (
+                    c as f32 - half(cols) + if j % 2 == 1 { 0.5 } else { 0.0 },
+                    j as f32 - half(rows),
+                ),
+                GridLayout::Rings => {
+                    let turn = c as f32 / cols as f32 * std::f32::consts::TAU;
+                    let radius = (j + 1) as f32;
+                    (radius * turn.cos(), radius * turn.sin())
+                }
+                GridLayout::Spiral => {
+                    // The golden angle between one seed and the next, and a
+                    // radius that grows as the square root so the seeds stay
+                    // evenly dense.
+                    let k = (i64::from(j) * i64::from(cols) + i64::from(c)) as f32;
+                    let turn = k * 2.399_963_2;
+                    (k.sqrt() * turn.cos(), k.sqrt() * turn.sin())
+                }
+            }
+        };
         let mut i: u64 = 0;
         for k in 0..planes {
             for j in 0..rows {
@@ -320,12 +381,13 @@ impl Grid {
                         return out;
                     }
                     let die = |attr| points::draw(self.seed, i, attr) - 0.5;
+                    let (across, down) = cell(c, j);
                     out.position.push([
                         self.position_x
-                            + (c as f32 - half(cols)) * self.spacing_x
+                            + across * self.spacing_x
                             + die(attr::JITTER_X) * self.jitter_x,
                         self.position_y
-                            + (j as f32 - half(rows)) * self.spacing_y
+                            + down * self.spacing_y
                             + die(attr::JITTER_Y) * self.jitter_y,
                         self.position_z
                             + (k as f32 - half(planes)) * self.spacing_z

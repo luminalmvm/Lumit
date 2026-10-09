@@ -2268,6 +2268,102 @@
   "@fxCloneToPoints": {
     "description": "Effect controls — the name of the Clone to points effect, which stamps a chosen layer's picture at every point of a points stream wired into it."
   },
+  "fxVaryPoints": "Vary points",
+  "@fxVaryPoints": {
+    "description": "Effect controls — the name of the Vary points effect, which makes the points of a stream wired into it differ in size, opacity, rotation, colour and position, by a pattern."
+  },
+  "fxPickPoints": "Pick points",
+  "@fxPickPoints": {
+    "description": "Effect controls — the name of the Pick points effect, which keeps some of the points of a stream wired into it and drops the rest."
+  },
+  "fxPattern": "Pattern",
+  "@fxPattern": {
+    "description": "Effect controls — a control and a group heading on Vary points and Pick points: what gives each point its number (its place in the stream, a random roll, a noise, its distance from a centre, or its age)."
+  },
+  "fxCurve": "Curve",
+  "@fxCurve": {
+    "description": "Effect controls — a control on Vary points: a curve that reshapes the pattern's number before the changes read it."
+  },
+  "fxNoiseScale": "Noise scale",
+  "@fxNoiseScale": {
+    "description": "Effect controls — a control on Vary points and Pick points: how far apart two points must be before the noise pattern gives them different numbers."
+  },
+  "fxNoiseSpeed": "Noise speed",
+  "@fxNoiseSpeed": {
+    "description": "Effect controls — a control on Vary points and Pick points: how fast the noise pattern changes over time."
+  },
+  "fxOffsetZ": "Offset z",
+  "@fxOffsetZ": {
+    "description": "Effect controls — a control on Vary points: how far a point is moved through the layer's plane, towards or away from the camera."
+  },
+  "fxFrom": "From",
+  "@fxFrom": {
+    "description": "Effect controls — a control on Pick points: the lowest pattern number a kept point may have."
+  },
+  "fxTo": "To",
+  "@fxTo": {
+    "description": "Effect controls — a control on Pick points: the highest pattern number a kept point may have."
+  },
+  "fxEveryNth": "Every nth",
+  "@fxEveryNth": {
+    "description": "Effect controls — a control on Pick points: keep one point in this many."
+  },
+  "fxChange": "Change",
+  "@fxChange": {
+    "description": "Effect controls — a group heading on Vary points, over the rows that say what the pattern changes about each point. A noun."
+  },
+  "fxAge": "Age",
+  "@fxAge": {
+    "description": "Effect controls — a Pattern option on Vary points and Pick points: number each point by how far through its life it is."
+  },
+  "fxPointsAlongPath": "Points along path",
+  "@fxPointsAlongPath": {
+    "description": "Effect controls — the name of the Points along path effect, which puts evenly spaced points along one of the layer's masks."
+  },
+  "fxAlignToPath": "Align to path",
+  "@fxAlignToPath": {
+    "description": "Effect controls — a checkbox on Points along path: turn each point to face the way the path runs."
+  },
+  "fxPathGroup": "Path",
+  "@fxPathGroup": {
+    "description": "Effect controls — a group heading on Points along path, over the rows that say where along the mask path the points go. A noun."
+  },
+  "fxLayout": "Layout",
+  "@fxLayout": {
+    "description": "Effect controls — a control on Grid: how its points are laid out (rows, offset rows, rings or a spiral). A noun."
+  },
+  "fxOffsetRows": "Offset rows",
+  "@fxOffsetRows": {
+    "description": "Effect controls — a Layout option on Grid: rows and columns with every other row moved across by half a cell, like brickwork."
+  },
+  "fxRings": "Rings",
+  "@fxRings": {
+    "description": "Effect controls — a Layout option on Grid: the points sit on rings about the centre."
+  },
+  "fxSpiral": "Spiral",
+  "@fxSpiral": {
+    "description": "Effect controls — a Layout option on Grid: the points sit on one evenly dense spiral out from the centre, like a sunflower's seeds."
+  },
+  "fxNearby": "Nearby",
+  "@fxNearby": {
+    "description": "Effect controls — a Mode option on Connect points: join every pair of points closer together than Max distance."
+  },
+  "fxInOrder": "In order",
+  "@fxInOrder": {
+    "description": "Effect controls — a Mode option on Connect points: join each point to the next one in the stream."
+  },
+  "fxTriangles": "Triangles",
+  "@fxTriangles": {
+    "description": "Effect controls — a Mode option on Connect points: join the points into a mesh of triangles."
+  },
+  "fxOutlineMode": "Outline",
+  "@fxOutlineMode": {
+    "description": "Effect controls — a Mode option on Connect points: draw only the lines round the outside of the points. A noun."
+  },
+  "fxDepthSort": "Depth sort",
+  "@fxDepthSort": {
+    "description": "Effect controls — a checkbox on Clone to points: draw the stamps furthest from the camera first, so near ones cover far ones."
+  },
   "fxClockwise": "Clockwise",
   "@fxClockwise": {
     "description": "Effect controls — a Wipe option on Radial wipe."

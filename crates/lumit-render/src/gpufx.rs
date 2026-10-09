@@ -314,6 +314,24 @@ pub trait GpuEffect: Sync + 'static {
         AuxKind::None
     }
 
+    /// The points stream this op hands on when it can only be made here, in
+    /// px@comp: one that depends on a picture, or on another such stream.
+    /// Called with what [`run`](Self::run) is about to be called with, and
+    /// only when an effect below reads it. `None` for everything else.
+    #[allow(clippy::too_many_arguments)]
+    fn points_out(
+        &self,
+        _fx: &FxEngine,
+        _ctx: &GpuContext,
+        _tex: &Tex,
+        _w: u32,
+        _h: u32,
+        _p: Params<'_>,
+        _aux: AuxSlot<'_>,
+    ) -> Option<lumit_core::fx::points::PointsStream> {
+        None
+    }
+
     /// Draw the effect, with its parameters read from the resolved bag and its
     /// side-table input (if it declared one) already bound.
     #[allow(clippy::too_many_arguments)]
@@ -431,6 +449,9 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &Trail,
     &ConnectPoints,
     &EmitFromImage,
+    &PointsAlongPath,
+    &PointsModifier("vary_points"),
+    &PointsModifier("pick_points"),
     // The seven layer styles that render (docs/impl/layer-styles.md §8).
     // Satin and Bevel and emboss are declared in `lumit_core::fx::styles` but
     // have no pass here, so an instance of one resolves to an op this table
@@ -4592,6 +4613,136 @@ impl GpuEffect for Grid {
     }
 }
 
+/// Points along path: worked out on the host from the mask's flattened line
+/// and drawn through the shared points draw, as Grid is.
+struct PointsAlongPath;
+impl GpuEffect for PointsAlongPath {
+    fn match_name(&self) -> &'static str {
+        "points_along_path"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        use lumit_core::fx::effects::points_along_path::PointsAlongPath as A;
+        let inst = A::read(p);
+        let style = inst.draw_style();
+        let px_scale = A::px_scale_of(p);
+        // The camera and the path both arrive in px@comp.
+        let projection = aux
+            .schedule()
+            .and_then(|s| s.projection)
+            .map(|proj| proj.rescaled(px_scale));
+        let path = lumit_core::fx::points::scale_path(&path_of(aux), px_scale);
+        let stream = inst.stream(&path, projection.unwrap_or_default());
+        let points = draw_points_of(&stream);
+        fx.points_draw(
+            ctx,
+            tex,
+            w,
+            h,
+            None,
+            &lumit_gpu::fx::PointsDrawOp {
+                points: &points,
+                feather: style.feather,
+                mix: style.mix,
+                projection: projection.map(|proj| proj.m),
+                field: lumit_gpu::fx::FieldTest::None,
+                seed: 0,
+                mode: 0,
+                sprite: None,
+            },
+        )
+    }
+}
+
+/// Vary points and Pick points: the wired stream with the effect's own change
+/// made, drawn as discs. The change is the declaration's `modify_points`, the
+/// same function a reader further down the wire goes through.
+struct PointsModifier(&'static str);
+impl GpuEffect for PointsModifier {
+    fn match_name(&self) -> &'static str {
+        self.0
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        use lumit_core::fx::ParamId;
+        let px_scale = p.float(ParamId::new("derived.px_scale"), 1.0);
+        let mix = (p.float(ParamId::new("mix"), 100.0) / 100.0).clamp(0.0, 1.0);
+        let stream = self.modified(p, aux, px_scale);
+        // Nothing wired, or nothing to show: the picture passes through.
+        let Some(stream) = stream.filter(|_| mix > 0.0) else {
+            return tex.clone();
+        };
+        let points = draw_points_of(&stream);
+        let projection = aux
+            .schedule()
+            .and_then(|c| c.projection)
+            .map(|proj| proj.rescaled(px_scale));
+        fx.points_draw(
+            ctx,
+            tex,
+            w,
+            h,
+            None,
+            &lumit_gpu::fx::PointsDrawOp {
+                points: &points,
+                feather: (p.float(ParamId::new("feather"), 100.0) / 100.0).clamp(0.0, 1.0),
+                mix,
+                projection: projection.map(|proj| proj.m),
+                field: lumit_gpu::fx::FieldTest::None,
+                seed: 0,
+                mode: 0,
+                sprite: None,
+            },
+        )
+    }
+    fn points_out(
+        &self,
+        _fx: &FxEngine,
+        _ctx: &GpuContext,
+        _tex: &Tex,
+        _w: u32,
+        _h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Option<lumit_core::fx::points::PointsStream> {
+        let px_scale = p.float(lumit_core::fx::ParamId::new("derived.px_scale"), 1.0);
+        Some(
+            self.modified(p, aux, px_scale)?
+                .rescaled(1.0 / px_scale.max(1e-6)),
+        )
+    }
+}
+
+impl PointsModifier {
+    /// The wired stream with this effect's change made, in raster pixels.
+    fn modified(
+        &self,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+        px_scale: f32,
+    ) -> Option<lumit_core::fx::points::PointsStream> {
+        let def = lumit_core::fx::BUILTIN_DEFS.get(self.0)?;
+        let input = points_input_at(aux, 0, px_scale)?;
+        def.modify_points(p, &input, aux.schedule().map_or(0.0, |s| s.t))
+    }
+}
+
 /// Scatter (docs/08 §3.89): candidates thrown on the host, kept on the
 /// card where the alpha under them beats their own die.
 ///
@@ -4615,38 +4766,117 @@ impl GpuEffect for Scatter {
         p: Params<'_>,
         aux: AuxSlot<'_>,
     ) -> Tex {
+        Thrown::scatter(p, aux, w, h).draw(fx, ctx, tex, w, h)
+    }
+    fn points_out(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Option<lumit_core::fx::points::PointsStream> {
+        Some(Thrown::scatter(p, aux, w, h).stood(fx, ctx, tex, w, h))
+    }
+}
+
+/// What Scatter and Emit from image post to the card: the candidates, the
+/// picture they are tested against, and the rule.
+struct Thrown {
+    candidates: lumit_core::fx::points::PointsStream,
+    /// `None` reads the effect's own input.
+    field: Option<Tex>,
+    test: lumit_gpu::fx::FieldTest,
+    seed: u32,
+    style: lumit_core::fx::points::DrawStyle,
+    projection: Option<lumit_core::fx::points::Projection>,
+    px_scale: f32,
+}
+
+impl Thrown {
+    fn scatter(p: Params<'_>, aux: AuxSlot<'_>, w: u32, h: u32) -> Self {
         use lumit_core::fx::effects::scatter::Scatter as S;
         let inst = S::read(p);
-        let style = inst.draw_style();
         let px_scale = S::px_scale_of(p);
         let projection = aux
             .schedule()
             .and_then(|sched| sched.projection)
             .map(|proj| proj.rescaled(px_scale));
-        // The override: the matte is *where the points go*, so it arrives
-        // as the kernel's own input rather than as a dissolve afterwards. Unset
-        // reads this effect's own picture, which is the documented default.
-        let matte = aux.matte().cloned();
-        let invert = p.bool(lumit_core::fx::MATTE_INVERT_ID, false);
-        let candidates = inst.candidates(w, h, px_scale, projection.unwrap_or_default());
-        let points = draw_points_of(&candidates);
-        fx.points_draw(
-            ctx,
-            tex,
-            w,
-            h,
-            matte.as_ref(),
-            &lumit_gpu::fx::PointsDrawOp {
-                points: &points,
-                feather: style.feather,
-                mix: style.mix,
-                projection: projection.map(|proj| proj.m),
-                field: lumit_gpu::fx::FieldTest::Alpha { invert },
-                seed: inst.seed,
-                mode: 0,
-                sprite: None,
+        Thrown {
+            candidates: inst.candidates(w, h, px_scale, projection.unwrap_or_default()),
+            // The override: the matte is *where the points go*, so it arrives
+            // as the kernel's own input rather than as a dissolve afterwards.
+            // Unset reads this effect's own picture, which is the documented
+            // default.
+            field: aux.matte().cloned(),
+            test: lumit_gpu::fx::FieldTest::Alpha {
+                invert: p.bool(lumit_core::fx::MATTE_INVERT_ID, false),
             },
-        )
+            seed: inst.seed,
+            style: inst.draw_style(),
+            projection,
+            px_scale,
+        }
+    }
+
+    fn emit_from_image(p: Params<'_>, aux: AuxSlot<'_>, w: u32, h: u32) -> Self {
+        use lumit_core::fx::effects::emit_from_image::EmitFromImage as E;
+        let inst = E::read(p);
+        let px_scale = E::px_scale_of(p);
+        let projection = aux
+            .schedule()
+            .and_then(|sched| sched.projection)
+            .map(|proj| proj.rescaled(px_scale));
+        Thrown {
+            candidates: inst.candidates(w, h, px_scale, projection.unwrap_or_default()),
+            // The Source layer, or this effect's own picture when the row is
+            // unset, which is what `None` means to the generic draw.
+            field: aux.layer_input().cloned(),
+            test: lumit_gpu::fx::FieldTest::Luma {
+                threshold: (inst.threshold / 100.0).clamp(0.0, 1.0),
+            },
+            seed: inst.seed,
+            style: inst.draw_style(),
+            projection,
+            px_scale,
+        }
+    }
+
+    fn op<'a>(&self, points: &'a [lumit_gpu::fx::DrawPoint]) -> lumit_gpu::fx::PointsDrawOp<'a> {
+        lumit_gpu::fx::PointsDrawOp {
+            points,
+            feather: self.style.feather,
+            mix: self.style.mix,
+            projection: self.projection.map(|proj| proj.m),
+            field: self.test,
+            seed: self.seed,
+            mode: 0,
+            sprite: None,
+        }
+    }
+
+    fn draw(&self, fx: &FxEngine, ctx: &GpuContext, tex: &Tex, w: u32, h: u32) -> Tex {
+        let points = draw_points_of(&self.candidates);
+        fx.points_draw(ctx, tex, w, h, self.field.as_ref(), &self.op(&points))
+    }
+
+    /// The candidates the picture kept, in px@comp, for the effects below
+    /// that read this one's stream.
+    fn stood(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+    ) -> lumit_core::fx::points::PointsStream {
+        let points = draw_points_of(&self.candidates);
+        let kept = fx.points_stood(ctx, tex, w, h, self.field.as_ref(), &self.op(&points));
+        let mut stream = self.candidates.clone();
+        stream.retain(|i| kept.get(i).copied().unwrap_or(false));
+        stream.rescaled(1.0 / self.px_scale.max(1e-6))
     }
 }
 
@@ -4674,39 +4904,19 @@ impl GpuEffect for EmitFromImage {
         p: Params<'_>,
         aux: AuxSlot<'_>,
     ) -> Tex {
-        use lumit_core::fx::effects::emit_from_image::EmitFromImage as E;
-        let inst = E::read(p);
-        let style = inst.draw_style();
-        let px_scale = E::px_scale_of(p);
-        let projection = aux
-            .schedule()
-            .and_then(|sched| sched.projection)
-            .map(|proj| proj.rescaled(px_scale));
-        // The Source layer, or this effect's own picture when the row is unset
-        // — which is what `None` means to the generic draw, and is the
-        // documented default.
-        let source = aux.layer_input().cloned();
-        let candidates = inst.candidates(w, h, px_scale, projection.unwrap_or_default());
-        let points = draw_points_of(&candidates);
-        fx.points_draw(
-            ctx,
-            tex,
-            w,
-            h,
-            source.as_ref(),
-            &lumit_gpu::fx::PointsDrawOp {
-                points: &points,
-                feather: style.feather,
-                mix: style.mix,
-                projection: projection.map(|proj| proj.m),
-                field: lumit_gpu::fx::FieldTest::Luma {
-                    threshold: (inst.threshold / 100.0).clamp(0.0, 1.0),
-                },
-                seed: inst.seed,
-                mode: 0,
-                sprite: None,
-            },
-        )
+        Thrown::emit_from_image(p, aux, w, h).draw(fx, ctx, tex, w, h)
+    }
+    fn points_out(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Option<lumit_core::fx::points::PointsStream> {
+        Some(Thrown::emit_from_image(p, aux, w, h).stood(fx, ctx, tex, w, h))
     }
 }
 
@@ -5301,6 +5511,7 @@ mod tests {
     /// the comparison below can pass by symmetry.
     fn grid_fixture(planes: i32) -> lumit_core::fx::effects::grid::Grid {
         lumit_core::fx::effects::grid::Grid {
+            layout: 0,
             columns: 7,
             rows: 5,
             planes,
@@ -5590,6 +5801,7 @@ mod tests {
             scale: 160.0,
             rotation: 25.0,
             tint: 100.0,
+            depth_sort: true,
             max_clones: 20_000,
             mix: 100.0,
         };

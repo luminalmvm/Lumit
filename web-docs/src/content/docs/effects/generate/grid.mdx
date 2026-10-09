@@ -23,6 +23,7 @@ Puts points at even intervals — rows, columns, and planes receding into depth.
 
 | Parameter | Control | Range | Default | Unit |
 | --- | --- | --- | --- | --- |
+| **Layout** | Dropdown | Rows · Offset rows · Rings · Spiral | Rows | - |
 | **Columns** | Slider, whole numbers | 1 to 100; up to 1000 | 10 | - |
 | **Rows** | Slider, whole numbers | 1 to 100; up to 1000 | 6 | - |
 | **Planes** | Slider, whole numbers | 1 to 100; up to 1000 | 1 | - |
@@ -48,7 +49,7 @@ Puts points at even intervals — rows, columns, and planes receding into depth.
 
 In the Effect Controls panel:
 
-- **Grid** groups **Columns**, **Rows**, **Planes**, **Spacing x**, **Spacing y**, **Spacing z**, **Position x**, **Position y**, **Position z**, **Jitter x**, **Jitter y**, **Jitter z**, **Seed**.
+- **Grid** groups **Layout**, **Columns**, **Rows**, **Planes**, **Spacing x**, **Spacing y**, **Spacing z**, **Position x**, **Position y**, **Position z**, **Jitter x**, **Jitter y**, **Jitter z**, **Seed**.
 - **Point** groups **Size**, **Feather**, **Colour**, **Max points**.
 - **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
 
@@ -56,6 +57,12 @@ In the Effect Controls panel:
 
 ## What each control does
 
+- **Layout**: how the points on each plane are arranged. **Rows** is rows and columns.
+  **Offset rows** moves every other row across by half a cell. **Rings** makes Rows the
+  number of rings and Columns the points on each, with Spacing x and Spacing y the gap
+  between rings across and down. **Spiral** winds one evenly dense spiral out from the
+  centre, like a sunflower's seeds, and the spacings set how tightly. Every layout has
+  Columns times Rows points on each plane.
 - **Columns**, **Rows** and **Planes**: how many cells across, down, and through the layer's
   plane. Planes at 1 is flat, which is what a 2D layer wants; more than one only shows once
   the layer is 3D and the composition has a camera. See [Cameras and 3D](/use/camera/).

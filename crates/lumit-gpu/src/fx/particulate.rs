@@ -214,6 +214,11 @@ pub(super) struct ParticulateParams {
     pub(super) field_mode: u32,
     pub(super) field_invert: u32,
     pub(super) field_threshold: f32,
+
+    /// The size of the "who stood" target, or 0 for an ordinary draw.
+    pub(super) probe_w: u32,
+    pub(super) probe_h: u32,
+    pub(super) _pad: [u32; 2],
 }
 
 /// The scan's block width — the same 256 the kernel declares.
@@ -430,6 +435,9 @@ impl FxEngine {
             field_mode: 0,
             field_invert: 0,
             field_threshold: 0.0,
+            probe_w: 0,
+            probe_h: 0,
+            _pad: [0; 2],
         };
         let ubuf = ctx
             .device

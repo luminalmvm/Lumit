@@ -16,7 +16,9 @@ Accumulation motion blur
 Add
 Add grain
 Add input
+Age
 Align to motion
+Align to path
 All edges
 Alpha
 Alpha bias
@@ -117,6 +119,7 @@ Ceiling
 Centre
 Centre X
 Centre Y
+Change
 Channel
 Channel blur
 Channel offset
@@ -178,6 +181,7 @@ Corner pin
 Count
 Create corner pin
 Create transform keys
+Curve
 Curves
 Custom
 Custom shader
@@ -202,6 +206,7 @@ Depth Anything V2 Small
 Depth channel
 Depth map
 Depth of field
+Depth sort
 Despill amount
 Despill bias
 Despot black
@@ -278,6 +283,7 @@ End thickness
 End x
 End y
 Every Nth beat
+Every nth
 Evolution
 Evolution options
 Exclusion
@@ -326,6 +332,7 @@ Fractal noise
 Fractal type
 Frame rate
 Frequency
+From
 Full body
 Full off
 Full on
@@ -389,6 +396,7 @@ Image
 In front
 In high
 In low
+In order
 Index
 Inflate
 Initial speed
@@ -428,6 +436,7 @@ Layer
 Layer knocks out shadow
 Layer out
 Layer points
+Layout
 Left and right
 Left bottom tangent x
 Left bottom tangent y
@@ -526,9 +535,12 @@ Multiply
 NTSC
 Native
 Near blur
+Nearby
 Nearest distance
 Node graph
 Noise
+Noise scale
+Noise speed
 Noise type
 None
 Normal
@@ -539,8 +551,10 @@ OCIO display transform
 OCIO file transform
 OCIO look transform
 Offset
+Offset rows
 Offset x
 Offset y
+Offset z
 Omni
 On original
 On transparent
@@ -560,6 +574,7 @@ Out low
 Outer bevel
 Outer glow
 Outer radius
+Outline
 Output
 Output black
 Output colour space
@@ -575,7 +590,9 @@ Paint style
 Parametric EQ
 Particle
 Particulate
+Path
 Path overlap
+Pattern
 Peak
 Per-axis wobble
 Perlin
@@ -583,6 +600,7 @@ Phase
 Phase offset
 Phaser
 Photo filter
+Pick points
 Pillow emboss
 Pin layer
 Pin light
@@ -601,6 +619,7 @@ Point control
 Point x
 Point y
 Points
+Points along path
 Points layer
 Points sample
 Polar coordinates
@@ -675,6 +694,7 @@ Right top tangent x
 Right top tangent y
 Right trim
 Rim brightness
+Rings
 Ripple
 Rise
 Robust Video Matting
@@ -774,6 +794,7 @@ Speed jitter
 Spherize
 Spiky
 Spin
+Spiral
 Split
 Split channels
 Spread
@@ -840,6 +861,7 @@ Time
 Time offset
 Tint
 Tint colour
+To
 Tone
 Top and bottom
 Top edge
@@ -855,6 +877,7 @@ Transition width
 Transparent
 Tremolo
 Triangle
+Triangles
 Trigger
 Tritone
 True peak
@@ -886,6 +909,7 @@ Use masks
 Use source colour
 Utility
 Value
+Vary points
 Vector scale
 Vegas
 Venetian blinds

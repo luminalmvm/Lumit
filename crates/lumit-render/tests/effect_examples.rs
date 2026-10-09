@@ -290,6 +290,7 @@ fn showcase(match_name: &str) -> Vec<(&'static str, EffectValue)> {
         // four-pixel particles from a four-hundred-pixel emitter is a faint
         // sprinkle at figure size. Bigger particles, more of them, and a wider
         // mouth make a picture a reader can name.
+        "points_along_path" => vec![("count", f(40.0)), ("size", f(18.0))],
         "particulate" => vec![
             ("emit_rate", f(900.0)),
             ("size", f(14.0)),
@@ -556,7 +557,7 @@ fn unillustrable(match_name: &str) -> Option<&'static str> {
         // graph and nowhere else, and this harness stages one effect on one
         // layer with no graph behind it. With no stream in they draw nothing,
         // and a showcase entry cannot supply one — only a wire can.
-        "clone_to_points" | "trail" | "connect_points" => {
+        "clone_to_points" | "trail" | "connect_points" | "vary_points" | "pick_points" => {
             Some("draws what a wired points stream gives it, and there is no graph here")
         }
         // **Not a nature — a defect.** The physical flare adds nothing to a

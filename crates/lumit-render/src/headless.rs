@@ -6896,6 +6896,76 @@ mod tests {
         assert_eq!(tailed, frame_of(&wired), "two renders of one frame differ");
     }
 
+    /// Scatter's points depend on the picture, so they are read back from the
+    /// card during the walk. This checks they reach an effect further down,
+    /// through one that changes the stream on the way.
+    #[test]
+    fn scatter_points_reach_the_effects_below_it() {
+        let mut r = match HeadlessRenderer::shared() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let (cw, ch) = (32u32, 16u32);
+        let build = |wired: bool| {
+            use lumit_core::graph::{Edge, InputRef, LayerGraph, NodeRef, OutputRef};
+            let (mut doc, comp_id, _) = matrix_base(cw, ch, LinearColour([0.8, 0.1, 0.1, 1.0]));
+            let (_, top) = matrix_top(&mut doc, comp_id, LinearColour([0.1, 0.2, 0.9, 1.0]));
+            let set = |inst: &mut lumit_core::model::EffectInstance, id: &str, v: f64| {
+                for p in &mut inst.params {
+                    if p.id == id {
+                        p.value = lumit_core::model::EffectValue::Float(Property::fixed(v));
+                        return;
+                    }
+                }
+                panic!("no parameter {id}");
+            };
+            // Every box draws nothing of its own but the last, so a line on
+            // the frame can only have come down both wires.
+            let mut scatter = lumit_core::fx::instantiate("scatter").unwrap();
+            set(&mut scatter, "density", 5000.0);
+            set(&mut scatter, "mix", 0.0);
+            let mut pick = lumit_core::fx::instantiate("pick_points").unwrap();
+            set(&mut pick, "mix", 0.0);
+            let mut connect = lumit_core::fx::instantiate("connect_points").unwrap();
+            set(&mut connect, "max_distance", 6.0);
+            let wire = |from: Uuid, to: Uuid| Edge {
+                from: OutputRef::EffectData {
+                    effect: from,
+                    port: "points".into(),
+                },
+                to: InputRef::Param {
+                    node: NodeRef::Effect(to),
+                    port: "points".into(),
+                },
+            };
+            let mut edges = vec![wire(pick.id, connect.id)];
+            if wired {
+                edges.push(wire(scatter.id, pick.id));
+            }
+            let comp = doc.comp_mut(comp_id).unwrap();
+            let l = comp.layers.iter_mut().find(|l| l.id == top).unwrap();
+            l.effects = vec![scatter, pick, connect];
+            l.graph = LayerGraph {
+                edges,
+                ..LayerGraph::default()
+            };
+            (DocumentStore::new(doc).snapshot(), comp_id)
+        };
+        let wired = build(true);
+        let cut = build(false);
+        let mut frame_of = |(doc, comp_id): &(Arc<lumit_core::Document>, Uuid)| {
+            r.render_rgba(doc, *comp_id, 0, 1.0)
+                .expect("the export path renders")
+                .0
+        };
+        let webbed = frame_of(&wired);
+        assert_ne!(webbed, frame_of(&cut), "Scatter's points drew no lines");
+        assert_eq!(webbed, frame_of(&wired), "two renders of one frame differ");
+    }
+
     /// **The degradation rung never engages on an export walk** (PS7;
     /// docs/13 §2's note under B12–B14).
     ///

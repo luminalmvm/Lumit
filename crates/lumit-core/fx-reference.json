@@ -9961,6 +9961,20 @@
       "category_slug": "generate",
       "params": [
         {
+          "id": "layout",
+          "label": "Layout",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Rows",
+            "Offset rows",
+            "Rings",
+            "Spiral"
+          ],
+          "dividers_after": []
+        },
+        {
           "id": "columns",
           "label": "Columns",
           "kind": "int",
@@ -10213,6 +10227,7 @@
         {
           "label": "Grid",
           "params": [
+            "layout",
             "columns",
             "rows",
             "planes",
@@ -10590,6 +10605,207 @@
       "matte_role": "strength"
     },
     {
+      "slug": "points-along-path",
+      "match_name": "points_along_path",
+      "label": "Points along path",
+      "version": 1,
+      "category": "Generate",
+      "category_slug": "generate",
+      "params": [
+        {
+          "id": "mask_path",
+          "label": "Mask path",
+          "kind": "mask_path",
+          "unit": "raw",
+          "self_default": true
+        },
+        {
+          "id": "count",
+          "label": "Count",
+          "kind": "int",
+          "unit": "raw",
+          "default": 20,
+          "slider_min": 1.0,
+          "slider_max": 200.0,
+          "hard_min": 1.0,
+          "hard_max": 1000000.0
+        },
+        {
+          "id": "start",
+          "label": "Start",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "end",
+          "label": "End",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "offset",
+          "label": "Offset",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "align",
+          "label": "Align to path",
+          "kind": "bool",
+          "unit": "raw",
+          "default": true
+        },
+        {
+          "id": "size",
+          "label": "Size",
+          "kind": "float",
+          "unit": "px",
+          "default": 8.0,
+          "slider_min": 0.0,
+          "slider_max": 200.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "feather",
+          "label": "Feather",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "colour",
+          "label": "Colour",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "mix",
+          "label": "Mix",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "blend",
+          "label": "Blend",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Normal",
+            "Darken",
+            "Multiply",
+            "Colour burn",
+            "Linear burn",
+            "Darker colour",
+            "Add",
+            "Lighten",
+            "Screen",
+            "Colour dodge",
+            "Lighter colour",
+            "Overlay",
+            "Soft light",
+            "Hard light",
+            "Linear light",
+            "Vivid light",
+            "Pin light",
+            "Hard mix",
+            "Difference",
+            "Exclusion",
+            "Subtract",
+            "Divide",
+            "Hue",
+            "Saturation",
+            "Colour",
+            "Luminosity"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "matte",
+          "label": "Matte",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "matte_invert",
+          "label": "Invert",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "matte_channel",
+          "label": "Channel",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Luminance",
+            "Alpha",
+            "Red",
+            "Green",
+            "Blue"
+          ],
+          "dividers_after": []
+        }
+      ],
+      "groups": [
+        {
+          "label": "Path",
+          "params": [
+            "mask_path",
+            "count",
+            "start",
+            "end",
+            "offset",
+            "align"
+          ],
+          "collapsed": false
+        },
+        {
+          "label": "Point",
+          "params": [
+            "size",
+            "feather",
+            "colour"
+          ],
+          "collapsed": false
+        }
+      ],
+      "matte_role": "strength"
+    },
+    {
       "slug": "clone-to-points",
       "match_name": "clone_to_points",
       "label": "Clone to points",
@@ -10632,6 +10848,13 @@
           "slider_max": 100.0,
           "hard_min": 0.0,
           "hard_max": 100.0
+        },
+        {
+          "id": "depth_sort",
+          "label": "Depth sort",
+          "kind": "bool",
+          "unit": "raw",
+          "default": true
         },
         {
           "id": "max_clones",
@@ -10897,6 +11120,20 @@
       "category_slug": "generate",
       "params": [
         {
+          "id": "mode",
+          "label": "Mode",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Nearby",
+            "In order",
+            "Triangles",
+            "Outline"
+          ],
+          "dividers_after": []
+        },
+        {
           "id": "max_distance",
           "label": "Max distance",
           "kind": "float",
@@ -10916,6 +11153,13 @@
           "slider_max": 32.0,
           "hard_min": 0.0,
           "hard_max": 64.0
+        },
+        {
+          "id": "depth",
+          "label": "Depth",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
         },
         {
           "id": "taper",
@@ -11066,8 +11310,10 @@
         {
           "label": "Connections",
           "params": [
+            "mode",
             "max_distance",
             "max_links",
+            "depth",
             "taper",
             "fade"
           ],
@@ -11080,6 +11326,628 @@
             "feather",
             "colour",
             "max_points"
+          ],
+          "collapsed": false
+        }
+      ],
+      "enabled_when": [
+        {
+          "param": "max_links",
+          "on": "mode",
+          "cond": "choice_is",
+          "value": 0
+        }
+      ],
+      "matte_role": "strength"
+    },
+    {
+      "slug": "vary-points",
+      "match_name": "vary_points",
+      "label": "Vary points",
+      "version": 1,
+      "category": "Generate",
+      "category_slug": "generate",
+      "params": [
+        {
+          "id": "pattern",
+          "label": "Pattern",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 1,
+          "options": [
+            "Index",
+            "Random",
+            "Noise",
+            "Distance",
+            "Age"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "curve",
+          "label": "Curve",
+          "kind": "curve",
+          "unit": "raw",
+          "default": [
+            [
+              0.0,
+              0.0
+            ],
+            [
+              1.0,
+              1.0
+            ]
+          ]
+        },
+        {
+          "id": "seed",
+          "label": "Seed",
+          "kind": "seed",
+          "unit": "raw"
+        },
+        {
+          "id": "noise_scale",
+          "label": "Noise scale",
+          "kind": "float",
+          "unit": "px",
+          "default": 200.0,
+          "slider_min": 10.0,
+          "slider_max": 1000.0,
+          "hard_min": 1.0
+        },
+        {
+          "id": "noise_speed",
+          "label": "Noise speed",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 5.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "centre_x",
+          "label": "Centre X",
+          "kind": "float",
+          "unit": "px",
+          "default": 960.0,
+          "slider_min": 0.0,
+          "slider_max": 3840.0
+        },
+        {
+          "id": "centre_y",
+          "label": "Centre Y",
+          "kind": "float",
+          "unit": "px",
+          "default": 540.0,
+          "slider_min": 0.0,
+          "slider_max": 2160.0
+        },
+        {
+          "id": "radius",
+          "label": "Radius",
+          "kind": "float",
+          "unit": "px",
+          "default": 400.0,
+          "slider_min": 0.0,
+          "slider_max": 2000.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "size",
+          "label": "Size",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 400.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "opacity",
+          "label": "Opacity",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "rotation",
+          "label": "Rotation",
+          "kind": "angle",
+          "unit": "degrees",
+          "default": 0.0,
+          "dial_step": 15.0
+        },
+        {
+          "id": "colour",
+          "label": "Colour",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "offset_x",
+          "label": "Offset x",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": -1000.0,
+          "slider_max": 1000.0
+        },
+        {
+          "id": "offset_y",
+          "label": "Offset y",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": -1000.0,
+          "slider_max": 1000.0
+        },
+        {
+          "id": "offset_z",
+          "label": "Offset z",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": -1000.0,
+          "slider_max": 1000.0
+        },
+        {
+          "id": "feather",
+          "label": "Feather",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "mix",
+          "label": "Mix",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "blend",
+          "label": "Blend",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Normal",
+            "Darken",
+            "Multiply",
+            "Colour burn",
+            "Linear burn",
+            "Darker colour",
+            "Add",
+            "Lighten",
+            "Screen",
+            "Colour dodge",
+            "Lighter colour",
+            "Overlay",
+            "Soft light",
+            "Hard light",
+            "Linear light",
+            "Vivid light",
+            "Pin light",
+            "Hard mix",
+            "Difference",
+            "Exclusion",
+            "Subtract",
+            "Divide",
+            "Hue",
+            "Saturation",
+            "Colour",
+            "Luminosity"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "matte",
+          "label": "Matte",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "matte_invert",
+          "label": "Invert",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "matte_channel",
+          "label": "Channel",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Luminance",
+            "Alpha",
+            "Red",
+            "Green",
+            "Blue"
+          ],
+          "dividers_after": []
+        }
+      ],
+      "groups": [
+        {
+          "label": "Pattern",
+          "params": [
+            "pattern",
+            "curve"
+          ],
+          "collapsed": false
+        },
+        {
+          "label": "",
+          "params": [
+            "seed"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "pattern",
+            "values": [
+              1,
+              2
+            ]
+          }
+        },
+        {
+          "label": "",
+          "params": [
+            "noise_scale",
+            "noise_speed"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "pattern",
+            "values": [
+              2
+            ]
+          }
+        },
+        {
+          "label": "",
+          "params": [
+            "centre_x",
+            "centre_y",
+            "radius"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "pattern",
+            "values": [
+              3
+            ]
+          }
+        },
+        {
+          "label": "Change",
+          "params": [
+            "size",
+            "opacity",
+            "rotation",
+            "colour",
+            "offset_x",
+            "offset_y",
+            "offset_z"
+          ],
+          "collapsed": false
+        },
+        {
+          "label": "Point",
+          "params": [
+            "feather"
+          ],
+          "collapsed": false
+        }
+      ],
+      "matte_role": "strength"
+    },
+    {
+      "slug": "pick-points",
+      "match_name": "pick_points",
+      "label": "Pick points",
+      "version": 1,
+      "category": "Generate",
+      "category_slug": "generate",
+      "params": [
+        {
+          "id": "pattern",
+          "label": "Pattern",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 1,
+          "options": [
+            "Index",
+            "Random",
+            "Noise",
+            "Distance",
+            "Age"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "from",
+          "label": "From",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "to",
+          "label": "To",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "seed",
+          "label": "Seed",
+          "kind": "seed",
+          "unit": "raw"
+        },
+        {
+          "id": "noise_scale",
+          "label": "Noise scale",
+          "kind": "float",
+          "unit": "px",
+          "default": 200.0,
+          "slider_min": 10.0,
+          "slider_max": 1000.0,
+          "hard_min": 1.0
+        },
+        {
+          "id": "noise_speed",
+          "label": "Noise speed",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 5.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "centre_x",
+          "label": "Centre X",
+          "kind": "float",
+          "unit": "px",
+          "default": 960.0,
+          "slider_min": 0.0,
+          "slider_max": 3840.0
+        },
+        {
+          "id": "centre_y",
+          "label": "Centre Y",
+          "kind": "float",
+          "unit": "px",
+          "default": 540.0,
+          "slider_min": 0.0,
+          "slider_max": 2160.0
+        },
+        {
+          "id": "radius",
+          "label": "Radius",
+          "kind": "float",
+          "unit": "px",
+          "default": 400.0,
+          "slider_min": 0.0,
+          "slider_max": 2000.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "every_nth",
+          "label": "Every nth",
+          "kind": "int",
+          "unit": "raw",
+          "default": 1,
+          "slider_min": 1.0,
+          "slider_max": 100.0,
+          "hard_min": 1.0,
+          "hard_max": 1000000.0
+        },
+        {
+          "id": "nth_offset",
+          "label": "Offset",
+          "kind": "int",
+          "unit": "raw",
+          "default": 0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 1000000.0
+        },
+        {
+          "id": "invert",
+          "label": "Invert",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "feather",
+          "label": "Feather",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "mix",
+          "label": "Mix",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "blend",
+          "label": "Blend",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Normal",
+            "Darken",
+            "Multiply",
+            "Colour burn",
+            "Linear burn",
+            "Darker colour",
+            "Add",
+            "Lighten",
+            "Screen",
+            "Colour dodge",
+            "Lighter colour",
+            "Overlay",
+            "Soft light",
+            "Hard light",
+            "Linear light",
+            "Vivid light",
+            "Pin light",
+            "Hard mix",
+            "Difference",
+            "Exclusion",
+            "Subtract",
+            "Divide",
+            "Hue",
+            "Saturation",
+            "Colour",
+            "Luminosity"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "matte",
+          "label": "Matte",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "matte_invert",
+          "label": "Invert",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "matte_channel",
+          "label": "Channel",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Luminance",
+            "Alpha",
+            "Red",
+            "Green",
+            "Blue"
+          ],
+          "dividers_after": []
+        }
+      ],
+      "groups": [
+        {
+          "label": "Pattern",
+          "params": [
+            "pattern",
+            "from",
+            "to"
+          ],
+          "collapsed": false
+        },
+        {
+          "label": "",
+          "params": [
+            "seed"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "pattern",
+            "values": [
+              1,
+              2
+            ]
+          }
+        },
+        {
+          "label": "",
+          "params": [
+            "noise_scale",
+            "noise_speed"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "pattern",
+            "values": [
+              2
+            ]
+          }
+        },
+        {
+          "label": "",
+          "params": [
+            "centre_x",
+            "centre_y",
+            "radius"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "pattern",
+            "values": [
+              3
+            ]
+          }
+        },
+        {
+          "label": "Count",
+          "params": [
+            "every_nth",
+            "nth_offset",
+            "invert"
+          ],
+          "collapsed": false
+        },
+        {
+          "label": "Point",
+          "params": [
+            "feather"
           ],
           "collapsed": false
         }

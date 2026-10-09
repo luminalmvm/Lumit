@@ -430,10 +430,13 @@ pub fn points_projection(
 /// `emit_rate` row, so a second consumer that wants a history declares
 /// the same two ids and needs no edit here.
 ///
-/// `(vec![], None)` — the documented calm — for every producer, for a consumer
-/// with nothing wired, and for a producer that cannot answer at this point in
-/// the frame (Scatter). The effect renders as a passthrough and the box
+/// `(vec![], None)` — the documented calm — for every producer and for a
+/// consumer with nothing wired. The effect renders as a passthrough and the box
 /// wears the "no stream" mark; nothing faults, and nothing is guessed.
+///
+/// An empty list with the producer still named is a stream that cannot be made
+/// yet, because its points depend on a picture (Scatter). The walk asks for it
+/// on the card.
 #[allow(clippy::too_many_arguments)]
 fn points_input_for(
     layer: &lumit_core::model::Layer,
@@ -511,7 +514,9 @@ fn points_input_for(
         ),
     };
     let Some(stream) = at(t) else {
-        return none;
+        // No stream yet, but the wire still names its producer: one whose
+        // points depend on a picture is asked again on the card.
+        return (Vec::new(), from);
     };
     let mut out = vec![stream];
 
@@ -1712,16 +1717,28 @@ pub fn build_comp_draws_at(
                 }),
             )
         });
-        effects
+        let carried: Vec<_> = effects
             .iter()
-            .filter(|e| e.enabled && e.effect.namespace == EffectNamespace::Builtin)
-            .filter_map(|e| {
+            .enumerate()
+            .filter(|(_, e)| e.enabled && e.effect.namespace == EffectNamespace::Builtin)
+            .filter_map(|(i, e)| {
                 let def = lumit_core::fx::BUILTIN_DEFS.get(&e.effect.match_name)?;
                 let wants =
                     lumit_core::fx::points::wants_carriage(def.signature()) && def.is_image_op();
-                wants.then_some((e, def))
+                wants.then_some((i, e, def))
             })
-            .map(|(e, def)| {
+            .collect();
+        // Which slot of this list an effect holds, by its place in the stack.
+        // A wire whose stream could not be made here names its producer's
+        // slot, so the walk can ask that op for it on the card.
+        let late = |input: &[lumit_core::fx::points::PointsStream], from: Option<u32>| {
+            let from = from.filter(|_| input.is_empty())?;
+            let slot = carried.iter().position(|(i, ..)| *i == from as usize)?;
+            u32::try_from(slot).ok()
+        };
+        carried
+            .iter()
+            .map(|&(_, e, def)| {
                 // A pinned effect is evaluated at the true playhead, so
                 // its schedule is scanned there too: the picture and the
                 // particles it draws must be of one moment.
@@ -1766,6 +1783,7 @@ pub fn build_comp_draws_at(
                         schedule: lumit_core::fx::points::Schedule::default(),
                         t,
                         projection,
+                        late_from: late(&input, input_from),
                         input,
                         input_from,
                     };
@@ -1793,6 +1811,7 @@ pub fn build_comp_draws_at(
                     schedule,
                     t,
                     projection,
+                    late_from: late(&input, input_from),
                     input,
                     input_from,
                 }

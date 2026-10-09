@@ -17,10 +17,10 @@ Emit from image is a **Generate** effect.
 
 This keeps points that land on something *bright*.
 
-One limit, the same as Scatter: because these points depend on a picture, neither
-[Points sample](/effects/drivers/points-sample/) or
-[Layer points](/effects/drivers/layer-points/) can read the stream. Wiring one of this
-layer's own consumers to it works.
+These points depend on a picture, as Scatter's do. Clone to points, Connect points, Trail,
+Vary points and Pick points can read them from below it in the same layer's stack.
+[Points sample](/effects/drivers/points-sample/) cannot, and neither can
+[Layer points](/effects/drivers/layer-points/) from another layer.
 
 ## Parameters
 

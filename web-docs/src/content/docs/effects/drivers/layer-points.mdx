@@ -15,6 +15,11 @@ Layer points is a **Drivers** effect.
 
 Lets you use points that are contained on another layer, similar to Audio level using another layers audio.
 
+It reads that layer's points after any [Vary points](/effects/generate/vary-points/) or
+[Pick points](/effects/generate/pick-points/) wired after its first producer. It cannot read
+the points of [Scatter](/effects/generate/scatter/) or
+[Emit from image](/effects/generate/emit-from-image/).
+
 ## Parameters
 
 {/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}

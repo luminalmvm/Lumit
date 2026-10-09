@@ -596,6 +596,50 @@ impl PointsStream {
         (past.id.get(*cursor) == Some(&id)).then_some(*cursor)
     }
 
+    /// The points furthest from the camera first, so a draw in that order
+    /// lays the near ones on top. Points the same distance off keep the order
+    /// they were in, and on a 2D layer nothing moves.
+    pub fn sort_far_to_near(&mut self) {
+        if self.projection.is_flat() {
+            return;
+        }
+        let near: Vec<f32> = (0..self.len()).map(|i| self.depth_scale(i)).collect();
+        let mut order: Vec<usize> = (0..self.len()).collect();
+        order.sort_by(|a, b| near[*a].total_cmp(&near[*b]));
+        fn pick<T: Copy>(v: &mut Vec<T>, order: &[usize]) {
+            *v = order.iter().filter_map(|i| v.get(*i).copied()).collect();
+        }
+        pick(&mut self.position, &order);
+        pick(&mut self.speed, &order);
+        pick(&mut self.age, &order);
+        pick(&mut self.life, &order);
+        pick(&mut self.size, &order);
+        pick(&mut self.rotation, &order);
+        pick(&mut self.colour, &order);
+        pick(&mut self.id, &order);
+    }
+
+    /// Keep the points `keep` answers true for, by index, in the order they
+    /// are in.
+    pub fn retain(&mut self, keep: impl FnMut(usize) -> bool) {
+        let flags: Vec<bool> = (0..self.len()).map(keep).collect();
+        fn sift<T>(v: &mut Vec<T>, flags: &[bool]) {
+            let mut i = 0;
+            v.retain(|_| {
+                i += 1;
+                flags.get(i - 1).copied().unwrap_or(false)
+            });
+        }
+        sift(&mut self.position, &flags);
+        sift(&mut self.speed, &flags);
+        sift(&mut self.age, &flags);
+        sift(&mut self.life, &flags);
+        sift(&mut self.size, &flags);
+        sift(&mut self.rotation, &flags);
+        sift(&mut self.colour, &flags);
+        sift(&mut self.id, &flags);
+    }
+
     /// Keep the **newest `n`** particles by birth index, dropping the rest.
     ///
     /// The degradation rung: under governor pressure the effect draws
@@ -933,9 +977,8 @@ pub struct PointsSchedule {
     /// driver walk reads the very same function. (ponytail: one host evaluation
     /// per sample per frame, memoised per producer. points-stream.md §3.3
     /// designs a GPU arena carriage for when a profile shows a real comp
-    /// spending it — and that carriage is also what would let **Scatter** feed
-    /// a stack consumer, which for now reads the same empty stream a driver
-    /// does.)
+    /// spending it.) A producer whose points depend on a picture leaves this
+    /// empty and the walk fills it, see [`late_from`](Self::late_from).
     pub input: Vec<PointsStream>,
     /// Which effect in the layer's stack the wire came from, by index — folded
     /// into the frame key, and read for nothing else.
@@ -948,6 +991,10 @@ pub struct PointsSchedule {
     /// so a duplicated layer still hits the per-effect cache: a key
     /// names content, never which row it came from.
     pub input_from: Option<u32>,
+    /// The slot in this list of the op whose stream this one reads, when that
+    /// stream could not be made before the render: its points depend on a
+    /// picture. The walk asks that op for it on the card and fills `input`.
+    pub late_from: Option<u32>,
 }
 
 /// One producer's cached birth scan (particulate.md §3.1,

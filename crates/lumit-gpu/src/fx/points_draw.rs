@@ -132,7 +132,6 @@ impl FxEngine {
         field: Option<&wgpu::Texture>,
         op: &PointsDrawOp<'_>,
     ) -> wgpu::Texture {
-        use wgpu::util::DeviceExt;
         let out = work_texture(ctx, w, h, "fx-points-out");
         {
             let mut enc = ctx.encoder("fx-points-copy");
@@ -146,10 +145,103 @@ impl FxEngine {
                 },
             );
         }
-        let count = u32::try_from(op.points.len()).unwrap_or(u32::MAX);
-        if count == 0 || op.mix <= 0.0 {
+        if op.points.is_empty() || op.mix <= 0.0 {
             return out;
         }
+        self.points_pass(ctx, src, w, h, field, op, &out, None);
+        out
+    }
+
+    /// Which of `op`'s points the field keeps, one answer per point in order.
+    ///
+    /// The same vertex-stage test [`points_draw`](Self::points_draw) runs, read
+    /// back, so a points stream made from the kept ones is the set the draw
+    /// shows. Costs one small synchronous readback. A readback that fails
+    /// keeps nothing.
+    pub fn points_stood(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        field: Option<&wgpu::Texture>,
+        op: &PointsDrawOp<'_>,
+    ) -> Vec<bool> {
+        let count = op.points.len();
+        if count == 0 || op.field == FieldTest::None {
+            return vec![true; count];
+        }
+        // A square-ish target with a pixel per point.
+        let pw = ((count as f64).sqrt().ceil() as u32).max(1);
+        let ph = (count as u32).div_ceil(pw).max(1);
+        let target = work_texture(ctx, pw, ph, "fx-points-stood");
+        self.points_pass(ctx, src, w, h, field, op, &target, Some((pw, ph)));
+
+        let bytes = target.format().block_copy_size(None).unwrap_or(8);
+        let padded = (pw * bytes).div_ceil(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT)
+            * wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+        let buffer = ctx.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("fx-points-stood"),
+            size: u64::from(padded) * u64::from(ph),
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+        // Hand over what the frame batch holds first, the pass above included.
+        ctx.flush();
+        let mut encoder = ctx.device.create_command_encoder(&Default::default());
+        encoder.copy_texture_to_buffer(
+            target.as_image_copy(),
+            wgpu::TexelCopyBufferInfo {
+                buffer: &buffer,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(padded),
+                    rows_per_image: Some(ph),
+                },
+            },
+            target.size(),
+        );
+        ctx.submit([encoder.finish()]);
+        let slice = buffer.slice(..);
+        let (tx, rx) = std::sync::mpsc::channel();
+        slice.map_async(wgpu::MapMode::Read, move |r| {
+            let _ = tx.send(r);
+        });
+        ctx.device.poll(wgpu::Maintain::Wait);
+        let mut stood = vec![false; count];
+        if matches!(rx.recv(), Ok(Ok(()))) {
+            let data = slice.get_mapped_range();
+            for (i, kept) in stood.iter_mut().enumerate() {
+                let at = (i as u32 / pw * padded + i as u32 % pw * bytes) as usize;
+                // A kept point wrote white, and black is all zero bytes in
+                // every working format.
+                *kept = data
+                    .get(at..at + bytes as usize)
+                    .is_some_and(|px| px.iter().any(|b| *b != 0));
+            }
+            drop(data);
+            buffer.unmap();
+        }
+        ctx.recycle(target);
+        stood
+    }
+
+    /// The instanced draw behind both entry points: over `target` as it
+    /// stands, or cleared and a pixel per point when `probe` gives its size.
+    #[allow(clippy::too_many_arguments)]
+    fn points_pass(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        field: Option<&wgpu::Texture>,
+        op: &PointsDrawOp<'_>,
+        out: &wgpu::Texture,
+        probe: Option<(u32, u32)>,
+    ) {
+        use wgpu::util::DeviceExt;
+        let count = u32::try_from(op.points.len()).unwrap_or(u32::MAX);
         // The stream layout Particulate's compaction writes, filled from the
         // host instead: the regions the draw reads carry the points, and the
         // ones only a data consumer would read stay nought. The strides are
@@ -168,7 +260,9 @@ impl FxEngine {
                 words[region(0) + i * 3 + c] = pt.position[c].to_bits();
                 words[region(14) + i * 3 + c] = pt.tail[c].to_bits();
             }
-            words[region(8) + i] = pt.size.to_bits();
+            // A probe asks who stood, whatever size they are drawn at.
+            let size = if probe.is_some() { 1.0 } else { pt.size };
+            words[region(8) + i] = size.to_bits();
             words[region(9) + i] = pt.rotation.to_bits();
             // Half precision, as particulate.md §4 declares the colour region.
             let half = |v: f32| u32::from(half::f16::from_f32(v).to_bits());
@@ -182,7 +276,8 @@ impl FxEngine {
         u.seed = op.seed;
         u.feather = op.feather;
         u.mix = op.mix;
-        u.mode = op.mode;
+        u.mode = if probe.is_some() { 0 } else { op.mode };
+        (u.probe_w, u.probe_h) = probe.unwrap_or((0, 0));
         u.target_w = w as f32;
         u.target_h = h as f32;
         u.sprite_w = op.sprite.map_or(1.0, |s| s.width() as f32);
@@ -253,8 +348,12 @@ impl FxEngine {
                     view: &target,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        // The picture is already there, copied in above.
-                        load: wgpu::LoadOp::Load,
+                        // The picture is already there, copied in by the
+                        // caller. A probe starts from black.
+                        load: match probe {
+                            Some(_) => wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                            None => wgpu::LoadOp::Load,
+                        },
                         store: wgpu::StoreOp::Store,
                     },
                 })],
@@ -266,6 +365,5 @@ impl FxEngine {
             rp.draw(0..6, 0..count);
         }
         drop(enc);
-        out
     }
 }

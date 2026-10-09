@@ -6456,6 +6456,8 @@ fn every_parameter_declares_a_unit() {
             // row exactly. Threshold is a share of full white and Density a
             // count per composition area, so neither rescales.
             ("emit_from_image", "size"),
+            // Points along path: the disc a point is drawn as, Grid's row.
+            ("points_along_path", "size"),
             // Connect points: how far apart two points may be and
             // still be joined, and how thick the line between them is. Both
             // are distances in the picture and must travel with the stream —
@@ -6463,6 +6465,19 @@ fn every_parameter_declares_a_unit() {
             // would weave a different web from the export's.
             ("connect_points", "max_distance"),
             ("connect_points", "width"),
+            // Vary points and Pick points: the pattern's own distances, and
+            // how far Vary points moves a point. All travel with the stream.
+            ("vary_points", "noise_scale"),
+            ("vary_points", "centre_x"),
+            ("vary_points", "centre_y"),
+            ("vary_points", "radius"),
+            ("vary_points", "offset_x"),
+            ("vary_points", "offset_y"),
+            ("vary_points", "offset_z"),
+            ("pick_points", "noise_scale"),
+            ("pick_points", "centre_x"),
+            ("pick_points", "centre_y"),
+            ("pick_points", "radius"),
             // What a full channel of a Motion vectors layer means, in pixels
             // of movement.
             ("motion_blur", "vector_scale"),

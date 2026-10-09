@@ -7,6 +7,10 @@
 //! becomes a mesh; a Scatter inside a silhouette becomes the constellation
 //! everybody makes by hand out of a plugin they had to go and buy.
 //!
+//! Mode chooses the pairs instead: each point to the next, a mesh of
+//! triangles, or only the lines round the outside. Max distance still drops a
+//! line that is too long.
+//!
 //! **A line is a capsule, and a capsule is a disc that has been stretched.**
 //! Nothing new is drawn here: the shared points draw already runs a dab from a
 //! head to a tail, so a segment is one entry in an ordinary stream whose
@@ -30,8 +34,8 @@ use std::collections::HashMap;
 
 use crate::fx::points::{self, PointsStream};
 use crate::fx::{
-    EffectDef, EffectMetadata, EffectSchema, ParamGroup, ParamId, Params, Port, PortType,
-    ResolveCx, Signature, Value,
+    EffectDef, EffectMetadata, EffectSchema, EnabledCond, EnabledWhen, ParamGroup, ParamId, Params,
+    Port, PortType, ResolveCx, Signature, Value,
 };
 use lumit_fx_macros::Effect;
 
@@ -59,10 +63,55 @@ const fn group(label: &'static str, params: &'static [&'static str]) -> ParamGro
 pub const CONNECT_GROUPS: &[ParamGroup] = &[
     group(
         "Connections",
-        &["max_distance", "max_links", "taper", "fade"],
+        &[
+            "mode",
+            "max_distance",
+            "max_links",
+            "depth",
+            "taper",
+            "fade",
+        ],
     ),
     group("Line", &["width", "feather", "colour", "max_points"]),
 ];
+
+/// Max connections only limits Nearby. The other modes name their pairs.
+pub const CONNECT_ENABLED_WHEN: &[EnabledWhen] = &[EnabledWhen {
+    param: "max_links",
+    on: "mode",
+    cond: EnabledCond::ChoiceIs(0),
+}];
+
+/// Which pairs of points are joined.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ConnectMode {
+    /// Every pair within Max distance, up to Max connections at each point.
+    #[default]
+    Nearby,
+    /// Each point to the next one in the stream.
+    InOrder,
+    /// The edges of a triangulation of the points.
+    Triangles,
+    /// Only the edges round the outside of them.
+    Outline,
+}
+
+impl ConnectMode {
+    /// The Choice option labels, in code order. A Choice is stored as its
+    /// index, so a new mode goes on the end.
+    pub const OPTIONS: &'static [&'static str] = &["Nearby", "In order", "Triangles", "Outline"];
+
+    /// The mode for a stored Choice index. Anything unknown is Nearby.
+    #[must_use]
+    pub const fn from_code(code: u32) -> Self {
+        match code {
+            1 => ConnectMode::InOrder,
+            2 => ConnectMode::Triangles,
+            3 => ConnectMode::Outline,
+            _ => ConnectMode::Nearby,
+        }
+    }
+}
 
 /// Connect points' controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
@@ -80,8 +129,14 @@ pub const CONNECT_GROUPS: &[ParamGroup] = &[
     // declaration.
     seeded = false,
     groups = CONNECT_GROUPS,
+    enabled_when = CONNECT_ENABLED_WHEN,
 )]
 pub struct ConnectPoints {
+    /// Which pairs are joined. Max distance drops a line that is too long in
+    /// every mode.
+    #[choice(label = "Mode", options = *ConnectMode::OPTIONS, default = 0)]
+    pub mode: u32,
+
     /// How far apart two points may be and still be joined, px@comp measured on
     /// the frame. **Nought joins nothing**, which is the documented no-op.
     #[slider(
@@ -107,6 +162,11 @@ pub struct ConnectPoints {
         unit = Raw
     )]
     pub max_links: i32,
+
+    /// Measure Max distance between the points themselves, in all three axes,
+    /// rather than between where the camera puts them on the frame.
+    #[toggle(label = "Depth", default = false)]
+    pub depth: bool,
 
     /// How much a line thins out as it lengthens, per cent: at 0 every line is
     /// the same Width, at 100 a line at exactly Max distance has no width left.
@@ -233,15 +293,32 @@ impl ConnectPoints {
         };
         let mut tails: Vec<[f32; 3]> = Vec::new();
         let reach = self.max_distance.max(0.0);
+        let mode = ConnectMode::from_code(self.mode);
         let links = self.max_links.clamp(0, 64) as u32;
         let n = points.len();
-        if reach <= 0.0 || links == 0 || n < 2 {
+        if reach <= 0.0 || n < 2 || (mode == ConnectMode::Nearby && links == 0) {
             return (out, tails);
         }
         // Where each point is *seen*, which is where "near enough" is judged.
         // On a 2D layer this is the pair the stream already holds.
         let seen: Vec<[f32; 2]> = (0..n).map(|i| points.projected(i)).collect();
-        let cells = Self::buckets(&seen, reach);
+        // With Depth on, nearness is between the points themselves. Two points
+        // within reach in space are within reach across the layer's plane too,
+        // so that plane is what the squares are cut from.
+        let flat: Vec<[f32; 2]> = if self.depth {
+            points.position.iter().map(|p| [p[0], p[1]]).collect()
+        } else {
+            seen.clone()
+        };
+        let apart = |i: usize, j: usize| {
+            let (dx, dy) = (flat[j][0] - flat[i][0], flat[j][1] - flat[i][1]);
+            let dz = if self.depth {
+                points.position[j][2] - points.position[i][2]
+            } else {
+                0.0
+            };
+            (dx * dx + dy * dy + dz * dz).sqrt()
+        };
 
         let taper = (self.taper / 100.0).clamp(0.0, 1.0);
         let fade = (self.fade / 100.0).clamp(0.0, 1.0);
@@ -253,11 +330,54 @@ impl ConnectPoints {
             self.colour[2] * a,
             a,
         ];
+        // One line from point `i` to point `j`, `d` apart.
+        let mut join = |i: usize, j: usize, d: f32| {
+            // How far along its own reach this line is: 0 for two points on
+            // top of each other, 1 at exactly Max distance.
+            let u = (d / reach).clamp(0.0, 1.0);
+            let dim = 1.0 - fade * u;
+            let mut colour = [0.0f32; 4];
+            for (c, k) in colour.iter_mut().zip(0..4) {
+                let mean = 0.5 * (points.colour[i][k] + points.colour[j][k]);
+                *c = mean * tint[k] * dim;
+            }
+            out.position.push(points.position[i]);
+            tails.push(points.position[j]);
+            out.speed.push(points.speed[i]);
+            out.age.push(points.age[i]);
+            out.life.push(points.life[i]);
+            out.size.push(width * (1.0 - taper * u));
+            out.rotation.push(0.0);
+            out.colour.push(colour);
+            // The segment's own index, ascending, which is the order the
+            // dabs go down in and so the order they cover each other in.
+            out.id.push(out.id.len() as u64);
+        };
+
+        if mode != ConnectMode::Nearby {
+            // The other modes name their pairs outright. A pair further apart
+            // than Max distance is still not joined.
+            let pairs = match mode {
+                ConnectMode::InOrder => (1..n).map(|j| (j - 1, j)).collect(),
+                ConnectMode::Triangles => Self::mesh(&seen, false),
+                _ => Self::mesh(&seen, true),
+            };
+            for (i, j) in pairs {
+                let d = apart(i, j);
+                if d <= reach {
+                    join(i, j, d);
+                }
+            }
+            return (out, tails);
+        }
+
+        let cells = Self::buckets(&flat, reach);
         let mut degree = vec![0u32; n];
         // Bounded by the pairing rule itself: every segment spends one of the
         // two ends' allowance, so there can never be more than `n · links / 2`
         // of them (14-ENGINEERING-RULES §6).
         let budget = (n as u64 * u64::from(links) / 2).min(u32::MAX as u64) as usize;
+        let mut made = 0usize;
         let mut near: Vec<(f32, usize)> = Vec::new();
 
         for i in 0..n {
@@ -265,7 +385,7 @@ impl ConnectPoints {
                 continue;
             }
             near.clear();
-            let (cx, cy) = Self::cell_of(seen[i], reach);
+            let (cx, cy) = Self::cell_of(flat[i], reach);
             for dy in -1..=1 {
                 for dx in -1..=1 {
                     let Some(bucket) = cells.get(&(cx.saturating_add(dx), cy.saturating_add(dy)))
@@ -279,7 +399,7 @@ impl ConnectPoints {
                         if j <= i {
                             continue;
                         }
-                        let d = (seen[j][0] - seen[i][0]).hypot(seen[j][1] - seen[i][1]);
+                        let d = apart(i, j);
                         if d <= reach {
                             near.push((d, j));
                         }
@@ -294,34 +414,54 @@ impl ConnectPoints {
                 if degree[i] >= links {
                     break;
                 }
-                if degree[j] >= links || out.len() >= budget {
+                if degree[j] >= links || made >= budget {
                     continue;
                 }
                 degree[i] += 1;
                 degree[j] += 1;
-                // How far along its own reach this line is: 0 for two points on
-                // top of each other, 1 at exactly Max distance.
-                let u = (d / reach).clamp(0.0, 1.0);
-                let dim = 1.0 - fade * u;
-                let mut colour = [0.0f32; 4];
-                for (c, k) in colour.iter_mut().zip(0..4) {
-                    let mean = 0.5 * (points.colour[i][k] + points.colour[j][k]);
-                    *c = mean * tint[k] * dim;
-                }
-                out.position.push(points.position[i]);
-                tails.push(points.position[j]);
-                out.speed.push(points.speed[i]);
-                out.age.push(points.age[i]);
-                out.life.push(points.life[i]);
-                out.size.push(width * (1.0 - taper * u));
-                out.rotation.push(0.0);
-                out.colour.push(colour);
-                // The segment's own index, ascending, which is the order the
-                // dabs go down in and so the order they cover each other in.
-                out.id.push(out.id.len() as u64);
+                made += 1;
+                join(i, j, d);
             }
         }
         (out, tails)
+    }
+
+    /// The pairs a triangulation of `seen` joins, each once and in a fixed
+    /// order: every edge of it, or only the ones round the outside.
+    ///
+    /// Two points in the same place count as the first of them, and a point
+    /// that is not a number is left out.
+    fn mesh(seen: &[[f32; 2]], outline: bool) -> Vec<(usize, usize)> {
+        use spade::{DelaunayTriangulation, Point2, Triangulation};
+        let mut mesh: DelaunayTriangulation<Point2<f64>> = DelaunayTriangulation::new();
+        // Which point each vertex of the mesh stands for.
+        let mut owner: Vec<usize> = Vec::new();
+        for (i, p) in seen.iter().enumerate() {
+            let Ok(v) = mesh.insert(Point2::new(f64::from(p[0]), f64::from(p[1]))) else {
+                continue;
+            };
+            if v.index() == owner.len() {
+                owner.push(i);
+            }
+        }
+        let pair = |a: usize, b: usize| {
+            let (a, b) = (owner.get(a).copied()?, owner.get(b).copied()?);
+            Some((a.min(b), a.max(b)))
+        };
+        let mut pairs: Vec<(usize, usize)> = if outline {
+            mesh.convex_hull()
+                .filter_map(|e| pair(e.from().index(), e.to().index()))
+                .collect()
+        } else {
+            mesh.undirected_edges()
+                .filter_map(|e| {
+                    let [a, b] = e.vertices();
+                    pair(a.index(), b.index())
+                })
+                .collect()
+        };
+        pairs.sort_unstable();
+        pairs
     }
 
     /// Which square of the projected plane a point falls in, at a grid pitch of
