@@ -177,8 +177,7 @@ void main() {
         (tester) async {
       final p = withComp();
       final layer = p.comp.addSolidLayer();
-      // A keyed property: Set keyframe adds to a curve, it does not start one
-      // (the stopwatch is the whole model).
+      // A keyed property, with the playhead between its two keys.
       layer.setTransform(
         prop: BridgeTransformProp.positionX,
         value: BridgeScalar.keyframed([
