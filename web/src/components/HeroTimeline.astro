@@ -721,6 +721,10 @@ const layers = [
     }
 
     // ---- the clock ----
+    // It waits for the field behind to have its picture (HeroField.astro says
+    // when), so the mark is not already moving when its light comes on.
+    let held = document.documentElement.classList.contains("hold");
+    document.addEventListener("hero:ready", () => (held = false), { once: true });
     let seen = true;
     new IntersectionObserver((entries) => {
       seen = entries[0].isIntersecting;
@@ -729,7 +733,7 @@ const layers = [
     const frame = (now: number) => {
       const dt = Math.min((now - last) / 1000, 0.1);
       last = now;
-      if (playing && seen && !document.hidden && !hero.paused) {
+      if (playing && seen && !document.hidden && !hero.paused && !held) {
         t = (t + dt) % SECONDS;
         render();
       }

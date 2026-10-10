@@ -23,9 +23,22 @@ const words = tagline.split(" ");
 >
   {/* Everything below the hero starts hidden and is revealed by the script at
       the foot of this page. Without script the class is never set and the page
-      is simply the page. */}
+      is simply the page.
+
+      `hold` keeps the whole page unseen until the hero has all its parts, so
+      nothing of it shows half-made: the field says when (HeroField.astro).
+      Two seconds is as long as anyone is kept waiting for it. */}
   <script is:inline>
-    document.documentElement.classList.add("anim");
+    (function () {
+      var root = document.documentElement;
+      root.classList.add("anim", "hold");
+      document.addEventListener("hero:ready", function () {
+        root.classList.remove("hold");
+      }, { once: true });
+      setTimeout(function () {
+        if (root.classList.contains("hold")) document.dispatchEvent(new Event("hero:ready"));
+      }, 2000);
+    })();
   </script>
 
   {/* ---------- hero ---------- */}
@@ -168,8 +181,8 @@ const words = tagline.split(" ");
 
 <style>
   /* The download button does not wait for the wordmark: it blurs in as the
-     page loads, and the rest of the hero follows the lockup home. */
-  :global(html.anim) .lead {
+     page is shown, and the rest of the hero follows the lockup home. */
+  :global(html.anim:not(.hold)) .lead {
     animation: piece-in 500ms both;
   }
   @keyframes piece-in {
@@ -288,6 +301,13 @@ const words = tagline.split(" ");
      should be weighing light against dark. */
   html.lens body > main {
     background-color: var(--color-ink);
+  }
+  /* The page held back until the hero is ready, then let in quickly. */
+  html.anim body {
+    transition: opacity 200ms ease-out;
+  }
+  html.hold body {
+    opacity: 0;
   }
 </style>
 
