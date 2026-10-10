@@ -7,6 +7,8 @@
 // draws by the panel's own walk, so hovering one row costs nothing at the
 // bridge (the budget test expects zero).
 
+import 'dart:ui' as ui;
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -180,6 +182,16 @@ class ProjectRowFrb extends StatefulWidget {
   final ProjectColumns columns;
   final ProjectCells cells;
 
+  /// Whether the rows carry poster frames (Settings, **Thumbnails on footage
+  /// rows**). On, every row's glyph slot takes [projectRowThumbWidth], so the
+  /// names still stand in one column whatever kind of row is above or below.
+  final bool thumbnails;
+
+  /// This footage item's poster frame, out of the panel's own cache, or null
+  /// while it is decoding, for a file with no picture, and for every other
+  /// kind of row. Only read while [thumbnails] is on.
+  final ui.Image? thumb;
+
   /// Whether this row is the whole selection, which is what decides on a click
   /// that there is nothing to collapse.
   ///
@@ -255,6 +267,8 @@ class ProjectRowFrb extends StatefulWidget {
     required this.renaming,
     required this.columns,
     required this.cells,
+    this.thumbnails = false,
+    this.thumb,
     required this.loneSelection,
     required this.onSelect,
     required this.selectedFootage,
@@ -610,6 +624,7 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
                   items: widget.cells.items,
                   size: widget.cells.size,
                   fps: widget.cells.fps,
+                  duration: widget.cells.duration,
                   path: widget.cells.path,
                   style: projectMetaStyle(t),
                   pathStyle: projectMetaStyle(t).copyWith(color: t.textDisabled),
@@ -713,8 +728,12 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
   /// per-type tints, which are the label palette's own chips: azure for
   /// picture footage, indigo for sound, amber for solids. A folder and a
   /// composition stay muted, as the mockup draws them, and missing footage
-  /// wears the warning-tinted unlink glyph. No thumbnail here — the preview
-  /// card carries the picture, so the tree stays a tight list of names.
+  /// wears the warning-tinted unlink glyph. No thumbnail here by default: the
+  /// preview card carries the picture, so the tree stays a tight list of
+  /// names. With **Thumbnails on footage rows** switched on, a footage row's
+  /// poster frame stands in the slot instead, the row's own height tall; the
+  /// glyph stays for a file with no picture, a missing one, and a frame that
+  /// has not decoded yet.
   ///
   /// **A colour tag takes the glyph over** (docs/07 §3.1, §12A.3a: the tag
   /// tints the icon's strokes rather than adding a dot). The per-type tint is
@@ -731,6 +750,7 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
   Widget _glyph(LumitTheme t) {
     final (icon, tint) = _iconFor(item, t);
     final tag = widget.label != 0 ? widget.label : widget.inherited;
+    final thumb = widget.thumbnails && !widget.missing ? widget.thumb : null;
     // The glyph is also the colour control: it already wears the label
     // colour, so pressing it is where a person looks to change it.
     return KeyedSubtree(
@@ -745,14 +765,38 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
                 keyPrefix: 'project-label');
             if (picked != null) widget.onSetLabel(picked);
           },
-          child: lumitIcon(
-            widget.missing ? LumitIcon.unlink : icon,
-            size: projectRowIconSize,
-            color: widget.missing
-                ? t.warning
-                : tag != 0
-                    ? t.labelColour(tag)
-                    : tint,
+          child: SizedBox(
+            width: widget.thumbnails
+                ? projectRowThumbWidth
+                : projectRowIconSize,
+            height: projectRowHeight,
+            child: thumb != null
+                // The card's own treatment, at the row's size: the frame
+                // fills its slot and the slot wears the control corner. A
+                // pixel clear above and below, so the frames of rows that
+                // follow one another do not run into one strip.
+                ? Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 1),
+                    child: ClipRRect(
+                      borderRadius:
+                          BorderRadius.circular(t.tokens.controlRadius),
+                      child: Container(
+                        color: t.surface0,
+                        child: RawImage(image: thumb, fit: BoxFit.cover),
+                      ),
+                    ),
+                  )
+                : Center(
+                    child: lumitIcon(
+                      widget.missing ? LumitIcon.unlink : icon,
+                      size: projectRowIconSize,
+                      color: widget.missing
+                          ? t.warning
+                          : tag != 0
+                              ? t.labelColour(tag)
+                              : tint,
+                    ),
+                  ),
           ),
         ),
       ),

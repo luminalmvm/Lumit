@@ -1745,6 +1745,14 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             settings.easingInPopup = on;
             changed();
           }),
+          // Off by default: the Project panel's rows are a list of names,
+          // and the preview card carries the picture.
+          _flag(t, 'settings-project-thumbnails',
+              l10n.settingsThumbnailsOnFootageRows,
+              value: settings.projectThumbnails, set: (on) {
+            settings.projectThumbnails = on;
+            changed();
+          }),
           // Off by default: the lane area draws bars, and the names
           // are already a column away in the outline.
           _flag(t, 'settings-layer-names-on-bars',

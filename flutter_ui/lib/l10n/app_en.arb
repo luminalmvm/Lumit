@@ -1261,7 +1261,7 @@
   },
   "duration": "Duration",
   "@duration": {
-    "description": "Field label: how long a composition runs."
+    "description": "Field label: how long a composition runs. Also the Project panel's Duration column heading, shown in capitals by the style, so write it sentence case."
   },
   "durationFormatNote": "Duration is HH:MM:SS:FF at the frame rate above.",
   "@durationFormatNote": {
@@ -12967,6 +12967,10 @@
   "settingsLayerNamesOnLaneBars": "Layer names on lane bars",
   "@settingsLayerNamesOnLaneBars": {
     "description": "Settings window, Timeline page: the name of one setting - whether each layer bar in the Timeline lane area is labelled with the layer name. Off by default."
+  },
+  "settingsThumbnailsOnFootageRows": "Thumbnails on footage rows",
+  "@settingsThumbnailsOnFootageRows": {
+    "description": "Settings window, Timeline page, Panels group: the name of one setting - whether each footage row in the Project panel carries a small poster frame in place of its type glyph. Off by default."
   },
   "settingsTimelineMinimap": "Minimap under the lanes",
   "@settingsTimelineMinimap": {
