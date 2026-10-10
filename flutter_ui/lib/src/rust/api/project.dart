@@ -381,10 +381,25 @@ class ProjectReference {
         that: this,
       );
 
+  /// Throw away the edits a crash left in the journal, for somebody who was
+  /// offered them and said no.
+  void discardJournal() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceDiscardJournal(
+        that: this,
+      );
+
   /// Close the group [`Self::begin_undo_group`] opened. Ending one that was
   /// never begun does nothing.
   void endUndoGroup() =>
       BridgeLib.instance.api.crateApiProjectProjectReferenceEndUndoGroup(
+        that: this,
+      );
+
+  /// Whether the journal holds edits from a run that never closed this
+  /// project, which is a crash or a power cut. Asked once, as the project
+  /// opens, to decide whether to offer them back.
+  bool endedBadly() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceEndedBadly(
         that: this,
       );
 
@@ -437,13 +452,14 @@ class ProjectReference {
 
   /// Bring a layered image file in as a composition, as one undo step: a
   /// footage item per layer, filed in a folder named for the file, and a
-  /// composition the document's size holding a Footage layer for each.
+  /// composition the document's size holding a layer for each. A group
+  /// that can't be a layer group becomes a composition of its own.
   ///
   /// `None` when `path` is not a layered file this build reads, which is
   /// anything but a Photoshop document, one of a kind that is not read, or
   /// one with fewer than two layers. The caller then imports it as plain
   /// footage. Otherwise the number of layers left out because they hold no
-  /// picture, which is what an adjustment layer or a fill layer is.
+  /// picture, which is what an adjustment layer or a gradient fill is.
   ///
   /// Only the layer list is read here. The pixels are read when a layer is
   /// first drawn.
@@ -536,6 +552,13 @@ class ProjectReference {
         that: this,
       );
 
+  /// Note that the project is being left on purpose, for the application
+  /// quitting. Closing or replacing a project notes it by itself.
+  void noteCleanExit() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceNoteCleanExit(
+        that: this,
+      );
+
   /// How much of the project's footage is packed, and whether saves pack
   /// automatically.
   BridgePackState packState() =>
@@ -583,8 +606,8 @@ class ProjectReference {
   ///
   /// Media paths are rebased against the destination directory before writing,
   /// so a project saved somewhere new keeps relative links that work.
-  /// A successful save clears the crash journal: the journal covers work
-  /// *between* saves, so once the document is on disk it is redundant.
+  /// A successful save drops the edits it wrote from the crash journal, and
+  /// the journal carries on for the edits made after it.
   ///
   /// A packed project is saved with its footage still inside
   /// ([`Self::save_packed`] is the same save with a progress stream).
@@ -724,6 +747,15 @@ class ProjectReference {
         that: this,
       );
 
+  /// The person chose not to save this project, which is about to close.
+  /// A guest whose host is away then keeps only the edits its file holds,
+  /// so the copy opens next time as it was saved. Does nothing for anyone
+  /// else.
+  void shareDiscardAway() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceShareDiscardAway(
+        that: this,
+      );
+
   /// Whether this machine is a guest of the project. True straight after
   /// opening a guest's own copy that was closed with its host away: it
   /// carries on looking for the host, and what it finds comes down the
@@ -778,7 +810,9 @@ class ProjectReference {
 
   /// Take a guest out of the project this machine hosts, by the id the
   /// people list gives them. Their Lumit is told and stops coming back.
-  /// The invite still works for anyone who holds it.
+  /// The invite is replaced, so the one they hold stops working. Everyone
+  /// still here is sent the new one, and [`Self::share_invite`] gives it,
+  /// with the key to hand to [`Self::share`] next time.
   void shareRemove({required int person}) => BridgeLib.instance.api
       .crateApiProjectProjectReferenceShareRemove(that: this, person: person);
 

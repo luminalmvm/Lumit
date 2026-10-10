@@ -1151,19 +1151,25 @@ class CompositionReference {
   /// the loop modes are the frontend's, and a ping-pong asks for every
   /// other leg reversed. The frame given is shown first in both directions,
   /// so a ping-pong turns at the end minus one.
+  ///
+  /// `speed` is how many times the comp's rate the leg runs at, 1 for
+  /// ordinary playback and 2, 4 or 8 for the J and L shuttle. A faster leg
+  /// keeps time by skipping frames, in either direction, and is silent.
   void play(
           {required BigInt from,
           required double scale,
           required BridgePlaybackMode mode,
           required int view,
-          required bool reverse}) =>
+          required bool reverse,
+          required int speed}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferencePlay(
           that: this,
           from: from,
           scale: scale,
           mode: mode,
           view: view,
-          reverse: reverse);
+          reverse: reverse,
+          speed: speed);
 
   /// The preview tier adaptive playback has settled on: 1 Full, 2 Half,
   /// 3 Third, 4 Quarter. Shown beside the mode so "why is it soft?" has an

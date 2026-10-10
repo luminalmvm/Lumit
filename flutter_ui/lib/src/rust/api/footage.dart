@@ -237,14 +237,6 @@ class FootageReference {
         that: this,
       );
 
-  /// Where this item's file is, as the *project* records it: the relative
-  /// path a saved project actually carries, falling back to the
-  /// absolute one only when the project has never been saved and there is
-  /// nothing to be relative to.
-  ///
-  /// Display data — the Project panel's Path column. It says where the
-  /// reference points, not whether anything is there; `get_status` is the
-  /// question about the disk, and this deliberately touches none.
   String filePath() =>
       BridgeLib.instance.api.crateApiFootageFootageReferenceFilePath(
         that: this,
@@ -345,6 +337,20 @@ class FootageReference {
           rateDen: rateDen,
           frames: frames,
           view: view);
+
+  /// Where this item's file is, as the *project* records it: the relative
+  /// path a saved project actually carries, falling back to the
+  /// absolute one only when the project has never been saved and there is
+  /// nothing to be relative to.
+  ///
+  /// Display data — the Project panel's Path column. It says where the
+  /// reference points, not whether anything is there; `get_status` is the
+  /// question about the disk, and this deliberately touches none.
+  /// Show this footage's file in the desktop's own file manager. False when
+  /// the file can't be found, or no window could be opened.
+  bool reveal() => BridgeLib.instance.api.crateApiFootageFootageReferenceReveal(
+        that: this,
+      );
 
   /// The rate this item's numbered run of stills plays at, or `None` when it
   /// is one ordinary file.

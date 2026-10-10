@@ -6,6 +6,7 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
+// These functions are ignored because they are not marked as `pub`: `journal_file`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`
 
 /// What this build can truthfully say about itself at load time.
@@ -40,6 +41,15 @@ BridgePlaybackTier resetRealtime() =>
 /// file carries it and hands it back at boot, as the cache budgets do.
 void setFullResDragPreviews({required bool fullRes}) => BridgeLib.instance.api
     .crateApiShellSetFullResDragPreviews(fullRes: fullRes);
+
+/// Let footage be decoded by the graphics card's video unit, or keep it on the
+/// processor.
+///
+/// On is quicker. Off is the way out on a machine whose graphics driver
+/// misbehaves with it. It reaches footage opened from here on, so a project
+/// already open wants reopening. Held the way the drag setting above is.
+void setHardwareDecode({required bool on_}) =>
+    BridgeLib.instance.api.crateApiShellSetHardwareDecode(on_: on_);
 
 /// How often Lumit writes a rotating copy of every open project, and how many
 /// copies it keeps (docs/10-FILE-FORMAT.md §4).
