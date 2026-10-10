@@ -191,6 +191,11 @@ class BridgeSharePerson {
   final double? cursorX;
   final double? cursorY;
 
+  /// The property rows they have selected in the Timeline and the
+  /// keyframes, as the frontend named them in [`ProjectReference::share_presence`].
+  final List<String> properties;
+  final List<String> keys;
+
   const BridgeSharePerson({
     required this.id,
     required this.name,
@@ -201,6 +206,8 @@ class BridgeSharePerson {
     this.playhead,
     this.cursorX,
     this.cursorY,
+    required this.properties,
+    required this.keys,
   });
 
   @override
@@ -213,7 +220,9 @@ class BridgeSharePerson {
       layers.hashCode ^
       playhead.hashCode ^
       cursorX.hashCode ^
-      cursorY.hashCode;
+      cursorY.hashCode ^
+      properties.hashCode ^
+      keys.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -228,7 +237,9 @@ class BridgeSharePerson {
           layers == other.layers &&
           playhead == other.playhead &&
           cursorX == other.cursorX &&
-          cursorY == other.cursorY;
+          cursorY == other.cursorY &&
+          properties == other.properties &&
+          keys == other.keys;
 }
 
 @freezed

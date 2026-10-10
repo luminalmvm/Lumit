@@ -20,6 +20,7 @@ import '../l10n/strings.dart';
 import '../state/drag_payloads.dart';
 import '../state/file_dialogs.dart';
 import '../theme/theme.dart';
+import '../widgets/share_marks.dart';
 import '../widgets/controls.dart';
 import 'project_columns_frb.dart';
 import 'project_menu_frb.dart';
@@ -163,6 +164,10 @@ class ProjectRowFrb extends StatefulWidget {
   /// The other people in a shared project who have this composition open,
   /// each as their colour and their name. Empty on every other kind of row.
   final List<(int, String)> people;
+
+  /// The colour of each other person in a shared project who has this item
+  /// selected. The row carries a bar of them. Empty whenever nobody has.
+  final List<int> holders;
   final bool selected;
 
   /// Whether this is one of the alternate rows, which stand on a slightly
@@ -244,6 +249,7 @@ class ProjectRowFrb extends StatefulWidget {
     required this.inUse,
     required this.proxy,
     this.people = const [],
+    this.holders = const [],
     required this.selected,
     this.shaded = false,
     required this.renaming,
@@ -479,6 +485,12 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
                     : widget.shaded
                         ? t.surface2.withValues(alpha: 0.5)
                         : null,
+            foregroundDecoration: widget.holders.isEmpty
+                ? null
+                : TheirBar(
+                    [for (final c in widget.holders) t.personColour(c)],
+                    tint: 0.14,
+                  ),
             padding: EdgeInsets.only(
               left: projectRowPadding + widget.depth * projectIndentPerDepth,
               right: projectRowPadding,

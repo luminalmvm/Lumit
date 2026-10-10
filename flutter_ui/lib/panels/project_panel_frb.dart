@@ -454,8 +454,12 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   ///
   /// A fresh set each time, because a notifier holding the value it already
   /// has tells nobody anything.
-  void _publishPicks() =>
-      _rowPicks.value = Set<String>.unmodifiable(_selectedIds);
+  void _publishPicks() {
+    _rowPicks.value = Set<String>.unmodifiable(_selectedIds);
+    // And the others in a shared project, who see these rows marked.
+    Provider.of<LumitUiState>(context, listen: false)
+        .setProjectPicks(_selectedIds);
+  }
 
   /// Mirror the anchor item to the shell, where the FX console reads
   /// it. The anchor, not the set: the console acts on one thing, the way the
@@ -882,6 +886,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
           if (item case ItemReference_Composition(:final field0))
             for (final p in share.inComp(field0)) (p.colour, p.name),
         ],
+        holders: share.holding('item:$id'),
         selected: selected,
         shaded: shaded,
         renaming: _renamingId == id,
@@ -909,9 +914,10 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
         relinkPicker: widget.relinkPicker,
       ),
     );
-    // Only a composition row shows who has it open, so only those rows follow
-    // the people in a shared project, and the panel is not rebuilt for them.
-    return item is ItemReference_Composition
+    // A composition row shows who has it open, and in a shared project any
+    // row shows who has it selected. Those rows follow the people in it, and
+    // the panel is not rebuilt for them. Outside one, only compositions do.
+    return item is ItemReference_Composition || share.active
         ? ValueListenableBuilder<int>(
             valueListenable: share.roster,
             builder: (context, _, __) => picked())

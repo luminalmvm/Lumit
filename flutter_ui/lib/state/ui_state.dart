@@ -19,7 +19,8 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:lumit_flutter/panels/easing_curve.dart' show EasingCurve;
 import 'package:lumit_flutter/panels/fx_section.dart' show FxSelection;
 import 'package:lumit_flutter/panels/key_ease_fields.dart' show KeyEaseClaim;
-import 'package:lumit_flutter/panels/layer_fold_frb.dart' show RevealFilter;
+import 'package:lumit_flutter/panels/layer_fold_frb.dart'
+    show RevealFilter, effectPath;
 import 'package:lumit_flutter/panels/shader_editor.dart' show InstanceHome;
 import 'package:lumit_flutter/l10n/strings.dart';
 import 'package:lumit_flutter/panels/viewer_texture_controller.dart';
@@ -1925,8 +1926,13 @@ class LumitUiState extends ChangeNotifier {
     _app.addListener(refreshColourSummary);
     refreshColourSummary();
     // What this person has open, for the others in a shared project.
-    selectedLayers.addListener(_look);
+    selectedLayers.addListener(_lookAfterPick);
+    selectedProperties.addListener(_lookAfterPick);
+    selectedEffects.addListener(_lookAfterPick);
     playheadFrame.addListener(_look);
+    // Sharing starting is the one time what is selected has to be sent
+    // without having changed.
+    _app.share.roster.addListener(_look);
     // Where the playhead was left is worth keeping, and it moves far too often
     // to write down each time. So it is captured when the user steps away from
     // the window and when they close it, alongside the deliberate acts below.
@@ -2123,10 +2129,69 @@ class LumitUiState extends ChangeNotifier {
 
   /// Tell the others in a shared project what this person has open. The share
   /// state keeps it and sends it once the project is shared.
-  void _look() => _app.share.look(
-      comp: _selectedComp,
-      layers: selectedLayers.value,
-      playhead: playheadFrame.value);
+  void _look() {
+    final share = _app.share;
+    share.look(
+        comp: _selectedComp,
+        layers: selectedLayers.value,
+        playhead: playheadFrame.value,
+        // Gathered only while there is somebody to tell.
+        properties: share.active ? _inHand() : const []);
+  }
+
+  /// A selection made anywhere lets go of the parameter last edited in the
+  /// Effect controls panel.
+  void _lookAfterPick() {
+    _touched = null;
+    _look();
+  }
+
+  /// The parameter last edited in the Effect controls panel, by the path its
+  /// row has in the Timeline. That panel has no selection of its own, so
+  /// editing a value is how the others see which one this person is on.
+  String? _touched;
+
+  /// Note that the row at [path] has just been edited, for the others in a
+  /// shared project. Does nothing when the project is not shared.
+  void touchProperty(String path) {
+    if (!_app.share.active || _touched == path) return;
+    _touched = path;
+    _look();
+  }
+
+  /// The items selected in the Project panel, each as `item:` and its id.
+  /// Held only while the project is shared.
+  List<String> _projectPicks = const [];
+
+  /// The Project panel's selection, for the others in a shared project to
+  /// see marked. Does nothing when the project is not shared.
+  void setProjectPicks(Iterable<String> ids) {
+    if (!_app.share.active) {
+      _projectPicks = const [];
+      return;
+    }
+    _projectPicks = [for (final id in ids) 'item:$id'];
+    _look();
+  }
+
+  /// Every row this person has in hand, for the others to mark: the property
+  /// rows selected in the Timeline, the effects picked in any panel, the row
+  /// last pressed in a panel with no selection of its own, and the items
+  /// selected in the Project panel.
+  List<String> _inHand() {
+    final owner = selectedEffectsLayer?.internallayerId.toString();
+    final picked = owner == null ? const <UuidValue>[] : selectedEffects.value;
+    final touched = _touched;
+    if (picked.isEmpty && touched == null && _projectPicks.isEmpty) {
+      return selectedProperties.value;
+    }
+    return {
+      ...selectedProperties.value,
+      for (final id in picked) effectPath(owner!, '$id'),
+      if (touched != null) touched,
+      ..._projectPicks,
+    }.toList();
+  }
 
   @override
   void dispose() {
