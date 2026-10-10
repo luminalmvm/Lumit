@@ -8,6 +8,7 @@ project(runner LANGUAGES CXX)
 # Any new source files that you add to the application should be added here.
 add_executable(${BINARY_NAME}
   "main.cc"
+  "extension_views.cc"
   "gpu_offload.cc"
   "my_application.cc"
   "viewer_texture_bridge.cc"
@@ -34,5 +35,10 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(EGL REQUIRED IMPORTED_TARGET egl)
 pkg_check_modules(GLES REQUIRED IMPORTED_TARGET glesv2)
 target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::EGL PkgConfig::GLES)
+
+# An extension's panel is a web page (extension_views.cc), shown by WebKitGTK:
+# the GTK 3 build of it, since that is the GTK the Flutter embedder uses.
+pkg_check_modules(WEBKIT REQUIRED IMPORTED_TARGET webkit2gtk-4.1)
+target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::WEBKIT)
 
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")

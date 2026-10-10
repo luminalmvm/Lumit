@@ -30,9 +30,17 @@ import 'package:lumit_flutter/state/updates.dart' show versionFromBootLine;
 /// what `app.info` tells a page so it can tell an older Lumit from a newer.
 const int extensionApiVersion = 1;
 
+/// What a page's own files are served under where the web view is WebKit,
+/// which serves a folder under a scheme of the application's and not under
+/// an https name.
+const String extensionScheme = 'lumit-extension';
+
 /// The name a page's own files are served under. Each extension has its own,
-/// so what one stores no other can read.
-String extensionOrigin(String id) => 'https://$id.lumit.example';
+/// so what one stores no other can read. An https name on Windows and the
+/// extension's own scheme on macOS and Linux, since that is what each web
+/// view can serve a folder as.
+String extensionOrigin(String id) =>
+    Platform.isWindows ? 'https://$id.lumit.example' : '$extensionScheme://$id';
 
 /// The most of an answer [ExtensionHost] fetches for a page.
 const int _fetchLimit = 8 << 20;
@@ -538,15 +546,46 @@ class ExtensionHost with WidgetsBindingObserver {
 }
 
 /// What a page is given before any of its own script runs: `window.lumit`,
-/// with `call` to ask and `on` to listen.
-const String extensionBootstrapScript = r'''
+/// with `call` to ask and `on` to listen. [origin] is the page's own, and a
+/// page anywhere else is given nothing.
+///
+/// The two web views carry messages differently. WebView2 has a channel of
+/// its own each way. WebKit hands a page one function to send text with, the
+/// same one to every frame on the page, so each message carries [key], which
+/// only the page's own frame was told, and an answer comes back as a call to
+/// a function this leaves on the window.
+String extensionBootstrap({required String origin, required String key}) =>
+    _bootstrap
+        .replaceFirst('__ORIGIN__', jsonEncode(origin))
+        .replaceFirst('__KEY__', jsonEncode(key));
+
+/// A message for a WebKit page, as the script that hands it over.
+String extensionDeliver(Map<String, Object?> message) =>
+    'window.__lumitDeliver&&window.__lumitDeliver(${jsonEncode(message)})';
+
+/// What a WebKit page sent, or null when it does not carry [key].
+Object? extensionUnwrap(Object? text, String key) {
+  if (text is! String) return null;
+  try {
+    final sent = jsonDecode(text);
+    if (sent is Map && sent['key'] == key) return sent['message'];
+  } catch (_) {
+    // Not something the bootstrap wrote.
+  }
+  return null;
+}
+
+const String _bootstrap = r'''
 (() => {
-  if (window.lumit || !window.chrome || !window.chrome.webview) return;
+  if (window.lumit || location.protocol + '//' + location.host !== __ORIGIN__) return;
+  const webview2 = window.chrome && window.chrome.webview;
+  const webkit = window.webkit && window.webkit.messageHandlers
+    && window.webkit.messageHandlers.lumit;
+  if (!webview2 && !webkit) return;
   const waiting = new Map();
   const listeners = new Map();
   let next = 1;
-  window.chrome.webview.addEventListener('message', (event) => {
-    const message = event.data;
+  const receive = (message) => {
     if (!message || typeof message !== 'object') return;
     if (typeof message.event === 'string') {
       for (const listener of listeners.get(message.event) || []) {
@@ -564,13 +603,21 @@ const String extensionBootstrapScript = r'''
       error.code = message.error && message.error.code || 'failed';
       call.reject(error);
     }
-  });
+  };
+  let send;
+  if (webview2) {
+    webview2.addEventListener('message', (event) => receive(event.data));
+    send = (message) => webview2.postMessage(message);
+  } else {
+    Object.defineProperty(window, '__lumitDeliver', { value: receive });
+    send = (message) => webkit.postMessage(JSON.stringify({ key: __KEY__, message }));
+  }
   window.lumit = Object.freeze({
     call(method, params) {
       return new Promise((resolve, reject) => {
         const id = next++;
         waiting.set(id, { resolve, reject });
-        window.chrome.webview.postMessage({ id, method, params: params || {} });
+        send({ id, method, params: params || {} });
       });
     },
     on(event, listener) {

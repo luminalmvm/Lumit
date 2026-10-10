@@ -7,7 +7,8 @@
 # FFmpeg 8.1 libraries into its lib/ directory (the launcher's rpath covers
 # them), so the manifest just repacks that staged bundle. The GNOME runtime
 # supplies GTK 3, which the Flutter Linux embedder needs and the plain
-# freedesktop runtime does not ship.
+# freedesktop runtime does not ship, and the GTK 3 build of WebKitGTK, which
+# shows an extension's page.
 #
 # CI (release.yml, linux-bundle job) copies the staged bundle to
 # packaging/flatpak/bundle/ before running flatpak-builder; to build locally on
@@ -60,7 +61,8 @@ finish-args:
   - --filesystem=/media
   - --filesystem=/run/media
   - --filesystem=/mnt
-  # The Addons page downloads model packs; nothing else needs the network.
+  # The Addons page downloads model packs, and an extension's page reaches
+  # the sites it was made for. Nothing else needs the network.
   - --share=network
 
 modules:

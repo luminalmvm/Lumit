@@ -21,6 +21,8 @@ class MainFlutterWindow: NSWindow {
 
     RegisterGeneratedPlugins(registry: flutterViewController)
     viewerTextureBridge = ViewerTextureBridge(controller: flutterViewController)
+    // An extension's page is a web view Flutter places in its panel.
+    ExtensionViewFactory.register(with: flutterViewController)
 
     // Open where the last run left the window, and zoomed — macOS's word for
     // maximised — when there is nothing to go back to. `setFrameUsingName`

@@ -16084,14 +16084,6 @@
   "@extensionMissingHint": {
     "description": "Hint under the title in a dock panel whose extension has been removed."
   },
-  "extensionUnsupportedTitle": "Extensions need Windows for now",
-  "@extensionUnsupportedTitle": {
-    "description": "Title shown in an extension's dock panel on macOS and Linux, where Lumit cannot show an extension's page yet."
-  },
-  "extensionUnsupportedHint": "An extension's panel is a web page, and Lumit can only show one on Windows so far.",
-  "@extensionUnsupportedHint": {
-    "description": "Hint under the title in an extension's dock panel on macOS and Linux."
-  },
   "extensionFailedTitle": "The extension could not be shown",
   "@extensionFailedTitle": {
     "description": "Title shown in an extension's dock panel when its page could not be put up."

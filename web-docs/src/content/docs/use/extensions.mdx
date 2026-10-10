@@ -9,9 +9,8 @@ An **extension** is a panel somebody else made. It is a folder holding a web pag
 `extension.json`, and Lumit shows the page in a panel of its own.
 
 :::note
-Extension panels are shown on Windows. On macOS and Linux the panel says so. Extensions are
-installed from a folder: the addon catalogue does not list them. An extension is not
-signed, and Lumit does not limit what its page loads from the internet.
+Extensions are installed from a folder: the addon catalogue does not list them. An
+extension is not signed, and Lumit does not limit what its page loads from the internet.
 :::
 
 ## Installing one
@@ -66,9 +65,9 @@ that is not a bare name is refused. A folder holds at most 4,096 files and 512 M
 
 ## The page
 
-The page is served from `https://<id>.lumit.example/`, so relative paths to its own
-scripts, styles and pictures work. Lumit gives it `window.lumit` before its own scripts
-run.
+The page is served from `https://<id>.lumit.example/` on Windows and from
+`lumit-extension://<id>/` on macOS and Linux, so relative paths to its own scripts, styles
+and pictures work. Lumit gives it `window.lumit` before its own scripts run.
 
 ```js
 const info = await lumit.call("app.info");
@@ -81,6 +80,12 @@ const stop = lumit.on("activity.edit", (edit) => console.log(edit.step));
 
 A page that has gone to another site is answered nothing until **Go back** is pressed.
 The page cannot open a window.
+
+On Linux the page is a still picture while a menu, a tooltip or a dialogue is open.
+
+On macOS and Linux a page can be inspected when Lumit is started with the environment
+variable `LUMIT_EXTENSION_DEVTOOLS=1`: from Safari's **Develop** menu, and from **Inspect
+Element** on the page's own menu.
 
 ## Permissions and calls
 
