@@ -42,7 +42,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -2093603631;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 2015699062;
 
 // Section: executor
 
@@ -18005,6 +18005,67 @@ fn wire__crate__api__effect__shader_graph_view_impl(
         },
     )
 }
+fn wire__crate__api__share__share_cloud_door_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "share_cloud_door",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_port = <Option<u16>>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let output_ok = Result::<_, ()>::Ok({
+                    crate::api::share::share_cloud_door(api_port);
+                })?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__share__share_cloud_relay_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "share_cloud_relay",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let output_ok = Result::<_, ()>::Ok(crate::api::share::share_cloud_relay())?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
 fn wire__crate__api__share__share_default_port_impl(
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -25472,6 +25533,17 @@ impl SseDecode for Option<crate::api::project::ProjectReference> {
     }
 }
 
+impl SseDecode for Option<u16> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<u16>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
 impl SseDecode for Option<u32> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -25877,8 +25949,8 @@ fn pde_ffi_dispatcher_primary_impl(
             data_len,
         ),
         499 => wire__crate__api__effect__rescan_plugins_impl(port, ptr, rust_vec_len, data_len),
-        534 => wire__crate__api__assets__text_font_faces_impl(port, ptr, rust_vec_len, data_len),
-        535 => wire__crate__api__assets__text_font_families_impl(port, ptr, rust_vec_len, data_len),
+        536 => wire__crate__api__assets__text_font_faces_impl(port, ptr, rust_vec_len, data_len),
+        537 => wire__crate__api__assets__text_font_families_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -26372,21 +26444,23 @@ fn pde_ffi_dispatcher_sync_impl(
 522 => wire__crate__api__cache__set_render_profiling_impl(ptr, rust_vec_len, data_len),
 523 => wire__crate__api__cache__set_vram_cache_budget_impl(ptr, rust_vec_len, data_len),
 524 => wire__crate__api__effect__shader_graph_view_impl(ptr, rust_vec_len, data_len),
-525 => wire__crate__api__share__share_default_port_impl(ptr, rust_vec_len, data_len),
-526 => wire__crate__api__share__share_link_in_impl(ptr, rust_vec_len, data_len),
-527 => wire__crate__api__share__share_link_locked_impl(ptr, rust_vec_len, data_len),
-528 => wire__crate__api__share__share_relay_port_impl(ptr, rust_vec_len, data_len),
-529 => wire__crate__api__share__share_set_footage_impl(ptr, rust_vec_len, data_len),
-530 => wire__crate__api__share__share_set_limits_impl(ptr, rust_vec_len, data_len),
-531 => wire__crate__api__solid__solid_reference_get_definition_impl(ptr, rust_vec_len, data_len),
-532 => wire__crate__api__solid__solid_reference_set_definition_impl(ptr, rust_vec_len, data_len),
-533 => wire__crate__api__system__system_memory_bytes_impl(ptr, rust_vec_len, data_len),
-536 => wire__crate__api__system__thaw_cursor_impl(ptr, rust_vec_len, data_len),
-537 => wire__crate__api__track__track_status_impl(ptr, rust_vec_len, data_len),
-538 => wire__crate__api__track__tracked_points_impl(ptr, rust_vec_len, data_len),
-539 => wire__crate__api__system__video_memory_bytes_impl(ptr, rust_vec_len, data_len),
-540 => wire__crate__api__cache__viewer_transport_impl(ptr, rust_vec_len, data_len),
-541 => wire__crate__api__cache__vram_cache_stats_impl(ptr, rust_vec_len, data_len),
+525 => wire__crate__api__share__share_cloud_door_impl(ptr, rust_vec_len, data_len),
+526 => wire__crate__api__share__share_cloud_relay_impl(ptr, rust_vec_len, data_len),
+527 => wire__crate__api__share__share_default_port_impl(ptr, rust_vec_len, data_len),
+528 => wire__crate__api__share__share_link_in_impl(ptr, rust_vec_len, data_len),
+529 => wire__crate__api__share__share_link_locked_impl(ptr, rust_vec_len, data_len),
+530 => wire__crate__api__share__share_relay_port_impl(ptr, rust_vec_len, data_len),
+531 => wire__crate__api__share__share_set_footage_impl(ptr, rust_vec_len, data_len),
+532 => wire__crate__api__share__share_set_limits_impl(ptr, rust_vec_len, data_len),
+533 => wire__crate__api__solid__solid_reference_get_definition_impl(ptr, rust_vec_len, data_len),
+534 => wire__crate__api__solid__solid_reference_set_definition_impl(ptr, rust_vec_len, data_len),
+535 => wire__crate__api__system__system_memory_bytes_impl(ptr, rust_vec_len, data_len),
+538 => wire__crate__api__system__thaw_cursor_impl(ptr, rust_vec_len, data_len),
+539 => wire__crate__api__track__track_status_impl(ptr, rust_vec_len, data_len),
+540 => wire__crate__api__track__tracked_points_impl(ptr, rust_vec_len, data_len),
+541 => wire__crate__api__system__video_memory_bytes_impl(ptr, rust_vec_len, data_len),
+542 => wire__crate__api__cache__viewer_transport_impl(ptr, rust_vec_len, data_len),
+543 => wire__crate__api__cache__vram_cache_stats_impl(ptr, rust_vec_len, data_len),
                         _ => unreachable!(),
                     }
 }
@@ -38147,6 +38221,16 @@ impl SseEncode for Option<crate::api::project::ProjectReference> {
         <bool>::sse_encode(self.is_some(), serializer);
         if let Some(value) = self {
             <crate::api::project::ProjectReference>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<u16> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <u16>::sse_encode(value, serializer);
         }
     }
 }

@@ -542,6 +542,22 @@ pub fn share_relay_port() -> u16 {
     lumit_share::RELAY_PORT
 }
 
+/// What Lumit's own relay is called in an invite, to give [`ProjectReference::share`]
+/// as its relay. It is reached through the door [`share_cloud_door`] names.
+#[frb(sync)]
+pub fn share_cloud_relay() -> String {
+    lumit_share::CLOUD_RELAY.to_owned()
+}
+
+/// Say which port on this machine the door to Lumit's own relay is on, or
+/// `None` when it has shut. The interface keeps the door, since it is what
+/// holds the account the relay asks a host for. With none, an invite that
+/// names the relay is tried at its other addresses only.
+#[frb(sync)]
+pub fn share_cloud_door(port: Option<u16>) {
+    lumit_share::set_cloud_door(port);
+}
+
 /// A relay's address as typed, with the usual port when it has none.
 #[frb(ignore)]
 fn at_relay(typed: &str) -> String {

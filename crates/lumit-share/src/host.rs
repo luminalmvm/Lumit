@@ -11,7 +11,7 @@ use crate::local::{place, sane};
 use crate::reach::{self, Closed};
 use crate::wire::{self, decode, encode, Message, Names, Out, Receiver, Sender};
 use crate::{
-    local_address, room, Event, Events, Invite, Person, Presence, Reach, Refusal, Relayed,
+    dialled, local_address, room, Event, Events, Invite, Person, Presence, Reach, Refusal, Relayed,
     ShareError, MAX_PEOPLE,
 };
 use lumit_core::store::{Moved, RemoteTag};
@@ -583,18 +583,24 @@ impl Hub {
             let name = room(&key);
             let current =
                 || !self.stop.load(Ordering::Relaxed) && self.seats.lock().channel() == key;
-            match lumit_relay::Room::open(relay, &name) {
-                Ok(mut kept) => {
+            // Lumit's own relay with no door to it open is as good as one
+            // that does not answer.
+            let at = dialled(relay);
+            match at
+                .as_deref()
+                .map(|at| (at, lumit_relay::Room::open(at, &name)))
+            {
+                Some((at, Ok(mut kept))) => {
                     said(Relayed::Open);
                     while current() {
                         match kept.guest(BEAT) {
-                            Ok(Some(guest)) => self.take(relay, &name, guest),
+                            Ok(Some(guest)) => self.take(at, &name, guest),
                             Ok(None) => {}
                             Err(_) => break,
                         }
                     }
                 }
-                Err(_) => said(Relayed::Unreachable),
+                _ => said(Relayed::Unreachable),
             }
             // Asked again before long, and at once for a new secret.
             let asked = Instant::now();
