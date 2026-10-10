@@ -14281,6 +14281,14 @@
   "@graphNoComp": {
     "description": "The Node graph panel's empty state when the composition it was drawing has gone. One line under the panel's name."
   },
+  "graphBoxNoFootage": "Wire footage into this box first",
+  "@graphBoxNoFootage": {
+    "description": "Status-area line when Analyse or Propagate is pressed on a Remove background, Depth or Roto brush box in a node graph, or the Roto brush is used on one, and no footage is wired into the box's picture socket. These effects read a footage file, and in a node graph the file is the one wired in."
+  },
+  "rotoPickABox": "Pick a Roto brush box to stroke on",
+  "@rotoPickABox": {
+    "description": "Status-area line when the Roto brush or Refine edge tool is used in a node graph composition with no Roto brush box picked on the canvas. A node graph has no layers, so the strokes belong to the picked box."
+  },
   "nodeNoRows": "This box has nothing to set.",
   "@nodeNoRows": {
     "description": "The Node panel's empty state when the picked box carries no values at all, which is the Output box of a node graph. One line under the panel's name."

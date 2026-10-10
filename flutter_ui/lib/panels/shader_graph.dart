@@ -41,6 +41,7 @@ import '../widgets/controls.dart';
 import 'shader_editor.dart' show InstanceHome;
 import 'graph_panel.dart'
     show
+        GraphBoxStack,
         GraphGroundPainter,
         GraphNodeFrame,
         graphShaderHeader,
@@ -839,8 +840,7 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel> {
                       ..setEntry(1, 3, _pan.dy)
                       ..setEntry(0, 0, _zoom)
                       ..setEntry(1, 1, _zoom),
-                    child: Stack(
-                      clipBehavior: Clip.none,
+                    child: GraphBoxStack(
                       children: [
                         for (final box in boxes)
                           Positioned(

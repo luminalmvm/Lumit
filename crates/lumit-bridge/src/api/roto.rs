@@ -489,9 +489,19 @@ pub fn roto_status(layer: LayerReference, effect: Uuid) -> Result<BridgeRotoStat
         .iter()
         .find(|e| e.id == effect)
         .ok_or(BridgeError::InvalidEffect)?;
+    status_of(fx)
+}
+
+/// One Roto brush's status, wherever it lives: on a layer, or as a box in a
+/// node graph. The store is keyed by the instance alone, so the reading is the
+/// same either way.
+pub(crate) fn status_of(
+    fx: &lumit_core::model::EffectInstance,
+) -> Result<BridgeRotoStatus, BridgeError> {
     if fx.effect.match_name != ROTO_BRUSH {
         return Err(BridgeError::InvalidEffect);
     }
+    let effect = fx.id;
     let block = fx.roto.clone().unwrap_or_default();
     let run = lumit_render::roto::propagated(effect);
     let (stage, done, total, reused, failure) = match lumit_render::roto::progress(effect) {
@@ -569,8 +579,13 @@ pub fn roto_source_frame(layer: LayerReference, frame: i64) -> Result<i64, Bridg
         .time_of_frame(frame)
         .map_err(|_| BridgeError::InvalidParam)?;
     let lt = lumit_core::time::layer_time(t_comp.0.to_f64(), item.start_offset.0);
-    let source_time = item.source_time_at(lt);
-    let (fps, frames) = media_rate(&layer, media)?;
+    source_frame_at((layer.project_id, media), item.source_time_at(lt))
+}
+
+/// The frame of the file at `source` that is showing at `source_time`: the
+/// last step of [`roto_source_frame`], which a brush in a node graph takes too.
+pub(crate) fn source_frame_at(source: Source, source_time: f64) -> Result<i64, BridgeError> {
+    let (fps, frames, _) = media_rate(source)?;
     // `blend` false and no sample rate: the frame a stroke is filed against is
     // the frame the user is *looking at*, which is the nearest native one — a
     // blend pair names two, and a matte is filed under one.
@@ -578,15 +593,34 @@ pub fn roto_source_frame(layer: LayerReference, frame: i64) -> Result<i64, Bridg
     i64::try_from(picked).map_err(|_| BridgeError::InvalidParam)
 }
 
-/// The media's own rate and how many frames it runs, from the probe cache.
+/// Where an analysis's file is: the project it is in, and the footage item.
+pub(crate) type Source = (Uuid, Uuid);
+
+/// The file a footage layer reads, or `NotFootage` for any other kind.
+pub(crate) fn layer_source(layer: &LayerReference) -> Result<Source, BridgeError> {
+    match layer.item()?.kind {
+        LayerKind::Footage { item } => Ok((layer.project_id, item)),
+        _ => Err(BridgeError::NotFootage),
+    }
+}
+
+/// The media's own rate, how many frames it runs and its picture's size, from
+/// the probe cache.
 ///
 /// The frame count is `duration × rate` rounded, which is the same sum
 /// `add_footage_layer` sizes a clip's span with — the two must not disagree
 /// about where a shot ends. It is a frame coarser than the media index's exact
 /// count, and it is used for one thing: clamping the last frame.
 #[frb(ignore)]
-fn media_rate(layer: &LayerReference, media: Uuid) -> Result<(f64, usize), BridgeError> {
-    let project = layer.project()?;
+pub(crate) fn media_rate(
+    (project, media): Source,
+) -> Result<(f64, usize, (u32, u32)), BridgeError> {
+    let project = crate::api::state::PROJECTS
+        .read()
+        .map_err(|_| BridgeError::ReadFailed)?
+        .get(&project)
+        .ok_or(BridgeError::InvalidProject)?
+        .clone();
     let state = project.read().map_err(|_| BridgeError::ReadFailed)?;
     let doc = state.store.snapshot();
     let footage = doc
@@ -609,7 +643,7 @@ fn media_rate(layer: &LayerReference, media: Uuid) -> Result<(f64, usize), Bridg
             return Err(BridgeError::NotFootage);
         }
         let frames = (info.duration_seconds * fps).round().max(1.0) as usize;
-        Ok((fps, frames))
+        Ok((fps, frames, (video.width, video.height)))
     }
 
     // Without a decoder nothing probes, and a rate invented here would file
@@ -703,17 +737,13 @@ fn boundary_of(width: u32, height: u32, gray: &[u8]) -> Vec<f32> {
 // The buttons, down
 // ---------------------------------------------------------------------------
 
-/// The propagation job one Roto brush on one footage layer describes — the
-/// shared front half of a Propagate press and of the release-time solve.
+/// The propagation job one Roto brush describes over the file at `source` —
+/// the shared front half of a Propagate press and of the release-time solve.
 fn job_of(
-    layer: &LayerReference,
+    source: Source,
     fx: &lumit_core::model::EffectInstance,
 ) -> Result<lumit_render::roto::RotoJob, BridgeError> {
-    let media = match layer.item()?.kind {
-        LayerKind::Footage { item } => item,
-        _ => return Err(BridgeError::NotFootage),
-    };
-    let (path, fingerprint) = crate::api::track::media_source(layer, media)?;
+    let (path, fingerprint) = crate::api::track::media_source_in(source.0, source.1)?;
     lumit_render::roto::job_for(fx, path, &fingerprint, true).ok_or(BridgeError::NotFootage)
 }
 
@@ -723,8 +753,12 @@ fn job_of(
 /// doorway every Action press goes through — an Action carries no value, so a
 /// press is an *event*: nothing is staged, nothing is committed, and no undo
 /// entry appears.
+///
+/// `source` is the file the brush reads, or why it has none. It is asked for
+/// only by Propagate: Cancel stops whatever is running whether or not the file
+/// can still be found.
 pub(crate) fn press(
-    layer: &LayerReference,
+    source: Result<Source, BridgeError>,
     fx: &lumit_core::model::EffectInstance,
     param: &str,
 ) -> Result<(), BridgeError> {
@@ -733,7 +767,7 @@ pub(crate) fn press(
             lumit_render::roto::cancel(fx.id);
             Ok(())
         }
-        PROPAGATE => match lumit_render::roto::request(job_of(layer, fx)?) {
+        PROPAGATE => match lumit_render::roto::request(job_of(source?, fx)?) {
             lumit_render::roto::Requested::Started => Ok(()),
             // Every refusal has a name and the status row reads it back;
             // what the *press* owes the caller is only that it did not
@@ -774,10 +808,19 @@ pub fn roto_solve_frame(
         .iter()
         .find(|e| e.id == effect)
         .ok_or(BridgeError::InvalidEffect)?;
+    solve_frame(layer_source(&layer)?, fx, frame)
+}
+
+/// [`roto_solve_frame`]'s body, over whichever file the brush reads.
+pub(crate) fn solve_frame(
+    source: Source,
+    fx: &lumit_core::model::EffectInstance,
+    frame: i64,
+) -> Result<bool, BridgeError> {
     if fx.effect.match_name != ROTO_BRUSH {
         return Err(BridgeError::InvalidEffect);
     }
-    let mut job = job_of(&layer, fx)?;
+    let mut job = job_of(source, fx)?;
     job.stop_after = Some(frame);
     Ok(matches!(
         lumit_render::roto::request(job),

@@ -682,6 +682,10 @@ pub fn param_enabled(inst: &EffectInstance, id: &str) -> bool {
         })
 }
 
+/// The stem of the one kind of pair a fresh instance starts with chained: a
+/// `scale_x` / `scale_y`, which is a size rather than a place.
+const SCALE_PAIR: &str = "scale";
+
 pub fn instantiate(match_name: &str) -> Option<EffectInstance> {
     let s = schema(match_name)?;
     Some(EffectInstance {
@@ -708,9 +712,15 @@ pub fn instantiate(match_name: &str) -> Option<EffectInstance> {
             .collect(),
         sample_temporally: true,
         custom_name: None,
-        // Unlinked: a fresh point's two halves move on their own, which
-        // is what every effect did before there was a chain to close.
-        linked_pairs: Vec::new(),
+        // A fresh point's two halves move on their own: it is a place. A
+        // fresh **scale** starts chained, as the layer's own Scale does,
+        // because a size dragged one axis at a time squashes the picture and
+        // that is the rarer thing to want.
+        linked_pairs: s
+            .pairs()
+            .filter(|pair| pair.stem == SCALE_PAIR)
+            .map(|pair| pair.stem.to_owned())
+            .collect(),
         // A fresh audio plugin has no memory of itself yet; it is the plugin's
         // own defaults until something saves one.
         plugin_state: None,

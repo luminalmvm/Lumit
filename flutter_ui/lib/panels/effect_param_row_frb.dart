@@ -1889,8 +1889,10 @@ class EffectPointRowFrb extends StatelessWidget {
     final id = effectId;
     final sx = _scalar(xValue);
     final sy = _scalar(yValue);
-    // The shared stem: "Light x" / "Light y" → "Light".
+    // The shared stem: "Light x" / "Light y" → "Light", and "Scale x %" →
+    // "Scale", the unit being the rider after the wells.
     var stem = xParam.label;
+    if (stem.endsWith(' %')) stem = stem.substring(0, stem.length - 2);
     if (stem.toLowerCase().endsWith(' x')) {
       stem = stem.substring(0, stem.length - 2);
     }
@@ -1943,33 +1945,22 @@ class EffectPointRowFrb extends StatelessWidget {
     // key at the playhead, so the sibling takes a key there as well, at the
     // ratio the pair reads on that frame. Stretching its whole curve instead
     // left the two halves agreeing at the playhead and nowhere else.
-    double? currentOf(BridgeScalar? scalar) => switch (scalar) {
-          BridgeScalar_Static(:final field0) => field0,
-          final BridgeScalar_Keyframed keyed =>
-            sampledScalar(keyed, timeOfFrame(comp, frame)),
-          _ => null,
-        };
-
     void writeChannel(BridgeParamInfo param, double next,
         {required bool live}) {
       final scalar = param.id == xParam.id ? sx : sy;
-      final before = currentOf(scalar);
       final value = BridgeEffectValue.float(scalar == null
           ? BridgeScalar.static_(next)
           : scalarWithValueAt(scalar, next, comp, frame));
       final other = param.id == xParam.id ? yParam : xParam;
       final otherScalar = other.id == xParam.id ? sx : sy;
-      BridgeEffectValue? scaled;
-      if (linked && before != null && before != 0 && otherScalar != null) {
-        final otherBefore = currentOf(otherScalar);
-        if (otherBefore != null) {
-          scaled = BridgeEffectValue.float(scalar is BridgeScalar_Keyframed &&
-                  otherScalar is BridgeScalar_Keyframed
-              ? scalarWithValueAt(
-                  otherScalar, next * otherBefore / before, comp, frame)
-              : scaledScalar(otherScalar, next / before));
-        }
-      }
+      final scaled = linked
+          ? chainedSibling(
+              was: scalar,
+              next: next,
+              sibling: otherScalar,
+              comp: comp,
+              frame: frame)
+          : null;
       // Both halves as **one** op where the caller can commit one: two writes
       // would be two undo steps for a gesture that moved one well.
       if (!live && scaled != null && onWritePair != null) {
@@ -2148,6 +2139,40 @@ class EffectPointRowFrb extends StatelessWidget {
       ],
     );
   }
+}
+
+/// What a scalar reads at [frame]: its own number while it is still, and its
+/// curve at the playhead once it is keyed.
+double? scalarValueAt(
+        BridgeScalar? scalar, CompositionReference comp, int frame) =>
+    switch (scalar) {
+      BridgeScalar_Static(:final field0) => field0,
+      final BridgeScalar_Keyframed keyed =>
+        sampledScalar(keyed, timeOfFrame(comp, frame)),
+      _ => null,
+    };
+
+/// The other half of a **chained pair**, once this half has gone from what
+/// [was] reads at [frame] to [next]. Null where there is nothing to scale.
+///
+/// One arithmetic for every surface that draws a pair: the point row's two
+/// wells, and a node box, which draws the halves as two rows of their own.
+BridgeEffectValue? chainedSibling({
+  required BridgeScalar? was,
+  required double next,
+  required BridgeScalar? sibling,
+  required CompositionReference comp,
+  required int frame,
+}) {
+  final before = scalarValueAt(was, comp, frame);
+  if (before == null || before == 0 || sibling == null) return null;
+  final siblingBefore = scalarValueAt(sibling, comp, frame);
+  if (siblingBefore == null) return null;
+  return BridgeEffectValue.float(
+      was is BridgeScalar_Keyframed && sibling is BridgeScalar_Keyframed
+          ? scalarWithValueAt(
+              sibling, next * siblingBefore / before, comp, frame)
+          : scaledScalar(sibling, next / before));
 }
 
 /// The effect schema, fetched once per session and then answered from here.

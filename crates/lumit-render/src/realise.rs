@@ -347,6 +347,58 @@ impl Realiser<'_> {
             })
     }
 
+    /// A baked picture - a roto matte, a plane - laid into a node graph's frame
+    /// where the footage it was made from is laid.
+    ///
+    /// On a layer the stack runs on the layer's own raster, so a matte of the
+    /// file lines up with the file by construction. A box runs on the graph's
+    /// frame, and the file's picture is in it wherever its Read put it: centred
+    /// at its natural size. So the baked picture is stretched to that size and
+    /// set down at that place, and everything outside it reads nothing.
+    ///
+    /// `size` is the baked picture's own raster: the file's for a roto matte,
+    /// and the model's for a plane, which is a few hundred pixels on the long
+    /// side whatever the file is.
+    fn lay_as_read(
+        &self,
+        baked: &wgpu::Texture,
+        size: (u32, u32),
+        read: &CompLayerDraw,
+        w: u32,
+        h: u32,
+        scale: f32,
+    ) -> wgpu::Texture {
+        let (bw, bh) = (size.0.max(1) as f32, size.1.max(1) as f32);
+        self.compositor.composite_with_camera(
+            &self.ctx,
+            w,
+            h,
+            [0.0, 0.0, 0.0, 0.0],
+            &[lumit_gpu::CompositeLayer {
+                texture: baked,
+                size: (bw, bh),
+                position: (read.position.0 * scale, read.position.1 * scale),
+                anchor: (bw * 0.5, bh * 0.5),
+                scale: (
+                    read.natural_size.0 * scale / bw * 100.0,
+                    read.natural_size.1 * scale / bh * 100.0,
+                ),
+                rotation_deg: 0.0,
+                // Full opacity: a matte is read as a number, never dimmed.
+                opacity: 100.0,
+                matte: None,
+                blend: lumit_gpu::Blend::Normal,
+                z: 0.0,
+                rotation_x_deg: 0.0,
+                rotation_y_deg: 0.0,
+                three_d: false,
+                layer_mask: None,
+                pre: None,
+            }],
+            None,
+        )
+    }
+
     /// Render a layer's layer-input slots (docs/impl/layer-input.md §2) — the
     /// depth passes of its `dof` effects, the matte sources of its Lens
     /// flares. Each [`LayerInputDraw::Layer`] (the referenced layer's source
@@ -622,8 +674,8 @@ impl Realiser<'_> {
     ///
     /// **What the walk does not carry in v1** (§2.3), each the same boundary a
     /// group header takes: neighbour frames, flow fields, the below-stack,
-    /// paint, lighting, mask paths and roto mattes. Each is a carriage a step
-    /// would grow, and none blocks the compositing the graph is for.
+    /// paint, lighting and mask paths. Each is a carriage a step would grow,
+    /// and none blocks the compositing the graph is for.
     pub fn realise_graph(
         &self,
         plan: &GraphDraw,
@@ -722,6 +774,9 @@ impl Realiser<'_> {
                     picture,
                     colour_tables,
                     flare_lens_files,
+                    roto,
+                    plane,
+                    baked_from,
                     ..
                 } => {
                     let tex = held(&made, input).unwrap_or_else(|| self.transparent(w, h));
@@ -735,6 +790,21 @@ impl Realiser<'_> {
                         Some(t) => LayerInput::Texture(t),
                         None => LayerInput::Absent,
                     };
+                    // What an analysis filed for the file this box reads, laid
+                    // where that file's own picture is laid: the Read step it
+                    // was made from says where. One op, so one slot apiece.
+                    let from = baked_from.and_then(|i| match plan.steps.get(i) {
+                        Some(GraphStep::Read(draw)) => Some(&**draw),
+                        _ => None,
+                    });
+                    let roto = [roto.as_ref().zip(from).map(|(m, read)| {
+                        let matte = upload_roto_matte(&self.ctx, m);
+                        self.lay_as_read(&matte, (m.width, m.height), read, w, h, scale)
+                    })];
+                    let planes = [plane.as_ref().zip(from).map(|(p, read)| {
+                        let plane = self.upload_plane(p);
+                        self.lay_as_read(&plane, (p.width, p.height), read, w, h, scale)
+                    })];
                     let out = crate::fxops::run_ops(
                         self.fx,
                         &self.ctx,
@@ -748,13 +818,16 @@ impl Realiser<'_> {
                         &[bind(picture)],
                         &flare_lens,
                         &[bind(matte)],
-                        // A graph has no masks, no birth schedules, no
-                        // propagated mattes and no graph of its own to run
-                        // here: a nested graph was lowered into these very
-                        // steps rather than left as an op.
+                        // A graph has no masks, no birth schedules and no graph
+                        // of its own to run here: a nested graph was lowered
+                        // into these very steps rather than left as an op.
                         &[],
                         &[],
-                        &crate::fxops::Side::NONE,
+                        &crate::fxops::Side {
+                            roto: &roto,
+                            planes: &planes,
+                            ..crate::fxops::Side::NONE
+                        },
                         &[],
                         None,
                         // Nothing names a box's picture in v1, so every step

@@ -19,6 +19,7 @@
 import 'dart:async';
 
 import 'package:flutter/widgets.dart';
+import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/roto.dart';
 import 'package:uuid/uuid.dart';
@@ -118,7 +119,11 @@ int rotoCoveredFrames(BridgeRotoStatus status) {
 /// working outward from.
 class RotoDisplayFrb extends StatefulWidget {
   /// The layer the effect sits on — what the base frame is written through.
-  final LayerReference layer;
+  final LayerReference? layer;
+
+  /// The node graph the brush is a box in, where it is one rather than an
+  /// effect on a layer. One of the two is given.
+  final CompositionReference? graph;
 
   /// Which instance on that layer: a matte is filed under the effect, because
   /// what was cut out is the subject this instance's strokes describe.
@@ -145,7 +150,8 @@ class RotoDisplayFrb extends StatefulWidget {
 
   const RotoDisplayFrb({
     super.key,
-    required this.layer,
+    this.layer,
+    this.graph,
     required this.effectId,
     required this.playheadFrame,
     required this.onChanged,
@@ -162,7 +168,8 @@ class _RotoDisplayFrbState extends State<RotoDisplayFrb>
   @override
   BridgeRotoStatus fetchStatus() =>
       widget.fetch?.call() ??
-      rotoStatus(layer: widget.layer, effect: widget.effectId);
+      widget.graph?.graphRotoStatus(effect: widget.effectId) ??
+      rotoStatus(layer: widget.layer!, effect: widget.effectId);
 
   @override
   VoidCallback get onChanged => widget.onChanged;
@@ -192,14 +199,34 @@ class _RotoDisplayFrbState extends State<RotoDisplayFrb>
   /// one undo step like every other effect edit.
   void _assignBase() {
     try {
-      final source =
-          rotoSourceFrame(layer: widget.layer, frame: widget.playheadFrame);
-      final staged = widget.layer.getEffects();
+      final graph = widget.graph;
+      if (graph != null) {
+        // A brush box: the same edit, through the graph's own commit.
+        final source = graph
+            .graphBoxSource(
+                effect: widget.effectId, frame: widget.playheadFrame)
+            .frame;
+        // The file will not read, so there is no frame of it to name.
+        if (source == null) return;
+        final staged = graph.getNodeGraphInstances();
+        final instance =
+            staged.where((e) => e.id() == widget.effectId).firstOrNull;
+        if (instance == null) return;
+        instance.rotoSetBaseFrame(frame: source);
+        graph.setNodeGraph(
+            instances: staged, wiring: graph.getNodeGraph().wiring);
+        widget.onChanged();
+        sample();
+        return;
+      }
+      final layer = widget.layer!;
+      final source = rotoSourceFrame(layer: layer, frame: widget.playheadFrame);
+      final staged = layer.getEffects();
       final instance =
           staged.where((e) => e.id() == widget.effectId).firstOrNull;
       if (instance == null) return;
       instance.rotoSetBaseFrame(frame: source);
-      widget.layer.setEffects(effects: staged);
+      layer.setEffects(effects: staged);
       widget.onChanged();
       sample();
     } catch (_) {

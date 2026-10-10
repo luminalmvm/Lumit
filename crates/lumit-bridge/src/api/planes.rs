@@ -20,7 +20,6 @@
 //! press is an event and has nothing else to poll against.
 
 use flutter_rust_bridge::frb;
-use lumit_core::model::LayerKind;
 use uuid::Uuid;
 
 use crate::api::{layer::LayerReference, BridgeError};
@@ -135,9 +134,19 @@ pub fn plane_status(layer: LayerReference, effect: Uuid) -> Result<BridgePlaneSt
         .iter()
         .find(|e| e.id == effect)
         .ok_or(BridgeError::InvalidEffect)?;
+    status_of(fx)
+}
+
+/// One planes-tier instance's status, wherever it lives: on a layer, or as a
+/// box in a node graph. The store is keyed by the instance alone, so the
+/// reading is the same either way.
+pub(crate) fn status_of(
+    fx: &lumit_core::model::EffectInstance,
+) -> Result<BridgePlaneStatus, BridgeError> {
     if lumit_core::planes::task_of(fx).is_none() {
         return Err(BridgeError::InvalidEffect);
     }
+    let effect = fx.id;
     let run = lumit_render::planes::analysed(effect);
     let (stage, done, total, failure) = match lumit_render::planes::progress(effect) {
         None => (BridgePlaneStage::Idle, 0, 0, None),
@@ -171,16 +180,13 @@ pub fn plane_status(layer: LayerReference, effect: Uuid) -> Result<BridgePlaneSt
 // The buttons, down
 // ---------------------------------------------------------------------------
 
-/// The analysis job one planes-tier effect on one footage layer describes.
+/// The analysis job one planes-tier effect describes over the file at
+/// `source`.
 fn job_of(
-    layer: &LayerReference,
+    source: crate::api::roto::Source,
     fx: &lumit_core::model::EffectInstance,
 ) -> Result<lumit_render::planes::PlaneJob, BridgeError> {
-    let media = match layer.item()?.kind {
-        LayerKind::Footage { item } => item,
-        _ => return Err(BridgeError::NotFootage),
-    };
-    let (path, fingerprint) = crate::api::track::media_source(layer, media)?;
+    let (path, fingerprint) = crate::api::track::media_source_in(source.0, source.1)?;
     lumit_render::planes::job_for(fx, path, &fingerprint, true).ok_or(BridgeError::NotFootage)
 }
 
@@ -190,8 +196,12 @@ fn job_of(
 /// doorway every Action press goes through - an Action carries no value, so a
 /// press is an *event*: nothing is staged, nothing is committed, and no undo
 /// entry appears.
+///
+/// `source` is the file the effect reads, or why it has none. It is asked for
+/// only by Analyse: Cancel stops whatever is running whether or not the file
+/// can still be found.
 pub(crate) fn press(
-    layer: &LayerReference,
+    source: Result<crate::api::roto::Source, BridgeError>,
     fx: &lumit_core::model::EffectInstance,
     param: &str,
 ) -> Result<(), BridgeError> {
@@ -208,7 +218,7 @@ pub(crate) fn press(
                 lumit_render::planes::note_refusal(fx.id, why);
                 return Err(BridgeError::AddonMissing);
             }
-            match lumit_render::planes::request(job_of(layer, fx)?) {
+            match lumit_render::planes::request(job_of(source?, fx)?) {
                 lumit_render::planes::Requested::Started => Ok(()),
                 // Every refusal has a name and the status row reads it back;
                 // what the *press* owes the caller is only that it did not

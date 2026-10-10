@@ -539,6 +539,52 @@ impl CompGraph {
             .map(|e| (&e.from, e.from_port.as_str()))
     }
 
+    /// The Read box `node`'s picture comes from, as `(read, item)`: its main
+    /// picture socket followed upstream, box by box, to the first Read.
+    ///
+    /// # In plain terms
+    ///
+    /// Remove background, Depth and the Roto brush do not work on the picture
+    /// they are handed. They read a **file**, frame by frame, and keep what
+    /// they made of it beside that file. On a layer the file is the layer's
+    /// own. A box has no layer, so its file is whichever Read is wired, through
+    /// any number of boxes, into its picture socket.
+    ///
+    /// A Switch is followed down its first socket, the picture it hands on
+    /// when it is bypassed. `None` where the chain ends at an Input, at
+    /// nothing, or goes round.
+    #[must_use]
+    pub fn read_behind(&self, node: Uuid) -> Option<(Uuid, Uuid)> {
+        let mut at = node;
+        // One step per box at most, so a loop a hand-edited file smuggled in
+        // stops rather than spins.
+        for _ in 0..self.nodes.len() {
+            let port = match self.node(at)? {
+                GraphNode::Read { id, item, .. } => return Some((*id, *item)),
+                GraphNode::Fx(inst) if inst.effect.match_name == SWITCH => "in0",
+                GraphNode::Fx(_) => INPUT_PORT.id,
+                GraphNode::Input { .. } | GraphNode::Output { .. } => return None,
+            };
+            at = *self.wire_into(at, port)?.0;
+        }
+        None
+    }
+
+    /// Every box that is switched on and reads a file through an analysis - a
+    /// planes-tier effect or a Roto brush - with the Read it reads, as
+    /// `(box, read, item)`. The graph's answer to walking a layer's effects
+    /// for them.
+    pub fn analysis_boxes(&self) -> impl Iterator<Item = (&EffectInstance, Uuid, Uuid)> + '_ {
+        self.nodes.iter().filter_map(|n| {
+            let GraphNode::Fx(inst) = n else { return None };
+            let reads = inst.enabled
+                && (crate::planes::task_of(inst).is_some()
+                    || inst.effect.match_name == crate::roto::ROTO_BRUSH);
+            let (read, item) = reads.then(|| self.read_behind(inst.id)).flatten()?;
+            Some((inst, read, item))
+        })
+    }
+
     /// Whether any Read box brings project item `id` in - the node graph's twin
     /// of `layer_names_item`, so the Project panel's *in use* badge and the
     /// export's footage list cannot under-report a graph.

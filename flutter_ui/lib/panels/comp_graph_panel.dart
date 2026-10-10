@@ -56,12 +56,15 @@ import '../widgets/marquee.dart';
 import 'effect_param_row_frb.dart'
     show
         EffectParamRowFrb,
+        cachedListPairs,
         cachedListParameterGroups,
         cachedListParameters,
+        chainedSibling,
         disabledParams,
         paramGroupVisible,
         paramRidersFor,
-        relistedRows;
+        relistedRows,
+        scalarValueAt;
 import 'graph_panel.dart';
 import 'placeholder.dart';
 import 'shader_editor.dart'
@@ -186,6 +189,33 @@ CompBoxRows compBoxRows(
   );
 }
 
+/// Press one of a node graph box's engine-side buttons: Analyse and Cancel on
+/// Remove background and Depth, Propagate and Cancel on a Roto brush.
+///
+/// These three read a file, and a box's file is the footage its picture comes
+/// from. A press that cannot start says why in the status area, because the
+/// box itself has nowhere to say it and a button that silently does nothing is
+/// what this replaces. A refusal the effect names itself, a missing addon or
+/// another analysis already running, is left to its status card, and so is a
+/// file that is wired in and will not read.
+void pressGraphBox(BuildContext context, CompositionReference comp,
+    UuidValue effect, String param) {
+  try {
+    comp.fireGraphAction(effect: effect, param: param);
+  } catch (_) {
+    var wired = true;
+    try {
+      comp.graphBoxSource(effect: effect, frame: 0);
+    } catch (_) {
+      wired = false;
+    }
+    if (!wired) {
+      Provider.of<LumitState>(context, listen: false)
+          .postNotice(l10n.graphBoxNoFootage);
+    }
+  }
+}
+
 /// How far apart several boxes dropped at once are stacked, canvas units.
 const double _dropStep = 100;
 
@@ -240,8 +270,9 @@ class _CompGraphPanelState extends State<CompGraphPanel> {
   Map<String, CompBoxRows> _params = const {};
 
   /// A drag on a box's control: shown at once, previewed through the render
-  /// request, committed once on release.
-  ({UuidValue node, String param, BridgeEffectValue value})? _staged;
+  /// request, committed once on release. Several values, because a chained
+  /// pair moves both of its rows in one gesture.
+  ({UuidValue node, Map<String, BridgeEffectValue> values})? _staged;
   final PreviewThrottle _preview = PreviewThrottle();
 
   /// Canvas positions, staged: a drag moves this map and the release commits.
@@ -654,9 +685,8 @@ class _CompGraphPanelState extends State<CompGraphPanel> {
     final values = {for (final v in info.values) v.id: v.value};
     final staged = _staged;
     BridgeEffectValue? valueOf(String id) =>
-        staged != null && staged.node == node.id && staged.param == id
-            ? staged.value
-            : values[id];
+        (staged != null && staged.node == node.id ? staged.values[id] : null) ??
+        values[id];
     return EffectParamRowFrb(
       key: ValueKey<String>('graph-row-$key-$param'),
       effectId: node.id,
@@ -669,8 +699,10 @@ class _CompGraphPanelState extends State<CompGraphPanel> {
       ownerLayers: const [],
       playheadFrame: ui.playheadFrame.value,
       onSeek: (frame) => ui.playheadFrame.value = frame,
-      onWrite: _writeParam,
-      onLive: _liveParam,
+      onWrite: (node, param, value) =>
+          _writeParams(node, _withChained(info, param, value)),
+      onLive: (node, param, value) =>
+          _liveParams(node, _withChained(info, param, value)),
       rowPadding: EdgeInsets.zero,
       valueColumn: const ValueColumn(graphControlColumn, graphRowInset),
       siblings: values,
@@ -718,29 +750,83 @@ class _CompGraphPanelState extends State<CompGraphPanel> {
             )) {
           return;
         }
-        _enterBox(node);
+        if (_enterBox(node)) return;
+        // Every other button is the engine's: an analysis to start or stop.
+        // The box is picked as well, so the Node panel is showing the card
+        // that says how it is getting on.
+        pressGraphBox(context, widget.comp, effect, param);
+        setState(() => _pick([node.id]));
       },
     );
   }
 
-  /// The staged boxes with one value written into one of them: what a
+  /// One row's new value, and with it the other half of its pair where the
+  /// box has the two **chained**: a Transform's Scale x and Scale y are two
+  /// rows here, each with a socket of its own, and the chain the Node panel
+  /// draws between them holds on the box as well.
+  Map<String, BridgeEffectValue> _withChained(
+      BridgeEffectInstanceInfo info, String param, BridgeEffectValue value) {
+    final ui = _ui;
+    final out = {param: value};
+    if (ui == null || value is! BridgeEffectValue_Float) return out;
+    for (final pair in cachedListPairs(info.name)) {
+      if (pair.x != param && pair.y != param) continue;
+      if (!info.linkedPairs.contains(pair.stem)) break;
+      final other = pair.x == param ? pair.y : pair.x;
+      BridgeScalar? held(String id) => switch (
+              info.values.where((v) => v.id == id).firstOrNull?.value) {
+            BridgeEffectValue_Float(:final field0) => field0,
+            _ => null,
+          };
+      // A new value only. The stopwatch and a deleted key arrive through the
+      // same write, and neither is a new size for the pair to keep up with.
+      final was = held(param);
+      final sized = switch ((was, value.field0)) {
+        (BridgeScalar_Static(), BridgeScalar_Static()) => true,
+        (
+          BridgeScalar_Keyframed(field0: final before),
+          BridgeScalar_Keyframed(field0: final after)
+        ) =>
+          after.length >= before.length,
+        _ => false,
+      };
+      if (!sized) break;
+      final frame = ui.playheadFrame.value;
+      final next = scalarValueAt(value.field0, widget.comp, frame);
+      if (next == null) break;
+      final scaled = chainedSibling(
+          was: was,
+          next: next,
+          sibling: held(other),
+          comp: widget.comp,
+          frame: frame);
+      if (scaled != null) out[other] = scaled;
+      break;
+    }
+    return out;
+  }
+
+  /// The staged boxes with these values written into one of them: what a
   /// preview sends and what a commit sends.
   List<BridgeEffectInstance> _instancesWith(
-      UuidValue node, String param, BridgeEffectValue value) {
+      UuidValue node, Map<String, BridgeEffectValue> values) {
     final instances = widget.comp.getNodeGraphInstances();
     for (final instance in instances) {
-      if (instance.id() == node) instance.setValue(id: param, value: value);
+      if (instance.id() != node) continue;
+      for (final entry in values.entries) {
+        instance.setValue(id: entry.key, value: entry.value);
+      }
     }
     return instances;
   }
 
   /// A typed value, or the release of a drag: one `setNodeGraph`, one undo
   /// step, exactly what the Node panel's edit commits.
-  void _writeParam(UuidValue node, String param, BridgeEffectValue value) {
+  void _writeParams(UuidValue node, Map<String, BridgeEffectValue> values) {
     _preview.cancel();
     final List<BridgeEffectInstance> instances;
     try {
-      instances = _instancesWith(node, param, value);
+      instances = _instancesWith(node, values);
     } catch (_) {
       return;
     }
@@ -750,10 +836,10 @@ class _CompGraphPanelState extends State<CompGraphPanel> {
 
   /// A drag tick: the row shows it and the Viewer previews it; nothing is
   /// committed.
-  void _liveParam(UuidValue node, String param, BridgeEffectValue value) {
+  void _liveParams(UuidValue node, Map<String, BridgeEffectValue> values) {
     final ui = _ui;
     if (ui == null) return;
-    setState(() => _staged = (node: node, param: param, value: value));
+    setState(() => _staged = (node: node, values: values));
     // Read inside the closure: a held tick must send the newest staged
     // value, not the one that was current when it was held.
     _preview.request(() {
@@ -761,7 +847,7 @@ class _CompGraphPanelState extends State<CompGraphPanel> {
         widget.comp.renderFrameWithGraphPreview(
           frame: BigInt.from(ui.playheadFrame.value),
           scale: ui.viewerScale,
-          instances: _instancesWith(node, param, value),
+          instances: _instancesWith(node, values),
         );
       } catch (_) {
         // The graph moved under the drag; the release re-reads.
@@ -1960,8 +2046,7 @@ class _CompGraphPanelState extends State<CompGraphPanel> {
                         ..setEntry(1, 3, _pan.dy)
                         ..setEntry(0, 0, _zoom)
                         ..setEntry(1, 1, _zoom),
-                      child: Stack(
-                        clipBehavior: Clip.none,
+                      child: GraphBoxStack(
                         children: [
                           for (final group in _graph!.wiring.groups)
                             if (graphGroupRect([

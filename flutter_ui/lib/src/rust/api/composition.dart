@@ -17,7 +17,9 @@ import 'graph.dart';
 import 'layer.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:uuid/uuid.dart';
+import 'planes.dart';
 import 'project_item.dart';
+import 'roto.dart';
 import 'solid.dart';
 import 'state.dart';
 import 'wireframes.dart';
@@ -902,6 +904,28 @@ class CompositionReference {
       .crateApiCompositionCompositionReferenceExportSpecCheck(
           that: this, spec: spec);
 
+  /// Press one of a box's Action parameters: `fire_effect_action` for a box.
+  ///
+  /// The boxes with an engine-side button are the planes tier's two and the
+  /// Roto brush. Anything else is refused rather than ignored, because a
+  /// button that silently does nothing is the hardest kind of fault to see.
+  /// Remove background, Depth and the Roto brush as boxes
+  /// (docs/impl/addons.md §6.1, docs/impl/roto.md §5).
+  ///
+  /// # In plain terms
+  ///
+  /// These three read a **file** and keep what they made of it beside that file.
+  /// On a layer the file is the layer's own, and `fire_effect_action`,
+  /// `plane_status` and the `roto_*` calls all name it through the layer. A box
+  /// has no layer. Its file is the footage its picture comes from, found by
+  /// following its picture socket upstream to a Read
+  /// ([`CompGraph::read_behind`]), and these are the same calls with the
+  /// composition and the box in the layer's place.
+  void fireGraphAction({required UuidValue effect, required String param}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceFireGraphAction(
+              that: this, effect: effect, param: param);
+
   /// This composition's rate as a plain number, for turning frames into
   /// seconds. Falls back to 60 for a comp with a nonsense rate rather than
   /// dividing by zero.
@@ -1024,6 +1048,89 @@ class CompositionReference {
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceGetWorkArea(
         that: this,
       );
+
+  /// Which frame of its file box `effect` is showing at composition frame
+  /// `frame`, and that file's picture size: `roto_source_frame` for a box.
+  ///
+  /// A Read has no start offset and no Retime, so the file's time is the
+  /// graph's own. Read on a frame change and held, never per rebuild.
+  ///
+  /// `NotFootage` where no footage is wired into the box. A file that is
+  /// wired in and will not read answers with no frame instead, so the two
+  /// can be told apart and said in different words.
+  /// Remove background, Depth and the Roto brush as boxes
+  /// (docs/impl/addons.md §6.1, docs/impl/roto.md §5).
+  ///
+  /// # In plain terms
+  ///
+  /// These three read a **file** and keep what they made of it beside that file.
+  /// On a layer the file is the layer's own, and `fire_effect_action`,
+  /// `plane_status` and the `roto_*` calls all name it through the layer. A box
+  /// has no layer. Its file is the footage its picture comes from, found by
+  /// following its picture socket upstream to a Read
+  /// ([`CompGraph::read_behind`]), and these are the same calls with the
+  /// composition and the box in the layer's place.
+  BridgeBoxSource graphBoxSource(
+          {required UuidValue effect, required PlatformInt64 frame}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceGraphBoxSource(
+              that: this, effect: effect, frame: frame);
+
+  /// A planes-tier box as its status row draws it: `plane_status` for a box.
+  /// Remove background, Depth and the Roto brush as boxes
+  /// (docs/impl/addons.md §6.1, docs/impl/roto.md §5).
+  ///
+  /// # In plain terms
+  ///
+  /// These three read a **file** and keep what they made of it beside that file.
+  /// On a layer the file is the layer's own, and `fire_effect_action`,
+  /// `plane_status` and the `roto_*` calls all name it through the layer. A box
+  /// has no layer. Its file is the footage its picture comes from, found by
+  /// following its picture socket upstream to a Read
+  /// ([`CompGraph::read_behind`]), and these are the same calls with the
+  /// composition and the box in the layer's place.
+  BridgePlaneStatus graphPlaneStatus({required UuidValue effect}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceGraphPlaneStatus(
+              that: this, effect: effect);
+
+  /// Solve the scribbled frame's own matte, now: `roto_solve_frame` for a
+  /// box, with the same quiet `false` where the job did not start.
+  /// Remove background, Depth and the Roto brush as boxes
+  /// (docs/impl/addons.md §6.1, docs/impl/roto.md §5).
+  ///
+  /// # In plain terms
+  ///
+  /// These three read a **file** and keep what they made of it beside that file.
+  /// On a layer the file is the layer's own, and `fire_effect_action`,
+  /// `plane_status` and the `roto_*` calls all name it through the layer. A box
+  /// has no layer. Its file is the footage its picture comes from, found by
+  /// following its picture socket upstream to a Read
+  /// ([`CompGraph::read_behind`]), and these are the same calls with the
+  /// composition and the box in the layer's place.
+  bool graphRotoSolveFrame(
+          {required UuidValue effect, required PlatformInt64 frame}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceGraphRotoSolveFrame(
+              that: this, effect: effect, frame: frame);
+
+  /// A Roto brush box as its status row draws it: `roto_status` for a box.
+  /// Remove background, Depth and the Roto brush as boxes
+  /// (docs/impl/addons.md §6.1, docs/impl/roto.md §5).
+  ///
+  /// # In plain terms
+  ///
+  /// These three read a **file** and keep what they made of it beside that file.
+  /// On a layer the file is the layer's own, and `fire_effect_action`,
+  /// `plane_status` and the `roto_*` calls all name it through the layer. A box
+  /// has no layer. Its file is the footage its picture comes from, found by
+  /// following its picture socket upstream to a Read
+  /// ([`CompGraph::read_behind`]), and these are the same calls with the
+  /// composition and the box in the layer's place.
+  BridgeRotoStatus graphRotoStatus({required UuidValue effect}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceGraphRotoStatus(
+              that: this, effect: effect);
 
   /// Fold the given layers into a new group and answer its id.
   ///
