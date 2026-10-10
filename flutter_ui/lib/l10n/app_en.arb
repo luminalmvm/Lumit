@@ -12069,6 +12069,27 @@
   "@tipViewerSnapshotNone": {
     "description": "Tooltip on the Viewer bar's show-snapshot mark while it is muted, saying why it does nothing: nothing has been photographed to show. One or two words."
   },
+  "fileTypeExpressions": "Lumit expressions",
+  "@fileTypeExpressions": {
+    "description": "File dialogue: the name of the file type that holds expressions saved from the Expressions panel."
+  },
+  "expressionsExported": "Expressions exported.",
+  "@expressionsExported": {
+    "description": "Status-line notice after the Expressions panel wrote every saved expression out as one file."
+  },
+  "expressionsImported": "{count, plural, =1{1 expression imported.} other{{count} expressions imported.}}",
+  "@expressionsImported": {
+    "description": "Status-line notice after the Expressions panel read a file of saved expressions in. {count} is how many it held.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "expressionsFileNotExpressions": "That file does not hold Lumit expressions.",
+  "@expressionsFileNotExpressions": {
+    "description": "Status-line notice when the file chosen for Import in the Expressions panel is not a file of saved expressions."
+  },
   "fileTypeWorkspace": "Lumit workspace",
   "@fileTypeWorkspace": {
     "description": "A file type in the system's file dialogues: a .lumworkspace panel arrangement, the workspace's counterpart of the shared theme file."

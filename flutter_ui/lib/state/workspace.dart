@@ -571,10 +571,44 @@ class Workspace extends ChangeNotifier {
     settingsChanged();
   }
 
-  /// The expressions saved from the Expressions panel, script by name.
-  // ponytail: kept in the settings file, move to a folder of files if people
-  // want to share them.
+  /// The expressions saved from the Expressions panel, script by name. They
+  /// live in the settings file, and travel as the file [encodeExpressions]
+  /// writes.
   final Map<String, String> savedExpressions = <String, String>{};
+
+  /// Every saved expression as the text of a file to hand to someone.
+  String encodeExpressions() =>
+      jsonEncode({'lumit_expressions': savedExpressions});
+
+  /// Take in a file [encodeExpressions] wrote and say how many it held, or
+  /// null when [text] isn't one. A name already taken by a different script
+  /// keeps both, the new one under a numbered name.
+  int? importExpressions(String text) {
+    final Object? read;
+    try {
+      read = jsonDecode(text);
+    } catch (_) {
+      return null;
+    }
+    if (read case {'lumit_expressions': final Map<dynamic, dynamic> saved}) {
+      var count = 0;
+      for (final MapEntry(:key, :value) in saved.entries) {
+        if (key is! String || value is! String) continue;
+        var name = key;
+        for (var n = 2;
+            savedExpressions.containsKey(name) &&
+                savedExpressions[name] != value;
+            n++) {
+          name = '$key $n';
+        }
+        savedExpressions[name] = value;
+        count++;
+      }
+      settingsChanged();
+      return count;
+    }
+    return null;
+  }
 
   /// Save [text] under [name], over whatever that name held.
   void saveExpression(String name, String text) {
