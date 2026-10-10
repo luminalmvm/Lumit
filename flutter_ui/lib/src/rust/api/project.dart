@@ -456,10 +456,11 @@ class ProjectReference {
   /// that can't be a layer group becomes a composition of its own.
   ///
   /// `None` when `path` is not a layered file this build reads, which is
-  /// anything but a Photoshop document, one of a kind that is not read, or
-  /// one with fewer than two layers. The caller then imports it as plain
-  /// footage. Otherwise the number of layers left out because they hold no
-  /// picture, which is what an adjustment layer or a gradient fill is.
+  /// anything but a Photoshop or Illustrator document, one of a kind that
+  /// is not read, or one with fewer than two layers. The caller then
+  /// imports it as plain footage. Otherwise the number of layers left out
+  /// because they hold no picture, which is what an adjustment layer or a
+  /// gradient fill is.
   ///
   /// Only the layer list is read here. The pixels are read when a layer is
   /// first drawn.

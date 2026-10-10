@@ -492,10 +492,11 @@ impl ProjectReference {
     /// that can't be a layer group becomes a composition of its own.
     ///
     /// `None` when `path` is not a layered file this build reads, which is
-    /// anything but a Photoshop document, one of a kind that is not read, or
-    /// one with fewer than two layers. The caller then imports it as plain
-    /// footage. Otherwise the number of layers left out because they hold no
-    /// picture, which is what an adjustment layer or a gradient fill is.
+    /// anything but a Photoshop or Illustrator document, one of a kind that
+    /// is not read, or one with fewer than two layers. The caller then
+    /// imports it as plain footage. Otherwise the number of layers left out
+    /// because they hold no picture, which is what an adjustment layer or a
+    /// gradient fill is.
     ///
     /// Only the layer list is read here. The pixels are read when a layer is
     /// first drawn.
@@ -509,22 +510,17 @@ impl ProjectReference {
         #[cfg(feature = "media")]
         {
             let file = std::path::PathBuf::from(&path);
-            if !lumit_media::psd::is_psd(&file) {
-                return Ok(None);
-            }
-            let Ok(psd) = lumit_media::psd::open(&file) else {
+            let Some(layered) = crate::layered::Layered::open(&file) else {
                 return Ok(None);
             };
-            if psd.layers.iter().filter(|l| l.has_pixels()).count() < 2 {
-                return Ok(None);
-            }
+            let (width, height) = layered.size();
             let name = file
                 .file_stem()
                 .map(|n| n.to_string_lossy().into_owned())
                 .unwrap_or_default();
             let settings = BridgeCompSettings {
-                width: psd.width,
-                height: psd.height,
+                width,
+                height,
                 ..BridgeCompSettings::defaults()
             };
             let (rate, duration) = settings.to_engine().ok_or(BridgeError::InvalidFrameRate)?;
@@ -538,11 +534,10 @@ impl ProjectReference {
                     .iter()
                     .filter(|o| matches!(o, Op::AddItem { .. }))
                     .count();
-                let (more, left_out) = crate::layered::psd_ops(
-                    &psd,
+                let (more, left_out) = layered.ops(
                     &file,
                     comp,
-                    (psd.width.clamp(16, 16384), psd.height.clamp(16, 16384)),
+                    (width.clamp(16, 16384), height.clamp(16, 16384)),
                     rate,
                     duration.0,
                     doc.items.len() + queued,

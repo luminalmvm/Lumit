@@ -22,7 +22,7 @@ Dragging files from your file manager onto the Lumit window works as well.
 
 The dialogue's **Footage** filter lists the common formats: MP4, MOV, MKV, AVI, WebM,
 M4V, MPEG, TS, MTS, M2TS, WMV, FLV, 3GP, OGV, MXF and GIF; PNG, JPEG, TIFF, OpenEXR,
-Targa, DPX, BMP, WebP, PSD and the Netpbm family; WAV, MP3, FLAC, AAC, M4A, OGG, Opus, AIFF
+Targa, DPX, BMP, WebP, PSD, AI and the Netpbm family; WAV, MP3, FLAC, AAC, M4A, OGG, Opus, AIFF
 and WMA.
 
 The filter is a convenience, not a limit. Switch it to **All files** and pick anything -
@@ -64,7 +64,29 @@ The other adjustment layers, a Vibrance below zero, a Curves drawn freehand or w
 than sixteen points, a Photo Filter whose colour isn't stored as Lab, gradient and pattern
 fills, and the other layer styles are not imported. A group's own mask and styles are
 dropped. PSB, 32 bit, CMYK, Lab and indexed documents are not split into layers.
-Illustrator and Affinity files are not read.
+Affinity files are not read.
+:::
+
+## Illustrator documents
+
+An `.ai` with two or more top-level layers imports as a composition the size of the first
+artboard, with one layer for each Illustrator layer. Each layer is also a footage item,
+filed in a folder named after the file. An `.ai` with one layer imports as a single
+footage item.
+
+- Name and visibility are kept.
+- A layer's opacity, blend mode, clipping masks and effects are drawn into its picture.
+- Sublayers are drawn as part of the top-level layer they are in.
+- A point in Illustrator is a pixel in Lumit.
+
+Lumit reads the PDF copy of the artwork that Illustrator saves with **Create PDF
+Compatible File** switched on. A file saved with it off imports as the page of text
+Illustrator writes in the artwork's place.
+
+:::note[Not built yet]
+A layer is read as pixels at the artboard's size, and softens when scaled past 100%. Only
+the first artboard is read. Sublayers are not split out. Files from before Illustrator 9
+are not read.
 :::
 
 ## Interpretation

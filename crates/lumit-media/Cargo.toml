@@ -19,6 +19,10 @@ blake3 = "1"
 # a file holds, and hand back one named channel rather than the RGB it guesses
 # at. ffmpeg's decoder has -layer and -part but no way to enumerate either.
 exr = "1.74"
+# A PDF renderer, for the layers of an Illustrator document. An `.ai` file
+# keeps a PDF copy of its artwork and ffmpeg opens neither half. Pure Rust,
+# no unsafe code, MIT or Apache-2.0.
+hayro = "0.8"
 # Inflate, for the layers a Photoshop document stores zipped.
 miniz_oxide = "0.8"
 rsmpeg = { version = "0.18", default-features = false, features = ["ffmpeg8", "link_system_ffmpeg"] }

@@ -14,6 +14,10 @@
 //! file, so a render that read the flattened picture, or the wrong layer,
 //! shows the wrong colour. The grey is what catches a 16 bit layer decoded
 //! with the wrong curve.
+//!
+//! An Illustrator document goes through the same entry, and nothing but its
+//! own reader opens it, so the second test here is what proves the probe and
+//! the frame index answer for a file ffmpeg can't read.
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
@@ -163,4 +167,42 @@ fn each_layer_of_a_document_draws_as_itself() {
             "empty off the layer"
         );
     }
+}
+
+#[test]
+fn each_layer_of_an_illustrator_document_draws_as_itself() {
+    use lumit_media::ai::fixture::{document as ai_document, Layer as AiLayer};
+
+    let Ok(mut r) = HeadlessRenderer::shared() else {
+        eprintln!("no adapter here");
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    // Bottom first: a red background, then a blue square at rows and columns
+    // 8 to 16.
+    let layers = [
+        AiLayer::solid("Background", [0, 0, 32, 32], [255, 0, 0]),
+        AiLayer::solid("Square", [8, 8, 16, 16], [0, 0, 255]),
+    ];
+    let path = dir.path().join("art.ai");
+    std::fs::write(&path, ai_document(SIZE, SIZE, &layers)).unwrap();
+    let path = path.to_string_lossy().into_owned();
+
+    let (doc, comp) = comp_of(&path, &[1, 0]);
+    let (rgba, w, h) = r.render_rgba(&doc, comp, 0, 1.0).expect("render");
+    assert_eq!((w, h), (SIZE, SIZE));
+    assert!(
+        close(px(&rgba, w, 12, 12), BLUE),
+        "the square, over the red"
+    );
+    assert!(close(px(&rgba, w, 20, 20), RED), "the background around it");
+
+    // The square alone, with the comp's own black where it is not.
+    let (doc, comp) = comp_of(&path, &[1]);
+    let (rgba, w, _) = r.render_rgba(&doc, comp, 0, 1.0).expect("render");
+    assert!(close(px(&rgba, w, 12, 12), BLUE));
+    assert!(
+        close(px(&rgba, w, 2, 2), [0, 0, 0, 255]),
+        "empty off the layer"
+    );
 }

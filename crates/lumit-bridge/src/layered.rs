@@ -16,6 +16,10 @@
 //! and a Precomp layer, since layer groups do not nest and carry no opacity
 //! or blend mode.
 //!
+//! An Illustrator document comes in the same way, with a Footage layer for
+//! each of its top-level layers. A layer's own opacity and blend mode are
+//! already in its picture, so every layer arrives plain.
+//!
 //! Pure, like `edits`: it returns ops and commits nothing.
 
 use std::path::Path;
@@ -28,6 +32,7 @@ use lumit_core::model::{
 };
 use lumit_core::ops::Op;
 use lumit_core::time::{Duration, FrameRate, Rational};
+use lumit_media::ai::AiDocument;
 use lumit_media::psd::{PsdDocument, PsdLayer, Section};
 use uuid::Uuid;
 
@@ -433,6 +438,161 @@ fn adjustment(record: &PsdLayer) -> Option<Vec<EffectInstance>> {
     Some(effects)
 }
 
+/// A layered file that imports as a composition.
+pub(crate) enum Layered {
+    Psd(PsdDocument),
+    Ai(AiDocument),
+}
+
+impl Layered {
+    /// `None` unless `path` is a layered file of a kind that is read, holding
+    /// two or more layers with a picture.
+    pub(crate) fn open(path: &Path) -> Option<Self> {
+        if lumit_media::psd::is_psd(path) {
+            let psd = lumit_media::psd::open(path).ok()?;
+            let pictures = psd.layers.iter().filter(|l| l.has_pixels()).count();
+            return (pictures >= 2).then_some(Self::Psd(psd));
+        }
+        if lumit_media::ai::is_ai(path) {
+            let ai = lumit_media::ai::open(path).ok()?;
+            return (ai.layers.len() >= 2).then_some(Self::Ai(ai));
+        }
+        None
+    }
+
+    /// The document's size in pixels.
+    pub(crate) fn size(&self) -> (u32, u32) {
+        match self {
+            Self::Psd(psd) => (psd.width, psd.height),
+            Self::Ai(ai) => (ai.width, ai.height),
+        }
+    }
+
+    /// The ops that fill `comp` with the file's layers, and how many layers
+    /// were left out because they hold no picture.
+    ///
+    /// `comp` is new and empty. `comp_size`, `rate` and `out` are its size,
+    /// frame rate and length, and `first_index` is where the next project
+    /// item goes.
+    pub(crate) fn ops(
+        &self,
+        path: &Path,
+        comp: Uuid,
+        comp_size: (u32, u32),
+        rate: FrameRate,
+        out: Rational,
+        first_index: usize,
+    ) -> (Vec<Op>, u32) {
+        match self {
+            Self::Psd(psd) => psd_ops(psd, path, comp, comp_size, rate, out, first_index),
+            Self::Ai(ai) => (ai_ops(ai, path, comp, comp_size, out, first_index), 0),
+        }
+    }
+}
+
+/// The item that reads one layer of the file at `path` as a picture.
+fn layer_item(path: &Path, id: Uuid, index: usize, name: &str) -> ProjectItem {
+    let file_name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    ProjectItem::Footage(FootageItem {
+        id,
+        name: format!("{name}/{file_name}"),
+        media: MediaRef {
+            relative_path: file_name,
+            absolute_path: path.to_string_lossy().into_owned(),
+            fingerprint: None,
+            extra: serde_json::Map::new(),
+        },
+        colour_space: None,
+        sequence: None,
+        source_layer: u32::try_from(index).ok(),
+        extra: serde_json::Map::new(),
+    })
+}
+
+/// The ops that add `items`, file them in a folder named for the file at
+/// `path`, and fill `comp` with `layers` and `groups`.
+fn filed(
+    path: &Path,
+    items: Vec<ProjectItem>,
+    layers: Vec<Layer>,
+    groups: Vec<LayerGroup>,
+    comp: Uuid,
+    first_index: usize,
+) -> Vec<Op> {
+    let stem = path
+        .file_stem()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let mut ops = Vec::new();
+    let folder = Uuid::now_v7();
+    let children: Vec<Uuid> = items.iter().map(ProjectItem::id).collect();
+    for (at, item) in items.into_iter().enumerate() {
+        ops.push(Op::AddItem {
+            index: first_index + at,
+            item: Box::new(item),
+        });
+    }
+    ops.push(Op::AddItem {
+        index: first_index + children.len(),
+        item: Box::new(ProjectItem::Folder(Folder {
+            id: folder,
+            name: format!("{stem} layers"),
+            children: Vec::new(),
+            extra: serde_json::Map::new(),
+        })),
+    });
+    ops.push(Op::SetFolderChildren { folder, children });
+    for (index, layer) in layers.into_iter().enumerate() {
+        ops.push(Op::AddLayer {
+            comp,
+            index,
+            layer: Box::new(layer),
+        });
+    }
+    for (index, group) in groups.into_iter().enumerate() {
+        ops.push(Op::GroupLayers {
+            comp,
+            index,
+            group: Box::new(group),
+        });
+    }
+    ops
+}
+
+/// The ops that fill `comp` with `ai`'s layers: a Footage layer for each
+/// top-level layer, hidden where Illustrator had it switched off.
+// ponytail: a layer is read as pixels at the artboard's size, so one scaled
+// past 100% goes soft. The upgrade is drawing it at the size the comp shows it.
+fn ai_ops(
+    ai: &AiDocument,
+    path: &Path,
+    comp: Uuid,
+    comp_size: (u32, u32),
+    out: Rational,
+    first_index: usize,
+) -> Vec<Op> {
+    let mut items = Vec::new();
+    let mut layers = Vec::new();
+    // The file lists its layers bottom first, and a comp lists them top first.
+    for (index, record) in ai.layers.iter().enumerate().rev() {
+        let id = Uuid::now_v7();
+        items.push(layer_item(path, id, index, &record.name));
+        let (width, height) = (f64::from(ai.width), f64::from(ai.height));
+        let mut layer = crate::edits::base_layer(
+            record.name.clone(),
+            LayerKind::Footage { item: id },
+            out,
+            crate::edits::centred_transform(width, height, comp_size.0, comp_size.1),
+        );
+        layer.switches.visible = record.visible;
+        layers.push(layer);
+    }
+    filed(path, items, layers, Vec::new(), comp, first_index)
+}
+
 /// Somewhere layers are being gathered: the document, or a group that becomes
 /// a composition of its own.
 struct Scope<'a> {
@@ -463,7 +623,7 @@ impl Scope<'_> {
 // ponytail: a group's own mask and layer styles are dropped, and a layer
 // clipped to a group is not clipped. A matte on the Lumit layer is the upgrade
 // for the mask and the clip.
-pub(crate) fn psd_ops(
+fn psd_ops(
     psd: &PsdDocument,
     path: &Path,
     comp: Uuid,
@@ -472,32 +632,9 @@ pub(crate) fn psd_ops(
     out: Rational,
     first_index: usize,
 ) -> (Vec<Op>, u32) {
-    let file_name = path
-        .file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_default();
-    let stem = path
-        .file_stem()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_default();
-
     // The item that reads one record of the file as a picture.
-    let footage = |id: Uuid, index: usize, record: &PsdLayer| {
-        ProjectItem::Footage(FootageItem {
-            id,
-            name: format!("{}/{file_name}", record.name),
-            media: MediaRef {
-                relative_path: file_name.clone(),
-                absolute_path: path.to_string_lossy().into_owned(),
-                fingerprint: None,
-                extra: serde_json::Map::new(),
-            },
-            colour_space: None,
-            sequence: None,
-            source_layer: u32::try_from(index).ok(),
-            extra: serde_json::Map::new(),
-        })
-    };
+    let footage =
+        |id: Uuid, index: usize, record: &PsdLayer| layer_item(path, id, index, &record.name);
     let centred = |width: u32, height: u32| {
         let (width, height) = (f64::from(width), f64::from(height));
         crate::edits::centred_transform(width, height, comp_size.0, comp_size.1)
@@ -624,40 +761,7 @@ pub(crate) fn psd_ops(
         .pop()
         .map(|root| (root.layers, root.groups))
         .unwrap_or_default();
-
-    let mut ops = Vec::new();
-    let folder = Uuid::now_v7();
-    let children: Vec<Uuid> = items.iter().map(ProjectItem::id).collect();
-    for (at, item) in items.into_iter().enumerate() {
-        ops.push(Op::AddItem {
-            index: first_index + at,
-            item: Box::new(item),
-        });
-    }
-    ops.push(Op::AddItem {
-        index: first_index + children.len(),
-        item: Box::new(ProjectItem::Folder(Folder {
-            id: folder,
-            name: format!("{stem} layers"),
-            children: Vec::new(),
-            extra: serde_json::Map::new(),
-        })),
-    });
-    ops.push(Op::SetFolderChildren { folder, children });
-    for (index, layer) in layers.into_iter().enumerate() {
-        ops.push(Op::AddLayer {
-            comp,
-            index,
-            layer: Box::new(layer),
-        });
-    }
-    for (index, group) in groups.into_iter().enumerate() {
-        ops.push(Op::GroupLayers {
-            comp,
-            index,
-            group: Box::new(group),
-        });
-    }
+    let ops = filed(path, items, layers, groups, comp, first_index);
     (ops, left_out)
 }
 

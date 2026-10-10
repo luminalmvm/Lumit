@@ -7,6 +7,7 @@
 //! scrubbing land on exactly the right frame in slice 5, and it is cached on
 //! disk keyed by a content *fingerprint* so it is built once per file.
 
+pub mod ai;
 pub mod audio;
 pub mod decode;
 pub mod encode;
@@ -46,6 +47,33 @@ pub enum MediaError {
     /// A Photoshop document that is damaged, or of a kind that is not read.
     #[error("photoshop document: {0}")]
     Psd(&'static str),
+    /// An Illustrator document that is damaged, or of a kind that is not read.
+    #[error("illustrator document: {0}")]
+    Ai(&'static str),
+}
+
+/// Whether a reader of Lumit's own opens this source and ffmpeg does not: one
+/// layer of a layered image file, or an Illustrator document, which ffmpeg
+/// can't open at all.
+#[must_use]
+pub fn reads_own(src: &MediaSource) -> bool {
+    src.source_layer.is_some() || ai::is_ai(src.on_disk())
+}
+
+/// The picture of a source that [`reads_own`]. `None` for everything else.
+///
+/// `target_width` asks for a narrower frame of the same shape, and never a
+/// wider one.
+pub fn read_own(
+    src: &MediaSource,
+    target_width: Option<u32>,
+) -> Option<Result<DecodedFrame, MediaError>> {
+    let path = src.on_disk();
+    if ai::is_ai(path) {
+        return Some(ai::read_layer(path, src.source_layer, target_width));
+    }
+    let layer = src.source_layer?;
+    Some(psd::read_layer(path, layer).map(|frame| psd::downsample(frame, target_width)))
 }
 
 impl From<rsmpeg::error::RsmpegError> for MediaError {
