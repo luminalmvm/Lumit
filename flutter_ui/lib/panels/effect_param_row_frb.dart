@@ -1904,6 +1904,17 @@ class EffectPointRowFrb extends StatelessWidget {
       stem = stem.substring(0, stem.length - 2);
     }
 
+    // Both halves as one op where the caller can commit one, so a point moved
+    // is one undo step and not one per axis.
+    void writeBoth(BridgeEffectValue x, BridgeEffectValue y) {
+      if (onWritePair != null) {
+        onWritePair!(id, {xParam.id: x, yParam.id: y});
+        return;
+      }
+      onWrite(id, xParam.id, x);
+      onWrite(id, yParam.id, y);
+    }
+
     final keyframes = (sx == null || sy == null)
         ? null
         : KeyframeControlsFrb(
@@ -1912,12 +1923,10 @@ class EffectPointRowFrb extends StatelessWidget {
             onSeek: onSeek,
             rowKey: '$id-${xParam.id}-pair',
             fixedColumns: twoColumn,
-            // Two parameters, so two writes: a keyframe op on the pair costs
-            // two undo steps today (the staged editor commits per param).
             onWrite: (next) {
               if (next.length == 2) {
-                onWrite(id, xParam.id, BridgeEffectValue.float(next[0]));
-                onWrite(id, yParam.id, BridgeEffectValue.float(next[1]));
+                writeBoth(BridgeEffectValue.float(next[0]),
+                    BridgeEffectValue.float(next[1]));
               }
             },
           );
@@ -2094,13 +2103,6 @@ class EffectPointRowFrb extends StatelessWidget {
                       ? BridgeScalar.static_(v)
                       : scalarWithValueAt(was, v, comp, frame));
 
-              void put(
-                void Function(UuidValue, String, BridgeEffectValue) write,
-                DropperSample sample,
-              ) {
-                write(id, xParam.id, at(sx, sample.xFrac * spanX));
-                write(id, yParam.id, at(sy, sample.yFrac * spanY));
-              }
 
               ui.armDropper(DropperArm(
                 id: 'fx-$id-${xParam.id}',
@@ -2108,8 +2110,12 @@ class EffectPointRowFrb extends StatelessWidget {
                 label: stem,
                 // **The drag is the pick**: the point follows the
                 // pointer through the preview, and the release states it once.
-                onPreview: (sample) => put(onLive, sample),
-                onPick: (sample) => put(onWrite, sample),
+                onPreview: (sample) {
+                  onLive(id, xParam.id, at(sx, sample.xFrac * spanX));
+                  onLive(id, yParam.id, at(sy, sample.yFrac * spanY));
+                },
+                onPick: (sample) => writeBoth(
+                    at(sx, sample.xFrac * spanX), at(sy, sample.yFrac * spanY)),
                 // Abandoned: the two numbers the row had, back through the
                 // same preview path. Nothing was committed either half.
                 onRevert: (sx == null || sy == null)
@@ -2577,6 +2583,11 @@ class EffectStackEditor {
   /// unaffected: [write] still commits the one parameter it is given.
   final Map<(UuidValue, String), BridgeEffectValue> _staged = {};
 
+  /// The same values, published while a drag is in flight, so the Viewer's
+  /// point marks move with the picture and not on release. Empty otherwise.
+  static final ValueNotifier<Map<(UuidValue, String), BridgeEffectValue>>
+      staging = ValueNotifier(const {});
+
   /// Roughly one preview render per 20 ms, so a fast drag cannot outrun the
   /// renderer and queue up work it will only throw away — but the tick that
   /// lands inside the interval is *held*, not dropped, so the pointer's last
@@ -2632,6 +2643,7 @@ class EffectStackEditor {
     required double scale,
   }) {
     _staged[(effect, param)] = value;
+    staging.value = Map.of(_staged);
     // A group header's drag stages without a live preview render: the
     // preview overlay stands a stack in for the LAYER's own, and a header's
     // stack is not that — the picture would blur the carrier alone. The row
@@ -2690,11 +2702,15 @@ class EffectStackEditor {
       // Someone else edited the stack mid-drag. Drop ours and re-read.
     }
     _staged.clear();
+    staging.value = const {};
   }
 
   /// Forget any drag in progress — a cancelled gesture.
   void clear() {
     _throttle.cancel();
+    // Told once this call is over: it runs from `dispose`, where nothing may
+    // be asked to rebuild.
+    if (_staged.isNotEmpty) Future.microtask(() => staging.value = const {});
     _staged.clear();
   }
 }

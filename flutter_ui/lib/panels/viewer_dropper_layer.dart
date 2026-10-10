@@ -331,12 +331,19 @@ class _DropperLayerState extends State<DropperLayer> {
     setState(() => _cursor = local);
     final arm = widget.uiState.dropper.value;
     if (arm != null) _syncViewfinder(arm);
-    if (!widget.fitted.contains(local)) return;
+    final inside = widget.fitted.contains(local);
     // A move with the button down is the pick itself moving: stage the sample
     // under the pointer and show it. The read below still happens when the
     // window has run out, so a sweep across the picture keeps answering.
-    if (_dragging && arm != null) _stage(arm, local);
-    if (_covered(local)) return;
+    //
+    // A point goes on past the picture's edge. A colour stops there, because
+    // there is nothing beyond it to read.
+    if (_dragging &&
+        arm != null &&
+        (inside || arm.reads == DropperReads.position)) {
+      _stage(arm, local);
+    }
+    if (!inside || _covered(local)) return;
     _throttle.request(() => _request(local));
   }
 
@@ -360,6 +367,9 @@ class _DropperLayerState extends State<DropperLayer> {
   /// away when it lands anywhere else — the same escape the egui build gave, so
   /// a dropper armed in error is dismissed by clicking away from the frame.
   ///
+  /// A point is the exception: it can sit outside the frame, so a press out
+  /// there is a pick like any other, and Escape or the button puts it away.
+  ///
   /// Nothing is written here. The press only stages what is under it, so that a
   /// click that never moves still has a value to commit on release.
   ///
@@ -369,7 +379,7 @@ class _DropperLayerState extends State<DropperLayer> {
   /// picture already down. The pick then ran with no grid to aim by. The press
   /// says where it is like any other movement does.
   void _pressed(DropperArm arm, Offset local, Offset global) {
-    if (!widget.fitted.contains(local)) {
+    if (arm.reads != DropperReads.position && !widget.fitted.contains(local)) {
       widget.uiState.disarmDropper();
       return;
     }
@@ -391,12 +401,29 @@ class _DropperLayerState extends State<DropperLayer> {
   /// lifted from a picture that is not the one on screen.
   void _stage(DropperArm arm, Offset local) {
     final window = widget.uiState.dropperPatch.value;
-    if (window == null || !_covered(local)) {
+    if (arm.reads == DropperReads.position) {
+      // A point is where the pointer is, not a pixel: it needs no window, and
+      // it is not held to the picture's edge.
+      final fitted = widget.fitted;
+      if (fitted.isEmpty) return;
+      _staged = DropperSample(
+        r: 0,
+        g: 0,
+        b: 0,
+        depth: 0,
+        x: 0,
+        y: 0,
+        xFrac: (local.dx - fitted.left) / fitted.width,
+        yFrac: (local.dy - fitted.top) / fitted.height,
+        region: _region,
+      );
+    } else if (window == null || !_covered(local)) {
       _request(local);
       return;
+    } else {
+      final (x, y) = windowPixelAt(window, _u(local), _v(local));
+      _staged = sampleFromWindow(window, _region, x, y);
     }
-    final (x, y) = windowPixelAt(window, _u(local), _v(local));
-    _staged = sampleFromWindow(window, _region, x, y);
     if (arm.onPreview == null) return;
     // Built inside the closure, so a held tick sends where the pointer is now
     // rather than where it was when the interval started ([PreviewThrottle]).
