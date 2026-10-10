@@ -306,6 +306,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeShareEnding dco_decode_box_autoadd_bridge_share_ending(dynamic raw);
 
   @protected
+  BridgeShareReach dco_decode_box_autoadd_bridge_share_reach(dynamic raw);
+
+  @protected
   BridgeSharedFrameInfo dco_decode_box_autoadd_bridge_shared_frame_info(
       dynamic raw);
 
@@ -935,6 +938,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeSharePerson dco_decode_bridge_share_person(dynamic raw);
+
+  @protected
+  BridgeShareReach dco_decode_bridge_share_reach(dynamic raw);
 
   @protected
   BridgeShareStarted dco_decode_bridge_share_started(dynamic raw);
@@ -1864,6 +1870,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeShareReach sse_decode_box_autoadd_bridge_share_reach(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeSharedFrameInfo sse_decode_box_autoadd_bridge_shared_frame_info(
       SseDeserializer deserializer);
 
@@ -2588,6 +2598,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   BridgeSharePerson sse_decode_bridge_share_person(
       SseDeserializer deserializer);
+
+  @protected
+  BridgeShareReach sse_decode_bridge_share_reach(SseDeserializer deserializer);
 
   @protected
   BridgeShareStarted sse_decode_bridge_share_started(
@@ -3635,6 +3648,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeShareEnding self, SseSerializer serializer);
 
   @protected
+  void sse_encode_box_autoadd_bridge_share_reach(
+      BridgeShareReach self, SseSerializer serializer);
+
+  @protected
   void sse_encode_box_autoadd_bridge_shared_frame_info(
       BridgeSharedFrameInfo self, SseSerializer serializer);
 
@@ -4448,6 +4465,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_share_person(
       BridgeSharePerson self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_share_reach(
+      BridgeShareReach self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_share_started(

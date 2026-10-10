@@ -6,18 +6,19 @@
 
 use crate::kept::{HostLog, Pair};
 use crate::local::{place, sane};
+use crate::reach::{self, Closed};
 use crate::wire::{self, decode, encode, Message, Names, Out, Receiver, Sender};
-use crate::{Event, Events, Invite, Person, Presence, Refusal, ShareError, MAX_PEOPLE};
+use crate::{Event, Events, Invite, Person, Presence, Reach, Refusal, ShareError, MAX_PEOPLE};
 use lumit_core::store::{Moved, RemoteTag};
 use lumit_core::{Document, DocumentStore};
 use parking_lot::Mutex;
 use std::net::{IpAddr, Ipv6Addr, Shutdown, TcpListener, TcpStream};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::mpsc::{sync_channel, SyncSender};
+use std::sync::mpsc::{sync_channel, Receiver as Done, SyncSender};
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// Both ends have to run this, edits being the wire format.
 pub(crate) const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -73,6 +74,8 @@ struct Hub {
     /// Every edit since the project was last saved, kept on disk. Taken in
     /// the tap, so nothing that holds it calls the store.
     log: Mutex<Option<HostLog>>,
+    /// Whether people outside this network can get in.
+    reach: Mutex<Reach>,
 }
 
 /// A project being shared from this machine.
@@ -83,8 +86,15 @@ struct Hub {
 pub struct Host {
     hub: Arc<Hub>,
     accepting: Mutex<Option<JoinHandle<()>>>,
+    /// Hears when the thread that keeps the router's port open has closed
+    /// it and gone.
+    reaching: Mutex<Option<Done<()>>>,
     restored: usize,
 }
+
+/// How long stopping waits for the router to be told to close the port. A
+/// router that takes longer is left to let the port lapse by itself.
+const CLOSING: Duration = Duration::from_millis(1500);
 
 /// Put back the edits a host made or was sent after its last save, which the
 /// document it has opened again does not hold. Its guests were working on a
@@ -176,6 +186,7 @@ pub fn host(
         looking: Mutex::new(None),
         names: Names::default(),
         log: Mutex::new(log),
+        reach: Mutex::new(Reach::Off),
     });
     // Weak, or the store would hold the hub that holds the store.
     let tapped = Arc::downgrade(&hub);
@@ -195,6 +206,7 @@ pub fn host(
         Ok(thread) => Ok(Host {
             hub,
             accepting: Mutex::new(Some(thread)),
+            reaching: Mutex::new(None),
             restored,
         }),
         Err(e) => {
@@ -263,6 +275,36 @@ impl Host {
         self.hub.seats.lock().people.clone()
     }
 
+    /// Ask this network's router to send the port here, so people outside
+    /// the network can join without a VPN. Answers at once. What comes of it
+    /// is an [`Event::Reach`], and [`Self::reach`] from then on. The port is
+    /// closed again when sharing stops.
+    pub fn reach_out(&self) {
+        let mut reaching = self.reaching.lock();
+        if reaching.is_some() {
+            return;
+        }
+        *self.hub.reach.lock() = Reach::Asking;
+        let (done, gone) = sync_channel(1);
+        let hub = self.hub.clone();
+        let spawned = thread::Builder::new()
+            .name("lumit-share-reach".into())
+            .spawn(move || {
+                hub.reach();
+                let _ = done.try_send(());
+            });
+        match spawned {
+            Ok(_) => *reaching = Some(gone),
+            Err(_) => *self.hub.reach.lock() = Reach::Refused,
+        }
+    }
+
+    /// Whether people outside this network can get in.
+    #[must_use]
+    pub fn reach(&self) -> Reach {
+        self.hub.reach.lock().clone()
+    }
+
     /// Latest wins: the accepting thread sends it on its next beat, so a
     /// playhead that moves every frame is not a message every frame.
     pub fn set_presence(&self, presence: Presence) {
@@ -326,6 +368,11 @@ impl Host {
         if let Some(thread) = self.accepting.lock().take() {
             let _ = thread.join();
         }
+        // And the router is told to close its port, which is waited for a
+        // moment so that Lumit closing does not leave it open.
+        if let Some(gone) = self.reaching.lock().take() {
+            let _ = gone.recv_timeout(CLOSING);
+        }
     }
 }
 
@@ -336,6 +383,37 @@ impl Drop for Host {
 }
 
 impl Hub {
+    /// The reach thread: have the router open the port, keep it open for as
+    /// long as the project is shared, and close it after.
+    fn reach(&self) {
+        let said = |reach: Reach| {
+            self.reach.lock().clone_from(&reach);
+            (self.events)(Event::Reach(reach));
+        };
+        let mapping = match reach::open(self.port, &self.stop) {
+            Ok((mapping, address)) => {
+                said(Reach::Open {
+                    address: address.to_string(),
+                });
+                mapping
+            }
+            Err(Closed::Refused) => return said(Reach::Refused),
+            Err(Closed::Behind) => return said(Reach::Behind),
+        };
+        let mut asked = Instant::now();
+        while !self.stop.load(Ordering::Relaxed) {
+            thread::sleep(BEAT);
+            if asked.elapsed() < reach::RENEW {
+                continue;
+            }
+            asked = Instant::now();
+            if !mapping.renew() {
+                said(Reach::Refused);
+            }
+        }
+        mapping.close();
+    }
+
     /// Say one last thing to a guest and close its connection behind it.
     fn dismiss(&self, link: &Link, last: &Message) {
         if let Ok(bytes) = encode(last, &self.names) {

@@ -29,7 +29,7 @@ One process, plus a sandbox process per third-party plugin bundle.
 | Analysis | Camera tracking, one at a time |
 | Audio pair | The cpal callback (lock-free reads only) and a thread that fills its ring ahead |
 | GPU submit | The only thread that submits to the wgpu queue |
-| Share | While a project is shared: one accepting, and a reader and a writer per connection. The readers apply other people's edits |
+| Share | While a project is shared: one accepting, and a reader and a writer per connection. The readers apply other people's edits. A host that asked its router to open the port has one more keeping it open |
 
 **Cancellation.** Every request carries an epoch per consumer (the Viewer, each export,
 background warming). Moving the playhead bumps the Viewer's. Jobs check at node and tile

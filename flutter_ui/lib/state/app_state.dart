@@ -139,16 +139,21 @@ class LumitState extends ChangeNotifier {
 
   /// Share the open project from this machine, under [name], listening on
   /// [port]. [key] is the secret of the invite this project was last shared
-  /// by, to make the same invite again, or null for a new one. Null when
-  /// there is no project open or it is already shared.
+  /// by, to make the same invite again, or null for a new one. [outside]
+  /// asks the router to open the port for people outside this network.
+  /// Null when there is no project open or it is already shared.
   BridgeShareStarted? startSharing(
-      {required String name, required int port, String? key}) {
+      {required String name,
+      required int port,
+      String? key,
+      bool outside = false}) {
     final open = project;
     if (open == null || share.active) return null;
     final events = RustStreamSink<BridgeShareEvent>();
     final BridgeShareStarted started;
     try {
-      started = open.share(name: name, port: port, key: key, events: events);
+      started = open.share(
+          name: name, port: port, key: key, outside: outside, events: events);
     } catch (_) {
       return null;
     }
@@ -238,6 +243,8 @@ class LumitState extends ChangeNotifier {
             error: refused > 0);
       case BridgeShareEvent_Elsewhere():
         postNotice(l10n.shareElsewhere, error: true);
+      case BridgeShareEvent_Reach(:final reach):
+        share.setReach(reach);
       case BridgeShareEvent_Ended(:final reason):
         stopSharing();
         postNotice(shareEndingText(reason),

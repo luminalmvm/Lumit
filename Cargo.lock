@@ -2128,6 +2128,7 @@ dependencies = [
  "lumit-core",
  "lumit-project",
  "parking_lot",
+ "roxmltree",
  "serde",
  "serde_json",
  "snow",
