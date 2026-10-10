@@ -5890,6 +5890,10 @@
   "@replaceFootageEllipsis": {
     "description": "Project panel, a footage item's right-click menu: point the item at a different file. The same command as Relink, offered under this name when the file is not missing. The ellipsis means a file dialogue opens."
   },
+  "projectShowInFolder": "Show in folder",
+  "@projectShowInFolder": {
+    "description": "Project panel right-click menu, on a footage item whose file is there: opens the folder the file is in, in the desktop's own file manager, with the file selected."
+  },
   "tipOpenFolder": "Open folder",
   "@tipOpenFolder": {
     "description": "Hover text on a finished export's path in the bottom strip and on a finished row in the export queue: a click opens the folder the file was written to, in the desktop's own file manager. The same words as the export dialog's Open folder tick. Two words at most."
