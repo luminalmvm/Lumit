@@ -105,6 +105,10 @@ pub(crate) fn open_input(src: &MediaSource) -> Result<AVFormatContextInput, Medi
 
 pub fn probe(src: impl Into<MediaSource>) -> Result<MediaProbe, MediaError> {
     let src = src.into();
+    // ffmpeg opens neither half of an Illustrator document.
+    if crate::ai::is_ai(src.on_disk()) {
+        return crate::ai::probe(src.on_disk());
+    }
     let input = open_input(&src)?;
 
     let duration_seconds = if input.duration > 0 {

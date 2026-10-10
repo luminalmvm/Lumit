@@ -657,13 +657,11 @@ fn decode(
             });
         }
     }
-    // One layer of a layered image file: the file's own reader again, since
-    // ffmpeg only ever opens the flattened picture.
-    if let Some(layer) = req.source.source_layer {
-        let out = lumit_media::psd::downsample(
-            lumit_media::psd::read_layer(req.source.on_disk(), layer).map_err(|e| e.to_string())?,
-            req.target_width,
-        );
+    // One layer of a layered image file, or an Illustrator document: the
+    // file's own reader again, since ffmpeg only ever opens the flattened
+    // picture of the one and can't open the other.
+    if let Some(out) = lumit_media::read_own(&req.source, req.target_width) {
+        let out = out.map_err(|e| e.to_string())?;
         cache.insert(
             cache_key,
             CachedFrame {

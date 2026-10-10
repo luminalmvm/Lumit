@@ -10,7 +10,7 @@ its entry here first. AE and Vegas names are noted only to help people arriving 
 | **Project** | The whole document, saved as a `.lum` file. One open at a time |
 | **Asset** | Anything in the Project panel: footage, audio, sequences, stills, comps |
 | **Footage item** | An asset pointing at a media file. Lumit never changes the file |
-| **Source layer** | One layer of a layered image file such as a PSD, which a footage item can read on its own |
+| **Source layer** | One layer of a layered image file such as a PSD or an Illustrator document, which a footage item can read on its own |
 | **Audio item** | An asset pointing at an audio file |
 | **Packed project** | A `.lum` that also carries its footage files inside it. The verbs are **pack** and **unpack** |
 | **Shared project** | A project several people edit at once. The **host** shares it and owns the file, the **guests** join with an **invite** |

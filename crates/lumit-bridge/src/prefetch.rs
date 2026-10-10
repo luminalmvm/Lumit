@@ -78,7 +78,35 @@ impl Prefetcher {
 #[cfg(feature = "media")]
 fn run(jobs: Receiver<PrefetchWant>, done: Sender<Done>) {
     let mut decoders: HashMap<Uuid, lumit_media::VideoDecoder> = HashMap::new();
+    // The pictures already read by a file's own reader. One is a still, and
+    // every coming frame asks for it again. Emptied when it grows, since the
+    // worst a second read does is cost time.
+    let mut read: std::collections::HashSet<(Uuid, Option<u32>)> = Default::default();
     while let Ok(want) = jobs.recv() {
+        // One layer of a layered file, or an Illustrator document, is read by
+        // the file's own reader, as the render reads it. ffmpeg would hand
+        // back the flattened picture of the one and can't open the other.
+        if lumit_media::reads_own(&want.source) {
+            if read.len() >= 4096 {
+                read.clear();
+            }
+            if !read.insert((want.item, want.target_width)) {
+                continue;
+            }
+            let Some(Ok(out)) = lumit_media::read_own(&want.source, want.target_width) else {
+                continue;
+            };
+            let sent = done.send(Done {
+                item: want.item,
+                frame: want.frame,
+                target_width: want.target_width,
+                decoded: out,
+            });
+            if sent.is_err() {
+                return;
+            }
+            continue;
+        }
         let dec = match decoders.entry(want.item) {
             std::collections::hash_map::Entry::Occupied(e) => e.into_mut(),
             std::collections::hash_map::Entry::Vacant(e) => {

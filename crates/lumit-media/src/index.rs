@@ -140,6 +140,22 @@ pub(crate) fn load_or_build_with(
 pub fn build_frame_index(src: impl Into<MediaSource>) -> Result<FrameIndex, MediaError> {
     let src = src.into();
     let fingerprint = Fingerprint::of(src.on_disk())?;
+    // An Illustrator document is one picture and ffmpeg can't open it, so its
+    // index is written out: one frame, on the clock ffmpeg gives a still.
+    if crate::ai::is_ai(src.on_disk()) {
+        crate::ai::open(src.on_disk())?;
+        return Ok(FrameIndex {
+            timebase_num: 1,
+            timebase_den: 25,
+            entries: vec![IndexEntry {
+                pts: 0,
+                keyframe: true,
+            }],
+            vfr: false,
+            median_delta: 0,
+            fingerprint,
+        });
+    }
     let mut input = crate::probe::open_input(&src)?;
 
     let (stream_index, timebase) = input

@@ -39,7 +39,7 @@ const List<String> footageExtensions = [
   'png', 'jpg', 'jpeg', 'tif', 'tiff', 'exr', 'tga', 'targa', 'dpx', 'bmp',
   'webp', 'ppm', 'pgm', 'pnm', 'pbm',
   // Layered documents, which import as a composition of their layers
-  'psd',
+  'psd', 'ai',
   // Sound
   'wav', 'mp3', 'flac', 'aac', 'm4a', 'ogg', 'opus', 'aiff', 'aif', 'wma',
 ];

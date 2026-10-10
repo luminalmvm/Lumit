@@ -107,9 +107,8 @@ pub(crate) fn decode_frame(
     if !src.on_disk().is_file() {
         return None;
     }
-    if let Some(layer) = src.source_layer {
-        let frame = lumit_media::psd::read_layer(src.on_disk(), layer).ok()?;
-        return Some(lumit_media::psd::downsample(frame, target_width));
+    if let Some(frame) = lumit_media::read_own(src, target_width) {
+        return frame.ok();
     }
     let index = lumit_render::media_index::load_or_build_index(src).ok()?;
     let mut decoder = lumit_media::VideoDecoder::open(src, index).ok()?;

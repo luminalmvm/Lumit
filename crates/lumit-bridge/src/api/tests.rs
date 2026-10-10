@@ -9207,3 +9207,89 @@ fn a_photoshop_document_imports_as_a_comp_of_its_layers_in_one_undo_step() {
     assert_eq!((glass[2], row(4, 0, "density")), (0.0, vec![25.0]));
     assert_eq!(row(4, 0, "preserve_luminosity"), [1.0]);
 }
+
+// An Illustrator document comes in the same way: a comp the artboard's size
+// with a layer for each top-level layer, top first, and a hidden layer hidden.
+// One with a single layer is footage, and is still read by its own reader.
+#[cfg(feature = "media")]
+#[test]
+fn an_illustrator_document_imports_as_a_comp_of_its_layers() {
+    use lumit_core::model::LayerKind;
+    use lumit_media::ai::fixture::{document, Layer};
+
+    let dir = tempfile::tempdir().expect("temp dir");
+    let path = dir.path().join("logo.ai");
+    let mut guide = Layer::solid("Guide", [0, 0, 4, 4], [0, 255, 0]);
+    guide.visible = false;
+    let layers = [
+        Layer::solid("Background", [0, 0, 32, 48], [255, 0, 0]),
+        Layer::solid("Mark", [8, 8, 16, 16], [0, 0, 255]),
+        guide,
+    ];
+    std::fs::write(&path, document(48, 32, &layers)).expect("the fixture writes");
+
+    let project = LumitBridgeState::new_project(None).expect("a new project");
+    let snapshot = || {
+        let state = project.state().expect("state");
+        let state = state.read().expect("read");
+        state.store.snapshot()
+    };
+    let before = snapshot().items.len();
+
+    let left_out = project
+        .import_layers(path.to_string_lossy().into_owned())
+        .expect("the document imports");
+    assert_eq!(left_out, Some(0));
+
+    let doc = snapshot();
+    let comp = doc
+        .items
+        .iter()
+        .find_map(|i| match i {
+            ProjectItem::Composition(c) if c.name == "logo" => Some(c),
+            _ => None,
+        })
+        .expect("a comp named for the file");
+    assert_eq!((comp.width, comp.height), (48, 32));
+    let layers: Vec<(&str, bool, Option<u32>)> = comp
+        .layers
+        .iter()
+        .map(|l| {
+            let pick = match &l.kind {
+                LayerKind::Footage { item } => match doc.item(*item) {
+                    Some(ProjectItem::Footage(f)) => f.source_layer,
+                    _ => None,
+                },
+                _ => None,
+            };
+            (l.name.as_str(), l.switches.visible, pick)
+        })
+        .collect();
+    assert_eq!(
+        layers,
+        [
+            ("Guide", false, Some(2)),
+            ("Mark", true, Some(1)),
+            ("Background", true, Some(0))
+        ],
+        "top first, each reading its own layer of the file"
+    );
+    assert!(doc.items.iter().any(|i| match i {
+        ProjectItem::Folder(f) => f.name == "logo layers" && f.children.len() == 3,
+        _ => false,
+    }));
+
+    project.undo().expect("one import, one step");
+    assert_eq!(snapshot().items.len(), before, "undo takes all of it back");
+
+    // One layer is a picture, not a document. ffmpeg can't open it, so the
+    // footage item it becomes has to probe through the file's own reader.
+    let flat = dir.path().join("flat.ai");
+    let one = [Layer::solid("Layer 1", [0, 0, 32, 48], [255, 0, 0])];
+    std::fs::write(&flat, document(48, 32, &one)).expect("the fixture writes");
+    let answer = project.import_layers(flat.to_string_lossy().into_owned());
+    assert_eq!(answer.expect("no error"), None);
+    let probe = crate::probe::ensure_probed(flat.as_path()).expect("the document probes");
+    let video = probe.video.as_ref().expect("a picture");
+    assert_eq!((video.width, video.height), (48, 32));
+}
