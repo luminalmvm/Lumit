@@ -635,19 +635,22 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// selection too".
   void _toggle(String path) => setState(() {
         final opening = !_isOpen(path);
-        for (final row in rowsTwirledWith(path, _twirlSelection())) {
+        for (final row in rowsTwirledWith(path, _twirlSelection(path))) {
           _setOpen(row, opening);
           if (!opening) _dropSelectionUnder(row);
         }
       });
 
-  /// Every row a twirl could act on: the selected layers and the selected
-  /// properties, as the paths [_open] is keyed by.
-  Set<String> _twirlSelection() => {
-        for (final id in _ui?.selectedLayerIds ?? const <UuidValue>{})
-          id.toString(),
-        ..._selectedProperties,
-      };
+  /// Every row [path]'s twirl could carry with it, as the paths [_open] is
+  /// keyed by: the selected layers for a layer's twirl, the selected
+  /// properties for a heading's. Never both, or shutting a picked heading
+  /// would shut the selected layer round it.
+  Set<String> _twirlSelection(String path) => layerIdOfPath(path) == null
+      ? {
+          for (final id in _ui?.selectedLayerIds ?? const <UuidValue>{})
+            id.toString(),
+        }
+      : {..._selectedProperties};
 
   /// Forget any selected property at or below [path], and any keyframes of
   /// theirs the marquee had caught.

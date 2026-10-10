@@ -394,9 +394,15 @@ class FoldRow extends StatelessWidget {
           // how the outline is navigated; a *modified* click only picks, so
           // Ctrl- and Shift-clicking a run of effects does not flap every one
           // of them open on the way past.
+          //
+          // An effect's own heading only picks, whatever the click. Its name
+          // is the thing being chosen, here and in the effect controls, so
+          // choosing an open effect must not fold it away.
           onTap: () {
             onSelectProperty(path);
-            if (!isModifiedClick) onToggle(path);
+            if (!isModifiedClick && effectIdOfPath(path) == null) {
+              onToggle(path);
+            }
           },
           // An *effect's* heading offers to copy the picked effects. The other
           // headings — Transform, Effects, Masks, Audio — are groupings rather
