@@ -9,9 +9,11 @@
 //! exporter share, so it crosses the probe, the decode worker and the
 //! compositor together.
 //!
-//! The document is a red background with a blue square on a layer of its own.
-//! Each layer is its own footage item pointing at the same file, so a render
-//! that read the flattened picture, or the wrong layer, shows the wrong colour.
+//! The document is a red background, a grey square on a layer of its own and
+//! a blue fill layer. Each layer is its own footage item pointing at the same
+//! file, so a render that read the flattened picture, or the wrong layer,
+//! shows the wrong colour. The grey is what catches a 16 bit layer decoded
+//! with the wrong curve.
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
@@ -29,6 +31,7 @@ use uuid::Uuid;
 const SIZE: u32 = 32;
 const RED: [u8; 4] = [255, 0, 0, 255];
 const BLUE: [u8; 4] = [0, 0, 255, 255];
+const GREY: [u8; 4] = [128, 128, 128, 255];
 
 /// A comp the document's size holding one Footage layer per record named, top
 /// first, each reading its own layer of `path`.
@@ -123,33 +126,41 @@ fn each_layer_of_a_document_draws_as_itself() {
         return;
     };
     let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("art.psd");
-    // Bottom first: the background, then the square at rows and columns 8 to 16.
+    // Bottom first: the background, then a grey square at rows and columns 8
+    // to 16, then a blue fill layer masked to the columns left of 4.
+    let mut fill = PsdLayer::fill("Fill", [0.0, 0.0, 255.0]);
+    fill.mask = Some(([0, 0, 32, 4], 0, vec![255; 32 * 4]));
     let records = [
         PsdLayer::solid("Background", [0, 0, 32, 32], RED),
-        PsdLayer::solid("Square", [8, 8, 16, 16], BLUE),
+        PsdLayer::solid("Square", [8, 8, 16, 16], GREY),
+        fill,
     ];
-    std::fs::write(&path, document(SIZE, SIZE, 8, &records)).unwrap();
-    let path = path.to_string_lossy().into_owned();
+    // A 16 bit document is read as floats, and has to draw the same colours.
+    for depth in [8, 16] {
+        let path = dir.path().join(format!("art{depth}.psd"));
+        std::fs::write(&path, document(SIZE, SIZE, depth, &records)).unwrap();
+        let path = path.to_string_lossy().into_owned();
 
-    // Both layers, the square on top: the document as it looked.
-    let (doc, comp) = comp_of(&path, &[1, 0]);
-    let (rgba, w, h) = r.render_rgba(&doc, comp, 0, 1.0).expect("render");
-    assert_eq!((w, h), (SIZE, SIZE));
-    assert!(
-        close(px(&rgba, w, 12, 12), BLUE),
-        "the square, over the red"
-    );
-    assert!(close(px(&rgba, w, 2, 2), RED), "the background around it");
-    assert!(close(px(&rgba, w, 20, 20), RED));
+        // Every layer, the fill on top: the document as it looked.
+        let (doc, comp) = comp_of(&path, &[2, 1, 0]);
+        let (rgba, w, h) = r.render_rgba(&doc, comp, 0, 1.0).expect("render");
+        assert_eq!((w, h), (SIZE, SIZE));
+        assert!(
+            close(px(&rgba, w, 12, 12), GREY),
+            "the square, over the red, at {depth} bit"
+        );
+        assert!(close(px(&rgba, w, 6, 2), RED), "the background around it");
+        assert!(close(px(&rgba, w, 20, 20), RED));
+        assert!(close(px(&rgba, w, 2, 20), BLUE), "the fill, where it shows");
 
-    // The square alone: where it is not, the comp's own black shows, so the
-    // layer was read as itself and not as the flattened picture.
-    let (doc, comp) = comp_of(&path, &[1]);
-    let (rgba, w, _) = r.render_rgba(&doc, comp, 0, 1.0).expect("render");
-    assert!(close(px(&rgba, w, 12, 12), BLUE));
-    assert!(
-        close(px(&rgba, w, 2, 2), [0, 0, 0, 255]),
-        "empty off the layer"
-    );
+        // The square alone: where it is not, the comp's own black shows, so
+        // the layer was read as itself and not as the flattened picture.
+        let (doc, comp) = comp_of(&path, &[1]);
+        let (rgba, w, _) = r.render_rgba(&doc, comp, 0, 1.0).expect("render");
+        assert!(close(px(&rgba, w, 12, 12), GREY));
+        assert!(
+            close(px(&rgba, w, 2, 2), [0, 0, 0, 255]),
+            "empty off the layer"
+        );
+    }
 }

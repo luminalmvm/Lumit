@@ -480,6 +480,16 @@ impl ColourState {
     }
 }
 
+/// The look-up-table files the config at `path` names, for whoever has to
+/// carry a config somewhere whole ([`LoadedConfig::files_read`]). Empty for a
+/// config that will not read.
+#[must_use]
+pub fn config_files(path: &Path) -> Vec<std::path::PathBuf> {
+    LoadedConfig::load(path)
+        .map(|config| config.files_read())
+        .unwrap_or_default()
+}
+
 /// Load and check a config, turning every failure into a state rather than an
 /// error (§3.3).
 fn load(path: &str, hash: u64, present: bool, working: WorkingSpace) -> Loaded {

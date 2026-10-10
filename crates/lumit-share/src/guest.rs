@@ -32,6 +32,8 @@ struct Connected {
     receiver: Receiver,
     socket: TcpStream,
     you: u32,
+    /// The last of this guest's edits the host took before, or 0.
+    heard: u64,
     people: Vec<Person>,
 }
 
@@ -47,9 +49,20 @@ struct Seat {
     /// when the person is given a new invite for a host that has moved.
     invite: Mutex<Invite>,
     name: String,
+    /// What the host knows this guest's edits by from one connection to the
+    /// next. Made up afresh for each store, as its edits are numbered afresh.
+    token: u64,
     /// The folder this machine keeps the project's footage under.
     root: Option<PathBuf>,
     names: Names,
+}
+
+/// A token for a new [`Seat`]. 0, which the host takes for none, when the
+/// system has no randomness to give.
+fn token() -> u64 {
+    let mut bytes = [0u8; 8];
+    let _ = getrandom::fill(&mut bytes);
+    u64::from_le_bytes(bytes)
 }
 
 /// A guest that has the host's document and has not started editing it.
@@ -61,22 +74,23 @@ pub struct Joining {
 }
 
 /// A guest's own copy, opened again with edits in it that were made while
-/// the host was away and never merged.
+/// the host was away and never merged, or a conflict never answered.
 pub struct Resuming {
     seat: Seat,
     project: Uuid,
     base: Arc<Document>,
     since: Vec<Pair>,
+    held: Vec<Conflict>,
     kept: Kept,
 }
 
 /// Pick up a guest's copy where it was left, if it was left with its host
-/// away. `file` is the copy as its file in `folder` holds it. Answers the
-/// copy as it stood when it was closed, every edit made while away included
-/// whether or not it was saved, and what goes on looking for the host.
+/// away or a conflict unanswered. `file` is the copy as its file in `folder`
+/// holds it. Answers the copy with the edits made while away that were kept,
+/// and what goes on looking for the host and asks the conflicts again.
 #[must_use]
 pub fn resume(file: &mut Document, folder: &Path) -> Option<(Document, Resuming)> {
-    let (finding, mut base, mut since) = Kept::read(file.id)?;
+    let (finding, mut base, mut since, mut held) = Kept::read(file.id)?;
     let root = finding.root.as_deref();
     // What was kept has no paths in it: where footage is on this machine is
     // never written down. The copy's own file is what knows.
@@ -92,12 +106,18 @@ pub fn resume(file: &mut Document, folder: &Path) -> Option<(Document, Resuming)
         place(op, file, root);
         land(&mut document, op, Some(was)).is_ok()
     });
+    for (op, _) in held.iter_mut().flat_map(|held| &mut held.ops) {
+        place(op, file, root);
+    }
     let base = Arc::new(base);
-    // Written again, so the file and the store count the same edits.
-    let kept = Kept::begin(&finding, &base, &since)?;
+    // Written again, so the file and the store count the same edits. What
+    // opens is what a close without saving goes back to.
+    let mut kept = Kept::begin(&finding, &base, &since, &held)?;
+    kept.saved = since.len();
     let seat = Seat {
         invite: Mutex::new(finding.invite.parse().ok()?),
         name: finding.name,
+        token: token(),
         root: finding.root,
         names: Names::default(),
     };
@@ -106,6 +126,7 @@ pub fn resume(file: &mut Document, folder: &Path) -> Option<(Document, Resuming)
         project: finding.project,
         base,
         since,
+        held,
         kept,
     };
     Some((document, resuming))
@@ -126,11 +147,14 @@ fn connect(seat: &Seat) -> Result<(Connected, Document), ShareError> {
         version: VERSION.to_owned(),
         schema: lumit_project::SCHEMA_VERSION.to_owned(),
         name: seat.name.clone(),
+        token: seat.token,
     };
     sender.send(&encode(&hello, &seat.names)?)?;
-    match decode(&receiver.recv(wire::DOCUMENT_LIMIT)?, &seat.names)? {
+    let welcome = receiver.recv(wire::DOCUMENT_LIMIT)?;
+    match decode(&welcome, &seat.names, seat.root.as_deref())? {
         Message::Welcome {
             you,
+            heard,
             document,
             people,
         } => {
@@ -143,6 +167,7 @@ fn connect(seat: &Seat) -> Result<(Connected, Document), ShareError> {
                 receiver,
                 socket,
                 you,
+                heard,
                 people,
             };
             Ok((connected, *document))
@@ -166,6 +191,7 @@ pub fn join(
     let seat = Seat {
         invite: Mutex::new(invite),
         name: name.chars().take(64).collect(),
+        token: token(),
         root,
         names: Names::default(),
     };
@@ -198,13 +224,16 @@ struct Inner {
     presence: Mutex<Option<Presence>>,
     people: Mutex<Vec<Person>>,
     /// Edits held back by a merge, until the person chooses. Each is removed
-    /// by [`Guest::resolve`], and all go when sharing stops.
+    /// by [`Guest::resolve`]. Kept when the copy closes, and gone when the
+    /// person leaves.
     conflicts: Mutex<Vec<Conflict>>,
     /// The edits made since the host was lost, on disk. There while the host
     /// is away. Taken before the store's lock, never under it.
     kept: Mutex<Option<Kept>>,
     /// The person has left, so nothing more is kept.
     left: AtomicBool,
+    /// The person is closing the copy without saving it.
+    discard: AtomicBool,
 }
 
 /// A project shared from someone else's machine. Leaving it is [`Self::stop`]
@@ -229,6 +258,7 @@ impl Inner {
             conflicts: Mutex::new(Vec::new()),
             kept: Mutex::new(None),
             left: AtomicBool::new(false),
+            discard: AtomicBool::new(false),
         })
     }
 
@@ -277,6 +307,7 @@ impl Resuming {
     pub fn start(self, store: Arc<DocumentStore>, events: Events) -> Result<Guest, ShareError> {
         let inner = Inner::new(store, events, self.seat, self.project);
         *inner.kept.lock() = Some(self.kept);
+        *inner.conflicts.lock() = self.held;
         let tap = inner.tap();
         inner.store.share_apart(tap, self.base, self.since);
         inner.begin(None)
@@ -328,6 +359,10 @@ impl Guest {
             }
             conflicts.remove(index)
         };
+        // What is kept still holds it, so it is written again without.
+        if let Some(kept) = self.inner.kept.lock().as_mut() {
+            kept.stale = true;
+        }
         if !mine {
             return 0;
         }
@@ -348,10 +383,43 @@ impl Guest {
         self.inner.hang_up();
     }
 
+    /// The secret this guest finds its host by.
+    #[cfg(test)]
+    pub(crate) fn key(&self) -> [u8; 32] {
+        self.inner.seat.invite.lock().key
+    }
+
     /// Whether this guest is without its host just now.
     #[must_use]
     pub fn away(&self) -> bool {
         self.inner.link.lock().is_none()
+    }
+
+    /// What a save writes while the host is away: the document, the store's
+    /// revision at it, and how many of the edits made since the host was lost
+    /// are in it, to hand to [`Self::saved`]. `None` with the host here.
+    #[must_use]
+    pub fn saving(&self) -> Option<(Arc<Document>, u64, usize)> {
+        self.inner.store.saving_apart()
+    }
+
+    /// The copy was saved with the first `mark` edits made while away in it.
+    /// They stay kept, and are what [`Self::discard`] goes back to.
+    pub fn saved(&self, mark: usize) {
+        self.inner.keep(false);
+        // ponytail: a host found and lost again during the write leaves the
+        // mark counting from the wrong document, which keeps too much and
+        // never too little. Compare the base as `keep` does if it matters.
+        if let Some(kept) = self.inner.kept.lock().as_mut() {
+            kept.saved = mark;
+        }
+    }
+
+    /// The person chose not to save the copy they are closing. If the host
+    /// is still away when it closes, the edits made since the last save are
+    /// not kept. Lumit going down before then keeps them all.
+    pub fn discard(&self) {
+        self.inner.discard.store(true, Ordering::Relaxed);
     }
 
     /// Leave. The document stays as it is, and what was being kept to merge
@@ -367,15 +435,19 @@ impl Guest {
 
 /// A drop is the project closing, not the person leaving. Edits made with
 /// the host away stay on disk, and the copy opened again carries on. So do
-/// edits the host had not answered yet, which closing would otherwise lose.
+/// edits the host had not answered yet, which closing would otherwise lose,
+/// and conflicts the person had not. After [`Guest::discard`] the edits
+/// made away since the last save go.
 impl Drop for Guest {
     fn drop(&mut self) {
         // Said first, so a merge finishing this moment leaves what is kept.
         self.inner.stop.store(true, Ordering::Relaxed);
         let away = self.away();
         self.inner.store.cast_adrift();
-        if away || self.inner.store.unanswered() > 0 {
-            self.inner.keep();
+        let held = !self.inner.conflicts.lock().is_empty();
+        if away || held || self.inner.store.unanswered() > 0 {
+            let discard = self.inner.discard.load(Ordering::Relaxed);
+            self.inner.keep(away && discard);
         }
         self.inner.end();
     }
@@ -454,8 +526,9 @@ impl Inner {
 
     /// Write down what a guest without its host would lose if Lumit closed:
     /// the document both last had, the first time, and each edit made since.
-    /// Does nothing for a guest that has its host.
-    fn keep(&self) {
+    /// Does nothing for a guest that has its host. `discard` is the copy
+    /// closing unsaved, which keeps only the edits its file holds.
+    fn keep(&self, discard: bool) {
         let mut kept = self.kept.lock();
         // Under the lock, so a guest that has left is not kept for after all.
         if self.left.load(Ordering::Relaxed) {
@@ -466,17 +539,32 @@ impl Inner {
             return;
         };
         match kept.as_mut() {
-            Some(kept) if !kept.stale && Arc::ptr_eq(&kept.base, &base) => kept.append(&since),
+            Some(kept) if !discard && !kept.stale && Arc::ptr_eq(&kept.base, &base) => {
+                kept.append(&since);
+            }
             // Nothing kept yet, or what is kept follows a document the store
-            // has merged past, or names an invite that has been replaced.
+            // has merged past, or is out of date, or is being cut back.
             _ => {
-                let Some((base, since)) = self.store.apart(0) else {
+                let Some((base, mut since)) = self.store.apart(0) else {
                     return;
                 };
+                // The save's mark counts edits made since the same document.
+                let same = kept.as_ref().filter(|kept| Arc::ptr_eq(&kept.base, &base));
+                let saved = same.map_or(0, |kept| kept.saved);
+                if discard {
+                    // An edit on its way to the host when it was lost was not
+                    // made away, and stays as it does for a guest with a host.
+                    since.truncate(saved.max(self.store.in_flight()));
+                    // Nothing more is kept, or this guest's thread could put
+                    // the rest back on its way out.
+                    self.left.store(true, Ordering::Relaxed);
+                }
                 let invite = self.seat.invite.lock().to_string();
                 let (name, root) = (self.seat.name.clone(), self.seat.root.clone());
                 let finding = Finding::new(self.project, invite, name, root);
-                if let Some(again) = Kept::begin(&finding, &base, &since) {
+                let held = self.conflicts.lock().clone();
+                if let Some(mut again) = Kept::begin(&finding, &base, &since, &held) {
+                    again.saved = saved;
                     *kept = Some(again);
                 }
             }
@@ -532,7 +620,7 @@ impl Inner {
             self.store.cast_adrift();
             self.alone();
             (self.events)(Event::Away);
-            self.keep();
+            self.keep(false);
 
             let mut wait = 1;
             // The invite the person has been told leads somewhere else.
@@ -558,6 +646,7 @@ impl Inner {
                     }
                     Ok((connected, mut document)) => {
                         // The way out before the merge, which sends through it.
+                        let heard = connected.heard;
                         let room = self.store.unanswered();
                         let Some(live) = self.link_up(connected, room) else {
                             wait = self.wait(wait);
@@ -565,8 +654,8 @@ impl Inner {
                         };
                         let have = self.store.snapshot();
                         settle(&mut document, Some(&have), self.seat.root.as_deref());
-                        self.keep();
-                        let (conflicts, refused) = self.store.rejoin(document);
+                        self.keep(false);
+                        let (conflicts, refused) = self.store.rejoin(document, heard);
                         {
                             // Merged, so there is nothing left to keep. Not
                             // if the project closed meanwhile: then nothing
@@ -620,7 +709,7 @@ impl Inner {
             if self.stop.load(Ordering::Relaxed) {
                 break;
             }
-            self.keep();
+            self.keep(false);
             if self.hurry.swap(false, Ordering::Relaxed) {
                 return 1;
             }
@@ -638,7 +727,7 @@ impl Inner {
             let Ok(bytes) = receiver.recv(wire::DOCUMENT_LIMIT) else {
                 break;
             };
-            match decode(&bytes, &self.seat.names) {
+            match decode(&bytes, &self.seat.names, self.seat.root.as_deref()) {
                 Ok(Message::Applied { peer, id, mut op }) => {
                     if !sane(&op) {
                         break;
@@ -680,6 +769,7 @@ impl Inner {
                     self.tell_people(people);
                 }
                 Ok(Message::Ping) => {}
+                Ok(Message::Invite { key }) => self.seat.invite.lock().key = key,
                 Ok(Message::Closed) => return Some(Ending::Closed),
                 Ok(Message::Removed) => return Some(Ending::Removed),
                 _ => break,

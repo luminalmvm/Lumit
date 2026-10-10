@@ -5,7 +5,10 @@ pub mod fixtures;
 pub mod pack;
 pub mod plugins;
 
-pub use pack::{autosave_owner, restore_packed, save_packed, unpack, PackSource, Packed, Unpacked};
+pub use pack::{
+    autosave_owner, hold_read_out, restore_packed, save_packed, unpack, PackSource, Packed,
+    Unpacked,
+};
 pub use plugins::{plugin_prefs_path, PluginPrefs};
 
 use lumit_core::model::{Fingerprint, MediaRef, ProjectItem};
@@ -1070,7 +1073,17 @@ pub fn rebase_for_save(doc: &Document, project_dir: &Path) -> Document {
     if let Some(config) = doc.colour.config.as_mut() {
         rebase_one(config, project_dir);
     }
+    keep_original_paths(&mut doc);
     doc
+}
+
+/// Give each file an effect reads the path it had, and not the copy's in this
+/// machine's cache that an open pointed its parameter at. For anything that
+/// leaves the open project: a save, the clipboard, a preset.
+pub fn keep_original_paths(doc: &mut Document) {
+    if let Some(cache) = cache_dir() {
+        pack::keep_original_paths(doc, &cache.join("packed"));
+    }
 }
 
 /// One media reference rebased against `project_dir`: the relative path
@@ -1188,7 +1201,17 @@ pub fn resolve_all_media(
     // this list would open the relink dialogue over footage that is perfectly
     // present. It also does not count as a relink, which is a count of the
     // project's real media.
-    for proxy in doc.proxies.values_mut() {
+    // A packed proxy or config that `restore_packed` has placed stays where it
+    // was put, as a packed item does above.
+    let packed = &doc.packed;
+    let placed = |id: Uuid, media: &MediaRef| {
+        packed.contains_key(&lumit_core::model::packed_id(id))
+            && Path::new(&media.absolute_path).is_file()
+    };
+    for (item, proxy) in &mut doc.proxies {
+        if placed(*item, &proxy.media) {
+            continue;
+        }
         if let Resolved::Found { path, .. } = resolve_media(&proxy.media, project_dir, search_roots)
         {
             proxy.media.absolute_path = path.to_string_lossy().into_owned();
@@ -1199,7 +1222,7 @@ pub fn resolve_all_media(
     // still keeps every colour space name it was given, and simply previews
     // through the built-in family until the file comes back. Opening the
     // relink dialogue over it would be a lie about what is wrong.
-    if let Some(config) = doc.colour.config.as_mut() {
+    if let Some(config) = doc.colour.config.as_mut().filter(|c| !placed(doc.id, c)) {
         if let Resolved::Found { path, .. } = resolve_media(config, project_dir, search_roots) {
             config.absolute_path = path.to_string_lossy().into_owned();
         }
@@ -1437,6 +1460,14 @@ impl JournalFile {
         if let Some(parent) = self.path.parent() {
             fs::create_dir_all(parent)?;
         }
+        // The first edit after a clean close starts the journal afresh. What
+        // was left in it are edits somebody chose not to save, and they must
+        // not come back underneath new ones.
+        let closed = self.closed_marker();
+        if closed.exists() {
+            let _ = fs::remove_file(&self.path);
+            let _ = fs::remove_file(&closed);
+        }
         let mut f = OpenOptions::new()
             .create(true)
             .append(true)
@@ -1471,7 +1502,57 @@ impl JournalFile {
         Ok(ops)
     }
 
+    /// How many bytes are journalled so far.
+    #[must_use]
+    pub fn size(&self) -> u64 {
+        fs::metadata(&self.path).map_or(0, |m| m.len())
+    }
+
+    /// Drop the first `bytes` of the journal, which a save has just written
+    /// into the project file, and keep the edits made after them.
+    pub fn forget(&self, bytes: u64) -> Result<(), ProjectError> {
+        let all = match fs::read(&self.path) {
+            Ok(all) => all,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(e) => return Err(e.into()),
+        };
+        let kept = usize::try_from(bytes)
+            .ok()
+            .and_then(|from| all.get(from..))
+            .unwrap_or_default();
+        if kept.is_empty() {
+            return self.clear();
+        }
+        // Written beside the journal and moved over it, so a crash part way
+        // leaves the old journal and not half of the new one.
+        let beside = self.path.with_extension("tmp");
+        fs::write(&beside, kept)?;
+        fs::rename(&beside, &self.path)?;
+        Ok(())
+    }
+
+    /// Note that the project was closed on purpose. The edits still in the
+    /// journal are then ones somebody chose not to save, and not what a crash
+    /// left behind.
+    pub fn mark_closed(&self) {
+        if self.size() > 0 {
+            let _ = fs::write(self.closed_marker(), b"");
+        }
+    }
+
+    /// Whether the journal holds edits from a run that never closed the
+    /// project, which is a crash or a power cut.
+    #[must_use]
+    pub fn ended_badly(&self) -> bool {
+        self.size() > 0 && !self.closed_marker().exists()
+    }
+
+    fn closed_marker(&self) -> PathBuf {
+        self.path.with_extension("closed")
+    }
+
     pub fn clear(&self) -> Result<(), ProjectError> {
+        let _ = fs::remove_file(self.closed_marker());
         match fs::remove_file(&self.path) {
             Ok(()) => {}
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}

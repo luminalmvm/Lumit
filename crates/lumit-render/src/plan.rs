@@ -21,7 +21,7 @@
 //! wanted for a preview, and a source decoded at viewport size is several times
 //! cheaper than one decoded at 4K and thrown away.
 
-use crate::decode::CompJob;
+use crate::decode::{CompJob, Cut};
 use crate::source::SourceProbes;
 use lumit_core::model::{Composition, Document, LayerKind};
 use std::path::PathBuf;
@@ -250,6 +250,39 @@ pub(crate) fn moment_offset(tau: f64, t: f64, comp_dt: f64) -> f64 {
     (tau - t) / comp_dt
 }
 
+/// File a clip's picture at each of `moments` on its job, so a neighbour of
+/// a Precomp or an adjustment layer above shows the footage a frame away and
+/// not this one. One real frame each, picked the way a layer's own
+/// neighbours are. `source_at` is the source time the clip shows at a comp
+/// time.
+fn push_moments(
+    shutter: &mut Vec<crate::decode::ShutterSample>,
+    moments: &[f64],
+    t: f64,
+    comp_dt: f64,
+    fps: f64,
+    src_frames: usize,
+    source_at: impl Fn(f64) -> f64,
+) {
+    for &tau in moments {
+        let offset = moment_offset(tau, t, comp_dt);
+        if offset == 0.0
+            || shutter
+                .iter()
+                .any(|s| s.offset.to_bits() == offset.to_bits())
+        {
+            continue;
+        }
+        let (source_frame, _) =
+            lumit_core::pixels::frame_pick(source_at(tau), fps, src_frames, false, None);
+        shutter.push(crate::decode::ShutterSample {
+            offset,
+            source_frame,
+            blend: None,
+        });
+    }
+}
+
 /// Recursively collect the decode jobs comp `comp` needs at comp time `t`
 /// (docs/06-RENDER-PIPELINE.md: Precomp evaluation). Cycle-guarded through
 /// `visited`, which must already contain `comp.id`.
@@ -285,7 +318,7 @@ pub fn collect_comp_jobs(
     if let Some(graph) = &comp.graph {
         // Viewed on its own or placed as a Precomp layer, so a picture Input's
         // preview item is drawn and has to be decoded (§5.11).
-        collect_graph_jobs(ctx, comp, graph, t, jobs, visited, false);
+        collect_graph_jobs(ctx, comp, graph, t, moments, jobs, visited, false);
         return;
     }
     let in_span =
@@ -431,23 +464,25 @@ pub fn collect_comp_jobs(
             | LayerKind::Adjustment
             | LayerKind::Null => {}
             LayerKind::Sequence { clips } => {
-                // Resolve the clip under the playhead to a footage frame
+                let flow_neighbours =
+                    lumit_core::fx::stack_flow_neighbours(&layer.effects, layer.switches.fx);
+                // The job for the clip live at layer time `lt`, alone
                 // (comp-source clips + gaps are handled elsewhere/skip).
-                if let Some((_id, lumit_core::sequence::ClipSource::Footage(item), st)) =
-                    lumit_core::sequence::resolve(clips, lt)
-                {
+                // `whole` asks for one real frame of it, the way a
+                // neighbour is picked: no blend partner and no flow.
+                let clip_job = |lt: f64, whole: bool| -> Option<CompJob> {
+                    let Some((_id, lumit_core::sequence::ClipSource::Footage(item), st)) =
+                        lumit_core::sequence::resolve(clips, lt)
+                    else {
+                        return None;
+                    };
                     // The one proxy resolution point: which file this
                     // item's pixels come from, and the probe to believe about
                     // them (always the original's — see `effective_media`).
-                    let Some((media, probe)) = crate::source::effective_media(doc, probes, item)
-                    else {
-                        continue;
-                    };
-                    let Some((fps, nat_w, nat_h, src_frames)) = probe.video() else {
-                        continue;
-                    };
+                    let (media, probe) = crate::source::effective_media(doc, probes, item)?;
+                    let (fps, nat_w, nat_h, src_frames) = probe.video()?;
                     use lumit_core::retime::Interpolation;
-                    let clip = lumit_core::sequence::active_clip(clips, lt);
+                    let clip = lumit_core::sequence::active_clip(clips, lt).filter(|_| !whole);
                     // Same engagement gate as a Footage layer; the
                     // clip's own retime supplies the speed.
                     let comp_fps = comp.frame_rate.fps();
@@ -463,15 +498,17 @@ pub fn collect_comp_jobs(
                         matches!(clip.map(|c| &c.interpolation), Some(Interpolation::Blend))
                             || flow.is_some();
                     let sample_fps = flow.as_ref().and_then(|p| p.input_fps_at(lt));
-                    let target_width = if flow.is_some() {
-                        None // flow decodes natively
+                    // Flow decodes natively, and so does a layer whose stack
+                    // measures motion, as a Footage layer's does.
+                    let target_width = if flow.is_some() || !flow_neighbours.is_empty() {
+                        None
                     } else {
                         quality.target_width(nat_w)
                     };
                     let target_width = fit_texture(target_width, nat_w, nat_h);
                     let (source_frame, blend) =
                         lumit_core::pixels::frame_pick(st, fps, src_frames, blend_on, sample_fps);
-                    jobs.push(CompJob {
+                    Some(CompJob {
                         layer: layer.id,
                         item,
                         source: media_source(doc, item, media),
@@ -481,10 +518,6 @@ pub fn collect_comp_jobs(
                         natural_h: nat_h,
                         blend,
                         flow,
-                        // Temporal effects on Sequence clips are a later
-                        // refinement (clip-relative neighbour resolution);
-                        // footage layers first. The accumulation shutter
-                        // takes the same boundary: a clip under one is held.
                         temporal: Vec::new(),
                         flow_neighbours: Vec::new(),
                         slate: false,
@@ -492,10 +525,50 @@ pub fn collect_comp_jobs(
                             &layer.effects,
                             layer.switches.fx,
                         ),
+                        // The accumulation shutter is a later refinement: a
+                        // clip under one is held.
                         shutter: Vec::new(),
                         shutter_flow: None,
-                    });
+                        cuts: Vec::new(),
+                    })
+                };
+                let Some(mut job) = clip_job(lt, false) else {
+                    continue;
+                };
+                // Neighbour frames for a temporal effect stack, as a Footage
+                // layer's are, through whichever clip is live then. A clip of
+                // this job's footage is one more frame of it, and any other
+                // is a job of its own. A gap is no neighbour.
+                if lumit_core::fx::stack_is_temporal(&layer.effects, layer.switches.fx) {
+                    let window = lumit_core::fx::stack_temporal_window(
+                        &layer.effects,
+                        layer.switches.fx,
+                        lt / comp_dt,
+                    );
+                    for o in window.into_iter().filter(|&o| o != 0) {
+                        match clip_job(lt + f64::from(o) * comp_dt, true) {
+                            Some(n) if n.item == job.item => job.temporal.push((o, n.source_frame)),
+                            Some(n) => job.cuts.push(Cut::Neighbour(o, n)),
+                            None => {}
+                        }
+                    }
+                    job.flow_neighbours = flow_neighbours.clone();
                 }
+                // And the layer at each moment a temporal effect above builds
+                // it again at: the clip live then, or nothing in a gap. A
+                // Posterize-held clip stays held.
+                if sample_times[idx] == t {
+                    for &tau in &layer_moments[idx] {
+                        let offset = moment_offset(tau, t, comp_dt);
+                        let at = offset.to_bits();
+                        let filed = |c: &Cut| matches!(c, Cut::Moment(o, _) if o.to_bits() == at);
+                        if offset != 0.0 && !job.cuts.iter().any(filed) {
+                            let lt = lumit_core::time::layer_time(tau, layer.start_offset.0);
+                            job.cuts.push(Cut::Moment(offset, clip_job(lt, true)));
+                        }
+                    }
+                }
+                jobs.push(job);
             }
             LayerKind::Precomp { comp: nested_id } => {
                 if visited.contains(nested_id) {
@@ -584,6 +657,7 @@ pub fn collect_comp_jobs(
                         channels: None,
                         shutter: Vec::new(),
                         shutter_flow: None,
+                        cuts: Vec::new(),
                     });
                     continue;
                 }
@@ -692,32 +766,22 @@ pub fn collect_comp_jobs(
                     })
                     .collect();
                 // And the clip at each moment a temporal effect above builds
-                // it again at, so a neighbour of a Precomp or an adjustment
-                // layer shows the footage a frame away and not this one. One
-                // real frame each, picked the way a layer's own neighbours
-                // are. A Posterize-held clip stays held.
+                // it again at. A Posterize-held clip stays held.
                 if sample_times[idx] == t {
-                    for &tau in &layer_moments[idx] {
-                        let offset = moment_offset(tau, t, comp_dt);
-                        if offset == 0.0
-                            || shutter
-                                .iter()
-                                .any(|s| s.offset.to_bits() == offset.to_bits())
-                        {
-                            continue;
-                        }
-                        let sst = layer.source_time_at(lumit_core::time::layer_time(
-                            tau,
-                            layer.start_offset.0,
-                        ));
-                        let (source_frame, _) =
-                            lumit_core::pixels::frame_pick(sst, fps, src_frames, false, None);
-                        shutter.push(crate::decode::ShutterSample {
-                            offset,
-                            source_frame,
-                            blend: None,
-                        });
-                    }
+                    push_moments(
+                        &mut shutter,
+                        &layer_moments[idx],
+                        t,
+                        comp_dt,
+                        fps,
+                        src_frames,
+                        |tau| {
+                            layer.source_time_at(lumit_core::time::layer_time(
+                                tau,
+                                layer.start_offset.0,
+                            ))
+                        },
+                    );
                 }
                 let shutter_flow = match &layer.interpolation {
                     Interpolation::Flow(p) if !shutter.is_empty() => Some(p.clone()),
@@ -746,6 +810,7 @@ pub fn collect_comp_jobs(
                     ),
                     shutter,
                     shutter_flow,
+                    cuts: Vec::new(),
                 });
             }
         }
@@ -767,11 +832,16 @@ pub fn collect_comp_jobs(
 /// draws as a Read of that item - unless `pictures_fed` says a host is feeding
 /// the pictures, where no preview stands in and nothing of it is decoded
 /// (§5.11).
+///
+/// `moments` are [`collect_comp_jobs`]'s: the other times a temporal effect
+/// further up builds this comp again at.
+#[allow(clippy::too_many_arguments)]
 fn collect_graph_jobs(
     ctx: &PlanContext<'_>,
     comp: &Composition,
     graph: &lumit_core::comp_graph::CompGraph,
     t: f64,
+    moments: &[f64],
     jobs: &mut Vec<CompJob>,
     visited: &mut Vec<Uuid>,
     pictures_fed: bool,
@@ -815,13 +885,22 @@ fn collect_graph_jobs(
                 let Some(nested) = doc.comp(*nested_id) else {
                     continue;
                 };
+                // A comp with layers is built again at the same moments.
+                //
+                // ponytail: a node graph read here is lowered into this
+                // graph's plan, which fetches by this comp's boxes alone, so
+                // its footage holds. The same goes for a Node graph box and a
+                // Node graph effect. Build each through its own comp if a
+                // graph inside a graph ever needs to move.
+                let moments: &[f64] = if nested.graph.is_some() { &[] } else { moments };
                 // A held nested frame wants no decodes: the realiser will
-                // serve the texture and never look at the pixels.
-                if held.is_some_and(|held| held(nested, t, None)) {
+                // serve the texture and never look at the pixels. A rebuild
+                // at another moment is made from pixels, as a Precomp's is.
+                if moments.is_empty() && held.is_some_and(|held| held(nested, t, None)) {
                     continue;
                 }
                 visited.push(*nested_id);
-                collect_comp_jobs(ctx, nested, t, &[], jobs, visited, false);
+                collect_comp_jobs(ctx, nested, t, moments, jobs, visited, false);
                 visited.pop();
             }
             LayerKind::Footage { item } => {
@@ -849,6 +928,7 @@ fn collect_graph_jobs(
                         slate: true,
                         shutter: Vec::new(),
                         shutter_flow: None,
+                        cuts: Vec::new(),
                     });
                     continue;
                 }
@@ -859,6 +939,12 @@ fn collect_graph_jobs(
                 };
                 let (source_frame, blend) =
                     lumit_core::pixels::frame_pick(t, fps, src_frames, false, None);
+                // A Read plays its file at comp time, at every moment too.
+                let mut shutter = Vec::new();
+                let comp_dt = 1.0 / comp.frame_rate.fps().max(1.0);
+                push_moments(&mut shutter, moments, t, comp_dt, fps, src_frames, |tau| {
+                    tau
+                });
                 jobs.push(CompJob {
                     channels: None,
                     layer: *id,
@@ -873,8 +959,9 @@ fn collect_graph_jobs(
                     temporal: Vec::new(),
                     flow_neighbours: Vec::new(),
                     slate: false,
-                    shutter: Vec::new(),
+                    shutter,
                     shutter_flow: None,
+                    cuts: Vec::new(),
                 });
             }
             // A solid rasterises where it is drawn, and no other kind of item
@@ -916,7 +1003,7 @@ fn nested_graph_jobs(
     match nested.graph.as_ref() {
         // Applied or nested, so every picture Input arrives on a socket and no
         // preview item is drawn or decoded (§5.11).
-        Some(graph) => collect_graph_jobs(ctx, nested, graph, t, jobs, visited, true),
+        Some(graph) => collect_graph_jobs(ctx, nested, graph, t, &[], jobs, visited, true),
         // A comp with layers: the dangling reference the walk renders as a
         // passthrough, planned as the Precomp it looks like.
         None => collect_comp_jobs(ctx, nested, t, &[], jobs, visited, false),
@@ -983,7 +1070,22 @@ pub fn same_decode(a: &[CompJob], b: &[CompJob]) -> bool {
                 && x.channels == y.channels
                 && x.shutter == y.shutter
                 && x.shutter_flow == y.shutter_flow
+                && x.cuts
+                    .iter()
+                    .map(Cut::name)
+                    .eq(y.cuts.iter().map(Cut::name))
         })
+}
+
+impl Cut {
+    /// What this asks for, as numbers that compare and hash: which kind, the
+    /// offset, and the other clip's own content name.
+    fn name(&self) -> (bool, u64, Option<u128>) {
+        match self {
+            Cut::Neighbour(o, job) => (false, f64::from(*o).to_bits(), Some(job.source_key())),
+            Cut::Moment(o, job) => (true, o.to_bits(), job.as_ref().map(CompJob::source_key)),
+        }
+    }
 }
 
 impl CompJob {
@@ -1055,6 +1157,13 @@ impl CompJob {
             h.update(b"shutter-flow/");
             h.update(&bincode::serialize(flow).unwrap_or_default());
             feed_synthesis(&mut h, flow);
+        }
+        // Another clip's frame is content too, and so is a gap.
+        for (moment, offset, clip) in self.cuts.iter().map(Cut::name) {
+            h.update(b"cut/");
+            h.update(&[u8::from(moment), u8::from(clip.is_some())]);
+            h.update(&offset.to_le_bytes());
+            h.update(&clip.unwrap_or(0).to_le_bytes());
         }
         let mut k = [0u8; 16];
         k.copy_from_slice(&h.finalize().as_bytes()[..16]);

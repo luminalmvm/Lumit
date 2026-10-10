@@ -186,14 +186,24 @@ fn attach_d3d11va(_codec: &AVCodec, _ctx: &mut AVCodecContext) -> bool {
     false
 }
 
+/// Whether a decoder may use the graphics card's video unit. An application
+/// setting, so the engine holds the live choice with no store behind it.
+static HARDWARE_DECODE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
+/// Allow or refuse hardware decode for every decoder opened from here on. One
+/// already open carries on the way it started.
+pub fn set_hardware_decode(allow: bool) {
+    HARDWARE_DECODE.store(allow, std::sync::atomic::Ordering::Relaxed);
+}
+
 impl VideoDecoder {
     pub fn open(src: impl Into<MediaSource>, index: FrameIndex) -> Result<Self, MediaError> {
-        Self::open_with(src, index, true)
+        let allow = HARDWARE_DECODE.load(std::sync::atomic::Ordering::Relaxed);
+        Self::open_with(src, index, allow)
     }
 
-    /// As [`Self::open`], with hardware decode refusable — the knob the
-    /// decoder settings page will drive, and what the hw/sw agreement test
-    /// pins its ground truth with.
+    /// As [`Self::open`], with hardware decode refusable. What the hw/sw
+    /// agreement test pins its ground truth with.
     pub fn open_with(
         src: impl Into<MediaSource>,
         index: FrameIndex,

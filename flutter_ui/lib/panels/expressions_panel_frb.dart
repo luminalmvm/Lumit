@@ -5,6 +5,8 @@
 // to project. Apply writes the way Animation ▸ Add expression does, onto the
 // property rows picked in the Timeline.
 
+import 'dart:io';
+
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
@@ -12,6 +14,9 @@ import 'package:provider/provider.dart';
 
 import '../l10n/strings.dart';
 import '../shell/menu_animation_frb.dart' show selectedChannels;
+import '../state/dock.dart' show Panel;
+import '../state/file_dialogs.dart';
+import '../widgets/autofill.dart';
 import '../widgets/controls.dart';
 import 'effect_param_row_frb.dart' show ExpressionTextEditingController;
 import 'graph_channels.dart';
@@ -26,6 +31,8 @@ class ExpressionsPanelFrb extends StatefulWidget {
 
 class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
   final TextEditingController _search = TextEditingController();
+  final FocusNode _searchFocus = FocusNode();
+  LumitUiState? _boundUi;
   final TextEditingController _name = TextEditingController();
   final TextEditingController _code = ExpressionTextEditingController();
 
@@ -39,12 +46,24 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
     for (final field in [_search, _name, _code]) {
       field.addListener(_redraw);
     }
+    // Ctrl+F asks the focused panel for its search box.
+    _boundUi = Provider.of<LumitUiState>(context, listen: false);
+    _boundUi!.panelSearchRequest.addListener(_onSearchRequested);
+  }
+
+  void _onSearchRequested() {
+    if (!mounted) return;
+    if (_boundUi?.searchRequestIsFor(Panel.expressions) ?? false) {
+      _searchFocus.requestFocus();
+    }
   }
 
   void _redraw() => setState(() {});
 
   @override
   void dispose() {
+    _boundUi?.panelSearchRequest.removeListener(_onSearchRequested);
+    _searchFocus.dispose();
     _search.dispose();
     _name.dispose();
     _code.dispose();
@@ -77,6 +96,36 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
     final name = _name.text.trim();
     ui.workspace.saveExpression(name, _code.text);
     setState(() => _picked = name);
+  }
+
+  /// Write every saved expression to one file, to hand to someone.
+  Future<void> _export(LumitState app, LumitUiState ui) async {
+    final path = await pickExpressionsSaveLocation();
+    if (path == null) return;
+    try {
+      await File(path).writeAsString(ui.workspace.encodeExpressions());
+      app.postNotice(l10n.expressionsExported);
+    } catch (_) {
+      app.postNotice(l10n.workspaceFileUnwritable, error: true);
+    }
+  }
+
+  /// Add the expressions in a file to the saved ones.
+  Future<void> _import(LumitState app, LumitUiState ui) async {
+    final path = await pickExpressionsToOpen();
+    if (path == null) return;
+    int? count;
+    try {
+      count = ui.workspace.importExpressions(await File(path).readAsString());
+    } catch (_) {
+      count = null;
+    }
+    if (count == null) {
+      app.postNotice(l10n.expressionsFileNotExpressions, error: true);
+      return;
+    }
+    app.postNotice(l10n.expressionsImported(count));
+    if (mounted) setState(() {});
   }
 
   void _apply(LumitState app, LumitUiState ui) {
@@ -115,6 +164,7 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
           child: HouseTextField(
             key: const ValueKey('expr-search'),
             controller: _search,
+            focusNode: _searchFocus,
             hint: l10n.searchExpressions,
             width: double.infinity,
           ),
@@ -162,6 +212,7 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
             child: HouseTextField(
               key: const ValueKey('expr-code'),
               controller: _code,
+              autofill: ExpressionAutofillGenerator(),
               multiline: true,
               topAlign: true,
               style: t.mono,
@@ -215,6 +266,15 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
                       'expr-apply',
                       l10n.apply,
                       hasTarget && hasCode ? () => _apply(app, ui) : null,
+                    ),
+                    button('expr-import', l10n.menuImport,
+                        () => _import(app, ui)),
+                    button(
+                      'expr-export',
+                      l10n.menuExport,
+                      ui.workspace.savedExpressions.isEmpty
+                          ? null
+                          : () => _export(app, ui),
                     ),
                     if (!hasTarget) ...[
                       const SizedBox(width: 10),

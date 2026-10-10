@@ -377,12 +377,14 @@ class EffectParamRowFrb extends StatelessWidget {
     if (twoColumn && valueColumn == null) {
       // No padding of its own: the Effect controls panel gives every row the
       // same fixed height ([fxRowHeight]), and padding on top of that would
-      // eat into the room the controls sit in.
+      // eat into the room the controls sit in. A row with riders may grow, so
+      // they have a second line to drop onto when the panel is narrow.
       return fxTwoColumnRow(
         context: context,
         name: label,
         keyframeControls: keyframeSlot,
         control: control,
+        grows: riders.isNotEmpty,
       );
     }
 
@@ -1641,6 +1643,8 @@ class EffectParamRowFrb extends StatelessWidget {
           : null;
       final beside = riders.any((r) => r.$1.kind is BridgeParamKind_Choice);
       final picker = param.kind is BridgeParamKind_Layer && beside;
+      // On a line of their own the riders have the whole room.
+      final wrapped = constraints.maxWidth < wrapBelow && canGrow;
       // Each rider lays its own parts straight into the row: a switch keeps
       // its box at full size and only its word gives, where a nested row
       // would have shared the room evenly and starved the box first.
@@ -1657,11 +1661,13 @@ class EffectParamRowFrb extends StatelessWidget {
             // button to press even with no room left for its word.
             choiceCeiling: room == null || picker
                 ? null
-                : math.max(20.0, room - effectCellWidth - 2),
+                : wrapped
+                    ? room
+                    : math.max(20.0, room - effectCellWidth - 2),
           ),
         ],
       ];
-      if (constraints.maxWidth >= wrapBelow || !canGrow) {
+      if (!wrapped) {
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1678,17 +1684,22 @@ class EffectParamRowFrb extends StatelessWidget {
           ],
         );
       }
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          control,
-          const SizedBox(height: 2),
-          Row(mainAxisSize: MainAxisSize.min, children: [
-            // The leading 6px spacer indents the run to match the gap the
-            // riders keep beside the control on the one-line layout.
-            ...riderRow,
-          ]),
-        ],
+      // A little room above and below, so two lines don't touch the rows
+      // either side.
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            control,
+            const SizedBox(height: 2),
+            Row(mainAxisSize: MainAxisSize.min, children: [
+              // The leading 6px spacer indents the run to match the gap the
+              // riders keep beside the control on the one-line layout.
+              ...riderRow,
+            ]),
+          ],
+        ),
       );
     });
   }

@@ -145,15 +145,17 @@ typedef CompBoxRows = ({
 /// box and the panel never disagree about what an effect is showing.
 ///
 /// [params] is the schema's list with the instance's derived rows after it, and
-/// [values] and [hidden] are the instance's. Out go the rows a plugin is
-/// hiding, the members of a group whose `visible_when` is unmet, the riders
-/// that belong beside their host, and a curve, whose editor is no 24px row.
+/// [values], [hidden] and [greyed] are the instance's. Out go the rows a
+/// plugin is hiding, the members of a group whose `visible_when` is unmet, the
+/// riders that belong beside their host, and a curve, whose editor is no 24px
+/// row. The rows a plugin has greyed are drawn disabled.
 CompBoxRows compBoxRows(
   String effect,
   List<BridgeParamInfo> params,
   Map<String, BridgeEffectValue> values,
-  Set<String> hidden,
-) {
+  Set<String> hidden, [
+  Iterable<String> greyed = const [],
+]) {
   final shown = [
     for (final p in params)
       if (!hidden.contains(p.id)) p,
@@ -180,7 +182,7 @@ CompBoxRows compBoxRows(
           p,
     ],
     riders: riders,
-    disabled: disabledParams(effect, values),
+    disabled: {...disabledParams(effect, values), ...greyed},
   );
 }
 
@@ -410,6 +412,7 @@ class _CompGraphPanelState extends State<CompGraphPanel> {
             ),
             {for (final v in info.values) v.id: v.value},
             info.hiddenRows.toSet(),
+            info.disabledRows,
           );
         }
       } catch (_) {

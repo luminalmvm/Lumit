@@ -280,9 +280,41 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
 
   /// Whether the drag recogniser takes part in a press. It asks as the press
   /// arrives, which is after [_onPointerDown] has looked at where it landed.
-  /// A drag that starts on the words selects, and one on empty picture is left
-  /// to the pan beneath.
-  bool _dragAllowed(int buttons) => _pressOnText && buttons == kPrimaryButton;
+  /// A drag that starts on the words selects, and one on empty picture draws
+  /// the box new text will wrap to.
+  bool _dragAllowed(int buttons) =>
+      buttons == kPrimaryButton && widget.tool != ToolMode.typeVertical;
+
+  /// The two corners of a text box being dragged out on empty picture.
+  Offset? _boxFrom;
+  Offset? _boxTo;
+
+  /// A box narrower than this on screen was a click with a shaky hand.
+  static const double _smallestBox = 8;
+
+  void _dragStart(Offset at) {
+    if (_pressOnText) return _dragTo(at);
+    setState(() {
+      _boxFrom = _lastClickPos ?? at;
+      _boxTo = at;
+    });
+  }
+
+  void _dragUpdate(Offset at) {
+    if (_boxFrom == null) return _dragTo(at);
+    setState(() => _boxTo = at);
+  }
+
+  void _dragEnd() {
+    _dragUnit = null;
+    final from = _boxFrom;
+    final to = _boxTo;
+    if (from == null || to == null) return;
+    setState(() => _boxFrom = _boxTo = null);
+    final box = Rect.fromPoints(from, to);
+    if (box.width < _smallestBox) return _create(from);
+    _create(box.topLeft, boxScreenWidth: box.width);
+  }
 
   @override
   void initState() {
@@ -530,9 +562,10 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
                   allowedButtonsFilter: _dragAllowed,
                 ),
                 (r) => r
-                  ..onStart = ((d) => _dragTo(d.localPosition))
-                  ..onUpdate = ((d) => _dragTo(d.localPosition))
-                  ..onEnd = ((_) => _dragUnit = null),
+                  ..onStart = ((d) => _dragStart(d.localPosition))
+                  ..onUpdate = ((d) => _dragUpdate(d.localPosition))
+                  ..onEnd = ((_) => _dragEnd())
+                  ..onCancel = (() => setState(() => _boxFrom = _boxTo = null)),
               ),
               TapGestureRecognizer:
                   GestureRecognizerFactoryWithHandlers<TapGestureRecognizer>(
@@ -547,6 +580,17 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
               onPointerDown: _onPointerDown,
               child: Stack(
                 children: [
+                  if (_boxFrom != null && _boxTo != null)
+                    Positioned.fromRect(
+                      rect: Rect.fromPoints(_boxFrom!, _boxTo!),
+                      child: IgnorePointer(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            border: Border.all(color: widget.accent),
+                          ),
+                        ),
+                      ),
+                    ),
                   if (vertical)
                     TextPointer(
                       at: _pointer,
@@ -750,13 +794,37 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
   }
 
   /// Make a text layer where the pointer is, and start typing into it.
-  void _create(Offset at) {
+  ///
+  /// [boxScreenWidth] is the width of a box dragged out with its top left at
+  /// [at]. The text then wraps to it, and starts inside its top left corner
+  /// rather than standing on the point.
+  void _create(Offset at, {double? boxScreenWidth}) {
     final options = widget.uiState.tools;
     // The composition's own placement — the same conversion the shape tools
     // build a new layer's art with.
-    final (cx, cy) =
-        ShapeSpace.ofComp(fitted: widget.fitted, compSize: widget.compSize)
-            .ofScreen(at);
+    final space =
+        ShapeSpace.ofComp(fitted: widget.fitted, compSize: widget.compSize);
+    var (cx, cy) = space.ofScreen(at);
+    var paragraph = options.paragraphStyle;
+    if (boxScreenWidth != null && space.screenScale > 0) {
+      paragraph =
+          paragraph.copyWith(boxWidth: boxScreenWidth / space.screenScale);
+      // The engine stands the new layer's first baseline on the point it is
+      // given, so the point is moved from the box's corner to that baseline.
+      final block = measuredText(
+          BridgeTextDocument(
+            text: '',
+            size: options.textSize,
+            fill: options.fillRgba,
+            pathOffset: const BridgeScalar.static_(0),
+            animators: const [],
+            style: options.textStyle,
+            paragraph: paragraph,
+          ),
+          text: '');
+      cx += block.lines.first.carets.first - block.left;
+      cy += block.ascent;
+    }
     try {
       // One op, so one undo step, and undoing it takes the layer away.
       // This used to be three — a layer saying "Text" in the middle of the
@@ -780,7 +848,7 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
           // What the Text and Paragraph panels were last set to with no text
           // layer selected.
           style: options.textStyle,
-          paragraph: options.paragraphStyle,
+          paragraph: paragraph,
         ),
         x: cx,
         y: cy,

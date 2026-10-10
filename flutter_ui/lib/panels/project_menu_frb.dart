@@ -26,6 +26,7 @@ enum _ProjectMenuAction {
   compSettings,
   rename,
   relink,
+  reveal,
   findMissing,
   addAudioOnly,
   setProxy,
@@ -160,6 +161,12 @@ Future<void> showProjectMenuFrb({
               onPressed: () => close(_ProjectMenuAction.relink),
               child: Text(
                   missing ? l10n.relinkEllipsis : l10n.replaceFootageEllipsis),
+            ),
+          if (isFootage && !missing)
+            MenuRow(
+              key: const ValueKey('project-menu-reveal'),
+              onPressed: () => close(_ProjectMenuAction.reveal),
+              child: Text(l10n.projectShowInFolder),
             ),
           // **The rate of a run of stills** (docs/07 §3.1). Stills carry no
           // rate of their own, so an imported run plays at 25 until this
@@ -451,6 +458,8 @@ Future<void> showProjectMenuFrb({
       onStartRename?.call();
     case _ProjectMenuAction.relink:
       await onRelink?.call();
+    case _ProjectMenuAction.reveal:
+      if (item case ItemReference_Footage(:final field0)) field0.reveal();
     case _ProjectMenuAction.findMissing:
       onFindMissing();
     case _ProjectMenuAction.addAudioOnly:

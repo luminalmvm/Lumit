@@ -545,13 +545,16 @@ class _LumitAppViewState extends State<LumitAppView> {
         state.notifyDocumentChanged();
       case 'playback.toggle':
         ui.requestTogglePlay();
-      // Shuttle is not built, and J/L have always stepped a frame here. Mapping
-      // them onto the step keeps today's keyboard exactly as it is rather than
-      // taking two keys away until a shuttle exists to give them back.
-      case 'playback.frame.prev' || 'playback.shuttle.reverse':
+      case 'playback.frame.prev':
         ui.stepFrame(-1);
-      case 'playback.frame.next' || 'playback.shuttle.forward':
+      case 'playback.frame.next':
         ui.stepFrame(1);
+      // `J` and `L` shuttle: each press is one step along the ladder. A held
+      // key is one press, or its repeats would run straight to the top.
+      case 'playback.shuttle.reverse' || 'playback.shuttle.forward':
+        if (event is KeyDownEvent) {
+          ui.shuttle(action.endsWith('forward') ? 1 : -1);
+        }
       // `K` stops the transport the way Space does, and is left for anything
       // else that wants it when nothing is playing.
       case 'playback.shuttle.pause':

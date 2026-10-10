@@ -483,7 +483,7 @@ pub fn land(doc: &mut Document, op: &Op, was: Option<&Op>) -> Result<(Op, Op), O
 
 /// Edits made apart that touch the same part of the document as someone
 /// else's. Held back until the person who made them chooses.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Conflict {
     /// What both sides touched, and anything else these ops touch.
     pub keys: BTreeSet<Key>,

@@ -125,6 +125,8 @@ class ShareState extends ChangeNotifier {
         : const BridgeShareReach.off();
     _sent = null;
     _noteRoster();
+    // A guest's copy opened again brings the conflicts it was closed with.
+    held = project.shareConflicts().length;
     notifyListeners();
     _send();
   }

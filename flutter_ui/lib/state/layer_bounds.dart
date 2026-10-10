@@ -79,11 +79,12 @@ const int _maxHeldBlocks = 512;
 /// Empty text still gets a box, half a size wide and as tall as a line of
 /// capitals, since the engine draws it as one transparent pixel. A layer
 /// waiting to be typed into is then visible and says what size it will be
-/// set at.
+/// set at. With a box width it is as wide as the box the words will wrap to.
 Size textLayerBounds(BridgeTextDocument document) {
   final block = measuredText(document);
   if (document.text.isEmpty) {
-    return Size(document.size * 0.5, block.lines.first.baseline);
+    return Size(document.paragraph.boxWidth ?? document.size * 0.5,
+        block.lines.first.baseline);
   }
   return Size(block.width, block.height);
 }

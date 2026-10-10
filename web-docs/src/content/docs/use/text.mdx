@@ -14,7 +14,7 @@ A **Text layer** holds editable text.
 ## Add text
 
 1. Pick the Type tool.
-2. Click in the Viewer.
+2. Click in the Viewer, or drag out a box for the words to wrap to.
 3. Type.
 
 `Shift+Enter` starts a new line. `Enter`, `Escape` or a click elsewhere ends the edit.
@@ -30,7 +30,7 @@ selected it sets what the Type tool makes next, and its heading reads **New text
 | **Style** | The face inside the family: Regular, Bold, Italic. |
 | **Size** | The letter size in pixels. |
 | **Leading** | The distance from one baseline to the next, in pixels. |
-| **Kerning** | **Metrics** uses the pair spacing the font carries. **Off** uses none. |
+| **Kerning** | **Metrics** uses the pair spacing the font carries, and is what new text starts on. **Off** uses none. |
 | **Tracking** | Extra space after every letter, in thousandths of the size. |
 | **Fill** | The letters' colour. Unticked, only the stroke is drawn. |
 | **Stroke**, **Width** | An outline round the letters, its colour and its width in pixels. |
@@ -69,14 +69,18 @@ The **Paragraph** panel sets how the lines sit against each other.
 | Control | What it does |
 | --- | --- |
 | **Align left**, **Align centre**, **Align right** | Which side the lines line up on. That side of the first line stays where it is. |
+| **Justify** | Stretch every line but a paragraph's last across the box. Needs a box width. |
+| **Box width** | The width the words wrap to, in pixels. At 0 there is no box, and a line only ends where you break it. |
 | **Indent left**, **Indent right** | Move the lines in from that side, in pixels. |
 | **Indent first line** | Extra indent for the first line of each paragraph. |
 | **Space before**, **Space after** | Room above and below each paragraph, in pixels. |
 
-Each line you break is a paragraph of its own.
+Each line you break is a paragraph of its own. In a box the words wrap at spaces, and a
+word wider than the box runs past it.
 
 :::note[Not built yet]
-Text in a box that wraps, justification, and vertical type are not built.
+A box has a width and no height. Text without spaces, such as Chinese and Japanese,
+doesn't wrap. Vertical type is not built.
 :::
 
 ## Run it along a path

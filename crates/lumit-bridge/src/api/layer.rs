@@ -2714,6 +2714,27 @@ impl LayerReference {
             .ok_or(BridgeError::InvalidLayer)
     }
 
+    /// This layer as it leaves the project, on the clipboard or in a preset.
+    /// A file an effect reads has the path it had, and not its copy's in this
+    /// machine's cache.
+    fn leaving(&self) -> Result<Layer, BridgeError> {
+        let doc = {
+            let project = self.project()?;
+            let project = project.read().map_err(|_| BridgeError::ReadFailed)?;
+            project.store.snapshot()
+        };
+        // Only a packed project that was opened here holds such a path.
+        if doc.packed.values().all(|entry| entry.original.is_none()) {
+            return self.item();
+        }
+        let mut doc = (*doc).clone();
+        lumit_project::keep_original_paths(&mut doc);
+        doc.comp(self.comp_id)
+            .and_then(|comp| comp.layers.iter().find(|l| l.id == self.layer_id))
+            .cloned()
+            .ok_or(BridgeError::InvalidLayer)
+    }
+
     #[frb(sync)]
     pub fn equals(&self, layer: &LayerReference) -> bool {
         self.comp_id == layer.comp_id
@@ -2777,7 +2798,7 @@ impl LayerReference {
     /// that knows whether the layer being pointed at is there.
     #[frb(sync)]
     pub fn copy_layer(&self) -> Result<String, BridgeError> {
-        let layer = self.item()?;
+        let layer = self.leaving()?;
         serde_json::to_string(&serde_json::json!({
             "format": 1,
             "kind": "layer",
@@ -2804,7 +2825,7 @@ impl LayerReference {
     /// effect — one shape, not two that drift.
     #[frb(sync)]
     pub fn copy_effects(&self, effects: Vec<Uuid>) -> Result<String, BridgeError> {
-        let stack = self.item()?.effects;
+        let stack = self.leaving()?.effects;
         let taken: Vec<_> = if effects.is_empty() {
             stack
         } else {
@@ -2875,7 +2896,7 @@ impl LayerReference {
     /// unexciting, document.
     #[frb(sync)]
     pub fn save_preset(&self, name: String) -> Result<String, BridgeError> {
-        let effects = self.item()?.effects;
+        let effects = self.leaving()?.effects;
         serde_json::to_string_pretty(&serde_json::json!({
             "format": 1,
             "name": name,

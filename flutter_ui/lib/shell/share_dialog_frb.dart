@@ -280,6 +280,25 @@ class _ShareDialogState extends State<_ShareDialog> {
     setState(() => _error = taken ? null : l10n.shareBadInvite);
   }
 
+  /// Take a guest out. The engine replaces the invite as it does, so the one
+  /// they hold stops working. The new one is shown, and its key is kept for
+  /// sharing this project again.
+  void _remove(int person) {
+    final share = widget.app.share;
+    share.remove(person);
+    final invite = _inviteNow();
+    final key = invite?.substring(invite.lastIndexOf('/') + 1);
+    final (id, port) = (_projectId, share.port);
+    if (key != null && id != null && port != null) {
+      _prefs.setShareHosted(id, '$port/$key');
+    }
+    setState(() {
+      _invite = invite;
+      _keptKey = key ?? _keptKey;
+      _sameInvite = false;
+    });
+  }
+
   /// Stop sharing for everyone, or leave. A host's invite is finished with,
   /// so the next time this project is shared it gets a new one.
   void _stop() {
@@ -574,7 +593,7 @@ class _ShareDialogState extends State<_ShareDialog> {
                   HouseButton(
                     key: ValueKey<String>('share-remove-${person.id}'),
                     small: true,
-                    onPressed: () => share.remove(person.id),
+                    onPressed: () => _remove(person.id),
                     child: Text(l10n.shareRemove, style: t.small),
                   ),
               ],

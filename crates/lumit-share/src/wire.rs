@@ -10,12 +10,13 @@ use snow::StatelessTransportState;
 use std::collections::HashMap;
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::net::{Shutdown, TcpStream};
+use std::path::Path;
 use std::sync::mpsc::{Receiver as Outbox, RecvTimeoutError};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 /// Raised whenever a message changes shape.
-pub(crate) const PROTOCOL: u32 = 1;
+pub(crate) const PROTOCOL: u32 = 3;
 
 /// Noise with no long-term keys, both ends proving they hold the invite's
 /// secret before anything else is said.
@@ -54,11 +55,18 @@ pub(crate) enum Message {
         version: String,
         schema: String,
         name: String,
+        /// A number this guest made up, the same each time it comes back,
+        /// which is how the host knows its edits from before. 0 for none.
+        #[serde(default)]
+        token: u64,
     },
     Refused(Refusal),
     /// The host's answer: who the guest is, the document, and who is here.
+    /// `heard` is the last edit the host took from this guest on a connection
+    /// before this one, which the document already holds. 0 for none.
     Welcome {
         you: u32,
+        heard: u64,
         document: Box<Document>,
         people: Vec<Person>,
     },
@@ -95,6 +103,11 @@ pub(crate) enum Message {
     Closed,
     /// The host has taken this guest out of the project.
     Removed,
+    /// The host has replaced the invite, having taken someone out. A guest
+    /// finds its host by this secret from now on.
+    Invite {
+        key: [u8; 32],
+    },
 }
 
 /// File name to this machine's path for it, for every file an effect on this
@@ -117,10 +130,16 @@ fn file_name(path: &str) -> &str {
 /// - no path on the sender's disk crosses. A media reference keeps its file
 ///   name and fingerprint, which is what the other end finds its copy by.
 /// - an effect's file keeps its name, and the receiver puts back its own path
-///   for a file of that name if it has one.
+///   for a file of that name if it has one, or else the path of one of that
+///   name in `root`, the folder it keeps the project's footage under.
 /// - the cache folder is each machine's own. An edit to it becomes an empty
 ///   batch, which keeps its place in the order and changes nothing.
-fn scrub(value: &mut Value, names: &mut HashMap<String, String>, outgoing: bool) {
+fn scrub(
+    value: &mut Value,
+    names: &mut HashMap<String, String>,
+    root: Option<&Path>,
+    outgoing: bool,
+) {
     match value {
         Value::Object(map) => {
             map.remove("absolute_path");
@@ -139,7 +158,14 @@ fn scrub(value: &mut Value, names: &mut HashMap<String, String>, outgoing: bool)
                             }
                             *path = name;
                         } else {
-                            *path = names.get(&name).cloned().unwrap_or(name);
+                            // ponytail: the top of the folder only, by name.
+                            // A walk, when files kept in folders inside it
+                            // have to be found too.
+                            let found = names.get(&name).cloned().or_else(|| {
+                                let here = root?.join(&name);
+                                here.is_file().then(|| here.to_string_lossy().into_owned())
+                            });
+                            *path = found.unwrap_or(name);
                         }
                     }
                 }
@@ -150,12 +176,12 @@ fn scrub(value: &mut Value, names: &mut HashMap<String, String>, outgoing: bool)
                 map.insert("ops".into(), Value::Array(Vec::new()));
             }
             for inner in map.values_mut() {
-                scrub(inner, names, outgoing);
+                scrub(inner, names, root, outgoing);
             }
         }
         Value::Array(items) => {
             for inner in items {
-                scrub(inner, names, outgoing);
+                scrub(inner, names, root, outgoing);
             }
         }
         _ => {}
@@ -164,13 +190,19 @@ fn scrub(value: &mut Value, names: &mut HashMap<String, String>, outgoing: bool)
 
 pub(crate) fn encode(message: &Message, names: &Names) -> Result<Arc<[u8]>, ShareError> {
     let mut value = serde_json::to_value(message)?;
-    scrub(&mut value, &mut names.lock(), true);
+    scrub(&mut value, &mut names.lock(), None, true);
     Ok(serde_json::to_vec(&value)?.into())
 }
 
-pub(crate) fn decode(bytes: &[u8], names: &Names) -> Result<Message, ShareError> {
+/// Read a message. `root` is the folder this machine keeps the project's
+/// footage under, where a file an effect names is looked for.
+pub(crate) fn decode(
+    bytes: &[u8],
+    names: &Names,
+    root: Option<&Path>,
+) -> Result<Message, ShareError> {
     let mut value: Value = serde_json::from_slice(bytes)?;
-    scrub(&mut value, &mut names.lock(), false);
+    scrub(&mut value, &mut names.lock(), root, false);
     Ok(serde_json::from_value(value)?)
 }
 
@@ -394,7 +426,7 @@ mod tests {
             ],
         }}});
         let bytes = serde_json::to_vec(&hostile).unwrap();
-        let message = decode(&bytes, &Names::default()).unwrap();
+        let message = decode(&bytes, &Names::default(), None).unwrap();
         let Message::Submit {
             op: Op::Batch { ops },
             ..

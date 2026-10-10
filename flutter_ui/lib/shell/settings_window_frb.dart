@@ -886,6 +886,8 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           workspace.performance.fullResDragPreviews =
               shipped.fullResDragPreviews;
           setFullResDragPreviews(fullRes: shipped.fullResDragPreviews);
+          workspace.performance.hardwareDecode = shipped.hardwareDecode;
+          setHardwareDecode(on_: shipped.hardwareDecode);
           workspace.settingsChanged();
           resetRealtime();
         });
@@ -1439,6 +1441,9 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         ],
       );
 
+  /// Puts the saved accent back while a swatch is being hovered.
+  VoidCallback? _endAccentPreview;
+
   /// The six one-click accents, and the hex of whatever the accent actually
   /// is — which is not always one of the six, because the theme editor can
   /// set any colour at all and a custom theme carries its own.
@@ -1448,21 +1453,33 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           for (final colour in LumitTheme.accentPresets) ...[
             if (colour != LumitTheme.accentPresets.first)
               const SizedBox(width: 4),
-            GestureDetector(
-              key: ValueKey<String>('settings-accent-${_hex(colour)}'),
-              behavior: HitTestBehavior.opaque,
-              onTap: () => setState(() => ui.workspace.setAccent(colour)),
-              child: Container(
-                width: _swatch,
-                height: _swatch,
-                decoration: BoxDecoration(
-                  color: colour,
-                  borderRadius: BorderRadius.circular(t.tokens.controlRadius),
-                  // The chosen one is ringed, so which of the six is in force
-                  // is readable without reading the hex beside them.
-                  border: _hex(colour) == _hex(t.accent)
-                      ? Border.all(color: t.textPrimary)
-                      : null,
+            // Hovering a swatch previews that accent without picking it.
+            MouseRegion(
+              onEnter: (_) {
+                _endAccentPreview = () => ui.workspace.previewAccent(null);
+                ui.workspace.previewAccent(colour);
+              },
+              onExit: (_) {
+                _endAccentPreview = null;
+                ui.workspace.previewAccent(null);
+              },
+              child: GestureDetector(
+                key: ValueKey<String>('settings-accent-${_hex(colour)}'),
+                behavior: HitTestBehavior.opaque,
+                onTap: () => setState(() => ui.workspace.setAccent(colour)),
+                child: Container(
+                  width: _swatch,
+                  height: _swatch,
+                  decoration: BoxDecoration(
+                    color: colour,
+                    borderRadius:
+                        BorderRadius.circular(t.tokens.controlRadius),
+                    // The chosen one is ringed, so which of the six is in
+                    // force is readable without reading the hex beside them.
+                    border: _hex(colour) == _hex(t.accent)
+                        ? Border.all(color: t.textPrimary)
+                        : null,
+                  ),
                 ),
               ),
             ),
@@ -2683,6 +2700,9 @@ class _SettingsWindowState extends State<_SettingsWindow> {
 
   @override
   void dispose() {
+    // A window shut with the pointer still on a swatch gets no exit, so the
+    // previewed accent is put back here, once the tree has settled.
+    if (_endAccentPreview case final end?) scheduleMicrotask(end);
     _perfTimer?.cancel();
     _unwatchAddons();
     _search?.dispose();
@@ -2752,6 +2772,12 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               value: ui.workspace.performance.fullResDragPreviews, set: (on) {
             ui.workspace.performance.fullResDragPreviews = on;
             setFullResDragPreviews(fullRes: on);
+            ui.workspace.settingsChanged();
+          }),
+          _flag(t, 'settings-hardware-decode', l10n.settingsHardwareDecode,
+              value: ui.workspace.performance.hardwareDecode, set: (on) {
+            ui.workspace.performance.hardwareDecode = on;
+            setHardwareDecode(on_: on);
             ui.workspace.settingsChanged();
           }),
           _row(
