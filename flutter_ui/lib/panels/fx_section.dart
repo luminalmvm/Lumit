@@ -699,14 +699,21 @@ class _RenameFieldState extends State<_RenameField> {
 /// its curve's colour while selected, and carrying a dot per axis on a
 /// multi-axis property. The row that owns the property builds it once and hands
 /// the same widget to whichever layout it draws, so the two cannot drift.
+///
+/// [grows] lets the row be taller than one line, for a control that drops
+/// part of itself onto a second line when the panel is narrow.
 Widget fxTwoColumnRow({
   required BuildContext context,
   required Widget name,
   Widget? keyframeControls,
   required Widget control,
+  bool grows = false,
 }) =>
-    SizedBox(
-      height: fxRowHeight(ThemeScope.of(context).theme),
+    ConstrainedBox(
+      constraints: grows
+          ? BoxConstraints(minHeight: fxRowHeight(ThemeScope.of(context).theme))
+          : BoxConstraints.tightFor(
+              height: fxRowHeight(ThemeScope.of(context).theme)),
       child: LayoutBuilder(
         builder: (context, constraints) => Row(
           children: [
