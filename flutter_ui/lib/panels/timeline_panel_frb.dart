@@ -1950,6 +1950,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     _ui!.deleteClaim = _claimDelete;
     _ui!.copyClaim = _claimCopy;
     _ui!.pasteClaim = _claimPaste;
+    _ui!.noteTimelineView = _rememberShownView;
     _publishEasingClaim();
     // An effect can be picked in the Effect controls panel too, and one
     // selection means the row here lights up when it is.
@@ -3167,6 +3168,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     if (_ui?.deleteClaim == _claimDelete) _ui!.deleteClaim = _priorDeleteClaim;
     if (_ui?.copyClaim == _claimCopy) _ui!.copyClaim = _priorCopyClaim;
     if (_ui?.pasteClaim == _claimPaste) _ui!.pasteClaim = _priorPasteClaim;
+    if (_ui?.noteTimelineView == _rememberShownView) {
+      _ui!.noteTimelineView = null;
+    }
     if (_ui?.easingApply.value == _applyEasing) _ui!.easingApply.value = null;
     if (_ui?.easingKey.value?.apply == _applyKeyEase) {
       _ui!.easingKey.value = null;
@@ -3398,6 +3402,34 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// of front can be told from an ordinary rebuild.
   UuidValue? _shownComp;
 
+  /// Write down the zoom and scroll on screen as [comp]'s. Called when a comp
+  /// is left, and whenever the session is about to be saved.
+  void _rememberView(UuidValue? comp) {
+    final position = positionOf(_hLane);
+    // Nothing is laid out, so there is no view to write down.
+    if (comp == null || position == null) return;
+    final extent = position.maxScrollExtent;
+    _ui?.rememberCompView(
+      comp.toString(),
+      zoom: _zoomMotion.target,
+      // A fraction of the scrollable range rather than a pixel offset: the
+      // panel may be a different width when the user comes back, and it is
+      // the stretch of time they were looking at that they want back.
+      scroll: extent > 0 ? (position.pixels / extent).clamp(0.0, 1.0) : 0.0,
+      scrollY: positionOf(_vOutline)?.pixels,
+    );
+  }
+
+  void _rememberShownView() => _rememberView(_shownComp);
+
+  /// The panel is on its way out, and its scroll positions are still attached
+  /// here, which they are not by `dispose`.
+  @override
+  void deactivate() {
+    _rememberShownView();
+    super.deactivate();
+  }
+
   /// This panel's half of "a composition remembers where you were":
   /// the magnification and how far the lanes are scrolled. The shell holds the
   /// other half, the playhead, because that is not the Timeline's alone.
@@ -3422,23 +3454,15 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         if (mounted) _publishRowSelection();
       });
     }
-    if (was != null) {
-      final position = positionOf(_hLane);
-      final extent = position?.maxScrollExtent ?? 0;
-      ui.rememberCompView(
-        was.toString(),
-        zoom: _zoomMotion.target,
-        // A fraction of the scrollable range rather than a pixel offset: the
-        // panel may be a different width when the user comes back, and it is
-        // the stretch of time they were looking at that they want back.
-        scroll: extent > 0 ? (position!.pixels / extent).clamp(0.0, 1.0) : 0.0,
-      );
-    }
+    _rememberView(was);
     if (now == null) return;
     final view = ui.compViews[now.toString()];
     if (view == null) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _shownComp != now) return;
+      // The rows are laid out by now. The lanes follow the outline.
+      final rows = positionOf(_vOutline);
+      rows?.jumpTo(view.scrollY.clamp(0.0, rows.maxScrollExtent));
       // Not "the zoom before a fit": that belonged to the comp just left.
       _zoomBeforeFit = null;
       _setZoom(view.zoom.clamp(1.0, _maxZoom), fly: false);
