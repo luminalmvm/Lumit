@@ -1,0 +1,315 @@
+---
+import { statSync } from "node:fs";
+import { resolve } from "node:path";
+import { Image } from "astro:assets";
+import Base from "../layouts/Base.astro";
+import SectionHead from "../components/SectionHead.astro";
+
+// The projects the home page's pictures were taken from, to be had as files.
+// Each one has its project in public/projects, and in src/assets/projects a
+// clip of it playing and one frame of it, which is what stands there until
+// the clip has loaded. The clips are played by scripts/clips.ts.
+import solsticeShot from "../assets/projects/solstice.png";
+import solsticeClip from "../assets/projects/solstice.mp4";
+import irisShot from "../assets/projects/iris.png";
+import irisClip from "../assets/projects/iris.mp4";
+import lumaKeyShot from "../assets/projects/luma-key.png";
+import lumaKeyClip from "../assets/projects/luma-key.mp4";
+import stackShot from "../assets/projects/stack.png";
+import stackClip from "../assets/projects/stack.mp4";
+import pulseShot from "../assets/projects/pulse.png";
+import pulseClip from "../assets/projects/pulse.mp4";
+import morphShot from "../assets/projects/morph.png";
+import morphClip from "../assets/projects/morph.mp4";
+
+// A file's size is read off the file, from web/, which is where both
+// `astro dev` and `astro build` are run.
+const file = (slug: string) => {
+  const kb = statSync(resolve(process.cwd(), "public/projects", `${slug}.lum`)).size / 1024;
+  return { href: `/projects/${slug}.lum`, size: `${Math.round(kb)} KB` };
+};
+
+// The fonts are all free ones. A project opened without its fonts is set in
+// Inter, so each card says which to install and where they are.
+const font = (name: string) => ({
+  name,
+  href: `https://fonts.google.com/specimen/${name.replaceAll(" ", "+")}`,
+});
+
+const projects = [
+  {
+    slug: "solstice",
+    shot: solsticeShot,
+    clip: solsticeClip,
+    name: "Solstice",
+    tag: "Light and glow",
+    p: "A burst of light, a drift of stars, and a horizon. Three cameras over 3D layers, particles, and the whole look on two adjustment layers.",
+    alt: "Cream and amber rays bursting from a bright point over a deep blue night sky",
+    layers: 34,
+    fonts: [font("Cinzel"), font("Lora")],
+    c: "amber",
+  },
+  {
+    slug: "iris",
+    shot: irisShot,
+    clip: irisClip,
+    name: "Iris",
+    tag: "Effects and a shader",
+    p: "An eye opens and the inside is a kaleidoscope. The fold is a Custom shader with its own rows, and the spiral is one petal and its repeater.",
+    alt: "A spiral of small bright eyes turning round a pink light on a dark violet ground",
+    layers: 30,
+    fonts: [font("Abril Fatface"), font("Raleway"), font("Playfair Display")],
+    c: "magenta",
+  },
+  {
+    slug: "luma-key",
+    shot: lumaKeyShot,
+    clip: lumaKeyClip,
+    name: "Luma Key",
+    tag: "Isometric",
+    p: "A film lot on a floating island that builds itself. The points family lays the tiles, plants the trees, and strings the lights.",
+    alt: "An isometric film studio lot on a floating island, with its name lying on the ground beside it",
+    layers: 55,
+    fonts: [font("Oswald"), font("Lora")],
+    c: "indigo",
+    needs: "Needs a version newer than 0.6.0",
+  },
+  {
+    slug: "stack",
+    shot: stackShot,
+    clip: stackClip,
+    name: "Stack",
+    tag: "Type and blend modes",
+    p: "A picture is a stack of layers, shown flat and then turned in space. Blend modes, track mattes, and a camera with depth of field.",
+    alt: "The words Stack, Blend, Matte and Depth in black on overlapping indigo, mint, amber and coral bands",
+    layers: 40,
+    fonts: [font("Montserrat"), font("IBM Plex Mono")],
+    c: "mint",
+  },
+  {
+    slug: "pulse",
+    shot: pulseShot,
+    clip: pulseClip,
+    name: "Pulse",
+    tag: "Interface motion",
+    p: "A film for a made-up music player. One camera move from start to finish, glow with falloff, and numbers driven by expressions.",
+    alt: "A music player card seen at an angle in the dark, with a level meter and a volume dial reading 82",
+    layers: 85,
+    fonts: [font("Montserrat"), font("IBM Plex Mono")],
+    c: "azure",
+  },
+  {
+    slug: "morph",
+    shot: morphShot,
+    clip: morphClip,
+    name: "Morph",
+    tag: "Shape morph",
+    p: "One shape through seven pictures, ending on the mark. Every change is path keyframes, and the holes morph as well as the outline.",
+    alt: "A white soundwave of rounded bars on an indigo ground",
+    layers: 53,
+    fonts: [font("Nunito")],
+    c: "coral",
+  },
+].map((project) => ({ ...project, file: file(project.slug) }));
+---
+
+<Base
+  title="Projects - Lumit"
+  description="Six short motion-graphics projects made in Lumit, to download, open and take apart."
+>
+  <section class="pt-14 pb-24 sm:pt-20 sm:pb-32">
+    <div class="wrap flex flex-col gap-14">
+      <SectionHead page kicker="Projects" title="Made in Lumit.">
+        <Fragment slot="lede">
+          Six short pieces, the same ones in the pictures on the home page. Each is a
+          project file you can download, open, and take apart.
+        </Fragment>
+      </SectionHead>
+
+      <div class="grid gap-5 lg:grid-cols-2">
+        {
+          projects.map((project, n) => (
+            <article class="project lit" style={`--c:var(--label-${project.c})`}>
+              <div class="picture">
+                <Image
+                  class="block w-full"
+                  src={project.shot}
+                  alt={project.alt}
+                  widths={[640, 960, 1280]}
+                  sizes="(min-width: 1360px) 590px, (min-width: 1024px) 46vw, 100vw"
+                  loading={n < 2 ? "eager" : "lazy"}
+                  quality={88}
+                />
+                <video class="clip" data-clip src={project.clip} muted loop playsinline preload="none" tabindex="-1" aria-hidden="true" />
+              </div>
+              <div class="body">
+                <p class="tag"><i class="dot" />{project.tag}</p>
+                <h2 class="mt-3 text-[26px] leading-[1.1] tracking-[-0.03em]">{project.name}</h2>
+                <p class="mt-3 max-w-[520px] text-[15px] leading-[1.45] text-fg-3">{project.p}</p>
+
+                <dl class="facts">
+                  <div>
+                    <dt>Length</dt>
+                    <dd>10 seconds, {project.layers} layers</dd>
+                  </div>
+                  <div>
+                    <dt>Fonts</dt>
+                    <dd>
+                      {/* Kept on one line, or a space lands before each comma. */}
+                      {project.fonts.map((f, i) => <Fragment>{i > 0 && ", "}<a href={f.href}>{f.name}</a></Fragment>)}
+                    </dd>
+                  </div>
+                </dl>
+
+                <div class="get">
+                  <a class="btn" href={project.file.href} download>
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                      <path d="M8 2v9M4 7l4 4 4-4M2 13h12" />
+                    </svg>
+                    Download
+                    <span class="size">{project.file.size}</span>
+                  </a>
+                  {project.needs && <span class="needs">{project.needs}</span>}
+                </div>
+              </div>
+            </article>
+          ))
+        }
+      </div>
+
+      <ul class="notes">
+        <li>
+          The fonts are free ones from Google Fonts. A project opened without its fonts
+          is set in Inter until they're installed.
+        </li>
+        <li>
+          Luma Key uses the points family of effects, which is newer than 0.6.0. The
+          rest were made on the same build, so try a newer version if one opens wrongly.
+        </li>
+        <li>
+          Open one with File ▸ Open, then twirl a layer open or press the Graph button
+          to see how a move was made.
+        </li>
+      </ul>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .project {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-card);
+    background: var(--color-ink-2);
+  }
+  /* The picture, and the clip that lies over it once it is playing. */
+  .picture {
+    position: relative;
+    border-bottom: 1px solid var(--color-line);
+    background: var(--color-ink);
+  }
+  .body {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    padding: 28px;
+  }
+  .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--c);
+  }
+
+  /* What a project is, in two short rows. */
+  .facts {
+    display: grid;
+    gap: 8px;
+    margin: 22px 0 0;
+    padding-top: 18px;
+    border-top: 1px solid var(--color-line);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.4;
+  }
+  .facts div {
+    display: grid;
+    grid-template-columns: 64px minmax(0, 1fr);
+    gap: 12px;
+  }
+  .facts dt {
+    color: var(--color-fg-4);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-size: 10px;
+    line-height: 1.7;
+  }
+  .facts dd {
+    margin: 0;
+    color: var(--color-fg-2);
+  }
+  .facts a {
+    color: inherit;
+    text-decoration: underline;
+    text-decoration-color: var(--color-line-2);
+    text-underline-offset: 3px;
+    transition:
+      color 0.15s,
+      text-decoration-color 0.15s;
+  }
+  .facts a:hover {
+    color: var(--color-fg);
+    text-decoration-color: var(--color-accent);
+  }
+
+  /* The download sits at the foot of its card, whatever the card's height. */
+  .get {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px 16px;
+    margin-top: auto;
+    padding-top: 24px;
+  }
+  .size {
+    color: var(--color-fg-4);
+    font-family: var(--font-mono);
+    font-size: 11px;
+  }
+  .needs {
+    color: var(--color-key);
+    font-family: var(--font-mono);
+    font-size: 11px;
+  }
+
+  .notes {
+    display: grid;
+    gap: 10px;
+    margin: 0;
+    padding: 0;
+    max-width: 720px;
+    list-style: none;
+    color: var(--color-fg-3);
+    font-size: 15px;
+    line-height: 1.45;
+  }
+  .notes li {
+    position: relative;
+    padding-left: 18px;
+  }
+  .notes li::before {
+    content: "";
+    position: absolute;
+    top: 0.6em;
+    left: 0;
+    width: 6px;
+    height: 6px;
+    border: 1px solid var(--color-fg-4);
+    transform: rotate(45deg);
+  }
+</style>
+
+<script>
+  import "../scripts/clips";
+</script>

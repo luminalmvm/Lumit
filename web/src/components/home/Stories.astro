@@ -40,7 +40,7 @@ const stories = [
     full: await fullSize(setupShot),
     alt: "The setup screen: After Effects or Vegas editing style, three interface styles, colour scheme, toolbar position and motion",
     tag: "Setup",
-    h: "After Effects or Vegas, you choose.",
+    h: "Customise and work your way.",
     p: "The setup screen asks how you like to edit, and each choice applies as you pick. All of them can be changed later in Settings.",
     c: "var(--label-mint)",
     wide: false,
@@ -116,27 +116,7 @@ const stories = [
 </style>
 
 <script>
-  // A clip plays while its card is on screen and stops when it is not, so a
-  // page of them costs what the ones in view cost. Nothing is fetched until a
-  // card first comes into view. A visitor who has asked for less motion gets
-  // the pictures. A workspace behind the front one in Meet the interface
-  // keeps still, and its clip starts when it is brought forward.
-  const clips = document.querySelectorAll<HTMLVideoElement>("[data-clip]");
-  if (clips.length && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
-    const seen = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          const clip = entry.target as HTMLVideoElement;
-          const behind = clip.closest("[data-layer]:not([aria-current])");
-          if (entry.isIntersecting && !behind) clip.play().catch(() => {});
-          else clip.pause();
-        }
-      },
-      { threshold: 0.35 },
-    );
-    for (const clip of clips) {
-      clip.addEventListener("playing", () => clip.classList.add("playing"), { once: true });
-      seen.observe(clip);
-    }
-  }
+  // Every clip on the page is played by this, not only the ones in this
+  // section.
+  import "../../scripts/clips";
 </script>

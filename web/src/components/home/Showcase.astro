@@ -10,8 +10,12 @@ import heroShot from "../../assets/shots/hero.png";
 // The wide picture's clip: the same window with the edit playing, and the
 // picture is its first frame (see Stories.astro, which plays every clip).
 import heroClip from "../../assets/clips/hero.mp4";
-import timelineShot from "../../assets/shots/timeline.png";
-import nodeGraphShot from "../../assets/shots/node-graph.png";
+// The two cards under it each play a clip too: keyframes boxed up and moved
+// in the Timeline, and a shader's own rows dragged in Effect controls.
+import lanesShot from "../../assets/shots/lanes.png";
+import lanesClip from "../../assets/clips/lanes.mp4";
+import effectsShot from "../../assets/shots/effects.png";
+import effectsClip from "../../assets/clips/effects.mp4";
 
 // Each picture again at the size it was captured, for the enlarged view a
 // click opens. At the page's own width the interface in them is too small to
@@ -26,17 +30,19 @@ const heroFull = await fullSize(heroShot);
 // The two cards under the wide one.
 const shots = [
   {
-    src: timelineShot,
-    full: await fullSize(timelineShot),
-    alt: "Lumit's timeline lanes beside the graph editor: clip bars and keyframes on one side, a property's curve on the other",
+    src: lanesShot,
+    clip: lanesClip,
+    full: await fullSize(lanesShot),
+    alt: "Lumit's Timeline showing only the keyframed rows of several layers: their names and values on the left, their keyframes in the lanes on the right",
     h: "Intuitively designed.",
     p: "Bring your knowledge directly into Lumit. We know time matters, so you can work without interruption.",
     c: "var(--label-mint)",
   },
   {
-    src: nodeGraphShot,
-    full: await fullSize(nodeGraphShot),
-    alt: "Lumit's node graph: a layer wired through two Glows, Add grain, a LUT, Levels and Motion blur",
+    src: effectsShot,
+    clip: effectsClip,
+    full: await fullSize(effectsShot),
+    alt: "Effect controls beside the Viewer: a Custom shader's own Wedges, Turn, Zoom and Slice rows, and the kaleidoscope they fold the picture into",
     h: "Dynamic effects.",
     p: "Effects can be driven by expressions, altered in the node graph, or simply in the effect controls. You decide.",
     c: "var(--label-azure)",
@@ -69,7 +75,7 @@ const [latest] = await releasesNewestFirst();
         <Image
           class="block w-full"
           src={heroShot}
-          alt="Lumit mid-edit: the viewer showing a graded frame, effect controls at the left, effects and presets at the right, and a full timeline of layers and keyframes below"
+          alt="Lumit mid-edit: the Viewer showing a burst of light over a night sky, effect controls at the left, effects and presets at the right, and a timeline of layers and keyframes below"
           widths={[720, 1200, 1800]}
           sizes="(min-width: 1360px) 1200px, 100vw"
           loading="eager"
@@ -85,7 +91,7 @@ const [latest] = await releasesNewestFirst();
     {
       shots.map((s, i) => (
         <figure class="lit m-0 flex flex-col rounded-card border border-line bg-ink-2" data-reveal style={`--i:${i};--c:${s.c}`}>
-          <button type="button" class="zoom shot border-b border-line bg-ink" data-zoom={s.full.url} data-w={s.full.w} data-h={s.full.h} aria-label="Enlarge this screenshot">
+          <button type="button" class="zoom shot relative border-b border-line bg-ink" data-zoom={s.full.url} data-w={s.full.w} data-h={s.full.h} aria-label="Enlarge this screenshot">
             <Image
               class="block w-full"
               src={s.src}
@@ -95,6 +101,7 @@ const [latest] = await releasesNewestFirst();
               loading="lazy"
               quality={90}
             />
+            <video class="clip" data-clip src={s.clip} muted loop playsinline preload="none" tabindex="-1" aria-hidden="true" />
           </button>
           <figcaption class="flex flex-col gap-2.5 p-7">
             <span class="font-mono text-[18px] tracking-[-0.01em] text-fg">{s.h}</span>
@@ -104,6 +111,12 @@ const [latest] = await releasesNewestFirst();
       ))
     }
   </div>
+
+  {/* What is in the pictures can be had: the projects page hands them out. */}
+  <p class="made" data-reveal>
+    <span>The projects in these pictures were made in Lumit, and you can open them yourself.</span>
+    <a class="go" href="/projects">Get the projects</a>
+  </p>
 </section>
 
 <style>
@@ -142,6 +155,18 @@ const [latest] = await releasesNewestFirst();
     font-family: var(--font-mono);
     font-size: 12px;
     line-height: 1;
+  }
+
+  .made {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px 32px;
+    margin: -16px 0 0;
+    color: var(--color-fg-3);
+    font-size: 15px;
+    line-height: 1.45;
   }
 
   /* The hero's three colours again, out of focus behind the wide picture, so

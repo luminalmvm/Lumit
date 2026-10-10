@@ -125,8 +125,8 @@ frame around it:
 | File | Where it appears |
 | --- | --- |
 | `hero.png` | the wide picture under "Composite the way you know" |
-| `timeline.png` | "Intuitively designed." |
-| `node-graph.png` | "Dynamic effects." |
+| `lanes.png` | "Intuitively designed." |
+| `effects.png` | "Dynamic effects." |
 | `workspace.png` | Meet the interface, Timeline |
 | `graph-workspace.png` | Meet the interface, Graph |
 | `nodes-workspace.png` | Meet the interface, Nodes |
@@ -140,12 +140,16 @@ They sit in `src/assets/` rather than `public/` so Astro's `<Image>` resizes
 each one, re-encodes it as WebP and writes the `srcset` the page serves. Source
 format and size do not matter; a 1.5 MB PNG leaves the build as a 149 KB WebP.
 To replace a picture, overwrite the file with a capture of the same shape - the
-two card pictures are cut to 580:260, the rest are whole windows or whole
+two card pictures are both 1910 by 666, the rest are whole windows or whole
 panels shown at their own aspect.
 
-The tab pictures are whole windows, one per workspace. `timeline.png` is two
-captures cut together on the diagonal, and `node-graph.png` is cut out of
-`nodes-workspace.png` - so replacing that one means recutting this one.
+The tab pictures are whole windows, one per workspace. The two card pictures
+are cut out of a window with the Timeline given half its height: `lanes.png`
+is the Timeline from its left edge, and `effects.png` is the row above it,
+Effect controls beside the Viewer.
+
+The pictures are of motion-graphics projects built in Lumit for the site, and
+Meet the interface is the one section still on an edit of footage.
 
 The four `story-` pictures are cut out of whole-window captures, so the interface
 in them can be read. A wide card and a narrow one share a row, and the two
@@ -157,10 +161,10 @@ drawn in `src/components/home/Features.astro`.
 
 ## Clips
 
-The wide picture and the four `story-` cards each play a clip over the picture. The
-clips are in `src/assets/clips/`, one MP4 a picture under the picture's own name, with
-no sound: `hero.mp4` is the edit playing at its own 24 frames a second, and the rest
-are 30. A clip is the same box as its picture and the picture is the clip's first
+The wide picture, the two cards under it, the four workspaces and the four `story-`
+cards each play a clip over the picture. The clips are in `src/assets/clips/`, one MP4
+a picture under the picture's own name, with no sound, at 30 frames a second. A clip
+is the same box as its picture and the picture is the clip's first
 frame, so replacing one means replacing both. A clip is fetched when it first comes on
 screen, plays while it is in view, and is left out for a visitor who has asked for
 less motion.
@@ -170,6 +174,22 @@ the state a frame wants, waits for it to draw, and saves the picture, and ffmpeg
 the clip from the frames. The pointer in them is drawn by the script, since the capture
 reads Lumit's own picture and the system's pointer is not in it. The script is not
 checked in.
+
+## Projects
+
+`/projects` hands out the motion-graphics projects the front page's pictures are
+of. Each one is three files under one name: the project in `public/projects/` as a
+`.lum`, and in `src/assets/projects/` a PNG of one frame at 1920 by 1080 with an MP4
+of the whole piece at half that size, 30 frames a second, and no sound. The card's
+words, its layer count, and the fonts it names are in `src/pages/projects.astro`, and
+the size beside the download is read off the file when the site is built.
+
+To replace a project, save it over its `.lum`, export the piece again for the MP4, and
+save one frame of it for the PNG. If its fonts or layer count changed, change them on
+its card too. A project set in a font the visitor does not have opens in Inter, which
+is why each card names its fonts.
+
+The clips here and on the front page are played by `src/scripts/clips.ts`.
 
 ## Media
 
