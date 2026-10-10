@@ -42,7 +42,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1995441542;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -890991448;
 
 // Section: executor
 
@@ -8511,6 +8511,7 @@ fn wire__crate__api__share__join_shared_project_impl(
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_invite = <String>::sse_decode(&mut deserializer);
             let api_name = <String>::sse_decode(&mut deserializer);
+            let api_password = <Option<String>>::sse_decode(&mut deserializer);
             let api_footage = <Option<String>>::sse_decode(&mut deserializer);
             let api_on_change_stream = <Option<
                 StreamSink<
@@ -8530,6 +8531,7 @@ fn wire__crate__api__share__join_shared_project_impl(
                     let output_ok = crate::api::share::join_shared_project(
                         api_invite,
                         api_name,
+                        api_password,
                         api_footage,
                         api_on_change_stream,
                         api_events,
@@ -15858,7 +15860,9 @@ fn wire__crate__api__project__project_reference_share_impl(
             let api_name = <String>::sse_decode(&mut deserializer);
             let api_port = <u16>::sse_decode(&mut deserializer);
             let api_key = <Option<String>>::sse_decode(&mut deserializer);
+            let api_password = <Option<String>>::sse_decode(&mut deserializer);
             let api_outside = <bool>::sse_decode(&mut deserializer);
+            let api_relay = <Option<String>>::sse_decode(&mut deserializer);
             let api_events = <Option<
                 StreamSink<
                     crate::api::share::BridgeShareEvent,
@@ -15872,7 +15876,9 @@ fn wire__crate__api__project__project_reference_share_impl(
                     api_name,
                     api_port,
                     api_key,
+                    api_password,
                     api_outside,
+                    api_relay,
                     api_events,
                 )?;
                 Ok(output_ok)
@@ -16001,14 +16007,14 @@ fn wire__crate__api__project__project_reference_share_id_impl(
         },
     )
 }
-fn wire__crate__api__project__project_reference_share_invite_impl(
+fn wire__crate__api__project__project_reference_share_key_impl(
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
     data_len_: i32,
 ) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
     FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
         flutter_rust_bridge::for_generated::TaskInfo {
-            debug_name: "project_reference_share_invite",
+            debug_name: "project_reference_share_key",
             port: None,
             mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
         },
@@ -16023,11 +16029,41 @@ fn wire__crate__api__project__project_reference_share_invite_impl(
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_that = <crate::api::project::ProjectReference>::sse_decode(&mut deserializer);
-            let api_address = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, BridgeError>((move || {
+                let output_ok = crate::api::project::ProjectReference::share_key(&api_that)?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__project__project_reference_share_link_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "project_reference_share_link",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <crate::api::project::ProjectReference>::sse_decode(&mut deserializer);
+            let api_address = <Option<String>>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, BridgeError>((move || {
                 let output_ok =
-                    crate::api::project::ProjectReference::share_invite(&api_that, api_address)?;
+                    crate::api::project::ProjectReference::share_link(&api_that, api_address)?;
                 Ok(output_ok)
             })())
         },
@@ -16165,10 +16201,44 @@ fn wire__crate__api__project__project_reference_share_reinvite_impl(
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_that = <crate::api::project::ProjectReference>::sse_decode(&mut deserializer);
             let api_invite = <String>::sse_decode(&mut deserializer);
+            let api_password = <Option<String>>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, BridgeError>((move || {
-                let output_ok =
-                    crate::api::project::ProjectReference::share_reinvite(&api_that, api_invite)?;
+                let output_ok = crate::api::project::ProjectReference::share_reinvite(
+                    &api_that,
+                    api_invite,
+                    api_password,
+                )?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__project__project_reference_share_relayed_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "project_reference_share_relayed",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <crate::api::project::ProjectReference>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, BridgeError>((move || {
+                let output_ok = crate::api::project::ProjectReference::share_relayed(&api_that)?;
                 Ok(output_ok)
             })())
         },
@@ -17353,14 +17423,75 @@ fn wire__crate__api__share__share_default_port_impl(
         },
     )
 }
-fn wire__crate__api__share__share_local_address_impl(
+fn wire__crate__api__share__share_link_in_impl(
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
     data_len_: i32,
 ) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
     FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
         flutter_rust_bridge::for_generated::TaskInfo {
-            debug_name: "share_local_address",
+            debug_name: "share_link_in",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_text = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let output_ok = Result::<_, ()>::Ok(crate::api::share::share_link_in(api_text))?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__share__share_link_locked_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "share_link_locked",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_text = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let output_ok =
+                    Result::<_, ()>::Ok(crate::api::share::share_link_locked(api_text))?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__share__share_relay_port_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "share_relay_port",
             port: None,
             mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
         },
@@ -17376,7 +17507,7 @@ fn wire__crate__api__share__share_local_address_impl(
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             deserializer.end();
             transform_result_sse::<_, ()>((move || {
-                let output_ok = Result::<_, ()>::Ok(crate::api::share::share_local_address())?;
+                let output_ok = Result::<_, ()>::Ok(crate::api::share::share_relay_port())?;
                 Ok(output_ok)
             })())
         },
@@ -19637,19 +19768,22 @@ impl SseDecode for crate::api::share::BridgeJoinOutcome {
                 return crate::api::share::BridgeJoinOutcome::BadInvite;
             }
             2 => {
-                return crate::api::share::BridgeJoinOutcome::Unreachable;
+                return crate::api::share::BridgeJoinOutcome::PasswordNeeded;
             }
             3 => {
+                return crate::api::share::BridgeJoinOutcome::Unreachable;
+            }
+            4 => {
                 let mut var_host = <String>::sse_decode(deserializer);
                 return crate::api::share::BridgeJoinOutcome::VersionMismatch { host: var_host };
             }
-            4 => {
+            5 => {
                 return crate::api::share::BridgeJoinOutcome::Full;
             }
-            5 => {
+            6 => {
                 return crate::api::share::BridgeJoinOutcome::Unsafe;
             }
-            6 => {
+            7 => {
                 return crate::api::share::BridgeJoinOutcome::Failed;
             }
             _ => {
@@ -21537,6 +21671,13 @@ impl SseDecode for crate::api::share::BridgeShareEvent {
                 let mut var_reach = <crate::api::share::BridgeShareReach>::sse_decode(deserializer);
                 return crate::api::share::BridgeShareEvent::Reach { reach: var_reach };
             }
+            6 => {
+                let mut var_relayed =
+                    <crate::api::share::BridgeShareRelayed>::sse_decode(deserializer);
+                return crate::api::share::BridgeShareEvent::Relayed {
+                    relayed: var_relayed,
+                };
+            }
             _ => {
                 unimplemented!("");
             }
@@ -21602,6 +21743,20 @@ impl SseDecode for crate::api::share::BridgeShareReach {
                 unimplemented!("");
             }
         }
+    }
+}
+
+impl SseDecode for crate::api::share::BridgeShareRelayed {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::api::share::BridgeShareRelayed::Off,
+            1 => crate::api::share::BridgeShareRelayed::Asking,
+            2 => crate::api::share::BridgeShareRelayed::Open,
+            3 => crate::api::share::BridgeShareRelayed::Unreachable,
+            _ => unreachable!("Invalid variant for BridgeShareRelayed: {}", inner),
+        };
     }
 }
 
@@ -24716,15 +24871,15 @@ fn pde_ffi_dispatcher_primary_impl(
             rust_vec_len,
             data_len,
         ),
-        475 => wire__crate__api__project__project_reference_unpack_impl(
+        477 => wire__crate__api__project__project_reference_unpack_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        479 => wire__crate__api__effect__rescan_plugins_impl(port, ptr, rust_vec_len, data_len),
-        510 => wire__crate__api__assets__text_font_faces_impl(port, ptr, rust_vec_len, data_len),
-        511 => wire__crate__api__assets__text_font_families_impl(port, ptr, rust_vec_len, data_len),
+        481 => wire__crate__api__effect__rescan_plugins_impl(port, ptr, rust_vec_len, data_len),
+        514 => wire__crate__api__assets__text_font_faces_impl(port, ptr, rust_vec_len, data_len),
+        515 => wire__crate__api__assets__text_font_families_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -25160,56 +25315,60 @@ fn pde_ffi_dispatcher_sync_impl(
 461 => wire__crate__api__project__project_reference_share_discard_away_impl(ptr, rust_vec_len, data_len),
 462 => wire__crate__api__project__project_reference_share_guest_impl(ptr, rust_vec_len, data_len),
 463 => wire__crate__api__project__project_reference_share_id_impl(ptr, rust_vec_len, data_len),
-464 => wire__crate__api__project__project_reference_share_invite_impl(ptr, rust_vec_len, data_len),
-465 => wire__crate__api__project__project_reference_share_people_impl(ptr, rust_vec_len, data_len),
-466 => wire__crate__api__project__project_reference_share_presence_impl(ptr, rust_vec_len, data_len),
-467 => wire__crate__api__project__project_reference_share_reach_impl(ptr, rust_vec_len, data_len),
-468 => wire__crate__api__project__project_reference_share_reinvite_impl(ptr, rust_vec_len, data_len),
-469 => wire__crate__api__project__project_reference_share_remove_impl(ptr, rust_vec_len, data_len),
-470 => wire__crate__api__project__project_reference_share_resolve_impl(ptr, rust_vec_len, data_len),
-471 => wire__crate__api__project__project_reference_start_worker_impl(ptr, rust_vec_len, data_len),
-472 => wire__crate__api__project__project_reference_stop_sharing_impl(ptr, rust_vec_len, data_len),
-473 => wire__crate__api__project__project_reference_ui_state_impl(ptr, rust_vec_len, data_len),
-474 => wire__crate__api__project__project_reference_undo_impl(ptr, rust_vec_len, data_len),
-476 => wire__crate__api__project__project_reference_use_proxies_impl(ptr, rust_vec_len, data_len),
-477 => wire__crate__api__footage__proxy_cancel_impl(ptr, rust_vec_len, data_len),
-478 => wire__crate__api__footage__proxy_poll_impl(ptr, rust_vec_len, data_len),
-480 => wire__crate__api__audio__reset_audio_clip_impl(ptr, rust_vec_len, data_len),
-481 => wire__crate__api__shell__reset_realtime_impl(ptr, rust_vec_len, data_len),
-482 => wire__crate__api__system__resident_memory_bytes_impl(ptr, rust_vec_len, data_len),
-483 => wire__crate__api__system__restore_frozen_cursor_impl(ptr, rust_vec_len, data_len),
-484 => wire__crate__api__shell__reveal_in_folder_impl(ptr, rust_vec_len, data_len),
-485 => wire__crate__api__roto__roto_boundary_impl(ptr, rust_vec_len, data_len),
-486 => wire__crate__api__roto__roto_solve_frame_impl(ptr, rust_vec_len, data_len),
-487 => wire__crate__api__roto__roto_source_frame_impl(ptr, rust_vec_len, data_len),
-488 => wire__crate__api__roto__roto_status_impl(ptr, rust_vec_len, data_len),
-489 => wire__crate__api__effect__sample_scalar_impl(ptr, rust_vec_len, data_len),
-490 => wire__crate__api__effect__sample_scalar_range_with_context_impl(ptr, rust_vec_len, data_len),
-491 => wire__crate__api__effect__sample_scalar_with_context_impl(ptr, rust_vec_len, data_len),
-492 => wire__crate__api__effect__sample_scalars_impl(ptr, rust_vec_len, data_len),
-493 => wire__crate__api__audio__set_audio_device_impl(ptr, rust_vec_len, data_len),
-494 => wire__crate__api__shell__set_autosave_impl(ptr, rust_vec_len, data_len),
-495 => wire__crate__api__cache__set_cache_budget_impl(ptr, rust_vec_len, data_len),
-496 => wire__crate__api__track__set_camera_solve_link_impl(ptr, rust_vec_len, data_len),
-497 => wire__crate__api__cache__set_disk_cache_budget_impl(ptr, rust_vec_len, data_len),
-498 => wire__crate__api__cache__set_disk_cache_location_impl(ptr, rust_vec_len, data_len),
-499 => wire__crate__api__shell__set_full_res_drag_previews_impl(ptr, rust_vec_len, data_len),
-500 => wire__crate__api__shell__set_hardware_decode_impl(ptr, rust_vec_len, data_len),
-501 => wire__crate__api__effect__set_plugin_enabled_impl(ptr, rust_vec_len, data_len),
-502 => wire__crate__api__cache__set_render_profiling_impl(ptr, rust_vec_len, data_len),
-503 => wire__crate__api__cache__set_vram_cache_budget_impl(ptr, rust_vec_len, data_len),
-504 => wire__crate__api__effect__shader_graph_view_impl(ptr, rust_vec_len, data_len),
-505 => wire__crate__api__share__share_default_port_impl(ptr, rust_vec_len, data_len),
-506 => wire__crate__api__share__share_local_address_impl(ptr, rust_vec_len, data_len),
-507 => wire__crate__api__solid__solid_reference_get_definition_impl(ptr, rust_vec_len, data_len),
-508 => wire__crate__api__solid__solid_reference_set_definition_impl(ptr, rust_vec_len, data_len),
-509 => wire__crate__api__system__system_memory_bytes_impl(ptr, rust_vec_len, data_len),
-512 => wire__crate__api__system__thaw_cursor_impl(ptr, rust_vec_len, data_len),
-513 => wire__crate__api__track__track_status_impl(ptr, rust_vec_len, data_len),
-514 => wire__crate__api__track__tracked_points_impl(ptr, rust_vec_len, data_len),
-515 => wire__crate__api__system__video_memory_bytes_impl(ptr, rust_vec_len, data_len),
-516 => wire__crate__api__cache__viewer_transport_impl(ptr, rust_vec_len, data_len),
-517 => wire__crate__api__cache__vram_cache_stats_impl(ptr, rust_vec_len, data_len),
+464 => wire__crate__api__project__project_reference_share_key_impl(ptr, rust_vec_len, data_len),
+465 => wire__crate__api__project__project_reference_share_link_impl(ptr, rust_vec_len, data_len),
+466 => wire__crate__api__project__project_reference_share_people_impl(ptr, rust_vec_len, data_len),
+467 => wire__crate__api__project__project_reference_share_presence_impl(ptr, rust_vec_len, data_len),
+468 => wire__crate__api__project__project_reference_share_reach_impl(ptr, rust_vec_len, data_len),
+469 => wire__crate__api__project__project_reference_share_reinvite_impl(ptr, rust_vec_len, data_len),
+470 => wire__crate__api__project__project_reference_share_relayed_impl(ptr, rust_vec_len, data_len),
+471 => wire__crate__api__project__project_reference_share_remove_impl(ptr, rust_vec_len, data_len),
+472 => wire__crate__api__project__project_reference_share_resolve_impl(ptr, rust_vec_len, data_len),
+473 => wire__crate__api__project__project_reference_start_worker_impl(ptr, rust_vec_len, data_len),
+474 => wire__crate__api__project__project_reference_stop_sharing_impl(ptr, rust_vec_len, data_len),
+475 => wire__crate__api__project__project_reference_ui_state_impl(ptr, rust_vec_len, data_len),
+476 => wire__crate__api__project__project_reference_undo_impl(ptr, rust_vec_len, data_len),
+478 => wire__crate__api__project__project_reference_use_proxies_impl(ptr, rust_vec_len, data_len),
+479 => wire__crate__api__footage__proxy_cancel_impl(ptr, rust_vec_len, data_len),
+480 => wire__crate__api__footage__proxy_poll_impl(ptr, rust_vec_len, data_len),
+482 => wire__crate__api__audio__reset_audio_clip_impl(ptr, rust_vec_len, data_len),
+483 => wire__crate__api__shell__reset_realtime_impl(ptr, rust_vec_len, data_len),
+484 => wire__crate__api__system__resident_memory_bytes_impl(ptr, rust_vec_len, data_len),
+485 => wire__crate__api__system__restore_frozen_cursor_impl(ptr, rust_vec_len, data_len),
+486 => wire__crate__api__shell__reveal_in_folder_impl(ptr, rust_vec_len, data_len),
+487 => wire__crate__api__roto__roto_boundary_impl(ptr, rust_vec_len, data_len),
+488 => wire__crate__api__roto__roto_solve_frame_impl(ptr, rust_vec_len, data_len),
+489 => wire__crate__api__roto__roto_source_frame_impl(ptr, rust_vec_len, data_len),
+490 => wire__crate__api__roto__roto_status_impl(ptr, rust_vec_len, data_len),
+491 => wire__crate__api__effect__sample_scalar_impl(ptr, rust_vec_len, data_len),
+492 => wire__crate__api__effect__sample_scalar_range_with_context_impl(ptr, rust_vec_len, data_len),
+493 => wire__crate__api__effect__sample_scalar_with_context_impl(ptr, rust_vec_len, data_len),
+494 => wire__crate__api__effect__sample_scalars_impl(ptr, rust_vec_len, data_len),
+495 => wire__crate__api__audio__set_audio_device_impl(ptr, rust_vec_len, data_len),
+496 => wire__crate__api__shell__set_autosave_impl(ptr, rust_vec_len, data_len),
+497 => wire__crate__api__cache__set_cache_budget_impl(ptr, rust_vec_len, data_len),
+498 => wire__crate__api__track__set_camera_solve_link_impl(ptr, rust_vec_len, data_len),
+499 => wire__crate__api__cache__set_disk_cache_budget_impl(ptr, rust_vec_len, data_len),
+500 => wire__crate__api__cache__set_disk_cache_location_impl(ptr, rust_vec_len, data_len),
+501 => wire__crate__api__shell__set_full_res_drag_previews_impl(ptr, rust_vec_len, data_len),
+502 => wire__crate__api__shell__set_hardware_decode_impl(ptr, rust_vec_len, data_len),
+503 => wire__crate__api__effect__set_plugin_enabled_impl(ptr, rust_vec_len, data_len),
+504 => wire__crate__api__cache__set_render_profiling_impl(ptr, rust_vec_len, data_len),
+505 => wire__crate__api__cache__set_vram_cache_budget_impl(ptr, rust_vec_len, data_len),
+506 => wire__crate__api__effect__shader_graph_view_impl(ptr, rust_vec_len, data_len),
+507 => wire__crate__api__share__share_default_port_impl(ptr, rust_vec_len, data_len),
+508 => wire__crate__api__share__share_link_in_impl(ptr, rust_vec_len, data_len),
+509 => wire__crate__api__share__share_link_locked_impl(ptr, rust_vec_len, data_len),
+510 => wire__crate__api__share__share_relay_port_impl(ptr, rust_vec_len, data_len),
+511 => wire__crate__api__solid__solid_reference_get_definition_impl(ptr, rust_vec_len, data_len),
+512 => wire__crate__api__solid__solid_reference_set_definition_impl(ptr, rust_vec_len, data_len),
+513 => wire__crate__api__system__system_memory_bytes_impl(ptr, rust_vec_len, data_len),
+516 => wire__crate__api__system__thaw_cursor_impl(ptr, rust_vec_len, data_len),
+517 => wire__crate__api__track__track_status_impl(ptr, rust_vec_len, data_len),
+518 => wire__crate__api__track__tracked_points_impl(ptr, rust_vec_len, data_len),
+519 => wire__crate__api__system__video_memory_bytes_impl(ptr, rust_vec_len, data_len),
+520 => wire__crate__api__cache__viewer_transport_impl(ptr, rust_vec_len, data_len),
+521 => wire__crate__api__cache__vram_cache_stats_impl(ptr, rust_vec_len, data_len),
                         _ => unreachable!(),
                     }
 }
@@ -27543,13 +27702,14 @@ impl flutter_rust_bridge::IntoDart for crate::api::share::BridgeJoinOutcome {
                 [0.into_dart(), project.into_into_dart().into_dart()].into_dart()
             }
             crate::api::share::BridgeJoinOutcome::BadInvite => [1.into_dart()].into_dart(),
-            crate::api::share::BridgeJoinOutcome::Unreachable => [2.into_dart()].into_dart(),
+            crate::api::share::BridgeJoinOutcome::PasswordNeeded => [2.into_dart()].into_dart(),
+            crate::api::share::BridgeJoinOutcome::Unreachable => [3.into_dart()].into_dart(),
             crate::api::share::BridgeJoinOutcome::VersionMismatch { host } => {
-                [3.into_dart(), host.into_into_dart().into_dart()].into_dart()
+                [4.into_dart(), host.into_into_dart().into_dart()].into_dart()
             }
-            crate::api::share::BridgeJoinOutcome::Full => [4.into_dart()].into_dart(),
-            crate::api::share::BridgeJoinOutcome::Unsafe => [5.into_dart()].into_dart(),
-            crate::api::share::BridgeJoinOutcome::Failed => [6.into_dart()].into_dart(),
+            crate::api::share::BridgeJoinOutcome::Full => [5.into_dart()].into_dart(),
+            crate::api::share::BridgeJoinOutcome::Unsafe => [6.into_dart()].into_dart(),
+            crate::api::share::BridgeJoinOutcome::Failed => [7.into_dart()].into_dart(),
             _ => {
                 unimplemented!("");
             }
@@ -30000,6 +30160,9 @@ impl flutter_rust_bridge::IntoDart for crate::api::share::BridgeShareEvent {
             crate::api::share::BridgeShareEvent::Reach { reach } => {
                 [5.into_dart(), reach.into_into_dart().into_dart()].into_dart()
             }
+            crate::api::share::BridgeShareEvent::Relayed { relayed } => {
+                [6.into_dart(), relayed.into_into_dart().into_dart()].into_dart()
+            }
             _ => {
                 unimplemented!("");
             }
@@ -30072,6 +30235,29 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::share::BridgeShareReach>
     for crate::api::share::BridgeShareReach
 {
     fn into_into_dart(self) -> crate::api::share::BridgeShareReach {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::share::BridgeShareRelayed {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Off => 0.into_dart(),
+            Self::Asking => 1.into_dart(),
+            Self::Open => 2.into_dart(),
+            Self::Unreachable => 3.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::share::BridgeShareRelayed
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::share::BridgeShareRelayed>
+    for crate::api::share::BridgeShareRelayed
+{
+    fn into_into_dart(self) -> crate::api::share::BridgeShareRelayed {
         self
     }
 }
@@ -32755,21 +32941,24 @@ impl SseEncode for crate::api::share::BridgeJoinOutcome {
             crate::api::share::BridgeJoinOutcome::BadInvite => {
                 <i32>::sse_encode(1, serializer);
             }
-            crate::api::share::BridgeJoinOutcome::Unreachable => {
+            crate::api::share::BridgeJoinOutcome::PasswordNeeded => {
                 <i32>::sse_encode(2, serializer);
             }
-            crate::api::share::BridgeJoinOutcome::VersionMismatch { host } => {
+            crate::api::share::BridgeJoinOutcome::Unreachable => {
                 <i32>::sse_encode(3, serializer);
+            }
+            crate::api::share::BridgeJoinOutcome::VersionMismatch { host } => {
+                <i32>::sse_encode(4, serializer);
                 <String>::sse_encode(host, serializer);
             }
             crate::api::share::BridgeJoinOutcome::Full => {
-                <i32>::sse_encode(4, serializer);
-            }
-            crate::api::share::BridgeJoinOutcome::Unsafe => {
                 <i32>::sse_encode(5, serializer);
             }
-            crate::api::share::BridgeJoinOutcome::Failed => {
+            crate::api::share::BridgeJoinOutcome::Unsafe => {
                 <i32>::sse_encode(6, serializer);
+            }
+            crate::api::share::BridgeJoinOutcome::Failed => {
+                <i32>::sse_encode(7, serializer);
             }
             _ => {
                 unimplemented!("");
@@ -34225,6 +34414,10 @@ impl SseEncode for crate::api::share::BridgeShareEvent {
                 <i32>::sse_encode(5, serializer);
                 <crate::api::share::BridgeShareReach>::sse_encode(reach, serializer);
             }
+            crate::api::share::BridgeShareEvent::Relayed { relayed } => {
+                <i32>::sse_encode(6, serializer);
+                <crate::api::share::BridgeShareRelayed>::sse_encode(relayed, serializer);
+            }
             _ => {
                 unimplemented!("");
             }
@@ -34273,6 +34466,24 @@ impl SseEncode for crate::api::share::BridgeShareReach {
                 unimplemented!("");
             }
         }
+    }
+}
+
+impl SseEncode for crate::api::share::BridgeShareRelayed {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::api::share::BridgeShareRelayed::Off => 0,
+                crate::api::share::BridgeShareRelayed::Asking => 1,
+                crate::api::share::BridgeShareRelayed::Open => 2,
+                crate::api::share::BridgeShareRelayed::Unreachable => 3,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
     }
 }
 

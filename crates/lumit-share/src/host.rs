@@ -4,11 +4,15 @@
 //! One thread accepts. Each guest has a reader, which is the thread that
 //! greeted it, and a writer.
 
+use crate::invite::locked_key;
 use crate::kept::{HostLog, Pair};
 use crate::local::{place, sane};
 use crate::reach::{self, Closed};
 use crate::wire::{self, decode, encode, Message, Names, Out, Receiver, Sender};
-use crate::{Event, Events, Invite, Person, Presence, Reach, Refusal, ShareError, MAX_PEOPLE};
+use crate::{
+    local_address, room, Event, Events, Invite, Person, Presence, Reach, Refusal, Relayed,
+    ShareError, MAX_PEOPLE,
+};
 use lumit_core::store::{Moved, RemoteTag};
 use lumit_core::{Document, DocumentStore};
 use parking_lot::Mutex;
@@ -49,6 +53,9 @@ struct Seats {
     /// The invite's secret. Replaced when a guest is removed, so it is read
     /// under the lock a caller is seated under.
     key: [u8; 32],
+    /// What the host's password comes to, if it set one. It outlives the
+    /// invite's secret, so the same password opens the next invite too.
+    lock: Option<[u8; 32]>,
     people: Vec<Person>,
     links: Vec<Link>,
     /// The last edit taken from each guest, by the token it says hello with,
@@ -57,6 +64,15 @@ struct Seats {
     next: u32,
     /// Someone came or went and the others have not been told yet.
     changed: bool,
+}
+
+impl Seats {
+    /// The key the channel is opened with: the invite's secret, and the
+    /// password's with it when there is one. What a guest that is in holds.
+    fn channel(&self) -> [u8; 32] {
+        self.lock
+            .map_or(self.key, |lock| locked_key(&self.key, &lock))
+    }
 }
 
 struct Hub {
@@ -76,6 +92,9 @@ struct Hub {
     log: Mutex<Option<HostLog>>,
     /// Whether people outside this network can get in.
     reach: Mutex<Reach>,
+    /// The relay this host keeps a room at, if it was given one, and how
+    /// that is going.
+    relay: Mutex<Option<(String, Relayed)>>,
 }
 
 /// A project being shared from this machine.
@@ -140,13 +159,16 @@ fn listen(address: IpAddr, port: u16) -> std::io::Result<(Vec<TcpListener>, u16)
 ///
 /// `key` is the secret of an invite handed out before, for a host picking up
 /// where it left off: guests who were here still hold it, and find their way
-/// back by it. `None` makes a new one.
+/// back by it. `None` makes a new one. `lock` is what [`crate::lock_of`]
+/// made of a password every guest then has to give, or `None` for none.
+#[allow(clippy::too_many_arguments)]
 pub fn host(
     store: Arc<DocumentStore>,
     name: &str,
     address: IpAddr,
     port: u16,
     key: Option<[u8; 32]>,
+    lock: Option<[u8; 32]>,
     root: Option<PathBuf>,
     events: Events,
 ) -> Result<Host, ShareError> {
@@ -172,6 +194,7 @@ pub fn host(
         greeting: AtomicUsize::new(0),
         seats: Mutex::new(Seats {
             key,
+            lock,
             people: vec![Person {
                 id: 0,
                 name: name.chars().take(64).collect(),
@@ -187,6 +210,7 @@ pub fn host(
         names: Names::default(),
         log: Mutex::new(log),
         reach: Mutex::new(Reach::Off),
+        relay: Mutex::new(None),
     });
     // Weak, or the store would hold the hub that holds the store.
     let tapped = Arc::downgrade(&hub);
@@ -217,16 +241,59 @@ pub fn host(
 }
 
 impl Host {
-    /// The invite to hand out, for a host reached at `address`.
-    #[must_use]
-    pub fn invite(&self, address: &str) -> Invite {
+    /// `address` with the port this host listens on.
+    fn at(&self, address: &str) -> String {
         let address = address.trim();
         // An IPv6 address has colons of its own, so it goes in brackets.
         let bare = address.contains(':') && !address.starts_with('[');
         let (open, close) = if bare { ("[", "]") } else { ("", "") };
+        format!("{open}{address}{close}:{}", self.hub.port)
+    }
+
+    /// The invite to hand out, for a host reached at `address` and nowhere
+    /// else.
+    #[must_use]
+    pub fn invite(&self, address: &str) -> Invite {
         Invite {
-            address: format!("{open}{address}{close}:{}", self.hub.port),
+            addresses: vec![self.at(address)],
+            relays: Vec::new(),
             key: self.key(),
+            locked: self.lock().is_some(),
+        }
+    }
+
+    /// The invite to hand out when nobody has said where the guest is: every
+    /// way to this host it knows of, for the guest to try all at once.
+    /// `typed` goes first, for an address only the person knows, such as a
+    /// VPN's. Then the router's address on the internet once it has opened
+    /// the port, this machine's own there over IPv6, and its address on its
+    /// own network.
+    #[must_use]
+    pub fn invite_anywhere(&self, typed: Option<&str>) -> Invite {
+        let outside = match self.reach() {
+            Reach::Open { address } => Some(address),
+            _ => None,
+        };
+        let known = [outside, crate::global_address(), Some(local_address())];
+        let typed = typed.map(str::trim).filter(|typed| !typed.is_empty());
+        let mut addresses: Vec<String> = Vec::new();
+        for address in typed
+            .into_iter()
+            .chain(known.iter().flatten().map(String::as_str))
+        {
+            let address = self.at(address);
+            if !addresses.contains(&address) {
+                addresses.push(address);
+            }
+        }
+        // A relay that is not answering just now may be by the time the
+        // guest tries it.
+        let relay = self.hub.relay.lock().clone();
+        Invite {
+            addresses,
+            relays: relay.into_iter().map(|(relay, _)| relay).collect(),
+            key: self.key(),
+            locked: self.lock().is_some(),
         }
     }
 
@@ -240,6 +307,13 @@ impl Host {
     #[must_use]
     pub fn key(&self) -> [u8; 32] {
         self.hub.seats.lock().key
+    }
+
+    /// What this host's password comes to, if it set one, to share the same
+    /// project by again later without asking for the password again.
+    #[must_use]
+    pub fn lock(&self) -> Option<[u8; 32]> {
+        self.hub.seats.lock().lock
     }
 
     /// How many edits made since the project was last saved were put back
@@ -305,6 +379,36 @@ impl Host {
         self.hub.reach.lock().clone()
     }
 
+    /// Keep a room at the relay at `relay`, a `host:port`, so a guest that
+    /// no address of this machine lets in can still join. Answers at once.
+    /// What comes of it is an [`Event::Relayed`], and [`Self::relayed`] from
+    /// then on. An invite made after this names the relay. The room goes
+    /// when sharing stops.
+    pub fn relay_through(&self, relay: &str) {
+        let relay = relay.trim().to_owned();
+        {
+            let mut asked = self.hub.relay.lock();
+            if relay.is_empty() || asked.is_some() {
+                return;
+            }
+            *asked = Some((relay.clone(), Relayed::Asking));
+        }
+        let hub = self.hub.clone();
+        let spawned = thread::Builder::new()
+            .name("lumit-share-relay".into())
+            .spawn(move || hub.relayed(&relay));
+        if spawned.is_err() {
+            *self.hub.relay.lock() = None;
+        }
+    }
+
+    /// Whether this host has a room at a relay.
+    #[must_use]
+    pub fn relayed(&self) -> Relayed {
+        let relay = self.hub.relay.lock();
+        relay.as_ref().map_or(Relayed::Off, |(_, relayed)| *relayed)
+    }
+
     /// Latest wins: the accepting thread sends it on its next beat, so a
     /// playhead that moves every frame is not a message every frame.
     pub fn set_presence(&self, presence: Presence) {
@@ -330,6 +434,9 @@ impl Host {
             return;
         }
         seats.key = key;
+        // The guests still here hold the key the channel opens with, which
+        // has the password in it already.
+        let key = seats.channel();
         if let Ok(bytes) = encode(&Message::Invite { key }, &self.hub.names) {
             Hub::send_each(&mut seats, |_| bytes.clone());
         }
@@ -412,6 +519,71 @@ impl Hub {
             }
         }
         mapping.close();
+    }
+
+    /// The relay thread: keep a room at `relay` for as long as the project
+    /// is shared, and take each guest that comes to it. The room is named
+    /// after the invite's secret, so when that is replaced the room is too.
+    fn relayed(self: &Arc<Self>, relay: &str) {
+        let said = |relayed: Relayed| {
+            let mut now = self.relay.lock();
+            let changed = now.as_ref().is_some_and(|(_, was)| *was != relayed);
+            if let Some((_, was)) = now.as_mut() {
+                *was = relayed;
+            }
+            drop(now);
+            if changed {
+                (self.events)(Event::Relayed(relayed));
+            }
+        };
+        while !self.stop.load(Ordering::Relaxed) {
+            let key = self.seats.lock().channel();
+            let name = room(&key);
+            let current =
+                || !self.stop.load(Ordering::Relaxed) && self.seats.lock().channel() == key;
+            match lumit_relay::Room::open(relay, &name) {
+                Ok(mut kept) => {
+                    said(Relayed::Open);
+                    while current() {
+                        match kept.guest(BEAT) {
+                            Ok(Some(guest)) => self.take(relay, &name, guest),
+                            Ok(None) => {}
+                            Err(_) => break,
+                        }
+                    }
+                }
+                Err(_) => said(Relayed::Unreachable),
+            }
+            // Asked again before long, and at once for a new secret.
+            let asked = Instant::now();
+            while current() && asked.elapsed() < lumit_relay::PING {
+                thread::sleep(BEAT);
+            }
+        }
+    }
+
+    /// Take a guest waiting at the relay and seat it like any other caller.
+    fn take(self: &Arc<Self>, relay: &str, name: &str, guest: u64) {
+        if self.greeting.fetch_add(1, Ordering::Relaxed) >= GREETING_ROOM {
+            self.greeting.fetch_sub(1, Ordering::Relaxed);
+            return;
+        }
+        let (hub, relay, name) = (self.clone(), relay.to_owned(), name.to_owned());
+        let spawned = thread::Builder::new()
+            .name("lumit-share-guest".into())
+            .spawn(
+                move || match lumit_relay::take(relay.as_str(), &name, guest) {
+                    Ok(socket) => {
+                        let _ = hub.seat(socket);
+                    }
+                    Err(_) => {
+                        hub.greeting.fetch_sub(1, Ordering::Relaxed);
+                    }
+                },
+            );
+        if spawned.is_err() {
+            self.greeting.fetch_sub(1, Ordering::Relaxed);
+        }
     }
 
     /// Say one last thing to a guest and close its connection behind it.
@@ -509,11 +681,14 @@ impl Hub {
     fn seat(self: &Arc<Self>, socket: TcpStream) -> Result<(), ShareError> {
         // The invite as it stands. A caller still saying hello when it is
         // replaced is not seated.
-        let key = self.seats.lock().key;
+        let (key, channel) = {
+            let seats = self.seats.lock();
+            (seats.key, seats.channel())
+        };
         let greeted = (|| {
             // An accepted socket takes after its listener on Windows.
             socket.set_nonblocking(false)?;
-            let (sender, mut receiver) = wire::open(socket.try_clone()?, &key, false)?;
+            let (sender, mut receiver) = wire::open(socket.try_clone()?, &channel, false)?;
             let hello = decode(&receiver.recv(1 << 16)?, &self.names, None)?;
             Ok::<_, ShareError>((sender, receiver, hello))
         })();

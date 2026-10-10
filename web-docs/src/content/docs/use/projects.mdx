@@ -52,29 +52,59 @@ only, and an autosave reads its footage from the project file it was written bes
 
 A shared project is edited by several people at once. One person, the **host**, shares it
 from their computer and the others join as **guests**. Guests connect to the host's
-computer directly, over a local network, the internet or a VPN.
+computer directly, over a local network, the internet or a VPN, or through a relay.
 
 **File ▸ Shared project…** opens the **Shared project** window, which has two pages.
 
 - **Share this project**: **Start sharing** shares the open project and shows its
-  **invite**.
-- **Join a project**: an invite is pasted, and **Join** opens the host's project in place of
-  the open one.
+  **invite link**.
+- **Join a project**: an invite link is pasted, and **Join** opens the host's project in
+  place of the open one.
+
+A click on an invite link in a browser opens Lumit on **Join a project** with the link
+filled in. On macOS the link is pasted by hand.
 
 While a project is shared, a **Shared** button sits on the bottom strip and opens the same
 window. It lists everyone in the project. The host can **Remove** a guest, and **Stop
 sharing** ends it for everyone. A guest has **Leave**.
 
-An invite holds the host's address, the port and a key. Anyone who has it can join and edit
-until the host stops sharing.
+An invite link holds every address the host can be reached at and a key. Anyone who has it
+can join and edit until the host stops sharing. A link is drawn veiled. **Show** asks
+before it shows one, and **Copy link** copies it without showing it. The part of the link
+after the `#` is not sent to lumitlab.com.
 
-With **Let people outside this network join** ticked, Lumit asks the host's router to open
-the port when sharing starts, and to close it when sharing stops. Once the router has
-opened it, **Address** is the router's address on the internet and the invite works from
-outside the network. A guest on the host's own network uses the local address shown under
-the invite. A router that refuses, or that has no address of its own on the internet,
-leaves the port closed. A guest outside the network then needs a VPN, or the port forwarded
-to the host's computer by hand.
+**Password** on **Share this project** sets a password that every guest types as well as
+having the link. **Join a project** shows a **Password** row for a link that needs one. A
+wrong password and a host that is not there give the same message. A project shared again
+keeps its password unless another is typed.
+
+A guest tries every address in the link at once and keeps the one that answers with the
+key. The line under the link says who it works for.
+
+| Line | Who can join |
+| --- | --- |
+| Anyone you send this link to can join. | Anyone. The host's router opened the port, or a relay is in use. |
+| Only people on your own network can join with this link. | People on the host's network. The router refused, has no address of its own on the internet, or was not asked. |
+
+**Advanced** holds the rest.
+
+- **Internet**: when ticked, Lumit asks the host's router to open the port when sharing
+  starts, and to close it when sharing stops. It is ticked by default.
+- **Port**: the port the host listens on.
+- **Relay**: the address of a relay, for guests the router does not let in.
+- **Address**, while sharing: one more address to add to the link, such as a VPN's.
+
+### Relays
+
+A relay is a server that passes edits between a host and its guests when neither can reach
+the other. Both connect out to it. What passes through is encrypted with the invite's key,
+which the relay is never given. The relay's owner can see the addresses that connected and
+how much was sent.
+
+Lumit has no relay of its own and uses one only when its address is in **Relay**. A relay
+is the `lumit-relay` program from Lumit's source, run on a server its owner controls:
+`cargo run --release -p lumit-relay`, with a port number after it to listen on a port other
+than 47857. A guest is sent through the relay only when no address of the host answers.
 
 An edit made by one person appears for everyone. Two people can work on the same layer at
 once: a change to one effect, mask or property leaves the others as they are. Where two

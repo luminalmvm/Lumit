@@ -61,6 +61,9 @@ class ShareState extends ChangeNotifier {
   /// For a host: whether people outside its network can get in.
   BridgeShareReach reach = const BridgeShareReach.off();
 
+  /// For a host: whether it has a room at a relay.
+  BridgeShareRelayed relayed = BridgeShareRelayed.off;
+
   /// How many conflicts a merge has left waiting to be chosen between.
   int held = 0;
 
@@ -123,6 +126,9 @@ class ShareState extends ChangeNotifier {
     reach = as == ShareRole.host
         ? project.shareReach()
         : const BridgeShareReach.off();
+    relayed = as == ShareRole.host
+        ? project.shareRelayed()
+        : BridgeShareRelayed.off;
     _sent = null;
     _noteRoster();
     // A guest's copy opened again brings the conflicts it was closed with.
@@ -141,6 +147,7 @@ class ShareState extends ChangeNotifier {
     away = false;
     held = 0;
     reach = const BridgeShareReach.off();
+    relayed = BridgeShareRelayed.off;
     _noteRoster();
     notifyListeners();
   }
@@ -149,6 +156,34 @@ class ShareState extends ChangeNotifier {
     reach = now;
     roster.value++;
     notifyListeners();
+  }
+
+  void setRelayed(BridgeShareRelayed now) {
+    relayed = now;
+    roster.value++;
+    notifyListeners();
+  }
+
+  /// The link to send to whoever is joining, while this machine hosts.
+  /// [address] is one more way in that only the person knows, such as a
+  /// VPN's. It holds every way the engine knows of just now, so it is read
+  /// again whenever [roster] moves.
+  String? link({String? address}) {
+    try {
+      return _project?.shareLink(address: address);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// The secret of the invite as it stands, kept to share this project by
+  /// the same invite next time.
+  String? key() {
+    try {
+      return _project?.shareKey();
+    } catch (_) {
+      return null;
+    }
   }
 
   void setPeople(List<BridgeSharePerson> now) {
@@ -174,10 +209,13 @@ class ShareState extends ChangeNotifier {
     }
   }
 
-  /// Look for a lost host by a new invite. False when [invite] is not one.
-  bool reinvite(String invite) {
+  /// Look for a lost host by a new invite, with the host's [password] when
+  /// it set one. False when [invite] is not one, or needs a password and has
+  /// none.
+  bool reinvite(String invite, {String? password}) {
     try {
-      return _project?.shareReinvite(invite: invite) ?? false;
+      return _project?.shareReinvite(invite: invite, password: password) ??
+          false;
     } catch (_) {
       return false;
     }

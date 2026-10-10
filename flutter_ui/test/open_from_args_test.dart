@@ -21,5 +21,7 @@ void main() {
 
   test('flags and stray tokens around it are ignored', () {
     expect(projectPathFromArgs(['--verbose', real, 'other']), real);
+    // A Linux desktop hands the same document over as a file: address.
+    expect(projectPathFromArgs([Uri.file(real).toString()]), real);
   });
 }

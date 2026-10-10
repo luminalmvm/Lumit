@@ -13,7 +13,8 @@ its entry here first. AE and Vegas names are noted only to help people arriving 
 | **Source layer** | One layer of a layered image file such as a PSD or an Illustrator document, which a footage item can read on its own |
 | **Audio item** | An asset pointing at an audio file |
 | **Packed project** | A `.lum` that also carries its footage files inside it. The verbs are **pack** and **unpack** |
-| **Shared project** | A project several people edit at once. The **host** shares it and owns the file, the **guests** join with an **invite** |
+| **Shared project** | A project several people edit at once. The **host** shares it and owns the file, the **guests** join with an **invite**, which is written as an **invite link** |
+| **Relay** | Somebody's own server that passes a shared project's edits between a host and guests who cannot reach each other. It cannot read them |
 | **Folder** | A group in the Project panel. Not *bin* |
 | **Composition (comp)** | Resolution, frame rate, duration, background, and a layer stack or a node graph |
 | **Node graph** | A comp whose picture is made by nodes and wires instead of layers |

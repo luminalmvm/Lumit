@@ -819,11 +819,22 @@ class Workspace extends ChangeNotifier {
   }
 
   /// Whether sharing a project asks the router to open its port, so people
-  /// outside this network can join.
-  bool shareOutside = false;
+  /// outside this network can join. On until the person says otherwise: it
+  /// is what lets a link work for someone far away with nothing to set up.
+  bool shareOutside = true;
 
   void setShareOutside(bool on) {
     shareOutside = on;
+    save();
+  }
+
+  /// The relay a shared project keeps a room at, as `host` or `host:port`,
+  /// or null for none. Somebody's own server, which Lumit only uses once it
+  /// has been typed here.
+  String? shareRelay;
+
+  void setShareRelay(String? relay) {
+    shareRelay = relay;
     save();
   }
 
@@ -1609,7 +1620,8 @@ class Workspace extends ChangeNotifier {
         'keymap': keymapJson,
         'audio_device': audioDevice,
         'share_name': shareName,
-        'share_outside': shareOutside,
+        'share_router': shareOutside,
+        'share_relay': shareRelay,
         'share_hosted': shareHosted,
         'autosave_minutes': autosaveMinutes,
         'autosave_keep': autosaveKeep,
@@ -1698,7 +1710,12 @@ class Workspace extends ChangeNotifier {
     audioDevice = device is String && device.isNotEmpty ? device : null;
     final sharedAs = j['share_name'];
     shareName = sharedAs is String && sharedAs.isNotEmpty ? sharedAs : null;
-    shareOutside = j['share_outside'] is bool && j['share_outside'] as bool;
+    // Under a new name: the old one was written as off for everybody, back
+    // when off was what a person who had never touched it got.
+    final outside = j['share_router'];
+    shareOutside = outside is bool ? outside : true;
+    final relay = j['share_relay'];
+    shareRelay = relay is String && relay.isNotEmpty ? relay : null;
     shareHosted.clear();
     final hosted = j['share_hosted'];
     if (hosted is Map) {

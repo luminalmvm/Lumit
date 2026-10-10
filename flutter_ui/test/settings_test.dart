@@ -152,7 +152,8 @@ void main() {
     ws.lastProjectPath = 'C:/edit/last.lum';
     ws.shareName = 'Ada';
     ws.shareHosted['a-project'] = '47856/00ff';
-    ws.shareOutside = true;
+    ws.shareOutside = false;
+    ws.shareRelay = 'relay.example.org';
     ws.recompose();
 
     final j = ws.toJson();
@@ -161,7 +162,8 @@ void main() {
     expect(back.lastProjectPath, 'C:/edit/last.lum');
     expect(back.shareName, 'Ada');
     expect(back.shareHosted, {'a-project': '47856/00ff'});
-    expect(back.shareOutside, isTrue);
+    expect(back.shareOutside, isFalse);
+    expect(back.shareRelay, 'relay.example.org');
     expect(back.themeShape, ThemeShape.lantern);
     expect(back.animationLevel, AnimationLevel.minimal);
     expect(back.performance.playback, PlaybackMode.everyFrame);

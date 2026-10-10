@@ -946,6 +946,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeShareReach dco_decode_bridge_share_reach(dynamic raw);
 
   @protected
+  BridgeShareRelayed dco_decode_bridge_share_relayed(dynamic raw);
+
+  @protected
   BridgeShareStarted dco_decode_bridge_share_started(dynamic raw);
 
   @protected
@@ -2607,6 +2610,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeShareReach sse_decode_bridge_share_reach(SseDeserializer deserializer);
+
+  @protected
+  BridgeShareRelayed sse_decode_bridge_share_relayed(
+      SseDeserializer deserializer);
 
   @protected
   BridgeShareStarted sse_decode_bridge_share_started(
@@ -4479,6 +4486,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_share_reach(
       BridgeShareReach self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_share_relayed(
+      BridgeShareRelayed self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_share_started(
