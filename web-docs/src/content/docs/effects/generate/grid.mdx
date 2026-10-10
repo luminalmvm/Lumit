@@ -15,7 +15,7 @@ Grid is a **Generate** effect.
 
 ## What it does
 
-Puts points at even intervals — rows, columns, and planes receding into depth.
+Puts points at even intervals: rows, columns, and planes receding into depth.
 
 ## Parameters
 
@@ -23,12 +23,16 @@ Puts points at even intervals — rows, columns, and planes receding into depth.
 
 | Parameter | Control | Range | Default | Unit |
 | --- | --- | --- | --- | --- |
+| **Layout** | Dropdown | Rows · Offset rows · Rings · Spiral · Hexagons · Point | Rows | - |
 | **Columns** | Slider, whole numbers | 1 to 100; up to 1000 | 10 | - |
 | **Rows** | Slider, whole numbers | 1 to 100; up to 1000 | 6 | - |
 | **Planes** | Slider, whole numbers | 1 to 100; up to 1000 | 1 | - |
 | **Spacing x** | Slider | 0 to 1000; higher | 120 | Pixels at composition size |
 | **Spacing y** | Slider | 0 to 1000; higher | 120 | Pixels at composition size |
 | **Spacing z** | Slider | 0 to 1000; higher | 120 | Pixels at composition size |
+| **Fit to size** | Checkbox | On or off | Off | - |
+| **Width** | Slider | 0 to 3840; higher | 1080 | Pixels at composition size |
+| **Height** | Slider | 0 to 2160; higher | 600 | Pixels at composition size |
 | **Position x** | Slider | 0 to 3840; any value by typing | 960 | Pixels at composition size |
 | **Position y** | Slider | 0 to 2160; any value by typing | 540 | Pixels at composition size |
 | **Position z** | Slider | -2000 to 2000; any value by typing | 0 | Pixels at composition size |
@@ -36,6 +40,9 @@ Puts points at even intervals — rows, columns, and planes receding into depth.
 | **Jitter y** | Slider | 0 to 500; higher | 0 | Pixels at composition size |
 | **Jitter z** | Slider | 0 to 500; higher | 0 | Pixels at composition size |
 | **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
+| **Start angle** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
+| **Arc** | Slider | 0 to 360 | 360 | Degrees |
+| **Inner radius** | Slider | 0 to 1000; higher | 0 | Pixels at composition size |
 | **Size** | Slider | 0 to 200; higher | 8 | Pixels at composition size |
 | **Feather** | Slider | 0 to 100 | 100 | Per cent |
 | **Colour** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
@@ -48,42 +55,72 @@ Puts points at even intervals — rows, columns, and planes receding into depth.
 
 In the Effect Controls panel:
 
-- **Grid** groups **Columns**, **Rows**, **Planes**, **Spacing x**, **Spacing y**, **Spacing z**, **Position x**, **Position y**, **Position z**, **Jitter x**, **Jitter y**, **Jitter z**, **Seed**.
+- **Grid** groups **Layout**, **Columns**, **Rows**, **Planes**, **Spacing x**, **Spacing y**, **Spacing z**, **Fit to size**, **Width**, **Height**, **Position x**, **Position y**, **Position z**, **Jitter x**, **Jitter y**, **Jitter z**, **Seed**.
 - **Point** groups **Size**, **Feather**, **Colour**, **Max points**.
+- **Spacing x** is editable while **Fit to size** is off.
+- **Spacing x** is editable while **Layout** is anything but Point.
+- **Spacing y** is editable while **Fit to size** is off.
+- **Spacing y** is editable while **Layout** is anything but Hexagons.
+- **Spacing y** is editable while **Layout** is anything but Point.
+- **Spacing z** is editable while **Layout** is anything but Point.
+- **Fit to size** is editable while **Layout** is anything but Point.
+- **Width** is editable while **Fit to size** is on.
+- **Width** is editable while **Layout** is anything but Point.
+- **Height** is editable while **Fit to size** is on.
+- **Height** is editable while **Layout** is anything but Hexagons.
+- **Height** is editable while **Layout** is anything but Point.
 - **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
 
 {/* END GENERATED */}
 
 ## What each control does
 
+- **Layout**: how the points on each plane are arranged. **Rows** is rows and columns.
+  **Offset rows** moves every other row across by half a cell. **Rings** makes Rows the
+  number of rings and Columns the points on each, with Spacing x and Spacing y the gap
+  between rings across and down. **Spiral** winds one evenly dense spiral out from the
+  centre, like a sunflower's seeds, and the spacings set how tightly. **Hexagons** packs
+  offset rows as a honeycomb, every point the same distance from its six neighbours, and
+  works the gap between rows out from Spacing x. **Point** puts every point at Position,
+  one on top of another until a Jitter or an effect below moves them apart. Every layout has
+  Columns times Rows points on each plane.
 - **Columns**, **Rows** and **Planes**: how many cells across, down, and through the layer's
-  plane. Planes at 1 is flat, which is what a 2D layer wants; more than one only shows once
+  plane. Planes at 1 is flat, which is what a 2D layer wants. More than one only shows once
   the layer is 3D and the composition has a camera. See [Cameras and 3D](/use/camera/).
 - **Spacing x**, **Spacing y** and **Spacing z**: the gap between cells along each axis. The
-  lattice is as big as its spacing makes it — it is not fitted to the frame.
+  lattice is as big as its spacing makes it, unless **Fit to size** is on.
+- **Fit to size**: fits the layout into Width and Height in place of Spacing x and Spacing
+  y. It stays that size however many points it holds.
+- **Width** and **Height**: how wide and tall the fitted layout is. Rings and Spiral read
+  them as their diameter across and down.
 - **Position x**, **Position y** and **Position z**: where the middle of the lattice sits.
-  Position z is how far in front of or behind the layer's own plane it floats; nought is on
+  Position z is how far in front of or behind the layer's own plane it floats. Nought is on
   the plane.
 - **Jitter x**, **Jitter y** and **Jitter z**: how far a cell may wander off its place.
   Each cell gets the same nudge every frame.
 - **Seed**: which jitter. Reseed to roll a different one.
+- **Start angle**: where round a ring its first point sits. It shows for Rings, as do the
+  next two.
+- **Arc**: how much of the circle a ring covers. A whole circle spaces its points evenly
+  round it, and anything less puts one at each end.
+- **Inner radius**: how far out the rings start. With the spacings it is added to every
+  ring. Fitted, it is the innermost ring, and at 0 that ring is one point at the centre.
 - **Size**: the diameter of the disc a point is drawn as.
 - **Feather**: how soft that disc's edge is. At nought it is a hard circle.
 - **Colour**: what the discs are drawn in. Values above 1 are legal, and useful under a
   [Glow](/effects/stylise/glow/).
-- **Max points**: the most points that may exist at once. It is a capacity declaration
-  rather than a look control, so it does not animate; a lattice bigger than the cap is cut
-  off at the end.
+- **Max points**: the most points that may exist at once. It does not animate. A lattice
+  bigger than the cap is cut off at the end.
 - **Mix**: how much of the drawing lands on the picture. At nought the points are still
   emitted on the socket.
-- **Matte** and **Invert** drive the strength of the effect from another layer's brightness;
-  see [Effects](/use/effects/).
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness.
+  See [Effects](/use/effects/).
 
 ## Related
 
-- [Scatter](/effects/generate/scatter/) - points thrown at random rather than ruled out.
+- [Scatter](/effects/generate/scatter/)
 - [Clone to points](/effects/generate/clone-to-points/)
 - [Connect points](/effects/generate/connect-points/)
-- [The node graph](/use/nodes/) - where the Points socket is wired.
+- [The node graph](/use/nodes/)
 - [Generate](/effects/#generate)
 - [Effects](/use/effects/)

@@ -1388,6 +1388,17 @@ impl HeadlessRenderer {
             crate::colour::InputTransforms::build(doc, &self.colour, &self.gpu, &parts.colour);
         let inputs = (!built.is_empty()).then_some(built);
         let out = {
+            let pixels_by_layer: HashMap<Uuid, &crate::decode::CompLayerPixels> = retained
+                .pixels
+                .layers
+                .iter()
+                .map(|lp| (lp.layer, lp))
+                .collect();
+            // Clone to points' pictures for a stream that is only made during
+            // the render: the walk asks for them here once it has the stream.
+            let late_clones = |spec: &crate::draw::LateClones, points: usize| {
+                crate::build::late_clone_pictures(doc, spec, points, &pixels_by_layer)
+            };
             let realiser = crate::realise::Realiser {
                 ctx: self.gpu.clone_handle(),
                 engine: &parts.colour,
@@ -1405,13 +1416,8 @@ impl HeadlessRenderer {
                 colour_inputs: inputs.as_ref(),
                 colour_config: self.colour.loaded().filter(|l| l.usable()),
                 flow: Some(&parts.flow),
+                late_clones: Some(&late_clones),
             };
-            let pixels_by_layer: HashMap<Uuid, &crate::decode::CompLayerPixels> = retained
-                .pixels
-                .layers
-                .iter()
-                .map(|lp| (lp.layer, lp))
-                .collect();
             let mut visited = vec![comp_id];
             if let Some(w) = &watcher {
                 w.building();
@@ -6894,6 +6900,248 @@ mod tests {
             "a wired stream must put a tail on the frame, from a cold start"
         );
         assert_eq!(tailed, frame_of(&wired), "two renders of one frame differ");
+    }
+
+    /// Scatter's points depend on the picture, so they are read back from the
+    /// card during the walk. This checks they reach an effect further down,
+    /// through one that changes the stream on the way.
+    #[test]
+    fn scatter_points_reach_the_effects_below_it() {
+        let mut r = match HeadlessRenderer::shared() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let (cw, ch) = (32u32, 16u32);
+        let build = |wired: bool| {
+            use lumit_core::graph::{Edge, InputRef, LayerGraph, NodeRef, OutputRef};
+            let (mut doc, comp_id, _) = matrix_base(cw, ch, LinearColour([0.8, 0.1, 0.1, 1.0]));
+            let (_, top) = matrix_top(&mut doc, comp_id, LinearColour([0.1, 0.2, 0.9, 1.0]));
+            let set = |inst: &mut lumit_core::model::EffectInstance, id: &str, v: f64| {
+                for p in &mut inst.params {
+                    if p.id == id {
+                        p.value = lumit_core::model::EffectValue::Float(Property::fixed(v));
+                        return;
+                    }
+                }
+                panic!("no parameter {id}");
+            };
+            // Every box draws nothing of its own but the last, so a line on
+            // the frame can only have come down both wires.
+            let mut scatter = lumit_core::fx::instantiate("scatter").unwrap();
+            set(&mut scatter, "density", 5000.0);
+            set(&mut scatter, "mix", 0.0);
+            let mut pick = lumit_core::fx::instantiate("pick_points").unwrap();
+            set(&mut pick, "mix", 0.0);
+            let mut connect = lumit_core::fx::instantiate("connect_points").unwrap();
+            set(&mut connect, "max_distance", 6.0);
+            let wire = |from: Uuid, to: Uuid| Edge {
+                from: OutputRef::EffectData {
+                    effect: from,
+                    port: "points".into(),
+                },
+                to: InputRef::Param {
+                    node: NodeRef::Effect(to),
+                    port: "points".into(),
+                },
+            };
+            let mut edges = vec![wire(pick.id, connect.id)];
+            if wired {
+                edges.push(wire(scatter.id, pick.id));
+            }
+            let comp = doc.comp_mut(comp_id).unwrap();
+            let l = comp.layers.iter_mut().find(|l| l.id == top).unwrap();
+            l.effects = vec![scatter, pick, connect];
+            l.graph = LayerGraph {
+                edges,
+                ..LayerGraph::default()
+            };
+            (DocumentStore::new(doc).snapshot(), comp_id)
+        };
+        let wired = build(true);
+        let cut = build(false);
+        let mut frame_of = |(doc, comp_id): &(Arc<lumit_core::Document>, Uuid)| {
+            r.render_rgba(doc, *comp_id, 0, 1.0)
+                .expect("the export path renders")
+                .0
+        };
+        let webbed = frame_of(&wired);
+        assert_ne!(webbed, frame_of(&cut), "Scatter's points drew no lines");
+        assert_eq!(webbed, frame_of(&wired), "two renders of one frame differ");
+    }
+
+    /// **A stamp shown at another moment is rendered at that moment.**
+    ///
+    /// The clone layer darkens over its first second and is stamped on a
+    /// lattice half a second in. With a time offset each stamp steps further
+    /// back, so the frame is not the one every stamp makes at this moment. A
+    /// render path that drew one moment everywhere would pass every other
+    /// test and fail this one.
+    #[test]
+    fn a_time_offset_stamps_other_moments_of_the_clone_layer() {
+        let mut r = match HeadlessRenderer::shared() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let (cw, ch) = (32u32, 16u32);
+        let build = |time_offset: u32| {
+            use lumit_core::model::EffectValue;
+            let (mut doc, comp_id, _) = matrix_base(cw, ch, LinearColour([0.8, 0.1, 0.1, 1.0]));
+            let (_, top) = matrix_top(&mut doc, comp_id, LinearColour([0.1, 0.2, 0.9, 1.0]));
+            let comp = doc.comp_mut(comp_id).unwrap();
+            let source = comp.layers[1].id;
+            let mut darken = lumit_core::fx::instantiate("exposure").unwrap();
+            for p in &mut darken.params {
+                if p.id == "stops" {
+                    p.value = EffectValue::Float(ramp(0.0, -6.0, 1));
+                }
+            }
+            comp.layers[1].effects = vec![darken];
+            // The top layer's own size, so the lattice sits on it.
+            let (mut effects, graph) = cloned_lattice(12, 10, source);
+            for p in &mut effects[1].params {
+                if p.id == "time_offset" {
+                    p.value = EffectValue::Choice(time_offset);
+                }
+            }
+            let l = comp.layers.iter_mut().find(|l| l.id == top).unwrap();
+            l.effects = effects;
+            l.graph = graph;
+            (DocumentStore::new(doc).snapshot(), comp_id)
+        };
+        let off = build(0);
+        let in_order = build(1);
+        let mut frame_of = |(doc, comp_id): &(Arc<lumit_core::Document>, Uuid)| {
+            r.render_rgba(doc, *comp_id, 15, 1.0)
+                .expect("the export path renders")
+                .0
+        };
+        let cascade = frame_of(&in_order);
+        assert_ne!(cascade, frame_of(&off), "every stamp showed one moment");
+        assert_eq!(
+            cascade,
+            frame_of(&in_order),
+            "two renders of one frame differ"
+        );
+    }
+
+    /// **Clone pictures made inside the walk reach the stamps.**
+    ///
+    /// Scatter's points exist only once the render has made them, so with a
+    /// Clone index on the clone layer the pictures cannot be made before the
+    /// walk: there is no count to number them by. The realiser asks for them
+    /// when the stream exists. Each copy turns its hue by its own number, so
+    /// the frame is not the one Per clone off makes, where every copy is the
+    /// first of one. Nor is it the frame with the wire cut, which is what a
+    /// walk that never asked for the pictures would draw.
+    #[test]
+    fn clone_pictures_for_a_stream_made_during_the_render_are_numbered() {
+        let mut r = match HeadlessRenderer::shared() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let (cw, ch) = (32u32, 16u32);
+        let build = |per_clone: u32, wired: bool| {
+            use lumit_core::graph::{Edge, InputRef, LayerGraph, NodeRef, OutputRef};
+            use lumit_core::model::EffectValue;
+            let (mut doc, comp_id, _) = matrix_base(cw, ch, LinearColour([0.8, 0.1, 0.1, 1.0]));
+            let (_, top) = matrix_top(&mut doc, comp_id, LinearColour([0.1, 0.2, 0.9, 1.0]));
+            let fixed = |v: f64| EffectValue::Float(Property::fixed(v));
+            let set = |inst: &mut lumit_core::model::EffectInstance, id: &str, v: EffectValue| {
+                for p in &mut inst.params {
+                    if p.id == id {
+                        p.value = v;
+                        return;
+                    }
+                }
+                panic!("no parameter {id}");
+            };
+            let comp = doc.comp_mut(comp_id).unwrap();
+
+            // The clone layer: its hue follows the copy's number.
+            let hue = lumit_core::fx::instantiate("hue_shift").unwrap();
+            let index = lumit_core::fx::instantiate("clone_index").unwrap();
+            let mut remap = lumit_core::fx::instantiate("remap").unwrap();
+            set(&mut remap, "out_high", fixed(300.0));
+            let source = &mut comp.layers[1];
+            let source_id = source.id;
+            source.graph = LayerGraph {
+                edges: vec![
+                    Edge {
+                        from: OutputRef::Driver {
+                            node: index.id,
+                            port: "normalised".into(),
+                        },
+                        to: InputRef::Param {
+                            node: NodeRef::Driver(remap.id),
+                            port: "value".into(),
+                        },
+                    },
+                    Edge {
+                        from: OutputRef::Driver {
+                            node: remap.id,
+                            port: "value".into(),
+                        },
+                        to: InputRef::Param {
+                            node: NodeRef::Effect(hue.id),
+                            port: "angle".into(),
+                        },
+                    },
+                ],
+                nodes: vec![index, remap],
+                ..LayerGraph::default()
+            };
+            source.effects = vec![hue];
+
+            // Scatter draws nothing of its own, so what lands is the stamps.
+            let mut scatter = lumit_core::fx::instantiate("scatter").unwrap();
+            set(&mut scatter, "density", fixed(5000.0));
+            set(&mut scatter, "mix", fixed(0.0));
+            let mut clone = lumit_core::fx::instantiate("clone_to_points").unwrap();
+            set(
+                &mut clone,
+                "clone_layer",
+                EffectValue::Layer(Some(source_id)),
+            );
+            set(&mut clone, "per_clone", EffectValue::Choice(per_clone));
+            let l = comp.layers.iter_mut().find(|l| l.id == top).unwrap();
+            let wire = Edge {
+                from: OutputRef::EffectData {
+                    effect: scatter.id,
+                    port: "points".into(),
+                },
+                to: InputRef::Param {
+                    node: NodeRef::Effect(clone.id),
+                    port: "points".into(),
+                },
+            };
+            l.graph = LayerGraph {
+                edges: if wired { vec![wire] } else { Vec::new() },
+                ..LayerGraph::default()
+            };
+            l.effects = vec![scatter, clone];
+            (DocumentStore::new(doc).snapshot(), comp_id)
+        };
+        let auto = build(0, true);
+        let off = build(1, true);
+        let cut = build(0, false);
+        let mut frame_of = |(doc, comp_id): &(Arc<lumit_core::Document>, Uuid)| {
+            r.render_rgba(doc, *comp_id, 0, 1.0)
+                .expect("the export path renders")
+                .0
+        };
+        let numbered = frame_of(&auto);
+        assert_ne!(numbered, frame_of(&off), "every copy was the first of one");
+        assert_ne!(numbered, frame_of(&cut), "nothing was stamped");
+        assert_eq!(numbered, frame_of(&auto), "two renders of one frame differ");
     }
 
     /// **The degradation rung never engages on an export walk** (PS7;

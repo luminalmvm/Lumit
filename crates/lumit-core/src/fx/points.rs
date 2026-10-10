@@ -342,6 +342,7 @@ pub fn outline_polyline(e: &Emitter) -> MaskPolyline {
         closed: true,
         feather: 0.0,
         expansion: 0.0,
+        corners: Vec::new(),
     }
 }
 
@@ -505,9 +506,375 @@ pub struct PointsStream {
     /// not a second thing to thread beside it. [`Projection::FLAT`] on a 2D
     /// layer, and in the driver walk's px@comp evaluation of a 2D layer.
     pub projection: Projection,
+    /// How far each point's size is stretched across and down, in its own
+    /// turned frame. 1 is unstretched. **Empty means no point is**, which is
+    /// what every producer hands out.
+    pub stretch: Vec<[f32; 2]>,
+    /// Which points are picked, 1 or 0, for the effects that act on only some
+    /// of a stream. **Empty means all of them.**
+    pub pick: Vec<f32>,
+    /// A number each point carries for the effects below to read: which of
+    /// several layers to stamp, how far to offset it in time, where it comes
+    /// in an order. **Empty means its place in the stream.**
+    pub index: Vec<f32>,
+    /// The named columns: a value for each point under a name an effect
+    /// gave it, for the effects below to read by that name. Never more than
+    /// [`NAMED_MAX`] of them. Written through [`named_mut`](Self::named_mut)
+    /// and read through [`column`](Self::column) and [`read`](Self::read).
+    pub named: Vec<Named>,
+    /// How many of this stream's pixels make one px@comp, which is what the
+    /// `@x`, `@y`, `@z` and `@size` names are read in at any preview size.
+    /// **Nought means 1**, which is what a stream made in px@comp carries.
+    pub px_scale: f32,
 }
 
+/// One named column: a name, and one, two or four numbers for each point.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Named {
+    pub name: String,
+    /// How many of a point's four numbers are its value: 1 for a number, 2
+    /// for an offset across and down, 4 for a colour. The rest are 0. Nought
+    /// is a name two joined streams held at different widths, which reads
+    /// nothing.
+    pub width: u8,
+    pub values: Vec<[f32; 4]>,
+}
+
+/// The most named columns one stream carries, which is far more than a
+/// stack of effects writes. A new name past it is not written.
+pub const NAMED_MAX: usize = 64;
+
+/// What a name reads, found once so a walk over the points does not look
+/// the name up again. It holds for the stream it came from, and for a copy
+/// of that stream with points dropped or reordered.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Column {
+    /// The number each point carries, which is what an empty name means.
+    Number,
+    /// A named column, by its place in the stream's list.
+    Named(usize),
+    /// The names starting with `@`, worked out from the point itself.
+    Index,
+    Id,
+    X,
+    Y,
+    Z,
+    Count,
+    IndexNorm,
+    Rand01,
+    Size,
+    Age,
+    Picked,
+    /// A name nothing wrote.
+    Nothing,
+}
+
+/// The dice `@rand01` rolls, kept off the numbers every effect uses for its
+/// own.
+const RAND01_ATTR: u32 = 96;
+
 impl PointsStream {
+    /// The named column `name`, filled in for every point so it can be
+    /// written, holding `width` numbers a point: 1, 2 or 4. A new one starts
+    /// at 0, and one that was wider keeps nothing in the numbers it gives
+    /// up. `None` for an empty name, for one starting with `@`, which is
+    /// only ever read, and for a new name on a stream that carries
+    /// [`NAMED_MAX`] already.
+    pub fn named_mut(&mut self, name: &str, width: u8) -> Option<&mut Vec<[f32; 4]>> {
+        if name.is_empty() || name.starts_with('@') {
+            return None;
+        }
+        let n = self.len();
+        let width = match width {
+            0 | 1 => 1,
+            2 => 2,
+            _ => 4,
+        };
+        let at = match self.named.iter().position(|c| c.name == name) {
+            Some(at) => at,
+            None if self.named.len() < NAMED_MAX => {
+                self.named.push(Named {
+                    name: name.to_owned(),
+                    ..Named::default()
+                });
+                self.named.len() - 1
+            }
+            None => return None,
+        };
+        let column = self.named.get_mut(at)?;
+        column.values.resize(n, [0.0; 4]);
+        if width < column.width {
+            for value in &mut column.values {
+                value
+                    .iter_mut()
+                    .skip(usize::from(width))
+                    .for_each(|v| *v = 0.0);
+            }
+        }
+        column.width = width;
+        Some(&mut column.values)
+    }
+
+    /// What `name` reads, found once for a walk over the points.
+    ///
+    /// An empty name is the number each point carries. A name starting with
+    /// `@` is worked out from the point and never stored, in any mix of
+    /// capitals: `@index` its place in the stream, `@id`, `@x`, `@y` and
+    /// `@z` where it is, `@n` how many points there are, `@indexnorm` its
+    /// place from 0 at the first to 1 at the last, `@rand01` a roll of its
+    /// own dice that is the same every frame, `@size`, `@age` and `@picked`.
+    /// Anything else is a named column.
+    #[must_use]
+    pub fn column(&self, name: &str) -> Column {
+        if name.is_empty() {
+            return Column::Number;
+        }
+        let Some(built_in) = name.strip_prefix('@') else {
+            let carried = |c: &Named| c.name == name && c.width > 0;
+            let at = self.named.iter().position(carried);
+            return at.map_or(Column::Nothing, Column::Named);
+        };
+        [
+            ("index", Column::Index),
+            ("id", Column::Id),
+            ("x", Column::X),
+            ("y", Column::Y),
+            ("z", Column::Z),
+            ("n", Column::Count),
+            ("indexnorm", Column::IndexNorm),
+            ("rand01", Column::Rand01),
+            ("size", Column::Size),
+            ("age", Column::Age),
+            ("picked", Column::Picked),
+        ]
+        .into_iter()
+        .find(|(want, _)| built_in.eq_ignore_ascii_case(want))
+        .map_or(Column::Nothing, |(_, column)| column)
+    }
+
+    /// The group a name means: the picked points for an empty name, and
+    /// [`column`](Self::column) for any other.
+    #[must_use]
+    pub fn group(&self, name: &str) -> Column {
+        if name.is_empty() {
+            Column::Picked
+        } else {
+            self.column(name)
+        }
+    }
+
+    /// How many of this stream's pixels make one px@comp.
+    #[must_use]
+    pub fn units(&self) -> f32 {
+        if self.px_scale > 0.0 {
+            self.px_scale
+        } else {
+            1.0
+        }
+    }
+
+    /// What `column` reads at point `i` as one number, or `None` for a name
+    /// nothing wrote. The one reader every effect goes through. An offset
+    /// reads as its length, and a colour as how bright its first three
+    /// numbers are.
+    #[must_use]
+    pub fn read(&self, column: Column, i: usize) -> Option<f32> {
+        let place = |axis: usize| self.position.get(i).map_or(0.0, |p| p[axis]) / self.units();
+        let of = |column: &[f32]| column.get(i).copied().unwrap_or(0.0);
+        let id = self.id.get(i).copied().unwrap_or(0);
+        Some(match column {
+            Column::Number => self.index_of(i),
+            Column::Named(at) => {
+                let ([a, b, c, _], width) = self.whole(Column::Named(at), i)?;
+                let luma = crate::fx::cpu::LUMA;
+                match width {
+                    2 => a.hypot(b),
+                    4 => a * luma[0] + b * luma[1] + c * luma[2],
+                    _ => a,
+                }
+            }
+            Column::Index => i as f32,
+            Column::Id => id as f32,
+            Column::X => place(0),
+            Column::Y => place(1),
+            Column::Z => place(2),
+            Column::Count => self.len() as f32,
+            // A single point reads as the first.
+            Column::IndexNorm => i as f32 / self.len().saturating_sub(1).max(1) as f32,
+            Column::Rand01 => draw(0, id, RAND01_ATTR),
+            Column::Size => of(&self.size) / self.units(),
+            Column::Age => of(&self.age),
+            Column::Picked => f32::from(u8::from(self.picked(i))),
+            Column::Nothing => return None,
+        })
+    }
+
+    /// Every number `column` holds at point `i`, and how many of the four
+    /// are its value. Anything but a named column is one number.
+    #[must_use]
+    pub fn whole(&self, column: Column, i: usize) -> Option<([f32; 4], u8)> {
+        let Column::Named(at) = column else {
+            return Some(([self.read(column, i)?, 0.0, 0.0, 0.0], 1));
+        };
+        let named = self.named.get(at)?;
+        let value = named.values.get(i).copied().unwrap_or([0.0; 4]);
+        Some((value, named.width))
+    }
+
+    /// [`read`](Self::read) for one point by name. A walk over the points
+    /// finds the [`column`](Self::column) once instead.
+    #[must_use]
+    pub fn value(&self, name: &str, i: usize) -> Option<f32> {
+        self.read(self.column(name), i)
+    }
+
+    /// [`value`](Self::value), with 0 for a name that reads nothing. So a
+    /// name nobody wrote puts no point in a group.
+    #[must_use]
+    pub fn value_of(&self, name: &str, i: usize) -> f32 {
+        self.value(name, i).unwrap_or(0.0)
+    }
+
+    /// Whether point `i` is in `group`: picked or not for the picked points,
+    /// and for any other column a value above `threshold`.
+    #[must_use]
+    pub fn in_group(&self, group: Column, threshold: f32, i: usize) -> bool {
+        match group {
+            Column::Picked => self.picked(i),
+            _ => self.read(group, i).unwrap_or(0.0) > threshold,
+        }
+    }
+
+    /// Whether an effect acts on point `i`, by its Apply to, Group and
+    /// Threshold rows: every point, the ones in the group, or the ones
+    /// not in it. `group` is what [`group`](Self::group) made of the row.
+    #[must_use]
+    pub fn applies(&self, apply_to: u32, group: Column, threshold: f32, i: usize) -> bool {
+        match apply_to {
+            1 => self.in_group(group, threshold, i),
+            2 => !self.in_group(group, threshold, i),
+            _ => true,
+        }
+    }
+
+    /// Every named column made as long as the stream, so the helpers that
+    /// drop or reorder points can treat it like any other.
+    fn fill_named(&mut self) {
+        let n = self.len();
+        for column in &mut self.named {
+            column.values.resize(n, [0.0; 4]);
+        }
+    }
+
+    /// Point `i`'s stretch, `[1, 1]` where none was set.
+    #[must_use]
+    pub fn stretch_of(&self, i: usize) -> [f32; 2] {
+        self.stretch.get(i).copied().unwrap_or([1.0; 2])
+    }
+
+    /// Whether point `i` is picked. Every point is until something says not.
+    #[must_use]
+    pub fn picked(&self, i: usize) -> bool {
+        self.pick.get(i).is_none_or(|p| *p > 0.5)
+    }
+
+    /// The number point `i` carries, its place in the stream where none was
+    /// set.
+    #[must_use]
+    pub fn index_of(&self, i: usize) -> f32 {
+        self.index.get(i).copied().unwrap_or(i as f32)
+    }
+
+    /// The stretch column, filled in for every point so it can be written.
+    pub fn stretch_mut(&mut self) -> &mut Vec<[f32; 2]> {
+        let n = self.len();
+        self.stretch.resize(n, [1.0; 2]);
+        &mut self.stretch
+    }
+
+    /// The pick column, filled in for every point so it can be written.
+    pub fn pick_mut(&mut self) -> &mut Vec<f32> {
+        let n = self.len();
+        self.pick.resize(n, 1.0);
+        &mut self.pick
+    }
+
+    /// The index column, filled in for every point so it can be written.
+    pub fn index_mut(&mut self) -> &mut Vec<f32> {
+        let n = self.len();
+        for i in self.index.len()..n {
+            self.index.push(i as f32);
+        }
+        self.index.truncate(n);
+        &mut self.index
+    }
+
+    /// `other`'s points added after this stream's own. The camera stays this
+    /// stream's. The result is no longer in `id` order.
+    pub fn append(&mut self, other: &PointsStream) {
+        // Fill the optional columns in first if either side carries one.
+        // Decided here and not from the column in the loop, since a stream
+        // with no points yet has every column empty.
+        let stretch = !self.stretch.is_empty() || !other.stretch.is_empty();
+        let pick = !self.pick.is_empty() || !other.pick.is_empty();
+        let index = !self.index.is_empty() || !other.index.is_empty();
+        if stretch {
+            self.stretch_mut();
+        }
+        if pick {
+            self.pick_mut();
+        }
+        if index {
+            self.index_mut();
+        }
+        for i in 0..other.len() {
+            if stretch {
+                self.stretch.push(other.stretch_of(i));
+            }
+            if pick {
+                self.pick.push(if other.picked(i) { 1.0 } else { 0.0 });
+            }
+            if index {
+                self.index.push(other.index_of(i));
+            }
+        }
+        // A named column either side carries goes across, and the side
+        // without it reads 0. A name the two hold at different widths reads
+        // nothing from here on, since one value cannot be made of both.
+        self.fill_named();
+        let n = self.len();
+        for theirs in &other.named {
+            if let Some(ours) = self.named.iter_mut().find(|c| c.name == theirs.name) {
+                if ours.width != theirs.width {
+                    ours.width = 0;
+                }
+            } else if self.named.len() < NAMED_MAX {
+                self.named.push(Named {
+                    name: theirs.name.clone(),
+                    width: theirs.width,
+                    values: vec![[0.0; 4]; n],
+                });
+            }
+        }
+        for ours in &mut self.named {
+            let theirs = other.named.iter().find(|c| c.name == ours.name);
+            let value = |i: usize| theirs.and_then(|c| c.values.get(i)).copied();
+            ours.values
+                .extend((0..other.len()).map(|i| value(i).unwrap_or([0.0; 4])));
+            if ours.width == 0 {
+                ours.values.fill([0.0; 4]);
+            }
+        }
+        self.position.extend_from_slice(&other.position);
+        self.speed.extend_from_slice(&other.speed);
+        self.age.extend_from_slice(&other.age);
+        self.life.extend_from_slice(&other.life);
+        self.size.extend_from_slice(&other.size);
+        self.rotation.extend_from_slice(&other.rotation);
+        self.colour.extend_from_slice(&other.colour);
+        self.id.extend_from_slice(&other.id);
+    }
+
     /// How many particles are live this frame.
     #[must_use]
     pub fn len(&self) -> usize {
@@ -577,6 +944,11 @@ impl PointsStream {
             colour: self.colour.clone(),
             id: self.id.clone(),
             projection: self.projection.rescaled(s),
+            stretch: self.stretch.clone(),
+            pick: self.pick.clone(),
+            index: self.index.clone(),
+            named: self.named.clone(),
+            px_scale: s * self.units(),
         }
     }
 
@@ -596,6 +968,84 @@ impl PointsStream {
         (past.id.get(*cursor) == Some(&id)).then_some(*cursor)
     }
 
+    /// The points furthest from the camera first, so a draw in that order
+    /// lays the near ones on top. Points the same distance off keep the order
+    /// they were in, and on a 2D layer nothing moves.
+    pub fn sort_far_to_near(&mut self) {
+        if self.projection.is_flat() {
+            return;
+        }
+        let near: Vec<f32> = (0..self.len()).map(|i| self.depth_scale(i)).collect();
+        let mut order: Vec<usize> = (0..self.len()).collect();
+        order.sort_by(|a, b| near[*a].total_cmp(&near[*b]));
+        self.reorder(&order);
+    }
+
+    /// The points in ascending `id` order, which is the order Trail and the
+    /// other readers walk a stream in. Points with the same `id` keep the
+    /// order they were in.
+    pub fn sort_by_id(&mut self) {
+        let mut order: Vec<usize> = (0..self.len()).collect();
+        order.sort_by_key(|i| self.id.get(*i).copied().unwrap_or(0));
+        self.reorder(&order);
+    }
+
+    /// The same points in another order: place `k` takes the point that was
+    /// at `order[k]`.
+    fn reorder(&mut self, order: &[usize]) {
+        fn pick<T: Copy>(v: &mut Vec<T>, order: &[usize]) {
+            *v = order.iter().filter_map(|i| v.get(*i).copied()).collect();
+        }
+        self.fill_named();
+        pick(&mut self.position, order);
+        pick(&mut self.speed, order);
+        pick(&mut self.age, order);
+        pick(&mut self.life, order);
+        pick(&mut self.size, order);
+        pick(&mut self.rotation, order);
+        pick(&mut self.colour, order);
+        pick(&mut self.id, order);
+        pick(&mut self.stretch, order);
+        pick(&mut self.pick, order);
+        pick(&mut self.index, order);
+        for column in &mut self.named {
+            pick(&mut column.values, order);
+        }
+    }
+
+    /// Keep the points `keep` answers true for, by index, in the order they
+    /// are in.
+    pub fn retain(&mut self, keep: impl FnMut(usize) -> bool) {
+        let flags: Vec<bool> = (0..self.len()).map(keep).collect();
+        fn sift<T>(v: &mut Vec<T>, flags: &[bool]) {
+            let mut i = 0;
+            v.retain(|_| {
+                i += 1;
+                flags.get(i - 1).copied().unwrap_or(false)
+            });
+        }
+        sift(&mut self.position, &flags);
+        sift(&mut self.speed, &flags);
+        sift(&mut self.age, &flags);
+        sift(&mut self.life, &flags);
+        sift(&mut self.size, &flags);
+        sift(&mut self.rotation, &flags);
+        sift(&mut self.colour, &flags);
+        sift(&mut self.id, &flags);
+        if !self.stretch.is_empty() {
+            sift(&mut self.stretch, &flags);
+        }
+        if !self.pick.is_empty() {
+            sift(&mut self.pick, &flags);
+        }
+        if !self.index.is_empty() {
+            sift(&mut self.index, &flags);
+        }
+        for column in &mut self.named {
+            sift(&mut column.values, &flags);
+        }
+    }
+
     /// Keep the **newest `n`** particles by birth index, dropping the rest.
     ///
     /// The degradation rung: under governor pressure the effect draws
@@ -609,6 +1059,10 @@ impl PointsStream {
             return;
         }
         let cut = len - n;
+        self.fill_named();
+        for column in &mut self.named {
+            column.values.drain(..cut);
+        }
         self.position.drain(..cut);
         self.speed.drain(..cut);
         self.age.drain(..cut);
@@ -617,6 +1071,14 @@ impl PointsStream {
         self.rotation.drain(..cut);
         self.colour.drain(..cut);
         self.id.drain(..cut);
+        for column in [&mut self.pick, &mut self.index] {
+            if column.len() == len {
+                column.drain(..cut);
+            }
+        }
+        if self.stretch.len() == len {
+            self.stretch.drain(..cut);
+        }
     }
 }
 
@@ -933,9 +1395,8 @@ pub struct PointsSchedule {
     /// driver walk reads the very same function. (ponytail: one host evaluation
     /// per sample per frame, memoised per producer. points-stream.md §3.3
     /// designs a GPU arena carriage for when a profile shows a real comp
-    /// spending it — and that carriage is also what would let **Scatter** feed
-    /// a stack consumer, which for now reads the same empty stream a driver
-    /// does.)
+    /// spending it.) A producer whose points depend on a picture leaves this
+    /// empty and the walk fills it, see [`late`](Self::late).
     pub input: Vec<PointsStream>,
     /// Which effect in the layer's stack the wire came from, by index — folded
     /// into the frame key, and read for nothing else.
@@ -948,6 +1409,47 @@ pub struct PointsSchedule {
     /// so a duplicated layer still hits the per-effect cache: a key
     /// names content, never which row it came from.
     pub input_from: Option<u32>,
+    /// The entries of `input` that could not be made before the render,
+    /// because their points depend on a picture: which entry, and the slot in
+    /// this list of the op that makes it. The walk asks that op for it on the
+    /// card and fills the entry in.
+    pub late: Vec<(u32, u32)>,
+    /// For an effect with several Points inputs: which effect in the stack
+    /// each input after the first is wired from, by index, and `u32::MAX` for
+    /// none. Folded into the frame key as `input_from` is. `input` then holds
+    /// one stream per input instead of a history.
+    pub ports_from: Vec<u32>,
+    /// For Text to points: the letters of the Text layer its row names, laid
+    /// out at this frame's time. The text engine sits above this crate, so
+    /// the draw builder lays them out and the effect reads them here.
+    pub text: Vec<TextGlyph>,
+    /// For Label points: the Text layer its row names, with `text` already
+    /// the words it reads at this frame's time. Folded into the frame key.
+    pub label: Option<Box<crate::model::TextDocument>>,
+    /// How many texels of empty room this op's picture has on each side of
+    /// the layer's art, across and down. A Shape or Text layer's picture is
+    /// only as big as its art, and a point may fall anywhere, so the walk adds
+    /// the room before the first op that asks and cuts it away again before
+    /// one that does not. `projection` already carries the points the same
+    /// distance in. Only the points effects a stack ends on are given any,
+    /// and it is nought on every other layer.
+    pub grow: [u32; 2],
+}
+
+/// One letter of a Text layer as it is laid out, in the layer's own px. A
+/// line break is not one, and a space only when the effect asks for spaces.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TextGlyph {
+    /// Where its pen starts, on the baseline.
+    pub origin: [f32; 2],
+    /// Where its pen ends, on the baseline.
+    pub end: [f32; 2],
+    /// From the baseline to the middle of the line's height. Straight up for
+    /// a straight line, and turned with the curve for text on a path.
+    pub up: [f32; 2],
+    /// Which word it is in and which line it is on, counted from 0.
+    pub word: u32,
+    pub line: u32,
 }
 
 /// One producer's cached birth scan (particulate.md §3.1,
@@ -1376,6 +1878,33 @@ pub struct Sprite<'a> {
     pub h: u32,
 }
 
+/// How a sprite sits on its point. The default is what Particulate stamps: a
+/// square of the point's size with the whole picture across it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SpriteFit {
+    /// The stamp's width and height, as multiples of the point's size.
+    pub unit: [f32; 2],
+    /// The place on the stamp that sits on the point, 0 to 1 from its top
+    /// left corner. The stamp turns about it.
+    pub anchor: [f32; 2],
+    /// How many times the picture's width and height the stamp is. Above 1
+    /// leaves the stamp empty round the picture, below 1 cuts the picture off.
+    pub uv: [f32; 2],
+    /// Corner radius, px on the stamp of a point whose size is 100.
+    pub corner: f32,
+}
+
+impl Default for SpriteFit {
+    fn default() -> Self {
+        Self {
+            unit: [1.0; 2],
+            anchor: [0.5; 2],
+            uv: [1.0; 2],
+            corner: 0.0,
+        }
+    }
+}
+
 /// The shortest distance from `p` to the segment `a`–`b`.
 ///
 /// The one shape all three modes share: with `a == b` it is the distance to a
@@ -1390,6 +1919,27 @@ fn seg_distance(p: [f32; 2], a: [f32; 2], b: [f32; 2]) -> f32 {
         0.0
     };
     (p[0] - a[0] - ex * t).hypot(p[1] - a[1] - ey * t)
+}
+
+/// How much of a pixel a capsule covers, `far` from its spine, before the
+/// clamp to 0..=1.
+///
+/// From a radius of 1 px up this is the soft edge every dab has. Under that
+/// the edge's half pixel of ramp eats the line: one 1 px wide lying between
+/// two pixel rows is half a pixel from both, and drew nothing. So a thin
+/// capsule is measured as the share of the pixel its width fills. That puts
+/// half its light in each row there and all of it in one row when it lies on
+/// a pixel centre, and a line thinner than a pixel carries its share. The two
+/// are mixed between 1 px and 2 px wide, so a width can animate across
+/// without a jump.
+fn capsule_cover(radius: f32, edge: f32, far: f32) -> f32 {
+    let soft = (radius - far) / edge;
+    if radius >= 1.0 {
+        return soft;
+    }
+    let boxed = (radius + 0.5 - far).clamp(0.0, 1.0).min(2.0 * radius);
+    let blend = (2.0 * radius - 1.0).clamp(0.0, 1.0);
+    boxed + (soft.clamp(0.0, 1.0) - boxed) * blend
 }
 
 /// Whether an entry produces a points stream, and so wants the birth schedule
@@ -1448,6 +1998,7 @@ pub fn scale_path(poly: &MaskPolyline, px_scale: f32) -> MaskPolyline {
         // by a different amount at every preview divisor.
         feather: poly.feather * k,
         expansion: poly.expansion * k,
+        corners: poly.corners.clone(),
     }
 }
 
@@ -1517,6 +2068,22 @@ pub fn draw_stream(
     style: &DrawStyle,
     sprite: Option<Sprite<'_>>,
 ) {
+    draw_stream_fit(rgba, w, h, s, tails, style, sprite, &SpriteFit::default());
+}
+
+/// [`draw_stream`], with a say in how a sprite sits on its point. Clone to
+/// points' reference draw. `fit` is unread in the other two modes.
+#[allow(clippy::too_many_arguments)]
+pub fn draw_stream_fit(
+    rgba: &mut [f32],
+    w: u32,
+    h: u32,
+    s: &PointsStream,
+    tails: &[[f32; 3]],
+    style: &DrawStyle,
+    sprite: Option<Sprite<'_>>,
+    fit: &SpriteFit,
+) {
     let feather = style.feather.clamp(0.0, 1.0);
     let mix = style.mix.clamp(0.0, 1.0);
     // Sprite with nothing to stamp falls back to the disc, here and in the
@@ -1552,10 +2119,18 @@ pub fn draw_stream(
         // the lens.
         let tail = tails.get(i).map_or(head, |t| s.projection.apply(*t).0);
         let (rot_s, rot_c) = s.rotation.get(i).copied().unwrap_or(0.0).sin_cos();
-        // A rotated square reaches √2 of its half-side at the corners; a
-        // capsule reaches its radius past either end.
+        let stretch = s.stretch_of(i);
+        // A stretched dot is an ellipse in the point's own turned frame. A
+        // capsule keeps its round ends.
+        let oval = (stretch != [1.0; 2] && tail == head).then_some(stretch);
+        let widest = stretch[0].max(stretch[1]);
+        // A turned stamp reaches as far as its furthest corner from the
+        // point, a capsule its radius past either end.
+        let far = |k: usize| size * stretch[k] * fit.unit[k] * (0.5 + (fit.anchor[k] - 0.5).abs());
         let reach = if sprite.is_some() {
-            radius * std::f32::consts::SQRT_2
+            far(0).hypot(far(1))
+        } else if oval.is_some() {
+            radius * widest
         } else {
             radius
         };
@@ -1580,18 +2155,62 @@ pub fn draw_stream(
                         // then measure across a square of its size.
                         let lx = dx * rot_c + dy * rot_s;
                         let ly = -dx * rot_s + dy * rot_c;
-                        let (u, v) = (lx / size + 0.5, ly / size + 0.5);
+                        let (u, v) = (
+                            lx / (size * stretch[0] * fit.unit[0]) + 0.5 + (fit.anchor[0] - 0.5),
+                            ly / (size * stretch[1] * fit.unit[1]) + 0.5 + (fit.anchor[1] - 0.5),
+                        );
                         if !(0.0..=1.0).contains(&u) || !(0.0..=1.0).contains(&v) {
                             continue;
                         }
-                        let t = sprite_tap(sp, u, v);
+                        // Rounded corners, measured on the stamp of a point
+                        // whose size is 100 so they turn and scale with it.
+                        let mut cover = 1.0;
+                        if fit.corner > 0.0 {
+                            let b = [50.0 * fit.unit[0], 50.0 * fit.unit[1]];
+                            let r = fit.corner.min(b[0]).min(b[1]);
+                            let d = [
+                                (u - 0.5).abs() * 100.0 * fit.unit[0] - (b[0] - r),
+                                (v - 0.5).abs() * 100.0 * fit.unit[1] - (b[1] - r),
+                            ];
+                            if d[0] > 0.0 && d[1] > 0.0 {
+                                // Half a pixel of ramp, as a disc's edge has.
+                                let px = size * stretch[0].min(stretch[1]) / 100.0;
+                                cover = ((r - d[0].hypot(d[1])) * px + 0.5).clamp(0.0, 1.0);
+                            }
+                        }
+                        // More or less of the picture across the stamp. Past
+                        // the picture's own edge the stamp is empty.
+                        let (tu, tv) = (
+                            u + (u - 0.5) * (fit.uv[0] - 1.0),
+                            v + (v - 0.5) * (fit.uv[1] - 1.0),
+                        );
+                        if !(0.0..=1.0).contains(&tu) || !(0.0..=1.0).contains(&tv) {
+                            continue;
+                        }
+                        let t = sprite_tap(sp, tu, tv);
                         // Both are premultiplied, so the tint is the plain
                         // product: the sprite's own colour times the
                         // particle's, its alpha times the particle's.
-                        [t[0] * src[0], t[1] * src[1], t[2] * src[2], t[3] * src[3]]
+                        [
+                            t[0] * src[0] * cover,
+                            t[1] * src[1] * cover,
+                            t[2] * src[2] * cover,
+                            t[3] * src[3] * cover,
+                        ]
                     }
                     None => {
-                        let cov = ((radius - seg_distance(p, tail, head)) / edge).clamp(0.0, 1.0);
+                        let cov = match oval {
+                            Some(st) => {
+                                let (dx, dy) = (p[0] - head[0], p[1] - head[1]);
+                                let lx = (dx * rot_c + dy * rot_s) / st[0];
+                                let ly = (-dx * rot_s + dy * rot_c) / st[1];
+                                (radius - lx.hypot(ly)) * st[0].min(st[1]) / edge
+                            }
+                            // A dot keeps its soft edge whatever its size.
+                            None if tail == head => (radius - seg_distance(p, tail, head)) / edge,
+                            None => capsule_cover(radius, edge, seg_distance(p, tail, head)),
+                        }
+                        .clamp(0.0, 1.0);
                         if cov <= 0.0 {
                             continue;
                         }

@@ -20,7 +20,7 @@ use lumit_fx_macros::Effect;
 /// Curves' controls: one curve on each of Master, Red, Green, Blue and
 /// Alpha — After Effects' own five.
 ///
-/// Each curve is an ordered list of 2..=16 points in the unit square, the
+/// Each curve is an ordered list of 2..=32 points in the unit square, the
 /// identity diagonal by default, so a fresh Curves is the bit-exact
 /// passthrough: the grade family's sanctioned exception to the "no no-op
 /// default" rule (docs/08 §3.10).

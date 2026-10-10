@@ -1166,6 +1166,8 @@ pub enum EffectValue {
     /// A name rather than an index into the config's list, because a config
     /// edited on disk reorders its lists and a moved config must not silently
     /// retarget a row. Static, exactly as [`EffectValue::File`] is.
+    ///
+    /// Also what a text row holds: the text as typed.
     Text(String),
 }
 

@@ -848,6 +848,32 @@ fn feed_effect_stack(
                 h.update(text.as_bytes());
             }
         }
+        // Track points draws nothing until its analysis lands, and a landing
+        // changes no row. Whether one is in hand for these rows joins the key,
+        // so frames cached before it are not served after.
+        if e.effect.match_name == lumit_core::fx::effects::track_points::MATCH_NAME
+            && marker_layer
+                .is_some_and(|l| lumit_core::fx::effects::track_points::fresh(e, l).is_some())
+        {
+            h.update(b"tracked/");
+        }
+        // Bake points draws from a bake kept outside the document, and one
+        // landing changes no row. Which bake a frame reads, and which frame
+        // of it, joins the key, so a frame drawn before it is not served.
+        if e.effect.match_name == lumit_core::fx::effects::bake_points::MATCH_NAME {
+            use lumit_core::fx::effects::bake_points::{reading, Reading};
+            match marker_layer.map(|l| reading(doc, comp, l, e, lt)) {
+                Some(Reading::Baked(baked, frame)) => {
+                    h.update(b"baked/");
+                    h.update(&baked.content);
+                    h.update(&frame.to_le_bytes());
+                }
+                Some(Reading::Nothing) => {
+                    h.update(b"unbaked/");
+                }
+                _ => {}
+            }
+        }
         // **The Node graph effect's own graph** (docs/impl/node-graph-comp.md
         // §2.5), for the Custom shader's reason above: the loop below hashes
         // every stored parameter, which covers the graph's Inputs for free,
@@ -898,6 +924,140 @@ fn feed_effect_stack(
                 },
                 None => {
                     h.update(b"nocomp");
+                }
+            }
+        }
+        // **A birth schedule.** An effect with an Emit rate row is born from
+        // the whole of that track: every frame's rate up to this one decides
+        // how many particles there are and which is which, and the loop below
+        // feeds the rate at this frame only. So a keyed or expression-driven
+        // track is fed whole, as a keyed mask is. That renames a frame for an
+        // edit after it, which costs a render and can never serve a stale one.
+        // A still rate is named by its one value already. Found by the row and
+        // not by Particulate, as the builder finds it. A layer read through a
+        // Layer points tap has its stack folded by the Layer arm below, so its
+        // track comes through here too.
+        if let Some(lumit_core::model::EffectValue::Float(rate)) = e.param("emit_rate") {
+            if !matches!(rate.animation, lumit_core::anim::Animation::Static(_)) {
+                h.update(b"emit-track/");
+                let _ = serde_json::to_writer(&mut *h, rate);
+            }
+        }
+        // **A points history.** An effect that declares Trail's two rows reads
+        // the stream wired into it again at earlier times, one for each
+        // sample, and every row above is fed at this frame's time only. A
+        // keyframe that moves a producer at one of those times and not at this
+        // one would change the tail and not the name. So what a stream is made
+        // from is fed again at each: the points effects of this stack, its
+        // drivers, its animated masks, and the same of any layer a Layer
+        // points tap names. Named by the two rows and not by Trail, as the
+        // builder finds them.
+        {
+            use lumit_core::fx::effects::trail::Trail;
+            let declares = |id: &str| {
+                lumit_core::fx::schema(&e.effect.match_name)
+                    .is_some_and(|s| s.params.iter().any(|p| p.id == id))
+            };
+            if declares(Trail::SAMPLES_PARAM) && declares(Trail::STEP_PARAM) {
+                // Read as the builder reads them, with the same clamps.
+                let samples = e
+                    .float_at(Trail::SAMPLES_PARAM, lt)
+                    .unwrap_or(1.0)
+                    .clamp(1.0, 256.0) as usize;
+                let step = e.float_at(Trail::STEP_PARAM, lt).unwrap_or(0.0).max(0.0);
+                h.update(b"points-history/");
+                for k in 1..samples {
+                    let when = lt - k as f64 * step;
+                    if when < 0.0 {
+                        break;
+                    }
+                    feed_f64(h, when);
+                    let masks = marker_layer.map_or(&[][..], |l| &l.masks[..]);
+                    feed_points_rows_at(h, effects, drivers, masks, when);
+                    for tap in drivers.iter().filter(|d| {
+                        d.enabled
+                            && d.effect.match_name
+                                == lumit_core::fx::drivers::layer_points::MATCH_NAME
+                    }) {
+                        let named = tap
+                            .layer_ref(lumit_core::fx::drivers::layer_points::SOURCE_PARAM)
+                            .and_then(|id| comp.layers.iter().find(|l| l.id == id));
+                        if let Some(far) = named {
+                            feed_points_rows_at(
+                                h,
+                                &far.effects,
+                                &far.graph.nodes,
+                                &far.masks,
+                                when,
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        // **Clone to points' other moments.** A time offset stamps a clone
+        // layer as it was at other times, and the Layer arm below feeds each
+        // layer at this frame's time only. So every other picture the builder
+        // renders joins the key: the layer, the time, its source there and
+        // its stack there. The list is the builder's own, from the same code.
+        //
+        // Whether the copies are rendered one per clone joins too. A Clone
+        // index nobody has wired changes which render a stamp takes, and
+        // changes no stored value this walk reads. The clone numbers
+        // themselves need nothing: they follow from this flag, this effect's
+        // own rows and the wired stream, which are all in the key already.
+        //
+        // Not for a referenced layer's own stack, whose layer rows render as
+        // a passthrough.
+        if allow_after_effects_refs && e.effect.match_name == "clone_to_points" {
+            use lumit_core::fx::effects::clone_to_points::CloneToPoints;
+            h.update(b"clone-moments/");
+            h.update(&[u8::from(
+                CloneToPoints::stored(e, lt).per_clone_in(e, doc, comp),
+            )]);
+            let mut fed: Vec<(Uuid, u64)> = Vec::new();
+            for m in CloneToPoints::planned(e, doc, comp, t, lt, None)
+                .into_iter()
+                .flatten()
+            {
+                let at = (m.layer, m.time.to_bits());
+                // This layer is the effect's own input, which has no other
+                // moment, and a moment fed once is fed.
+                if m.time.to_bits() == t.to_bits()
+                    || marker_layer.is_some_and(|l| l.id == m.layer)
+                    || fed.contains(&at)
+                {
+                    continue;
+                }
+                fed.push(at);
+                let Some(src) = comp.layers.iter().find(|l| l.id == m.layer) else {
+                    continue;
+                };
+                h.update(src.id.as_bytes());
+                feed_f64(h, m.time);
+                // Out of its span there, the layer stamps nothing.
+                if m.time < src.in_point.0.to_f64() || m.time >= src.out_point.0.to_f64() {
+                    h.update(&[0]);
+                    continue;
+                }
+                h.update(&[1]);
+                let slt = lumit_core::time::layer_time(m.time, src.start_offset.0);
+                feed_source(h, doc, comp, src, slt, m.time, quality, stamper, visited)?;
+                if e.layer_source(m.row).folds_effects() {
+                    feed_effect_stack(
+                        h,
+                        src.switches.fx,
+                        &src.effects,
+                        Some(src),
+                        comp,
+                        doc,
+                        m.time,
+                        slt,
+                        quality,
+                        stamper,
+                        visited,
+                        false,
+                    )?;
                 }
             }
         }
@@ -1185,6 +1345,66 @@ fn feed_effect_stack(
         }
     }
     Some(())
+}
+
+/// Feed what a points stream is made from, at layer time `when`: every row
+/// that can animate on each enabled points effect of `effects` and on each
+/// enabled driver, and the shape of every animated mask.
+///
+/// For an effect that reads its stream at other times than the frame's own.
+/// More than any one wire carries, which costs a needless miss and can never
+/// cause a stale hit.
+fn feed_points_rows_at(
+    h: &mut blake3::Hasher,
+    effects: &[lumit_core::model::EffectInstance],
+    drivers: &[lumit_core::model::EffectInstance],
+    masks: &[lumit_core::mask::Mask],
+    when: f64,
+) {
+    use lumit_core::model::EffectValue;
+    let makes_points = |e: &&lumit_core::model::EffectInstance| {
+        lumit_core::fx::BUILTIN_DEFS
+            .get(&e.effect.match_name)
+            .is_some_and(|def| lumit_core::fx::points::wants_carriage(def.signature()))
+    };
+    for e in effects
+        .iter()
+        .filter(makes_points)
+        .chain(drivers)
+        .filter(|e| e.enabled)
+    {
+        for p in &e.params {
+            match &p.value {
+                EffectValue::Float(v) => feed_f64(h, v.value_at(when)),
+                EffectValue::Point(x, y) => {
+                    feed_f64(h, x.value_at(when));
+                    feed_f64(h, y.value_at(when));
+                }
+                EffectValue::Colour(c) => {
+                    for ch in c {
+                        feed_f64(h, ch.value_at(when));
+                    }
+                }
+                // Nothing else moves with time.
+                _ => {}
+            }
+        }
+    }
+    for mask in masks.iter().filter(|m| m.path_is_animated()) {
+        let path = mask.path_at(when);
+        for v in &path.vertices {
+            for c in [
+                v.pos.0,
+                v.pos.1,
+                v.tan_in.0,
+                v.tan_in.1,
+                v.tan_out.0,
+                v.tan_out.1,
+            ] {
+                feed_f64(h, c);
+            }
+        }
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -3137,6 +3357,271 @@ mod tests {
             key(&doc, &legacy, 1.0),
             key(&doc, &legacy_no_stack, 1.0),
             "the legacy after-effects bool still folds the depth layer's stack"
+        );
+    }
+
+    /// **Clone to points keys the other moments it shows.**
+    ///
+    /// With a time offset a stamp shows its clone layer as it was earlier, so
+    /// an edit to a keyframe that moves only an earlier moment changes a later
+    /// frame's picture and has to change its name. The clone layer here
+    /// settles at 2 s and the frame asked for is 2.5 s: the edit moves the
+    /// middle key at 1 s, which nothing at 2.5 s reads but a stamp 0.6 s back
+    /// does.
+    ///
+    /// And a Clone index on the clone layer keys the frame even unwired,
+    /// since it changes which render a stamp takes.
+    #[test]
+    fn clone_to_points_keys_the_other_moments_it_shows() {
+        use lumit_core::model::EffectValue;
+        let doc = Document::new();
+        let stops = |middle: f64| {
+            EffectValue::Float(linear_retime(&[(0.0, 0.0), (1.0, middle), (2.0, -6.0)]))
+        };
+        let set = |e: &mut lumit_core::model::EffectInstance, id: &str, value: EffectValue| {
+            for p in &mut e.params {
+                if p.id == id {
+                    p.value = value.clone();
+                }
+            }
+        };
+        let mut cloned = text_layer("c", 0.0, 10.0, 0.0);
+        cloned.switches.visible = false;
+        let mut darken = lumit_core::fx::instantiate("exposure").unwrap();
+        set(&mut darken, "stops", stops(-1.0));
+        cloned.effects.push(darken);
+        let mut host = text_layer("h", 0.0, 10.0, 0.0);
+        let mut clone = lumit_core::fx::instantiate("clone_to_points").unwrap();
+        set(
+            &mut clone,
+            "clone_layer",
+            EffectValue::Layer(Some(cloned.id)),
+        );
+        set(
+            &mut clone,
+            "time_step",
+            EffectValue::Float(lumit_core::anim::Property::fixed(0.2)),
+        );
+        host.effects.push(clone);
+        let off = comp_with(vec![host, cloned]);
+        let with = |comp: &Composition, time_offset: u32, middle: f64| {
+            let mut c = comp.clone();
+            set(
+                &mut c.layers[0].effects[0],
+                "time_offset",
+                EffectValue::Choice(time_offset),
+            );
+            set(&mut c.layers[1].effects[0], "stops", stops(middle));
+            c
+        };
+
+        assert_eq!(
+            key(&doc, &with(&off, 0, -1.0), 2.5),
+            key(&doc, &with(&off, 0, -3.0), 2.5),
+            "with no time offset the edit moves nothing this frame shows"
+        );
+        assert_ne!(
+            key(&doc, &with(&off, 1, -1.0), 2.5),
+            key(&doc, &with(&off, 1, -3.0), 2.5),
+            "a stamp shows the moment the edit moved, so the frame is renamed"
+        );
+
+        let mut indexed = off.clone();
+        indexed.layers[1]
+            .graph
+            .nodes
+            .push(lumit_core::fx::instantiate("clone_index").unwrap());
+        assert_ne!(
+            key(&doc, &off, 2.5),
+            key(&doc, &indexed, 2.5),
+            "an unwired Clone index still renders the copies one per clone"
+        );
+    }
+
+    /// **Trail keys the earlier moments it reads its stream at.**
+    ///
+    /// A tail is the producer evaluated again at earlier times, so an edit
+    /// to a keyframe that moves the producer only at an earlier time changes
+    /// the tail of a later frame and has to change its name. The Grid here
+    /// settles at 2 s and the frame asked for is 2.5 s. The edit moves the
+    /// middle key at 1 s, which the Grid at 2.5 s does not read and a tail
+    /// sample 0.6 s back does.
+    ///
+    /// Checked twice: with the Grid in Trail's own stack, and with it on
+    /// another layer read through a Layer points tap.
+    #[test]
+    fn trail_keys_the_earlier_moments_it_reads_its_stream_at() {
+        use lumit_core::graph::{Edge, InputRef, LayerGraph, NodeRef, OutputRef};
+        use lumit_core::model::EffectValue;
+        let doc = Document::new();
+        let fixed = |v: f64| EffectValue::Float(lumit_core::anim::Property::fixed(v));
+        let slide = |middle: f64| {
+            EffectValue::Float(linear_retime(&[(0.0, 0.0), (1.0, middle), (2.0, 100.0)]))
+        };
+        let set = |e: &mut lumit_core::model::EffectInstance, id: &str, value: EffectValue| {
+            for p in &mut e.params {
+                if p.id == id {
+                    p.value = value.clone();
+                }
+            }
+        };
+        let into_points = |to: Uuid| InputRef::Param {
+            node: NodeRef::Effect(to),
+            port: "points".into(),
+        };
+        let grid = || {
+            let mut g = lumit_core::fx::instantiate("grid").unwrap();
+            set(&mut g, "position_x", slide(50.0));
+            g
+        };
+        let trail = |samples: f64| {
+            let mut t = lumit_core::fx::instantiate("trail").unwrap();
+            set(&mut t, "back_samples", fixed(samples));
+            set(&mut t, "back_step", fixed(0.2));
+            t
+        };
+
+        // The producer in Trail's own stack.
+        let same_stack = |samples: f64, middle: f64| {
+            let mut l = text_layer("t", 0.0, 10.0, 0.0);
+            let (mut g, t) = (grid(), trail(samples));
+            set(&mut g, "position_x", slide(middle));
+            l.graph = LayerGraph {
+                edges: vec![Edge {
+                    from: OutputRef::EffectData {
+                        effect: g.id,
+                        port: "points".into(),
+                    },
+                    to: into_points(t.id),
+                }],
+                ..LayerGraph::default()
+            };
+            l.effects = vec![g, t];
+            l
+        };
+        // One layer and its ids, edited in place so only the keyframe differs.
+        let base = comp_with(vec![same_stack(8.0, 50.0)]);
+        let with = |samples: f64, middle: f64| {
+            let mut c = base.clone();
+            set(&mut c.layers[0].effects[0], "position_x", slide(middle));
+            set(&mut c.layers[0].effects[1], "back_samples", fixed(samples));
+            c
+        };
+        assert_eq!(
+            key(&doc, &with(1.0, 50.0), 2.5),
+            key(&doc, &with(1.0, 20.0), 2.5),
+            "with no tail the edit moves nothing this frame shows"
+        );
+        assert_ne!(
+            key(&doc, &with(8.0, 50.0), 2.5),
+            key(&doc, &with(8.0, 20.0), 2.5),
+            "a tail sample reads the moment the edit moved"
+        );
+
+        // The producer on another layer, through a tap. That layer is hidden,
+        // so it reaches the key through the tap alone.
+        let mut far = text_layer("far", 0.0, 10.0, 0.0);
+        far.switches.visible = false;
+        far.effects = vec![grid()];
+        let mut near = text_layer("near", 0.0, 10.0, 0.0);
+        let t = trail(8.0);
+        let mut tap = lumit_core::fx::instantiate("layer_points").unwrap();
+        set(&mut tap, "source", EffectValue::Layer(Some(far.id)));
+        near.graph = LayerGraph {
+            edges: vec![Edge {
+                from: OutputRef::Driver {
+                    node: tap.id,
+                    port: "points".into(),
+                },
+                to: into_points(t.id),
+            }],
+            nodes: vec![tap],
+            ..LayerGraph::default()
+        };
+        near.effects = vec![t];
+        let tapped = comp_with(vec![near, far]);
+        let mut edited = tapped.clone();
+        set(&mut edited.layers[1].effects[0], "position_x", slide(20.0));
+        assert_ne!(
+            key(&doc, &tapped, 2.5),
+            key(&doc, &edited, 2.5),
+            "a tail read through a tap keys the far layer's earlier moments"
+        );
+    }
+
+    /// **Particulate keys the whole of its Emit rate track.**
+    ///
+    /// Births follow every frame's rate up to this one, so an edit to an
+    /// earlier keyframe changes how many particles a later frame holds and
+    /// which is which, and has to change its name. The rate here settles at
+    /// 2 s and the frame asked for is 2.5 s. The edit moves the middle key at
+    /// 1 s, which the rate at 2.5 s does not read.
+    ///
+    /// Checked twice: Particulate in the layer's own stack, and on a hidden
+    /// layer read through a Layer points tap.
+    #[test]
+    fn particulate_keys_the_whole_of_its_emit_rate_track() {
+        use lumit_core::graph::{Edge, InputRef, LayerGraph, NodeRef, OutputRef};
+        use lumit_core::model::EffectValue;
+        let doc = Document::new();
+        let rate = |middle: f64| {
+            EffectValue::Float(linear_retime(&[(0.0, 10.0), (1.0, middle), (2.0, 50.0)]))
+        };
+        let set = |e: &mut lumit_core::model::EffectInstance, id: &str, value: EffectValue| {
+            for p in &mut e.params {
+                if p.id == id {
+                    p.value = value.clone();
+                }
+            }
+        };
+        let particulate = || {
+            let mut p = lumit_core::fx::instantiate("particulate").unwrap();
+            set(&mut p, "emit_rate", rate(30.0));
+            p
+        };
+
+        // In the layer's own stack.
+        let mut own = text_layer("p", 0.0, 10.0, 0.0);
+        own.effects = vec![particulate()];
+        let own = comp_with(vec![own]);
+        let mut edited = own.clone();
+        set(&mut edited.layers[0].effects[0], "emit_rate", rate(90.0));
+        assert_ne!(
+            key(&doc, &own, 2.5),
+            key(&doc, &edited, 2.5),
+            "an earlier rate changes which particles this frame holds"
+        );
+
+        // On a hidden layer, read through a tap into Clone to points.
+        let mut far = text_layer("far", 0.0, 10.0, 0.0);
+        far.switches.visible = false;
+        far.effects = vec![particulate()];
+        let mut near = text_layer("near", 0.0, 10.0, 0.0);
+        let clone = lumit_core::fx::instantiate("clone_to_points").unwrap();
+        let mut tap = lumit_core::fx::instantiate("layer_points").unwrap();
+        set(&mut tap, "source", EffectValue::Layer(Some(far.id)));
+        near.graph = LayerGraph {
+            edges: vec![Edge {
+                from: OutputRef::Driver {
+                    node: tap.id,
+                    port: "points".into(),
+                },
+                to: InputRef::Param {
+                    node: NodeRef::Effect(clone.id),
+                    port: "points".into(),
+                },
+            }],
+            nodes: vec![tap],
+            ..LayerGraph::default()
+        };
+        near.effects = vec![clone];
+        let tapped = comp_with(vec![near, far]);
+        let mut edited = tapped.clone();
+        set(&mut edited.layers[1].effects[0], "emit_rate", rate(90.0));
+        assert_ne!(
+            key(&doc, &tapped, 2.5),
+            key(&doc, &edited, 2.5),
+            "a tap keys the far layer's whole Emit rate track"
         );
     }
 

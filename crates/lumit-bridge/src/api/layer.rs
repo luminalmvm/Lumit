@@ -6780,6 +6780,34 @@ impl LayerReference {
             return Ok(());
         }
 
+        // A points effect landing below a producer is wired to it in the same
+        // undo step, so the stack works without a trip to the node graph.
+        let layer = self.item()?;
+        let mut effects = layer.effects;
+        let mut graph = layer.graph;
+        effects.push(instance.clone());
+        if graph.wire_points_from_above(&effects, instance.id) {
+            let proj = self.project()?;
+            let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
+            proj.store
+                .commit(lumit_core::Op::Batch {
+                    ops: vec![
+                        lumit_core::Op::SetLayerEffects {
+                            comp: self.comp_id,
+                            layer: self.layer_id,
+                            effects,
+                        },
+                        lumit_core::Op::SetLayerGraph {
+                            comp: self.comp_id,
+                            layer: self.layer_id,
+                            graph: Box::new(graph),
+                        },
+                    ],
+                })
+                .map_err(BridgeError::OpError)?;
+            return Ok(());
+        }
+
         self.with_effects(move |effects| {
             effects.push(instance);
             Ok(())

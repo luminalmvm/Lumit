@@ -2268,3 +2268,65 @@ fn a_cancelled_point_track_returns_nothing_partial() {
     let never = solve_points_cancellable(&set, 0, &reference, quad, &settings, &|| false);
     assert_eq!(never, solve_points(&set, 0, &reference, quad, &settings));
 }
+
+// ---------------------------------------------------------------------------
+// Blob tracking
+// ---------------------------------------------------------------------------
+
+/// Two bright squares moving apart keep the ids they were given on the first
+/// frame, their centres land where the squares were drawn, and a speck under
+/// the area floor is never a blob.
+#[test]
+fn two_moving_blobs_keep_their_ids() {
+    const BW: usize = 96;
+    const BH: usize = 64;
+    let draw = |n: usize| -> Vec<f32> {
+        let mut frame = vec![0.0f32; BW * BH];
+        // A 6x6 square walking right, an 8x8 one walking down, and one
+        // lit pixel that should be ignored.
+        for (x0, y0, side) in [(10 + 3 * n, 8, 6), (60, 6 + 2 * n, 8)] {
+            for y in y0..y0 + side {
+                for x in x0..x0 + side {
+                    frame[y * BW + x] = 1.0;
+                }
+            }
+        }
+        frame[50 * BW + 5] = 1.0;
+        frame
+    };
+    let run = || {
+        let mut tracker = BlobTracker::new(BlobSettings {
+            threshold: 0.5,
+            invert: false,
+            min_area: 4.0,
+            max_area: 1000.0,
+            max_move: 8.0,
+            max_blobs: 100,
+        });
+        for n in 0..10 {
+            let frame = draw(n);
+            tracker
+                .push(n as i64, FramePlane::new(&frame, BW, BH).unwrap())
+                .unwrap();
+        }
+        tracker.finish()
+    };
+    let tracks = run();
+    assert_eq!(tracks.len(), 2, "two squares, and the speck is too small");
+    // Ids go in scan order, so the square that starts higher up is first.
+    for (track, (x0, y0, dx, dy, side)) in tracks
+        .iter()
+        .zip([(60.0, 6.0, 0.0, 2.0, 8.0), (10.0, 8.0, 3.0, 0.0, 6.0)])
+    {
+        assert_eq!(track.points.len(), 10, "one id for the whole run");
+        for (n, p) in track.points.iter().enumerate() {
+            let half = (side - 1.0) / 2.0;
+            assert_eq!(p.frame, n as i64);
+            assert!((p.x - (x0 + dx * n as f64 + half)).abs() < 1e-9);
+            assert!((p.y - (y0 + dy * n as f64 + half)).abs() < 1e-9);
+            assert_eq!(p.area, side * side);
+        }
+    }
+    assert_eq!((tracks[0].id, tracks[1].id), (0, 1));
+    assert_eq!(tracks, run(), "the same frames give the same tracks");
+}

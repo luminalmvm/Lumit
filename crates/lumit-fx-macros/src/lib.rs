@@ -66,6 +66,7 @@ use syn::{
         seed,
         file,
         colour_name,
+        text,
         layer,
         clip,
         mask_path,
@@ -499,6 +500,7 @@ fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
         "seed",
         "file",
         "colour_name",
+        "text",
         "layer",
         "clip",
         "mask_path",
@@ -513,7 +515,7 @@ fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
             syn::Error::new(
                 field.span(),
                 "every field is a parameter and needs one of #[slider] #[bounded] #[counter] \
-                 #[dial] #[toggle] #[choice] #[colour] #[seed] #[file] #[layer] #[clip] \
+                 #[dial] #[toggle] #[choice] #[colour] #[seed] #[file] #[text] #[layer] #[clip] \
                  #[mask_path] #[curve] #[action]",
             )
         })?;
@@ -722,6 +724,15 @@ fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
                     }
                 },
                 quote! { () },
+            )
+        }
+        // A short text the user types. The field is a `ShortText`, which is
+        // `Copy`, and `default` is what a fresh row holds.
+        "text" => {
+            let default = get("default").unwrap_or_else(|| quote! { "" });
+            (
+                quote! { ::lumit_core::fx::ParamKind::Text { default: #default } },
+                quote! { p.text(#idc, #default) },
             )
         }
         "layer" => {

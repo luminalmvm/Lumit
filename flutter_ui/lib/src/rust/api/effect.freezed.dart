@@ -1700,6 +1700,7 @@ extension BridgeParamKindPatterns on BridgeParamKind {
     TResult Function(BridgeParamKind_Seed value)? seed,
     TResult Function(BridgeParamKind_File value)? file,
     TResult Function(BridgeParamKind_ColourName value)? colourName,
+    TResult Function(BridgeParamKind_Text value)? text,
     TResult Function(BridgeParamKind_Layer value)? layer,
     TResult Function(BridgeParamKind_Clip value)? clip,
     TResult Function(BridgeParamKind_MaskPath value)? maskPath,
@@ -1728,6 +1729,8 @@ extension BridgeParamKindPatterns on BridgeParamKind {
         return file(_that);
       case BridgeParamKind_ColourName() when colourName != null:
         return colourName(_that);
+      case BridgeParamKind_Text() when text != null:
+        return text(_that);
       case BridgeParamKind_Layer() when layer != null:
         return layer(_that);
       case BridgeParamKind_Clip() when clip != null:
@@ -1769,6 +1772,7 @@ extension BridgeParamKindPatterns on BridgeParamKind {
     required TResult Function(BridgeParamKind_Seed value) seed,
     required TResult Function(BridgeParamKind_File value) file,
     required TResult Function(BridgeParamKind_ColourName value) colourName,
+    required TResult Function(BridgeParamKind_Text value) text,
     required TResult Function(BridgeParamKind_Layer value) layer,
     required TResult Function(BridgeParamKind_Clip value) clip,
     required TResult Function(BridgeParamKind_MaskPath value) maskPath,
@@ -1796,6 +1800,8 @@ extension BridgeParamKindPatterns on BridgeParamKind {
         return file(_that);
       case BridgeParamKind_ColourName():
         return colourName(_that);
+      case BridgeParamKind_Text():
+        return text(_that);
       case BridgeParamKind_Layer():
         return layer(_that);
       case BridgeParamKind_Clip():
@@ -1834,6 +1840,7 @@ extension BridgeParamKindPatterns on BridgeParamKind {
     TResult? Function(BridgeParamKind_Seed value)? seed,
     TResult? Function(BridgeParamKind_File value)? file,
     TResult? Function(BridgeParamKind_ColourName value)? colourName,
+    TResult? Function(BridgeParamKind_Text value)? text,
     TResult? Function(BridgeParamKind_Layer value)? layer,
     TResult? Function(BridgeParamKind_Clip value)? clip,
     TResult? Function(BridgeParamKind_MaskPath value)? maskPath,
@@ -1861,6 +1868,8 @@ extension BridgeParamKindPatterns on BridgeParamKind {
         return file(_that);
       case BridgeParamKind_ColourName() when colourName != null:
         return colourName(_that);
+      case BridgeParamKind_Text() when text != null:
+        return text(_that);
       case BridgeParamKind_Layer() when layer != null:
         return layer(_that);
       case BridgeParamKind_Clip() when clip != null:
@@ -1911,6 +1920,7 @@ extension BridgeParamKindPatterns on BridgeParamKind {
     TResult Function()? seed,
     TResult Function(List<String> filter, String filterName)? file,
     TResult Function(BridgeColourNameRole role)? colourName,
+    TResult Function(String default_)? text,
     TResult Function()? layer,
     TResult Function()? clip,
     TResult Function()? maskPath,
@@ -1941,6 +1951,8 @@ extension BridgeParamKindPatterns on BridgeParamKind {
         return file(_that.filter, _that.filterName);
       case BridgeParamKind_ColourName() when colourName != null:
         return colourName(_that.role);
+      case BridgeParamKind_Text() when text != null:
+        return text(_that.default_);
       case BridgeParamKind_Layer() when layer != null:
         return layer();
       case BridgeParamKind_Clip() when clip != null:
@@ -1993,6 +2005,7 @@ extension BridgeParamKindPatterns on BridgeParamKind {
     required TResult Function() seed,
     required TResult Function(List<String> filter, String filterName) file,
     required TResult Function(BridgeColourNameRole role) colourName,
+    required TResult Function(String default_) text,
     required TResult Function() layer,
     required TResult Function() clip,
     required TResult Function() maskPath,
@@ -2023,6 +2036,8 @@ extension BridgeParamKindPatterns on BridgeParamKind {
         return file(_that.filter, _that.filterName);
       case BridgeParamKind_ColourName():
         return colourName(_that.role);
+      case BridgeParamKind_Text():
+        return text(_that.default_);
       case BridgeParamKind_Layer():
         return layer();
       case BridgeParamKind_Clip():
@@ -2071,6 +2086,7 @@ extension BridgeParamKindPatterns on BridgeParamKind {
     TResult? Function()? seed,
     TResult? Function(List<String> filter, String filterName)? file,
     TResult? Function(BridgeColourNameRole role)? colourName,
+    TResult? Function(String default_)? text,
     TResult? Function()? layer,
     TResult? Function()? clip,
     TResult? Function()? maskPath,
@@ -2101,6 +2117,8 @@ extension BridgeParamKindPatterns on BridgeParamKind {
         return file(_that.filter, _that.filterName);
       case BridgeParamKind_ColourName() when colourName != null:
         return colourName(_that.role);
+      case BridgeParamKind_Text() when text != null:
+        return text(_that.default_);
       case BridgeParamKind_Layer() when layer != null:
         return layer();
       case BridgeParamKind_Clip() when clip != null:
@@ -2837,6 +2855,72 @@ class _$BridgeParamKind_ColourNameCopyWithImpl<$Res>
           ? _self.role
           : role // ignore: cast_nullable_to_non_nullable
               as BridgeColourNameRole,
+    ));
+  }
+}
+
+/// @nodoc
+
+class BridgeParamKind_Text extends BridgeParamKind {
+  const BridgeParamKind_Text({required this.default_}) : super._();
+
+  final String default_;
+
+  /// Create a copy of BridgeParamKind
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  @pragma('vm:prefer-inline')
+  $BridgeParamKind_TextCopyWith<BridgeParamKind_Text> get copyWith =>
+      _$BridgeParamKind_TextCopyWithImpl<BridgeParamKind_Text>(
+          this, _$identity);
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is BridgeParamKind_Text &&
+            (identical(other.default_, default_) ||
+                other.default_ == default_));
+  }
+
+  @override
+  int get hashCode => Object.hash(runtimeType, default_);
+
+  @override
+  String toString() {
+    return 'BridgeParamKind.text(default_: $default_)';
+  }
+}
+
+/// @nodoc
+abstract mixin class $BridgeParamKind_TextCopyWith<$Res>
+    implements $BridgeParamKindCopyWith<$Res> {
+  factory $BridgeParamKind_TextCopyWith(BridgeParamKind_Text value,
+          $Res Function(BridgeParamKind_Text) _then) =
+      _$BridgeParamKind_TextCopyWithImpl;
+  @useResult
+  $Res call({String default_});
+}
+
+/// @nodoc
+class _$BridgeParamKind_TextCopyWithImpl<$Res>
+    implements $BridgeParamKind_TextCopyWith<$Res> {
+  _$BridgeParamKind_TextCopyWithImpl(this._self, this._then);
+
+  final BridgeParamKind_Text _self;
+  final $Res Function(BridgeParamKind_Text) _then;
+
+  /// Create a copy of BridgeParamKind
+  /// with the given fields replaced by the non-null parameter values.
+  @pragma('vm:prefer-inline')
+  $Res call({
+    Object? default_ = null,
+  }) {
+    return _then(BridgeParamKind_Text(
+      default_: null == default_
+          ? _self.default_
+          : default_ // ignore: cast_nullable_to_non_nullable
+              as String,
     ));
   }
 }

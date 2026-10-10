@@ -143,9 +143,21 @@ Generate textures, colours, and gradients.
 | [Grid](/effects/generate/grid/) | A lattice of points, and the discs that make it visible. |
 | [Scatter](/effects/generate/scatter/) | Throws points at the picture and keeps the ones that land on something. |
 | [Emit from image](/effects/generate/emit-from-image/) | Throws points at a layer and keeps the ones that land somewhere bright. |
+| [Points along path](/effects/generate/points-along-path/) | Evenly spaced points along one of the layer's masks. |
+| [Text to points](/effects/generate/text-to-points/) | Makes one point for each character, word or line of a Text layer. |
+| [Track points](/effects/generate/track-points/) | Follows things in the layer's footage and hands them out as points. |
 | [Clone to points](/effects/generate/clone-to-points/) | Stamps a layer's picture at every point of a stream. |
 | [Trail](/effects/generate/trail/) | Draws where every point of a stream has just been. |
 | [Connect points](/effects/generate/connect-points/) | Joins points that are near each other with lines. |
+| [Points field](/effects/generate/points-field/) | Draws a picture of where a stream's points are, for other effects to read. |
+| [Label points](/effects/generate/label-points/) | Writes a short piece of text beside every point of a stream. |
+| [Vary points](/effects/generate/vary-points/) | Makes the points of a stream differ from one another. |
+| [Pick points](/effects/generate/pick-points/) | Keeps some of a stream's points and drops the rest. |
+| [Transform points](/effects/generate/transform-points/) | Moves, scales and turns a whole stream of points about an anchor. |
+| [Merge points](/effects/generate/merge-points/) | Joins up to four streams of points into one. |
+| [Relax points](/effects/generate/relax-points/) | Pushes a stream's points apart until they stop overlapping. |
+| [Flow points](/effects/generate/flow-points/) | Carries a stream's points along a field over time. |
+| [Bake points](/effects/generate/bake-points/) | Writes the points wired into it to disk and hands the written points on. |
 
 {/* END GENERATED */}
 
@@ -288,5 +300,6 @@ A driver is wired on a layer's own graph, see [The node graph](/use/nodes/), or 
 | [Points sample](/effects/drivers/points-sample/) | Turns a stream of points into numbers you can drive things with. |
 | [Layer points](/effects/drivers/layer-points/) | Brings another layer's points into this layer's graph. |
 | [Expression](/effects/drivers/expression/) | Hands out whatever an expression returns: a number, a point or a colour. |
+| [Clone index](/effects/drivers/clone-index/) | Tells a layer which copy Clone to points is stamping it as. |
 
 {/* END GENERATED */}

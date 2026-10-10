@@ -68,9 +68,9 @@ const TABLES_AT: usize = 4;
 /// Where the five point records start: past the header and the five tables.
 const POINTS_AT: usize = TABLES_AT + CHANNELS * TABLE;
 
-/// The most control points a record has room for. The same sixteen Lumit's own
-/// curve carries (`lumit_core::fx::CURVE_MAX_POINTS`), which is why the
-/// point list needs no thinning on the way across.
+/// The most control points a record has room for. Lumit's own curve carries
+/// more (`lumit_core::fx::CURVE_MAX_POINTS`), which is why the point list
+/// needs no thinning on the way across.
 const MAX_POINTS: usize = 16;
 
 /// One channel's record: sixteen pairs, the count, the selected index.

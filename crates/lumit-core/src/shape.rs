@@ -646,6 +646,41 @@ pub fn contents_bounds(contents: &[ShapeItem], t: f64) -> Option<(f64, f64, f64,
     out
 }
 
+/// The outlines a layer's art draws at `t`, as one run for an effect to walk
+/// in the pixels of the layer's own picture: every line the picture strokes,
+/// in list order, once a combine, an offset, a trim and the dashes have had
+/// it, with each copy its repeater draws. An item with no paint is followed
+/// too, which is how a guide path for points is drawn.
+///
+/// A line's vertices are its two ends and the item's own vertices that fall on
+/// it. An offset or a combine leaves no telling which those were, so there a
+/// vertex is wherever the line turns, and a curve has one at every joint.
+#[must_use]
+pub fn outline_at(contents: &[ShapeItem], t: f64) -> crate::mask::MaskPolyline {
+    let mut out = crate::mask::MaskPolyline::default();
+    // The picture's corner is the corner of the art's box.
+    let Some((x0, y0, ..)) = contents_bounds(contents, t) else {
+        return out;
+    };
+    let to_box = Affine::translation(-x0, -y0);
+    for run in runs(contents) {
+        let Some(art) = Art::at(contents, run, t) else {
+            continue;
+        };
+        for (copy, _) in art.item.copies_at(t) {
+            let place = copy.then(&to_box);
+            let own = art.own(&place, t);
+            for line in art.stroked(&art.placed(&place), copy.scale(), t) {
+                if out.points.len() >= crate::fx::points::CAP_HARD as usize {
+                    return out;
+                }
+                out.append(&walked(line, own.as_deref()));
+            }
+        }
+    }
+    out
+}
+
 /// The layer's contents split into the pieces that draw as **one**.
 ///
 /// An item whose [`combine`](ShapeItem::combine) is 0 starts a run of its own;
@@ -730,6 +765,191 @@ fn combined_at(run: &[ShapeItem], t: f64) -> Vec<Vec<(f64, f64)>> {
         .collect()
 }
 
+/// One run of a layer's contents as it is drawn at `t`, before the repeater
+/// places it. The picture and an effect walking the outline both start here,
+/// so a combine, an offset and a trim mean the same thing to each.
+struct Art<'a> {
+    /// The run's first item, whose paint and modifiers the whole run takes.
+    item: &'a ShapeItem,
+    /// The item's own shape this instant, which a keyed path moves.
+    drawn: std::borrow::Cow<'a, BezierPath>,
+    /// What a combine, an offset or a trim made of it. `None` is "nothing
+    /// has changed it", which draws the bezier itself.
+    lines: Option<Vec<Vec<(f64, f64)>>>,
+    /// A combined run, whose contours close on themselves.
+    ring: bool,
+}
+
+impl<'a> Art<'a> {
+    /// The art of `run`, or `None` when none is left to draw: trimmed away
+    /// to nothing (the first frame of a write-on), or a combine that left no
+    /// art at all.
+    fn at(contents: &'a [ShapeItem], run: std::ops::Range<usize>, t: f64) -> Option<Self> {
+        let members = contents.get(run)?;
+        let item = members.first()?;
+        let ring = members.len() > 1;
+        let lines: Option<Vec<Vec<(f64, f64)>>> = if ring {
+            Some(
+                combined_at(members, t)
+                    .into_iter()
+                    .map(|c| item.shaped(c, true, t))
+                    .collect(),
+            )
+        } else {
+            item.trimmed_at(t).map(|p| vec![p])
+        };
+        let lines = match lines {
+            Some(lines) => {
+                let lines: Vec<_> = lines.into_iter().filter(|p| p.len() >= 2).collect();
+                if lines.is_empty() {
+                    return None;
+                }
+                Some(lines)
+            }
+            None => None,
+        };
+        Some(Self {
+            item,
+            drawn: item.path_at(t),
+            lines,
+            ring,
+        })
+    }
+
+    /// The paths one copy draws, placed by `to_box`.
+    fn placed(&self, to_box: &Affine) -> Vec<BezierPath> {
+        // A boolean's contours close on themselves; a trimmed piece has two
+        // ends whatever the path it was cut from had.
+        let closed = self.ring || self.drawn.closed;
+        match &self.lines {
+            // A trimmed piece or a boolean's contour is a polyline, and a
+            // polyline is a bezier whose handles are all zero — one path
+            // type, still. Closed so the fill has something to
+            // fill: a half-trimmed circle fills as a half circle, exactly
+            // as AE draws it.
+            Some(lines) => lines
+                .iter()
+                .map(|points| {
+                    polyline_path(
+                        &points.iter().map(|&p| to_box.apply(p)).collect::<Vec<_>>(),
+                        closed,
+                    )
+                })
+                .collect(),
+            None => vec![transform_path(&self.drawn, to_box)],
+        }
+    }
+
+    /// The lines the outline's brush runs along for one copy's `placed`
+    /// paths, cut into their dashes. `scale` is how much bigger the copy
+    /// draws, which its dashes grow with.
+    fn stroked(&self, placed: &[BezierPath], scale: f64, t: f64) -> Vec<Vec<(f64, f64)>> {
+        let item = self.item;
+        // Dashes cut the outline into pieces, each of which is a brush run
+        // of its own. A solid outline is one piece, which is the
+        // same single run it always was. An item with no outline has no
+        // dashes to cut it.
+        let pattern: Vec<f64> = if item.stroke.is_some() && item.stroke_width > 0.0 {
+            item.dash_pattern_at(t).iter().map(|d| d * scale).collect()
+        } else {
+            Vec::new()
+        };
+        placed
+            .iter()
+            .flat_map(|path| {
+                let mut points: Vec<(f64, f64)> = match &self.lines {
+                    Some(_) => path.vertices.iter().map(|v| v.pos).collect(),
+                    None => flatten_path(path),
+                };
+                if let (true, Some(&first)) = (self.ring, points.first()) {
+                    points.push(first);
+                }
+                if pattern.is_empty() {
+                    vec![points]
+                } else {
+                    dashed(&points, &pattern, item.dash_offset.value_at(t) * scale)
+                }
+            })
+            .collect()
+    }
+
+    /// The item's own vertices where `to_box` places them, sorted by x, while
+    /// the outline still runs through them. An offset moves it off them and a
+    /// combine cuts it elsewhere, and then there are none to name.
+    fn own(&self, to_box: &Affine, t: f64) -> Option<Vec<(f64, f64)>> {
+        if self.ring || self.item.offset_amount.value_at(t) != 0.0 {
+            return None;
+        }
+        let mut own: Vec<(f64, f64)> = self
+            .drawn
+            .vertices
+            .iter()
+            .map(|v| to_box.apply(v.pos))
+            .collect();
+        own.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.total_cmp(&b.1)));
+        Some(own)
+    }
+}
+
+/// One stroked line as a path for an effect to walk: closed where it comes
+/// back to its start, with a vertex at each end and at each of `own`, the
+/// item's own vertices. With no `own` to go by a vertex is wherever the line
+/// turns. The joints along a straight run are never vertices.
+fn walked(mut points: Vec<(f64, f64)>, own: Option<&[(f64, f64)]>) -> crate::mask::MaskPolyline {
+    points.dedup();
+    if points.len() < 2 {
+        return crate::mask::MaskPolyline::default();
+    }
+    let closed = points.len() > 2 && points.first() == points.last();
+    // A closed line ends on its first point again, which is no second vertex.
+    let n = points.len() - usize::from(closed);
+    let at = |j: usize| points.get(j % n).copied().unwrap_or_default();
+    let corners = (0..n)
+        .filter(|&i| {
+            if !closed && (i == 0 || i + 1 == n) {
+                return true;
+            }
+            let b = at(i);
+            match own {
+                // Cutting a line moves a point by a rounding error, so near
+                // enough is the same place.
+                Some(own) => {
+                    const NEAR: f64 = 1e-6;
+                    let from = own.partition_point(|v| v.0 < b.0 - NEAR);
+                    own.iter()
+                        .skip(from)
+                        .take_while(|v| v.0 <= b.0 + NEAR)
+                        .any(|v| (v.1 - b.1).abs() <= NEAR)
+                }
+                None => {
+                    let (a, c) = (at(i + n - 1), at(i + 1));
+                    let (u, v) = ((b.0 - a.0, b.1 - a.1), (c.0 - b.0, c.1 - b.1));
+                    // The sine of the turn, with a doubling back counted too.
+                    let straight = u.0.hypot(u.1) * v.0.hypot(v.1) * 1e-3;
+                    (u.0 * v.1 - u.1 * v.0).abs() > straight || u.0 * v.0 + u.1 * v.1 < 0.0
+                }
+            }
+        })
+        .collect();
+    let points: Vec<[f32; 2]> = points.iter().map(|p| [p.0 as f32, p.1 as f32]).collect();
+    let mut arc = Vec::with_capacity(points.len());
+    let mut far = 0.0f32;
+    arc.push(far);
+    for pair in points.windows(2) {
+        if let [a, b] = pair {
+            far += (b[0] - a[0]).hypot(b[1] - a[1]);
+        }
+        arc.push(far);
+    }
+    crate::mask::MaskPolyline {
+        points,
+        arc,
+        closed,
+        corners,
+        ..Default::default()
+    }
+}
+
 /// Draw `contents` into a fresh `w`×`h` RGBA buffer whose extent is the box
 /// `(min_x, min_y)`–`(max_x, max_y)` in layer coordinates.
 ///
@@ -767,7 +987,6 @@ pub fn rasterise_contents(
         // A combined run is drawn once, with the paint and the modifiers of the
         // **first** item in it; the ones after it lend their path and
         // nothing else. A run of one is every shape nobody has combined.
-        let ring = run.len() > 1;
         let Some(item) = contents.get(run.start) else {
             continue;
         };
@@ -775,34 +994,8 @@ pub fn rasterise_contents(
         if opacity <= 0.0 {
             continue;
         }
-        // The art at this instant, once the combine and the modifiers have had
-        // it. `None` is "nothing has changed it", which draws the bezier itself.
-        let lines: Option<Vec<Vec<(f64, f64)>>> = if ring {
-            Some(
-                combined_at(&contents[run.clone()], t)
-                    .into_iter()
-                    .map(|c| item.shaped(c, true, t))
-                    .collect(),
-            )
-        } else {
-            item.trimmed_at(t).map(|p| vec![p])
-        };
-        // The shape this instant, which a keyed path moves.
-        let drawn = item.path_at(t);
-        // A boolean's contours close on themselves; a trimmed piece has two
-        // ends whatever the path it was cut from had.
-        let closed = ring || drawn.closed;
-        let lines = match lines {
-            Some(lines) => {
-                let lines: Vec<_> = lines.into_iter().filter(|p| p.len() >= 2).collect();
-                if lines.is_empty() {
-                    // Trimmed away to nothing (the first frame of a write-on),
-                    // or a combine that left no art at all.
-                    continue;
-                }
-                Some(lines)
-            }
-            None => None,
+        let Some(art) = Art::at(contents, run, t) else {
+            continue;
         };
 
         // The copies the repeater asks for, drawn **last first** so the
@@ -820,23 +1013,7 @@ pub fn rasterise_contents(
             // placed. An item nobody has repeated is placed by the identity, so
             // this is exactly the subtraction it has always been.
             let to_box = copy.then(&Affine::translation(-min_x, -min_y));
-            let placed: Vec<BezierPath> = match &lines {
-                // A trimmed piece or a boolean's contour is a polyline, and a
-                // polyline is a bezier whose handles are all zero — one path
-                // type, still. Closed so the fill has something to
-                // fill: a half-trimmed circle fills as a half circle, exactly
-                // as AE draws it.
-                Some(lines) => lines
-                    .iter()
-                    .map(|points| {
-                        polyline_path(
-                            &points.iter().map(|&p| to_box.apply(p)).collect::<Vec<_>>(),
-                            closed,
-                        )
-                    })
-                    .collect(),
-                None => vec![transform_path(&drawn, &to_box)],
-            };
+            let placed = art.placed(&to_box);
 
             if let Some(fill) = item.fill {
                 // All the contours at once, so a boolean's hole is a hole: the
@@ -883,28 +1060,7 @@ pub fn rasterise_contents(
                 // A copy is a scaled **drawing**, not a scaled path: its outline
                 // and its dashes grow with it, or a copy at half size would be a
                 // shape with an outline twice as heavy.
-                let scale = copy.scale();
-                // Dashes cut the outline into pieces, each of which is a brush run
-                // of its own. A solid outline is one piece, which is the
-                // same single run it always was.
-                let pattern: Vec<f64> = item.dash_pattern_at(t).iter().map(|d| d * scale).collect();
-                let pieces: Vec<Vec<(f64, f64)>> = placed
-                    .iter()
-                    .flat_map(|path| {
-                        let mut points: Vec<(f64, f64)> = match &lines {
-                            Some(_) => path.vertices.iter().map(|v| v.pos).collect(),
-                            None => flatten_path(path),
-                        };
-                        if let (true, Some(&first)) = (ring, points.first()) {
-                            points.push(first);
-                        }
-                        if pattern.is_empty() {
-                            vec![points]
-                        } else {
-                            dashed(&points, &pattern, item.dash_offset.value_at(t) * scale)
-                        }
-                    })
-                    .collect();
+                let pieces = art.stroked(&placed, copy.scale(), t);
                 let brushes: Vec<crate::paint::PaintStroke> = pieces
                     .into_iter()
                     .filter(|p| p.len() >= 2)
@@ -916,7 +1072,7 @@ pub fn rasterise_contents(
                         // behind it and its width is the item's own.
                         pressures: Vec::new(),
                         colour: stroke,
-                        width: item.stroke_width * scale,
+                        width: item.stroke_width * copy.scale(),
                         // A vector outline has a hard edge; the rasteriser keeps
                         // half a pixel of falloff whatever this says, which is the
                         // anti-aliasing rather than a soft brush.

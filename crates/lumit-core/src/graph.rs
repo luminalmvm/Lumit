@@ -447,6 +447,95 @@ impl LayerGraph {
         self.edges.iter().find(|e| &e.to == to).map(|e| &e.from)
     }
 
+    /// Wire `consumer`'s first points input, if nothing feeds it, to the
+    /// nearest effect above it that hands a points stream out, and say
+    /// whether a wire was added.
+    ///
+    /// Run when a points effect is added to a stack, so it reads the producer
+    /// above it without a trip to the node graph.
+    pub fn wire_points_from_above(&mut self, effects: &[EffectInstance], consumer: Uuid) -> bool {
+        let points_ports = |e: &EffectInstance, outputs: bool| {
+            let sig = crate::fx::BUILTIN_DEFS
+                .get(&e.effect.match_name)
+                .map(|def| def.signature());
+            sig.map_or(&[][..], |s| if outputs { s.outputs() } else { s.inputs() })
+                .iter()
+                .filter(|p| p.ty == PortType::Points)
+                .map(|p| p.id)
+        };
+        let Some(at) = effects.iter().position(|e| e.id == consumer) else {
+            return false;
+        };
+        // Nearest first. An effect with several inputs takes a different
+        // producer on each, and never one whose points already reach it
+        // through a producer it has taken, so a stream is not merged with
+        // its own source.
+        let mut above = effects
+            .iter()
+            .take(at)
+            .rev()
+            .filter_map(|e| points_ports(e, true).next().map(|port| (e.id, port)));
+        let mut taken: Vec<Uuid> = Vec::new();
+        let mut added = false;
+        for port in effects
+            .get(at)
+            .into_iter()
+            .flat_map(|e| points_ports(e, false))
+        {
+            let to = InputRef::Param {
+                node: NodeRef::Effect(consumer),
+                port: port.to_owned(),
+            };
+            if self.wire_into(&to).is_some() {
+                continue;
+            }
+            let Some((producer, out)) = above.find(|(id, _)| !self.feeds_points(*id, &taken))
+            else {
+                break;
+            };
+            taken.push(producer);
+            self.edges.push(Edge {
+                from: OutputRef::EffectData {
+                    effect: producer,
+                    port: out.to_owned(),
+                },
+                to,
+            });
+            added = true;
+        }
+        added
+    }
+
+    /// Whether `effect`'s points reach any of `targets` along the points
+    /// wires, or it is one of them.
+    fn feeds_points(&self, effect: Uuid, targets: &[Uuid]) -> bool {
+        let mut seen = vec![effect];
+        let mut next = 0;
+        // Each effect is looked at once, so a loop in a hand-edited file ends.
+        while let Some(from) = seen.get(next).copied() {
+            next += 1;
+            if targets.contains(&from) {
+                return true;
+            }
+            for edge in &self.edges {
+                let (
+                    OutputRef::EffectData { effect: source, .. },
+                    InputRef::Param {
+                        node: NodeRef::Effect(to),
+                        ..
+                    },
+                ) = (&edge.from, &edge.to)
+                else {
+                    continue;
+                };
+                if *source == from && !seen.contains(to) {
+                    seen.push(*to);
+                }
+            }
+        }
+        false
+    }
+
     /// Whether the effect named by `effect` takes the layer's own source alpha
     /// as its matte (§1.4) — the one in-graph feed the Matte row can carry.
     #[must_use]

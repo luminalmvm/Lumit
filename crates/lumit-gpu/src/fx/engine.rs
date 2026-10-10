@@ -695,7 +695,12 @@ impl FxEngine {
                 "fx-particulate",
             ),
         );
+        let points_field = super::points_field::PointsFieldPipelines::new(
+            ctx,
+            &module(include_str!("../fx_pointsfield.wgsl"), "fx-points-field"),
+        );
         Self {
+            points_field,
             particulate_layout: particulate.layout,
             particulate_draw_layout: particulate.draw_layout,
             particulate_empty_layout: particulate.empty_layout,

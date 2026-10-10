@@ -1,0 +1,97 @@
+---
+title: Label points
+description: "Writes a short piece of text beside every point of a stream."
+---
+
+import Compare from "../../../../components/Compare.astro";
+
+Label points is a **Generate** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+<Compare label="Label points" category="generate" slug="label-points" />
+
+{/* END GENERATED */}
+
+## What it does
+
+Reads the stream on its **Points** socket and writes a label beside every point. The look
+comes from a Text layer: its font, size, colour and style. The wording is a template, typed
+into the **Text** row, or the Text layer's own text while that row is empty. The Text layer
+can be hidden and still be read.
+
+| In the template | Written as |
+| --- | --- |
+| `{index}` | The point's place in the stream. |
+| `{number}` | The number it carries. |
+| `{x}` and `{y}` | Where it is seen on the frame, in pixels at composition size. |
+| `{id}` | Its id. |
+| `{size}` | Its size. |
+| `{age}` | Its age. |
+| `{attr:NAME}` | The number it carries under the name NAME. |
+| `{@NAME}` | One of the `@` names. `{@index}`, `{@id}` and `{@n}` are written whole. |
+
+Any other text is written as it is, at every point. So is a token whose name reads nothing.
+See [Names](/effects/generate/vary-points/#names).
+
+Labels follow where the points are seen and do not turn with them. A point behind the
+camera has no label.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Apply to** | Dropdown | All points · Picked · Not picked | All points | - |
+| **Group** | Text | A short line of text | Empty | - |
+| **Threshold** | Slider | 0 to 1; any value by typing | 0.5 | - |
+| **Text layer** | Layer | Any layer in the composition | None | - |
+| **Text** | Text | A short line of text | Empty | - |
+| **Decimals** | Slider, whole numbers | 0 to 4 | 0 | - |
+| **Offset x** | Slider | -200 to 200; any value by typing | 8 | Pixels at composition size |
+| **Offset y** | Slider | -200 to 200; any value by typing | 0 | Pixels at composition size |
+| **Anchor** | Dropdown | Left · Centre · Right | Left | - |
+| **Max labels** | Slider, whole numbers | 1 to 2000 | 300 | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Group** is editable while **Apply to** is anything but All points.
+- **Threshold** is editable while **Apply to** is anything but All points.
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Apply to**: which points get a label.
+- **Group**: the group Picked and Not picked go by, as a name. Left empty, they go by the
+  points a Pick points picked. See [Names](/effects/generate/vary-points/#names).
+- **Threshold**: what a point's Group must read above to be in it. It is read only with a
+  Group named.
+- **Text layer**: the Text layer whose look the labels take. Unset draws nothing, unless
+  this effect is on a Text layer.
+- **Text**: the template. The Text layer then gives only the look. Left empty, the Text
+  layer's own text is the template.
+- **Decimals**: how many decimal places the numbers in a label are written to.
+- **Offset x** and **Offset y**: how far across and down from its point a label sits.
+- **Anchor**: which part of the label sits at that offset. **Left** runs the text away to
+  the right of it, and **Right** to the left.
+- **Max labels**: the most labels drawn. Past it the newest points keep theirs.
+- **Mix**: how much of the result replaces the picture underneath.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness.
+  See [Effects](/use/effects/).
+
+## Related
+
+- [Text](/use/text/)
+- [Text to points](/effects/generate/text-to-points/)
+- [Vary points](/effects/generate/vary-points/)
+- [The node graph](/use/nodes/)
+- [Generate](/effects/#generate)
+- [Effects](/use/effects/)

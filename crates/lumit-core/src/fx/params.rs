@@ -174,7 +174,7 @@ pub enum Value {
     ///
     /// The one value that carries a *shape* rather than a scalar, and it is
     /// here rather than beside the op — the way a mask path is — for the
-    /// opposite reason to the mask path's: a curve is at most sixteen pairs
+    /// opposite reason to the mask path's: a curve is at most thirty-two pairs
     /// of numbers the user typed, small enough to stay `Copy`, to be hashed
     /// field by field into the frame key, and to borrow nothing from the
     /// document. What it costs is the width of every arena slot, since an
@@ -185,12 +185,83 @@ pub enum Value {
     /// arena's width ever shows up in a profile — nothing above here reads
     /// the points except that one `packed`.
     Curve(CurvePoints),
+    /// A short text the user typed, inline, for the reason a curve is: it is
+    /// small, `Copy`, and hashed into the frame key with everything else.
+    Text(ShortText),
+}
+
+/// The most bytes of UTF-8 a [`ParamKind::Text`](crate::fx::ParamKind::Text)
+/// row holds. A text this long is no wider than a curve, so adding the kind
+/// left every arena slot the size it was. A curve has since grown to twice
+/// this, and the cap stayed: a name or a label has no use for more.
+pub const TEXT_MAX_BYTES: usize = 128;
+
+/// `text` cut to [`TEXT_MAX_BYTES`], never through the middle of a character.
+/// Where a text is set, it is cut with this.
+#[must_use]
+pub fn capped_text(text: &str) -> &str {
+    text.get(..text.floor_char_boundary(TEXT_MAX_BYTES))
+        .unwrap_or("")
+}
+
+/// One text row's value. Fixed-size and `Copy` so it can live in the arena
+/// and in an effect's parameter struct. Read it with [`Self::as_str`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ShortText {
+    bytes: [u8; TEXT_MAX_BYTES],
+    len: u8,
+}
+
+// A text wider than a curve would widen every parameter of every effect.
+const _: () = assert!(size_of::<ShortText>() <= size_of::<CurvePoints>());
+
+impl ShortText {
+    /// No text at all.
+    pub const EMPTY: Self = Self {
+        bytes: [0; TEXT_MAX_BYTES],
+        len: 0,
+    };
+
+    /// `text`, cut to the cap. The bytes past the end stay zero, so two equal
+    /// texts compare equal.
+    #[must_use]
+    pub fn new(text: &str) -> Self {
+        let text = capped_text(text).as_bytes();
+        let mut out = Self::EMPTY;
+        if let Some(room) = out.bytes.get_mut(..text.len()) {
+            room.copy_from_slice(text);
+            out.len = text.len() as u8;
+        }
+        out
+    }
+
+    /// The text.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        self.bytes
+            .get(..usize::from(self.len))
+            .and_then(|b| std::str::from_utf8(b).ok())
+            .unwrap_or("")
+    }
+
+    /// Whether nothing was typed.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+}
+
+impl Default for ShortText {
+    fn default() -> Self {
+        Self::EMPTY
+    }
 }
 
 /// The most control points a [`ParamKind::Curve`](crate::fx::ParamKind::Curve)
-/// carries. Sixteen is well past what a grade needs and keeps the
-/// inline form small.
-pub const CURVE_MAX_POINTS: usize = 16;
+/// carries. Thirty-two is well past what a grade needs, and is what a colour
+/// ramp of thirty-two stops asks for. It sets the width of every arena slot,
+/// 272 bytes with the id, so raise it again only with that in mind.
+pub const CURVE_MAX_POINTS: usize = 32;
 
 /// The identity diagonal: the default curve, and what a malformed one falls
 /// back to.
@@ -310,6 +381,8 @@ impl Value {
             // A shape is not a number; its first point's output is the least
             // misleading scalar to give a caller that asked anyway.
             Value::Curve(c) => c.xy[0][1],
+            // Words are not a number either.
+            Value::Text(_) => 0.0,
         }
     }
 
@@ -327,6 +400,7 @@ impl Value {
             Value::Vec4(_) => 7,
             Value::MaskPath(_) => 8,
             Value::Curve(_) => 9,
+            Value::Text(_) => 10,
         }
     }
 }
@@ -452,6 +526,14 @@ impl<'a> Params<'a> {
         match self.get(id) {
             Some(Value::Curve(c)) => c,
             _ => CurvePoints::IDENTITY,
+        }
+    }
+
+    /// The text row `id`, or `default` when absent or of another kind.
+    pub fn text(&self, id: ParamId, default: &str) -> ShortText {
+        match self.get(id) {
+            Some(Value::Text(text)) => text,
+            _ => ShortText::new(default),
         }
     }
 
@@ -749,6 +831,12 @@ impl ResolvedFx<'_> {
                         feed(&p[0].to_le_bytes());
                         feed(&p[1].to_le_bytes());
                     }
+                }
+                // The length first, as a curve's is, then only the bytes
+                // typed.
+                Value::Text(text) => {
+                    feed(&[text.len]);
+                    feed(text.as_str().as_bytes());
                 }
             }
         }

@@ -5655,6 +5655,61 @@ fn custom_name_roundtrips_and_defaults_to_none() {
     assert_eq!(back.custom_name.as_deref(), Some("Blur the sign"));
 }
 
+/// A text row saves and loads, reaches the effect through the bag, names the
+/// frame, and reads its default in a project from before the row existed.
+#[test]
+fn a_text_row_round_trips_resolves_and_feeds_the_key() {
+    use crate::fx::effects::label_points::LabelPoints;
+
+    let read = |e: &EffectInstance| {
+        let stack = super::resolve_stack(
+            std::slice::from_ref(e),
+            0.0,
+            1000.0,
+            1.0,
+            &MarkerContext::NONE,
+            Arc::new(ExpressionContext::detached()),
+        );
+        let text = LabelPoints::read(stack.get(0).expect("one op").params).text;
+        let mut key: Vec<u8> = Vec::new();
+        stack.feed_hash(&mut |b| key.extend_from_slice(b));
+        (text.as_str().to_owned(), key)
+    };
+    let set = |e: &mut EffectInstance, text: &str| {
+        for p in &mut e.params {
+            if p.id == "text" {
+                p.value = EffectValue::Text(text.to_owned());
+            }
+        }
+    };
+
+    let fresh = instantiate("label_points").expect("label_points");
+    assert_eq!(fresh.param("text"), Some(&EffectValue::Text(String::new())));
+
+    let mut typed = fresh.clone();
+    set(&mut typed, "{index}: {x}");
+    let json = serde_json::to_string(&typed).unwrap();
+    let back: EffectInstance = serde_json::from_str(&json).unwrap();
+    assert_eq!(back, typed, "a saved text loads again");
+    assert_eq!(read(&back).0, "{index}: {x}");
+    assert_ne!(read(&back).1, read(&fresh).1, "the text names the frame");
+
+    // A project from before the row existed has no entry for it.
+    let mut older = vec![fresh.clone()];
+    older[0].params.retain(|p| p.id != "text");
+    assert_eq!(read(&older[0]).0, "");
+    backfill_builtin_params(&mut older);
+    assert_eq!(
+        older[0].param("text"),
+        Some(&EffectValue::Text(String::new()))
+    );
+
+    // A text longer than the cap is cut at a whole character, not refused.
+    let mut long = fresh;
+    set(&mut long, &"é".repeat(TEXT_MAX_BYTES));
+    assert_eq!(read(&long).0, "é".repeat(TEXT_MAX_BYTES / 2));
+}
+
 /// **Spectral radiometry preserves exposure and actually resolves the
 /// coating** (entry A2). Two halves:
 ///
@@ -6035,8 +6090,8 @@ fn every_derived_spatial_id_is_one_the_effect_actually_derives() {
         }
     }
     assert_eq!(
-        declaring, 2,
-        "Scanlines and the Lens flare are the two today"
+        declaring, 3,
+        "Scanlines, the Lens flare and Transform points are the three today"
     );
 }
 
@@ -6441,12 +6496,15 @@ fn every_parameter_declares_a_unit() {
             ("grid", "spacing_x"),
             ("grid", "spacing_y"),
             ("grid", "spacing_z"),
+            ("grid", "width"),
+            ("grid", "height"),
             ("grid", "position_x"),
             ("grid", "position_y"),
             ("grid", "position_z"),
             ("grid", "jitter_x"),
             ("grid", "jitter_y"),
             ("grid", "jitter_z"),
+            ("grid", "inner_radius"),
             ("grid", "size"),
             // Scatter: the disc a point is drawn as. Density is a count
             // per composition area and rescales nowhere — it is measured
@@ -6456,6 +6514,21 @@ fn every_parameter_declares_a_unit() {
             // row exactly. Threshold is a share of full white and Density a
             // count per composition area, so neither rescales.
             ("emit_from_image", "size"),
+            // Points along path: the disc a point is drawn as, Grid's row.
+            ("points_along_path", "size"),
+            // Text to points: the disc a point is drawn as, Grid's row.
+            ("text_to_points", "size"),
+            // Track points: the analysis's three distances, which are in the
+            // footage's own pixels, and the disc a point is drawn as.
+            ("track_points", "spacing"),
+            ("track_points", "window"),
+            ("track_points", "max_distance"),
+            ("track_points", "size"),
+            // Clone to points: the cell a layer is fitted into, and how far
+            // a stamp's corners are rounded.
+            ("clone_to_points", "cell_width"),
+            ("clone_to_points", "cell_height"),
+            ("clone_to_points", "corner_radius"),
             // Connect points: how far apart two points may be and
             // still be joined, and how thick the line between them is. Both
             // are distances in the picture and must travel with the stream —
@@ -6463,6 +6536,42 @@ fn every_parameter_declares_a_unit() {
             // would weave a different web from the export's.
             ("connect_points", "max_distance"),
             ("connect_points", "width"),
+            // Points field: how far from a point its field reaches.
+            ("points_field", "radius"),
+            // Label points: how far from its point a label sits.
+            ("label_points", "offset_x"),
+            ("label_points", "offset_y"),
+            // Vary points and Pick points: the pattern's own distances, and
+            // how far Vary points moves a point. All travel with the stream.
+            ("vary_points", "noise_scale"),
+            ("vary_points", "centre_x"),
+            ("vary_points", "centre_y"),
+            ("vary_points", "radius"),
+            ("vary_points", "spacing"),
+            ("vary_points", "offset_x"),
+            ("vary_points", "offset_y"),
+            ("vary_points", "offset_z"),
+            ("vary_points", "offset_forward"),
+            ("vary_points", "offset_side"),
+            ("pick_points", "noise_scale"),
+            ("pick_points", "centre_x"),
+            ("pick_points", "centre_y"),
+            ("pick_points", "radius"),
+            ("pick_points", "spacing"),
+            // Transform points, Relax points and Flow points: where the
+            // stream is moved from and to, the space a point wants, and the
+            // field's own places and speed. All travel with the stream.
+            ("transform_points", "anchor_x"),
+            ("transform_points", "anchor_y"),
+            ("transform_points", "position_x"),
+            ("transform_points", "position_y"),
+            ("transform_points", "position_z"),
+            ("relax_points", "radius"),
+            ("flow_points", "speed"),
+            ("flow_points", "noise_scale"),
+            ("flow_points", "centre_x"),
+            ("flow_points", "centre_y"),
+            ("flow_points", "radius"),
             // What a full channel of a Motion vectors layer means, in pixels
             // of movement.
             ("motion_blur", "vector_scale"),
@@ -6635,6 +6744,7 @@ fn a_vec4_is_its_own_kind_and_reads_back_whole() {
         Value::Vec4([1.0; 4]),
         Value::MaskPath(true),
         Value::Curve(CurvePoints::IDENTITY),
+        Value::Text(ShortText::new("a")),
     ];
     let mut tags: Vec<u8> = Vec::new();
     for k in kinds {
@@ -6679,6 +6789,8 @@ fn payload_len(v: Value) -> usize {
         // A length, then two floats a live point — the unused tail of
         // the fixed array is padding by another name and never feeds a key.
         Value::Curve(c) => 4 + 8 * c.points().len(),
+        // A length byte, then the bytes typed.
+        Value::Text(t) => 1 + t.as_str().len(),
     }
 }
 
@@ -7913,7 +8025,7 @@ fn a_curve_is_sanitised_on_read() {
     let repeated = CurvePoints::sanitised(&[[0.0, 0.0], [0.5, 0.9], [0.5, 0.1], [1.0, 1.0]]);
     assert_eq!(repeated.points(), [[0.0, 0.0], [0.5, 0.9], [1.0, 1.0]]);
 
-    // Past sixteen, the tail is dropped rather than the list refused.
+    // Past the cap, the tail is dropped rather than the list refused.
     let many: Vec<[f32; 2]> = (0..40).map(|i| [i as f32 / 39.0, 0.5]).collect();
     assert_eq!(
         CurvePoints::sanitised(&many).points().len(),
@@ -8602,6 +8714,7 @@ fn a_mask_path_emitter_with_no_path_emits_nothing() {
         points: vec![[0.0, 0.0], [100.0, 0.0]],
         arc: vec![0.0, 100.0],
         closed: false,
+        corners: Vec::new(),
     };
     let dt = 1.0 / 60.0;
     let sched = Schedule::scan(dt, 120, 600, &|_| 150.0);
@@ -8924,7 +9037,8 @@ fn clone_stamps(e: &EffectInstance, stream: &PointsStream) -> PointsStream {
         1.0,
         &MarkerContext::NONE,
     );
-    crate::fx::effects::clone_to_points::CloneToPoints::read(Params::new(&bag)).stamps(stream)
+    use crate::fx::effects::clone_to_points::{CloneToPoints, Pictures};
+    CloneToPoints::read(Params::new(&bag)).stamps(stream, Pictures::plain(1))
 }
 
 /// A small hand-made stream: two points, a known distance apart, with distinct
@@ -8940,7 +9054,123 @@ fn two_points() -> PointsStream {
         colour: vec![[1.0, 0.0, 0.0, 1.0], [0.0, 1.0, 0.0, 1.0]],
         id: vec![0, 1],
         projection: points::Projection::FLAT,
+        ..PointsStream::default()
     }
+}
+
+/// A named column stays on the point it was written for through every helper
+/// that reorders, drops or joins points, whether it holds a number, an
+/// offset or a colour. The reader answers an empty name, a built-in one and
+/// an unknown one as it says it does, and makes one number of the wider two.
+#[test]
+fn a_named_column_stays_with_its_points() {
+    // Four points out of id order, each 10 px further across than the last.
+    let mut s = PointsStream {
+        position: (0..4).map(|i| [i as f32 * 10.0, 0.0, 0.0]).collect(),
+        speed: vec![[0.0; 3]; 4],
+        age: vec![0.0; 4],
+        life: vec![1.0; 4],
+        size: vec![2.0; 4],
+        rotation: vec![0.0; 4],
+        colour: vec![[1.0; 4]; 4],
+        id: vec![3, 1, 2, 0],
+        ..PointsStream::default()
+    };
+    // Ten times its id, so a weight on the wrong point shows.
+    let weights = s.named_mut("weight", 1).expect("room for a name");
+    for (weight, v) in weights.iter_mut().zip([30.0, 10.0, 20.0, 0.0]) {
+        weight[0] = v;
+    }
+    // An offset and a colour ride with it, each made from the point's id.
+    let offset = |id: u64| [3.0 * id as f32, 4.0 * id as f32, 0.0, 0.0];
+    let colour = |id: u64| [id as f32, 0.5, 0.25, 1.0];
+    let ids = s.id.clone();
+    for (name, width) in [("push", 2), ("tint", 4)] {
+        let column = s.named_mut(name, width).expect("room for a name");
+        for (value, id) in column.iter_mut().zip(&ids) {
+            *value = if width == 2 { offset(*id) } else { colour(*id) };
+        }
+    }
+    // Whether every point still carries its own two, and reads each as one
+    // number by the rule: an offset its length, a colour how bright it is.
+    let wide = |s: &PointsStream| {
+        let (push, tint) = (s.column("push"), s.column("tint"));
+        (0..s.len()).all(|i| {
+            let id = s.id[i];
+            let luma = 0.2126 * id as f32 + 0.7152 * 0.5 + 0.0722 * 0.25;
+            s.whole(push, i) == Some((offset(id), 2))
+                && s.whole(tint, i) == Some((colour(id), 4))
+                && (s.value_of("push", i) - 5.0 * id as f32).abs() < 1e-4
+                && (s.value_of("tint", i) - luma).abs() < 1e-5
+        })
+    };
+    assert!(wide(&s), "written");
+    let weight_of = |s: &PointsStream| -> Vec<(u64, f32)> {
+        (0..s.len())
+            .map(|i| (s.id[i], s.value_of("weight", i)))
+            .collect()
+    };
+
+    assert_eq!(s.value_of("", 2), 2.0, "an empty name is its number");
+    assert_eq!(s.value_of("@X", 2), 20.0, "capitals do not matter");
+    assert_eq!(s.value_of("@n", 0), 4.0);
+    assert_eq!(s.value_of("@indexnorm", 3), 1.0);
+    assert_eq!(s.value_of("@id", 0), 3.0);
+    assert_eq!(s.value_of("wieght", 1), 0.0, "a slip reads nought");
+    assert_eq!(s.value("wieght", 1), None);
+    assert_eq!(s.value("@bogus", 1), None);
+    assert!(
+        s.named_mut("@x", 1).is_none(),
+        "a built-in is never written"
+    );
+    // At half size a place still reads in px@comp.
+    let half = s.rescaled(0.5);
+    assert_eq!(half.value_of("@x", 2), 20.0);
+    assert_eq!(weight_of(&half), weight_of(&s));
+    assert!(wide(&half), "rescaled");
+
+    s.sort_by_id();
+    assert_eq!(
+        weight_of(&s),
+        [(0, 0.0), (1, 10.0), (2, 20.0), (3, 30.0)],
+        "sorted"
+    );
+    assert!(wide(&s), "sorted");
+    s.retain(|i| i != 1);
+    assert_eq!(weight_of(&s), [(0, 0.0), (2, 20.0), (3, 30.0)], "retained");
+    assert!(wide(&s), "retained");
+    s.keep_newest(2);
+    assert_eq!(weight_of(&s), [(2, 20.0), (3, 30.0)], "newest kept");
+    assert!(wide(&s), "newest kept");
+
+    // Each side carries a name the other lacks, and the lack reads nought.
+    // A name the two hold at different widths reads nothing afterwards.
+    let mut other = two_points();
+    let tag = other.named_mut("tag", 1).expect("room for a name");
+    tag.fill([1.0, 0.0, 0.0, 0.0]);
+    other.named_mut("push", 1);
+    s.append(&other);
+    assert_eq!(
+        weight_of(&s),
+        [(2, 20.0), (3, 30.0), (0, 0.0), (1, 0.0)],
+        "appended"
+    );
+    let tags: Vec<f32> = (0..s.len()).map(|i| s.value_of("tag", i)).collect();
+    assert_eq!(tags, [0.0, 0.0, 1.0, 1.0]);
+    let tint = s.column("tint");
+    let tints: Vec<Option<([f32; 4], u8)>> = (0..s.len()).map(|i| s.whole(tint, i)).collect();
+    let none = Some(([0.0; 4], 4));
+    assert_eq!(
+        tints,
+        [Some((colour(2), 4)), Some((colour(3), 4)), none, none]
+    );
+    assert_eq!(s.value("push", 0), None, "two widths under one name");
+
+    // A name past the cap is not written.
+    for k in 0..=points::NAMED_MAX {
+        s.named_mut(&format!("n{k}"), 1);
+    }
+    assert_eq!(s.named.len(), points::NAMED_MAX);
 }
 
 /// A flat opaque sprite of `n × n` — a picture with nothing in it but coverage,

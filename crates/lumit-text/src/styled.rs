@@ -1213,6 +1213,7 @@ mod tests {
             closed: false,
             feather: 0.0,
             expansion: 0.0,
+            corners: Vec::new(),
         };
         let r = rasterise_on_path(&b, &path, 0.0, 420, 200, &[]);
         assert_eq!((r.width, r.height), (420, 200));

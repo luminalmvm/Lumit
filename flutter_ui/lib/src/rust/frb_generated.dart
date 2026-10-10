@@ -18553,21 +18553,25 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
           role: dco_decode_bridge_colour_name_role(raw[1]),
         );
       case 9:
-        return BridgeParamKind_Layer();
+        return BridgeParamKind_Text(
+          default_: dco_decode_String(raw[1]),
+        );
       case 10:
-        return BridgeParamKind_Clip();
+        return BridgeParamKind_Layer();
       case 11:
-        return BridgeParamKind_MaskPath();
+        return BridgeParamKind_Clip();
       case 12:
-        return BridgeParamKind_Curve();
+        return BridgeParamKind_MaskPath();
       case 13:
+        return BridgeParamKind_Curve();
+      case 14:
         return BridgeParamKind_Slider(
           default_: dco_decode_f_64(raw[1]),
           min: dco_decode_f_64(raw[2]),
           max: dco_decode_f_64(raw[3]),
           log: dco_decode_bool(raw[4]),
         );
-      case 14:
+      case 15:
         return BridgeParamKind_Action();
       default:
         throw Exception("unreachable");
@@ -23804,21 +23808,24 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         var var_role = sse_decode_bridge_colour_name_role(deserializer);
         return BridgeParamKind_ColourName(role: var_role);
       case 9:
-        return BridgeParamKind_Layer();
+        var var_default_ = sse_decode_String(deserializer);
+        return BridgeParamKind_Text(default_: var_default_);
       case 10:
-        return BridgeParamKind_Clip();
+        return BridgeParamKind_Layer();
       case 11:
-        return BridgeParamKind_MaskPath();
+        return BridgeParamKind_Clip();
       case 12:
-        return BridgeParamKind_Curve();
+        return BridgeParamKind_MaskPath();
       case 13:
+        return BridgeParamKind_Curve();
+      case 14:
         var var_default_ = sse_decode_f_64(deserializer);
         var var_min = sse_decode_f_64(deserializer);
         var var_max = sse_decode_f_64(deserializer);
         var var_log = sse_decode_bool(deserializer);
         return BridgeParamKind_Slider(
             default_: var_default_, min: var_min, max: var_max, log: var_log);
-      case 14:
+      case 15:
         return BridgeParamKind_Action();
       default:
         throw UnimplementedError('');
@@ -29449,27 +29456,30 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       case BridgeParamKind_ColourName(role: final role):
         sse_encode_i_32(8, serializer);
         sse_encode_bridge_colour_name_role(role, serializer);
-      case BridgeParamKind_Layer():
+      case BridgeParamKind_Text(default_: final default_):
         sse_encode_i_32(9, serializer);
-      case BridgeParamKind_Clip():
+        sse_encode_String(default_, serializer);
+      case BridgeParamKind_Layer():
         sse_encode_i_32(10, serializer);
-      case BridgeParamKind_MaskPath():
+      case BridgeParamKind_Clip():
         sse_encode_i_32(11, serializer);
-      case BridgeParamKind_Curve():
+      case BridgeParamKind_MaskPath():
         sse_encode_i_32(12, serializer);
+      case BridgeParamKind_Curve():
+        sse_encode_i_32(13, serializer);
       case BridgeParamKind_Slider(
           default_: final default_,
           min: final min,
           max: final max,
           log: final log
         ):
-        sse_encode_i_32(13, serializer);
+        sse_encode_i_32(14, serializer);
         sse_encode_f_64(default_, serializer);
         sse_encode_f_64(min, serializer);
         sse_encode_f_64(max, serializer);
         sse_encode_bool(log, serializer);
       case BridgeParamKind_Action():
-        sse_encode_i_32(14, serializer);
+        sse_encode_i_32(15, serializer);
     }
   }
 
