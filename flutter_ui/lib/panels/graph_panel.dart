@@ -149,15 +149,25 @@ const double graphWireStub = 40;
 
 /// One wire's curve, in **screen** coordinates (both ends already transformed).
 ///
-/// A cubic whose handles run horizontally out of each socket — right out of the
-/// output, left into the input — by half the gap between them, or by
-/// [graphWireStub] when that half is smaller or points the wrong way. Free of
-/// the painter so its geometry can be asserted directly.
+/// The handles run horizontally out of each socket — right out of the output,
+/// left into the input. With the input to the right it is one cubic, reaching
+/// half the gap or [graphWireStub], whichever is longer. With the input to the
+/// left it is two cubics that meet level at the midpoint, so each end turns
+/// back in a round hook no wider than the stub however far apart the boxes
+/// are. The stub is never longer than half the wire, so a short wire stays a
+/// short curve. Free of the painter so its geometry can be asserted directly.
 Path graphWirePath(Offset a, Offset b, {double zoom = 1}) {
-  final reach = math.max(graphWireStub * zoom, (b.dx - a.dx).abs() / 2);
-  return Path()
-    ..moveTo(a.dx, a.dy)
-    ..cubicTo(a.dx + reach, a.dy, b.dx - reach, b.dy, b.dx, b.dy);
+  final dx = b.dx - a.dx;
+  final stub = math.min(graphWireStub * zoom, (b - a).distance / 2);
+  final path = Path()..moveTo(a.dx, a.dy);
+  if (dx >= 0) {
+    final reach = math.max(stub, dx / 2);
+    return path..cubicTo(a.dx + reach, a.dy, b.dx - reach, b.dy, b.dx, b.dy);
+  }
+  final mid = (a + b) / 2;
+  return path
+    ..cubicTo(a.dx + stub, a.dy, a.dx, mid.dy, mid.dx, mid.dy)
+    ..cubicTo(b.dx, mid.dy, b.dx - stub, b.dy, b.dx, b.dy);
 }
 
 /// The glyphs in the toolbar. A size down from the
