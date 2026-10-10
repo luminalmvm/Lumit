@@ -3192,7 +3192,8 @@ impl AudioJobsBuilder {
                 visited.pop();
             }
             LayerKind::Sequence { clips } => self.sequence_jobs(
-                doc, comp, base_s, layer, clips, strip, in_s, out_s, offset_s, carriers, jobs,
+                doc, comp, base_s, layer, clips, strip, in_s, out_s, offset_s, carriers, visited,
+                jobs,
             ),
             _ => {}
         }
@@ -3245,25 +3246,53 @@ impl AudioJobsBuilder {
                 .partial_cmp(&clips[*b].place_start)
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
+        // Where each clip starts and ends on the comp timeline, worked out
+        // once for the row, and the latest end among the clips up to each
+        // place in the order: a walk back from a clip stops where nothing
+        // earlier reaches it.
+        let spans: Vec<(f64, f64)> = clips
+            .iter()
+            .map(|c| {
+                (
+                    offset_s + c.place_start.to_f64(),
+                    offset_s + c.place_end().to_f64(),
+                )
+            })
+            .collect();
+        let mut latest = f64::NEG_INFINITY;
+        let reach: Vec<f64> = order
+            .iter()
+            .map(|&i| {
+                latest = latest.max(spans[i].1);
+                latest
+            })
+            .collect();
+        // The row's own duck and its own rack are the same for every clip on
+        // it, so they are made once and each job holds the one.
+        let driven = driven_volume_of(doc, comp, layer, offset_s, base_s);
+        let chain = audio_chain_of(doc, comp, layer, offset_s, base_s);
 
-        for &i in &order {
+        for (at, &i) in order.iter().enumerate() {
             let clip = &clips[i];
-            let lumit_core::sequence::ClipSource::Footage(item) = clip.source else {
-                continue;
-            };
             if clip.retime.is_some() {
                 continue; // docs/09 §7: a retimed clip is silent in v1
             }
-            let Some(ProjectItem::Footage(f)) = doc.item(item) else {
-                continue;
+            // The file a footage clip sounds from. A clip whose source is a
+            // composition has none, and its comp is walked further down.
+            let file = match clip.source {
+                lumit_core::sequence::ClipSource::Footage(item) => {
+                    let Some(ProjectItem::Footage(f)) = doc.item(item) else {
+                        continue;
+                    };
+                    let path = footage_path(f);
+                    if !self.item_has_audio(item, &path) {
+                        continue;
+                    }
+                    Some((item, path))
+                }
+                lumit_core::sequence::ClipSource::Comp(_) => None,
             };
-            if !self.item_has_audio(item, &footage_path(f)) {
-                continue;
-            }
-            let (start_s, end_s) = (
-                offset_s + clip.place_start.to_f64(),
-                offset_s + clip.place_end().to_f64(),
-            );
+            let (start_s, end_s) = spans[i];
             // What the layer's own in/out points leave of it.
             let (clip_in, clip_out) = (start_s.max(in_s), end_s.min(out_s));
             if clip_out <= clip_in {
@@ -3277,33 +3306,49 @@ impl AudioJobsBuilder {
             // the long one being ramped down across everything the short one
             // covers.
             let span = (end_s - start_s).max(0.0);
-            // ponytail: a scan of the row's clips per end, which is nothing at
-            // the handful a row holds; sort by start and walk if a row ever
-            // carries thousands.
+            // The row is in order of start, so the neighbours that can join a
+            // clip are the few either side of it: a head join starts earlier
+            // and a tail join starts inside the clip. Each walk stops where
+            // nothing further on can reach, which is a step or two on a row
+            // that is cut and not stacked. Where more than one neighbour joins
+            // at an end the first of them as the clips are stored is the one
+            // read, which is the one a scan of the whole row finds.
             let overlap = |head: bool| -> f64 {
-                for (m, o) in clips.iter().enumerate() {
-                    if m == i {
-                        continue;
-                    }
-                    let (o_start, o_end) = (
-                        offset_s + o.place_start.to_f64(),
-                        offset_s + o.place_end().to_f64(),
-                    );
+                let mut joined: Option<usize> = None;
+                let mut see = |m: usize| {
+                    let (o_start, o_end) = spans[m];
                     let joins = if head {
                         o_start < start_s && o_end > start_s && o_end < end_s
                     } else {
                         o_end > end_s && o_start < end_s && o_start > start_s
                     };
-                    if joins {
-                        let by = if head {
-                            o_end - start_s
-                        } else {
-                            end_s - o_start
-                        };
-                        return by.clamp(0.0, span);
+                    if joins && joined.is_none_or(|j| m < j) {
+                        joined = Some(m);
+                    }
+                };
+                if head {
+                    for k in (0..at).rev() {
+                        if reach[k] <= start_s {
+                            break;
+                        }
+                        see(order[k]);
+                    }
+                } else {
+                    for &m in &order[at + 1..] {
+                        if spans[m].0 >= end_s {
+                            break;
+                        }
+                        see(m);
                     }
                 }
-                0.0
+                joined.map_or(0.0, |m| {
+                    let by = if head {
+                        spans[m].1 - start_s
+                    } else {
+                        end_s - spans[m].0
+                    };
+                    by.clamp(0.0, span)
+                })
             };
             // A stored fade is heard for its own seconds where the clip
             // overlaps nothing at that end; where it does overlap, the overlap
@@ -3329,6 +3374,62 @@ impl AudioJobsBuilder {
                 tail_shape: clip.fade_out.shape,
                 gain_db: clip.gain_db,
             };
+            // Kept for a gain with no ramp on it too. `volume_bake` reads
+            // a fade that does nothing as the constant it is, and
+            // `jobs_signature` hashes the whole of it, so neither needed a
+            // line changing for the gain.
+            let fade = (fade.is_active() || clip.gain_db != 0.0).then_some(fade);
+
+            let Some((item, path)) = file else {
+                let lumit_core::sequence::ClipSource::Comp(nested_id) = clip.source else {
+                    continue;
+                };
+                let Some(nested) = doc
+                    .comp(nested_id)
+                    .filter(|_| !visited.contains(&nested_id))
+                else {
+                    continue;
+                };
+                let mut inner = carriers.to_vec();
+                inner.push(crate::export::Carrier {
+                    volume: layer.volume_db.clone(),
+                    pan: layer.pan.clone(),
+                    offset_s,
+                    fade,
+                    // The row's rack as a bus over the comp's sum, as a
+                    // Precomp layer's is.
+                    chain: bus_chain_of(doc, comp, layer, offset_s, base_s),
+                });
+                // The clip's own rack is a bus inside the row's, so it
+                // hears the comp first, as a footage clip's rack hears its
+                // file ahead of the row's.
+                if let Some(rack) = clip_chain_of(doc, comp, layer, clip, start_s, base_s) {
+                    inner.push(crate::export::Carrier {
+                        volume: lumit_core::anim::Property::zero(),
+                        pan: lumit_core::anim::Property::zero(),
+                        offset_s: start_s,
+                        fade: None,
+                        chain: Some(rack),
+                    });
+                }
+                // The comp's own time 0 sits where the clip's source time 0
+                // does: the clip's start, less how far it is trimmed in.
+                let nested_s = start_s - clip.source_in.to_f64();
+                inner.extend(master_carrier(nested, nested_s));
+                visited.push(nested_id);
+                self.walk(
+                    doc,
+                    nested,
+                    nested_s,
+                    (clip_in, clip_out),
+                    &inner,
+                    Some(strip),
+                    visited,
+                    jobs,
+                );
+                visited.pop();
+                continue;
+            };
 
             jobs.push(AudioJob {
                 item,
@@ -3336,7 +3437,7 @@ impl AudioJobsBuilder {
                 // Which clip this is, so a filtered reading of the mix can ask
                 // for one clip of one row (docs/impl/audio-nodes.md §2).
                 clip: Some(clip.id),
-                path: footage_path(f),
+                path,
                 in_s: clip_in,
                 out_s: clip_out,
                 // Where the clip's source sample 0 sits on the comp timeline:

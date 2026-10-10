@@ -22,8 +22,15 @@
 //! is happening: the kick shows in the bottom band, the hats in the top, and a
 //! cut can be aimed at either.
 //!
-//! Everything here is pure arithmetic over samples already decoded elsewhere,
-//! so all of it is a plain deterministic test.
+//! The summarising is pure arithmetic over samples, so all of it is a plain
+//! deterministic test. It takes them a stretch at a time ([`PyramidBuilder`]),
+//! so a file is summarised as it is decoded and never held whole, and the
+//! summary is written to a small file beside the frame index
+//! ([`load_or_build`]) so the next run of Lumit reads it back instead of decoding
+//! the file again.
+
+use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 /// The bands a multiwave stack draws, plus the plain full-range wave that a
 /// single-wave lane draws. Stored side by side in one pyramid because they
@@ -163,6 +170,14 @@ struct Running {
     max: f32,
     sum_sq: f64,
     count: usize,
+}
+
+/// A summary of several whole blocks, for folding them into one.
+#[derive(Clone, Copy)]
+struct Folded {
+    min: f32,
+    max: f32,
+    sum_sq: f64,
 }
 
 impl Running {
@@ -359,121 +374,426 @@ pub struct PeakPyramid {
     /// because this is a picture: half the memory, and the difference is three
     /// ten-thousandths of a pixel on any lane ever drawn. Empty for a source
     /// longer than [`SAMPLE_KEEP_SECONDS`], where the summary never runs out.
-    samples: Vec<i16>,
+    ///
+    /// Set when the pyramid is built. One read back from its file has none
+    /// yet: the file holds the summary, which is a tenth of the size, and the
+    /// samples are decoded from [`Self::source`] the first time a lane zooms
+    /// in far enough to ask for them.
+    samples: OnceLock<Vec<i16>>,
+    /// Whether a build of this source keeps its samples: it is short enough.
+    keeps_samples: bool,
+    /// The file the samples can be decoded from again.
+    source: Option<PathBuf>,
 }
 
-impl PeakPyramid {
-    /// Summarise interleaved-stereo PCM. One pass over the samples fills the
-    /// finest tier; the coarser ones are folded down from it, so the whole
-    /// pyramid costs barely more than the single tier the old fixed-bucket
-    /// waveform cost.
+/// A source being summarised a stretch at a time.
+///
+/// Hand it the sound in order, in pieces of any size, and it comes to the
+/// same pyramid whatever the pieces were: nothing here looks at where one
+/// piece ends and the next begins.
+pub struct PyramidBuilder {
+    sample_rate: u32,
+    /// Samples per block of the tier being filled, which starts at
+    /// [`FINEST_BLOCK`] and is folded up each time the tier fills.
+    block: usize,
+    /// The finished blocks, one list per band.
+    done: [Vec<Folded>; BAND_COUNT],
+    running: [Running; BAND_COUNT],
+    filled: usize,
+    frames: usize,
+    split: Split,
+    samples: Vec<i16>,
+    /// How many frames a source may run to and still have its samples kept.
+    keep: usize,
+}
+
+impl PyramidBuilder {
     #[must_use]
-    pub fn build(interleaved: &[f32], sample_rate: u32) -> PeakPyramid {
-        let frames = interleaved.len() / 2;
-        if frames == 0 || sample_rate == 0 {
+    pub fn new(sample_rate: u32) -> Self {
+        Self {
+            sample_rate,
+            block: FINEST_BLOCK,
+            done: std::array::from_fn(|_| Vec::new()),
+            running: [Running::EMPTY; BAND_COUNT],
+            filled: 0,
+            frames: 0,
+            split: Split::new(sample_rate as f32),
+            samples: Vec::new(),
+            keep: (SAMPLE_KEEP_SECONDS * f64::from(sample_rate)) as usize,
+        }
+    }
+
+    /// The next stretch of interleaved-stereo PCM.
+    pub fn push(&mut self, interleaved: &[f32]) {
+        for frame in interleaved.chunks_exact(2) {
+            let mono = 0.5 * (frame[0] + frame[1]);
+            self.frames += 1;
+            // Short enough so far that the zoom could out-resolve the finest
+            // tier: keep the mono mixdown too. The moment it is not, the
+            // samples kept so far are let go.
+            if self.frames <= self.keep {
+                self.samples.push(to_i16(mono));
+            } else if !self.samples.is_empty() {
+                self.samples = Vec::new();
+            }
+            let bands = self.split.run(mono);
+            for (slot, value) in self.running.iter_mut().zip(bands) {
+                slot.push(value);
+            }
+            self.filled += 1;
+            if self.filled == self.block {
+                self.close_block();
+            }
+        }
+    }
+
+    fn close_block(&mut self) {
+        for (done, slot) in self.done.iter_mut().zip(&self.running) {
+            done.push(Folded {
+                min: slot.min,
+                max: slot.max,
+                sum_sq: slot.sum_sq,
+            });
+        }
+        self.running = [Running::EMPTY; BAND_COUNT];
+        self.filled = 0;
+        // The tier is full: fold it down by [`TIER_RATIO`] and carry on at the
+        // coarser block, so one pyramid's memory is bounded however long the
+        // file is. Only files tens of minutes long ever reach this.
+        if self.done[0].len() >= MAX_BLOCKS {
+            for done in &mut self.done {
+                *done = done
+                    .chunks(TIER_RATIO)
+                    .map(|group| {
+                        let mut all = Folded {
+                            min: f32::MAX,
+                            max: f32::MIN,
+                            sum_sq: 0.0,
+                        };
+                        for one in group {
+                            all.min = all.min.min(one.min);
+                            all.max = all.max.max(one.max);
+                            all.sum_sq += one.sum_sq;
+                        }
+                        all
+                    })
+                    .collect();
+            }
+            self.block = self.block.saturating_mul(TIER_RATIO);
+        }
+    }
+
+    /// The pyramid of everything pushed.
+    #[must_use]
+    pub fn finish(mut self) -> PeakPyramid {
+        let keeps_samples = self.frames <= self.keep;
+        if self.frames == 0 || self.sample_rate == 0 {
             return PeakPyramid {
-                sample_rate: sample_rate.max(1),
+                sample_rate: self.sample_rate.max(1),
                 frames: 0,
                 tiers: Vec::new(),
-                samples: Vec::new(),
+                samples: OnceLock::from(Vec::new()),
+                keeps_samples,
+                source: None,
             };
         }
-
-        // Coarsen the finest tier until it fits the memory budget — only files
-        // hours long ever reach this.
-        let mut block = FINEST_BLOCK;
-        while frames.div_ceil(block) > MAX_BLOCKS {
-            block = block.saturating_mul(TIER_RATIO);
-        }
-
-        let len = frames.div_ceil(block);
+        let len = self.frames.div_ceil(self.block);
         let mut data = vec![PeakBlock::SILENT; len * BAND_COUNT];
-        let mut split = Split::new(sample_rate as f32);
-        let mut running = [Running::EMPTY; BAND_COUNT];
-        let mut index = 0usize;
-        let mut filled = 0usize;
-        // Short enough that the zoom can out-resolve the finest tier: keep the
-        // mono mixdown too, so it has something to answer with when it does.
-        let keep_samples = (frames as f64) <= SAMPLE_KEEP_SECONDS * f64::from(sample_rate);
-        let mut samples = if keep_samples {
-            Vec::with_capacity(frames)
-        } else {
-            Vec::new()
-        };
-        for frame in 0..frames {
-            let l = interleaved.get(frame * 2).copied().unwrap_or(0.0);
-            let r = interleaved.get(frame * 2 + 1).copied().unwrap_or(0.0);
-            let mono = 0.5 * (l + r);
-            if keep_samples {
-                samples.push(to_i16(mono));
-            }
-            let bands = split.run(mono);
-            for (b, value) in bands.iter().enumerate() {
-                if let Some(slot) = running.get_mut(b) {
-                    slot.push(*value);
+        for (b, done) in self.done.iter().enumerate() {
+            for (i, one) in done.iter().enumerate() {
+                if let Some(cell) = data.get_mut(b * len + i) {
+                    *cell = PeakBlock {
+                        min: one.min,
+                        max: one.max,
+                        rms: (one.sum_sq / self.block as f64).sqrt() as f32,
+                    };
                 }
-            }
-            filled += 1;
-            if filled == block {
-                for (b, slot) in running.iter().enumerate() {
-                    if let Some(cell) = data.get_mut(b * len + index) {
-                        *cell = slot.finish();
-                    }
-                }
-                running = [Running::EMPTY; BAND_COUNT];
-                filled = 0;
-                index += 1;
             }
         }
-        if filled > 0 {
-            for (b, slot) in running.iter().enumerate() {
+        if self.filled > 0 {
+            let index = self.done[0].len();
+            for (b, slot) in self.running.iter().enumerate() {
                 if let Some(cell) = data.get_mut(b * len + index) {
                     *cell = slot.finish();
                 }
             }
         }
+        self.samples.shrink_to_fit();
+        PeakPyramid {
+            sample_rate: self.sample_rate,
+            frames: self.frames,
+            tiers: coarser_tiers(Tier {
+                block: self.block,
+                len,
+                data,
+            }),
+            samples: OnceLock::from(self.samples),
+            keeps_samples,
+            source: None,
+        }
+    }
+}
 
-        let mut tiers = vec![Tier { block, len, data }];
-        for _ in 1..TIERS {
-            let Some(finer) = tiers.last() else { break };
-            if finer.len <= 1 {
-                break;
-            }
-            let coarse_len = finer.len.div_ceil(TIER_RATIO);
-            let mut coarse = vec![PeakBlock::SILENT; coarse_len * BAND_COUNT];
-            for b in 0..BAND_COUNT {
-                for i in 0..coarse_len {
-                    let mut acc: Option<PeakBlock> = None;
-                    for k in 0..TIER_RATIO {
-                        let src = i * TIER_RATIO + k;
-                        if src >= finer.len {
-                            break;
-                        }
-                        let block = finer.data.get(b * finer.len + src).copied();
-                        acc = match (acc, block) {
-                            (Some(a), Some(x)) => Some(a.merged(x)),
-                            (None, Some(x)) => Some(x),
-                            (a, None) => a,
-                        };
+/// The finest tier and the coarser ones folded down from it.
+fn coarser_tiers(finest: Tier) -> Vec<Tier> {
+    let mut tiers = vec![finest];
+    for _ in 1..TIERS {
+        let Some(finer) = tiers.last() else { break };
+        if finer.len <= 1 {
+            break;
+        }
+        let coarse_len = finer.len.div_ceil(TIER_RATIO);
+        let mut coarse = vec![PeakBlock::SILENT; coarse_len * BAND_COUNT];
+        for b in 0..BAND_COUNT {
+            for i in 0..coarse_len {
+                let mut acc: Option<PeakBlock> = None;
+                for k in 0..TIER_RATIO {
+                    let src = i * TIER_RATIO + k;
+                    if src >= finer.len {
+                        break;
                     }
-                    if let Some(cell) = coarse.get_mut(b * coarse_len + i) {
-                        *cell = acc.unwrap_or(PeakBlock::SILENT);
-                    }
+                    let block = finer.data.get(b * finer.len + src).copied();
+                    acc = match (acc, block) {
+                        (Some(a), Some(x)) => Some(a.merged(x)),
+                        (None, Some(x)) => Some(x),
+                        (a, None) => a,
+                    };
+                }
+                if let Some(cell) = coarse.get_mut(b * coarse_len + i) {
+                    *cell = acc.unwrap_or(PeakBlock::SILENT);
                 }
             }
-            tiers.push(Tier {
-                block: finer.block.saturating_mul(TIER_RATIO),
-                len: coarse_len,
-                data: coarse,
-            });
+        }
+        tiers.push(Tier {
+            block: finer.block.saturating_mul(TIER_RATIO),
+            len: coarse_len,
+            data: coarse,
+        });
+    }
+    tiers
+}
+
+/// What a peak file starts with: seven bytes saying it is one, then the
+/// version of this layout. The same nine bytes every cache file of Lumit's
+/// opens with, and a file with another magic or a later version is not read.
+const PEAK_MAGIC: &[u8; 7] = b"LMTPEAK";
+const PEAK_VERSION: u16 = 1;
+
+/// How many frames are decoded and summarised at a time while a file's
+/// pyramid is built: about a third of a megabyte in hand, whatever the file.
+const BUILD_FRAMES: usize = 1 << 15;
+
+/// The peak file for a file with this fingerprint, in `dir`. Named as the
+/// frame index beside it is, with the rate the sound was summarised at, since
+/// the same file summarised at another rate is another pyramid.
+#[must_use]
+pub fn peak_path(dir: &Path, fingerprint: &lumit_media::Fingerprint, sample_rate: u32) -> PathBuf {
+    dir.join(format!("{}.{sample_rate}.peak", fingerprint.cache_key()))
+}
+
+/// This file's pyramid at `sample_rate`: read from its peak file in
+/// `cache_dir` when one is there for the file as it is now, else built by
+/// decoding the file through once and written there for next time. `None`
+/// when the file cannot be decoded.
+///
+/// The peak file carries the fingerprint of the file it summarises, so one
+/// left behind by a file since replaced is not believed. The cache is a
+/// convenience: with no directory, or one that cannot be written, the pyramid
+/// is built and handed back all the same.
+#[must_use]
+pub fn load_or_build(
+    path: &Path,
+    sample_rate: u32,
+    cache_dir: Option<&Path>,
+) -> Option<PeakPyramid> {
+    let fingerprint = lumit_media::Fingerprint::of(path).ok();
+    if let (Some(dir), Some(fp)) = (cache_dir, &fingerprint) {
+        let held = std::fs::read(peak_path(dir, fp, sample_rate))
+            .ok()
+            .and_then(|bytes| PeakPyramid::from_bytes(&bytes, fp, sample_rate));
+        if let Some(mut pyramid) = held {
+            pyramid.source = Some(path.to_path_buf());
+            return Some(pyramid);
+        }
+    }
+    let mut reader = lumit_media::audio::AudioReader::open(path, sample_rate).ok()?;
+    let mut builder = PyramidBuilder::new(sample_rate);
+    let mut at = 0u64;
+    loop {
+        let (chunk, _) = reader.read(at, BUILD_FRAMES, true).ok()?;
+        if chunk.is_empty() {
+            break;
+        }
+        at += (chunk.len() / 2) as u64;
+        builder.push(&chunk);
+    }
+    let mut pyramid = builder.finish();
+    if pyramid.is_empty() {
+        return None;
+    }
+    pyramid.source = Some(path.to_path_buf());
+    if let (Some(dir), Some(fp)) = (cache_dir, &fingerprint) {
+        // Best-effort: a cache that cannot be written costs the next run the
+        // decode again, never this one its answer.
+        if std::fs::create_dir_all(dir).is_ok() {
+            let _ = std::fs::write(peak_path(dir, fp, sample_rate), pyramid.to_bytes(fp));
+        }
+    }
+    Some(pyramid)
+}
+
+impl PeakPyramid {
+    /// Summarise interleaved-stereo PCM that is all in hand:
+    /// [`PyramidBuilder`] handed the lot at once.
+    #[must_use]
+    pub fn build(interleaved: &[f32], sample_rate: u32) -> PeakPyramid {
+        let mut builder = PyramidBuilder::new(sample_rate);
+        builder.push(interleaved);
+        builder.finish()
+    }
+
+    /// The pyramid as a peak file's bytes: the nine-byte head, the
+    /// fingerprint of the file summarised, and the tiers. The samples are not
+    /// written; see [`Self::samples`].
+    #[must_use]
+    pub fn to_bytes(&self, fingerprint: &lumit_media::Fingerprint) -> Vec<u8> {
+        let mut out = Vec::with_capacity(64 + self.bytes());
+        out.extend_from_slice(PEAK_MAGIC);
+        out.extend_from_slice(&PEAK_VERSION.to_le_bytes());
+        out.extend_from_slice(&fingerprint.size.to_le_bytes());
+        out.extend_from_slice(&fingerprint.mtime_unix.to_le_bytes());
+        let hash = fingerprint.content_hash.as_bytes();
+        out.extend_from_slice(&(hash.len() as u32).to_le_bytes());
+        out.extend_from_slice(hash);
+        out.extend_from_slice(&self.sample_rate.to_le_bytes());
+        out.extend_from_slice(&(self.frames as u64).to_le_bytes());
+        out.push(u8::from(self.keeps_samples));
+        out.extend_from_slice(&(self.tiers.len() as u32).to_le_bytes());
+        for tier in &self.tiers {
+            out.extend_from_slice(&(tier.block as u64).to_le_bytes());
+            out.extend_from_slice(&(tier.len as u64).to_le_bytes());
+            for block in &tier.data {
+                out.extend_from_slice(&block.min.to_le_bytes());
+                out.extend_from_slice(&block.max.to_le_bytes());
+                out.extend_from_slice(&block.rms.to_le_bytes());
+            }
+        }
+        out
+    }
+
+    /// A pyramid read back from a peak file's bytes, or `None` for bytes that
+    /// are not one, were written by a newer Lumit, summarise another file or
+    /// another rate, or do not add up. A refusal costs a rebuild and nothing
+    /// else, so anything doubtful is refused.
+    #[must_use]
+    pub fn from_bytes(
+        bytes: &[u8],
+        fingerprint: &lumit_media::Fingerprint,
+        sample_rate: u32,
+    ) -> Option<PeakPyramid> {
+        /// The next `n` bytes, moving `rest` past them.
+        fn take<'a>(rest: &mut &'a [u8], n: usize) -> Option<&'a [u8]> {
+            let (head, tail) = rest.split_at_checked(n)?;
+            *rest = tail;
+            Some(head)
+        }
+        fn u32_of(rest: &mut &[u8]) -> Option<u32> {
+            Some(u32::from_le_bytes(take(rest, 4)?.try_into().ok()?))
+        }
+        fn u64_of(rest: &mut &[u8]) -> Option<u64> {
+            Some(u64::from_le_bytes(take(rest, 8)?.try_into().ok()?))
+        }
+        fn f32_of(rest: &mut &[u8]) -> Option<f32> {
+            Some(f32::from_le_bytes(take(rest, 4)?.try_into().ok()?))
         }
 
-        PeakPyramid {
+        let mut rest = bytes;
+        if take(&mut rest, 7)? != PEAK_MAGIC {
+            return None;
+        }
+        if u16::from_le_bytes(take(&mut rest, 2)?.try_into().ok()?) != PEAK_VERSION {
+            return None;
+        }
+        let size = u64_of(&mut rest)?;
+        let mtime = i64::from_le_bytes(take(&mut rest, 8)?.try_into().ok()?);
+        let hash_len = u32_of(&mut rest)? as usize;
+        let hash = take(&mut rest, hash_len)?;
+        if size != fingerprint.size
+            || mtime != fingerprint.mtime_unix
+            || hash != fingerprint.content_hash.as_bytes()
+        {
+            return None;
+        }
+        if u32_of(&mut rest)? != sample_rate {
+            return None;
+        }
+        let frames = usize::try_from(u64_of(&mut rest)?).ok()?;
+        let keeps_samples = *take(&mut rest, 1)?.first()? != 0;
+        let tier_count = u32_of(&mut rest)? as usize;
+        if frames == 0 || tier_count == 0 || tier_count > TIERS {
+            return None;
+        }
+        let mut tiers = Vec::with_capacity(tier_count);
+        for _ in 0..tier_count {
+            let block = usize::try_from(u64_of(&mut rest)?).ok()?;
+            let len = usize::try_from(u64_of(&mut rest)?).ok()?;
+            // A tier holds no more blocks than the build ever makes, and
+            // exactly as many as its block size makes of the frames.
+            if block == 0 || len == 0 || len > MAX_BLOCKS + TIER_RATIO {
+                return None;
+            }
+            let cells = len * BAND_COUNT;
+            if rest.len() < cells * 12 {
+                return None;
+            }
+            let mut data = Vec::with_capacity(cells);
+            for _ in 0..cells {
+                data.push(PeakBlock {
+                    min: f32_of(&mut rest)?,
+                    max: f32_of(&mut rest)?,
+                    rms: f32_of(&mut rest)?,
+                });
+            }
+            tiers.push(Tier { block, len, data });
+        }
+        if !rest.is_empty() || tiers.first()?.len != frames.div_ceil(tiers.first()?.block) {
+            return None;
+        }
+        Some(PeakPyramid {
             sample_rate,
             frames,
             tiers,
-            samples,
-        }
+            samples: OnceLock::new(),
+            keeps_samples,
+            source: None,
+        })
+    }
+
+    /// The mono mixdown a fully zoomed lane draws from, or nothing for a
+    /// source too long to keep one.
+    ///
+    /// A pyramid that was built holds it already. One read back from its
+    /// file decodes it here, the first time it is asked for, from the file
+    /// the pyramid summarises: once per run for a source somebody zooms
+    /// right in on, and never for the rest.
+    fn samples(&self) -> &[i16] {
+        self.samples.get_or_init(|| {
+            let (true, Some(path)) = (self.keeps_samples, &self.source) else {
+                return Vec::new();
+            };
+            let Ok(mut reader) = lumit_media::audio::AudioReader::open(path, self.sample_rate)
+            else {
+                return Vec::new();
+            };
+            let mut samples = Vec::with_capacity(self.frames);
+            while let Ok((chunk, _)) = reader.read(samples.len() as u64, BUILD_FRAMES, true) {
+                if chunk.is_empty() {
+                    break;
+                }
+                samples.extend(chunk.chunks_exact(2).map(|f| to_i16(0.5 * (f[0] + f[1]))));
+            }
+            samples
+        })
     }
 
     /// How long the summarised audio runs, in seconds.
@@ -498,7 +818,7 @@ impl PeakPyramid {
             .iter()
             .map(|t| t.data.len() * std::mem::size_of::<PeakBlock>())
             .sum::<usize>()
-            + self.samples.len() * std::mem::size_of::<i16>()
+            + self.samples.get().map_or(0, Vec::len) * std::mem::size_of::<i16>()
     }
 
     /// The tier to read a bucket of `samples_per_bucket` samples from: the
@@ -593,11 +913,10 @@ impl PeakPyramid {
     /// than at [`BLOCKS_PER_BUCKET`] blocks also keeps the sample scan bounded:
     /// at most one block's worth of samples per column.
     fn wants_samples(&self, samples_per_bucket: f64) -> bool {
-        if self.samples.is_empty() {
-            return false;
-        }
         let finest = self.tiers.first().map_or(FINEST_BLOCK, |t| t.block);
-        samples_per_bucket < finest as f64
+        // Asked in this order so the samples are only fetched for a view that
+        // would use them.
+        samples_per_bucket < finest as f64 && !self.samples().is_empty()
     }
 
     /// `buckets` summaries taken straight off the samples, for a view zoomed in
@@ -631,8 +950,9 @@ impl PeakPyramid {
             first.saturating_sub(SAMPLE_PREROLL)
         };
         let mut split = Split::new(self.sample_rate as f32);
+        let samples = self.samples();
         for i in pre..last {
-            let x = self.samples.get(i).copied().map_or(0.0, from_i16);
+            let x = samples.get(i).copied().map_or(0.0, from_i16);
             let value = if plain {
                 x
             } else {
@@ -748,5 +1068,69 @@ mod tests {
         // A degenerate span answers silence rather than dividing by zero.
         assert_eq!(p.range(Band::Full, 0.5, 0.5, 3).len(), 3);
         assert!(p.range(Band::Full, 0.0, 1.0, 0).is_empty());
+    }
+
+    /// **A peak file read back is the pyramid that was built**: every band at
+    /// every zoom draws the same, down to the view zoomed in past the summary,
+    /// which the read-back pyramid answers by fetching the samples it did not
+    /// store. And a peak file is not believed about a file that has changed
+    /// since it was written.
+    #[test]
+    fn a_peak_file_read_back_draws_what_the_built_pyramid_draws() {
+        use crate::stream::tests::{ramp_wav, Scratch};
+        const RATE: u32 = 8_000;
+        let dir = Scratch::new("peaks");
+        let path = ramp_wav(&dir.0, "ramp.wav", RATE, 9);
+        let cache = dir.0.join("cache");
+
+        let whole = lumit_media::audio::decode_all(&path, RATE).unwrap();
+        let in_memory = PeakPyramid::build(&whole.samples, RATE);
+        // Built from the file a stretch at a time, which writes the peak file.
+        let built = load_or_build(&path, RATE, Some(&cache)).unwrap();
+        let fingerprint = lumit_media::Fingerprint::of(&path).unwrap();
+        let file = peak_path(&cache, &fingerprint, RATE);
+        assert!(file.is_file(), "the build left its peak file");
+        // Read back: nothing is decoded to make this one.
+        let read = load_or_build(&path, RATE, Some(&cache)).unwrap();
+        assert!(
+            read.samples.get().is_none(),
+            "read from the file, not rebuilt"
+        );
+
+        let views = [
+            (0.0, 9.0, 16),   // the whole source, from the coarsest tier
+            (1.0, 7.5, 300),  // the middle tier
+            (2.0, 4.0, 900),  // the finest tier
+            (3.0, 3.25, 500), // past the summary: four samples a column
+            (8.5, 10.0, 40),  // off the end
+        ];
+        for band in [Band::Full, Band::Low, Band::Mid, Band::High] {
+            for (from, to, buckets) in views {
+                let want = in_memory.range(band, from, to, buckets);
+                assert!(
+                    built.range(band, from, to, buckets) == want,
+                    "{band:?} built"
+                );
+                assert!(read.range(band, from, to, buckets) == want, "{band:?} read");
+            }
+        }
+        assert_eq!(read.duration_seconds(), in_memory.duration_seconds());
+        assert_eq!(
+            read.bytes(),
+            in_memory.bytes(),
+            "samples and all, once asked"
+        );
+
+        // The same file with another modification time is another file as far
+        // as the cache can tell, and bytes that are not a peak file are not
+        // one.
+        let bytes = std::fs::read(&file).unwrap();
+        let mut later = fingerprint.clone();
+        later.mtime_unix += 1;
+        assert!(PeakPyramid::from_bytes(&bytes, &fingerprint, RATE).is_some());
+        assert!(PeakPyramid::from_bytes(&bytes, &later, RATE).is_none());
+        assert!(PeakPyramid::from_bytes(&bytes, &fingerprint, 48_000).is_none());
+        assert!(PeakPyramid::from_bytes(&bytes[..bytes.len() - 5], &fingerprint, RATE).is_none());
+        assert!(PeakPyramid::from_bytes(b"LMTPEAK", &fingerprint, RATE).is_none());
     }
 }
