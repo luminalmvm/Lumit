@@ -56,6 +56,7 @@ pub fn decode_all(path: &Path, target_rate: u32) -> Result<AudioBuffer, MediaErr
         decoder.sample_rate,
     )
     .map_err(|e| MediaError::Ffmpeg(e.to_string()))?;
+    cap_downmix(&mut swr)?;
     swr.init().map_err(|e| MediaError::Ffmpeg(e.to_string()))?;
 
     let mut samples: Vec<f32> = Vec::new();
@@ -162,6 +163,29 @@ fn plane_slice<'a>(ptr: *const u8, len: usize) -> Result<&'a [u8], MediaError> {
     }
 }
 
+/// Hold a fold-down to stereo at full scale.
+///
+/// **In plain terms.** A 5.1 or 7.1 recording has a centre and surrounds, and
+/// folding it to two speakers adds those onto the left and right. Left alone
+/// the sum runs well past full scale, by 7.7 dB for 5.1 and 9.9 dB for 7.1
+/// with every channel busy, and the master then clips it: the clip plays loud
+/// and distorted. FFmpeg scales the fold-down back by itself for whole-number
+/// samples and not for the floats Lumit asks for, so it is asked to here.
+/// A stereo source has nothing folded into it and is not changed.
+///
+/// Wrapped so the unsafety is one auditable function, as the two beside it
+/// are.
+#[allow(unsafe_code)]
+fn cap_downmix(swr: &mut SwrContext) -> Result<(), MediaError> {
+    // SAFETY: `swr` is a live `SwrContext`, whose first field is its
+    // `AVClass`, which is all `av_opt_set_double` asks of the pointer. The
+    // name is a NUL-terminated literal that outlives the call.
+    unsafe {
+        rsmpeg::avutil::opt_set_double(swr.as_mut_ptr().cast(), c"rematrix_maxval", 1.0, 0)
+            .map_err(|e| MediaError::Ffmpeg(e.to_string()))
+    }
+}
+
 fn byte_to_f32(bytes: &[u8], out: &mut [f32]) {
     for (i, chunk) in bytes.chunks_exact(4).enumerate().take(out.len()) {
         out[i] = f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
@@ -225,6 +249,37 @@ mod tests {
         let l = buf.samples[1000];
         let r = buf.samples[1001];
         assert!((l - r).abs() < 1e-3, "L {l} vs R {r}");
+    }
+
+    /// A 5.1 recording with every channel at half scale folds down to stereo
+    /// without passing full scale. It used to peak at 1.2, which the master
+    /// clipped.
+    #[test]
+    fn a_surround_source_folds_down_inside_full_scale() {
+        let dir = tempfile::tempdir().unwrap();
+        let Some(bin) = ffmpeg_bin() else {
+            eprintln!("skipping: no ffmpeg CLI available");
+            return;
+        };
+        let file = dir.path().join("surround.wav");
+        let tone = "0.5*sin(440*2*PI*t)";
+        let made = Command::new(bin)
+            .args(["-v", "error", "-y", "-f", "lavfi", "-i"])
+            .arg(format!(
+                "aevalsrc={}:c=5.1:s=48000:d=1",
+                [tone; 6].join("|")
+            ))
+            .arg(&file)
+            .status()
+            .is_ok_and(|status| status.success());
+        if !made {
+            eprintln!("skipping: this ffmpeg cannot write the fixture");
+            return;
+        }
+        let buf = decode_all(&file, 48_000).unwrap();
+        let peak = buf.samples.iter().fold(0.0f32, |peak, s| peak.max(s.abs()));
+        assert!(peak < 0.6, "peak {peak}");
+        assert!(peak > 0.3, "the fold-down still carries the sound: {peak}");
     }
 
     /// Regression: a video-only file has no audio stream, so `decode_all`

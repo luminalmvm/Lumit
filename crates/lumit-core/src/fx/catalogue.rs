@@ -83,6 +83,7 @@ use super::effects::{
     contrast::{Contrast, ContrastDef},
     corner_pin::{CornerPin, CornerPinDef},
     curves::{Curves, CurvesDef},
+    custom_controls::{CustomControls, CustomControlsDef},
     custom_shader::{CustomShader, CustomShaderDef},
     datamosh::{Datamosh, DatamoshDef},
     depth::{Depth, DepthDef},
@@ -432,6 +433,7 @@ crate::catalogue![
     CheckboxControlDef => CheckboxControl,
     ColourControlDef => ColourControl,
     PointControlDef => PointControl,
+    CustomControlsDef => CustomControls,
     // The Drivers family, last of all: a driver is added from the Graph
     // panel's own search rather than from the Add-effect menu, and its entries
     // declare a data signature instead of an image kernel. The order inside it

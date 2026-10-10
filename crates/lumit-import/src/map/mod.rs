@@ -164,6 +164,36 @@ impl Conv<'_> {
 /// The one entry point. Never returns an error: everything that could not be
 /// carried is a row in the returned [`ImportReport`].
 #[must_use]
+/// A preset's effects as Lumit effects, top of the stack first.
+///
+/// The same conversion a layer's effects get inside a project, run with no
+/// project around it: `size` is the layer the preset was saved from, which an
+/// effect's points are measured against, and `name` is what the report's rows
+/// are filed under.
+pub fn map_preset(
+    name: &str,
+    effects: &[crate::capture::Property],
+    size: (f64, f64),
+) -> (Vec<lumit_core::model::EffectInstance>, ImportReport) {
+    let mut report = ImportReport::default();
+    let path = ItemPath::item(name);
+    let mut conv = Conv {
+        report: &mut report,
+        tb: TimeBase::fallback(),
+        offset: Rational::ZERO,
+        size: (size.0.max(1.0), size.1.max(1.0)),
+        span: (Rational::ZERO, Rational::ZERO),
+        layer_ids: BTreeMap::new(),
+        masks: Vec::new(),
+        self_index: 0,
+    };
+    let mapped = effects
+        .iter()
+        .map(|node| effects::map_effect(&mut conv, &path, node).instance())
+        .collect();
+    (mapped, report)
+}
+
 pub fn map_capture(capture: &Capture) -> (Document, ImportReport) {
     let mut report = ImportReport::default();
     let mut doc = Document::new();

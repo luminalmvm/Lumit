@@ -98,6 +98,9 @@ pub fn map_effect(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Mapp
 /// collide with the other; each is asked in turn and the first to claim the
 /// name wins.
 fn claim(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<EffectInstance> {
+    if let Some(controls) = pseudo(conv, path, node) {
+        return Some(controls);
+    }
     // The two third-party roads come first, and in this order: the vendor's own
     // plug-in beats Lumit's nearest likeness, because it is the effect itself.
     // Neither road can fire on a row that names neither an `ofx` identifier nor
@@ -115,6 +118,132 @@ fn claim(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<Effect
         return Some(mapped);
     }
     super::fx_distort::claim(conv, path, node)
+}
+
+/// What every pseudo effect's match name begins with.
+const PSEUDO: &str = "Pseudo/";
+
+/// **A pseudo effect, as Custom controls.**
+///
+/// A pseudo effect is a set of named controls somebody made for a rig: it
+/// draws nothing, and expressions on other properties read it by name. Lumit's
+/// Custom controls is the same thing, so each slider, angle, checkbox and
+/// colour comes across as a control with the name it had, its keyframes and
+/// its range, and the set keeps the name the expressions look it up by.
+///
+/// A point is two numbers here, named "… x" and "… y". The headings a pseudo
+/// effect groups its controls under carry nothing and are passed over.
+fn pseudo(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<EffectInstance> {
+    use lumit_core::fx::effects::custom_controls::{set_controls, Control, ControlKind};
+
+    let match_name = match_name_of(node);
+    if !match_name.starts_with(PSEUDO) {
+        return None;
+    }
+    let name = display_name(node, match_name).to_string();
+    let here = path.property(&name);
+    let mut inst = lumit_core::fx::instantiate("custom_controls")?;
+    inst.enabled = node.enabled.unwrap_or(true);
+    inst.custom_name = Some(name);
+    inst.extra = ae_map(vec![
+        ("match_name", serde_json::json!(match_name)),
+        ("name", serde_json::json!(node.name)),
+    ]);
+
+    let mut leaves = Vec::new();
+    flatten(node.children(), &mut leaves);
+    let mut controls = Vec::new();
+    let mut values = Vec::new();
+    for leaf in leaves {
+        // `Pseudo/510820-0007` is control 7. Anything else in there is After
+        // Effects' own (its Compositing Options), which every effect has.
+        let Some(number) = match_name_of(leaf)
+            .strip_prefix(match_name)
+            .and_then(|rest| rest.strip_prefix('-'))
+            .filter(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
+        else {
+            continue;
+        };
+        let id = format!("control_{}", number.trim_start_matches('0'));
+        let label = display_name(leaf, &id).trim().to_string();
+        let (min, max) = leaf.range.unwrap_or((0.0, 100.0));
+        let kind = match (leaf.value_type.as_deref(), leaf.control.as_deref()) {
+            (Some("float"), Some("angle")) => ControlKind::Angle,
+            (Some("float"), Some("checkbox")) => ControlKind::Checkbox,
+            (Some("float"), _) => ControlKind::Number,
+            (Some("colour"), _) => ControlKind::Colour,
+            (Some("point" | "point3"), _) => {
+                for (axis, suffix) in ["x", "y"].into_iter().enumerate() {
+                    let value = from_node(conv, &here, leaf, axis, 0.0);
+                    controls.push(Control {
+                        id: format!("{id}_{suffix}"),
+                        label: format!("{label} {suffix}"),
+                        kind: ControlKind::Number,
+                        default: [value.value_at(0.0), 0.0, 0.0, 0.0],
+                        min: 0.0,
+                        max: if axis == 0 { conv.size.0 } else { conv.size.1 },
+                    });
+                    values.push(EffectValue::Float(value));
+                }
+                continue;
+            }
+            // A heading, or something After Effects itself could not read.
+            _ => continue,
+        };
+        let value = match kind {
+            ControlKind::Colour => EffectValue::Colour([
+                from_node(conv, &here, leaf, 0, 0.0),
+                from_node(conv, &here, leaf, 1, 0.0),
+                from_node(conv, &here, leaf, 2, 0.0),
+                from_node(conv, &here, leaf, 3, 1.0),
+            ]),
+            ControlKind::Checkbox => {
+                EffectValue::Bool(from_node(conv, &here, leaf, 0, 0.0).value_at(0.0) != 0.0)
+            }
+            ControlKind::Number | ControlKind::Angle => {
+                EffectValue::Float(from_node(conv, &here, leaf, 0, 0.0))
+            }
+        };
+        let default = match &value {
+            EffectValue::Float(p) => [p.value_at(0.0), 0.0, 0.0, 0.0],
+            EffectValue::Bool(on) => [f64::from(u8::from(*on)), 0.0, 0.0, 0.0],
+            EffectValue::Colour(c) => [
+                c[0].value_at(0.0),
+                c[1].value_at(0.0),
+                c[2].value_at(0.0),
+                c[3].value_at(0.0),
+            ],
+            _ => [0.0; 4],
+        };
+        controls.push(Control {
+            id,
+            label,
+            kind,
+            default,
+            min,
+            max,
+        });
+        values.push(value);
+    }
+
+    set_controls(&mut inst, &controls);
+    for (control, value) in controls.iter().zip(values) {
+        if let Some(param) = inst.params.iter_mut().find(|p| p.id == control.id) {
+            param.value = value;
+        }
+    }
+    Some(inst)
+}
+
+/// Every leaf under `nodes`, with After Effects' own groups opened.
+fn flatten<'a>(nodes: &'a [Property], out: &mut Vec<&'a Property>) {
+    for node in nodes {
+        if node.group.is_some() {
+            flatten(node.children(), out);
+        } else {
+            out.push(node);
+        }
+    }
 }
 
 /// **The vendor's own OFX build of this same plug-in, if it is installed**
@@ -492,7 +621,12 @@ fn collect(
         Some(value) => params.push(EffectParam {
             id,
             value,
-            extra: serde_json::Map::new(),
+            // The name the row had, which is how an expression asks for it.
+            extra: node
+                .name
+                .iter()
+                .map(|name| ("name".to_string(), serde_json::json!(name.trim())))
+                .collect(),
         }),
         // Nothing Lumit animates: kept whole rather than approximated.
         None => {

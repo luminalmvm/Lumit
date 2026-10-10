@@ -1576,6 +1576,18 @@
   "@fileTypePreset": {
     "description": "A file type in the system's file dialogues: a saved .lumfx effect stack."
   },
+  "expressionLanguageJavaScript": "JavaScript",
+  "@expressionLanguageJavaScript": {
+    "description": "The name of a programming language an expression can be written in. A proper name; do not translate."
+  },
+  "expressionLanguageRhai": "Rhai",
+  "@expressionLanguageRhai": {
+    "description": "The name of a programming language an expression can be written in. A proper name; do not translate."
+  },
+  "fileTypePresetToOpen": "Effect presets",
+  "@fileTypePresetToOpen": {
+    "description": "A file type in the system's file dialogues when opening a preset: Lumit's own .lumfx files and After Effects' .ffx files together."
+  },
   "fileTypeShader": "WGSL shader",
   "@fileTypeShader": {
     "description": "A file type in the system's file dialogues: a .wgsl shader loaded into a Custom shader effect by its 'Load from file…' button."
@@ -7197,6 +7209,10 @@
   "@settingsQualityTier": {
     "description": "Settings window: the name of one setting."
   },
+  "settingsNewExpressionsLanguage": "New expressions are written in",
+  "@settingsNewExpressionsLanguage": {
+    "description": "Settings window: the name of the setting choosing which programming language a new expression starts in. Followed by a dropdown reading JavaScript or Rhai."
+  },
   "settingsRetimeOpensToSpeed": "Retime opens to Speed",
   "@settingsRetimeOpensToSpeed": {
     "description": "Settings window: the name of the setting that opens a Retime channel showing playback speed. Speed, never velocity (docs/01-GLOSSARY.md)."
@@ -10037,6 +10053,10 @@
   "@fxColourControl": {
     "description": "Effect name in the Add effect menu — holds one colour for an expression to read."
   },
+  "fxCustomControls": "Custom controls",
+  "@fxCustomControls": {
+    "description": "Effect name in the Add effect menu — a named set of controls for expressions to read, which is what an After Effects pseudo effect imports as."
+  },
   "fxPointControl": "Point control",
   "@fxPointControl": {
     "description": "Effect name in the Add effect menu — holds one place in the frame for an expression to read."
@@ -10452,6 +10472,15 @@
   "aeExpressionNotRunnable": "the expression does not run here and was switched off — its text is kept, and the keyframes underneath drive the property: {source}",
   "@aeExpressionNotRunnable": {
     "description": "Import report row reason, lower case. An expression written in After Effects' language, which Lumit cannot run; the placeholder is the expression's source text.",
+    "placeholders": {
+      "source": {
+        "type": "String"
+      }
+    }
+  },
+  "aeExpressionOverKeys": "the expression sits over keyframes, and only one of the two can drive a property here — the keyframes do, and the expression's text is kept: {source}",
+  "@aeExpressionOverKeys": {
+    "description": "Import report row reason, lower case. An After Effects expression Lumit could run, on a property that also has keyframes; Lumit keeps the keyframes. The placeholder is the expression's source text.",
     "placeholders": {
       "source": {
         "type": "String"
@@ -13500,6 +13529,10 @@
   },
   "histSetParent": "Set parent",
   "@histSetParent": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histEditExpression": "Edit expression",
+  "@histEditExpression": {
     "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
   },
   "histEditTransform": "Edit transform",

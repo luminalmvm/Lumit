@@ -210,6 +210,12 @@ pub enum Reason {
     /// keyframes underneath drive the property, so the motion survives and the
     /// expression is there to re-author.
     ExpressionNotRunnable { source: String },
+    /// An enabled expression Lumit can run, on a property that also has
+    /// keyframes. After Effects keeps the keyframes underneath an expression
+    /// for it to read (`value`, `loopOut()`); Lumit holds one or the other. So
+    /// the keyframes drive the property, as they would with the expression
+    /// switched off, and the text is kept in the `ae` namespace.
+    ExpressionOverKeys { source: String },
     /// A property After Effects itself could not read (a `CUSTOM_VALUE`
     /// blob).
     PropertyUnreadable { match_name: String },
@@ -451,6 +457,11 @@ impl std::fmt::Display for Reason {
                 f,
                 "the expression does not run here and was switched off — its text is kept, and \
                  the keyframes underneath drive the property: {source}"
+            ),
+            Self::ExpressionOverKeys { source } => write!(
+                f,
+                "the expression sits over keyframes, and only one of the two can drive a property \
+                 here — the keyframes do, and the expression's text is kept: {source}"
             ),
             Self::PropertyUnreadable { match_name } => write!(
                 f,

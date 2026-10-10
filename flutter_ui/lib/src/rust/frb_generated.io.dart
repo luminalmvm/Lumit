@@ -577,6 +577,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeExportState dco_decode_bridge_export_state(dynamic raw);
 
   @protected
+  BridgeExpressionLanguage dco_decode_bridge_expression_language(dynamic raw);
+
+  @protected
   BridgeFadeShape dco_decode_bridge_fade_shape(dynamic raw);
 
   @protected
@@ -2196,6 +2199,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeExportState sse_decode_bridge_export_state(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeExpressionLanguage sse_decode_bridge_expression_language(
       SseDeserializer deserializer);
 
   @protected
@@ -4019,6 +4026,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_export_state(
       BridgeExportState self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_expression_language(
+      BridgeExpressionLanguage self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_fade_shape(

@@ -25,6 +25,33 @@ Map<GraphChannel, BridgeScalar> withLinkedPartners(
     Map<GraphChannel, BridgeScalar> edits) {
   final out = Map.of(edits);
   edits.forEach((channel, next) {
+    if (channel.linkedParam case final half?) {
+      // An effect's chained pair: the other half is read off the instance,
+      // where a layer's is read off its transform.
+      BridgeScalar? was;
+      for (final v in channel.effect?.values ?? const <BridgeParamValue>[]) {
+        if (v.id == half.id && v.value is BridgeEffectValue_Float) {
+          was = (v.value as BridgeEffectValue_Float).field0;
+        }
+      }
+      if (was == null ||
+          channel.scalar is BridgeScalar_Expression ||
+          was is BridgeScalar_Expression ||
+          next is BridgeScalar_Expression) {
+        return;
+      }
+      out[GraphChannel(
+        path: channel.path,
+        id: '${channel.id}@${half.id}',
+        label: channel.label,
+        colourIndex: channel.colourIndex,
+        scalar: was,
+        entry: channel.entry,
+        effect: channel.effect,
+        param: half,
+      )] = linkedPartnerScalar(channel.scalar, was, next);
+      return;
+    }
     final partner = channel.linkedPartner;
     if (partner == null) return;
     final was = read(channel.entry.info.transform, partner);
@@ -197,7 +224,7 @@ void previewChannelEdits({
   if (lead.effect == null || lead.param == null) return;
   final staged = layer.getEffects();
   for (final instance in staged) {
-    edits.forEach((channel, next) {
+    all.forEach((channel, next) {
       if (!sameLayer(channel) ||
           channel.effect == null ||
           channel.param == null) {

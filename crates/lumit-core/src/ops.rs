@@ -513,6 +513,21 @@ pub enum Op {
         prop: TransformProp,
         animation: Animation,
     },
+    /// Replace what a transform property's expression knows about its
+    /// property ([`crate::expression::Slot`]): the language it is written in,
+    /// the value underneath it, and its seed. `None` is a property with no
+    /// such note, which is every one without an expression.
+    ///
+    /// Its own op beside [`Op::SetTransformProperty`], in the same
+    /// [`Op::Batch`] when an edit changes both, so every other writer of a
+    /// transform's animation stays as it was. The note is whole in the op, so
+    /// replaying the journal writes the same seed the edit did.
+    SetTransformExpressionSlot {
+        comp: Uuid,
+        layer: Uuid,
+        prop: TransformProp,
+        slot: Option<serde_json::Value>,
+    },
     /// Set how one two-axis transform property is shown and edited — combined
     /// on one row, linked, or separated onto a row per axis.
     ///
@@ -862,6 +877,7 @@ impl Op {
             Op::SetLayerMatte { .. } => "Set matte",
             Op::SetLayerParent { .. } => "Set parent",
             Op::SetTransformProperty { .. } => "Edit transform",
+            Op::SetTransformExpressionSlot { .. } => "Edit expression",
             Op::SetTransformAxisMode { .. } => "Set axis mode",
             Op::SetCameraZoom { .. } => "Set camera zoom",
             Op::SetCameraSettings { .. } => "Set camera settings",
@@ -949,6 +965,7 @@ fn lock_guards(op: &Op) -> Option<(Uuid, Uuid)> {
         | Op::SetLayerMatte { comp, layer, .. }
         | Op::SetLayerParent { comp, layer, .. }
         | Op::SetTransformProperty { comp, layer, .. }
+        | Op::SetTransformExpressionSlot { comp, layer, .. }
         | Op::SetTransformAxisMode { comp, layer, .. }
         | Op::SetCameraZoom { comp, layer, .. }
         | Op::SetCameraSettings { comp, layer, .. }
@@ -1014,6 +1031,7 @@ fn comp_guards(op: &Op) -> Option<Uuid> {
         | Op::SetLayerMatte { comp, .. }
         | Op::SetLayerParent { comp, .. }
         | Op::SetTransformProperty { comp, .. }
+        | Op::SetTransformExpressionSlot { comp, .. }
         | Op::SetTransformAxisMode { comp, .. }
         | Op::SetCameraZoom { comp, .. }
         | Op::SetCameraSolveLink { comp, .. }
@@ -1997,6 +2015,31 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 layer: *layer,
                 prop: *prop,
                 animation: previous,
+            })
+        }
+        Op::SetTransformExpressionSlot {
+            comp,
+            layer,
+            prop,
+            slot,
+        } => {
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let l = c
+                .layers
+                .iter_mut()
+                .find(|l| l.id == *layer)
+                .ok_or(OpError::UnknownLayer)?;
+            let property = l.prop_mut(*prop).ok_or(OpError::PropNotOnLayer)?;
+            let key = crate::expression::SLOT_KEY;
+            let previous = match slot {
+                Some(slot) => property.extra.insert(key.to_owned(), slot.clone()),
+                None => property.extra.remove(key),
+            };
+            Ok(Op::SetTransformExpressionSlot {
+                comp: *comp,
+                layer: *layer,
+                prop: *prop,
+                slot: previous,
             })
         }
         Op::SetTransformAxisMode {

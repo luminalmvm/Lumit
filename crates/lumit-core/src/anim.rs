@@ -538,7 +538,9 @@ impl Property {
         match &self.animation {
             Animation::Static(v) => *v,
             Animation::Keyframed(keys) => evaluate(keys, t).unwrap_or(0.0),
-            Animation::Expression(expression) => crate::expression::evaluate(expression, None),
+            Animation::Expression(expression) => {
+                crate::expression::evaluate_property(expression, None, &self.extra)
+            }
         }
     }
 
@@ -547,9 +549,49 @@ impl Property {
             Animation::Static(v) => *v,
             Animation::Keyframed(keys) => evaluate(keys, t).unwrap_or(0.0),
             Animation::Expression(expression) => {
-                crate::expression::evaluate(expression, Some(context))
+                crate::expression::evaluate_property(expression, Some(context), &self.extra)
             }
         }
+    }
+
+    /// Change what drives this property, and keep the note an expression reads
+    /// its own value from ([`crate::expression::Slot`]) in step with it.
+    ///
+    /// **In plain terms.** `value` in an expression means what the property
+    /// held before the expression, and `wiggle` wanders around that. So the
+    /// moment an expression is put on a property is the moment to write the
+    /// number down. Editing the text afterwards leaves the note alone, and
+    /// taking the expression off removes it.
+    pub fn set_animation(&mut self, animation: Animation) {
+        use crate::expression::{Slot, SLOT_KEY};
+        match (&self.animation, &animation) {
+            (Animation::Expression(_), Animation::Expression(_)) => {}
+            (_, Animation::Expression(_)) => {
+                // A seed of its own, so two properties given the same text
+                // do not wander in step.
+                let seed = (uuid::Uuid::now_v7().as_u128() as u32).max(1);
+                Slot::new(&[self.value_at(0.0)], 0, seed).write(&mut self.extra);
+            }
+            _ => {
+                self.extra.remove(SLOT_KEY);
+            }
+        }
+        self.animation = animation;
+    }
+
+    /// The language this property's expression is written in. Rhai when
+    /// nothing says otherwise.
+    #[must_use]
+    pub fn expression_language(&self) -> crate::expression::Language {
+        crate::expression::Language::of(&self.extra)
+    }
+
+    /// Say which language this property's expression is written in.
+    pub fn set_expression_language(&mut self, language: crate::expression::Language) {
+        use crate::expression::Slot;
+        Slot::read(&self.extra)
+            .in_language(language)
+            .write(&mut self.extra);
     }
 
     pub fn is_animated(&self) -> bool {

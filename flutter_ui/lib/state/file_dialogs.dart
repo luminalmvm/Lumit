@@ -105,9 +105,15 @@ Future<String?> pickExportSaveLocation(
 XTypeGroup _presetGroup() =>
     XTypeGroup(label: l10n.fileTypePreset, extensions: const ['lumfx']);
 
-/// Pick one `.lumfx` preset file to load, or null when cancelled.
+/// What a preset picker opens: Lumit's own `.lumfx`, and an After Effects
+/// `.ffx`, which the engine converts as it reads it. One group, so both kinds
+/// show without changing the dialogue's filter.
+XTypeGroup _presetOpenGroup() => XTypeGroup(
+    label: l10n.fileTypePresetToOpen, extensions: const ['lumfx', 'ffx']);
+
+/// Pick one preset file to load, or null when cancelled.
 Future<String?> pickPresetToOpen() async {
-  final file = await openFile(acceptedTypeGroups: [_presetGroup()]);
+  final file = await openFile(acceptedTypeGroups: [_presetOpenGroup()]);
   return file?.path;
 }
 

@@ -510,6 +510,31 @@ pub fn list_graph_groups() -> Vec<BridgePresetInfo> {
         .unwrap_or_default()
 }
 
+/// A preset file's text, ready for `load_preset`, whichever kind of preset the
+/// file is.
+///
+/// A Lumit `.lumfx` is handed back as it is. An After Effects `.ffx` is read
+/// and converted first, so the panels have one call to make and one kind of
+/// text to apply: its pseudo effects arrive as Custom controls, the effects
+/// Lumit has arrive as Lumit's, and its expressions come with them.
+///
+/// The file is told apart by its first bytes and not by its name. A file that
+/// is neither is refused as any other non-preset is.
+#[frb(sync)]
+pub fn read_effect_preset(path: String) -> Result<String, BridgeError> {
+    let path = std::path::Path::new(&path);
+    if !lumit_import::is_ffx(path) {
+        return std::fs::read_to_string(path).map_err(|_| BridgeError::InvalidPreset);
+    }
+    let (effects, _report) =
+        lumit_import::open_ffx(path).map_err(|_| BridgeError::InvalidPreset)?;
+    let name = path
+        .file_stem()
+        .map(|stem| stem.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    lumit_core::preset::to_json(&name, &effects).map_err(|_| BridgeError::InvalidPreset)
+}
+
 /// Where the preset library lives, created on first ask — the save dialogue's
 /// default folder, so a saved preset appears in the listing without the user
 /// navigating anywhere. `None` only when the platform has no home directory.
@@ -633,7 +658,9 @@ fn sample_at(scalar: BridgeScalar, seconds: f64) -> f64 {
                 .collect();
             lumit_core::anim::evaluate(&keys, seconds).unwrap_or(0.0)
         }
-        BridgeScalar::Expression(expr) => lumit_core::expression::evaluate(&expr, None),
+        BridgeScalar::Expression(expr, language) => {
+            lumit_core::expression::evaluate_in(language.read(), &expr, None)
+        }
     }
 }
 
@@ -658,12 +685,13 @@ pub fn sample_scalar_with_context(
                 .collect();
             lumit_core::anim::evaluate(&keys, seconds).unwrap_or(0.0)
         }
-        BridgeScalar::Expression(expr) => {
+        BridgeScalar::Expression(expr, language) => {
             let Some(doc) = document_for(&layer) else {
                 return 0.0;
             };
 
-            lumit_core::expression::evaluate(
+            lumit_core::expression::evaluate_in(
+                language.read(),
                 &expr,
                 Some(Arc::new(ExpressionContext {
                     document: doc.clone(),
@@ -704,7 +732,7 @@ pub fn sample_scalar_range_with_context(
     samples: i64,
 ) -> Vec<f64> {
     match scalar {
-        BridgeScalar::Expression(expr) => {
+        BridgeScalar::Expression(expr, language) => {
             let Some(doc) = document_for(&layer) else {
                 return Vec::new();
             };
@@ -718,6 +746,7 @@ pub fn sample_scalar_range_with_context(
                 .to_f64();
 
             lumit_core::expression::evaluate_range(
+                language.read(),
                 &expr,
                 Some(&ExpressionContext {
                     document: doc.clone(),
@@ -1436,6 +1465,40 @@ impl BridgeKeyframe {
     }
 }
 
+/// The language an expression is written in
+/// ([`lumit_core::expression::Language`]).
+///
+/// It crosses with the text every time, in both directions. The person writing
+/// an expression picks it, and nothing works it out from the text: the same
+/// line can mean two things, and a guess would be wrong quietly.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BridgeExpressionLanguage {
+    /// One line of Rhai, Lumit's first language. What an expression with
+    /// nothing stored beside it is.
+    Rhai,
+    /// JavaScript, as After Effects expressions are written.
+    JavaScript,
+}
+
+impl BridgeExpressionLanguage {
+    #[frb(ignore)]
+    pub(crate) fn of(language: lumit_core::expression::Language) -> Self {
+        match language {
+            lumit_core::expression::Language::Rhai => Self::Rhai,
+            lumit_core::expression::Language::JavaScript => Self::JavaScript,
+        }
+    }
+
+    #[frb(ignore)]
+    pub(crate) fn read(self) -> lumit_core::expression::Language {
+        match self {
+            Self::Rhai => lumit_core::expression::Language::Rhai,
+            Self::JavaScript => lumit_core::expression::Language::JavaScript,
+        }
+    }
+}
+
 /// One animatable scalar channel: a single number, or the curve it follows.
 ///
 /// The two are separate variants rather than a number plus an "animated" flag
@@ -1451,7 +1514,8 @@ pub enum BridgeScalar {
     /// At least one key, strictly ascending in time — the invariant the
     /// engine's keyframe ops maintain, enforced here on the way in.
     Keyframed(Vec<BridgeKeyframe>),
-    Expression(String),
+    /// The text, and the language it is written in.
+    Expression(String, BridgeExpressionLanguage),
 }
 
 impl BridgeScalar {
@@ -1476,7 +1540,10 @@ impl BridgeScalar {
                     .map(|k| BridgeKeyframe::read_at(k, offset))
                     .collect(),
             ),
-            Animation::Expression(expr) => BridgeScalar::Expression(expr.clone()),
+            Animation::Expression(expr) => BridgeScalar::Expression(
+                expr.clone(),
+                BridgeExpressionLanguage::of(property.expression_language()),
+            ),
         }
     }
 
@@ -1507,7 +1574,22 @@ impl BridgeScalar {
                 }
                 Ok(Animation::Keyframed(out))
             }
-            BridgeScalar::Expression(expr) => Ok(Animation::Expression(expr.clone())),
+            BridgeScalar::Expression(expr, _) => Ok(Animation::Expression(expr.clone())),
+        }
+    }
+
+    /// Put `animation` on `property`: this channel's own, already checked by
+    /// [`Self::animation_at`] and held to whatever bounds apply.
+    ///
+    /// The one way a channel reaches a property that can hold an expression,
+    /// because an expression is two things: its text, which is the animation,
+    /// and its language, which is written beside it. A caller that assigned
+    /// the animation alone would hand a JavaScript expression to Rhai.
+    #[frb(ignore)]
+    pub(crate) fn put(&self, property: &mut Property, animation: Animation) {
+        property.set_animation(animation);
+        if let BridgeScalar::Expression(_, language) = self {
+            property.set_expression_language(language.read());
         }
     }
 }
@@ -1637,13 +1719,14 @@ impl BridgeEffectValue {
     ) -> Result<(), BridgeError> {
         match (self, target) {
             (BridgeEffectValue::Float(scalar), EffectValue::Float(property)) => {
-                property.animation = clamp_animation(scalar.animation_at(offset)?, bounds);
+                let animation = clamp_animation(scalar.animation_at(offset)?, bounds);
+                scalar.put(property, animation);
                 Ok(())
             }
             (BridgeEffectValue::Point(point), EffectValue::Point(x, y)) => {
                 let (ax, ay) = (point.x.animation_at(offset)?, point.y.animation_at(offset)?);
-                x.animation = clamp_animation(ax, bounds);
-                y.animation = clamp_animation(ay, bounds);
+                point.x.put(x, clamp_animation(ax, bounds));
+                point.y.put(y, clamp_animation(ay, bounds));
                 Ok(())
             }
             (BridgeEffectValue::Colour(colour), EffectValue::Colour(channels)) => {
@@ -1653,8 +1736,11 @@ impl BridgeEffectValue {
                     colour.b.animation_at(offset)?,
                     colour.a.animation_at(offset)?,
                 ];
-                for (property, animation) in channels.iter_mut().zip(animations) {
-                    property.animation = clamp_animation(animation, bounds);
+                let scalars = [&colour.r, &colour.g, &colour.b, &colour.a];
+                for ((property, animation), scalar) in
+                    channels.iter_mut().zip(animations).zip(scalars)
+                {
+                    scalar.put(property, clamp_animation(animation, bounds));
                 }
                 Ok(())
             }
@@ -2835,6 +2921,22 @@ impl BridgeEffectInstance {
     #[frb(sync)]
     pub fn set_expression_source(&mut self, source: String) {
         lumit_core::fx::drivers::expression::set_source(&mut self.effect, &source);
+    }
+
+    /// The language an Expression box's text is written in. Rhai for every
+    /// other instance, which holds no text.
+    #[frb(sync)]
+    pub fn expression_language(&self) -> BridgeExpressionLanguage {
+        BridgeExpressionLanguage::of(lumit_core::fx::drivers::expression::language_of(
+            &self.effect,
+        ))
+    }
+
+    /// Stage a change of the language an Expression box's text is written in,
+    /// beside [`Self::set_expression_source`] and committed the same way.
+    #[frb(sync)]
+    pub fn set_expression_language(&mut self, language: BridgeExpressionLanguage) {
+        lumit_core::fx::drivers::expression::set_language(&mut self.effect, language.read());
     }
 
     /// Stage one more number input on an Expression box and answer its name,

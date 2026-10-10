@@ -27,6 +27,22 @@ LFX, Lumit's own plugin format, still requires implementing.
 Drag an effect onto a layer. You can also select layers and double-click the effect.
 The **Effect** menu does the same job.
 
+## After Effects presets
+
+**Animation ▸ Apply animation preset** and the Effect Controls panel's preset load open an
+After Effects `.ffx` as well as a Lumit `.lumfx`. An `.ffx` in the preset folder is not
+listed.
+
+| In the preset | Arrives as |
+| --- | --- |
+| An effect Lumit has | That effect, with its values and keyframes |
+| A pseudo effect | [Custom controls](/effects/controls/custom-controls/), under the same name |
+| Any other effect | A placeholder that keeps its values and draws nothing |
+| An expression | The same [expression](/use/expressions/#what-javascript-can-read) |
+| An expression over keyframes | The keyframes |
+
+A layer's own transform, masks and text animators in a preset are not read.
+
 ## Favourites
 
 If there's particular effects or presets you use regularly, you can save them as 

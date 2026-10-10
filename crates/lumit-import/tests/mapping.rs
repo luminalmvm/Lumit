@@ -447,11 +447,11 @@ fn a_tracked_cameras_keyframes_arrive_on_the_rotation_lanes_and_the_zoom() {
     assert_eq!(zoom[0].value, 1000.0);
     assert_eq!(zoom[2].value, 1400.0);
 
-    // The exporter's expression is After Effects' own language, so it drives
-    // nothing and is named in the report with its text.
+    // The exporter's expression sits over those keys, and the keys are the
+    // shot, so it drives nothing and is named in the report with its text.
     assert!(reported(&report, |r| matches!(
         r,
-        Reason::ExpressionNotRunnable { source } if source.contains("thisComp")
+        Reason::ExpressionOverKeys { source } if source.contains("thisComp")
     )));
     assert_eq!(
         camera

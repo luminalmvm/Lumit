@@ -49,7 +49,7 @@
 
 use std::sync::OnceLock;
 
-use crate::expression::{evaluate_value, ExprValue};
+use crate::expression::{evaluate_value_in, ExprValue, Language};
 use crate::fx::{
     DriverCx, EffectDef, EffectMetadata, EffectSchema, ParamId, ParamKind, ParamSchema, Port,
     PortType, Signature, Unit, Value,
@@ -206,6 +206,28 @@ pub fn set_source(inst: &mut EffectInstance, source: &str) {
     }
 }
 
+/// The language this instance's expression is written in. Rhai when nothing
+/// says otherwise, which is every box made before there was a choice.
+#[must_use]
+pub fn language_of(inst: &EffectInstance) -> Language {
+    inst.extra
+        .get(EXTRA_KEY)
+        .and_then(|block| block.get("language"))
+        .and_then(serde_json::Value::as_str)
+        .map_or(Language::Rhai, Language::from_id)
+}
+
+/// Say which language this instance's expression is written in. Rhai is
+/// stored as nothing at all, so an untouched box saves back the same bytes.
+pub fn set_language(inst: &mut EffectInstance, language: Language) {
+    let Some(block) = block_mut(inst) else { return };
+    if language == Language::Rhai {
+        block.remove("language");
+    } else {
+        block.insert("language".to_owned(), language.id().into());
+    }
+}
+
 /// Expression's behaviour.
 pub struct ExpressionDef;
 
@@ -273,7 +295,9 @@ impl EffectDef for ExpressionDef {
             .collect();
         // A refusal is `Err`, and it pushes nothing: the sentence is the
         // editor's to show, and the parameter's keyframes are the calm degrade.
-        let Ok(result) = evaluate_value(source, Some(cx.context.clone()), &inputs) else {
+        let language = language_of(cx.inst);
+        let Ok(result) = evaluate_value_in(language, source, Some(cx.context.clone()), &inputs)
+        else {
             return;
         };
         match result {

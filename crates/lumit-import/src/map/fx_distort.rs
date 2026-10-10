@@ -126,12 +126,15 @@ pub(crate) fn claim(
 fn transform(fx: &mut Fx<'_, '_>) {
     fx.point(1, "anchor_x", "anchor_y", Unit::Px);
     fx.point(2, "position_x", "position_y", Unit::Px);
-    // AE's Uniform Scale ties Width to Height and hides Width; Lumit has two
-    // axes and no switch, so the tie is *resolved* here rather than carried.
-    // Nothing is lost, so nothing is reported.
+    // AE's Uniform Scale ties Width to Height and hides Width. Lumit has two
+    // axes and a chain between them, so both take the one number and the chain
+    // arrives closed. Nothing is lost, so nothing is reported.
     let uniform = fx.still(11).unwrap_or(1.0) != 0.0;
     fx.carry(3, "scale_y", Unit::Direct);
     fx.carry(if uniform { 3 } else { 4 }, "scale_x", Unit::Direct);
+    if uniform {
+        fx.inst.set_pair_linked("scale", true);
+    }
     // Skew and Skew Axis are the pair Lumit grew to match After Effects' own
     // shear and its own order (anchor, scale, skew, rotation, position), so
     // both numbers carry unchanged.
