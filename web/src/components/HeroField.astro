@@ -256,13 +256,10 @@
   document.addEventListener("wordmark:home", cue, { once: true });
   setTimeout(cue, 2600);
 
-  const whenIdle = (fn: () => void) => {
-    const idle = (window as any).requestIdleCallback as
-      | ((cb: () => void, o?: { timeout: number }) => void)
-      | undefined;
-    if (idle) idle(fn, { timeout: 1500 });
-    else setTimeout(fn, 200);
-  };
+  // The page is not shown and the timeline does not start until this is
+  // said (index.astro holds the page, HeroTimeline.astro the clock), so the
+  // mark, its light and the words round it all arrive in one frame.
+  const ready = () => document.dispatchEvent(new Event("hero:ready"));
 
   const start = () => {
     const canvas = document.querySelector<HTMLCanvasElement>("[data-field]");
@@ -271,6 +268,7 @@
     const giveUp = () => {
       canvas?.remove();
       document.querySelector(".field")?.classList.add("no-gl");
+      ready();
     };
     if (!canvas || !gl) {
       giveUp();
@@ -434,6 +432,13 @@
     const readyAt = performance.now();
     draw(readyAt, true);
     canvas.classList.add("lit");
+    // A font arriving can move the wordmark, so the light is put under it
+    // again once they are all in, and the page is shown a frame after.
+    document.fonts.ready.then(() => {
+      measure();
+      draw(performance.now(), true);
+      requestAnimationFrame(ready);
+    });
 
     const begin = () => {
       measure();
@@ -461,6 +466,5 @@
     }).observe(canvas);
   };
 
-  if (document.readyState === "complete") whenIdle(start);
-  else addEventListener("load", () => whenIdle(start), { once: true });
+  start();
 </script>

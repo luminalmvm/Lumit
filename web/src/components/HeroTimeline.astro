@@ -3,7 +3,7 @@
 // it. The wordmark (Wordmark.astro, `controlled`) is drawn at whatever pose
 // the Wordmark row's keyframes say, the field's light and the streak across
 // the lockup come off the Glow and Flare rows, and RGB split is a filter on
-// the wordmark itself. The visitor can drag any keyframe, drag the playhead,
+// the wordmark itself, all but its glow. The visitor can drag any keyframe, drag the playhead,
 // drag or type the time, and turn a layer off, the way they would in Lumit.
 //
 // The loop closes because every row ends on the value it starts on and only a
@@ -26,8 +26,9 @@ const layers = [
   {/* Red one way, blue the other, green where it was. Each channel is a
       layer of its own colour whose alpha is how much of that colour the
       picture has, and the three are added: with no offset that is the
-      picture again, so nothing jumps as the filter comes on. Units are CSS
-      pixels. */}
+      picture again, so nothing jumps as the filter comes on. That holds for
+      what is solid and not for the wordmark's soft glow, so the glow is left
+      out of it. The script sets the distances. */}
   <svg class="hc-defs" width="0" height="0" aria-hidden="true" focusable="false">
     <filter id="hc-split" x="-40%" y="-60%" width="180%" height="220%" color-interpolation-filters="sRGB">
       <feColorMatrix in="SourceGraphic" type="matrix" values="0 0 0 0 1  0 0 0 0 0  0 0 0 0 0  1 0 0 0 0" result="r0"></feColorMatrix>
@@ -377,7 +378,9 @@ const layers = [
   const root = document.querySelector<HTMLElement>("[data-hero-timeline]");
   const wm = document.querySelector<Lockup>(".wm[data-controlled]");
 
-  if (root && wm && wm.wmPose && wm.wmTiming) {
+  const solid = wm?.querySelector<SVGGElement>(".solid");
+
+  if (root && wm && solid && wm.wmPose && wm.wmTiming) {
     const pose = wm.wmPose;
     const timing = wm.wmTiming;
 
@@ -467,6 +470,7 @@ const layers = [
     let drawnFrame = -1;
     let wordShown = true;
     let splitOn = false;
+    let pixel = 1;
     let lanesWidth = lanes.clientWidth;
     const render = () => {
       const p = poseAt(t);
@@ -479,13 +483,16 @@ const layers = [
         wm.style.visibility = wordShown ? "" : "hidden";
       }
       const split = on.split ? valueAt(tracks.split, t) : 0;
-      if (split > 0.01) {
-        splitR.setAttribute("dx", (split * 6).toFixed(2));
-        splitB.setAttribute("dx", (-split * 6).toFixed(2));
-      }
       if (split > 0.01 !== splitOn) {
         splitOn = !splitOn;
-        wm.style.filter = splitOn ? "url(#hc-split)" : "";
+        solid.style.filter = splitOn ? "url(#hc-split)" : "";
+        // The filter is on a part of the drawing, so its distances are in
+        // the drawing's own units. This is one CSS pixel in them.
+        if (splitOn) pixel = 1 / (wm.getScreenCTM()?.a || 1);
+      }
+      if (split > 0.01) {
+        splitR.setAttribute("dx", (split * 6 * pixel).toFixed(2));
+        splitB.setAttribute("dx", (-split * 6 * pixel).toFixed(2));
       }
       hero.pose = p;
       hero.glow = on.glow ? valueAt(tracks.glow, t) : 0;
@@ -714,6 +721,10 @@ const layers = [
     }
 
     // ---- the clock ----
+    // It waits for the field behind to have its picture (HeroField.astro says
+    // when), so the mark is not already moving when its light comes on.
+    let held = document.documentElement.classList.contains("hold");
+    document.addEventListener("hero:ready", () => (held = false), { once: true });
     let seen = true;
     new IntersectionObserver((entries) => {
       seen = entries[0].isIntersecting;
@@ -722,7 +733,7 @@ const layers = [
     const frame = (now: number) => {
       const dt = Math.min((now - last) / 1000, 0.1);
       last = now;
-      if (playing && seen && !document.hidden && !hero.paused) {
+      if (playing && seen && !document.hidden && !hero.paused && !held) {
         t = (t + dt) % SECONDS;
         render();
       }

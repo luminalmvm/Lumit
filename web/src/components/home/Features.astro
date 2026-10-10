@@ -282,8 +282,7 @@ const journal = ["Add Glow", "Set keyframe", "Trim layer"];
     background: var(--c);
   }
 
-  /* The well a drawing sits in: darker than its card, on the graph editor's
-     faint grid. */
+  /* The well a drawing sits in: darker than its card. */
   .art {
     position: relative;
     display: flex;
@@ -293,11 +292,6 @@ const journal = ["Add Glow", "Set keyframe", "Trim layer"];
     overflow: hidden;
     border-bottom: 1px solid var(--color-line);
     background-color: var(--color-ink);
-    background-image:
-      linear-gradient(color-mix(in srgb, var(--color-line) 55%, transparent) 1px, transparent 1px),
-      linear-gradient(90deg, color-mix(in srgb, var(--color-line) 55%, transparent) 1px, transparent 1px);
-    background-size: 33px 33px;
-    background-position: -1px -1px;
   }
   .art svg {
     display: block;
