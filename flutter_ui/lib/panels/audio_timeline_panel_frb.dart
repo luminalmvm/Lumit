@@ -1101,10 +1101,14 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
             builder: (context, candidate, _) => Container(
               // A live outline while something is over it, so the drop is
               // visibly going to land rather than being taken on faith.
-              foregroundDecoration: candidate.isEmpty
-                  ? null
-                  : BoxDecoration(
-                      border: Border.all(color: t.accent, width: 2)),
+              // Always a decoration, clear until then: adding one only
+              // then rebuilt the lanes under it from nothing.
+              foregroundDecoration: BoxDecoration(
+                  border: Border.all(
+                      color: candidate.isEmpty
+                          ? t.accent.withValues(alpha: 0)
+                          : t.accent,
+                      width: 2)),
               child: LayoutBuilder(
                 builder: (context, box) {
                   final outlineWidth = min(
