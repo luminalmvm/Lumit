@@ -454,12 +454,8 @@ const layers = [
       return `00:00:${two(Math.floor(f / FPS))}:${two(f % FPS)}`;
     };
 
-    // The frame the word lands on is the cue the rest of the page arrives on,
-    // and it has a sound - once, and only if the browser will play it.
+    // The frame the word lands on is the cue the rest of the page arrives on.
     let landed = false;
-    const snap = new Audio("/audio/click.mp3");
-    snap.preload = "auto";
-    snap.volume = 0.25;
 
     // This runs every frame while it plays, so it touches the page only where
     // something has changed since the frame before: the wordmark when its
@@ -509,7 +505,6 @@ const layers = [
 
       if (!landed && p >= 45 / 46) {
         landed = true;
-        if (!still) snap.play().catch(() => {});
         document.dispatchEvent(new Event("wordmark:home"));
       }
       if (still) hero.redraw?.();
