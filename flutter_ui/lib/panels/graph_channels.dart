@@ -102,6 +102,10 @@ class GraphChannel {
   final BridgeEffectInstanceInfo? effect;
   final BridgeParamInfo? param;
 
+  /// The other half of an effect's chained pair, or null: [linkedPartner] for
+  /// an effect, whose rows are named by parameter and not by transform axis.
+  final BridgeParamInfo? linkedParam;
+
   /// True for the layer's Retime channel, which is neither a transform
   /// property nor an effect parameter but reads and writes like both.
   final bool retime;
@@ -142,6 +146,7 @@ class GraphChannel {
     this.linkedPartner,
     this.effect,
     this.param,
+    this.linkedParam,
     this.retime = false,
     this.volume = false,
     this.mask,
@@ -305,8 +310,26 @@ List<GraphChannel> graphChannels({
       final paramId = rest.substring(slash + 1);
       for (final fx in styles ? entry.info.styles : entry.info.effects) {
         if (fx.id.toString() != effectId) continue;
-        for (final param in cachedListParameters(fx.name)) {
-          if (param.id != paramId) continue;
+        // The rows an instance derives are rows like any other: a Custom
+        // controls slider is keyed and eased as a declared one is.
+        final rows = [...cachedListParameters(fx.name), ...fx.derivedParams];
+        // A chained pair is one curve, as a layer's linked Scale is. Either
+        // half's row resolves to the x half, which is drawn and edited, and
+        // the y half follows every write ([withLinkedPartners]).
+        var leadId = paramId;
+        BridgeParamInfo? linkedParam;
+        for (final pair in cachedListPairs(fx.name)) {
+          if (pair.x != paramId && pair.y != paramId) continue;
+          if (!fx.linkedPairs.contains(pair.stem)) continue;
+          leadId = pair.x;
+          for (final row in rows) {
+            if (row.id == pair.y) linkedParam = row;
+          }
+        }
+        final channelId = leadId == paramId ? path : '$head/$effectId/$leadId';
+        if (out.any((c) => c.id == channelId)) continue;
+        for (final param in rows) {
+          if (param.id != leadId) continue;
           // The kind is the control, not the storage: a Slider, an Int and an
           // Angle all cross the bridge as one Float scalar, and any of them
           // keyed is a curve (docs/08 §1.2). So the test is on the value, not
@@ -320,7 +343,7 @@ List<GraphChannel> graphChannels({
           if (scalar == null) continue;
           out.add(GraphChannel(
             path: path,
-            id: path,
+            id: channelId,
             label:
                 '${entry.info.name} · ${effectLabelOf(fx.name)} · ${param.label}',
             colourIndex: out.length,
@@ -328,6 +351,7 @@ List<GraphChannel> graphChannels({
             entry: entry,
             effect: fx,
             param: param,
+            linkedParam: linkedParam,
           ));
         }
       }
