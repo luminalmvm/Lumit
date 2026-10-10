@@ -100,6 +100,7 @@ Future<T?> showLumitModal<T>({
               spec: motion.modal,
               rise: motion.modalRise,
               scale: motion.modalScale,
+              leads: true,
               child: builder(close),
             ),
           ),

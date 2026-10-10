@@ -6,6 +6,7 @@
 // user's animation level are answered.
 
 import 'dart:math' as math;
+import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/widgets.dart';
 
@@ -45,6 +46,21 @@ class Entrance extends StatefulWidget {
   /// tree built here must not change shape under a child that is on screen.
   final bool fadeOnly;
 
+  /// The blur the child clears from, as a sigma. Only [Entrance.content]
+  /// takes one.
+  final double blur;
+
+  /// Whether this is what is on a surface rather than the surface itself. It
+  /// then plays only inside an entrance that leads and is still playing, and
+  /// starts a beat after it.
+  final bool follows;
+
+  /// Whether this is a floating surface arriving, which what is on it follows
+  /// in. Off for content coming up in a place that was already there, a
+  /// settings page or a tab's body, so a menu surface drawn inside one is not
+  /// played again with every page.
+  final bool leads;
+
   final Widget child;
 
   const Entrance({
@@ -53,8 +69,11 @@ class Entrance extends StatefulWidget {
     this.rise = 0,
     this.scale = 1,
     this.alignment = Alignment.center,
+    this.leads = false,
     required this.child,
-  }) : fadeOnly = false;
+  })  : fadeOnly = false,
+        blur = 0,
+        follows = false;
 
   /// An entrance that is a fade and nothing else, for a surface that fills
   /// its place and has nowhere to travel from: a wash, a whole window.
@@ -62,7 +81,30 @@ class Entrance extends StatefulWidget {
       : rise = 0,
         scale = 1,
         alignment = Alignment.center,
-        fadeOnly = true;
+        fadeOnly = true,
+        blur = 0,
+        follows = false,
+        leads = false;
+
+  /// What is on a surface, following the surface in: a menu's rows, a
+  /// dialogue's strips and body. The surface arrives first and this comes up
+  /// behind it, out of [blur] and up from [rise].
+  ///
+  /// Wrapped round the content by the surface itself, which cannot know how
+  /// it was put on screen. So this looks for the [Entrance] above it, and
+  /// stays still unless that one leads and is still playing: a surface that
+  /// is simply there or took over from another has its content with it.
+  const Entrance.content({
+    super.key,
+    required this.spec,
+    this.rise = 0,
+    this.blur = 0,
+    required this.child,
+  })  : scale = 1,
+        alignment = Alignment.center,
+        fadeOnly = false,
+        follows = true,
+        leads = false;
 
   @override
   State<Entrance> createState() => _EntranceState();
@@ -70,6 +112,9 @@ class Entrance extends StatefulWidget {
 
 class _EntranceState extends State<Entrance>
     with SingleTickerProviderStateMixin {
+  /// How far into its own time the content waits before it starts.
+  static const double _lag = 0.2;
+
   AnimationController? _controller;
   Animation<double> _fade = kAlwaysCompleteAnimation;
   Animation<double> _travel = kAlwaysCompleteAnimation;
@@ -79,6 +124,12 @@ class _EntranceState extends State<Entrance>
     super.initState();
     final spec = widget.spec;
     if (spec.isStill) return;
+    final follows = widget.follows;
+    if (follows) {
+      final surface =
+          context.getInheritedWidgetOfExactType<_EntranceScope>()?.progress;
+      if (surface == null || surface.isCompleted) return;
+    }
     final controller =
         AnimationController(vsync: this, duration: spec.duration);
     _controller = controller;
@@ -87,9 +138,14 @@ class _EntranceState extends State<Entrance>
     // overshoots would ask for an opacity above one.
     _fade = CurvedAnimation(
       parent: controller,
-      curve: const Interval(0, 0.66, curve: Curves.easeOut),
+      curve: follows
+          ? const Interval(_lag, 0.8, curve: Curves.easeOut)
+          : const Interval(0, 0.66, curve: Curves.easeOut),
     );
-    _travel = CurvedAnimation(parent: controller, curve: spec.curve);
+    _travel = CurvedAnimation(
+      parent: controller,
+      curve: follows ? Interval(_lag, 1, curve: spec.curve) : spec.curve,
+    );
     controller.forward();
   }
 
@@ -100,26 +156,62 @@ class _EntranceState extends State<Entrance>
   }
 
   @override
-  Widget build(BuildContext context) => FadeTransition(
-        opacity: _fade,
-        child: widget.fadeOnly
-            ? widget.child
-            : AnimatedBuilder(
-                animation: _travel,
-                child: widget.child,
-                builder: (context, child) {
-                  final left = 1 - _travel.value;
-                  final scale = 1 - (1 - widget.scale) * left;
-                  return Transform(
-                    transform: Matrix4.identity()
-                      ..translateByDouble(0, widget.rise * left, 0, 1)
-                      ..scaleByDouble(scale, scale, 1, 1),
-                    alignment: widget.alignment,
-                    child: child,
-                  );
-                },
-              ),
+  Widget build(BuildContext context) => _EntranceScope(
+        progress: widget.leads
+            ? _controller ?? kAlwaysCompleteAnimation
+            : kAlwaysCompleteAnimation,
+        child: FadeTransition(
+          opacity: _fade,
+          child: widget.fadeOnly
+              ? widget.child
+              : AnimatedBuilder(
+                  animation: _travel,
+                  child: widget.child,
+                  builder: (context, child) {
+                    final left = 1 - _travel.value;
+                    if (widget.follows) {
+                      final sigma = widget.blur * left;
+                      return ImageFiltered(
+                        // Off at rest, so settled content is drawn straight
+                        // and not through a layer.
+                        enabled: sigma > 0.05,
+                        imageFilter: ImageFilter.blur(
+                          sigmaX: sigma,
+                          sigmaY: sigma,
+                          tileMode: TileMode.decal,
+                        ),
+                        child: Transform.translate(
+                          offset: Offset(0, widget.rise * left),
+                          // Rows are pressed where they will be, not where
+                          // they are drawn on the way there.
+                          transformHitTests: false,
+                          child: child,
+                        ),
+                      );
+                    }
+                    final scale = 1 - (1 - widget.scale) * left;
+                    return Transform(
+                      transform: Matrix4.identity()
+                        ..translateByDouble(0, widget.rise * left, 0, 1)
+                        ..scaleByDouble(scale, scale, 1, 1),
+                      alignment: widget.alignment,
+                      child: child,
+                    );
+                  },
+                ),
+        ),
       );
+}
+
+/// Tells what is on a surface how far the surface's own entrance has got.
+class _EntranceScope extends InheritedWidget {
+  final Animation<double> progress;
+
+  const _EntranceScope({required this.progress, required super.child});
+
+  // Read once, as the content mounts.
+  @override
+  bool updateShouldNotify(_EntranceScope old) => false;
 }
 
 /// A twirl's triangle, turned a quarter as it opens or shuts.
