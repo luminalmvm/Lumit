@@ -909,6 +909,15 @@ class Workspace extends ChangeNotifier {
     recompose();
   }
 
+  /// The accent being hovered in Settings, drawn and not saved the same way.
+  Color? _lookingAccent;
+
+  void previewAccent(Color? accent) {
+    if (_lookingAccent == accent) return;
+    _lookingAccent = accent;
+    recompose();
+  }
+
   void recompose() {
     // Density rides on every theme this method can build, preview included:
     // it is a setting about rows rather than about colours, so no colour
@@ -943,7 +952,7 @@ class Workspace extends ChangeNotifier {
       _theme = _withRoom(LumitTheme.forScheme(
         looking?.scheme ?? colorScheme,
         themeShape,
-        accentOverride: accentOverride,
+        accentOverride: _lookingAccent ?? accentOverride,
       ).copyWith(density: density));
     }
     notifyListeners();

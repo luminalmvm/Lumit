@@ -220,11 +220,13 @@ class LumitUiState extends ChangeNotifier {
   final ValueNotifier<int> panelSearchRequest = ValueNotifier(0);
 
   /// Ask the focused panel for its search box, and say whether there is one to
-  /// ask for. Only two panels have one (docs/07 §15); anywhere else the chord
+  /// ask for. Only three panels have one (docs/07 §15); anywhere else the chord
   /// is left alone rather than swallowed.
   bool requestPanelSearch() {
     final panel = activePanel;
-    if (panel != Panel.project && panel != Panel.effectsAndPresets) {
+    if (panel != Panel.project &&
+        panel != Panel.effectsAndPresets &&
+        panel != Panel.expressions) {
       return false;
     }
     panelSearchRequest.value++;

@@ -238,11 +238,19 @@ void maybeShowTourFrb(
 /// Raise the tour, whether or not it has been seen: Help ▸ Show the tour.
 void showTourFrb(BuildContext context, LumitState state, LumitUiState ui) {
   final made = _demoItems = _makeDemo(state, ui);
+  final hadNone = ui.selectedLayer.value == null && ui.graphNode.value == null;
   final up = showTour(
     context,
     ui.workspace,
     steps: tourSteps(ui),
-    onEnd: () => _clearDemo(state, made),
+    onEnd: () {
+      // The tour picks a layer when none is, and lets go of it at the end.
+      if (hadNone) {
+        ui.setSelection(const []);
+        ui.graphNode.value = null;
+      }
+      _clearDemo(state, made);
+    },
   );
   if (!up) _clearDemo(state, made);
 }
