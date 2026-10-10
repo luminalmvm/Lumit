@@ -51,7 +51,7 @@ autosave reads its footage from the project file it was written beside.
 
 A shared project is edited by several people at once. One person, the **host**, shares it
 from their computer and the others join as **guests**. Guests connect to the host's
-computer directly, over a local network or a VPN.
+computer directly, over a local network, the internet or a VPN.
 
 **File ▸ Shared project…** opens the **Shared project** window, which has two pages.
 
@@ -65,9 +65,15 @@ window. It lists everyone in the project. The host can **Remove** a guest, and *
 sharing** ends it for everyone. A guest has **Leave**.
 
 An invite holds the host's address, the port and a key. Anyone who has it can join and edit
-until the host stops sharing. **Address** starts as the host's address on its local
-network. For a guest outside that network it is the host's VPN address, or a public address
-with the port forwarded to the host's computer.
+until the host stops sharing.
+
+With **Let people outside this network join** ticked, Lumit asks the host's router to open
+the port when sharing starts, and to close it when sharing stops. Once the router has
+opened it, **Address** is the router's address on the internet and the invite works from
+outside the network. A guest on the host's own network uses the local address shown under
+the invite. A router that refuses, or that has no address of its own on the internet,
+leaves the port closed. A guest outside the network then needs a VPN, or the port forwarded
+to the host's computer by hand.
 
 An edit made by one person appears for everyone. Two people can work on the same layer at
 once: a change to one effect, mask or property leaves the others as they are. Where two

@@ -17,6 +17,9 @@ getrandom = "0.4"
 # An invite's key is written as text. Already in the lock.
 hex = "0.4"
 parking_lot = "0.12"
+# Reading what a router says about itself when it is asked to open a port.
+# Already in the lock.
+roxmltree = "0.21"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # The Noise protocol, for the encrypted channel between a host and its guests.

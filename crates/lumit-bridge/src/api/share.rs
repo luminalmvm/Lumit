@@ -13,7 +13,7 @@ use std::{
 use flutter_rust_bridge::frb;
 use lumit_core::{Document, DocumentStore};
 use lumit_share::{
-    Conflict, Ending, Event, Invite, Person, Presence, Refusal, ShareError, Sharing,
+    Conflict, Ending, Event, Invite, Person, Presence, Reach, Refusal, ShareError, Sharing,
 };
 use uuid::Uuid;
 
@@ -82,6 +82,36 @@ pub enum BridgeShareEnding {
     Removed,
 }
 
+/// Whether people outside the host's network can reach it.
+#[frb(non_opaque)]
+#[derive(Debug, Clone)]
+pub enum BridgeShareReach {
+    /// The router was not asked. People outside need a VPN, or the port
+    /// forwarded by hand.
+    Off,
+    /// The router is being asked to open the port.
+    Asking,
+    /// The router sends the port to this machine. `address` is the one it
+    /// has on the internet, for the invite of someone outside.
+    Open { address: String },
+    /// No router answered, or it would not open the port.
+    Refused,
+    /// The router is behind another, or behind an address its provider
+    /// shares, so its port opens onto nobody.
+    Behind,
+}
+
+#[frb(ignore)]
+fn reach(reach: Reach) -> BridgeShareReach {
+    match reach {
+        Reach::Off => BridgeShareReach::Off,
+        Reach::Asking => BridgeShareReach::Asking,
+        Reach::Open { address } => BridgeShareReach::Open { address },
+        Reach::Refused => BridgeShareReach::Refused,
+        Reach::Behind => BridgeShareReach::Behind,
+    }
+}
+
 /// What a shared project tells the frontend as it goes.
 #[frb(non_opaque)]
 #[derive(Debug, Clone)]
@@ -100,6 +130,9 @@ pub enum BridgeShareEvent {
     Elsewhere,
     /// Sharing is over for this guest. The project stays open as it is.
     Ended { reason: BridgeShareEnding },
+    /// For a host: what came of asking the router to let people outside
+    /// this network in.
+    Reach { reach: BridgeShareReach },
 }
 
 pub type ShareEventStream = StreamSink<BridgeShareEvent>;
@@ -239,6 +272,7 @@ fn events_for(
             Event::Ended(reason) => BridgeShareEvent::Ended {
                 reason: ending(reason),
             },
+            Event::Reach(now) => BridgeShareEvent::Reach { reach: reach(now) },
         };
         if let Some(sink) = &sink {
             _ = sink.add(event);
@@ -370,15 +404,19 @@ impl ProjectReference {
     ///
     /// `name` is what the others see this person called. Port 0 takes any
     /// free one. `key` is what the last [`BridgeShareStarted::Sharing`] for
-    /// this project gave, or `None` for a new invite. `events` is optional
-    /// the way a project's change stream is, and for the same reason: nothing
-    /// about sharing depends on someone watching.
+    /// this project gave, or `None` for a new invite. `outside` asks this
+    /// network's router to send the port here, so people outside the network
+    /// can join without a VPN. It answers later, as a
+    /// [`BridgeShareEvent::Reach`]. `events` is optional the way a project's
+    /// change stream is, and for the same reason: nothing about sharing
+    /// depends on someone watching.
     #[frb(sync)]
     pub fn share(
         &self,
         name: String,
         port: u16,
         key: Option<String>,
+        outside: bool,
         events: Option<ShareEventStream>,
     ) -> Result<BridgeShareStarted, BridgeError> {
         let (store, root) = {
@@ -399,6 +437,10 @@ impl ProjectReference {
                 Ok(host) => {
                     let (port, key) = (host.port(), lumit_share::key_text(&host.key()));
                     let restored = host.restored() as u32;
+                    // A test never asks the machine's real router anything.
+                    if outside && !cfg!(test) {
+                        host.reach_out();
+                    }
                     shared.insert(self.id, Sharing::Host(host));
                     BridgeShareStarted::Sharing {
                         port,
@@ -412,6 +454,17 @@ impl ProjectReference {
                 Err(_) => BridgeShareStarted::Failed,
             },
         )
+    }
+
+    /// Whether people outside this network can get in, while this machine
+    /// hosts the project. The events carry it as it changes.
+    #[frb(sync)]
+    pub fn share_reach(&self) -> Result<BridgeShareReach, BridgeError> {
+        let shared = SHARED.lock().map_err(|_| BridgeError::ReadFailed)?;
+        Ok(match shared.get(&self.id) {
+            Some(Sharing::Host(host)) => reach(host.reach()),
+            _ => BridgeShareReach::Off,
+        })
     }
 
     /// The invite for a host reached at `address`, to send to whoever is

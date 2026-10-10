@@ -55,6 +55,9 @@ class ShareState extends ChangeNotifier {
   /// This guest has lost its host and is working on alone until it is back.
   bool away = false;
 
+  /// For a host: whether people outside its network can get in.
+  BridgeShareReach reach = const BridgeShareReach.off();
+
   /// How many conflicts a merge has left waiting to be chosen between.
   int held = 0;
 
@@ -78,6 +81,9 @@ class ShareState extends ChangeNotifier {
     people = project.sharePeople();
     away = false;
     held = 0;
+    reach = as == ShareRole.host
+        ? project.shareReach()
+        : const BridgeShareReach.off();
     _sent = null;
     _noteRoster();
     notifyListeners();
@@ -93,7 +99,14 @@ class ShareState extends ChangeNotifier {
     people = const [];
     away = false;
     held = 0;
+    reach = const BridgeShareReach.off();
     _noteRoster();
+    notifyListeners();
+  }
+
+  void setReach(BridgeShareReach now) {
+    reach = now;
+    roster.value++;
     notifyListeners();
   }
 
