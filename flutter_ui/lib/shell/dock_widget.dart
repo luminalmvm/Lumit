@@ -75,6 +75,8 @@ double panelMinWidth(Panel panel) => switch (panel) {
       Panel.paragraph => 220,
       Panel.expressions => 180,
       Panel.debug => 180,
+      // A page lays itself out, and a timer or a sign-in form needs this much.
+      Panel.extension => 240,
     };
 
 /// The smallest width a whole dock subtree can be drawn at: a pane is its
@@ -237,7 +239,7 @@ class _DockWidgetState extends State<DockWidget> {
                 activePanel: widget.activePanel,
                 drag: _drag,
                 onClose: _closePanel,
-                header: _bareTitle(t, maximised.panel),
+                header: _bareTitle(t, maximised),
                 child: widget.buildPanel(context, maximised),
               )
             : _buildNode(context, widget.root),
@@ -247,7 +249,8 @@ class _DockWidgetState extends State<DockWidget> {
 
   /// The title line a pane standing alone wears. Studio draws none, and
   /// neither does a panel that draws a header of its own.
-  Widget? _bareTitle(LumitTheme t, Panel panel) {
+  Widget? _bareTitle(LumitTheme t, PaneId pane) {
+    final panel = pane.panel;
     if (t.shape == ThemeShape.studio) return null;
     // These three draw a header line of their own.
     if (panel == Panel.viewer ||
@@ -258,7 +261,7 @@ class _DockWidgetState extends State<DockWidget> {
     return DockPaneHandle(
       child: _TitleLine(
         child: Text(
-          t.kickerCase(panel.title),
+          t.kickerCase(paneTitle(pane)),
           key: const ValueKey('pane-title'),
           style: t.tokens.titleCentred ? t.kickerOn : t.kicker,
         ),
@@ -272,7 +275,7 @@ class _DockWidgetState extends State<DockWidget> {
             activePanel: widget.activePanel,
             drag: _drag,
             onClose: _closePanel,
-            header: _bareTitle(ThemeScope.of(context).theme, pane.id.panel),
+            header: _bareTitle(ThemeScope.of(context).theme, pane.id),
             child: widget.buildPanel(context, pane.id),
           ),
         DockTabs() when node.stacked => _StackGroup(
@@ -574,7 +577,7 @@ class _GhostLayer extends StatelessWidget {
                 spec: ThemeScope.of(context).motion.lift,
                 scale: 0.92,
                 alignment: Alignment.topLeft,
-                child: _GhostPill(title: pane.panel.title, theme: t),
+                child: _GhostPill(title: paneTitle(pane), theme: t),
               ),
             ),
           );
@@ -804,7 +807,7 @@ class _TabGroup extends StatelessWidget {
                   for (var i = 0; i < tabs.children.length; i++)
                     _TabPill(
                       pane: tabs.children[i].id,
-                      title: tabs.children[i].panel.title,
+                      title: paneTitle(tabs.children[i].id),
                       active: i == tabs.active,
                       drag: drag,
                       onClose: onClose,
@@ -1332,7 +1335,7 @@ class _StackHeaderState extends State<_StackHeader> {
           const SizedBox(width: 4),
           Expanded(
             child: Text(
-              t.kickerCase(widget.pane.panel.title),
+              t.kickerCase(paneTitle(widget.pane)),
               style: (widget.open ? t.kickerOn : t.kicker).copyWith(color: ink),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,

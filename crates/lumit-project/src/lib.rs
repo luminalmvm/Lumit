@@ -827,6 +827,21 @@ pub fn addons_dir() -> Option<PathBuf> {
     Some(dirs.data_local_dir().join("addons"))
 }
 
+/// Where installed extensions live: each in a folder named by its id,
+/// holding an `extension.json` and the page it names. Beside the addons, and
+/// for the same reason: it is nothing Lumit could rebuild.
+pub fn extensions_dir() -> Option<PathBuf> {
+    let dirs = project_dirs()?;
+    Some(dirs.data_local_dir().join("extensions"))
+}
+
+/// Where the extension `id` keeps what its page stores, such as a sign-in.
+/// Not in its own folder, which an update replaces whole.
+pub fn extension_data_dir(id: &str) -> Option<PathBuf> {
+    let dirs = project_dirs()?;
+    Some(dirs.data_local_dir().join("extension-data").join(id))
+}
+
 /// Media frame-index cache directory (docs/10-FILE-FORMAT.md §3) — global,
 /// keyed by content fingerprint, so shared across projects and machines-safe.
 pub fn media_index_dir() -> Option<PathBuf> {

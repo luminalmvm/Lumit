@@ -18,6 +18,7 @@ import 'api/composition.dart';
 import 'api/effect.dart';
 import 'api/export.dart';
 import 'api/expressions.dart';
+import 'api/extensions.dart';
 import 'api/folder.dart';
 import 'api/footage.dart';
 import 'api/graph.dart';
@@ -210,6 +211,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeExportSpec dco_decode_box_autoadd_bridge_export_spec(dynamic raw);
+
+  @protected
+  BridgeExtension dco_decode_box_autoadd_bridge_extension(dynamic raw);
 
   @protected
   BridgeFileParam dco_decode_box_autoadd_bridge_file_param(dynamic raw);
@@ -580,6 +584,15 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeExpressionLanguage dco_decode_bridge_expression_language(dynamic raw);
+
+  @protected
+  BridgeExtension dco_decode_bridge_extension(dynamic raw);
+
+  @protected
+  BridgeExtensionOutcome dco_decode_bridge_extension_outcome(dynamic raw);
+
+  @protected
+  BridgeExtensionPermission dco_decode_bridge_extension_permission(dynamic raw);
 
   @protected
   BridgeFadeShape dco_decode_bridge_fade_shape(dynamic raw);
@@ -1203,6 +1216,13 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       dynamic raw);
 
   @protected
+  List<BridgeExtension> dco_decode_list_bridge_extension(dynamic raw);
+
+  @protected
+  List<BridgeExtensionPermission> dco_decode_list_bridge_extension_permission(
+      dynamic raw);
+
+  @protected
   List<BridgeFootageLack> dco_decode_list_bridge_footage_lack(dynamic raw);
 
   @protected
@@ -1792,6 +1812,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeExtension sse_decode_box_autoadd_bridge_extension(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeFileParam sse_decode_box_autoadd_bridge_file_param(
       SseDeserializer deserializer);
 
@@ -2229,6 +2253,17 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeExpressionLanguage sse_decode_bridge_expression_language(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeExtension sse_decode_bridge_extension(SseDeserializer deserializer);
+
+  @protected
+  BridgeExtensionOutcome sse_decode_bridge_extension_outcome(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeExtensionPermission sse_decode_bridge_extension_permission(
       SseDeserializer deserializer);
 
   @protected
@@ -2941,6 +2976,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  List<BridgeExtension> sse_decode_list_bridge_extension(
+      SseDeserializer deserializer);
+
+  @protected
+  List<BridgeExtensionPermission> sse_decode_list_bridge_extension_permission(
+      SseDeserializer deserializer);
+
+  @protected
   List<BridgeFootageLack> sse_decode_list_bridge_footage_lack(
       SseDeserializer deserializer);
 
@@ -3616,6 +3659,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeExportSpec self, SseSerializer serializer);
 
   @protected
+  void sse_encode_box_autoadd_bridge_extension(
+      BridgeExtension self, SseSerializer serializer);
+
+  @protected
   void sse_encode_box_autoadd_bridge_file_param(
       BridgeFileParam self, SseSerializer serializer);
 
@@ -4088,6 +4135,18 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_expression_language(
       BridgeExpressionLanguage self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_extension(
+      BridgeExtension self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_extension_outcome(
+      BridgeExtensionOutcome self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_extension_permission(
+      BridgeExtensionPermission self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_fade_shape(
@@ -4878,6 +4937,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_list_bridge_export_queue_item(
       List<BridgeExportQueueItem> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_bridge_extension(
+      List<BridgeExtension> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_bridge_extension_permission(
+      List<BridgeExtensionPermission> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_bridge_footage_lack(
