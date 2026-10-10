@@ -1,0 +1,65 @@
+---
+import Base from "../layouts/Base.astro";
+---
+
+{/*
+  Where an invite link leads. The invite is everything after the # in the
+  address, which a browser keeps to itself: it is never sent to this site or
+  to anyone else. The script below hands it to Lumit on this computer, and
+  does nothing else with it.
+*/}
+<Base
+  title="Join a shared project - Lumit"
+  description="Open an invite to a shared Lumit project."
+>
+  <section class="pt-14 pb-24 sm:pt-20 sm:pb-32">
+    <div class="wrap">
+      <div class="sec-rule"><p class="kicker pl-3">Shared project</p></div>
+
+      <div id="join-ready" hidden>
+        <h1 class="sec-title">You have been invited to a shared project.</h1>
+        <p class="lede mt-4">
+          Lumit should be asking to open. If it is not, press the button. Lumit opens on
+          <strong>Join a project</strong> with the invite already in it.
+        </p>
+        <div class="mt-9 flex flex-wrap gap-3">
+          <a class="btn border-white" id="join-open" href="/download">Open in Lumit</a>
+          <a class="btn btn-ghost" href="/download">Download Lumit</a>
+        </div>
+        <p class="lede mt-9">
+          Nothing happening? In Lumit, choose <strong>File ▸ Shared project…</strong>, then
+          <strong>Join a project</strong>, and paste the whole link you were sent.
+        </p>
+        <p class="lede mt-4">
+          The invite stays on this computer. It is the part of the link after the
+          <code>#</code>, which your browser does not send to this site.
+        </p>
+      </div>
+
+      <div id="join-empty">
+        <h1 class="sec-title">This link has no invite in it.</h1>
+        <p class="lede mt-4">
+          An invite link is longer than this one. Ask whoever shared the project to copy
+          it again from Lumit's <strong>Shared project</strong> window.
+        </p>
+        <div class="mt-9 flex flex-wrap gap-3">
+          <a class="btn border-white" href="/">Back to the start</a>
+          <a class="btn btn-ghost" href="/download">Download Lumit</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</Base>
+
+<script is:inline>
+  (() => {
+    const invite = window.location.hash.slice(1);
+    // Only what Lumit writes an invite in. Anything else is not handed on.
+    if (!/^[A-Za-z0-9_-]{40,600}$/.test(invite)) return;
+    const link = "lumit://join/" + invite;
+    document.getElementById("join-open").href = link;
+    document.getElementById("join-empty").hidden = true;
+    document.getElementById("join-ready").hidden = false;
+    window.location.href = link;
+  })();
+</script>

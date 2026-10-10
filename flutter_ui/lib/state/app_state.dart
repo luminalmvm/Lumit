@@ -18,7 +18,7 @@ import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:lumit_flutter/src/rust/api/share.dart' as bridge_share;
 import 'package:lumit_flutter/src/rust/api/share.dart'
-    hide joinSharedProject, shareDefaultPort, shareLocalAddress;
+    hide joinSharedProject, shareDefaultPort, shareLinkIn, shareRelayPort;
 import 'package:lumit_flutter/src/rust/api/state.dart';
 import 'package:lumit_flutter/state/share.dart';
 import 'package:lumit_flutter/state/ui_state.dart';
@@ -42,15 +42,45 @@ String windowTitleFor(String? path) {
 /// Windows runner forwards the command line as entrypoint arguments (the
 /// installer's file association passes the document path this way); anything
 /// else on the line — flags, stray tokens — is not a project and is ignored.
+///
+/// A Linux desktop hands the document over as a `file:` address, since the
+/// same launcher line also takes an invite link.
 String? projectPathFromArgs(List<String> args) {
-  for (final a in args) {
+  for (var a in args) {
+    if (a.startsWith('file:')) {
+      try {
+        a = Uri.parse(a).toFilePath();
+      } catch (_) {
+        continue;
+      }
+    }
     if (a.toLowerCase().endsWith('.lum') && File(a).existsSync()) return a;
+  }
+  return null;
+}
+
+/// The invite link Lumit was started with, as a click on one in a browser
+/// starts it: the first argument that holds an invite, or null.
+String? inviteFromArgs(List<String> args) {
+  for (final a in args) {
+    // Only what could be one is put to the engine: a path is not.
+    if (!a.startsWith('lumit:') && !a.startsWith('https:')) continue;
+    try {
+      final link = bridge_share.shareLinkIn(text: a);
+      if (link != null) return link;
+    } catch (_) {
+      // No engine to ask, as in a widget test.
+    }
   }
   return null;
 }
 
 class LumitState extends ChangeNotifier {
   ProjectReference? project;
+
+  /// The invite link Lumit was started with, until the Shared project window
+  /// has opened on it.
+  String? launchInvite;
 
   StreamSubscription? currentDocumentStream;
 
@@ -140,20 +170,31 @@ class LumitState extends ChangeNotifier {
   /// Share the open project from this machine, under [name], listening on
   /// [port]. [key] is the secret of the invite this project was last shared
   /// by, to make the same invite again, or null for a new one. [outside]
-  /// asks the router to open the port for people outside this network.
+  /// asks the router to open the port for people outside this network, and
+  /// [relay] is a relay to keep a room at for whoever that does not let in.
+  /// [password] is one every guest has to give as well as holding the link,
+  /// and null keeps whatever [key] was shared with.
   /// Null when there is no project open or it is already shared.
   BridgeShareStarted? startSharing(
       {required String name,
       required int port,
       String? key,
-      bool outside = false}) {
+      String? password,
+      bool outside = false,
+      String? relay}) {
     final open = project;
     if (open == null || share.active) return null;
     final events = RustStreamSink<BridgeShareEvent>();
     final BridgeShareStarted started;
     try {
       started = open.share(
-          name: name, port: port, key: key, outside: outside, events: events);
+          name: name,
+          port: port,
+          key: key,
+          password: password,
+          outside: outside,
+          relay: relay,
+          events: events);
     } catch (_) {
       return null;
     }
@@ -168,13 +209,17 @@ class LumitState extends ChangeNotifier {
   }
 
   /// Join the shared project [invite] names and make it the open one. It
-  /// arrives unsaved, so saving writes this person's own copy. [footage] is
-  /// the folder this machine keeps the project's footage in.
+  /// arrives unsaved, so saving writes this person's own copy. [password]
+  /// is the host's, when it set one. [footage] is the folder this machine
+  /// keeps the project's footage in.
   ///
   /// Null when another project is already on its way in. Anything else the
   /// caller shows: the previous project stays loaded unless this joined.
   Future<BridgeJoinOutcome?> joinShared(
-      {required String invite, required String name, String? footage}) async {
+      {required String invite,
+      required String name,
+      String? password,
+      String? footage}) async {
     // One at a time, for [openProject]'s reason.
     if (opening.value) return null;
     opening.value = true;
@@ -187,6 +232,7 @@ class LumitState extends ChangeNotifier {
       outcome = await bridge_share.joinSharedProject(
           invite: invite,
           name: name,
+          password: password,
           footage: footage,
           onChangeStream: _changeSink(),
           events: events);
@@ -245,6 +291,8 @@ class LumitState extends ChangeNotifier {
         postNotice(l10n.shareElsewhere, error: true);
       case BridgeShareEvent_Reach(:final reach):
         share.setReach(reach);
+      case BridgeShareEvent_Relayed(:final relayed):
+        share.setRelayed(relayed);
       case BridgeShareEvent_Ended(:final reason):
         stopSharing();
         postNotice(shareEndingText(reason),

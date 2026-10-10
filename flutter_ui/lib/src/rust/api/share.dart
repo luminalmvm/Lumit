@@ -18,35 +18,48 @@ import 'solid.dart';
 import 'state.dart';
 part 'share.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `describe`, `ending`, `events_for`, `let_go`, `person`, `reach`, `resume`, `saved`, `saving`, `stop_all`, `stop`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `at_relay`, `describe`, `ending`, `events_for`, `kept_text`, `let_go`, `person`, `reach`, `relayed`, `resume`, `saved`, `saving`, `stop_all`, `stop`, `unlocked`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// The port a host listens on unless the person picks another.
 int shareDefaultPort() =>
     BridgeLib.instance.api.crateApiShareShareDefaultPort();
 
-/// This machine's address on its network, to offer in an invite. A guess the
-/// person can type over, for a VPN or a forwarded port.
-String shareLocalAddress() =>
-    BridgeLib.instance.api.crateApiShareShareLocalAddress();
+/// The invite in `text`, written as a link, or `None` when there is none in
+/// it. What tells a link Lumit was started with from a file to open, and
+/// what tidies whatever a person pasted.
+String? shareLinkIn({required String text}) =>
+    BridgeLib.instance.api.crateApiShareShareLinkIn(text: text);
+
+/// Whether the invite in `text` needs a password given with it. False for
+/// anything that is not an invite.
+bool shareLinkLocked({required String text}) =>
+    BridgeLib.instance.api.crateApiShareShareLinkLocked(text: text);
+
+/// The port a relay listens on unless its owner picked another, for an
+/// address typed without one.
+int shareRelayPort() => BridgeLib.instance.api.crateApiShareShareRelayPort();
 
 /// Join the project an invite names. It opens as a new, unsaved project in
 /// place of whatever was open, so saving it writes this person's own copy.
 ///
-/// `footage` is the folder this machine keeps the project's footage in. Each
-/// item is looked for there by name and then by fingerprint, and what is not
-/// found shows as missing, to be relinked like any other.
+/// `password` is the host's, when it set one. `footage` is the folder this
+/// machine keeps the project's footage in. Each item is looked for there by
+/// name and then by fingerprint, and what is not found shows as missing, to
+/// be relinked like any other.
 ///
 /// Not sync: it waits on the network and on the whole document arriving.
 Future<BridgeJoinOutcome> joinSharedProject(
         {required String invite,
         required String name,
+        String? password,
         String? footage,
         RustStreamSink<ScopedChange>? onChangeStream,
         RustStreamSink<BridgeShareEvent>? events}) =>
     BridgeLib.instance.api.crateApiShareJoinSharedProject(
         invite: invite,
         name: name,
+        password: password,
         footage: footage,
         onChangeStream: onChangeStream,
         events: events);
@@ -62,7 +75,12 @@ sealed class BridgeJoinOutcome with _$BridgeJoinOutcome {
   /// The text is not an invite.
   const factory BridgeJoinOutcome.badInvite() = BridgeJoinOutcome_BadInvite;
 
-  /// Nobody answered at that address, or the invite was not accepted.
+  /// The host set a password, and none was given with the invite.
+  const factory BridgeJoinOutcome.passwordNeeded() =
+      BridgeJoinOutcome_PasswordNeeded;
+
+  /// Nobody answered at that address, or the invite was not accepted. A
+  /// wrong password looks the same: the host does not answer to one.
   const factory BridgeJoinOutcome.unreachable() = BridgeJoinOutcome_Unreachable;
   const factory BridgeJoinOutcome.versionMismatch({
     required String host,
@@ -165,6 +183,11 @@ sealed class BridgeShareEvent with _$BridgeShareEvent {
   const factory BridgeShareEvent.reach({
     required BridgeShareReach reach,
   }) = BridgeShareEvent_Reach;
+
+  /// For a host: what came of asking a relay for a room.
+  const factory BridgeShareEvent.relayed({
+    required BridgeShareRelayed relayed,
+  }) = BridgeShareEvent_Relayed;
 }
 
 /// One person in a shared project, and what they are looking at.
@@ -267,13 +290,32 @@ sealed class BridgeShareReach with _$BridgeShareReach {
   const factory BridgeShareReach.behind() = BridgeShareReach_Behind;
 }
 
+/// Whether a host has a room at a relay, for people no address of this
+/// machine lets in.
+enum BridgeShareRelayed {
+  /// It was given no relay.
+  off,
+
+  /// The relay is being asked.
+  asking,
+
+  /// The room is open, and the link leads to it.
+  open,
+
+  /// The relay did not answer or would not open a room. It is asked again
+  /// every few seconds.
+  unreachable,
+  ;
+}
+
 @freezed
 sealed class BridgeShareStarted with _$BridgeShareStarted {
   const BridgeShareStarted._();
 
   /// Sharing, and listening on `port`. `key` is the invite's secret, to
   /// hand back to [`ProjectReference::share`] when this project is shared
-  /// again, so the invite people already hold still finds it. `restored`
+  /// again, so the invite people already hold still finds it, with the
+  /// password it had. `restored`
   /// edits made since the project was last saved were put back first: the
   /// project had been closed without saving, and the people coming back
   /// were working on a document with them in.

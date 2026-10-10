@@ -53,6 +53,7 @@ extension BridgeJoinOutcomePatterns on BridgeJoinOutcome {
   TResult maybeMap<TResult extends Object?>({
     TResult Function(BridgeJoinOutcome_Joined value)? joined,
     TResult Function(BridgeJoinOutcome_BadInvite value)? badInvite,
+    TResult Function(BridgeJoinOutcome_PasswordNeeded value)? passwordNeeded,
     TResult Function(BridgeJoinOutcome_Unreachable value)? unreachable,
     TResult Function(BridgeJoinOutcome_VersionMismatch value)? versionMismatch,
     TResult Function(BridgeJoinOutcome_Full value)? full,
@@ -66,6 +67,8 @@ extension BridgeJoinOutcomePatterns on BridgeJoinOutcome {
         return joined(_that);
       case BridgeJoinOutcome_BadInvite() when badInvite != null:
         return badInvite(_that);
+      case BridgeJoinOutcome_PasswordNeeded() when passwordNeeded != null:
+        return passwordNeeded(_that);
       case BridgeJoinOutcome_Unreachable() when unreachable != null:
         return unreachable(_that);
       case BridgeJoinOutcome_VersionMismatch() when versionMismatch != null:
@@ -98,6 +101,8 @@ extension BridgeJoinOutcomePatterns on BridgeJoinOutcome {
   TResult map<TResult extends Object?>({
     required TResult Function(BridgeJoinOutcome_Joined value) joined,
     required TResult Function(BridgeJoinOutcome_BadInvite value) badInvite,
+    required TResult Function(BridgeJoinOutcome_PasswordNeeded value)
+        passwordNeeded,
     required TResult Function(BridgeJoinOutcome_Unreachable value) unreachable,
     required TResult Function(BridgeJoinOutcome_VersionMismatch value)
         versionMismatch,
@@ -111,6 +116,8 @@ extension BridgeJoinOutcomePatterns on BridgeJoinOutcome {
         return joined(_that);
       case BridgeJoinOutcome_BadInvite():
         return badInvite(_that);
+      case BridgeJoinOutcome_PasswordNeeded():
+        return passwordNeeded(_that);
       case BridgeJoinOutcome_Unreachable():
         return unreachable(_that);
       case BridgeJoinOutcome_VersionMismatch():
@@ -140,6 +147,7 @@ extension BridgeJoinOutcomePatterns on BridgeJoinOutcome {
   TResult? mapOrNull<TResult extends Object?>({
     TResult? Function(BridgeJoinOutcome_Joined value)? joined,
     TResult? Function(BridgeJoinOutcome_BadInvite value)? badInvite,
+    TResult? Function(BridgeJoinOutcome_PasswordNeeded value)? passwordNeeded,
     TResult? Function(BridgeJoinOutcome_Unreachable value)? unreachable,
     TResult? Function(BridgeJoinOutcome_VersionMismatch value)? versionMismatch,
     TResult? Function(BridgeJoinOutcome_Full value)? full,
@@ -152,6 +160,8 @@ extension BridgeJoinOutcomePatterns on BridgeJoinOutcome {
         return joined(_that);
       case BridgeJoinOutcome_BadInvite() when badInvite != null:
         return badInvite(_that);
+      case BridgeJoinOutcome_PasswordNeeded() when passwordNeeded != null:
+        return passwordNeeded(_that);
       case BridgeJoinOutcome_Unreachable() when unreachable != null:
         return unreachable(_that);
       case BridgeJoinOutcome_VersionMismatch() when versionMismatch != null:
@@ -183,6 +193,7 @@ extension BridgeJoinOutcomePatterns on BridgeJoinOutcome {
   TResult maybeWhen<TResult extends Object?>({
     TResult Function(ProjectReference project)? joined,
     TResult Function()? badInvite,
+    TResult Function()? passwordNeeded,
     TResult Function()? unreachable,
     TResult Function(String host)? versionMismatch,
     TResult Function()? full,
@@ -196,6 +207,8 @@ extension BridgeJoinOutcomePatterns on BridgeJoinOutcome {
         return joined(_that.project);
       case BridgeJoinOutcome_BadInvite() when badInvite != null:
         return badInvite();
+      case BridgeJoinOutcome_PasswordNeeded() when passwordNeeded != null:
+        return passwordNeeded();
       case BridgeJoinOutcome_Unreachable() when unreachable != null:
         return unreachable();
       case BridgeJoinOutcome_VersionMismatch() when versionMismatch != null:
@@ -228,6 +241,7 @@ extension BridgeJoinOutcomePatterns on BridgeJoinOutcome {
   TResult when<TResult extends Object?>({
     required TResult Function(ProjectReference project) joined,
     required TResult Function() badInvite,
+    required TResult Function() passwordNeeded,
     required TResult Function() unreachable,
     required TResult Function(String host) versionMismatch,
     required TResult Function() full,
@@ -240,6 +254,8 @@ extension BridgeJoinOutcomePatterns on BridgeJoinOutcome {
         return joined(_that.project);
       case BridgeJoinOutcome_BadInvite():
         return badInvite();
+      case BridgeJoinOutcome_PasswordNeeded():
+        return passwordNeeded();
       case BridgeJoinOutcome_Unreachable():
         return unreachable();
       case BridgeJoinOutcome_VersionMismatch():
@@ -269,6 +285,7 @@ extension BridgeJoinOutcomePatterns on BridgeJoinOutcome {
   TResult? whenOrNull<TResult extends Object?>({
     TResult? Function(ProjectReference project)? joined,
     TResult? Function()? badInvite,
+    TResult? Function()? passwordNeeded,
     TResult? Function()? unreachable,
     TResult? Function(String host)? versionMismatch,
     TResult? Function()? full,
@@ -281,6 +298,8 @@ extension BridgeJoinOutcomePatterns on BridgeJoinOutcome {
         return joined(_that.project);
       case BridgeJoinOutcome_BadInvite() when badInvite != null:
         return badInvite();
+      case BridgeJoinOutcome_PasswordNeeded() when passwordNeeded != null:
+        return passwordNeeded();
       case BridgeJoinOutcome_Unreachable() when unreachable != null:
         return unreachable();
       case BridgeJoinOutcome_VersionMismatch() when versionMismatch != null:
@@ -380,6 +399,27 @@ class BridgeJoinOutcome_BadInvite extends BridgeJoinOutcome {
   @override
   String toString() {
     return 'BridgeJoinOutcome.badInvite()';
+  }
+}
+
+/// @nodoc
+
+class BridgeJoinOutcome_PasswordNeeded extends BridgeJoinOutcome {
+  const BridgeJoinOutcome_PasswordNeeded() : super._();
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is BridgeJoinOutcome_PasswordNeeded);
+  }
+
+  @override
+  int get hashCode => runtimeType.hashCode;
+
+  @override
+  String toString() {
+    return 'BridgeJoinOutcome.passwordNeeded()';
   }
 }
 
@@ -971,6 +1011,7 @@ extension BridgeShareEventPatterns on BridgeShareEvent {
     TResult Function(BridgeShareEvent_Elsewhere value)? elsewhere,
     TResult Function(BridgeShareEvent_Ended value)? ended,
     TResult Function(BridgeShareEvent_Reach value)? reach,
+    TResult Function(BridgeShareEvent_Relayed value)? relayed,
     required TResult orElse(),
   }) {
     final _that = this;
@@ -987,6 +1028,8 @@ extension BridgeShareEventPatterns on BridgeShareEvent {
         return ended(_that);
       case BridgeShareEvent_Reach() when reach != null:
         return reach(_that);
+      case BridgeShareEvent_Relayed() when relayed != null:
+        return relayed(_that);
       case _:
         return orElse();
     }
@@ -1013,6 +1056,7 @@ extension BridgeShareEventPatterns on BridgeShareEvent {
     required TResult Function(BridgeShareEvent_Elsewhere value) elsewhere,
     required TResult Function(BridgeShareEvent_Ended value) ended,
     required TResult Function(BridgeShareEvent_Reach value) reach,
+    required TResult Function(BridgeShareEvent_Relayed value) relayed,
   }) {
     final _that = this;
     switch (_that) {
@@ -1028,6 +1072,8 @@ extension BridgeShareEventPatterns on BridgeShareEvent {
         return ended(_that);
       case BridgeShareEvent_Reach():
         return reach(_that);
+      case BridgeShareEvent_Relayed():
+        return relayed(_that);
     }
   }
 
@@ -1051,6 +1097,7 @@ extension BridgeShareEventPatterns on BridgeShareEvent {
     TResult? Function(BridgeShareEvent_Elsewhere value)? elsewhere,
     TResult? Function(BridgeShareEvent_Ended value)? ended,
     TResult? Function(BridgeShareEvent_Reach value)? reach,
+    TResult? Function(BridgeShareEvent_Relayed value)? relayed,
   }) {
     final _that = this;
     switch (_that) {
@@ -1066,6 +1113,8 @@ extension BridgeShareEventPatterns on BridgeShareEvent {
         return ended(_that);
       case BridgeShareEvent_Reach() when reach != null:
         return reach(_that);
+      case BridgeShareEvent_Relayed() when relayed != null:
+        return relayed(_that);
       case _:
         return null;
     }
@@ -1091,6 +1140,7 @@ extension BridgeShareEventPatterns on BridgeShareEvent {
     TResult Function()? elsewhere,
     TResult Function(BridgeShareEnding reason)? ended,
     TResult Function(BridgeShareReach reach)? reach,
+    TResult Function(BridgeShareRelayed relayed)? relayed,
     required TResult orElse(),
   }) {
     final _that = this;
@@ -1107,6 +1157,8 @@ extension BridgeShareEventPatterns on BridgeShareEvent {
         return ended(_that.reason);
       case BridgeShareEvent_Reach() when reach != null:
         return reach(_that.reach);
+      case BridgeShareEvent_Relayed() when relayed != null:
+        return relayed(_that.relayed);
       case _:
         return orElse();
     }
@@ -1133,6 +1185,7 @@ extension BridgeShareEventPatterns on BridgeShareEvent {
     required TResult Function() elsewhere,
     required TResult Function(BridgeShareEnding reason) ended,
     required TResult Function(BridgeShareReach reach) reach,
+    required TResult Function(BridgeShareRelayed relayed) relayed,
   }) {
     final _that = this;
     switch (_that) {
@@ -1148,6 +1201,8 @@ extension BridgeShareEventPatterns on BridgeShareEvent {
         return ended(_that.reason);
       case BridgeShareEvent_Reach():
         return reach(_that.reach);
+      case BridgeShareEvent_Relayed():
+        return relayed(_that.relayed);
     }
   }
 
@@ -1171,6 +1226,7 @@ extension BridgeShareEventPatterns on BridgeShareEvent {
     TResult? Function()? elsewhere,
     TResult? Function(BridgeShareEnding reason)? ended,
     TResult? Function(BridgeShareReach reach)? reach,
+    TResult? Function(BridgeShareRelayed relayed)? relayed,
   }) {
     final _that = this;
     switch (_that) {
@@ -1186,6 +1242,8 @@ extension BridgeShareEventPatterns on BridgeShareEvent {
         return ended(_that.reason);
       case BridgeShareEvent_Reach() when reach != null:
         return reach(_that.reach);
+      case BridgeShareEvent_Relayed() when relayed != null:
+        return relayed(_that.relayed);
       case _:
         return null;
     }
@@ -1530,6 +1588,71 @@ class _$BridgeShareEvent_ReachCopyWithImpl<$Res>
     return $BridgeShareReachCopyWith<$Res>(_self.reach, (value) {
       return _then(_self.copyWith(reach: value));
     });
+  }
+}
+
+/// @nodoc
+
+class BridgeShareEvent_Relayed extends BridgeShareEvent {
+  const BridgeShareEvent_Relayed({required this.relayed}) : super._();
+
+  final BridgeShareRelayed relayed;
+
+  /// Create a copy of BridgeShareEvent
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  @pragma('vm:prefer-inline')
+  $BridgeShareEvent_RelayedCopyWith<BridgeShareEvent_Relayed> get copyWith =>
+      _$BridgeShareEvent_RelayedCopyWithImpl<BridgeShareEvent_Relayed>(
+          this, _$identity);
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is BridgeShareEvent_Relayed &&
+            (identical(other.relayed, relayed) || other.relayed == relayed));
+  }
+
+  @override
+  int get hashCode => Object.hash(runtimeType, relayed);
+
+  @override
+  String toString() {
+    return 'BridgeShareEvent.relayed(relayed: $relayed)';
+  }
+}
+
+/// @nodoc
+abstract mixin class $BridgeShareEvent_RelayedCopyWith<$Res>
+    implements $BridgeShareEventCopyWith<$Res> {
+  factory $BridgeShareEvent_RelayedCopyWith(BridgeShareEvent_Relayed value,
+          $Res Function(BridgeShareEvent_Relayed) _then) =
+      _$BridgeShareEvent_RelayedCopyWithImpl;
+  @useResult
+  $Res call({BridgeShareRelayed relayed});
+}
+
+/// @nodoc
+class _$BridgeShareEvent_RelayedCopyWithImpl<$Res>
+    implements $BridgeShareEvent_RelayedCopyWith<$Res> {
+  _$BridgeShareEvent_RelayedCopyWithImpl(this._self, this._then);
+
+  final BridgeShareEvent_Relayed _self;
+  final $Res Function(BridgeShareEvent_Relayed) _then;
+
+  /// Create a copy of BridgeShareEvent
+  /// with the given fields replaced by the non-null parameter values.
+  @pragma('vm:prefer-inline')
+  $Res call({
+    Object? relayed = null,
+  }) {
+    return _then(BridgeShareEvent_Relayed(
+      relayed: null == relayed
+          ? _self.relayed
+          : relayed // ignore: cast_nullable_to_non_nullable
+              as BridgeShareRelayed,
+    ));
   }
 }
 

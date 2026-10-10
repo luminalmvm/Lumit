@@ -8,13 +8,15 @@ use crate::host::VERSION;
 use crate::kept::{Finding, Kept, Pair};
 use crate::local::{carry, place, sane, sane_document, settle};
 use crate::wire::{self, decode, encode, Message, Names, Out, Receiver, Sender};
-use crate::{Conflict, Ending, Event, Events, Invite, Person, Presence, ShareError};
+use crate::{
+    room, Conflict, Ending, Event, Events, Invite, Person, Presence, ShareError, MAX_ADDRESSES,
+};
 use lumit_core::shared::land;
 use lumit_core::store::{Moved, RemoteTag, Tap};
 use lumit_core::{Document, DocumentStore};
 use lumit_project::resolve_all_media;
 use parking_lot::Mutex;
-use std::net::{Shutdown, TcpStream, ToSocketAddrs};
+use std::net::{Shutdown, SocketAddr, TcpStream, ToSocketAddrs};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::mpsc::{sync_channel, SyncSender};
@@ -132,16 +134,69 @@ pub fn resume(file: &mut Document, folder: &Path) -> Option<(Document, Resuming)
     Some((document, resuming))
 }
 
+/// How long a relay is left untried, for the host to answer by itself.
+const HEAD_START: Duration = Duration::from_millis(400);
+
+/// A connection that has proved both ends hold the invite's secret.
+type Opened = (TcpStream, Sender, Receiver);
+
+/// `relay` is for an address that is a relay's, where the host is asked for
+/// by the room it keeps there.
+fn open(at: SocketAddr, relay: bool, key: &[u8; 32]) -> Result<Opened, ShareError> {
+    let socket = if relay {
+        lumit_relay::join(at, &room(key))?
+    } else {
+        TcpStream::connect_timeout(&at, wire::GREETING)?
+    };
+    let (sender, receiver) = wire::open(socket.try_clone()?, key, true)?;
+    Ok((socket, sender, receiver))
+}
+
+/// Find the host by an invite: every address in it is tried at once, and the
+/// first to answer with the invite's secret is the host. An address that
+/// leads to some other machine, as the host's address on its own network
+/// does from anywhere else, fails that and is never said another word to.
+/// A relay is asked for the host a moment later than the host itself.
+fn reach(invite: &Invite) -> Result<Opened, ShareError> {
+    let mut places: Vec<(SocketAddr, bool)> = Vec::new();
+    let direct = invite.addresses.iter().map(|address| (address, false));
+    let relayed = invite.relays.iter().map(|address| (address, true));
+    for (address, relay) in direct.chain(relayed).take(MAX_ADDRESSES) {
+        for at in address.to_socket_addrs().into_iter().flatten() {
+            if places.len() < MAX_ADDRESSES && !places.contains(&(at, relay)) {
+                places.push((at, relay));
+            }
+        }
+    }
+    if let [(only, relay)] = places[..] {
+        return open(only, relay, &invite.key).map_err(|_| ShareError::Unreachable);
+    }
+    // Room for every answer, so a try that loses has nowhere to wait and
+    // goes, closing its connection as it does.
+    let (found, answers) = sync_channel(places.len());
+    for (at, relay) in places {
+        let (found, key) = (found.clone(), invite.key);
+        let _ = thread::Builder::new()
+            .name("lumit-share-reach".into())
+            .spawn(move || {
+                // A host that can be reached itself is the better way to
+                // it, and a moment's start is all it needs to answer first.
+                if relay {
+                    thread::sleep(HEAD_START);
+                }
+                if let Ok(opened) = open(at, relay, &key) {
+                    let _ = found.try_send(opened);
+                }
+            });
+    }
+    drop(found);
+    answers.recv().map_err(|_| ShareError::Unreachable)
+}
+
 /// Reach the host an invite names, and say hello.
 fn connect(seat: &Seat) -> Result<(Connected, Document), ShareError> {
     let invite = seat.invite.lock().clone();
-    let socket = invite
-        .address
-        .to_socket_addrs()
-        .map_err(|_| ShareError::Unreachable)?
-        .find_map(|addr| TcpStream::connect_timeout(&addr, wire::GREETING).ok())
-        .ok_or(ShareError::Unreachable)?;
-    let (mut sender, mut receiver) = wire::open(socket.try_clone()?, &invite.key, true)?;
+    let (socket, mut sender, mut receiver) = reach(&invite)?;
     let hello = Message::Hello {
         protocol: wire::PROTOCOL,
         version: VERSION.to_owned(),
@@ -188,6 +243,9 @@ pub fn join(
     name: &str,
     root: Option<PathBuf>,
 ) -> Result<(Document, Joining), ShareError> {
+    if invite.locked {
+        return Err(ShareError::Locked);
+    }
     let seat = Seat {
         invite: Mutex::new(invite),
         name: name.chars().take(64).collect(),

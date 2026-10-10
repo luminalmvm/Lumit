@@ -82,6 +82,16 @@ Root: HKA; Subkey: "Software\Classes\Lumit.Project\DefaultIcon"; ValueType: stri
   ValueData: "{app}\icons\lumit-project.ico"
 Root: HKA; Subkey: "Software\Classes\Lumit.Project\shell\open\command"; ValueType: string; \
   ValueData: """{app}\{#MyAppExe}"" ""%1"""
+; lumit: — invite links. A click on one in a browser starts Lumit with the
+; link, and its Shared project window opens on it.
+Root: HKA; Subkey: "Software\Classes\lumit"; ValueType: string; \
+  ValueData: "URL:Lumit invite link"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\lumit"; ValueType: string; \
+  ValueName: "URL Protocol"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\lumit\DefaultIcon"; ValueType: string; \
+  ValueData: "{app}\{#MyAppExe},0"
+Root: HKA; Subkey: "Software\Classes\lumit\shell\open\command"; ValueType: string; \
+  ValueData: """{app}\{#MyAppExe}"" ""%1"""
 ; .lumfx — presets. No open verb: a preset is applied inside a project, not
 ; opened on its own, so it gets the icon and a name only.
 Root: HKA; Subkey: "Software\Classes\.lumfx"; ValueType: string; \

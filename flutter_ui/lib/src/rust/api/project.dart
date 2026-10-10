@@ -725,29 +725,38 @@ class ProjectReference {
       BridgeLib.instance.api.crateApiProjectProjectReferenceSetUseProxies(
           that: this, useProxies: useProxies);
 
-  /// Share this project from this machine. Others join with the text
-  /// [`Self::share_invite`] gives.
+  /// Share this project from this machine. Others join with the link
+  /// [`Self::share_link`] gives.
   ///
   /// `name` is what the others see this person called. Port 0 takes any
   /// free one. `key` is what the last [`BridgeShareStarted::Sharing`] for
-  /// this project gave, or `None` for a new invite. `outside` asks this
+  /// this project gave, or `None` for a new invite. `password` is one every
+  /// guest has to give as well as holding the link. Empty or `None` keeps
+  /// whatever `key` was shared with, which is no password for a new
+  /// invite. `outside` asks this
   /// network's router to send the port here, so people outside the network
   /// can join without a VPN. It answers later, as a
-  /// [`BridgeShareEvent::Reach`]. `events` is optional the way a project's
+  /// [`BridgeShareEvent::Reach`]. `relay` is the `host:port` of a relay to
+  /// keep a room at, for people the router does not let in, and answers as
+  /// a [`BridgeShareEvent::Relayed`]. `events` is optional the way a project's
   /// change stream is, and for the same reason: nothing about sharing
   /// depends on someone watching.
   BridgeShareStarted share(
           {required String name,
           required int port,
           String? key,
+          String? password,
           required bool outside,
+          String? relay,
           RustStreamSink<BridgeShareEvent>? events}) =>
       BridgeLib.instance.api.crateApiProjectProjectReferenceShare(
           that: this,
           name: name,
           port: port,
           key: key,
+          password: password,
           outside: outside,
+          relay: relay,
           events: events);
 
   /// The conflicts a merge left for this guest to choose between, in the
@@ -782,10 +791,21 @@ class ProjectReference {
         that: this,
       );
 
-  /// The invite for a host reached at `address`, to send to whoever is
-  /// joining. `None` when this machine is not hosting the project.
-  String? shareInvite({required String address}) => BridgeLib.instance.api
-      .crateApiProjectProjectReferenceShareInvite(that: this, address: address);
+  /// The secret of the invite as it stands, to hand to [`Self::share`] the
+  /// next time this project is shared. `None` when this machine is not
+  /// hosting it.
+  String? shareKey() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceShareKey(
+        that: this,
+      );
+
+  /// The link to send to whoever is joining. It holds every way to this
+  /// machine the engine knows of just now, so it is asked for again when
+  /// the router or a relay answers. `address` is one more the person
+  /// typed, for a VPN or a port forwarded by hand. `None` when this
+  /// machine is not hosting the project.
+  String? shareLink({String? address}) => BridgeLib.instance.api
+      .crateApiProjectProjectReferenceShareLink(that: this, address: address);
 
   /// Everyone in the project right now, this person included. Empty when it
   /// is not shared. The events carry the same list as it changes.
@@ -827,16 +847,26 @@ class ProjectReference {
       );
 
   /// Give a guest that has lost its host a new invite to look for it by,
-  /// for a host that has moved or made a new one. False when the text is
-  /// not an invite or this machine is not a guest of the project.
-  bool shareReinvite({required String invite}) => BridgeLib.instance.api
-      .crateApiProjectProjectReferenceShareReinvite(that: this, invite: invite);
+  /// for a host that has moved or made a new one. `password` goes with it
+  /// when the host set one. False when the text is not an invite, it needs
+  /// a password and has none, or this machine is not a guest of the
+  /// project.
+  bool shareReinvite({required String invite, String? password}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceShareReinvite(
+          that: this, invite: invite, password: password);
+
+  /// Whether this machine has a room at a relay, while it hosts the
+  /// project. The events carry it as it changes.
+  BridgeShareRelayed shareRelayed() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceShareRelayed(
+        that: this,
+      );
 
   /// Take a guest out of the project this machine hosts, by the id the
   /// people list gives them. Their Lumit is told and stops coming back.
   /// The invite is replaced, so the one they hold stops working. Everyone
-  /// still here is sent the new one, and [`Self::share_invite`] gives it,
-  /// with the key to hand to [`Self::share`] next time.
+  /// still here is sent the new one, [`Self::share_link`] gives it, and
+  /// [`Self::share_key`] the key to hand to [`Self::share`] next time.
   void shareRemove({required int person}) => BridgeLib.instance.api
       .crateApiProjectProjectReferenceShareRemove(that: this, person: person);
 

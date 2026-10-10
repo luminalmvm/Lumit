@@ -2304,6 +2304,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "lumit-relay"
+version = "0.6.0"
+
+[[package]]
 name = "lumit-render"
 version = "0.6.0"
 dependencies = [
@@ -2349,10 +2353,12 @@ dependencies = [
 name = "lumit-share"
 version = "0.6.0"
 dependencies = [
+ "blake3",
  "getrandom 0.4.3",
  "hex",
  "lumit-core",
  "lumit-project",
+ "lumit-relay",
  "parking_lot",
  "roxmltree",
  "serde",

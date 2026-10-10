@@ -15138,18 +15138,6 @@
   "@shareAddress": {
     "description": "Field label in the Shared project window: this computer's network address, which goes into the invite. The person can type another over it."
   },
-  "shareInvite": "Invite",
-  "@shareInvite": {
-    "description": "Label in the Shared project window beside the invite: the line of text a host sends and a guest pastes to join."
-  },
-  "shareCopyInvite": "Copy invite",
-  "@shareCopyInvite": {
-    "description": "Button in the Shared project window. Puts the invite on the clipboard."
-  },
-  "shareInviteCopied": "Invite copied",
-  "@shareInviteCopied": {
-    "description": "Bottom-strip notice after the Copy invite button is pressed."
-  },
   "shareHostHint": "Anyone with the invite can join and edit until you stop sharing.",
   "@shareHostHint": {
     "description": "Quiet line on the Share this project page of the Shared project window, under the fields."
@@ -15474,29 +15462,120 @@
   "@shareOutsideAsk": {
     "description": "Text beside the tick box on the Internet row of the Share this project page. When ticked, Lumit asks the home router to open the sharing port, so friends elsewhere can join without a VPN."
   },
-  "shareReachOff": "People outside your network need a VPN, or this port forwarded to this computer.",
-  "@shareReachOff": {
-    "description": "Quiet line under the invite in the Shared project window, shown to a host who left the Internet box unticked."
+  "shareLink": "Invite link",
+  "@shareLink": {
+    "description": "Row label in the Shared project window, beside the invite link: the link a host sends and a guest pastes to join."
   },
-  "shareReachAsking": "Asking your router to open the port…",
-  "@shareReachAsking": {
-    "description": "Quiet line under the invite in the Shared project window, shown to a host for a second or two after sharing starts, while Lumit asks the home router to let people outside the network in."
+  "shareCopyLink": "Copy link",
+  "@shareCopyLink": {
+    "description": "Button in the Shared project window. Puts the invite link on the clipboard without showing it."
   },
-  "shareReachOpen": "People outside your network can join with this invite. On your own network the address is {address}.",
-  "@shareReachOpen": {
-    "description": "Quiet line under the invite in the Shared project window, shown to a host once the router has opened the port. The invite above now carries the public address. {address} is this computer's address on the local network, for someone in the same house.",
-    "placeholders": {
-      "address": {
-        "type": "String"
-      }
-    }
+  "shareLinkCopied": "Invite link copied",
+  "@shareLinkCopied": {
+    "description": "Bottom-strip notice after the Copy link button is pressed."
   },
-  "shareReachRefused": "Your router would not open the port. People outside your network need a VPN, or the port forwarded to this computer.",
-  "@shareReachRefused": {
-    "description": "Warning line under the invite in the Shared project window, shown to a host when no router answered or the router refused to open the sharing port."
+  "shareLinkPaste": "Paste the link you were sent",
+  "@shareLinkPaste": {
+    "description": "Placeholder in the empty Invite link field on the Join a project page of the Shared project window."
   },
-  "shareReachBehind": "Your router has no address of its own on the internet, so people outside your network need a VPN.",
-  "@shareReachBehind": {
-    "description": "Warning line under the invite in the Shared project window, shown to a host whose router sits behind another router or behind an address the internet provider shares between customers, so opening its port would reach nobody."
+  "shareShowLink": "Show",
+  "@shareShowLink": {
+    "description": "Small button beside an invite link in the Shared project window. The link is hidden until this is pressed and a warning agreed to."
+  },
+  "shareHideLink": "Hide",
+  "@shareHideLink": {
+    "description": "Small button beside an invite link in the Shared project window, once the link is showing. Hides it again."
+  },
+  "shareShowTitle": "Show the invite link?",
+  "@shareShowTitle": {
+    "description": "Title of the small question that opens when Show is pressed beside a hidden invite link."
+  },
+  "shareShowBody": "Anyone who sees this link can join the project and change it, and the link holds your internet address. Keep it off streams, recordings and screenshots.",
+  "@shareShowBody": {
+    "description": "Body of the question asked before a hidden invite link is shown."
+  },
+  "shareKeepHidden": "Keep hidden",
+  "@shareKeepHidden": {
+    "description": "Default button of the question asked before a hidden invite link is shown. Closes the question and leaves the link hidden."
+  },
+  "shareShowConfirm": "Show link",
+  "@shareShowConfirm": {
+    "description": "Button of the question asked before a hidden invite link is shown. Shows the link."
+  },
+  "shareAdvanced": "Advanced",
+  "@shareAdvanced": {
+    "description": "Label of a fold in the Shared project window. Opening it shows the rows most people never need: the port, the router, a relay, an extra address."
+  },
+  "shareRelay": "Relay",
+  "@shareRelay": {
+    "description": "Row label under Advanced on the Share this project page: the address of a relay, a small server somebody runs that passes edits between people whose routers will not let each other in."
+  },
+  "shareRelayExample": "relay.example.org",
+  "@shareRelayExample": {
+    "description": "Placeholder in the empty Relay field, showing what a relay's address looks like. Keep it as a made-up address."
+  },
+  "shareRelayHint": "A relay is a small server someone you trust runs. It carries your edits to people your router does not let in, and cannot read them. Leave it empty if you have none.",
+  "@shareRelayHint": {
+    "description": "Quiet line under the Relay field in the Shared project window."
+  },
+  "shareAddressHint": "Another address this computer can be reached at, such as a VPN's. It is added to the link. Leave it empty if you are not sure.",
+  "@shareAddressHint": {
+    "description": "Quiet line under the Address field, under Advanced, while a project is being shared."
+  },
+  "shareOpenChecking": "Checking whether people outside your network can join…",
+  "@shareOpenChecking": {
+    "description": "Quiet line under the invite link for a second or two after sharing starts, while Lumit asks the home router, and a relay if one is set, to let people in."
+  },
+  "shareOpenAnywhere": "Anyone you send this link to can join.",
+  "@shareOpenAnywhere": {
+    "description": "Quiet line under the invite link once the home router has agreed to let people outside the network in."
+  },
+  "shareOpenRelay": "Anyone you send this link to can join. People your router does not let in come through the relay.",
+  "@shareOpenRelay": {
+    "description": "Quiet line under the invite link when the home router would not let people in but the relay is ready."
+  },
+  "shareOpenLocal": "Only people on your own network can join with this link, because your router would not let anyone else in. The other person can share the project instead, or you can stop, set a relay under Advanced and share again.",
+  "@shareOpenLocal": {
+    "description": "Warning line under the invite link when the home router refused, or sits behind another router, and no relay is set."
+  },
+  "shareOpenLocalOff": "Only people on your own network can join with this link, because the router was not asked to let anyone else in.",
+  "@shareOpenLocalOff": {
+    "description": "Warning line under the invite link when the person unticked the Internet box before sharing and no relay is set."
+  },
+  "shareRelayDown": "The relay is not answering, so only people on your own network can join just now. Lumit keeps trying it.",
+  "@shareRelayDown": {
+    "description": "Warning line under the invite link when a relay is set but cannot be reached and the home router would not let people in either."
+  },
+  "sharePassword": "Password",
+  "@sharePassword": {
+    "description": "Row label in the Shared project window. On the Share this project page it is an optional password the host sets, which everyone joining has to type as well as having the invite link. On the Join a project page it is where a guest types that password."
+  },
+  "sharePasswordNone": "None",
+  "@sharePasswordNone": {
+    "description": "Placeholder in the empty Password field on the Share this project page, meaning the project is shared with no password."
+  },
+  "sharePasswordKept": "The same as last time",
+  "@sharePasswordKept": {
+    "description": "Placeholder in the empty Password field on the Share this project page when this project was last shared with a password, which is kept unless another is typed."
+  },
+  "sharePasswordTheirs": "The host's password",
+  "@sharePasswordTheirs": {
+    "description": "Placeholder in the empty Password field on the Join a project page, shown when the pasted invite link needs a password."
+  },
+  "sharePasswordHint": "People joining have to type this as well as having the link. Leave it empty for no password.",
+  "@sharePasswordHint": {
+    "description": "Quiet line under the Password field on the Share this project page."
+  },
+  "sharePasswordSet": "People joining need the password as well as this link.",
+  "@sharePasswordSet": {
+    "description": "Quiet line under the invite link while a project is shared with a password."
+  },
+  "sharePasswordNeeded": "That invite needs the host's password",
+  "@sharePasswordNeeded": {
+    "description": "Line in the Shared project window when a guest tries to join by an invite link that needs a password and typed none."
+  },
+  "shareUnreachableOrPassword": "Nobody answered, or the password is wrong. Check both, and that the host is still sharing.",
+  "@shareUnreachableOrPassword": {
+    "description": "Line in the Shared project window when joining with a password failed. Lumit is not told which of the two it was."
   }
 }
