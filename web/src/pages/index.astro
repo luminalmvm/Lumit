@@ -137,7 +137,6 @@ const words = tagline.split(" ");
   {/* ---------- a screenshot, brought forward ---------- */}
   <dialog class="lightbox" data-lightbox aria-label="Screenshot, enlarged">
     <div class="veil" data-veil></div>
-    <img data-full alt="" draggable="false" />
   </dialog>
 
   {/* What the page behind is put through while a screenshot is forward: a
@@ -244,8 +243,12 @@ const words = tagline.split(" ");
   /* The screenshot brought forward. The dialog is the whole window and draws
      nothing itself: the veil dims the page and lays the hero's grain over it,
      the page behind is out of focus (the lens filter, set from the script),
-     and the picture is placed and moved by the script. */
+     and the script puts a copy of the screenshot's panel in it and moves
+     that. A dialog has a text colour of its own, which the copy must not
+     take. */
   .lightbox {
+    color: inherit;
+    cursor: pointer;
     position: fixed;
     inset: 0;
     width: 100vw;
@@ -274,17 +277,18 @@ const words = tagline.split(" ");
   .lightbox.open .veil {
     opacity: 1;
   }
-  .lightbox img {
+  /* No `will-change` here: with it the words in the panel stay drawn at the
+     size they left the page at, and are soft once it has grown. */
+  .lightbox :global(.forward) {
     position: absolute;
-    display: block;
-    max-width: none;
-    border: 1px solid var(--color-line-2);
-    border-radius: var(--radius-card);
+    margin: 0;
     box-shadow: 0 30px 90px rgb(0 0 0 / 0.55);
     transform-origin: 0 0;
-    will-change: transform;
-    cursor: pointer;
     user-select: none;
+  }
+  /* It is forward already, so its strip does not say how to get it there. */
+  .lightbox :global(.forward .shot-bar > span:last-child) {
+    visibility: hidden;
   }
 </style>
 
@@ -383,13 +387,12 @@ const words = tagline.split(" ");
     );
   }
 
-  // A screenshot comes forward where it sits on the page, with a little
-  // spring, to half as big again or what the window has room for. The page
-  // behind goes out of focus and takes the hero's grain. A click anywhere,
-  // Escape, or a scroll sends it back to its size.
+  // A screenshot comes forward where it sits on the page, panel and all, with
+  // a little spring, to half as big again or what the window has room for.
+  // The page behind goes out of focus and takes the hero's grain. A click
+  // anywhere, Escape, or a scroll sends it back to its size.
   const box = document.querySelector<HTMLDialogElement>("[data-lightbox]");
   if (box) {
-    const full = box.querySelector<HTMLImageElement>("[data-full]")!;
     const root = document.documentElement;
     const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
     // Out of <main>, which is one of the things the lens filter is put on.
@@ -480,17 +483,21 @@ const words = tagline.split(" ");
     };
     let grained = false;
 
-    // ---- the picture ----
+    // ---- the panel ----
+    // What comes forward is a copy of the screenshot's whole panel: its frame,
+    // its strip and its words. The copy is laid out at the size the panel has
+    // on the page and scaled up by `grow`, so its words grow with it.
     type Box = { left: number; top: number; width: number; height: number };
-    let thumb: HTMLImageElement | null = null;
-    let clip: HTMLElement | null = null;
+    let panel: HTMLElement | null = null;
+    let copy: HTMLElement | null = null;
     let home: Box = { left: 0, top: 0, width: 1, height: 1 };
+    let grow = 1;
     let closing = false;
 
-    // Where a box is, said as a transform of the picture's forward place.
+    // Where a box is, said as a transform of the copy's forward place.
     const from = (r: Box, x = 1) =>
       `translate(${((r.left - home.left) * x).toFixed(2)}px, ${((r.top - home.top) * x).toFixed(2)}px) ` +
-      `scale(${(1 + (r.width / home.width - 1) * x).toFixed(4)})`;
+      `scale(${((1 + (r.width / home.width - 1) * x) * grow).toFixed(4)})`;
     // A spring that overshoots by about a fifteenth and has settled by 640ms.
     const spring = (time: number) => {
       const z = 0.64;
@@ -500,34 +507,56 @@ const words = tagline.split(" ");
     };
 
     const open = (shot: HTMLButtonElement) => {
+      const here = shot.closest<HTMLElement>(".shot");
       const small = shot.querySelector("img");
-      if (!small || box.open) return;
-      thumb = small;
+      if (!here || !small || box.open) return;
+      panel = here;
       closing = false;
       if (!grained) {
         grained = true;
         grain();
       }
 
+      // The copy is only looked at: it cannot be clicked or tabbed to, so a
+      // click on it lands on the dialog, and the dialog says what it shows.
+      const fwd = here.cloneNode(true) as HTMLElement;
+      copy = fwd;
+      fwd.classList.add("forward");
+      fwd.removeAttribute("data-reveal");
+      fwd.inert = true;
+      box.ariaLabel = `Screenshot, enlarged: ${small.alt}`;
+      // The picture stands in for its clip, as it does on the page.
+      fwd.querySelector("[data-clip]")?.remove();
+      // The picture the page already has, then the one at the capture's size.
       const url = shot.dataset.zoom!;
-      const w = Number(shot.dataset.w);
-      const h = Number(shot.dataset.h);
-      full.alt = small.alt;
-      full.src = small.currentSrc || url;
-      full.dataset.want = url;
+      const pic = fwd.querySelector("img")!;
+      pic.removeAttribute("srcset");
+      pic.removeAttribute("loading");
+      pic.decoding = "sync";
+      pic.src = small.currentSrc || url;
       const big = new Image();
       big.onload = () => {
-        if (box.open && full.dataset.want === url) full.src = url;
+        if (copy === fwd) pic.src = url;
       };
       big.src = url;
 
       // Forward is a step towards the visitor: half as big again as it stands
-      // on the page, less where the window has not the room, and never bigger
-      // than the capture itself.
-      const start = small.getBoundingClientRect();
+      // on the page, less where the window has not the room, and the picture
+      // never bigger than the capture itself. The computed size and not the
+      // box, which has the growth under the pointer in it.
+      const start = here.getBoundingClientRect();
+      const laid = getComputedStyle(here);
+      const pw = parseFloat(laid.width);
+      const ph = parseFloat(laid.height);
       const phone = innerWidth < 640;
-      const width = Math.min(start.width * 1.5, innerWidth * (phone ? 0.94 : 0.8), (innerHeight * 0.78 * w) / h, w);
-      const height = (width * h) / w;
+      grow = Math.min(
+        1.5,
+        (innerWidth * (phone ? 0.94 : 0.8)) / pw,
+        (innerHeight * 0.9) / ph,
+        Number(shot.dataset.w) / small.offsetWidth,
+      );
+      const width = pw * grow;
+      const height = ph * grow;
       // It grows where it is and does not travel: the corner furthest from
       // the middle of the window stays put, so it grows towards the middle.
       // One that sits near the middle grows evenly instead. Then it moves
@@ -545,17 +574,16 @@ const words = tagline.split(" ");
         width,
         height,
       };
-      full.style.left = `${home.left}px`;
-      full.style.top = `${home.top}px`;
-      full.style.width = `${width}px`;
-      full.style.height = `${height}px`;
+      fwd.style.left = `${home.left}px`;
+      fwd.style.top = `${home.top}px`;
+      fwd.style.width = `${pw}px`;
+      fwd.style.height = `${ph}px`;
+      fwd.style.transform = from(home);
+      box.append(fwd);
 
       box.showModal();
       box.classList.add("open");
-      small.style.visibility = "hidden";
-      // A card's clip lies over its picture, and goes with it.
-      clip = shot.querySelector<HTMLElement>("[data-clip]");
-      if (clip) clip.style.visibility = "hidden";
+      here.style.visibility = "hidden";
       hero.paused = true;
       focusTo(1, 280);
 
@@ -564,32 +592,34 @@ const words = tagline.split(" ");
       for (let i = 0; i <= STEPS; i++) {
         frames.push({ transform: from(start, 1 - spring((i / STEPS) * 0.64)) });
       }
-      frames[STEPS] = { transform: "none" };
-      full.animate(frames, { duration: still ? 1 : 640, easing: "linear" });
+      frames[STEPS] = { transform: from(home) };
+      fwd.animate(frames, { duration: still ? 1 : 640, easing: "linear" });
       addEventListener("scroll", close, { passive: true, once: true });
       addEventListener("resize", close, { once: true });
     };
 
     function close() {
-      if (!box!.open || closing) return;
+      const fwd = copy;
+      const here = panel;
+      if (!box!.open || closing || !fwd || !here) return;
       closing = true;
       removeEventListener("scroll", close);
       removeEventListener("resize", close);
       // From wherever it has got to, back to where the page has it now.
-      const now = full.getBoundingClientRect();
-      full.getAnimations().forEach((a) => a.cancel());
-      const back = thumb ? thumb.getBoundingClientRect() : now;
+      const now = fwd.getBoundingClientRect();
+      fwd.getAnimations().forEach((a) => a.cancel());
+      const back = here.getBoundingClientRect();
       box!.classList.remove("open");
       focusTo(0, 260);
-      const going = full.animate(
+      const going = fwd.animate(
         [{ transform: from(now) }, { transform: from(back) }],
         { duration: still ? 1 : 340, easing: "cubic-bezier(0.3, 0, 0.2, 1)", fill: "forwards" },
       );
       going.onfinish = () => {
-        if (thumb) thumb.style.visibility = "";
-        if (clip) clip.style.visibility = "";
+        here.style.visibility = "";
         box!.close();
-        going.cancel();
+        fwd.remove();
+        copy = null;
         setLens(0);
         hero.paused = false;
         closing = false;

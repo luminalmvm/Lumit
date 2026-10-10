@@ -77,11 +77,11 @@ const stories = [
     {
       stories.map((s, i) => (
         <figure
-          class:list={["lit m-0 flex flex-col rounded-card border border-line bg-ink-2", s.wide ? "lg:col-span-7" : "lg:col-span-5"]}
+          class:list={["lit shot m-0 flex flex-col rounded-card border border-line bg-ink-2", s.wide ? "lg:col-span-7" : "lg:col-span-5"]}
           data-reveal
           style={`--i:${i % 2};--c:${s.c}`}
         >
-          <button type="button" class="zoom shot relative border-b border-line bg-ink" data-zoom={s.full.url} data-w={s.full.w} data-h={s.full.h} aria-label="Enlarge this screenshot">
+          <button type="button" class="zoom relative border-b border-line bg-ink" data-zoom={s.full.url} data-w={s.full.w} data-h={s.full.h} aria-label="Enlarge this screenshot">
             <Image
               class="block w-full"
               src={s.src}
