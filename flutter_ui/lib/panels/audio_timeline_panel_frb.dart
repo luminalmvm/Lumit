@@ -65,6 +65,8 @@ import 'graph_edits.dart' show applyEasingToSelection;
 import 'graph_maths.dart' show rationalSeconds;
 import 'key_block.dart' show KeyStretch;
 import 'layer_fold_frb.dart';
+import '../state/share.dart';
+import '../widgets/share_marks.dart';
 import 'placeholder.dart';
 import 'spectral_lane_frb.dart';
 import 'timeline_bar_frb.dart' show BarGrab;
@@ -210,6 +212,29 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
   /// this panel has no graph to colour and no range selection yet.
   List<String> _selectedProperties = const [];
 
+  /// The shared project's people, whose tracks and rows are marked here.
+  /// Its roster only moves while a project is shared.
+  ShareState? _share;
+
+  /// Whether the project was shared the last time anyone was heard from.
+  bool _sharing = false;
+
+  /// Someone came, went or selected something else: the rows are drawn
+  /// again. Nothing happens here while the project is not shared.
+  void _onRoster() {
+    if (!mounted) return;
+    final now = _share?.active ?? false;
+    if (now || _sharing) setState(() => _sharing = now);
+    _shareKeys();
+  }
+
+  /// Tell the others in a shared project which keyframes are selected in
+  /// these lanes. Nothing is gathered when the project is not shared.
+  void _shareKeys() {
+    if (!(_share?.active ?? false)) return;
+    _share!.keys(Set<String>.of(_laneKeys.value), from: 'audio');
+  }
+
   /// The work area, held between document revisions - reading it is several
   /// bridge calls and only an edit can change the answer - and the span staged
   /// while an edge is being dragged.
@@ -286,6 +311,10 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
     // Kept rather than looked up again: `dispose` runs after the element is
     // deactivated, where an ancestor lookup is no longer safe.
     _ui = Provider.of<LumitUiState>(context, listen: false);
+    _share = Provider.of<LumitState>(context, listen: false).share
+      ..roster.addListener(_onRoster);
+    _sharing = _share!.active;
+    _laneKeys.addListener(_shareKeys);
     _cacheRevision = Listenable.merge([_ui!.frameArrived, _ui!.cacheChanged]);
     _ui!.activePane.addListener(_onActivePanel);
     _onActivePanel();
@@ -295,6 +324,9 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
 
   @override
   void dispose() {
+    _share?.roster.removeListener(_onRoster);
+    // With the panel gone nothing in it is selected, for the others either.
+    _share?.keys(const {}, from: 'audio');
     _escapeRelease?.call();
     _boundTools?.removeListener(_onToolChanged);
     _ui?.activePane.removeListener(_onActivePanel);
@@ -1382,13 +1414,12 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
     AudioTrackRow track,
     int index, {
     required int playhead,
-  }) =>
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // The pick rides on the shell's own list, so choosing a track
-          // repaints this row and its neighbour and rebuilds no panel.
-          ValueListenableBuilder<List<LayerReference>>(
+  }) {
+    // What the others in a shared project have in hand, by track and by row.
+    // Empty, and nothing walked, outside one.
+    final theirs = _sharing ? _share!.inHand(comp) : const <String, List<int>>{};
+    final onTrack = theirs[track.id] ?? const <int>[];
+    final head = ValueListenableBuilder<List<LayerReference>>(
             valueListenable: ui.selectedLayers,
             builder: (context, picked, _) => AudioTrackOutlineRow(
               key: ValueKey<String>('atl-row-${track.id}'),
@@ -1409,7 +1440,21 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
               onResize: (dy) => _resizeTrack(track, dy),
               onResizeStart: () => _rowCarry = 0,
             ),
-          ),
+          );
+    return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // The pick rides on the shell's own list, so choosing a track
+          // repaints this row and its neighbour and rebuilds no panel.
+          if (onTrack.isEmpty)
+            head
+          else
+            DecoratedBox(
+              position: DecorationPosition.foreground,
+              decoration:
+                  TheirBar([for (final c in onTrack) t.personColour(c)]),
+              child: head,
+            ),
           for (final row in track.drawnRows)
             FoldRow(
               key: ValueKey<String>('atl-prop-${foldRowPath(track.id, row)}'),
@@ -1422,6 +1467,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
               timingsColumn: const ValueColumn(0, 0),
               baseIndent: outlineGap + switchCellWidth * 3 + outlineGap,
               path: foldRowPath(track.id, row),
+              others: theirs[foldRowPath(track.id, row)] ?? const [],
               selectedProperties: _selectedProperties,
               graphColours: const {},
               onSelectProperty: _pickProperty,
@@ -1444,9 +1490,14 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
             ),
         ],
       );
+  }
 
-  void _pickProperty(String path) =>
-      setState(() => _selectedProperties = [path]);
+  void _pickProperty(String path) {
+    setState(() => _selectedProperties = [path]);
+    // This panel's picks are its own, so the others in a shared project are
+    // told of the row the way a panel with no selection tells them.
+    _ui?.touchProperty(path);
+  }
 
   /// *Detach audio* on a faded picture row: its sound goes onto an Audio layer
   /// of its own and the picture row is muted, which takes it off this list and
@@ -2364,10 +2415,22 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
     final keys = laneKeysOf(row);
     if (keys.isEmpty) return const SizedBox.shrink();
     final rowId = foldRowPath(track.id, row);
+    // The keys of this lane someone else has selected, in their colours.
+    final others = <int, List<Color>>{};
+    if (_sharing) {
+      final t = ThemeScope.of(context).theme;
+      final held = _share!.keysInHand(ui.selectedComp);
+      for (var i = 0; held.isNotEmpty && i < keys.length; i++) {
+        if (held['$rowId#$i'] case final colours?) {
+          others[i] = [for (final c in colours) t.personColour(c)];
+        }
+      }
+    }
     return ValueListenableBuilder<Set<String>>(
       valueListenable: _laneKeys,
       builder: (context, selected, _) => KeyLane(
         key: ValueKey<String>('atl-keys-$rowId'),
+        others: others,
         entry: track.entry,
         row: row,
         rowId: rowId,

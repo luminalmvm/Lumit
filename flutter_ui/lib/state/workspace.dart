@@ -784,6 +784,15 @@ class Workspace extends ChangeNotifier {
     save();
   }
 
+  /// Whether sharing a project asks the router to open its port, so people
+  /// outside this network can join.
+  bool shareOutside = false;
+
+  void setShareOutside(bool on) {
+    shareOutside = on;
+    save();
+  }
+
   /// The most projects [shareHosted] remembers.
   static const int maxShareHosted = 16;
 
@@ -1557,6 +1566,7 @@ class Workspace extends ChangeNotifier {
         'keymap': keymapJson,
         'audio_device': audioDevice,
         'share_name': shareName,
+        'share_outside': shareOutside,
         'share_hosted': shareHosted,
         'autosave_minutes': autosaveMinutes,
         'autosave_keep': autosaveKeep,
@@ -1645,6 +1655,7 @@ class Workspace extends ChangeNotifier {
     audioDevice = device is String && device.isNotEmpty ? device : null;
     final sharedAs = j['share_name'];
     shareName = sharedAs is String && sharedAs.isNotEmpty ? sharedAs : null;
+    shareOutside = j['share_outside'] is bool && j['share_outside'] as bool;
     shareHosted.clear();
     final hosted = j['share_hosted'];
     if (hosted is Map) {

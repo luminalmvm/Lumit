@@ -14423,9 +14423,9 @@
   "@shareInviteCopied": {
     "description": "Bottom-strip notice after the Copy invite button is pressed."
   },
-  "shareHostHint": "Anyone with the invite can join and edit until you stop sharing. People outside your network need a VPN, or this port forwarded to this computer.",
+  "shareHostHint": "Anyone with the invite can join and edit until you stop sharing.",
   "@shareHostHint": {
-    "description": "Quiet lines under the invite in the Shared project window, shown to the host."
+    "description": "Quiet line on the Share this project page of the Shared project window, under the fields."
   },
   "sharePeople": "People",
   "@sharePeople": {
@@ -14738,5 +14738,38 @@
   "sendToBack": "Send to back",
   "@sendToBack": {
     "description": "Menu item: move a layer to the bottom of the stack."
+  },
+  "shareOutside": "Internet",
+  "@shareOutside": {
+    "description": "Row label on the Share this project page of the Shared project window, beside a tick box that lets people who are not on the same local network join."
+  },
+  "shareOutsideAsk": "Let people outside this network join",
+  "@shareOutsideAsk": {
+    "description": "Text beside the tick box on the Internet row of the Share this project page. When ticked, Lumit asks the home router to open the sharing port, so friends elsewhere can join without a VPN."
+  },
+  "shareReachOff": "People outside your network need a VPN, or this port forwarded to this computer.",
+  "@shareReachOff": {
+    "description": "Quiet line under the invite in the Shared project window, shown to a host who left the Internet box unticked."
+  },
+  "shareReachAsking": "Asking your router to open the port…",
+  "@shareReachAsking": {
+    "description": "Quiet line under the invite in the Shared project window, shown to a host for a second or two after sharing starts, while Lumit asks the home router to let people outside the network in."
+  },
+  "shareReachOpen": "People outside your network can join with this invite. On your own network the address is {address}.",
+  "@shareReachOpen": {
+    "description": "Quiet line under the invite in the Shared project window, shown to a host once the router has opened the port. The invite above now carries the public address. {address} is this computer's address on the local network, for someone in the same house.",
+    "placeholders": {
+      "address": {
+        "type": "String"
+      }
+    }
+  },
+  "shareReachRefused": "Your router would not open the port. People outside your network need a VPN, or the port forwarded to this computer.",
+  "@shareReachRefused": {
+    "description": "Warning line under the invite in the Shared project window, shown to a host when no router answered or the router refused to open the sharing port."
+  },
+  "shareReachBehind": "Your router has no address of its own on the internet, so people outside your network need a VPN.",
+  "@shareReachBehind": {
+    "description": "Warning line under the invite in the Shared project window, shown to a host whose router sits behind another router or behind an address the internet provider shares between customers, so opening its port would reach nobody."
   }
 }

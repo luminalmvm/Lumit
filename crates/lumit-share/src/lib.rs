@@ -9,13 +9,15 @@
 //! and the guests reach it directly, over a LAN or a VPN.
 //!
 //! Threads: sharing runs its own and none is the UI thread. The host has one
-//! that accepts, and a reader and a writer per guest. A guest has a reader and
-//! a writer.
+//! that accepts, a reader and a writer per guest, and one that keeps its
+//! router's port open when it was asked to. A guest has a reader and a
+//! writer.
 
 mod guest;
 mod host;
 mod kept;
 mod local;
+mod reach;
 mod wire;
 
 pub use guest::{join, resume, Guest, Joining, Resuming};
@@ -48,13 +50,31 @@ pub struct Presence {
     pub playhead: Option<CompTime>,
     /// Their pointer over the Viewer, in composition pixels.
     pub cursor: Option<(f64, f64)>,
+    /// The property rows they have selected in the Timeline, and the
+    /// keyframes, each by the name the interface knows it by. Nothing here
+    /// reads them: they are only handed to the other interfaces to match
+    /// against their own rows.
+    #[serde(default)]
+    pub properties: Vec<String>,
+    #[serde(default)]
+    pub keys: Vec<String>,
 }
+
+/// The most property rows and keyframes one person's selection is relayed
+/// with, and the longest name any of them goes by.
+const MARKED_PROPERTIES: usize = 256;
+const MARKED_KEYS: usize = 2048;
+const MARK_LENGTH: usize = 256;
 
 impl Presence {
     /// Cut down to what is worth relaying, whoever sent it.
     fn tidied(mut self) -> Self {
         self.layers.truncate(256);
         self.cursor = self.cursor.filter(|(x, y)| x.is_finite() && y.is_finite());
+        self.properties.retain(|name| name.len() <= MARK_LENGTH);
+        self.properties.truncate(MARKED_PROPERTIES);
+        self.keys.retain(|name| name.len() <= MARK_LENGTH);
+        self.keys.truncate(MARKED_KEYS);
         self
     }
 }
@@ -78,6 +98,27 @@ pub enum Refusal {
     Version { host: String },
     /// The project already has [`MAX_PEOPLE`] in it.
     Full,
+}
+
+/// Whether people outside the host's network can reach it.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum Reach {
+    /// The router was not asked. Only people on the host's own network, or
+    /// on a VPN with it, or through a port forwarded by hand, can join.
+    #[default]
+    Off,
+    /// The router is being asked.
+    Asking,
+    /// The router sends the port to this machine. `address` is the one it
+    /// has on the internet, which is what goes in an invite for someone
+    /// outside.
+    Open { address: String },
+    /// No router answered, or the one that did would not open the port.
+    Refused,
+    /// The router is not on the internet itself: it sits behind another, or
+    /// behind an address its provider shares between customers. Opening its
+    /// port would reach nobody.
+    Behind,
 }
 
 /// Why sharing stopped for a guest.
@@ -110,6 +151,9 @@ pub enum Event {
     Elsewhere,
     /// Sharing is over for this guest. The document stays as it is.
     Ended(Ending),
+    /// For a host: what came of asking its router to let people outside
+    /// the network in.
+    Reach(Reach),
 }
 
 /// Where those events go. Called from the share threads with no lock held.

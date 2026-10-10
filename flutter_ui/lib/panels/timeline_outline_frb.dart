@@ -649,8 +649,9 @@ class TimelineSelection {
   /// Each selected path's graph line colours, for tinting its label.
   final Map<String, List<Color>> colours;
 
-  /// What the other people in a shared project have selected: by layer id, the
-  /// colour of each person who has that layer selected.
+  /// What the other people in a shared project have selected: by layer id
+  /// or property path, the colour of each person who has it selected. A
+  /// layer is here too when it is a property or a keyframe on it they hold.
   final Map<String, List<int>> others;
 }
 
@@ -663,6 +664,7 @@ class LayerSelection {
     required this.properties,
     required this.colours,
     this.others = const [],
+    this.otherProperties = const {},
   });
 
   /// Whether this layer is one of the selected ones — what its row and its bar
@@ -672,8 +674,12 @@ class LayerSelection {
   final List<String> properties;
   final Map<String, List<Color>> colours;
 
-  /// The colour of each other person who has this layer selected.
+  /// The colour of each other person who has this layer selected, or
+  /// something on it.
   final List<int> others;
+
+  /// The same for this layer's property rows, by path.
+  final Map<String, List<int>> otherProperties;
 
   static LayerSelection of(TimelineSelection all, String layerId) {
     final mine = [
@@ -691,6 +697,10 @@ class LayerSelection {
           if (all.colours[path] case final line?) path: line,
       },
       others: all.others[layerId] ?? const [],
+      otherProperties: {
+        for (final held in all.others.entries)
+          if (isUnderPath(layerId, held.key)) held.key: held.value,
+      },
     );
   }
 
@@ -702,6 +712,12 @@ class LayerSelection {
     if (highlighted != other.highlighted) return false;
     if (!listEquals(properties, other.properties)) return false;
     if (!listEquals(others, other.others)) return false;
+    if (otherProperties.length != other.otherProperties.length) return false;
+    for (final held in otherProperties.entries) {
+      if (!listEquals(held.value, other.otherProperties[held.key])) {
+        return false;
+      }
+    }
     if (colours.length != other.colours.length) return false;
     for (final entry in colours.entries) {
       if (!listEquals(entry.value, other.colours[entry.key])) return false;
@@ -971,6 +987,9 @@ class Outline extends StatelessWidget {
                     timingsColumn: timingsColumn,
                     baseIndent: baseIndent,
                     path: foldRowPath(rows[i].id, row),
+                    others: mine.otherProperties[
+                            foldRowPath(rows[i].id, row)] ??
+                        const [],
                     selectedProperties: mine.properties,
                     graphColours: mine.colours,
                     onSelectProperty: onSelectProperty,
@@ -1041,6 +1060,9 @@ class Outline extends StatelessWidget {
                       timingsColumn: timingsColumn,
                       baseIndent: baseIndent,
                       path: foldRowPath(rows[i].id, row),
+                      others: mine.otherProperties[
+                              foldRowPath(rows[i].id, row)] ??
+                          const [],
                       selectedProperties: mine.properties,
                       graphColours: mine.colours,
                       onSelectProperty: onSelectProperty,

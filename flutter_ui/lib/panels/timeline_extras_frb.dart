@@ -29,12 +29,13 @@ import '../icons/lumit_icons.dart';
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../shell/comp_settings_frb.dart';
+import '../shell/dock_widget.dart' show DockPaneHandle;
 import '../state/comp_time.dart';
 import '../state/timeline_columns.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/drag_escape.dart';
-import 'timeline_metrics_frb.dart' show TimelineMode;
+import 'timeline_metrics_frb.dart' show TimelineMode, laneKeyHalf;
 import 'timeline_snap.dart';
 
 /// The Timeline's **panel header strip** (§12A.1, §12A.6: 22 tall): the panel's
@@ -97,10 +98,13 @@ class CompTabsFrb extends StatelessWidget {
           // The panel's own name, ahead of the tabs (§12A.1). A kicker like
           // every other panel title (§7.1), and lit because the Timeline is
           // the container these tabs belong to rather than one of them.
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Text(t.kickerCase(title ?? l10n.panelTimeline),
-                style: t.kickerOn),
+          // It lifts the pane too, since a Timeline standing alone has no tab.
+          DockPaneHandle(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Text(t.kickerCase(title ?? l10n.panelTimeline),
+                  style: t.kickerOn),
+            ),
           ),
           Expanded(child: _strip(context, t, comps, selected)),
           // The single filled action this surface is allowed (§3.1, §12A.1):
@@ -170,9 +174,10 @@ class CompTabsFrb extends StatelessWidget {
       child: Stack(
         alignment: Alignment.centerLeft,
         children: [
-          // Behind the controls, so the words centre on the line itself.
+          // Behind the controls, so the words centre on the line itself. The
+          // empty line round them lifts the pane.
           Positioned.fill(
-            child: IgnorePointer(
+            child: DockPaneHandle(
               child: Center(
                 child: Text(t.kickerCase(title ?? l10n.panelTimeline),
                     key: const ValueKey('tl-title'), style: t.kickerOn),
@@ -2897,6 +2902,92 @@ class SharePlayheads extends StatelessWidget {
       ),
     );
   }
+}
+
+/// The keyframes the others in a shared project have selected in the lanes,
+/// each ringed in its person's colour.
+///
+/// It listens to the roster, which moves when someone's selection does and
+/// not for a playhead or a pointer, and it is the only thing that rebuilds
+/// then. With nobody holding a keyframe it walks nothing and draws nothing.
+class ShareKeys extends StatelessWidget {
+  const ShareKeys({super.key, required this.comp, required this.places});
+
+  final CompositionReference comp;
+
+  /// Where each keyframe named in `held` sits in the lanes, with the
+  /// colours it was named with. A name with no keyframe on screen answers
+  /// nothing.
+  final List<(Offset, List<int>)> Function(Map<String, List<int>> held) places;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    final share = Provider.of<LumitState>(context, listen: false).share;
+    return IgnorePointer(
+      child: ListenableBuilder(
+        listenable: share.roster,
+        builder: (context, _) {
+          final held = <String, List<int>>{};
+          for (final person in share.inComp(comp)) {
+            for (final key in person.keys) {
+              (held[key] ??= []).add(person.colour);
+            }
+          }
+          if (held.isEmpty) return const SizedBox.shrink();
+          return CustomPaint(
+            key: const ValueKey<String>('tl-share-keys'),
+            painter: _ShareKeysPainter([
+              for (final (at, colours) in places(held))
+                for (var i = 0; i < colours.length; i++)
+                  (at, t.personColour(colours[i]), i),
+            ]),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _ShareKeysPainter extends CustomPainter {
+  const _ShareKeysPainter(this.marks);
+
+  /// Each ring: where, whose colour, and how many rings are inside it. Two
+  /// people on one keyframe get a ring each, one outside the other.
+  final List<(Offset, Color, int)> marks;
+
+  /// How far the first ring stands off the keyframe's own mark, and each
+  /// further one off the ring inside it.
+  static const double _reach = laneKeyHalf + 3;
+  static const double _step = 3;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final clip = canvas.getLocalClipBounds();
+    final ring = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+    for (final (at, colour, inside) in marks) {
+      final reach = _reach + _step * inside;
+      if (at.dx < clip.left - reach || at.dx > clip.right + reach) continue;
+      ring.color = colour;
+      canvas.drawPath(
+        Path()
+          ..moveTo(at.dx, at.dy - reach)
+          ..lineTo(at.dx + reach, at.dy)
+          ..lineTo(at.dx, at.dy + reach)
+          ..lineTo(at.dx - reach, at.dy)
+          ..close(),
+        ring,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_ShareKeysPainter old) => !listEquals(old.marks, marks);
+
+  @override
+  bool? hitTest(Offset position) => false;
 }
 
 /// The playhead's head: a downward triangle with the hairline carried up into

@@ -706,16 +706,25 @@ class ProjectReference {
   ///
   /// `name` is what the others see this person called. Port 0 takes any
   /// free one. `key` is what the last [`BridgeShareStarted::Sharing`] for
-  /// this project gave, or `None` for a new invite. `events` is optional
-  /// the way a project's change stream is, and for the same reason: nothing
-  /// about sharing depends on someone watching.
+  /// this project gave, or `None` for a new invite. `outside` asks this
+  /// network's router to send the port here, so people outside the network
+  /// can join without a VPN. It answers later, as a
+  /// [`BridgeShareEvent::Reach`]. `events` is optional the way a project's
+  /// change stream is, and for the same reason: nothing about sharing
+  /// depends on someone watching.
   BridgeShareStarted share(
           {required String name,
           required int port,
           String? key,
+          required bool outside,
           RustStreamSink<BridgeShareEvent>? events}) =>
       BridgeLib.instance.api.crateApiProjectProjectReferenceShare(
-          that: this, name: name, port: port, key: key, events: events);
+          that: this,
+          name: name,
+          port: port,
+          key: key,
+          outside: outside,
+          events: events);
 
   /// The conflicts a merge left for this guest to choose between, in the
   /// order [`Self::share_resolve`] indexes them.
@@ -754,21 +763,35 @@ class ProjectReference {
 
   /// Tell the others what this person is looking at: the composition open,
   /// the layers selected in it, the playhead's frame, and the pointer over
-  /// the Viewer in composition pixels. Does nothing when the project is not
-  /// shared. Latest wins, so call it as often as any of them changes.
+  /// the Viewer in composition pixels. `properties` and `keys` are the
+  /// property rows and the keyframes selected in the Timeline, by whatever
+  /// names the frontend matches its own rows with, which the engine passes
+  /// on unread. Does nothing when the project is not shared. Latest wins,
+  /// so call it as often as any of them changes.
   void sharePresence(
           {CompositionReference? comp,
           required List<LayerReference> layers,
           PlatformInt64? playhead,
           double? cursorX,
-          double? cursorY}) =>
+          double? cursorY,
+          required List<String> properties,
+          required List<String> keys}) =>
       BridgeLib.instance.api.crateApiProjectProjectReferenceSharePresence(
           that: this,
           comp: comp,
           layers: layers,
           playhead: playhead,
           cursorX: cursorX,
-          cursorY: cursorY);
+          cursorY: cursorY,
+          properties: properties,
+          keys: keys);
+
+  /// Whether people outside this network can get in, while this machine
+  /// hosts the project. The events carry it as it changes.
+  BridgeShareReach shareReach() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceShareReach(
+        that: this,
+      );
 
   /// Give a guest that has lost its host a new invite to look for it by,
   /// for a host that has moved or made a new one. False when the text is

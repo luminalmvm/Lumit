@@ -18,8 +18,8 @@ import 'solid.dart';
 import 'state.dart';
 part 'share.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `describe`, `ending`, `events_for`, `let_go`, `person`, `resume`, `saved`, `saving`, `stop_all`, `stop`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `describe`, `ending`, `events_for`, `let_go`, `person`, `reach`, `resume`, `saved`, `saving`, `stop_all`, `stop`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// The port a host listens on unless the person picks another.
 int shareDefaultPort() =>
@@ -159,6 +159,12 @@ sealed class BridgeShareEvent with _$BridgeShareEvent {
   const factory BridgeShareEvent.ended({
     required BridgeShareEnding reason,
   }) = BridgeShareEvent_Ended;
+
+  /// For a host: what came of asking the router to let people outside
+  /// this network in.
+  const factory BridgeShareEvent.reach({
+    required BridgeShareReach reach,
+  }) = BridgeShareEvent_Reach;
 }
 
 /// One person in a shared project, and what they are looking at.
@@ -185,6 +191,11 @@ class BridgeSharePerson {
   final double? cursorX;
   final double? cursorY;
 
+  /// The property rows they have selected in the Timeline and the
+  /// keyframes, as the frontend named them in [`ProjectReference::share_presence`].
+  final List<String> properties;
+  final List<String> keys;
+
   const BridgeSharePerson({
     required this.id,
     required this.name,
@@ -195,6 +206,8 @@ class BridgeSharePerson {
     this.playhead,
     this.cursorX,
     this.cursorY,
+    required this.properties,
+    required this.keys,
   });
 
   @override
@@ -207,7 +220,9 @@ class BridgeSharePerson {
       layers.hashCode ^
       playhead.hashCode ^
       cursorX.hashCode ^
-      cursorY.hashCode;
+      cursorY.hashCode ^
+      properties.hashCode ^
+      keys.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -222,7 +237,34 @@ class BridgeSharePerson {
           layers == other.layers &&
           playhead == other.playhead &&
           cursorX == other.cursorX &&
-          cursorY == other.cursorY;
+          cursorY == other.cursorY &&
+          properties == other.properties &&
+          keys == other.keys;
+}
+
+@freezed
+sealed class BridgeShareReach with _$BridgeShareReach {
+  const BridgeShareReach._();
+
+  /// The router was not asked. People outside need a VPN, or the port
+  /// forwarded by hand.
+  const factory BridgeShareReach.off() = BridgeShareReach_Off;
+
+  /// The router is being asked to open the port.
+  const factory BridgeShareReach.asking() = BridgeShareReach_Asking;
+
+  /// The router sends the port to this machine. `address` is the one it
+  /// has on the internet, for the invite of someone outside.
+  const factory BridgeShareReach.open({
+    required String address,
+  }) = BridgeShareReach_Open;
+
+  /// No router answered, or it would not open the port.
+  const factory BridgeShareReach.refused() = BridgeShareReach_Refused;
+
+  /// The router is behind another, or behind an address its provider
+  /// shares, so its port opens onto nobody.
+  const factory BridgeShareReach.behind() = BridgeShareReach_Behind;
 }
 
 @freezed

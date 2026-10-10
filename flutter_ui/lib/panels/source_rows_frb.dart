@@ -76,6 +76,8 @@ class _SourceRowsFrbState extends State<SourceRowsFrb> {
 
     return FxSection(
       title: l10n.sourceSection,
+      // The Timeline has no rows for these, so the name is this panel's own.
+      scope: '${widget.layer.internallayerId}/source',
       open: widget.open,
       onToggle: widget.onToggle,
       rows: rows,

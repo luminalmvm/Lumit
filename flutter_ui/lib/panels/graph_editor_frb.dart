@@ -134,6 +134,12 @@ class GraphEditorFrb extends StatefulWidget {
   /// The selected keys, as `channelId#index` — owned by the Timeline panel so
   /// the bottom bar and the shortcuts act on the same set.
   final Set<String> selectedKeys;
+
+  /// The keys the other people in a shared project have selected, as
+  /// `channelId#index`, with the colour of each person who holds it. Each
+  /// is drawn with a ring in that colour, one outside the other when it is
+  /// several people. Empty outside a shared project.
+  final Map<String, List<int>> otherKeys;
   final VoidCallback onSelectionChanged;
   final VoidCallback onChanged;
 
@@ -159,6 +165,7 @@ class GraphEditorFrb extends StatefulWidget {
     this.penArmed = false,
     this.breakHandles = false,
     required this.selectedKeys,
+    this.otherKeys = const {},
     required this.onSelectionChanged,
     required this.onChanged,
     required this.onWheelTime,
@@ -2118,6 +2125,8 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
               // that drops the selection also takes the handles away.
               // Speed lens: the dot is on top — it is the keyframe itself, and
               // its influence bar runs out sideways from underneath it.
+              if (widget.otherKeys.isNotEmpty)
+                ..._otherKeyRings(t, range, height),
               if (widget.lens == GraphLens.value) ...[
                 ..._keyHandles(t, range, height),
                 ..._tangentHandles(range, height),
@@ -2389,6 +2398,40 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
       ];
     }
     return const [];
+  }
+
+  /// A ring round each key someone else in a shared project has selected,
+  /// in their colour. Under the key glyphs, and never in the pointer's way.
+  List<Widget> _otherKeyRings(
+      LumitTheme t, (double, double) range, double height) {
+    final out = <Widget>[];
+    for (final channel in widget.channels) {
+      for (var i = 0; i < channel.keys.length; i++) {
+        final colours = widget.otherKeys['${channel.id}#$i'];
+        if (colours == null) continue;
+        final point = _keyPoint(channel, i, range, height, isOut: true);
+        for (var held = 0; held < colours.length; held++) {
+          final ring = _keyGrab + 2 + 6.0 * held;
+          out.add(Positioned(
+            key: ValueKey<String>('graph-share-key-${channel.id}#$i-$held'),
+            left: point.dx - ring / 2,
+            top: point.dy - ring / 2,
+            width: ring,
+            height: ring,
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                      color: t.personColour(colours[held]), width: 1.5),
+                ),
+              ),
+            ),
+          ));
+        }
+      }
+    }
+    return out;
   }
 
   /// The grabbable key glyphs.
