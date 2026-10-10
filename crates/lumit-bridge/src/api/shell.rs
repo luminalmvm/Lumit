@@ -104,7 +104,10 @@ pub fn set_full_res_drag_previews(full_res: bool) {
 /// already open wants reopening. Held the way the drag setting above is.
 #[frb(sync)]
 pub fn set_hardware_decode(on: bool) {
+    #[cfg(feature = "media")]
     lumit_media::set_hardware_decode(on);
+    #[cfg(not(feature = "media"))]
+    let _ = on;
 }
 
 /// One rotating autosave beside a project.
