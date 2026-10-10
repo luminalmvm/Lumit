@@ -13299,10 +13299,12 @@ fn wire__crate__api__layer__layer_reference_set_parent_impl(
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_that = <crate::api::layer::LayerReference>::sse_decode(&mut deserializer);
             let api_parent = <Option<uuid::Uuid>>::sse_decode(&mut deserializer);
+            let api_frame = <i64>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, BridgeError>((move || {
-                let output_ok =
-                    crate::api::layer::LayerReference::set_parent(&api_that, api_parent)?;
+                let output_ok = crate::api::layer::LayerReference::set_parent(
+                    &api_that, api_parent, api_frame,
+                )?;
                 Ok(output_ok)
             })())
         },

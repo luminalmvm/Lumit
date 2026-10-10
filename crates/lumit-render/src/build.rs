@@ -293,39 +293,151 @@ pub fn parent_world_placement(
         let Some(a) = comp.layers.iter().find(|l| l.id == *ancestor_id) else {
             continue;
         };
-        let alt = lumit_core::time::layer_time(t_comp, a.start_offset.0);
-        let tr = &a.transform;
-        // An ancestor's own expressions are about the ancestor: `layer()`,
-        // `cut_in` and `cut_out` must resolve to the layer being evaluated, not
-        // to the child that started the walk up the chain.
-        let context = Arc::new(ExpressionContext {
-            layer: Some(a.id),
-            ..(*context).clone()
-        });
-        let p = lumit_gpu::place_matrix(
-            (
-                tr.position_x.value_at_with_context(alt, context.clone()) as f32,
-                tr.position_y.value_at_with_context(alt, context.clone()) as f32,
-            ),
-            (
-                tr.anchor_x.value_at_with_context(alt, context.clone()) as f32,
-                tr.anchor_y.value_at_with_context(alt, context.clone()) as f32,
-            ),
-            (
-                tr.scale_x.value_at_with_context(alt, context.clone()) as f32,
-                tr.scale_y.value_at_with_context(alt, context.clone()) as f32,
-            ),
-            tr.rotation.value_at_with_context(alt, context.clone()) as f32,
-            tr.position_z.value_at_with_context(alt, context.clone()) as f32,
-            tr.rotation_x.value_at_with_context(alt, context.clone()) as f32,
-            tr.rotation_y.value_at_with_context(alt, context.clone()) as f32,
-        );
+        let p = own_placement(a, t_comp, &context);
         world = Some(match world {
             Some(w) => lumit_gpu::concat_place(w, p),
             None => p,
         });
     }
     world
+}
+
+/// `layer`'s own placement at comp time `t_comp`, before any parent's.
+fn own_placement(
+    layer: &lumit_core::model::Layer,
+    t_comp: f64,
+    context: &Arc<ExpressionContext>,
+) -> [[f32; 4]; 4] {
+    let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
+    let tr = &layer.transform;
+    // A layer's own expressions are about that layer: `layer()`, `cut_in` and
+    // `cut_out` must resolve to the layer being evaluated, not to the child
+    // that started the walk up the chain.
+    let context = Arc::new(ExpressionContext {
+        layer: Some(layer.id),
+        ..(**context).clone()
+    });
+    lumit_gpu::place_matrix(
+        (
+            tr.position_x.value_at_with_context(lt, context.clone()) as f32,
+            tr.position_y.value_at_with_context(lt, context.clone()) as f32,
+        ),
+        (
+            tr.anchor_x.value_at_with_context(lt, context.clone()) as f32,
+            tr.anchor_y.value_at_with_context(lt, context.clone()) as f32,
+        ),
+        (
+            tr.scale_x.value_at_with_context(lt, context.clone()) as f32,
+            tr.scale_y.value_at_with_context(lt, context.clone()) as f32,
+        ),
+        tr.rotation.value_at_with_context(lt, context.clone()) as f32,
+        tr.position_z.value_at_with_context(lt, context.clone()) as f32,
+        tr.rotation_x.value_at_with_context(lt, context.clone()) as f32,
+        tr.rotation_y.value_at_with_context(lt, context.clone()) as f32,
+    )
+}
+
+/// The transform edits that keep `layer` where it is at comp time `t_comp`
+/// when its parent becomes `new_parent`. Taking a parent, losing one or
+/// swapping one changes what the layer follows from then on. It must not move
+/// the picture on the frame it happens.
+///
+/// A parented layer's values are read inside its parent's space, so the same
+/// numbers under a new parent land somewhere else. This works out the numbers
+/// that land it where it already was: position, scale and the three rotations.
+/// The anchor point stays, and opacity is not inherited. A property that
+/// already reads right is left out, and so is one driven by an expression.
+///
+/// ponytail: a keyed property moves as a whole, each axis on its own, so its
+/// other keys only hold their place under a parent that is not turned. Carry
+/// position keys as x, y pairs if a turned parent needs it.
+pub fn reparented(
+    comp: &lumit_core::model::Composition,
+    layer: &lumit_core::model::Layer,
+    new_parent: Option<Uuid>,
+    t_comp: f64,
+    context: Arc<ExpressionContext>,
+) -> Vec<(
+    lumit_core::model::TransformProp,
+    lumit_core::anim::Animation,
+)> {
+    use lumit_core::anim::Animation;
+    use lumit_core::model::TransformProp as P;
+
+    // A camera or a light does not follow its parent yet, so it has nothing
+    // to make up.
+    if matches!(
+        layer.kind,
+        lumit_core::model::LayerKind::Camera { .. } | lumit_core::model::LayerKind::Light { .. }
+    ) {
+        return Vec::new();
+    }
+    let identity = lumit_gpu::Mat4::IDENTITY.to_cols_array_2d();
+    let was = parent_world_placement(comp, layer, t_comp, context.clone()).unwrap_or(identity);
+    let now = match new_parent.and_then(|id| comp.layers.iter().find(|l| l.id == id)) {
+        Some(parent) => {
+            let own = own_placement(parent, t_comp, &context);
+            match parent_world_placement(comp, parent, t_comp, context.clone()) {
+                Some(world) => lumit_gpu::concat_place(world, own),
+                None => own,
+            }
+        }
+        None => identity,
+    };
+    let Some(out) = lumit_gpu::invert_place(now).filter(|_| was != now) else {
+        return Vec::new();
+    };
+    // Out of the old parent's space and into the new one's.
+    let carry = lumit_gpu::concat_place(out, was);
+
+    let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
+    let tr = &layer.transform;
+    let at = |p: &lumit_core::anim::Property| p.value_at_with_context(lt, context.clone());
+    let to = lumit_gpu::unplace_matrix(
+        lumit_gpu::concat_place(carry, own_placement(layer, t_comp, &context)),
+        (at(&tr.anchor_x) as f32, at(&tr.anchor_y) as f32),
+    );
+    // A flip can be written two ways: one axis negative, or the other one
+    // negative and half a turn. Keep the way the layer already has it.
+    let (sx, sy, rz) = if f64::from(to.scale.0) * at(&tr.scale_x) < 0.0 {
+        (-to.scale.0, -to.scale.1, to.rotation_deg + 180.0)
+    } else {
+        (to.scale.0, to.scale.1, to.rotation_deg)
+    };
+
+    let mut edits = Vec::new();
+    // `gain` is what a keyed property's other keys are scaled by. `None` is a
+    // scale, which goes by its own ratio.
+    let mut edit = |prop: P, to: f32, turns: bool, gain: Option<f64>| {
+        let Some(property) = tr.get(prop) else { return };
+        let from = at(property);
+        let mut delta = f64::from(to) - from;
+        if turns {
+            // The nearest way round, so a layer three turns in stays there.
+            delta = (delta + 180.0).rem_euclid(360.0) - 180.0;
+        }
+        // The matrices are f32. Past a thousandth it is their noise.
+        let delta = (delta * 1e3).round() / 1e3;
+        if delta == 0.0 || !delta.is_finite() {
+            return;
+        }
+        let gain = gain.unwrap_or((from + delta) / from);
+        let animation = match &property.animation {
+            Animation::Static(v) => Some(Animation::Static(v + delta)),
+            keyed => lumit_core::ops::remapped(keyed, gain, from + delta - gain * from),
+        };
+        edits.extend(animation.map(|a| (prop, a)));
+    };
+    let along = |axis: usize| Some(f64::from(carry[axis][axis]));
+    edit(P::PositionX, to.position.0, false, along(0));
+    edit(P::PositionY, to.position.1, false, along(1));
+    edit(P::PositionZ, to.z, false, along(2));
+    edit(P::ScaleX, sx, false, None);
+    edit(P::ScaleY, sy, false, None);
+    edit(P::Rotation, rz, true, Some(1.0));
+    edit(P::RotationX, to.rotation_x_deg, true, Some(1.0));
+    edit(P::RotationY, to.rotation_y_deg, true, Some(1.0));
+    edits
 }
 
 /// Where the composition's camera puts a particle that sits off `layer`'s own
@@ -5208,6 +5320,57 @@ mod parent_placement_tests {
                 .unwrap();
         let expected = lumit_gpu::concat_place(place_of(&gp), place_of(&parent));
         assert_eq!(world, expected);
+    }
+
+    #[test]
+    fn taking_and_losing_a_parent_leaves_the_layer_where_it_was() {
+        let ctx = || Arc::new(ExpressionContext::detached());
+        let world = |c: &Composition, l: &Layer| {
+            let own = own_placement(l, 0.0, &ctx());
+            match parent_world_placement(c, l, 0.0, ctx()) {
+                Some(pre) => lumit_gpu::concat_place(pre, own),
+                None => own,
+            }
+        };
+        // A scaled parent and a tilted one are separate rigs: scale has no z,
+        // so a tilt under a scaled parent has no exact answer.
+        for tilted in [false, true] {
+            let (tilt, scale) = if tilted { (15.0, 100.0) } else { (0.0, 50.0) };
+            let mut gp = layer(10.0, 20.0, None);
+            gp.transform.rotation_y = Property::fixed(tilt);
+            let mut parent = layer(100.0, 40.0, Some(gp.id));
+            parent.transform.anchor_x = Property::fixed(7.0);
+            parent.transform.rotation = Property::fixed(30.0);
+            parent.transform.scale_x = Property::fixed(scale);
+            parent.transform.scale_y = Property::fixed(scale);
+            // Flipped, more than a turn round and tilted: the awkward ones to
+            // read back out of a matrix.
+            let mut child = layer(5.0, 60.0, None);
+            child.transform.anchor_y = Property::fixed(4.0);
+            child.transform.rotation = Property::fixed(400.0);
+            child.transform.rotation_x = Property::fixed(tilt);
+            child.transform.scale_x = Property::fixed(80.0);
+            child.transform.scale_y = Property::fixed(-80.0);
+
+            let before = world(&comp(vec![child.clone()]), &child);
+            for new_parent in [Some(parent.id), None] {
+                let c = comp(vec![gp.clone(), parent.clone(), child.clone()]);
+                let edits = reparented(&c, &child, new_parent, 0.0, ctx());
+                assert!(!edits.is_empty());
+                for (prop, animation) in edits {
+                    child.transform.get_mut(prop).unwrap().animation = animation;
+                }
+                child.parent = new_parent;
+                let c = comp(vec![gp.clone(), parent.clone(), child.clone()]);
+                let after = world(&c, &child);
+                for (b, a) in before.iter().flatten().zip(after.iter().flatten()) {
+                    assert!((b - a).abs() < 1e-2, "{before:?} became {after:?}");
+                }
+            }
+            // Back where it started, in the numbers too.
+            assert!((child.transform.rotation.value_at(0.0) - 400.0).abs() < 1e-2);
+            assert!((child.transform.scale_y.value_at(0.0) + 80.0).abs() < 1e-2);
+        }
     }
 }
 

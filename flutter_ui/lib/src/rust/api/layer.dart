@@ -3579,8 +3579,13 @@ class LayerReference {
   /// A self-parent, an unknown layer, or one that would close a cycle is
   /// refused by the op — a parent loop has no defined transform, so unlike a
   /// dangling matte it cannot be allowed to exist and be ignored later.
-  void setParent({UuidValue? parent}) => BridgeLib.instance.api
-      .crateApiLayerLayerReferenceSetParent(that: this, parent: parent);
+  ///
+  /// **The layer does not move.** Its transform is rewritten in the same
+  /// undo step so it sits where it sat at `frame`, the playhead. Only what
+  /// the parent does afterwards carries it.
+  void setParent({UuidValue? parent, required PlatformInt64 frame}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSetParent(
+          that: this, parent: parent, frame: frame);
 
   /// Give this layer a puppet, replace the one it has, or take it away.
   ///
