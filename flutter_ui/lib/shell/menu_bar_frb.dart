@@ -758,7 +758,7 @@ class LumitMenuBarFrb extends StatelessWidget {
       final layer = ui.selectedLayer.value;
       if (layer == null) return;
       try {
-        layer.loadPreset(text: File(preset.path).readAsStringSync());
+        layer.loadPreset(text: readEffectPreset(path: preset.path));
       } catch (_) {
         return;
       }

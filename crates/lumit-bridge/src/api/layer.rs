@@ -2614,17 +2614,38 @@ impl BridgeTransform {
         target: &mut lumit_core::model::TransformGroup,
         offset: Rational,
     ) -> Result<(), BridgeError> {
-        target.anchor_x.animation = self.anchor_x.animation_at(offset)?;
-        target.anchor_y.animation = self.anchor_y.animation_at(offset)?;
-        target.position_x.animation = self.position_x.animation_at(offset)?;
-        target.position_y.animation = self.position_y.animation_at(offset)?;
-        target.position_z.animation = self.position_z.animation_at(offset)?;
-        target.scale_x.animation = self.scale_x.animation_at(offset)?;
-        target.scale_y.animation = self.scale_y.animation_at(offset)?;
-        target.rotation.animation = self.rotation.animation_at(offset)?;
-        target.rotation_x.animation = self.rotation_x.animation_at(offset)?;
-        target.rotation_y.animation = self.rotation_y.animation_at(offset)?;
-        target.opacity.animation = self.opacity.animation_at(offset)?;
+        self.anchor_x
+            .put(&mut target.anchor_x, self.anchor_x.animation_at(offset)?);
+        self.anchor_y
+            .put(&mut target.anchor_y, self.anchor_y.animation_at(offset)?);
+        self.position_x.put(
+            &mut target.position_x,
+            self.position_x.animation_at(offset)?,
+        );
+        self.position_y.put(
+            &mut target.position_y,
+            self.position_y.animation_at(offset)?,
+        );
+        self.position_z.put(
+            &mut target.position_z,
+            self.position_z.animation_at(offset)?,
+        );
+        self.scale_x
+            .put(&mut target.scale_x, self.scale_x.animation_at(offset)?);
+        self.scale_y
+            .put(&mut target.scale_y, self.scale_y.animation_at(offset)?);
+        self.rotation
+            .put(&mut target.rotation, self.rotation.animation_at(offset)?);
+        self.rotation_x.put(
+            &mut target.rotation_x,
+            self.rotation_x.animation_at(offset)?,
+        );
+        self.rotation_y.put(
+            &mut target.rotation_y,
+            self.rotation_y.animation_at(offset)?,
+        );
+        self.opacity
+            .put(&mut target.opacity, self.opacity.animation_at(offset)?);
         Ok(())
     }
 }
@@ -6433,16 +6454,11 @@ impl LayerReference {
         if props.is_empty() {
             return Ok(());
         }
-        let offset = self.item()?.start_offset.0;
+        let layer = self.item()?;
 
         let mut ops = Vec::with_capacity(props.len());
         for (prop, value) in props.into_iter().zip(values) {
-            ops.push(lumit_core::Op::SetTransformProperty {
-                comp: self.comp_id,
-                layer: self.layer_id,
-                prop: prop.core(),
-                animation: value.animation_at(offset)?,
-            });
+            ops.extend(self.transform_ops(&layer, prop, &value)?);
         }
         // One op stays one op; a batch of one would undo the same but reads
         // worse in the journal.
@@ -6470,19 +6486,52 @@ impl LayerReference {
         // Confirm the layer is there before committing, so a stale reference is
         // a calm error rather than a failed op — and its offset is what carries
         // the keys back onto its own clock.
-        let animation = value.animation_at(self.item()?.start_offset.0)?;
+        let mut ops = self.transform_ops(&self.item()?, prop, &value)?;
+        // An expression's note rides with it as a second op, and the two are
+        // one step.
+        let op = match ops.len() {
+            1 => ops.pop().ok_or(BridgeError::InvalidLayer)?,
+            _ => lumit_core::Op::Batch { ops },
+        };
+        self.commit(op)
+    }
 
-        let proj = self.project()?;
-        let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
-        proj.store
-            .commit(lumit_core::Op::SetTransformProperty {
-                comp: self.comp_id,
-                layer: self.layer_id,
-                prop: prop.core(),
-                animation,
-            })
-            .map_err(BridgeError::OpError)?;
-        Ok(())
+    /// The ops that put `value` on one transform property: its animation, and
+    /// beside it what an expression knows about the property (its language,
+    /// the value underneath, its seed) whenever that changes.
+    ///
+    /// The note is worked out here and carried whole in the op, so undo puts
+    /// back the one that was there and a replayed journal writes the same seed.
+    #[frb(ignore)]
+    fn transform_ops(
+        &self,
+        layer: &lumit_core::model::Layer,
+        prop: BridgeTransformProp,
+        value: &BridgeScalar,
+    ) -> Result<Vec<lumit_core::Op>, BridgeError> {
+        use lumit_core::expression::SLOT_KEY;
+
+        let animation = value.animation_at(layer.start_offset.0)?;
+        let mut ops = vec![lumit_core::Op::SetTransformProperty {
+            comp: self.comp_id,
+            layer: self.layer_id,
+            prop: prop.core(),
+            animation: animation.clone(),
+        }];
+        if let Some(held) = layer.prop(prop.core()) {
+            let mut next = held.clone();
+            value.put(&mut next, animation);
+            let slot = next.extra.get(SLOT_KEY).cloned();
+            if slot.as_ref() != held.extra.get(SLOT_KEY) {
+                ops.push(lumit_core::Op::SetTransformExpressionSlot {
+                    comp: self.comp_id,
+                    layer: self.layer_id,
+                    prop: prop.core(),
+                    slot,
+                });
+            }
+        }
+        Ok(ops)
     }
 
     /// Set how one two-axis property is shown and edited: combined on

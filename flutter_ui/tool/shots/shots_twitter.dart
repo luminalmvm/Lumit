@@ -114,7 +114,8 @@ Future<void> main() async {
           comps.firstWhere((c) => c.$1.internalid == others.first);
       ui.setSelectedComp(other.$1);
       await pause(2);
-      ui.compViews[id] = (frame: view.frame, zoom: view.zoom, scroll: scroll);
+      ui.rememberCompView(id,
+          frame: view.frame, zoom: view.zoom, scroll: scroll);
       ui.setSelectedComp(comp);
       await pause(3);
       ui.setSelection(kept);

@@ -13,8 +13,8 @@ import 'package:uuid/uuid.dart';
 import 'roto.dart';
 part 'effect.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `animation_at`, `animation_of`, `badge_of`, `bridge_derived_param`, `bridge_param`, `bridge_shader_ty`, `bridge_unit`, `catalogue`, `clamp_animation`, `core_unit`, `derived_params_of`, `document_for`, `drop_stale_offers`, `fill_derived`, `hard_bounds`, `is_audio_effect`, `is_audio_match_name`, `param`, `plugin_category_key`, `presets_in`, `read_at`, `read_at`, `read_at`, `read_instance_info`, `read`, `sample_at`, `scan_audio_plugins`, `seconds_of`, `shader_error`, `validated`, `with_live_inputs`, `write_at`, `write_at`, `write`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `animation_at`, `animation_of`, `badge_of`, `bridge_derived_param`, `bridge_param`, `bridge_shader_ty`, `bridge_unit`, `catalogue`, `clamp_animation`, `core_unit`, `derived_params_of`, `document_for`, `drop_stale_offers`, `fill_derived`, `hard_bounds`, `is_audio_effect`, `is_audio_match_name`, `of`, `param`, `plugin_category_key`, `presets_in`, `put`, `read_at`, `read_at`, `read_at`, `read_instance_info`, `read`, `read`, `sample_at`, `scan_audio_plugins`, `seconds_of`, `shader_error`, `validated`, `with_live_inputs`, `write_at`, `write_at`, `write`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `get_effects`, `new`
 
 /// Every built-in **effect**, in schema order — the Add-effect menu's source of
@@ -166,6 +166,19 @@ List<BridgePresetInfo> listNodeGroups() =>
 List<BridgePresetInfo> listGraphGroups() =>
     BridgeLib.instance.api.crateApiEffectListGraphGroups();
 
+/// A preset file's text, ready for `load_preset`, whichever kind of preset the
+/// file is.
+///
+/// A Lumit `.lumfx` is handed back as it is. An After Effects `.ffx` is read
+/// and converted first, so the panels have one call to make and one kind of
+/// text to apply: its pseudo effects arrive as Custom controls, the effects
+/// Lumit has arrive as Lumit's, and its expressions come with them.
+///
+/// The file is told apart by its first bytes and not by its name. A file that
+/// is neither is refused as any other non-preset is.
+String readEffectPreset({required String path}) =>
+    BridgeLib.instance.api.crateApiEffectReadEffectPreset(path: path);
+
 /// Where the preset library lives, created on first ask — the save dialogue's
 /// default folder, so a saved preset appears in the listing without the user
 /// navigating anywhere. `None` only when the platform has no home directory.
@@ -286,6 +299,10 @@ abstract class BridgeEffectInstance implements RustOpaqueInterface {
   /// False when the effect is individually bypassed (docs/08 §1.5) — the state
   /// of the checkbox in its title bar.
   bool enabled();
+
+  /// The language an Expression box's text is written in. Rhai for every
+  /// other instance, which holds no text.
+  BridgeExpressionLanguage expressionLanguage();
 
   /// The text an Expression box runs, empty for a fresh one. Read when its
   /// editor opens, never in a rebuild.
@@ -466,6 +483,10 @@ abstract class BridgeEffectInstance implements RustOpaqueInterface {
   /// committing op (`LayerReference::set_effect_enabled`) and does not need
   /// this.
   void setEnabled({required bool enabled});
+
+  /// Stage a change of the language an Expression box's text is written in,
+  /// beside [`Self::set_expression_source`] and committed the same way.
+  void setExpressionLanguage({required BridgeExpressionLanguage language});
 
   /// Stage new text on an Expression box. The graph's own commit writes it, so
   /// an edit is one undo step.
@@ -987,6 +1008,22 @@ class BridgeEnabledWhen {
           param == other.param &&
           on_ == other.on_ &&
           cond == other.cond;
+}
+
+/// The language an expression is written in
+/// ([`lumit_core::expression::Language`]).
+///
+/// It crosses with the text every time, in both directions. The person writing
+/// an expression picks it, and nothing works it out from the text: the same
+/// line can mean two things, and a guess would be wrong quietly.
+enum BridgeExpressionLanguage {
+  /// One line of Rhai, Lumit's first language. What an expression with
+  /// nothing stored beside it is.
+  rhai,
+
+  /// JavaScript, as After Effects expressions are written.
+  javaScript,
+  ;
 }
 
 /// A file parameter: the paths it references, and the index that selects which
@@ -1515,8 +1552,11 @@ sealed class BridgeScalar with _$BridgeScalar {
   const factory BridgeScalar.keyframed(
     List<BridgeKeyframe> field0,
   ) = BridgeScalar_Keyframed;
+
+  /// The text, and the language it is written in.
   const factory BridgeScalar.expression(
     String field0,
+    BridgeExpressionLanguage field1,
   ) = BridgeScalar_Expression;
 }
 

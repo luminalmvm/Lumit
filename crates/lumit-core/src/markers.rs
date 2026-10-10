@@ -37,6 +37,12 @@ pub struct Marker {
     pub label: String,
     #[serde(default)]
     pub kind: MarkerKind,
+    /// Which of the label colours the marker wears, as an index into the
+    /// interface's label palette, the same one a layer's label picks from.
+    /// `None` is the plain marker grey, which is what every marker made before
+    /// markers had a colour opens as.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub colour: Option<u8>,
     /// Unknown fields from newer Lumit versions (docs/10-FILE-FORMAT.md §1.1).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
@@ -51,6 +57,7 @@ impl Marker {
             duration: None,
             label: String::new(),
             kind: MarkerKind::User,
+            colour: None,
             extra: serde_json::Map::new(),
         }
     }
@@ -63,6 +70,7 @@ impl Marker {
             duration: None,
             label: String::new(),
             kind: MarkerKind::Beat { confidence },
+            colour: None,
             extra: serde_json::Map::new(),
         }
     }
@@ -98,6 +106,7 @@ mod tests {
             duration: None,
             label: String::new(),
             kind,
+            colour: None,
             extra: serde_json::Map::new(),
         }
     }

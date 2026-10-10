@@ -364,8 +364,9 @@ MenuEntry animateTextRow(LumitState app, LumitUiState ui) => MenuEntry(
       ),
     );
 
-/// Animation ▸ Add expression: a Rhai expression on every picked property row,
-/// replacing whatever it held.
+/// Animation ▸ Add expression: an expression on every picked property row,
+/// replacing whatever it held. It opens in the language the first row's
+/// expression is in, or the one Settings names for a new expression.
 MenuEntry addExpressionRow(
     BuildContext context, LumitState app, LumitUiState ui) {
   final channels = [
@@ -381,14 +382,17 @@ MenuEntry addExpressionRow(
             final asked = await showExpressionDialogFrb(
               context: context,
               initial: was is BridgeScalar_Expression ? was.field0 : '',
+              language: was is BridgeScalar_Expression
+                  ? was.field1
+                  : ui.workspace.defaultExpressionLanguage,
             );
             // Blank changes nothing. Taking an expression *off* a property is
             // the row's own control (docs/07 §4.3, still owed), not a menu row
             // that would have to invent a value to put back.
-            if (asked == null || asked.trim().isEmpty) return;
+            if (asked == null || asked.text.trim().isEmpty) return;
             commitChannelEdits({
               for (final channel in channels)
-                channel: BridgeScalar.expression(asked),
+                channel: BridgeScalar.expression(asked.text, asked.language),
             });
             app.notifyDocumentChanged();
           },
@@ -469,8 +473,8 @@ MenuEntry saveAnimationPresetRow(LumitUiState ui) {
   );
 }
 
-/// Animation ▸ Apply animation preset: a saved `.lumfx` onto the primary
-/// layer only, as one undo step.
+/// Animation ▸ Apply animation preset: a saved `.lumfx`, or an After Effects
+/// `.ffx`, onto the primary layer only, as one undo step.
 ///
 /// A file that is not a preset at all is a normal thing for a picker to hand
 /// back rather than something to shout about.
@@ -485,7 +489,7 @@ MenuEntry applyAnimationPresetRow(LumitState app, LumitUiState ui) {
             if (path == null) return;
             final String text;
             try {
-              text = File(path).readAsStringSync();
+              text = readEffectPreset(path: path);
             } catch (_) {
               return;
             }

@@ -50,7 +50,8 @@ composites over it.
 | **Property** | A named animatable value. Properties nest in **property groups** |
 | **Keyframe** | A time and value, with hold, linear or bezier (**speed** and **influence**, AE's maths) |
 | **Graph editor** | Edits curves as a **value graph** or a **speed graph**. Two views of the same data |
-| **Expression** | A per-property script that computes the value each frame |
+| **Expression** | A per-property script that computes the value each frame. Written in **JavaScript** or **Rhai**, which the expression's own language choice says |
+| **Custom controls** | An effect holding a named set of controls for expressions to read. What an After Effects pseudo effect imports as |
 | **Marker** | A labelled point or span. **Beat markers** come from audio onset detection |
 | **Motion blur** | Three things: the layer switch, the **Motion blur** effect (optical flow), and **Accumulation motion blur** (re-renders and averages) |
 

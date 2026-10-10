@@ -208,6 +208,9 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
   final ValueNotifier<KeyStretch?> _keyStretch =
       ValueNotifier<KeyStretch?>(null);
 
+  /// The lane marquee's box while it is being dragged.
+  final ValueNotifier<Rect?> _laneMarquee = ValueNotifier<Rect?>(null);
+
   /// Which property rows are picked, so a row draws itself lit. A plain list:
   /// this panel has no graph to colour and no range selection yet.
   List<String> _selectedProperties = const [];
@@ -340,6 +343,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
     _searchField.dispose();
     _laneKeys.dispose();
     _keyStretch.dispose();
+    _laneMarquee.dispose();
     _workPreview.dispose();
     for (final drag in _clipDrag.values) {
       drag.dispose();
@@ -1072,6 +1076,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
             ),
       ],
       playheadFrame: ui.playheadFrame.value,
+      playhead: ui.playheadFrame,
       work: work,
       fps: fps,
     );
@@ -2096,6 +2101,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
                             Positioned.fill(
                               child: MarqueeSelect(
                                 key: const ValueKey('atl-lane-marquee'),
+                                box: _laneMarquee,
                                 onSelect: (rect, additive) =>
                                     _laneKeys.value = {
                                   if (additive) ..._laneKeys.value,
@@ -2159,6 +2165,9 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
                                 ),
                               ),
                             ),
+                            // The marquee's box, over the lanes and the seams
+                            // it is dragged across.
+                            MarqueeOverlay(box: _laneMarquee),
                           ],
                         ),
                       ),

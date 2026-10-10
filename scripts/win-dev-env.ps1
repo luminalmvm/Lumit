@@ -18,9 +18,9 @@
 .PARAMETER FfmpegDir
     The extracted FFmpeg build directory (the folder containing bin\, lib\, include\).
     If omitted, the script searches, in order:
-      $env:KIRIKO_FFMPEG_DIR
-      %USERPROFILE%\ffmpeg\ffmpeg-n8.1-*-win64-gpl-shared-*
-      C:\ffmpeg\ffmpeg-n8.1-*-win64-gpl-shared-*
+      $env:LUMIT_FFMPEG_DIR
+      %USERPROFILE%\ffmpeg\ffmpeg-n8.*-win64-gpl-shared-*
+      C:\ffmpeg\ffmpeg-n8.*-win64-gpl-shared-*
 
 .PARAMETER Persist
     Also store the variables at User scope (like setx) so future shells inherit them.
@@ -51,12 +51,12 @@ function Find-FfmpegDir {
 
     $candidates = @()
     if ($Explicit)               { $candidates += $Explicit }
-    if ($env:KIRIKO_FFMPEG_DIR)  { $candidates += $env:KIRIKO_FFMPEG_DIR }
+    if ($env:LUMIT_FFMPEG_DIR)   { $candidates += $env:LUMIT_FFMPEG_DIR }
 
     foreach ($base in @("$env:USERPROFILE\ffmpeg", 'C:\ffmpeg')) {
         if (Test-Path $base) {
             $match = Get-ChildItem -Path $base -Directory -ErrorAction SilentlyContinue |
-                Where-Object { $_.Name -like 'ffmpeg-n8.1-*win64-gpl-shared*' } |
+                Where-Object { $_.Name -like 'ffmpeg-n8.*win64-gpl-shared*' } |
                 Sort-Object Name -Descending | Select-Object -First 1
             if ($match) { $candidates += $match.FullName }
         }

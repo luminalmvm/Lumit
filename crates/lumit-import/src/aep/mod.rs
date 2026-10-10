@@ -48,6 +48,7 @@
 //! documentation. No code is vendored from any of them.
 
 pub mod enums;
+pub mod ffx;
 mod props;
 pub mod rifx;
 

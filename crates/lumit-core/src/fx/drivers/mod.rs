@@ -2732,6 +2732,28 @@ mod tests {
         );
     }
 
+    /// A box runs its text in the language it was given, Rhai until told
+    /// otherwise, and the choice sits beside the text without disturbing it.
+    #[test]
+    fn an_expression_box_runs_in_the_language_it_was_given() {
+        use crate::expression::Language;
+
+        let mut e = expression("Math.max(20, 1.5) / 8");
+        assert_eq!(expression::language_of(&e), Language::Rhai);
+        assert_eq!(sockets_of(&e)[0], ("value", None), "Rhai has no Math");
+
+        expression::set_language(&mut e, Language::JavaScript);
+        assert_eq!(expression::language_of(&e), Language::JavaScript);
+        assert_eq!(sockets_of(&e)[0], ("value", Some(Value::Float(2.5))));
+        assert_eq!(expression::source_of(&e), "Math.max(20, 1.5) / 8");
+
+        expression::set_language(&mut e, Language::Rhai);
+        assert!(
+            e.extra["expression"].get("language").is_none(),
+            "Rhai is stored as nothing at all"
+        );
+    }
+
     /// A refused expression pushes nothing, and the parameter it is wired to
     /// resolves to its own stored value — the same calm the walk gives a
     /// bypassed driver or a spent budget. Every kind of refusal: a runtime
