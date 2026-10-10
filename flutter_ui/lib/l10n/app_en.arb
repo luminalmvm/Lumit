@@ -12237,7 +12237,7 @@
   },
   "importLayersLeftOut": "{count, plural, =1{One layer had no picture and was left out} other{{count} layers had no picture and were left out}}",
   "@importLayersLeftOut": {
-    "description": "Status-line notice after a Photoshop document was imported as a composition of its layers. {count} is how many of the document's layers hold no pixels of their own, such as adjustment layers and fill layers, and so were not brought in.",
+    "description": "Status-line notice after a Photoshop document was imported as a composition of its layers. {count} is how many of the document's layers hold no pixels of their own, such as empty layers, gradient fill layers and adjustment layers of a kind Lumit has no effect for, and so were not brought in.",
     "placeholders": {
       "count": {
         "type": "int"

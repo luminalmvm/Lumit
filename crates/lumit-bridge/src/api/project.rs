@@ -488,13 +488,14 @@ impl ProjectReference {
 
     /// Bring a layered image file in as a composition, as one undo step: a
     /// footage item per layer, filed in a folder named for the file, and a
-    /// composition the document's size holding a Footage layer for each.
+    /// composition the document's size holding a layer for each. A group
+    /// that can't be a layer group becomes a composition of its own.
     ///
     /// `None` when `path` is not a layered file this build reads, which is
     /// anything but a Photoshop document, one of a kind that is not read, or
     /// one with fewer than two layers. The caller then imports it as plain
     /// footage. Otherwise the number of layers left out because they hold no
-    /// picture, which is what an adjustment layer or a fill layer is.
+    /// picture, which is what an adjustment layer or a gradient fill is.
     ///
     /// Only the layer list is read here. The pixels are read when a layer is
     /// first drawn.
@@ -526,7 +527,7 @@ impl ProjectReference {
                 height: psd.height,
                 ..BridgeCompSettings::defaults()
             };
-            let (_, duration) = settings.to_engine().ok_or(BridgeError::InvalidFrameRate)?;
+            let (rate, duration) = settings.to_engine().ok_or(BridgeError::InvalidFrameRate)?;
 
             let state = self.state()?;
             let left_out = {
