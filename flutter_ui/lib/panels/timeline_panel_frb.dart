@@ -4132,6 +4132,26 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                 key: const ValueKey('tl-outline-ground'),
                                 behavior: HitTestBehavior.translucent,
                                 onTap: () => _deselectAll(ui),
+                                // A right-click on the ground opens the same
+                                // menu as the lane ground. A fold row with
+                                // no menu of its own lets the click through
+                                // to here, so anything above the foot of the
+                                // last row is ignored.
+                                onSecondaryTapUp: (d) {
+                                  final foot = blockHeights.fold<double>(
+                                          0, (sum, height) => sum + height) -
+                                      (_vOutline.hasClients
+                                          ? _vOutline.offset
+                                          : 0);
+                                  if (d.localPosition.dy < foot) return;
+                                  showTimelineMoreMenu(
+                                    context,
+                                    comp: comp,
+                                    playhead: ui.playheadFrame,
+                                    position: d.globalPosition,
+                                    onChanged: ui.model.refresh,
+                                  );
+                                },
                                 // The viewport's own height, which is what
                                 // the row list windows itself against.
                                 child: LayoutBuilder(

@@ -811,6 +811,40 @@ void main() {
           findsOneWidget);
     });
 
+    /// The empty ground under the outline's rows opens the same menu as the
+    /// lane ground, which is where After Effects offers New.
+    testWidgets('a right-click under the outline rows offers New layer',
+        (tester) async {
+      final p = withComp();
+      final layer = p.comp.addSolidLayer();
+      await mount(tester, p);
+      await tester.tap(
+          find.byKey(ValueKey<String>('tl-twirl-${layer.internallayerId}')));
+      await tester.pump();
+
+      // A heading has no menu of its own, and it is not ground either.
+      await tester.tapAt(tester.getCenter(find.text('Transform')),
+          buttons: kSecondaryButton);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('tl-add-layer')), findsNothing);
+
+      final ground =
+          tester.getRect(find.byKey(const ValueKey('tl-outline-ground')));
+      await tester.tapAt(ground.bottomLeft + const Offset(40, -20),
+          buttons: kSecondaryButton);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('tl-razor')), findsNothing,
+          reason: 'the ground has no razor to hand over');
+      await tester.tap(find.byKey(const ValueKey('tl-add-layer')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Adjustment'));
+      await tester.pumpAndSettle();
+
+      final layers = p.comp.getLayers();
+      expect(layers, hasLength(2));
+      expect(layers.first.getKind(), BridgeLayerKind.adjustment);
+    });
+
     testWidgets('the switch column reaches the document', (tester) async {
       final p = withComp();
       final layer = p.comp.addAdjustmentLayer();

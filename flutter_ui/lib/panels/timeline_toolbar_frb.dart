@@ -352,6 +352,8 @@ Widget _compToggleButton(
 /// A right-click on empty lane ground opens it too, at [position], with
 /// [frame] under the pointer as the "here" of the two work-area rows. The
 /// razor row stays on the button: the ground has no razor to hand over.
+/// The empty ground under the outline's rows opens it too, with no [frame],
+/// so "here" is the playhead.
 Future<void> showTimelineMoreMenu(
   BuildContext context, {
   required CompositionReference comp,
