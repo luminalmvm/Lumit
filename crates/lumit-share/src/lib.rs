@@ -145,8 +145,9 @@ pub enum ShareError {
 ///
 /// The key is 256 random bits, so there is nothing to guess and no need for a
 /// password exchange. Whoever holds an invite can join and edit, until the
-/// host stops sharing. A host that only closes the project keeps the key, so
-/// the same invite works when it shares that project again.
+/// host stops sharing or takes someone out, which replaces it for everyone
+/// still there. A host that only closes the project keeps the key, so the
+/// same invite works when it shares that project again.
 #[derive(Clone, PartialEq, Eq)]
 pub struct Invite {
     /// `host:port`, where host is an address or a name.
@@ -255,7 +256,9 @@ mod tests {
     use lumit_core::model::{LinearColour, ProjectItem, SolidDef};
     use lumit_core::{Document, DocumentStore, Op};
     use parking_lot::Mutex;
-    use std::net::{IpAddr, Ipv4Addr};
+    use std::io::{Read, Write};
+    use std::net::{IpAddr, Ipv4Addr, Shutdown, TcpListener, TcpStream};
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::time::{Duration, Instant};
 
     const LOOPBACK: IpAddr = IpAddr::V4(Ipv4Addr::LOCALHOST);
@@ -293,18 +296,56 @@ mod tests {
         }
     }
 
+    /// A way to the host on `port` that can stop passing on what the host
+    /// says. The first `deaf` connections made through it hear nothing more,
+    /// as one that dies with answers still on their way does. Answers the
+    /// port it listens on.
+    fn relay(port: u16, deaf: Arc<AtomicUsize>) -> u16 {
+        let listener = TcpListener::bind((LOOPBACK, 0)).unwrap();
+        let here = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            for (nth, guest) in listener.incoming().flatten().enumerate() {
+                let Ok(host) = TcpStream::connect((LOOPBACK, port)) else {
+                    continue;
+                };
+                let pump = |mut from: TcpStream, mut to: TcpStream, deaf: Arc<AtomicUsize>| {
+                    std::thread::spawn(move || {
+                        let mut bytes = [0u8; 4096];
+                        while let Ok(n @ 1..) = from.read(&mut bytes) {
+                            let heard = deaf.load(Ordering::Relaxed) <= nth;
+                            if heard && to.write_all(&bytes[..n]).is_err() {
+                                break;
+                            }
+                        }
+                        let _ = to.shutdown(Shutdown::Both);
+                    });
+                };
+                let (to_host, to_guest) = (host.try_clone().unwrap(), guest.try_clone().unwrap());
+                pump(guest, to_host, Arc::new(AtomicUsize::new(0)));
+                pump(host, to_guest, deaf.clone());
+            }
+        });
+        here
+    }
+
     /// The whole road over real sockets: a guest is sent the document, both
     /// ends edit at once, the same item included, and they end on the same
-    /// document. Presence crosses, a dropped connection loses nothing, and the
-    /// guest hears the host stop.
+    /// document. Presence crosses, a dropped connection loses nothing and
+    /// makes no edit twice, and the guest hears the host stop.
     #[test]
     fn a_host_and_a_guest_end_on_the_same_document() {
         let hosted = Arc::new(DocumentStore::new(Document::new()));
         let shared = add_solid(&hosted, "before");
         let host = host(hosted.clone(), "Host", LOOPBACK, 0, None, None, quiet()).unwrap();
+        let deaf = Arc::new(AtomicUsize::new(0));
+        let through = relay(host.port(), deaf.clone());
         let invite: Invite = host.invite("127.0.0.1").to_string().parse().unwrap();
+        let invite = Invite {
+            address: format!("127.0.0.1:{through}"),
+            ..invite
+        };
 
-        let (document, joining) = join(invite, "Guest", None).unwrap();
+        let (document, joining) = join(invite.clone(), "Guest", None).unwrap();
         assert_eq!(document.items, hosted.snapshot().items);
         let joined = Arc::new(DocumentStore::new(document));
         let heard = Arc::new(Mutex::new(Vec::new()));
@@ -331,8 +372,31 @@ mod tests {
             host.people().iter().any(|p| p.presence.comp == comp)
         });
 
-        // The connection drops. An edit made on each side of the gap is on
-        // both ends once the guest has found its host again.
+        // Someone else joins and is taken out. The invite they hold lets
+        // nobody in after that, and the guest still here is sent the new one,
+        // which is what it finds the host by from here on.
+        let (document, joining) = join(invite.clone(), "Other", None).unwrap();
+        let theirs = Arc::new(DocumentStore::new(document));
+        let other = joining.start(theirs, quiet()).unwrap();
+        until("the host sees both guests", || host.people().len() == 3);
+        host.remove(other.me());
+        assert!(join(invite, "Other", None).is_err());
+        assert_eq!(host.people().len(), 2);
+        until("the guest still here has the new invite", || {
+            guest.key() == host.key()
+        });
+
+        // The connection drops, with an edit on it that the host took and
+        // never got to answer. The host says so when the guest is back, and
+        // the edit is not made a second time, which here would be refused:
+        // the item is already gone. An edit made on each side of the gap is
+        // on both ends once the guest has found its host again.
+        heard.lock().clear();
+        deaf.store(1, Ordering::Relaxed);
+        joined.commit(Op::RemoveItem { id: hosts }).unwrap();
+        until("the host has taken the edit", || {
+            hosted.snapshot().item(hosts).is_none()
+        });
         guest.cut();
         let apart = add_solid(&joined, "made while away");
         let meanwhile = add_solid(&hosted, "made meanwhile");
@@ -340,6 +404,11 @@ mod tests {
             let (h, g) = (hosted.snapshot(), joined.snapshot());
             h.item(apart).is_some() && g.item(meanwhile).is_some() && h.items == g.items
         });
+        let back = Event::Back {
+            held: 0,
+            refused: 0,
+        };
+        until("nothing was merged twice", || heard.lock().contains(&back));
 
         // The host goes without saying it is over, as a closed project or a
         // crash does, and the guest works on. The same project shared again
@@ -376,11 +445,13 @@ mod tests {
     /// Closing Lumit loses nobody's work. A host that closed without saving
     /// has every edit since its last save back when it shares again, its
     /// guest's included. A guest that closed while its host was away opens
-    /// its copy as it left it, and that finds the host and merges.
+    /// its copy as it left it, and that finds the host and merges. What it
+    /// chose not to save is not in it, and a conflict it closed on is asked
+    /// again.
     #[test]
     fn a_host_and_a_guest_that_both_closed_carry_on_where_they_left_off() {
         let hosted = Arc::new(DocumentStore::new(Document::new()));
-        add_solid(&hosted, "saved");
+        let both = add_solid(&hosted, "saved");
         let host = host(hosted.clone(), "Host", LOOPBACK, 0, None, None, quiet()).unwrap();
         let invite: Invite = host.invite("127.0.0.1").to_string().parse().unwrap();
         let (document, joining) = join(invite, "Guest", None).unwrap();
@@ -415,7 +486,13 @@ mod tests {
             rename(&joined, before, &format!("renamed {n}"));
         }
         rename(&joined, before, "renamed with no host");
-        let copy = Document::clone(&joined.snapshot());
+        rename(&joined, both, "the guest's name");
+        // It saves, makes one more edit, and closes without saving that.
+        let (copy, _, mark) = guest.saving().expect("the host is away");
+        let copy = Document::clone(&copy);
+        guest.saved(mark);
+        let unsaved = add_solid(&joined, "made after the save");
+        guest.discard();
         drop(guest);
         drop(joined);
 
@@ -434,13 +511,15 @@ mod tests {
         assert_eq!(host.restored(), 2, "the two edits made after the save");
         let back = hosted.snapshot();
         assert!(back.item(hosts).is_some() && back.item(guests).is_some());
+        rename(&hosted, both, "the host's name");
 
-        // The guest opens its copy: what it did with no host is in it, and
-        // goes to the host once that is found.
+        // The guest opens its copy: what it did with no host and saved is in
+        // it, and goes to the host once that is found.
         let nowhere = std::path::Path::new("");
         let kept = resume(&mut copy.clone(), nowhere);
         let (document, resuming) = kept.expect("the guest's edits were kept");
         assert!(document.item(apart).is_some());
+        assert!(document.item(unsaved).is_none(), "it was not saved");
         let joined = Arc::new(DocumentStore::new(document));
         let guest = resuming.start(joined.clone(), quiet()).unwrap();
         until("the host has what its guest did while away", || {
@@ -450,6 +529,24 @@ mod tests {
         });
         until("nothing is kept once it is merged", || {
             resume(&mut copy.clone(), nowhere).is_none()
+        });
+
+        // Both renamed one item, so the guest's name for it was held back.
+        // It closes without choosing, and its copy opened again still asks.
+        until("the merge held the guest's name back", || {
+            guest.conflicts().len() == 1
+        });
+        let copy = Document::clone(&joined.snapshot());
+        drop(guest);
+        drop(joined);
+        let kept = resume(&mut copy.clone(), nowhere);
+        let (document, resuming) = kept.expect("the conflict was kept");
+        let joined = Arc::new(DocumentStore::new(document));
+        let guest = resuming.start(joined, quiet()).unwrap();
+        assert_eq!(guest.conflicts().len(), 1);
+        guest.resolve(0, true);
+        until("the host has the name its guest chose to keep", || {
+            hosted.snapshot().item(both).map(ProjectItem::name) == Some("the guest's name")
         });
 
         // A host that stops for good keeps nothing to put back either.

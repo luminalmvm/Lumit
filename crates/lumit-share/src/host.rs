@@ -31,17 +31,28 @@ const GREETING_ROOM: usize = 8;
 /// what the host is looking at.
 const BEAT: Duration = Duration::from_millis(50);
 
+/// How many guests the host remembers the last edit of.
+const HEARD: usize = 4 * MAX_PEOPLE;
+
 /// The way to one seated guest.
 struct Link {
     id: u32,
+    /// What its guest said hello with.
+    token: u64,
     out: SyncSender<Out>,
     socket: TcpStream,
 }
 
 /// Who is here. Bounded by [`MAX_PEOPLE`].
 struct Seats {
+    /// The invite's secret. Replaced when a guest is removed, so it is read
+    /// under the lock a caller is seated under.
+    key: [u8; 32],
     people: Vec<Person>,
     links: Vec<Link>,
+    /// The last edit taken from each guest, by the token it says hello with,
+    /// to tell one that comes back. The newest [`HEARD`] guests, oldest first.
+    heard: Vec<(u64, u64)>,
     next: u32,
     /// Someone came or went and the others have not been told yet.
     changed: bool,
@@ -49,7 +60,6 @@ struct Seats {
 
 struct Hub {
     store: Arc<DocumentStore>,
-    key: [u8; 32],
     port: u16,
     /// The folder the host's own footage is found under.
     root: Option<PathBuf>,
@@ -145,13 +155,13 @@ pub fn host(
     let restored = restore(&store, &lost.unwrap_or_default());
     let hub = Arc::new(Hub {
         store,
-        key,
         port,
         root,
         events,
         stop: AtomicBool::new(false),
         greeting: AtomicUsize::new(0),
         seats: Mutex::new(Seats {
+            key,
             people: vec![Person {
                 id: 0,
                 name: name.chars().take(64).collect(),
@@ -159,6 +169,7 @@ pub fn host(
                 presence: Presence::default(),
             }],
             links: Vec::new(),
+            heard: Vec::new(),
             next: 1,
             changed: false,
         }),
@@ -203,7 +214,7 @@ impl Host {
         let (open, close) = if bare { ("[", "]") } else { ("", "") };
         Invite {
             address: format!("{open}{address}{close}:{}", self.hub.port),
-            key: self.hub.key,
+            key: self.key(),
         }
     }
 
@@ -216,7 +227,7 @@ impl Host {
     /// The invite's secret, to share the same project by again later.
     #[must_use]
     pub fn key(&self) -> [u8; 32] {
-        self.hub.key
+        self.hub.seats.lock().key
     }
 
     /// How many edits made since the project was last saved were put back
@@ -259,12 +270,26 @@ impl Host {
     }
 
     /// Take one guest out of the project. They are told, and their Lumit
-    /// stops trying to come back. Anyone who holds the invite can still join
-    /// with it, so keeping someone out for good takes a new invite.
+    /// stops trying to come back. The invite is replaced, so the one they
+    /// hold lets nobody in, and everyone still here is sent the new one. A
+    /// guest who has lost the host just then is not, and needs it given.
     pub fn remove(&self, id: u32) {
-        let seats = self.hub.seats.lock();
-        if let Some(link) = seats.links.iter().find(|link| link.id == id) {
-            self.hub.dismiss(link, &Message::Removed);
+        let mut seats = self.hub.seats.lock();
+        let Some(at) = seats.links.iter().position(|link| link.id == id) else {
+            return;
+        };
+        let gone = seats.links.remove(at);
+        self.hub.dismiss(&gone, &Message::Removed);
+        seats.people.retain(|p| p.id != id);
+        seats.changed = true;
+        // With no randomness for a new secret the old invite stands.
+        let mut key = [0u8; 32];
+        if getrandom::fill(&mut key).is_err() {
+            return;
+        }
+        seats.key = key;
+        if let Ok(bytes) = encode(&Message::Invite { key }, &self.hub.names) {
+            Hub::send_each(&mut seats, |_| bytes.clone());
         }
     }
 
@@ -404,11 +429,14 @@ impl Hub {
     /// Greet one caller and, if it holds the invite and runs this version,
     /// seat it and read from it until it goes.
     fn seat(self: &Arc<Self>, socket: TcpStream) -> Result<(), ShareError> {
+        // The invite as it stands. A caller still saying hello when it is
+        // replaced is not seated.
+        let key = self.seats.lock().key;
         let greeted = (|| {
             // An accepted socket takes after its listener on Windows.
             socket.set_nonblocking(false)?;
-            let (sender, mut receiver) = wire::open(socket.try_clone()?, &self.key, false)?;
-            let hello = decode(&receiver.recv(1 << 16)?, &self.names)?;
+            let (sender, mut receiver) = wire::open(socket.try_clone()?, &key, false)?;
+            let hello = decode(&receiver.recv(1 << 16)?, &self.names, None)?;
             Ok::<_, ShareError>((sender, receiver, hello))
         })();
         self.greeting.fetch_sub(1, Ordering::Relaxed);
@@ -418,6 +446,7 @@ impl Hub {
             version,
             schema,
             name,
+            token,
         } = hello
         else {
             return Err(ShareError::OutOfTurn);
@@ -435,8 +464,21 @@ impl Hub {
         let seat_out = out.clone();
         let seated = self.store.frozen(|document| {
             let mut seats = self.seats.lock();
+            if seats.key != key {
+                return Err(ShareError::OutOfTurn);
+            }
+            // The connection this guest had before is over, noticed here yet
+            // or not. Nothing more is taken from it, bar an edit already on
+            // its way in, which is counted below and reaches this guest like
+            // anyone else's.
+            let old = seats.links.iter().position(|link| link.token == token);
+            if let Some(old) = old.filter(|_| token != 0) {
+                let old = seats.links.remove(old);
+                let _ = old.socket.shutdown(Shutdown::Both);
+                seats.people.retain(|p| p.id != old.id);
+            }
             if seats.people.len() >= MAX_PEOPLE {
-                return None;
+                return Ok(None);
             }
             let id = seats.next;
             seats.next += 1;
@@ -451,13 +493,16 @@ impl Hub {
             });
             seats.links.push(Link {
                 id,
+                token,
                 out: seat_out,
                 socket,
             });
             seats.changed = true;
-            Some((id, document, seats.people.clone()))
-        });
-        let Some((id, document, people)) = seated else {
+            let heard = seats.heard.iter().find(|(t, _)| *t == token);
+            let heard = heard.map_or(0, |(_, id)| *id);
+            Ok(Some((id, heard, document, seats.people.clone())))
+        })?;
+        let Some((id, heard, document, people)) = seated else {
             self.refuse(&mut sender, Refusal::Full);
             return Ok(());
         };
@@ -468,6 +513,7 @@ impl Hub {
         let welcome = encode(
             &Message::Welcome {
                 you: id,
+                heard,
                 document: Box::new(Document::clone(&document)),
                 people,
             },
@@ -483,7 +529,7 @@ impl Hub {
                 _ => sender.close(),
             });
         if spawned.is_ok() {
-            self.listen(id, &mut receiver, &out);
+            self.listen((id, token), &mut receiver, &out);
         }
         self.unseat(id);
         spawned?;
@@ -497,13 +543,33 @@ impl Hub {
         sender.close();
     }
 
+    /// Note that the guest `token` names sent edit `id` on connection `peer`,
+    /// before it is taken. False when that connection is no longer the
+    /// guest's seat: it has come back on another, or been taken out, and the
+    /// edit is not wanted. Under the lock a guest is seated under, so one
+    /// that comes back is told of every edit that was let past here.
+    fn hear(&self, peer: u32, token: u64, id: u64) -> bool {
+        let mut seats = self.seats.lock();
+        if !seats.links.iter().any(|link| link.id == peer) {
+            return false;
+        }
+        if token != 0 {
+            seats.heard.retain(|(t, _)| *t != token);
+            seats.heard.push((token, id));
+            if seats.heard.len() > HEARD {
+                seats.heard.remove(0);
+            }
+        }
+        true
+    }
+
     /// Read one guest's edits until it goes or says something out of turn.
-    fn listen(&self, peer: u32, receiver: &mut Receiver, out: &SyncSender<Out>) {
+    fn listen(&self, (peer, token): (u32, u64), receiver: &mut Receiver, out: &SyncSender<Out>) {
         while !self.stop.load(Ordering::Relaxed) {
             let Ok(bytes) = receiver.recv(wire::EDIT_LIMIT) else {
                 break;
             };
-            match decode(&bytes, &self.names) {
+            match decode(&bytes, &self.names, self.root.as_deref()) {
                 Ok(Message::Submit { id, mut op, was }) => {
                     place(&mut op, &self.store.snapshot(), self.root.as_deref());
                     let tag = RemoteTag { peer, id };
@@ -513,6 +579,9 @@ impl Hub {
                     //
                     // `was` is only ever compared with, so nothing in it
                     // reaches the document and it needs no checking.
+                    if !self.hear(peer, token, id) {
+                        break;
+                    }
                     if sane(&op) && self.store.commit_remote(&op, Some(&was), tag).is_ok() {
                         continue;
                     }

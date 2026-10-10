@@ -51,7 +51,15 @@ Future<bool> askUnsavedChangesFrb(
     builder: (close) => _UnsavedDialog(onChoose: close),
   );
   if (save == null) return false;
-  if (!save) return true;
+  if (!save) {
+    // A guest's copy whose host is away keeps only what its file holds.
+    try {
+      app.project?.shareDiscardAway();
+    } catch (_) {
+      // Closed already.
+    }
+    return true;
+  }
   await saveProjectFrb(app, ui, picker: savePicker);
   try {
     return !(app.project?.isDirty() ?? false);

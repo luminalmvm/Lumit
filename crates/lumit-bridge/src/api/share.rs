@@ -284,15 +284,17 @@ pub(crate) fn stop_all() {
     }
 }
 
-/// What a save of `project` writes while this machine hosts it: the
-/// document, the store's revision at it, and how many of the edits the host
-/// keeps are in it, to hand to [`saved`]. `None` when it is not hosted.
+/// What a save of `project` writes while this machine hosts it, or is its
+/// guest with the host away: the document, the store's revision at it, and
+/// how many of the edits kept are in it, to hand to [`saved`]. `None` for
+/// any other project.
 #[frb(ignore)]
 pub(crate) fn saving(project: Uuid) -> Option<(Arc<Document>, u64, usize)> {
     let shared = SHARED.lock().ok()?;
     match shared.get(&project) {
         Some(Sharing::Host(host)) => Some(host.saving()),
-        _ => None,
+        Some(Sharing::Guest(guest)) => guest.saving(),
+        None => None,
     }
 }
 
@@ -308,6 +310,9 @@ pub(crate) fn saved(project: Uuid, document: Uuid, mark: Option<usize>) {
         (Some(Sharing::Host(host)), Some(mark)) => host.saved(mark),
         // Sharing started while the file was being written. Kept as it is.
         (Some(Sharing::Host(_)), None) => {}
+        // A guest's edits stay kept, and the mark is what closing without
+        // saving goes back to.
+        (Some(Sharing::Guest(guest)), Some(mark)) => guest.saved(mark),
         _ => lumit_share::forget(document),
     }
 }
@@ -473,7 +478,9 @@ impl ProjectReference {
 
     /// Take a guest out of the project this machine hosts, by the id the
     /// people list gives them. Their Lumit is told and stops coming back.
-    /// The invite still works for anyone who holds it.
+    /// The invite is replaced, so the one they hold stops working. Everyone
+    /// still here is sent the new one, and [`Self::share_invite`] gives it,
+    /// with the key to hand to [`Self::share`] next time.
     #[frb(sync)]
     pub fn share_remove(&self, person: u32) -> Result<(), BridgeError> {
         let shared = SHARED.lock().map_err(|_| BridgeError::ReadFailed)?;
@@ -559,6 +566,19 @@ impl ProjectReference {
             Some(Sharing::Guest(guest)) => guest.resolve(index as usize, mine) as u32,
             _ => 0,
         })
+    }
+
+    /// The person chose not to save this project, which is about to close.
+    /// A guest whose host is away then keeps only the edits its file holds,
+    /// so the copy opens next time as it was saved. Does nothing for anyone
+    /// else.
+    #[frb(sync)]
+    pub fn share_discard_away(&self) -> Result<(), BridgeError> {
+        let shared = SHARED.lock().map_err(|_| BridgeError::ReadFailed)?;
+        if let Some(Sharing::Guest(guest)) = shared.get(&self.id) {
+            guest.discard();
+        }
+        Ok(())
     }
 }
 

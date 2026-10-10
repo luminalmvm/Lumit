@@ -93,10 +93,13 @@ enum Link {
     /// A guest in step with its host, apart from `pending`, oldest first.
     Guest { pending: VecDeque<Pending> },
     /// A guest that has lost its host. `base` is the last document both had,
-    /// `since` every edit made here after it with what it replaced.
+    /// `since` every edit made here after it with what it replaced. `sent`
+    /// numbers the first of those: the ones the host had been sent and had
+    /// not answered, which it may have taken all the same.
     Adrift {
         base: Arc<Document>,
         since: Vec<(Op, Op)>,
+        sent: Vec<u64>,
     },
 }
 
@@ -633,7 +636,11 @@ impl DocumentStore {
     /// holds `base` with those applied. [`Self::rejoin`] takes it from there.
     pub fn share_apart(&self, tap: Tap, base: Arc<Document>, since: Vec<(Op, Op)>) {
         self.journal.lock().shared = Some(Shared {
-            link: Link::Adrift { base, since },
+            link: Link::Adrift {
+                base,
+                since,
+                sent: Vec::new(),
+            },
             tap,
             next_id: 0,
             touched: BTreeMap::new(),
@@ -646,10 +653,33 @@ impl DocumentStore {
     pub fn apart(&self, from: usize) -> Option<Apart> {
         let journal = self.journal.lock();
         match &journal.shared.as_ref()?.link {
-            Link::Adrift { base, since } => {
+            Link::Adrift { base, since, .. } => {
                 Some((base.clone(), since.get(from..).unwrap_or_default().to_vec()))
             }
             _ => None,
+        }
+    }
+
+    /// What a save writes for a guest without its host: the document, the
+    /// revision at it, and how many of the edits [`Self::apart`] gives are in
+    /// it, taken in one moment. `None` for anyone else.
+    #[must_use]
+    pub fn saving_apart(&self) -> Option<(Arc<Document>, u64, usize)> {
+        let journal = self.journal.lock();
+        match &journal.shared.as_ref()?.link {
+            Link::Adrift { since, .. } => Some((self.snapshot(), self.revision(), since.len())),
+            _ => None,
+        }
+    }
+
+    /// How many of the edits [`Self::apart`] gives, its first ones, were made
+    /// with the host still there and were on their way to it when it was lost.
+    #[must_use]
+    pub fn in_flight(&self) -> usize {
+        let journal = self.journal.lock();
+        match journal.shared.as_ref().map(|shared| &shared.link) {
+            Some(Link::Adrift { sent, .. }) => sent.len(),
+            _ => 0,
         }
     }
 
@@ -821,6 +851,7 @@ impl DocumentStore {
         let since = pending.iter().map(|p| (p.op.clone(), p.was.clone()));
         shared.link = Link::Adrift {
             since: since.collect(),
+            sent: pending.iter().map(|p| p.id).collect(),
             base: Arc::new(base),
         };
     }
@@ -833,15 +864,21 @@ impl DocumentStore {
     /// conflicts for the person to choose between, with a count of the edits
     /// that no longer apply at all. The undo history is cleared, because its
     /// steps were made against a document that is no longer this one.
-    pub fn rejoin(&self, theirs: Document) -> (Vec<Conflict>, usize) {
+    ///
+    /// `heard` is the last of this guest's edits the host took before it was
+    /// lost, by the host's own account, or 0 for none. The answers to those
+    /// went with the connection. They are in `theirs` already, so they are
+    /// left out here and not made a second time.
+    pub fn rejoin(&self, theirs: Document, heard: u64) -> (Vec<Conflict>, usize) {
         let mut journal = self.journal.lock();
         let Some(shared) = journal.shared.as_mut() else {
             return (Vec::new(), 0);
         };
-        let Link::Adrift { base, since } = &shared.link else {
+        let Link::Adrift { base, since, sent } = &shared.link else {
             return (Vec::new(), 0);
         };
-        let merge = plan_merge(base, theirs, since);
+        let taken = sent.iter().take_while(|id| **id <= heard).count();
+        let merge = plan_merge(base, theirs, since.get(taken..).unwrap_or_default());
         let mut pending = VecDeque::with_capacity(merge.clean.len());
         for (op, was) in merge.clean {
             shared.next_id += 1;
@@ -3220,7 +3257,7 @@ mod tests {
 
         let mut theirs = doc.clone();
         apply(&mut theirs, &rename(x, "theirs")).unwrap();
-        let (conflicts, refused) = guest.store.rejoin(theirs);
+        let (conflicts, refused) = guest.store.rejoin(theirs, 0);
 
         assert_eq!(refused, 0);
         assert_eq!(conflicts.len(), 1);
@@ -3246,7 +3283,7 @@ mod tests {
 
         let mut theirs = doc.clone();
         apply(&mut theirs, &rename(x, "theirs")).unwrap();
-        let (conflicts, refused) = guest.store.rejoin(theirs);
+        let (conflicts, refused) = guest.store.rejoin(theirs, 0);
 
         assert_eq!((conflicts.len(), refused), (1, 0));
         assert_eq!(conflicts[0].ops.len(), 2, "the delete and its undo");
@@ -3317,7 +3354,8 @@ mod tests {
         away.store.cast_adrift();
         set(&away.store, second, 7.0);
         set(&away.store, first, 5.0);
-        let (conflicts, refused) = away.store.rejoin(Document::clone(&host.store.snapshot()));
+        let theirs = Document::clone(&host.store.snapshot());
+        let (conflicts, refused) = away.store.rejoin(theirs, 0);
         assert_eq!((conflicts.len(), refused), (1, 0));
         assert_eq!(
             read(&away.store),

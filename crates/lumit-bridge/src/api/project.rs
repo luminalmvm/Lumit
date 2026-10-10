@@ -543,6 +543,7 @@ impl ProjectReference {
                     &file,
                     comp,
                     (psd.width.clamp(16, 16384), psd.height.clamp(16, 16384)),
+                    rate,
                     duration.0,
                     doc.items.len() + queued,
                 );
@@ -872,8 +873,8 @@ impl ProjectReference {
         // (`crate::autosave::sweep_one`); the lock comes back at the end only
         // to record where the file went.
         // A host's document comes with how many of the edits it keeps are in
-        // it. Asked before this project's own lock, which is the order the
-        // share registry is always taken in.
+        // it, and so does a guest's whose host is away. Asked before this
+        // project's own lock, the order the share registry is always taken in.
         let hosted = crate::api::share::saving(self.id);
         let (document, target, revision, previous, journalled) = {
             let state = project.read().map_err(|_| BridgeError::ReadFailed)?;

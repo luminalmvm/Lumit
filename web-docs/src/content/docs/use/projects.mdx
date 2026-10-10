@@ -93,9 +93,9 @@ is held back and listed in the **Conflicts** window, where each is settled with 
 mine** or **Keep theirs**. An edit to something that no longer exists is dropped.
 
 A guest's saved copy that is closed while the host is away is still a guest when it is
-opened again. It opens with every edit made while away, saved or not, looks for the host,
-and merges when it finds it. **Leave** ends that. A conflict not settled before the copy is
-closed is settled as **Keep theirs**.
+opened again. It opens with the edits made while away that were saved, or all of them if
+Lumit crashed, looks for the host, and merges when it finds it. **Leave** ends that. A
+conflict not settled before the copy is closed is listed again when it is opened.
 
 A host that closes the project, or Lumit, without **Stop sharing** keeps its invite. When
 it opens the project and shares it again on the same port, the guests who are waiting come
@@ -106,13 +106,16 @@ A host keeps every edit made since its last save, its guests' included. If it cl
 without saving, or Lumit crashed, **Start sharing** puts those edits back. Closing a host
 project that was never saved stops sharing.
 
-**Stop sharing** finishes with the invite, and sharing again makes a new one. A removed
-guest keeps its copy, and the invite it holds still works until then.
+**Stop sharing** finishes with the invite, and sharing again makes a new one. **Remove**
+replaces the invite. The removed guest keeps its copy, the invite it holds stops working,
+and the guests still connected carry on. A guest that had lost the host at that moment
+needs the new invite.
 
 :::note
 Everyone needs the same version of Lumit. Proxies, files an effect reads such as a LUT, and
-the results of tracking, roto and depth analysis are not sent. A shared project takes up to
-16 people.
+the results of tracking, roto and depth analysis are not sent. A proxy is looked for in the
+footage folder as footage is, and a file an effect reads by its name at the top of that
+folder. A shared project takes up to 16 people.
 :::
 
 ## Autosave

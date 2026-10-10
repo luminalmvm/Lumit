@@ -885,8 +885,7 @@ impl LumitBridgeState {
             // picker's problem, and Dart shows its own notice for None.
             return Ok(None);
         };
-        // What was kept holds every edit made while the host was away, saved
-        // or not, so it is what opens.
+        // What was kept is the copy as a guest left it, so it is what opens.
         let beside = path.parent().unwrap_or_else(|| Path::new(""));
         let (doc, resuming) = match lumit_share::resume(&mut doc, beside) {
             Some((kept, resuming)) => (kept, Some(resuming)),

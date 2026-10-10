@@ -229,6 +229,8 @@ impl ProjectReference {
     /// quitting. Closing or replacing a project notes it by itself.
     #[frb(sync)]
     pub fn note_clean_exit(&self) {
+        // Quitting drops nothing, so sharing is let go of as a close does it.
+        crate::api::share::stop(self.id);
         if let Ok(state) = self.state() {
             if let Ok(state) = state.read() {
                 crate::api::state::discard_unsaved_journal(&state);

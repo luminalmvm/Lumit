@@ -58,8 +58,8 @@ behind, frames drop. Audio never waits.
   each machine finds its own copy by fingerprint.
 - Closing Lumit loses neither end's work. A host writes every edit since its last save to
   a log beside the journals, and lands them again when it shares the project next. A guest
-  without its host writes the last document both had and each edit since, and its copy
-  opened again carries on from there (`lumit-share`, `kept.rs`).
+  without its host writes the last document both had, the edits since and open conflicts
+  for its copy to reopen from, less what a close left unsaved (`lumit-share`, `kept.rs`).
 
 ## 4. The evaluation graph
 
