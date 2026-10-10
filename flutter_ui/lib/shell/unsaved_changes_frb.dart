@@ -12,6 +12,7 @@ import '../l10n/strings.dart';
 import '../widgets/controls.dart';
 import 'dialog_frame.dart';
 import 'menu_bar_frb.dart' show saveProjectFrb;
+import 'tour_frb.dart' show onlyTourDemo;
 
 /// Narrow, like the recovery dialogue: one sentence and three short answers.
 const double unsavedDialogWidth = 350;
@@ -21,7 +22,8 @@ const double unsavedDialogWidth = 350;
 void installUnsavedQuestion(BuildContext context) {
   final app = context.read<LumitState>();
   final ui = context.read<LumitUiState>();
-  app.askUnsaved = () => askUnsavedChangesFrb(context, app, ui);
+  app.askUnsaved = () async =>
+      onlyTourDemo(app) || await askUnsavedChangesFrb(context, app, ui);
 }
 
 /// Ask, and answer whether the project may go.

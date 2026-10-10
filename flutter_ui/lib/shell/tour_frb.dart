@@ -237,7 +237,7 @@ void maybeShowTourFrb(
 
 /// Raise the tour, whether or not it has been seen: Help ▸ Show the tour.
 void showTourFrb(BuildContext context, LumitState state, LumitUiState ui) {
-  final made = _makeDemo(state, ui);
+  final made = _demoItems = _makeDemo(state, ui);
   final up = showTour(
     context,
     ui.workspace,
@@ -275,14 +275,25 @@ const String _demoEffect = 'glow';
 /// the project has gained anything since, such as files dropped onto the
 /// Project panel while the tour was up: that is the user's, and it stays.
 void _clearDemo(LumitState state, int? made) {
-  if (made == null) return;
-  final project = state.project;
-  if (project == null) return;
-  try {
-    if (project.path() != null || project.getItems().length != made) return;
-  } catch (_) {
-    return;
-  }
+  final only = onlyTourDemo(state);
+  _demoItems = null;
   // Nothing in it is the user's, so there is nothing to ask about saving.
-  state.newProject(ask: false);
+  if (made != null && only) state.newProject(ask: false);
+}
+
+/// How many items the project held once the tour had made its composition,
+/// while the tour is up over it.
+int? _demoItems;
+
+/// Whether the tour is up and everything in the project is its own, so
+/// quitting part way has nothing of the user's to ask about saving.
+bool onlyTourDemo(LumitState state) {
+  final made = _demoItems;
+  final project = state.project;
+  if (made == null || project == null) return false;
+  try {
+    return project.path() == null && project.getItems().length == made;
+  } catch (_) {
+    return false;
+  }
 }
