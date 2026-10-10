@@ -1,32 +1,49 @@
 ---
-// The default page title, plus a "Last updated" line right below it, so a stale
-// page is visible where you are actually reading. The date comes from git via
-// Starlight's lastUpdated option; a page with no commit yet shows no line.
+// A page opens the way a section of the main site does: a ruled line carrying
+// where the page sits in the manual, then the title. The "Updated" date is on
+// the same line, so a stale page is visible where you are actually reading. It
+// comes from git via Starlight's lastUpdated option, and a page with no commit
+// yet shows none.
 import Default from "@astrojs/starlight/components/PageTitle.astro";
+import type { StarlightRouteData } from "@astrojs/starlight/route-data";
 
-const { lastUpdated } = Astro.locals.starlightRoute;
----
+const { lastUpdated, sidebar } = Astro.locals.starlightRoute;
 
-<Default><slot /></Default>
-{
-  lastUpdated && (
-    <p class="page-updated">
-      Last updated{" "}
-      <time datetime={lastUpdated.toISOString()}>
-        {lastUpdated.toLocaleDateString("en-GB", {
-          day: "numeric",
-          month: "long",
-          year: "numeric",
-        })}
-      </time>
-    </p>
-  )
+// The labels of the groups the current page is inside, outermost first.
+function trail(entries: StarlightRouteData["sidebar"], path: string[] = []): string[] | undefined {
+  for (const entry of entries) {
+    if (entry.type === "link") {
+      if (entry.isCurrent) return path;
+    } else {
+      const hit = trail(entry.entries, [...path, entry.label]);
+      if (hit) return hit;
+    }
+  }
 }
 
-<style>
-  .page-updated {
-    margin-top: 0.4rem;
-    font-size: var(--sl-text-xs);
-    color: var(--sl-color-gray-3);
+const groups = trail(sidebar);
+const topic = Astro.locals.starlightSidebarTopics.topics.find((t) => t.isCurrent)?.label;
+// The home page is in no group. "Reference / Reference" says it once.
+const kicker = groups
+  ? [topic, ...groups].filter((label, i, all) => label && label !== all[i - 1]).join(" / ")
+  : "Documentation";
+---
+
+<div class="sec-rule">
+  <p class="kicker">{kicker}</p>
+  {
+    lastUpdated && (
+      <p class="sec-no">
+        Updated{" "}
+        <time datetime={lastUpdated.toISOString()}>
+          {lastUpdated.toLocaleDateString("en-GB", {
+            day: "numeric",
+            month: "long",
+            year: "numeric",
+          })}
+        </time>
+      </p>
+    )
   }
-</style>
+</div>
+<Default><slot /></Default>

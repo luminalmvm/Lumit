@@ -29,7 +29,8 @@ export default defineConfig({
     starlight({
       title: "Lumit docs",
       description: "Documentation for Lumit, the native motion-graphics and compositing editor.",
-      logo: { src: "./src/assets/lumit-mark.svg", alt: "Lumit" },
+      // The wordmark the main site's bar carries. theme.css sets "Docs" beside it.
+      logo: { src: "./src/assets/lumit-wordmark.svg", alt: "Lumit docs", replacesTitle: true },
       favicon: "/lumit-mark.svg",
       // The marketing site's two faces, shipped the same way it ships them
       // (web/src/layouts/Base.astro): the variable sans, and the variable mono
@@ -40,6 +41,11 @@ export default defineConfig({
         "./src/styles/paper-mono.css",
         "./src/styles/theme.css",
       ],
+      // A code block is a card: the card's corner and hairline here, and its
+      // ground in theme.css, as Starlight sets that one after these.
+      expressiveCode: {
+        styleOverrides: { borderRadius: "4px", borderColor: "var(--sl-color-hairline)" },
+      },
       // The before-and-after wipe on every effect page. Each figure carries a
       // range input across the picture; this points the CSS clip at its value.
       // Small enough to inline, and the figures degrade to an honest
@@ -62,10 +68,9 @@ r.addEventListener("input",set);set()})})`,
         LastUpdated: "./src/components/LastUpdated.astro",
         // Emptied: one ramp, dark, so there is nothing for a theme picker to pick.
         ThemeSelect: "./src/components/ThemeSelect.astro",
+        // The bar's links, as words rather than icons.
+        SocialIcons: "./src/components/SocialIcons.astro",
       },
-      social: [
-        { icon: "github", label: "GitHub", href: "https://github.com/luminalmvm/Lumit" },
-      ],
       editLink: {
         baseUrl: "https://github.com/luminalmvm/Lumit/edit/main/web-docs/",
       },
@@ -73,6 +78,16 @@ r.addEventListener("input",set);set()})})`,
       // with its own list underneath. There is no `sidebar` option here on
       // purpose - the plugin below owns it, and Starlight refuses both at once.
       plugins: [
+        // Has to come before the topics plugin, so its middleware runs first
+        // and still sees the whole sidebar (src/fullSidebar.ts).
+        {
+          name: "lumit-full-sidebar",
+          hooks: {
+            "config:setup"({ addRouteMiddleware }) {
+              addRouteMiddleware({ entrypoint: "./src/fullSidebar.ts", order: "pre" });
+            },
+          },
+        },
         starlightSidebarTopics(
           [
             // Read in order, once: install it, learn the shape of a
