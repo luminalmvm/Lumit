@@ -14,9 +14,15 @@ import 'package:lumit_flutter/shell/precompose_dialog_frb.dart';
 import 'package:lumit_flutter/shell/dock_widget.dart';
 import 'package:lumit_flutter/shell/first_run_frb.dart';
 import 'package:lumit_flutter/shell/flowchart_frb.dart';
+import 'package:lumit_flutter/shell/export_queue_frb.dart'
+    show showExportQueueFrb;
 import 'package:lumit_flutter/shell/fx_console_frb.dart'
     show lastKnownPointerPosition;
+import 'package:lumit_flutter/shell/layer_settings_frb.dart'
+    show showLayerSettingsFrb;
+import 'package:lumit_flutter/shell/menu_animation_frb.dart';
 import 'package:lumit_flutter/shell/menu_bar_frb.dart';
+import 'package:lumit_flutter/shell/menu_layer_frb.dart';
 import 'package:lumit_flutter/shell/project_settings_frb.dart';
 import 'package:lumit_flutter/shell/settings_window_frb.dart';
 import 'package:lumit_flutter/shell/share_dialog_frb.dart';
@@ -524,6 +530,10 @@ class _LumitAppViewState extends State<LumitAppView> {
     // A tool action can also arrive from the primary lookup, if someone rebinds
     // one into a context a panel is. Same handler either way.
     if (ui.tools.handleAction(action)) return KeyEventResult.handled;
+    // A held key repeats, and these are pressed once however long it is held.
+    if (event is KeyRepeatEvent && _pressedOnce(action)) {
+      return KeyEventResult.handled;
+    }
 
     var handled = true;
     switch (action) {
@@ -996,6 +1006,93 @@ class _LumitAppViewState extends State<LumitAppView> {
           ui.clearSelection();
           state.notifyDocumentChanged();
         }
+      // The Animation menu's keyframe rows, pressed from the keyboard. Each
+      // is the row itself, so a key and its menu row cannot come to differ,
+      // and a row that would be greyed out leaves the key alone.
+      case 'keyframe.toggle':
+        handled = setKeyframeRow(state, ui).press();
+      // After Effects' Alt+Shift+P and its four siblings: the same command on
+      // one Transform property of the selected layers, with no row to pick.
+      case final id when id.startsWith('keyframe.toggle.'):
+        handled = toggleTransformKeys(
+            state, ui, id.substring('keyframe.toggle.'.length));
+      case 'keyframe.hold.toggle':
+        handled = toggleHoldRow(state, ui).press();
+      case 'keyframe.interpolation':
+        handled = keyframeInterpolationRow(context, state, ui).press();
+      case 'keyframe.speed':
+        handled = keyframeSpeedRow(context, state, ui).press();
+      case 'expression.add':
+        handled = addExpressionRow(context, state, ui).press();
+      // The Layer menu's rows the same way. Stepping the blend mode repeats
+      // while the key is held, and stops at either end of the list.
+      case 'layer.blend.next':
+        handled = blendStepRow(state, ui, by: 1).press();
+      case 'layer.blend.prev':
+        handled = blendStepRow(state, ui, by: -1).press();
+      case 'layer.lock.toggle':
+        handled = lockRow(state, ui).press();
+      case 'layer.unlock.all':
+        handled = unlockAllRow(state, ui).press();
+      case 'layer.order.up' ||
+            'layer.order.down' ||
+            'layer.order.top' ||
+            'layer.order.bottom':
+        handled = MenuEntry.pressAction(arrangeRows(state, ui), action);
+      case 'layer.centre':
+        handled = MenuEntry.pressAction(transformRows(state, ui), action);
+      case 'mask.feather' || 'mask.invert':
+        handled =
+            MenuEntry.pressAction(maskRows(context, state, ui), action);
+      case 'layer.settings':
+        final layer = ui.selectedLayer.value;
+        if (layer == null) {
+          handled = false;
+        } else {
+          showLayerSettingsFrb(context: context, layer: layer).then((changed) {
+            if (changed) state.notifyDocumentChanged();
+          });
+        }
+      // Up and down the stack with the selection, and along the Timeline
+      // with the layers themselves. Keyboard only, like the frame steps.
+      case 'layer.select.next':
+        handled = selectNeighbourLayer(ui, by: 1);
+      case 'layer.select.prev':
+        handled = selectNeighbourLayer(ui, by: -1);
+      case 'layer.shift.earlier':
+        handled = shiftSelectedLayers(state, ui, -1);
+      case 'layer.shift.later':
+        handled = shiftSelectedLayers(state, ui, 1);
+      case 'layer.shift.earlier10':
+        handled = shiftSelectedLayers(state, ui, -10);
+      case 'layer.shift.later10':
+        handled = shiftSelectedLayers(state, ui, 10);
+      case 'comp.trim.workarea':
+        final trim = trimCompAction(state, comp);
+        if (trim == null) {
+          handled = false;
+        } else {
+          trim();
+        }
+      case 'export.queue.open':
+        showExportQueueFrb(context: context);
+      case 'help.open':
+        openLumitHelp(state);
+      // The View menu's two switches that had no key.
+      case 'viewer.controls.toggle':
+        ui.setViewerLayerControls(!ui.viewerLayerControls);
+      case 'viewer.snap.grid.toggle':
+        ui.tools.snapToGrid = !ui.tools.snapToGrid;
+      // A panel put up or taken down, as its tick in the Window menu does.
+      case final id when id.startsWith('panel.toggle.'):
+        final panel = Panel.values
+            .where((panel) => panelToggleAction(panel) == id)
+            .firstOrNull;
+        if (panel == null) {
+          handled = false;
+        } else {
+          togglePanel(ui, panel);
+        }
       // A bound action this shell has no call for yet — the menus carry those.
       // Ignored rather than swallowed, so the key still reaches whatever else
       // wants it.
@@ -1005,3 +1102,27 @@ class _LumitAppViewState extends State<LumitAppView> {
     return handled ? KeyEventResult.handled : KeyEventResult.ignored;
   }
 }
+
+/// Whether a held key must not repeat [action]: the commands that flip
+/// something or open a window, where a second firing undoes or doubles the
+/// first.
+bool _pressedOnce(String action) =>
+    action.startsWith('keyframe.toggle') ||
+    action.startsWith('panel.toggle.') ||
+    const {
+      'keyframe.hold.toggle',
+      'keyframe.interpolation',
+      'keyframe.speed',
+      'expression.add',
+      'layer.lock.toggle',
+      'layer.unlock.all',
+      'layer.centre',
+      'layer.settings',
+      'mask.feather',
+      'mask.invert',
+      'comp.trim.workarea',
+      'export.queue.open',
+      'help.open',
+      'viewer.controls.toggle',
+      'viewer.snap.grid.toggle',
+    }.contains(action);

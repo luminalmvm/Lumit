@@ -14567,6 +14567,178 @@
   "@shareRemoved": {
     "description": "Bottom-strip notice shown to a guest the host has taken out of the shared project. The guest keeps the project open as an ordinary unsaved project."
   },
+  "keyAddOrRemoveAKeyframeAtThePlayhead": "Add or remove a keyframe at the playhead",
+  "@keyAddOrRemoveAKeyframeAtThePlayhead": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyAddOrRemoveAPositionKeyframe": "Add or remove a Position keyframe",
+  "@keyAddOrRemoveAPositionKeyframe": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyAddOrRemoveAScaleKeyframe": "Add or remove a Scale keyframe",
+  "@keyAddOrRemoveAScaleKeyframe": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyAddOrRemoveARotationKeyframe": "Add or remove a Rotation keyframe",
+  "@keyAddOrRemoveARotationKeyframe": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyAddOrRemoveAnOpacityKeyframe": "Add or remove an Opacity keyframe",
+  "@keyAddOrRemoveAnOpacityKeyframe": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyAddOrRemoveAnAnchorPointKeyframe": "Add or remove an Anchor point keyframe",
+  "@keyAddOrRemoveAnAnchorPointKeyframe": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyHoldOrReleaseTheKeyframe": "Hold or release the keyframe",
+  "@keyHoldOrReleaseTheKeyframe": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keySetTheKeyframeSInterpolation": "Set the keyframe's interpolation",
+  "@keySetTheKeyframeSInterpolation": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keySetTheKeyframeSSpeed": "Set the keyframe's speed",
+  "@keySetTheKeyframeSSpeed": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyAddAnExpression": "Add an expression",
+  "@keyAddAnExpression": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyTrimTheCompositionToTheWorkArea": "Trim the composition to the work area",
+  "@keyTrimTheCompositionToTheWorkArea": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyOpenTheExportQueue": "Open the export queue",
+  "@keyOpenTheExportQueue": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyOpenLumitHelp": "Open Lumit help",
+  "@keyOpenLumitHelp": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyLayerSettings": "Layer settings",
+  "@keyLayerSettings": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyNextBlendMode": "Next blend mode",
+  "@keyNextBlendMode": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyPreviousBlendMode": "Previous blend mode",
+  "@keyPreviousBlendMode": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyLockOrUnlockTheLayer": "Lock or unlock the layer",
+  "@keyLockOrUnlockTheLayer": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyUnlockEveryLayer": "Unlock every layer",
+  "@keyUnlockEveryLayer": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keySelectTheLayerBelow": "Select the layer below",
+  "@keySelectTheLayerBelow": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keySelectTheLayerAbove": "Select the layer above",
+  "@keySelectTheLayerAbove": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyMoveTheLayerUpTheStack": "Move the layer up the stack",
+  "@keyMoveTheLayerUpTheStack": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyMoveTheLayerDownTheStack": "Move the layer down the stack",
+  "@keyMoveTheLayerDownTheStack": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyMoveTheLayerToTheTopOfTheStack": "Move the layer to the top of the stack",
+  "@keyMoveTheLayerToTheTopOfTheStack": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyMoveTheLayerToTheBottomOfTheStack": "Move the layer to the bottom of the stack",
+  "@keyMoveTheLayerToTheBottomOfTheStack": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyMoveTheLayerAFrameEarlier": "Move the layer a frame earlier",
+  "@keyMoveTheLayerAFrameEarlier": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyMoveTheLayerAFrameLater": "Move the layer a frame later",
+  "@keyMoveTheLayerAFrameLater": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyMoveTheLayerTenFramesEarlier": "Move the layer ten frames earlier",
+  "@keyMoveTheLayerTenFramesEarlier": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyMoveTheLayerTenFramesLater": "Move the layer ten frames later",
+  "@keyMoveTheLayerTenFramesLater": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyCentreTheLayerInTheComposition": "Centre the layer in the composition",
+  "@keyCentreTheLayerInTheComposition": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keySetTheMaskSFeather": "Set the mask's feather",
+  "@keySetTheMaskSFeather": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyInvertTheMask": "Invert the mask",
+  "@keyInvertTheMask": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyShowOrHideTheLayerControls": "Show or hide the layer controls",
+  "@keyShowOrHideTheLayerControls": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyTurnSnappingToTheGridOnOrOff": "Turn snapping to the grid on or off",
+  "@keyTurnSnappingToTheGridOnOrOff": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyShowOrHideTheProjectPanel": "Show or hide the Project panel",
+  "@keyShowOrHideTheProjectPanel": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyShowOrHideEffectControls": "Show or hide Effect controls",
+  "@keyShowOrHideEffectControls": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyShowOrHideEffectsPresets": "Show or hide Effects & presets",
+  "@keyShowOrHideEffectsPresets": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyShowOrHideTheAudioPanel": "Show or hide the Audio panel",
+  "@keyShowOrHideTheAudioPanel": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyShowOrHideTheTextPanel": "Show or hide the Text panel",
+  "@keyShowOrHideTheTextPanel": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyShowOrHideTheParagraphPanel": "Show or hide the Paragraph panel",
+  "@keyShowOrHideTheParagraphPanel": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "menuUnlockAllLayers": "Unlock all layers",
+  "@menuUnlockAllLayers": {
+    "description": "A row of the Layer menu: take the lock off every layer in the composition."
+  },
+  "menuArrange": "Arrange",
+  "@menuArrange": {
+    "description": "A row of the Layer menu that opens the rows for moving the selected layers up and down the stack."
+  },
+  "bringToFront": "Bring to front",
+  "@bringToFront": {
+    "description": "Menu item: move a layer to the top of the stack."
+  },
+  "sendToBack": "Send to back",
+  "@sendToBack": {
+    "description": "Menu item: move a layer to the bottom of the stack."
+  },
   "shareOutside": "Internet",
   "@shareOutside": {
     "description": "Row label on the Share this project page of the Shared project window, beside a tick box that lets people who are not on the same local network join."

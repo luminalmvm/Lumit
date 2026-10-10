@@ -229,6 +229,50 @@ void main() {
       expect(layer.getRetimeProperty(), isNull);
     });
 
+    /// After Effects' Alt+Shift+P keys Position on the selected layer and a
+    /// second press takes the key away again, and Shift+= and Shift+- step
+    /// the layer's blend mode.
+    testWidgets('Alt+Shift+P keys Position, Shift+= steps the blend mode',
+        (tester) async {
+      final p = await mount(tester);
+      final comp = p.uiState.selectedComp!;
+      final layer = comp.addSolidLayer();
+      p.uiState.setSelection([layer]);
+      p.uiState.playheadFrame.value = 12;
+      p.uiState.model.refresh();
+      await tester.pump();
+
+      Future<void> press(LogicalKeyboardKey key, {bool alt = false}) async {
+        if (alt) await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+        await tester.sendKeyEvent(key);
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+        if (alt) await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+        await tester.pump();
+      }
+
+      await press(LogicalKeyboardKey.keyP, alt: true);
+      final keyed = layer.getTransform().positionX;
+      expect(keyed, isA<BridgeScalar_Keyframed>());
+      expect(
+          comp.frameAtTime(
+              time: (keyed as BridgeScalar_Keyframed).field0.single.time),
+          12,
+          reason: 'one key, on the playhead');
+      expect(layer.getTransform().positionY, isA<BridgeScalar_Keyframed>(),
+          reason: 'both axes of the row');
+
+      await press(LogicalKeyboardKey.keyP, alt: true);
+      expect(layer.getTransform().positionX, isA<BridgeScalar_Static>(),
+          reason: 'the second press takes the key away');
+
+      expect(layer.getBlend(), 0);
+      await press(LogicalKeyboardKey.equal);
+      expect(layer.getBlend(), 1);
+      await press(LogicalKeyboardKey.minus);
+      expect(layer.getBlend(), 0);
+    });
+
     /// Layer ▸ New from the keyboard, on After Effects' chords: Ctrl+Y makes
     /// a Solid and Ctrl+Alt+Y an Adjustment layer, in the fronted comp.
     testWidgets('Ctrl+Y and Ctrl+Alt+Y add a Solid and an Adjustment layer',

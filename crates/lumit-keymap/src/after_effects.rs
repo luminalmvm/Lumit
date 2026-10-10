@@ -78,6 +78,56 @@ const COMMANDS: &[(&str, &str, KeyContext, &str)] = &[
     ("CCompCmd", "SetWorkAreaStart", Global, "workarea.set.start"),
     ("CCompCmd", "SetWorkAreaEnd", Global, "workarea.set.end"),
     ("CCompCmd", "AddMarker", Global, "marker.add"),
+    // Keyframes. The NewKF commands are the reveal letters with Alt and Shift.
+    (
+        "CCompCompCmd",
+        "CompTwirlPositionAddStateNewKF",
+        Global,
+        "keyframe.toggle.position",
+    ),
+    (
+        "CCompCompCmd",
+        "CompTwirlScaleAddStateNewKF",
+        Global,
+        "keyframe.toggle.scale",
+    ),
+    (
+        "CCompCompCmd",
+        "CompTwirlRotationAddStateNewKF",
+        Global,
+        "keyframe.toggle.rotation",
+    ),
+    (
+        "CCompCompCmd",
+        "CompTwirlOpacityAddStateNewKF",
+        Global,
+        "keyframe.toggle.opacity",
+    ),
+    (
+        "CCompCompCmd",
+        "CompTwirlAnchorPointAddStateNewKF",
+        Global,
+        "keyframe.toggle.anchor",
+    ),
+    (
+        "CSwitchboard",
+        "ToggleKeyframeHoldInterp",
+        Global,
+        "keyframe.hold.toggle",
+    ),
+    (
+        "CSwitchboard",
+        "KeyframeInterpDialog",
+        Global,
+        "keyframe.interpolation",
+    ),
+    (
+        "CSwitchboard",
+        "KeyframeVelocityDialog",
+        Global,
+        "keyframe.speed",
+    ),
+    ("CSwitchboard", "ToggleExpression", Global, "expression.add"),
     // Editing and files.
     ("CCompCmd", "Clear", Global, "edit.delete.selection"),
     ("CSwitchboard", "Cut", Global, "edit.cut"),
@@ -120,7 +170,58 @@ const COMMANDS: &[(&str, &str, KeyContext, &str)] = &[
         "panel.maximise",
     ),
     ("CCompCompCmd", "ToggleGraph", Global, "graph.toggle"),
-    // Layers.
+    (
+        "CSwitchboard",
+        "CompTrimToWorkArea",
+        Global,
+        "comp.trim.workarea",
+    ),
+    (
+        "CSwitchboard",
+        "ShowHideRenderQueue",
+        Global,
+        "export.queue.open",
+    ),
+    ("CSwitchboard", "HelpAfterEffectsHelp", Global, "help.open"),
+    // Layers. A transfer mode is After Effects' old name for a blend mode.
+    ("CSwitchboard", "LayerSettings", Global, "layer.settings"),
+    ("CSwitchboard", "NextXferMode", Global, "layer.blend.next"),
+    ("CSwitchboard", "PrevXferMode", Global, "layer.blend.prev"),
+    ("CSwitchboard", "ToggleLock", Global, "layer.lock.toggle"),
+    (
+        "CSwitchboard",
+        "UnlockAllLayers",
+        Global,
+        "layer.unlock.all",
+    ),
+    ("CCompCmd", "SelectNext", Global, "layer.select.next"),
+    ("CCompCmd", "SelectPrevious", Global, "layer.select.prev"),
+    ("CSwitchboard", "BringCloser", Global, "layer.order.up"),
+    ("CSwitchboard", "SendFarther", Global, "layer.order.down"),
+    ("CSwitchboard", "BringToFront", Global, "layer.order.top"),
+    ("CSwitchboard", "SendToBack", Global, "layer.order.bottom"),
+    (
+        "CCompCompCmd",
+        "NudgeEarlier",
+        Global,
+        "layer.shift.earlier",
+    ),
+    ("CCompCompCmd", "NudgeLater", Global, "layer.shift.later"),
+    (
+        "CCompCompCmd",
+        "NudgeEarlierMore",
+        Global,
+        "layer.shift.earlier10",
+    ),
+    (
+        "CCompCompCmd",
+        "NudgeLaterMore",
+        Global,
+        "layer.shift.later10",
+    ),
+    ("CCompCmd", "CenterLayerInView", Global, "layer.centre"),
+    ("CSwitchboard", "MaskFeather", Global, "mask.feather"),
+    ("CSwitchboard", "MaskInverse", Global, "mask.invert"),
     (
         "CSwitchboard",
         "EnableTimeRemap",
@@ -257,8 +358,56 @@ const COMMANDS: &[(&str, &str, KeyContext, &str)] = &[
         "viewer.grid.toggle",
     ),
     ("CDirTabPanel", "NewViewer", Viewer, "viewer.new"),
-    // Panels.
+    (
+        "CSwitchboard",
+        "ToggleLayerControls",
+        Viewer,
+        "viewer.controls.toggle",
+    ),
+    (
+        "CSwitchboard",
+        "ToggleSnapGrid",
+        Viewer,
+        "viewer.snap.grid.toggle",
+    ),
+    // Panels. The Character panel is Lumit's Text panel.
     ("CSwitchboard", "Find", Panels, "panel.search.focus"),
+    (
+        "CSwitchboard",
+        "ShowHideProject",
+        Panels,
+        "panel.toggle.project",
+    ),
+    (
+        "CSwitchboard",
+        "ToggleEffectControls",
+        Panels,
+        "panel.toggle.effects",
+    ),
+    (
+        "CSwitchboard",
+        "ShowHideFxPal",
+        Panels,
+        "panel.toggle.presets",
+    ),
+    (
+        "CSwitchboard",
+        "ShowHideAudio",
+        Panels,
+        "panel.toggle.audio",
+    ),
+    (
+        "CSwitchboard",
+        "ShowHideCharPal",
+        Panels,
+        "panel.toggle.text",
+    ),
+    (
+        "CSwitchboard",
+        "ShowHideParaPal",
+        Panels,
+        "panel.toggle.paragraph",
+    ),
 ];
 
 /// Every action `command` stands for.

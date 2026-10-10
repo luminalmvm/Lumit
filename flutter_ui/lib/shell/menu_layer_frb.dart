@@ -211,6 +211,7 @@ List<MenuEntry> maskRows(BuildContext context, LumitState app, LumitUiState ui) 
       picked == null
           ? null
           : () => write(maskWith(picked.mask, inverted: !picked.mask.inverted)),
+      action: 'mask.invert',
       checked: () => pickedMask(ui)?.mask.inverted ?? false,
     ),
     // Feather and expansion are layer pixels off one signed-distance field,
@@ -227,6 +228,7 @@ List<MenuEntry> maskRows(BuildContext context, LumitState app, LumitUiState ui) 
                 max: 10000,
                 put: (m, v) => maskWith(m, feather: v),
               ),
+      action: 'mask.feather',
     ),
     MenuEntry(
       l10n.menuMaskOpacity,
@@ -378,6 +380,7 @@ List<MenuEntry> transformRows(LumitState app, LumitUiState ui) {
                 ],
               );
             }),
+      action: 'layer.centre',
     ),
     MenuEntry.divider(),
     ...axisModeRows(app, ui),
@@ -590,7 +593,170 @@ MenuEntry blendStepRow(LumitState app, LumitUiState ui, {required int by}) {
       when: (entry) =>
           by > 0 ? entry.info.blend < last : entry.info.blend > 0,
     ),
+    action: by > 0 ? 'layer.blend.next' : 'layer.blend.prev',
   );
+}
+
+/// Layer ▸ Lock: the padlock for the whole selection, every layer ending up
+/// as the first one does, the way a switch cell clicked on a selection works.
+MenuEntry lockRow(LumitState app, LumitUiState ui) {
+  final comp = ui.selectedComp;
+  final entries = selectedEntries(ui);
+  return MenuEntry(
+    l10n.switchLock,
+    comp == null || entries.isEmpty
+        ? null
+        : () {
+            try {
+              comp.setSwitchOnLayers(
+                clicked: entries.first.layer.internallayerId,
+                layers: [for (final e in entries) e.layer.internallayerId],
+                switch_: BridgeLayerSwitch.locked,
+                on_: !entries.first.info.switches.locked,
+              );
+              app.notifyDocumentChanged();
+            } catch (_) {
+              // The layer went away between the draw and the press.
+            }
+          },
+    action: 'layer.lock.toggle',
+    checked: entries.firstOrNull?.info.switches.locked ?? false,
+  );
+}
+
+/// Layer ▸ Unlock all layers: every padlock in the composition off, selected
+/// or not, as one undo step. Greyed when nothing is locked.
+MenuEntry unlockAllRow(LumitState app, LumitUiState ui) {
+  final comp = ui.selectedComp;
+  final locked = [
+    for (final entry in ui.model.layers)
+      if (entry.info.switches.locked) entry.layer.internallayerId,
+  ];
+  return MenuEntry(
+    l10n.menuUnlockAllLayers,
+    comp == null || locked.isEmpty
+        ? null
+        : () {
+            try {
+              comp.setSwitchOnLayers(
+                clicked: locked.first,
+                layers: locked,
+                switch_: BridgeLayerSwitch.locked,
+                on_: false,
+              );
+              app.notifyDocumentChanged();
+            } catch (_) {}
+          },
+    action: 'layer.unlock.all',
+  );
+}
+
+/// Layer ▸ Arrange: the selected layers one place up or down the stack, or all
+/// the way to either end.
+///
+/// A block of layers keeps its shape and its order. A locked layer stays where
+/// it is, and so does one already at the end it is being sent to.
+List<MenuEntry> arrangeRows(LumitState app, LumitUiState ui) {
+  final ids = ui.selectedLayerIds;
+  final all = ui.model.layers;
+  final moving = [
+    for (var i = 0; i < all.length; i++)
+      if (ids.contains(all[i].layer.internallayerId) &&
+          !all[i].info.switches.locked)
+        i,
+  ];
+
+  VoidCallback? move({required bool up, required bool toEnd}) {
+    // Nowhere to go when the block already sits against that end.
+    final blocked = moving.isEmpty ||
+        (up
+            ? moving.last == moving.length - 1
+            : moving.first == all.length - moving.length);
+    if (blocked) return null;
+    return () {
+      asOneUndoStep(app.project, () {
+        if (toEnd) {
+          // Each one lands on the end itself, so the last to move is the one
+          // that stays there: the bottom of the block first going up, the top
+          // of it first going down, and the block arrives in its own order.
+          for (final i in up ? moving.reversed : moving) {
+            try {
+              all[i]
+                  .layer
+                  .reorder(newIndex: BigInt.from(up ? 0 : all.length - 1));
+            } catch (_) {}
+          }
+          return;
+        }
+        // One place: a layer swaps with its neighbour and leaves every index
+        // past it alone, so from the top going up and from the bottom going
+        // down the indices read before the move stay true throughout.
+        final taken = <int>{};
+        for (final i in up ? moving : moving.reversed) {
+          final to = up ? i - 1 : i + 1;
+          // Against the end, or against a selected layer that could not move.
+          if (to < 0 || to >= all.length || taken.contains(to)) {
+            taken.add(i);
+            continue;
+          }
+          try {
+            all[i].layer.reorder(newIndex: BigInt.from(to));
+            taken.add(to);
+          } catch (_) {
+            taken.add(i);
+          }
+        }
+      });
+      app.notifyDocumentChanged();
+    };
+  }
+
+  return [
+    MenuEntry(l10n.bringToFront, move(up: true, toEnd: true),
+        action: 'layer.order.top'),
+    MenuEntry(l10n.bringForward, move(up: true, toEnd: false),
+        action: 'layer.order.up'),
+    MenuEntry(l10n.sendBackward, move(up: false, toEnd: false),
+        action: 'layer.order.down'),
+    MenuEntry(l10n.sendToBack, move(up: false, toEnd: true),
+        action: 'layer.order.bottom'),
+  ];
+}
+
+/// Select the layer under the selected one, or over it: [by] is 1 for the next
+/// one down the stack and -1 for the next one up. With nothing selected it
+/// takes the top layer going down and the bottom one going up. Returns whether
+/// the selection moved.
+bool selectNeighbourLayer(LumitUiState ui, {required int by}) {
+  final all = ui.model.layers;
+  if (all.isEmpty) return false;
+  final primary = ui.selectedLayer.value?.internallayerId;
+  final at = primary == null
+      ? -1
+      : all.indexWhere((e) => e.layer.internallayerId == primary);
+  final to = at < 0 ? (by > 0 ? 0 : all.length - 1) : at + by;
+  if (to < 0 || to >= all.length) return false;
+  ui.setSelection([all[to].layer]);
+  return true;
+}
+
+/// Slide the selected layers along the Timeline by [frames], keyframes and all,
+/// which is what dragging their bars does. A locked layer stays put. Returns
+/// whether anything moved.
+bool shiftSelectedLayers(LumitState app, LumitUiState ui, int frames) {
+  final comp = ui.selectedComp;
+  final ids = [
+    for (final entry in selectedEntries(ui))
+      if (!entry.info.switches.locked) entry.layer.internallayerId,
+  ];
+  if (comp == null || ids.isEmpty) return false;
+  try {
+    comp.slideLayers(layerIds: ids, delta: frames);
+  } catch (_) {
+    return false;
+  }
+  app.notifyDocumentChanged();
+  return true;
 }
 
 /// The kinds with a picture to gate another layer with — everything except the
