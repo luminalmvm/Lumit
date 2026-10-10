@@ -50,6 +50,13 @@ final shotShape = ThemeShape.values
         .asNameMap()[Platform.environment['LUMIT_SHOTS_SHAPE'] ?? ''] ??
     ThemeShape.studio;
 
+/// The colour scheme a sweep stages in, by its name in [LumitColorScheme]:
+/// `LUMIT_SHOTS_SCHEME=vellumLight`. Unset, the shape's own scheme stands,
+/// which is what the manual is shot in; this is for looking a panel over in
+/// the light schemes before its pictures are taken.
+final shotScheme = LumitColorScheme.values
+    .asNameMap()[Platform.environment['LUMIT_SHOTS_SCHEME'] ?? ''];
+
 final _shotTokens = ShapeTokens.of(shotShape);
 
 /// How far above a docked panel's content its tab strip starts, in logical
@@ -116,6 +123,7 @@ Future<(LumitState, LumitUiState)> bootLumit() async {
   ui.workspace.skipFirstRun();
   ui.workspace.finishTour();
   ui.workspace.setShape(shotShape);
+  if (shotScheme case final scheme?) ui.workspace.setScheme(scheme);
   return (state, ui);
 }
 
