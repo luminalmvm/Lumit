@@ -261,8 +261,14 @@ class _KeyBlockOverlayState extends State<KeyBlockOverlay> {
                 ),
               ),
             ),
-            _handle(t, x: left, top: boxTop, bottom: boxBottom, start: true),
-            _handle(t, x: right, top: boxTop, bottom: boxBottom, start: false),
+            // No handles on a block whose keys all sit on one frame. There is
+            // nothing to stretch, and the two would stand on the keys and take
+            // the drag that moves them.
+            if (block.last > block.first) ...[
+              _handle(t, x: left, top: boxTop, bottom: boxBottom, start: true),
+              _handle(t,
+                  x: right, top: boxTop, bottom: boxBottom, start: false),
+            ],
             // Measured from where the box is *now*, so the span it reports is
             // the one the release will write rather than the one the gesture
             // started from.
@@ -471,6 +477,123 @@ class _KeyBlockOverlayState extends State<KeyBlockOverlay> {
       child: HintPill(
         text: l10n.timelineStretchHint(first.round(), last.round()),
       ),
+    );
+  }
+}
+
+/// The ground inside the block box, as a grab that **moves** the block: every
+/// key the same distance, where a handle would stretch them.
+///
+/// It sits behind the bars and the keys, so they keep their own gestures, and
+/// it lets a click through to the ground beneath it.
+class KeyBlockMoveGrab extends StatefulWidget {
+  /// The selected keys, from the area's one walk.
+  final List<SelectedKey> places;
+  final TimelineAxis axis;
+  final ValueNotifier<KeyStretch?> stretch;
+  final bool magnet;
+
+  /// The release: write every key where the move has carried it.
+  final ValueChanged<KeyStretch> onMove;
+
+  const KeyBlockMoveGrab({
+    super.key,
+    required this.places,
+    required this.axis,
+    required this.stretch,
+    required this.magnet,
+    required this.onMove,
+  });
+
+  @override
+  State<KeyBlockMoveGrab> createState() => _KeyBlockMoveGrabState();
+}
+
+class _KeyBlockMoveGrabState extends State<KeyBlockMoveGrab> {
+  /// Pixels the gesture has moved, as a running total. See the lane key's own.
+  double _deltaPx = 0;
+
+  final DragEscape _escape = DragEscape();
+
+  @override
+  void dispose() {
+    _escape.dispose();
+    super.dispose();
+  }
+
+  void _moveBy(double dx, KeyBlock block) {
+    final perFrame = widget.axis.perFrame;
+    if (!_escape.running || perFrame <= 0) return;
+    _deltaPx += dx;
+    // ponytail: whole frames only. A key's own drag also snaps to markers and
+    // the playhead, give this the same if a block needs to land on one.
+    var by = _deltaPx / perFrame;
+    if (widget.magnet &&
+        !snapSuspended(
+            controlPressed: HardwareKeyboard.instance.isControlPressed)) {
+      by = by.roundToDouble();
+    }
+    // Held inside the axis, as one key's drag is.
+    final back = block.first < 0 ? 0.0 : -block.first;
+    final room = widget.axis.frames - block.last;
+    by = by.clamp(back, room < 0 ? 0.0 : room).toDouble();
+    widget.stretch.value = by == 0
+        ? null
+        : KeyStretch.shift(
+            keys: {for (final p in widget.places) '${p.rowId}#${p.index}'},
+            by: by,
+          );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final block = KeyBlockOverlay.blockOf(widget.places);
+    if (block == null) return const SizedBox.shrink();
+    // Between the handles, which keep the two ends.
+    final left = widget.axis.xOf(block.first) + _blockHandleGrab / 2;
+    final right = widget.axis.xOf(block.last) - _blockHandleGrab / 2;
+    if (right <= left) return const SizedBox.shrink();
+    var top = widget.places.first.top;
+    var bottom = top + widget.places.first.height;
+    for (final p in widget.places) {
+      if (p.top < top) top = p.top;
+      if (p.top + p.height > bottom) bottom = p.top + p.height;
+    }
+    return Stack(
+      children: [
+        Positioned(
+          key: const ValueKey('tl-block-move'),
+          left: left,
+          top: top + _blockBoxInset,
+          width: right - left,
+          height: bottom - top - _blockBoxInset * 2,
+          child: MouseRegion(
+            cursor: SystemMouseCursors.grab,
+            hitTestBehavior: HitTestBehavior.translucent,
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              supportedDevices: dragDevices,
+              // From the down, as the handles are, so the block stays under
+              // the hand.
+              dragStartBehavior: DragStartBehavior.down,
+              onHorizontalDragStart: (_) {
+                _deltaPx = 0;
+                _escape.begin(() => widget.stretch.value = null);
+              },
+              onHorizontalDragUpdate: (d) => _moveBy(d.delta.dx, block),
+              onHorizontalDragEnd: (_) {
+                final held = widget.stretch.value;
+                widget.stretch.value = null;
+                if (_escape.end() && held != null) widget.onMove(held);
+              },
+              onHorizontalDragCancel: () {
+                _escape.end();
+                widget.stretch.value = null;
+              },
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
