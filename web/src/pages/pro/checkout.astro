@@ -1,0 +1,66 @@
+---
+import Base from "../../layouts/Base.astro";
+
+// Where Lumit sends someone to pay. Paddle's own script draws the checkout
+// over this page for the payment named in the address, so this site never
+// sees a card. The token is a public one, set when the site is built:
+// PUBLIC_PADDLE_TOKEN, and PUBLIC_PADDLE_ENV=sandbox while testing.
+const TOKEN = import.meta.env.PUBLIC_PADDLE_TOKEN ?? "";
+const SANDBOX = import.meta.env.PUBLIC_PADDLE_ENV === "sandbox";
+---
+
+<Base title="Get Lumit Pro" description="Pay for Lumit Pro.">
+  <section class="pt-14 pb-24 sm:pt-20 sm:pb-32">
+    <div class="wrap">
+      <div class="sec-rule"><p class="kicker pl-3">Lumit Pro</p></div>
+
+      <div id="pay-ready" hidden>
+        <h1 class="sec-title mt-7">Finish paying for Pro.</h1>
+        <p class="lede mt-4">
+          The payment form should be open over this page. It is Paddle's, who take the
+          payment for us, so your card details never reach Lumit.
+        </p>
+        <div class="mt-9 flex flex-wrap gap-3">
+          <a class="btn border-white" href="" id="pay-again">Open the payment form</a>
+        </div>
+      </div>
+
+      <div id="pay-empty">
+        <h1 class="sec-title mt-7">Pro is bought from inside Lumit.</h1>
+        <p class="lede mt-4">
+          Press your name at the left of Lumit's bottom strip, choose See what is in Pro,
+          and it brings you back here with everything filled in.
+        </p>
+        <div class="mt-9 flex flex-wrap gap-3">
+          <a class="btn border-white" href="/pro">What is in Pro</a>
+          <a class="btn btn-ghost" href="/download">Download Lumit</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</Base>
+
+{TOKEN && <script is:inline src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>}
+<script is:inline define:vars={{ TOKEN, SANDBOX }}>
+  (() => {
+    // Only a payment Lumit made has one of these in the address.
+    const made = /^txn_[a-z0-9]{10,40}$/.test(new URLSearchParams(location.search).get("_ptxn") ?? "");
+    if (!TOKEN || !made || !window.Paddle) return;
+    document.getElementById("pay-empty").hidden = true;
+    document.getElementById("pay-ready").hidden = false;
+    document.getElementById("pay-again").href = location.href;
+    if (SANDBOX) Paddle.Environment.set("sandbox");
+    // With the payment in the address, the script opens the form itself.
+    Paddle.Initialize({
+      token: TOKEN,
+      checkout: {
+        settings: {
+          displayMode: "overlay",
+          theme: "dark",
+          locale: "en",
+          successUrl: location.origin + "/pro/welcome",
+        },
+      },
+    });
+  })();
+</script>

@@ -67,6 +67,15 @@ markup. The page is still fully usable with JavaScript disabled.
 > publishes at all publishes all three. The Linux asset was a `.tar.gz` up to and
 > including v0.1.0.
 
+## Lumit Pro
+
+Pro is bought inside Lumit, and paid for on `/pro/checkout`, where Paddle's script draws
+its form over the page. The page takes Paddle's client-side token from the build, so the
+`lumit` Worker's build needs two variables: `PUBLIC_PADDLE_TOKEN`, and
+`PUBLIC_PADDLE_ENV=sandbox` while it is the sandbox's token. Without the token the page
+only points people back to Lumit. `/pro` asks `cloud.lumitlab.com` for the prices and shows none if
+it doesn't answer.
+
 ## Release notes
 
 `/releases` is the changelog, in the shape of Astro's Starlog example: a sticky
