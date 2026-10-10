@@ -4,11 +4,39 @@
 // ignore_for_file: invalid_use_of_internal_member, unused_import, unnecessary_import
 
 import '../frb_generated.dart';
+import 'effect.dart';
+import 'footage.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
+import 'package:uuid/uuid.dart';
 
-// These functions are ignored because they are not marked as `pub`: `add_row`, `chosen`, `close_gap`, `commit`, `covers`, `cut`, `delete`, `find`, `has_sound`, `move_by`, `open`, `place`, `razor_at`, `razor`, `relink`, `retrimmed`, `ripple`, `roll`, `row_of`, `slide`, `slip`, `time`, `trim`
-// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Edit`, `Row`, `Stop`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `eq`, `fmt`, `from`, `from`, `from`
+// These functions are ignored because they are not marked as `pub`: `add_row`, `chosen`, `close_gap`, `commit`, `copy`, `covers`, `cut`, `delete`, `find`, `follows`, `forget_copied`, `frame_up`, `has_sound`, `is_still`, `land`, `make_composition`, `move_by`, `open`, `paste`, `place`, `razor_at`, `razor`, `relink`, `remove_span`, `renew`, `retrimmed`, `ripple`, `roll`, `room`, `row_of`, `slide`, `slip`, `time`, `transition`, `trim`, `with_linked`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Edit`, `Held`, `Row`, `Stop`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`
+
+/// How a paste ended, and where the playhead goes after it.
+class BridgeCutPaste {
+  final BridgeCutResult result;
+
+  /// The frame the pasted clips end on, the first one after the last of
+  /// them. The frame asked for when nothing was pasted.
+  final PlatformInt64 endFrame;
+
+  const BridgeCutPaste({
+    required this.result,
+    required this.endFrame,
+  });
+
+  @override
+  int get hashCode => result.hashCode ^ endFrame.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeCutPaste &&
+          runtimeType == other.runtimeType &&
+          result == other.result &&
+          endFrame == other.endFrame;
+}
 
 /// How a Cut edit ended. Anything but `Done` left the document untouched, and
 /// says why in a form the panel can put words to.
@@ -41,4 +69,27 @@ enum BridgeCutResult {
   /// on a picture layer.
   wrongLayer,
   ;
+}
+
+/// What a clip is showing at a frame: the footage item, and the moment of it
+/// in seconds of source time.
+class BridgeMatchFrame {
+  final FootageReference footage;
+  final BridgeRational sourceTime;
+
+  const BridgeMatchFrame({
+    required this.footage,
+    required this.sourceTime,
+  });
+
+  @override
+  int get hashCode => footage.hashCode ^ sourceTime.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeMatchFrame &&
+          runtimeType == other.runtimeType &&
+          footage == other.footage &&
+          sourceTime == other.sourceTime;
 }

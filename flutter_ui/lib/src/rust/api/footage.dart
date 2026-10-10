@@ -257,8 +257,8 @@ class FootageReference {
   /// the result when it lands.
   ///
   /// Returns as soon as the job is *running*; ask [`proxy_poll`] how it is
-  /// getting on. A second one while the first runs is a calm refusal — two
-  /// transcodes share one disk.
+  /// getting on. One asked for while another runs waits its turn, since two
+  /// transcodes share one disk, and starts when the one before it lands.
   void makeProxy() =>
       BridgeLib.instance.api.crateApiFootageFootageReferenceMakeProxy(
         that: this,

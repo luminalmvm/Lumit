@@ -853,12 +853,39 @@ class CompositionReference {
       .crateApiCompositionCompositionReferenceCropToRegion(
           that: this, region: region);
 
+  /// The composition a clip plays, made for it when it plays footage, for
+  /// work on one clip that a Sequence layer has no room for.
+  ///
+  /// A clip that already plays a composition answers that one. Otherwise a
+  /// composition is made, named for the footage and holding it as one
+  /// layer from time zero: the file's own picture size and whole length at
+  /// this composition's frame rate, with its work area on the stretch the
+  /// clip plays. A still takes this composition's length and a sound file
+  /// its size. The clip then plays the new composition and shows exactly
+  /// what it showed, since its trim and its Retime are left as they are.
+  /// One undo step, and a clip linked to this one is not touched.
+  ///
+  /// `None` when the clip's layer is locked.
+  CompositionReference? cutClipToComposition({required UuidValue clip}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutClipToComposition(
+              that: this, clip: clip);
+
   /// Close the gap on `layer` that `at_frame` falls in: everything after
   /// it moves earlier by its length, on every unlocked Sequence layer.
   BridgeCutResult cutCloseGap(
           {required LayerReference layer, required PlatformInt64 atFrame}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceCutCloseGap(
           that: this, layer: layer, atFrame: atFrame);
+
+  /// Copy clips, and with `linked` the clips linked to them, for
+  /// [`Self::cut_paste`]. They are kept until the next copy or until the
+  /// project closes, through any change of composition, and the document
+  /// is not touched.
+  BridgeCutResult cutCopy(
+          {required List<UuidValue> clips, required bool linked}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceCutCopy(
+          that: this, clips: clips, linked: linked);
 
   /// Delete clips, on any Sequence layers of this composition. With
   /// `linked` the clips linked to them go too. With `ripple` what they
@@ -870,6 +897,37 @@ class CompositionReference {
           required bool linked}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceCutDelete(
           that: this, clips: clips, ripple: ripple, linked: linked);
+
+  /// Duplicate clips: [`Self::cut_move`] with the clips left where they
+  /// are and copies of them making the move, overwriting what they land
+  /// on. The copies are clips of their own, and a copied picture clip and
+  /// its copied sound are linked to each other and not to the originals.
+  BridgeCutResult cutDuplicate(
+          {required List<UuidValue> clips,
+          required UuidValue grabbed,
+          required PlatformInt64 byFrames,
+          LayerReference? target,
+          required bool linked}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutDuplicate(
+              that: this,
+              clips: clips,
+              grabbed: grabbed,
+              byFrames: byFrames,
+              target: target,
+              linked: linked);
+
+  /// Match frame: the footage item and the moment of it that the clip
+  /// under `frame` is showing, read through the clip's Retime.
+  ///
+  /// The clip is the one on `layer`, or without one on the top-most
+  /// unlocked picture Sequence layer that has a clip there. `None` over a
+  /// gap, and for a clip that plays a composition.
+  BridgeMatchFrame? cutMatchFrame(
+          {required PlatformInt64 frame, LayerReference? layer}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutMatchFrame(
+              that: this, frame: frame, layer: layer);
 
   /// Move clips by `by_frames`, overwriting what they land on.
   ///
@@ -891,6 +949,27 @@ class CompositionReference {
           byFrames: byFrames,
           target: target,
           linked: linked);
+
+  /// Paste the copied clips with the earliest of them at `at_frame`,
+  /// overwriting what they land on. They arrive as clips of their own,
+  /// linked to each other as the copied ones were.
+  ///
+  /// Clips copied off one layer land on one layer. With a `target`, that
+  /// is the layer for the top-most picture clip, or the top-most sound clip
+  /// when no picture was copied, and the rest follow as in
+  /// [`Self::cut_move`]: clips of that kind keep their distance from it in
+  /// layers, and clips of the other kind go back to the layers they were
+  /// copied from, counted from the top. Without one they land as in
+  /// [`Self::cut_place`]: picture on new layers at the top of the stack,
+  /// and sound on the first sound layers with room. A layer that is
+  /// missing is made, and a locked one refuses the paste.
+  ///
+  /// `Nothing` when nothing has been copied in this project, or an item a
+  /// copied clip plays has since been deleted.
+  BridgeCutPaste cutPaste(
+          {required PlatformInt64 atFrame, LayerReference? target}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceCutPaste(
+          that: this, atFrame: atFrame, target: target);
 
   /// Put a span of a footage item down at `at_frame`: the Cut workspace's
   /// insert and overwrite, and the drop from its Source viewer.
@@ -942,6 +1021,28 @@ class CompositionReference {
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceCutRazor(
           that: this, layers: layers, atFrame: atFrame, linked: linked);
 
+  /// Lift or extract a span: cut at `start_frame` and `end_frame` on
+  /// `layers`, or on every unlocked Sequence layer when the list is empty,
+  /// and delete what lies between.
+  ///
+  /// With `ripple` the span is closed, an extract: everything after it
+  /// moves earlier by its length on every unlocked Sequence layer, refused
+  /// as `Overlap` where a layer left out still holds a clip in the way.
+  /// Without it the gap is left, a lift, and `Nothing` says no clip was in
+  /// the span.
+  BridgeCutResult cutRemoveSpan(
+          {required PlatformInt64 startFrame,
+          required PlatformInt64 endFrame,
+          required List<LayerReference> layers,
+          required bool ripple}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutRemoveSpan(
+              that: this,
+              startFrame: startFrame,
+              endFrame: endFrame,
+              layers: layers,
+              ripple: ripple);
+
   /// Roll an edit point to `to_frame`: the clip on one side trims as the
   /// clip on the other extends, and nothing else moves.
   ///
@@ -981,6 +1082,38 @@ class CompositionReference {
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceCutSlip(
           that: this, clip: clip, byFrames: byFrames, linked: linked);
 
+  /// Put a transition of `frames` on one edge of a clip: its end when
+  /// `end_edge` is set, and its start otherwise.
+  ///
+  /// Where another clip on the layer meets that edge, or already overlaps
+  /// it, the two are made to overlap by that length, centred on the edit
+  /// point: each is carried on by half into its own source, and the odd
+  /// frame goes to the incoming clip. The overlap is the transition, a
+  /// dissolve on a picture layer, drawn in a straight line, and a crossfade
+  /// on a sound layer. A clip is not carried past the end of its media, so
+  /// the overlap is the longest the two have source for, and `Limit` when
+  /// neither has any.
+  ///
+  /// Where nothing meets the edge, the clip fades there on its own for that
+  /// length, held to the clip's.
+  ///
+  /// No `frames` takes the transition off: an overlap is trimmed back to
+  /// its middle so the clips abut, and a fade is cleared. With `linked` the
+  /// clips linked to this one take the same at the same edge on their own
+  /// layers.
+  BridgeCutResult cutTransition(
+          {required UuidValue clip,
+          required bool endEdge,
+          required PlatformInt64 frames,
+          required bool linked}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutTransition(
+              that: this,
+              clip: clip,
+              endEdge: endEdge,
+              frames: frames,
+              linked: linked);
+
   /// Trim a clip so its edges land on `start_frame` and `end_frame`, as
   /// `LayerReference::trim_clip` does: an edge moving inward crops, one
   /// moving outward carries the clip on.
@@ -988,8 +1121,11 @@ class CompositionReference {
   /// With `ripple` everything after the clip follows its change of length,
   /// and a trimmed head leaves the clip starting where it did. Without it
   /// nothing else moves, and on a picture layer an edge is refused where it
-  /// would cover a neighbour. With `linked` the clips linked to it take the
-  /// same change at the same edges.
+  /// would cover a neighbour it only met. An edge that already overlaps its
+  /// neighbour is a dissolve, and is dragged longer or shorter: it stays
+  /// within the neighbour's span, and is refused as `Limit` past the end
+  /// of its own media. With `linked` the clips linked to it take the same
+  /// change at the same edges.
   BridgeCutResult cutTrim(
           {required UuidValue clip,
           required PlatformInt64 startFrame,
