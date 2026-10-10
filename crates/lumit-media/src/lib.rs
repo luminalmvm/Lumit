@@ -19,6 +19,14 @@ pub mod slate;
 
 use std::path::Path;
 
+// rsmpeg's bindings are for FFmpeg 8. Against another major the build can go through
+// and then read FFmpeg's structures at the wrong offsets, so stop it here instead.
+const _: () = assert!(
+    rsmpeg::ffi::LIBAVUTIL_VERSION_MAJOR == 60,
+    "Lumit needs FFmpeg 8.x (libavutil 60) and the build found another version. \
+     See \"Building from source\" in README.md."
+);
+
 pub use audio::AudioBuffer;
 pub use decode::{set_hardware_decode, DecodedFrame, LumaFrame, PixelFormat, VideoDecoder};
 pub use encode::Encoder;

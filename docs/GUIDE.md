@@ -20,14 +20,14 @@ The user manual is docs.lumitlab.com, built from `web-docs/`.
 | Tool | Version | Why |
 |---|---|---|
 | Rust | pinned by `rust-toolchain.toml` | rustup reads the file, you don't pick one |
-| FFmpeg | 8.1, shared build | rsmpeg's bindings describe FFmpeg 8. Against 7 or 9 it compiles and reads the wrong offsets |
+| FFmpeg | 8.x, shared build | rsmpeg's bindings describe FFmpeg 8, and `lumit-media` stops the build on any other major |
 | LLVM | 18 | The binding generator reads FFmpeg's headers through libclang. Newer ones emit blank structures |
 | Flutter | stable (CI pins the version) | On Windows you also need Visual Studio's C++ desktop workload |
 
 ### Windows
 
 1. Unzip `ffmpeg-n8.1-latest-win64-gpl-shared-8.1.zip` from the BtbN FFmpeg builds under
-   `%USERPROFILE%\ffmpeg\`. A dated `autobuild-*` asset needs `-FfmpegDir <folder>`.
+   `%USERPROFILE%\ffmpeg\`. Unzipped anywhere else it needs `-FfmpegDir <folder>`.
 2. `winget install LLVM.LLVM --version 18.1.8` and `winget install Rustlang.Rustup`.
 3. From the repo root: `. .\scripts\win-dev-env.ps1 -Persist`. The leading dot matters.
 4. `cargo test --workspace`, then `cd flutter_ui; flutter run -d windows`.
@@ -37,15 +37,24 @@ terminal.
 
 ### macOS
 
-Homebrew has no `ffmpeg@8` and its `ffmpeg` is 9.x. Follow CI's recipe in
-`.github/actions/ffmpeg8-macos`. Then `cargo test --workspace`, and `flutter run -d macos`
-from `flutter_ui/`.
+1. `brew install ffmpeg@8`. Homebrew's plain `ffmpeg` is 9.x. On an Intel Mac there's no
+   prebuilt one, so Homebrew builds it from source.
+2. In the shell you build from, since `ffmpeg@8` isn't linked into `PATH`:
+   `export FFMPEG_PKG_CONFIG_PATH="$(brew --prefix ffmpeg@8)/lib/pkgconfig"` and
+   `export PATH="$(brew --prefix ffmpeg@8)/bin:$PATH"`.
+3. `cargo test --workspace`, then `cd flutter_ui; flutter run -d macos`.
+
+Xcode's own libclang works, so there's no LLVM to install. The app icon needs Xcode 26
+or newer. A release build needs `FLUTTER_XCODE_ARCHS="$(uname -m)"`, as Flutter otherwise
+builds both architectures and Homebrew only has FFmpeg for yours.
 
 ### Linux
 
-Install the FFmpeg 8 dev packages, `pkg-config` and `clang` (on Arch, `clang18 llvm18`).
-If your default clang is newer than 18, set `LIBCLANG_PATH` to LLVM 18's `lib`. A distro
-on FFmpeg 6 or 7 needs the BtbN tarball the way `ci.yml` does it.
+Ubuntu 26.04 is the only release here whose own FFmpeg is 8, so there it's the FFmpeg
+dev packages, `pkg-config`, `libclang-18-dev` and the desktop libraries. Debian 13 and
+older Ubuntu are on 7 and Arch is on 9, so they unpack the BtbN 8.1 tarball instead. The
+commands for both are in the README's Linux section, and are what `ci.yml` runs. Set
+`LIBCLANG_PATH` to LLVM 18's `lib` either way (on Arch, install `clang18 llvm18`).
 
 ### Commands
 
