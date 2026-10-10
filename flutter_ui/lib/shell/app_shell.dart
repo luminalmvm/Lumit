@@ -455,12 +455,18 @@ class _LumitAppViewState extends State<LumitAppView> {
   /// Which keymap context the focused panel is. Panels with no bindings of
   /// their own resolve to `Global`, which is also the fallback for every other
   /// context, so nothing is lost by the mapping being partial.
-  BridgeKeyContext _contextOf(Panel? panel) => switch (panel) {
+  BridgeKeyContext _contextOf(LumitUiState ui, Panel? panel) =>
+      switch (panel) {
         Panel.project => BridgeKeyContext.project,
-        Panel.viewer => BridgeKeyContext.viewer,
+        // A Viewer looking at a file is the Cut arrangement's source side, so
+        // I and O mark there.
+        Panel.viewer => ui.views.active?.mode == ViewMode.footage
+            ? BridgeKeyContext.cut
+            : BridgeKeyContext.viewer,
         // Both tables answer to the Timeline's keys: the razor, the split and
         // the transport come from there, and the Audio timeline is a timeline.
         Panel.timeline || Panel.audioTimeline => BridgeKeyContext.timeline,
+        Panel.cutTimeline => BridgeKeyContext.cut,
         Panel.effectControls => BridgeKeyContext.effects,
         _ => BridgeKeyContext.global,
       };
@@ -506,7 +512,7 @@ class _LumitAppViewState extends State<LumitAppView> {
     // panel is active — the engine falls back to Global itself, so one call
     // answers both. (This handler runs wherever focus is; the active panel is
     // what the dock last fronted, which is what a user would call "where I am".)
-    var action = ui.keymap.actionFor(_contextOf(ui.activePanel), event);
+    var action = ui.keymap.actionFor(_contextOf(ui, ui.activePanel), event);
     if (action == null) {
       // The Tools context is a context no panel *is* (docs/07 §15 scopes it to
       // the toolbar, not to a pane), so it is asked for separately and only
@@ -977,6 +983,21 @@ class _LumitAppViewState extends State<LumitAppView> {
           // says rather than being overwritten by the next frame that arrives.
           ui.scrubTo(at);
         }
+      // The Cut arrangement's source side: the marks, and the two ways of
+      // putting the marked span down at the playhead. Nothing without a
+      // footage view on screen to mark.
+      case 'cut.mark.in' || 'cut.mark.out':
+        if (ui.sourceView case final view?) {
+          ui.markSource(view, markIn: action == 'cut.mark.in');
+        }
+      case 'cut.insert' || 'cut.overwrite':
+        if (ui.sourceView case final view?) {
+          ui.placeSource(view, insert: action == 'cut.insert');
+        }
+      // Ripple delete acts on the Cut timeline's own selection, which the
+      // panel answers for on its own key handler.
+      case 'cut.delete.ripple':
+        handled = ui.activePanel == Panel.cutTimeline;
       case 'edit.delete.selection':
         // A panel holding a finer selection than the layer one gets the key
         // first — a selected mask row is what Delete is about, not the
@@ -990,6 +1011,7 @@ class _LumitAppViewState extends State<LumitAppView> {
         if (!const {
           Panel.timeline,
           Panel.audioTimeline,
+          Panel.cutTimeline,
           Panel.viewer,
           Panel.hierarchy,
         }.contains(ui.activePanel)) {

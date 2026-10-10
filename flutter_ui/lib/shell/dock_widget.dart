@@ -70,6 +70,8 @@ double panelMinWidth(Panel panel) => switch (panel) {
       // chip and the 10 trailing inset. That comes to 278, and the board draws
       // the column at 300.
       Panel.audioTimeline => 300,
+      // The track headers' column and a lane of time beside it.
+      Panel.cutTimeline => 260,
       // A label and a value well side by side, which is every row they have.
       Panel.text => 220,
       Panel.paragraph => 220,
@@ -249,10 +251,11 @@ class _DockWidgetState extends State<DockWidget> {
   /// neither does a panel that draws a header of its own.
   Widget? _bareTitle(LumitTheme t, Panel panel) {
     if (t.shape == ThemeShape.studio) return null;
-    // These three draw a header line of their own.
+    // These four draw a header line of their own.
     if (panel == Panel.viewer ||
         panel == Panel.timeline ||
-        panel == Panel.audioTimeline) {
+        panel == Panel.audioTimeline ||
+        panel == Panel.cutTimeline) {
       return null;
     }
     return DockPaneHandle(

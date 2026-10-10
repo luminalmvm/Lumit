@@ -9489,6 +9489,58 @@
   "@workspaceRetiming": {
     "description": "The name of a panel arrangement, tuned for shaping how things move: the Easing panel down the right and a tall Timeline. 'Retiming' is the gerund of the Lumit term Retime — keep it a noun for the kind of work."
   },
+  "workspaceCut": "Cut",
+  "@workspaceCut": {
+    "description": "The name of a panel arrangement, tuned for cutting long footage into clips: the Cut timeline across the bottom. A verb used as a noun, as an editor says 'the cut'."
+  },
+  "panelCutTimeline": "Cut timeline",
+  "@panelCutTimeline": {
+    "description": "Panel title: the timeline of the Cut arrangement, one row per Sequence layer with the clips laid along it."
+  },
+  "cutToolSelect": "Select",
+  "@cutToolSelect": {
+    "description": "A tool on the Cut timeline's strip: the pointer that picks, moves and trims clips."
+  },
+  "cutToolRazor": "Razor",
+  "@cutToolRazor": {
+    "description": "A tool on the Cut timeline's strip: a click cuts a clip where the pointer is."
+  },
+  "cutToolRipple": "Ripple",
+  "@cutToolRipple": {
+    "description": "A tool on the Cut timeline's strip: trimming a clip's edge moves everything after it to close or open the room."
+  },
+  "cutToolRoll": "Roll",
+  "@cutToolRoll": {
+    "description": "A tool on the Cut timeline's strip: dragging an edit point trims one clip as the other extends."
+  },
+  "cutToolSlip": "Slip",
+  "@cutToolSlip": {
+    "description": "A tool on the Cut timeline's strip: dragging a clip changes which frames of its source it shows, without moving it."
+  },
+  "cutToolSlide": "Slide",
+  "@cutToolSlide": {
+    "description": "A tool on the Cut timeline's strip: dragging a clip moves it between its neighbours, which trim to stay against it."
+  },
+  "cutSnap": "Snap",
+  "@cutSnap": {
+    "description": "A toggle on the Cut timeline's strip: whether a dragged clip lands on the edit points, markers and playhead near it."
+  },
+  "cutLinked": "Linked",
+  "@cutLinked": {
+    "description": "A toggle on the Cut timeline's strip: whether a picture clip and the clip carrying its sound are selected and edited together."
+  },
+  "cutCloseGap": "Close gap",
+  "@cutCloseGap": {
+    "description": "Cut timeline, right-click on empty room between clips: everything after the gap moves earlier to close it."
+  },
+  "cutRippleDelete": "Ripple delete",
+  "@cutRippleDelete": {
+    "description": "Cut timeline, clip menu: remove the clip and close the room it leaves, so everything after it moves earlier."
+  },
+  "cutNoTracks": "No tracks yet. Drop footage here to make one.",
+  "@cutNoTracks": {
+    "description": "Shown across the Cut timeline's empty rows when the composition has no layers. 'Tracks' is this panel's own word for its rows."
+  },
   "blendColourBurn": "Colour burn",
   "@blendColourBurn": {
     "description": "A blend mode — the Timeline's Blend dropdown, and anywhere layers composite."

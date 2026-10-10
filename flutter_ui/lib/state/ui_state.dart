@@ -1949,6 +1949,7 @@ class LumitUiState extends ChangeNotifier {
     // the controls file has no other way to reach the store.
     modalPlacementStore = this.workspace;
     selectedLayer.addListener(_syncSelection);
+    this.workspace.presetApplied.addListener(_onPresetApplied);
     _app.addListener(_sourceNames.clear);
     // A layer that has gone must leave the selection with it. The
     // model is the one place that knows which layers exist, so the pruning
@@ -2257,6 +2258,7 @@ class LumitUiState extends ChangeNotifier {
     _app.removeListener(_adoptProjectSession);
     _app.removeListener(refreshColourSummary);
     _app.removeListener(_sourceNames.clear);
+    workspace.presetApplied.removeListener(_onPresetApplied);
     cutLinked.dispose();
     _lifecycle.dispose();
     _clock.dispose();
@@ -2506,6 +2508,37 @@ class LumitUiState extends ChangeNotifier {
   /// which is what the Cut workspace's source side is.
   bool get hasSourceView =>
       views.views.any((view) => view.mode == ViewMode.footage);
+
+  /// The Cut workspace has a source side in its Viewer and the others do not,
+  /// which a dock tree cannot say. So choosing Cut puts one there, and choosing
+  /// another takes away the one Cut put there.
+  bool _sourceFromCut = false;
+
+  void _onPresetApplied() {
+    if (workspace.activePreset == WorkspacePreset.cut) {
+      if (!hasSourceView) {
+        showSourceView();
+        _sourceFromCut = hasSourceView;
+      }
+      return;
+    }
+    if (!_sourceFromCut) return;
+    _sourceFromCut = false;
+    final source = sourceView;
+    if (source == null) return;
+    for (final entry in views.paneViews.entries) {
+      if (!entry.value.contains(source.id) || entry.value.length != 2) continue;
+      // The source goes last, which is the view a narrower layout drops.
+      entry.value
+        ..remove(source.id)
+        ..add(source.id);
+      views.setLayout(entry.key, ViewLayout.one);
+      saveLayout();
+      rememberSession();
+      requestFrame();
+      return;
+    }
+  }
 
   /// Put a source side in the Viewer the keyboard is in: two views across,
   /// the left one a footage view waiting for a clip. What applying the Cut
