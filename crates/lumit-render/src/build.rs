@@ -3994,7 +3994,7 @@ pub fn accumulation_mb_below(
             // the frame-time entry, so no frame is copied here.
             let mut at_moment_by_layer = pixels_by_layer.clone();
             for lp in pixels_by_layer.values() {
-                if let Some((_, moment)) = lp
+                if let Some((_, Some(moment))) = lp
                     .shutter
                     .iter()
                     .find(|(o, _)| o.to_bits() == off.to_bits())
@@ -4065,7 +4065,8 @@ fn own_shutter_average(
             .shutter
             .iter()
             .find(|(o, _)| o.to_bits() == off.to_bits())
-            .map(|(_, m)| m.rgba.as_slice())
+            .and_then(|(_, m)| m.as_deref())
+            .map(|m| m.rgba.as_slice())
             .filter(|m| m.len() == n)
             .unwrap_or(&lp.rgba);
         for (s, &b) in sum.iter_mut().zip(moment) {
@@ -4145,8 +4146,9 @@ fn adjustment_flow_below(
 /// frame-time picture. `None` on an ordinary build, and when no clip here has
 /// the moment, so the caller's map is used as it is and nothing is copied.
 ///
-/// A clip with no picture for the moment (a Sequence clip, a dropped decode)
-/// keeps its frame-time pixels, which is what every rebuild used to draw.
+/// A clip with no picture for the moment (a dropped decode) keeps its
+/// frame-time pixels, which is what every rebuild used to draw. A Sequence
+/// layer in a gap at the moment is left out, so it draws nothing.
 fn pixels_at_moment<'a>(
     comp: &lumit_core::model::Composition,
     t_comp: f64,
@@ -4159,8 +4161,11 @@ fn pixels_at_moment<'a>(
     let dt = 1.0 / comp.frame_rate.fps().max(1.0);
     let offset = crate::plan::moment_offset(t_comp, frame_t, dt);
     let mut out = None;
-    for layer in &comp.layers {
-        let Some(lp) = pixels_by_layer.get(&layer.id).copied() else {
+    // What this comp's clips are filed under: its layers, or the boxes of
+    // its node graph, whose Reads are keyed by their own ids.
+    let boxes = comp.graph.iter().flat_map(|g| &g.nodes).map(|n| n.id());
+    for id in comp.layers.iter().map(|l| l.id).chain(boxes) {
+        let Some(lp) = pixels_by_layer.get(&id).copied() else {
             continue;
         };
         if let Some((_, moment)) = lp
@@ -4168,8 +4173,11 @@ fn pixels_at_moment<'a>(
             .iter()
             .find(|(o, _)| o.to_bits() == offset.to_bits())
         {
-            out.get_or_insert_with(|| pixels_by_layer.clone())
-                .insert(layer.id, &**moment);
+            let out = out.get_or_insert_with(|| pixels_by_layer.clone());
+            match moment {
+                Some(moment) => out.insert(id, &**moment),
+                None => out.remove(&id),
+            };
         }
     }
     out
@@ -5303,7 +5311,8 @@ mod render_below_at_tests {
     // the frame's own time and orange at every other moment the plan asked
     // for, filed under the plan's own keys.
     fn decoded(job: &crate::decode::CompJob) -> CompLayerPixels {
-        let flat = |rgb: [u8; 3], shutter| CompLayerPixels {
+        use crate::decode::Cut;
+        let flat = |rgb: [u8; 3]| CompLayerPixels {
             layer: job.layer,
             width: 8,
             height: 8,
@@ -5313,16 +5322,28 @@ mod render_below_at_tests {
             natural_h: 180,
             temporal: Vec::new(),
             flow_fields: Vec::new(),
-            shutter,
+            shutter: Vec::new(),
             source_key: 0,
             source_frame: 0,
         };
-        let moments = job
-            .shutter
+        let neighbour = || flat(ORANGE).rgba.to_vec();
+        let moment = || Some(Box::new(flat(ORANGE)));
+        let mut lp = flat(GREY);
+        lp.temporal = job
+            .temporal
             .iter()
-            .map(|s| (s.offset, Box::new(flat(ORANGE, Vec::new()))))
+            .map(|(o, _)| (*o, neighbour()))
             .collect();
-        flat(GREY, moments)
+        lp.shutter = job.shutter.iter().map(|s| (s.offset, moment())).collect();
+        // Another clip's frame arrives where a frame of this one would, and
+        // a gap arrives as nothing.
+        for cut in &job.cuts {
+            match cut {
+                Cut::Neighbour(o, _) => lp.temporal.push((*o, neighbour())),
+                Cut::Moment(o, clip) => lp.shutter.push((*o, clip.as_ref().and_then(|_| moment()))),
+            }
+        }
+        lp
     }
     const GREY: [u8; 3] = [60, 60, 60];
     const ORANGE: [u8; 3] = [230, 120, 20];
@@ -5331,6 +5352,13 @@ mod render_below_at_tests {
     fn clip_colour(draws: &[CompLayerDraw]) -> [u8; 3] {
         match &draws.first().expect("the clip draws").source {
             DrawSource::Pixels { rgba, .. } => [rgba[0], rgba[1], rgba[2]],
+            // A node graph's clip is its Read box.
+            DrawSource::Graph(plan) => match plan.steps.first() {
+                Some(crate::draw::GraphStep::Read(read)) => {
+                    clip_colour(std::slice::from_ref(&**read))
+                }
+                _ => panic!("the graph reads a clip"),
+            },
             _ => panic!("a clip draws from decoded pixels"),
         }
     }
@@ -5344,48 +5372,204 @@ mod render_below_at_tests {
     // handed the nested comp as it was a frame ago, footage and all. The
     // nested rebuild used to draw the clip inside from the one decode in
     // hand, so the plugin compared a frame with itself, saw no motion and
-    // gave the picture back unchanged.
+    // gave the picture back unchanged. The footage is tried on a footage
+    // layer, as a clip on a Sequence layer and read by a node graph, since
+    // each is planned by its own arm. The Sequence layer has an edit point
+    // at this frame, so its frame before is another clip's footage, and it
+    // is tried again with the plugin on the layer itself.
     #[test]
     fn a_plugin_on_a_precomp_reads_the_nested_footage_a_frame_back() {
+        use crate::decode::Cut;
+        use lumit_core::comp_graph::{CompGraph, GraphEdge, GraphNode};
         use lumit_core::model::ProjectItem;
+        use lumit_core::sequence::{Clip, ClipSource};
         let mut doc = Document::new();
-        let (footage, probes) = clip(&mut doc);
-        let footage_id = footage.id;
-        let nested = comp_with(10, vec![footage]);
-        let nested_id = nested.id;
-        doc.items.push(ProjectItem::Composition(nested));
-        let precomp = |effects: Vec<lumit_core::model::EffectInstance>| {
+        let (footage, mut probes) = clip(&mut doc);
+        let LayerKind::Footage { item } = footage.kind else {
+            panic!("a footage layer");
+        };
+        let (earlier, more) = clip(&mut doc);
+        let LayerKind::Footage { item: other } = earlier.kind else {
+            panic!("a footage layer");
+        };
+        probes.extend(more);
+        let at = |n, d| Rational::new(n, d).unwrap();
+        let mut cut = footage.clone();
+        cut.id = Uuid::now_v7();
+        cut.kind = LayerKind::Sequence {
+            clips: vec![
+                Clip::new(
+                    ClipSource::Footage(other),
+                    at(0, 1),
+                    at(1, 2),
+                    at(0, 1),
+                    at(1, 2),
+                ),
+                Clip::new(
+                    ClipSource::Footage(item),
+                    at(1, 2),
+                    at(10, 1),
+                    at(1, 2),
+                    at(19, 2),
+                ),
+            ],
+        };
+        let sequence = cut.clone();
+        let (read, out) = (Uuid::now_v7(), Uuid::now_v7());
+        let mut graph = comp_with(10, Vec::new());
+        graph.graph = Some(CompGraph {
+            nodes: vec![
+                GraphNode::Read {
+                    id: read,
+                    item,
+                    custom_name: None,
+                },
+                GraphNode::Output { id: out },
+            ],
+            edges: vec![GraphEdge {
+                from: read,
+                from_port: "output".into(),
+                to: out,
+                to_port: "input".into(),
+            }],
+            layout: Vec::new(),
+            exposed: Vec::new(),
+            groups: Vec::new(),
+        });
+        // What the clip's pixels are filed under, the footage it shows a
+        // frame back, and the comp it sits in.
+        let cases = [
+            (
+                "a footage layer",
+                footage.id,
+                item,
+                comp_with(10, vec![footage]),
+            ),
+            ("a Sequence layer", cut.id, other, comp_with(10, vec![cut])),
+            ("a node graph", read, item, graph),
+        ]
+        .map(|(what, clip_id, before, nested)| {
+            let nested_id = nested.id;
+            doc.items.push(ProjectItem::Composition(nested));
+            (what, clip_id, before, nested_id)
+        });
+        let rig = FlowRig::new();
+        let precomp = |nested_id: Uuid, effects: Vec<lumit_core::model::EffectInstance>| {
             let mut l = text_layer(0.0);
             l.kind = LayerKind::Precomp { comp: nested_id };
             l.transform.position_y = Property::fixed(0.0);
             l.effects = effects;
             comp_with(10, vec![l])
         };
-        let outer = precomp(vec![previous_frame_effect()]);
-
-        // The plan fetches the clip at both of the plugin's neighbours, each
-        // the one real frame it shows then.
-        let plan = |comp: &Composition| {
-            crate::plan_comp_frame(&doc, comp, 0.5, crate::Quality::default(), &probes)
+        // A job's other moments, whichever way they were asked for: the
+        // offset, whose footage, and which frame of it.
+        let moments = |job: &crate::decode::CompJob| -> Vec<(f64, Uuid, usize)> {
+            let own = job.shutter.iter();
+            own.map(|s| (s.offset.round(), job.item, s.source_frame))
+                .chain(job.cuts.iter().filter_map(|c| match c {
+                    Cut::Moment(o, Some(clip)) => Some((o.round(), clip.item, clip.source_frame)),
+                    _ => None,
+                }))
+                .collect()
         };
-        let jobs = plan(&outer);
-        let job = jobs
-            .iter()
-            .find(|j| j.layer == footage_id)
-            .expect("planned");
-        assert_eq!(job.source_frame, 5);
-        assert_eq!(
-            job.shutter
-                .iter()
-                .map(|s| (s.offset.round(), s.source_frame, s.blend))
-                .collect::<Vec<_>>(),
-            vec![(-1.0, 4, None), (1.0, 6, None)],
-            "the clip is planned a frame either side"
-        );
 
-        // And the builder draws each neighbour from those pixels.
-        let lp = decoded(job);
-        let pixels: HashMap<Uuid, &CompLayerPixels> = [(footage_id, &lp)].into_iter().collect();
+        for (what, clip_id, before, nested_id) in cases {
+            let outer = precomp(nested_id, vec![previous_frame_effect()]);
+
+            // The plan fetches the clip at both of the plugin's neighbours,
+            // each the one real frame it shows then.
+            let jobs =
+                crate::plan_comp_frame(&doc, &outer, 0.5, crate::Quality::default(), &probes);
+            let job = jobs.iter().find(|j| j.layer == clip_id).expect("planned");
+            assert_eq!(job.source_frame, 5, "{what}");
+            assert_eq!(
+                moments(job),
+                vec![(-1.0, before, 4), (1.0, item, 6)],
+                "{what}: the clip is planned a frame either side"
+            );
+
+            // And the builder draws each neighbour from those pixels.
+            let lp = decoded(job);
+            let pixels: HashMap<Uuid, &CompLayerPixels> = [(clip_id, &lp)].into_iter().collect();
+            let mut v = vec![outer.id];
+            let draws = build_comp_draws(
+                &std::sync::Arc::new(doc.clone()),
+                &outer,
+                0.5,
+                &pixels,
+                &mut v,
+            );
+            let d = draws.first().expect("the Precomp draws");
+            match &d.source {
+                DrawSource::Nested { draws, .. } => assert_eq!(clip_colour(draws), GREY),
+                _ => panic!("a Precomp layer draws a nested comp"),
+            }
+            assert_eq!(
+                d.flow_below
+                    .iter()
+                    .map(|(o, inner, _, measure)| (*o, clip_colour(inner), *measure))
+                    .collect::<Vec<_>>(),
+                vec![(-1, ORANGE, false), (1, ORANGE, false)],
+                "{what}: each neighbour is the clip at its own moment, with no flow asked for"
+            );
+
+            let Some(rig) = &rig else {
+                continue;
+            };
+            let plain = rig.render_with(&doc, &precomp(nested_id, Vec::new()), 0.5, &pixels);
+            let read = rig.render_with(&doc, &outer, 0.5, &pixels);
+            assert!(
+                centre_red(&read) > centre_red(&plain).saturating_add(60),
+                "{what}: the plugin was handed the previous frame ({} → {})",
+                centre_red(&plain),
+                centre_red(&read)
+            );
+        }
+
+        // The plugin on the Sequence layer itself reads its neighbours
+        // through the clips. The frame after is one more frame of this clip,
+        // and the frame before the edit point is the other clip's own job.
+        let mut direct = sequence.clone();
+        direct.effects = vec![previous_frame_effect()];
+        let comp = comp_with(10, vec![direct]);
+        let jobs = crate::plan_comp_frame(&doc, &comp, 0.5, crate::Quality::default(), &probes);
+        let job = jobs.first().expect("planned");
+        assert_eq!(job.temporal, vec![(1, 6)]);
+        assert!(
+            matches!(&job.cuts[..], [Cut::Neighbour(-1, n)] if n.item == other && n.source_frame == 4),
+            "the frame before the cut is the other clip's"
+        );
+        if let Some(rig) = &rig {
+            let lp = decoded(job);
+            let pixels: HashMap<Uuid, &CompLayerPixels> =
+                [(sequence.id, &lp)].into_iter().collect();
+            let plain = comp_with(10, vec![sequence.clone()]);
+            let (plain, read) = (
+                rig.render_with(&doc, &plain, 0.5, &pixels),
+                rig.render_with(&doc, &comp, 0.5, &pixels),
+            );
+            assert!(
+                centre_red(&read) > centre_red(&plain).saturating_add(60),
+                "a plugin on the Sequence layer was handed the previous frame ({} → {})",
+                centre_red(&plain),
+                centre_red(&read)
+            );
+        }
+
+        // With nothing before the edit point the frame before is a gap, so
+        // that neighbour is drawn without the layer and not with this frame
+        // held.
+        let mut alone = sequence;
+        if let LayerKind::Sequence { clips } = &mut alone.kind {
+            clips.remove(0);
+        }
+        let alone_id = alone.id;
+        let nested = comp_with(10, vec![alone]);
+        let outer = precomp(nested.id, vec![previous_frame_effect()]);
+        doc.items.push(ProjectItem::Composition(nested));
+        let jobs = crate::plan_comp_frame(&doc, &outer, 0.5, crate::Quality::default(), &probes);
+        let lp = decoded(jobs.first().expect("planned"));
+        let pixels: HashMap<Uuid, &CompLayerPixels> = [(alone_id, &lp)].into_iter().collect();
         let mut v = vec![outer.id];
         let draws = build_comp_draws(
             &std::sync::Arc::new(doc.clone()),
@@ -5394,30 +5578,14 @@ mod render_below_at_tests {
             &pixels,
             &mut v,
         );
-        let d = draws.first().expect("the Precomp draws");
-        match &d.source {
-            DrawSource::Nested { draws, .. } => assert_eq!(clip_colour(draws), GREY),
-            _ => panic!("a Precomp layer draws a nested comp"),
-        }
         assert_eq!(
-            d.flow_below
+            draws[0]
+                .flow_below
                 .iter()
-                .map(|(o, inner, _, measure)| (*o, clip_colour(inner), *measure))
+                .map(|(o, inner, ..)| (*o, inner.len()))
                 .collect::<Vec<_>>(),
-            vec![(-1, ORANGE, false), (1, ORANGE, false)],
-            "each neighbour is the clip at its own moment, with no flow asked for"
-        );
-
-        let Some(rig) = FlowRig::new() else {
-            return;
-        };
-        let plain = rig.render_with(&doc, &precomp(Vec::new()), 0.5, &pixels);
-        let read = rig.render_with(&doc, &outer, 0.5, &pixels);
-        assert!(
-            centre_red(&read) > centre_red(&plain).saturating_add(60),
-            "the plugin was handed the previous frame ({} → {})",
-            centre_red(&plain),
-            centre_red(&read)
+            vec![(-1, 0), (1, 1)],
+            "a gap a frame back is empty"
         );
     }
 
