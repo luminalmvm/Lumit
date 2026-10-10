@@ -546,7 +546,9 @@ DockSplit presetLayout(WorkspacePreset preset) => switch (preset) {
       // Cut: Project and Effect controls tabbed down the left, the Viewer
       // taking the rest of the top band (the Source view is a second view
       // inside it, so one pane serves), and the **Cut timeline** across the
-      // bottom at the Audio arrangement's proportions.
+      // bottom at the Audio arrangement's proportions. The Project column is
+      // a little wider than elsewhere, so its Duration column has room on a
+      // 1920 screen.
       WorkspacePreset.cut => DockSplit(
           DockAxis.vertical,
           [
@@ -559,7 +561,7 @@ DockSplit presetLayout(WorkspacePreset preset) => switch (preset) {
                 ]),
                 DockPane(Panel.viewer),
               ],
-              [0.22, 0.78],
+              [0.24, 0.76],
             ),
             DockPane(Panel.cutTimeline),
           ],

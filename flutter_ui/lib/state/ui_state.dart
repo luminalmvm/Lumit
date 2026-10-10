@@ -311,6 +311,11 @@ class LumitUiState extends ChangeNotifier {
   bool Function()? copyClaim;
   bool Function()? pasteClaim;
 
+  /// The same claim for Cut, asked before the layer is taken: the Cut
+  /// timeline's clips go as a copy and a delete of their own, and a layer
+  /// must not go with them.
+  bool Function()? cutClaim;
+
   /// Where the Easing panel sends a shape, published by the Timeline
   /// while it can take one and null when it cannot.
   ///
@@ -2423,6 +2428,49 @@ class LumitUiState extends ChangeNotifier {
     // once before, in which case this asks for the picture on the spot.
     itemFacts(footage);
     _askForView(into, force: true);
+    notifyListeners();
+    rememberSession();
+  }
+
+  /// **Open a piece of footage at a moment of it** in the source view: what
+  /// match frame and a double-click on a clip in the Cut timeline do. [at] is
+  /// in seconds of source time, and [markIn] and [markOut] put the In and Out
+  /// marks on the same clock when given, Out being the moment the clip stops
+  /// before. Nothing without a source view on screen.
+  void openFootageViewAt(FootageReference footage, BridgeRational at,
+      {BridgeRational? markIn, BridgeRational? markOut}) {
+    final view = sourceView;
+    if (view == null) return;
+    final id = footage.internalid.toString();
+    view.itemId = id;
+    view.compId = null;
+    view.sourceFrame = 0;
+    view.sourceIn = null;
+    view.sourceOut = null;
+    // Source time to the item's own frames, which wants the item's rate.
+    void stand(BridgeMediaInfo? facts) {
+      if (facts == null || view.itemId != id || facts.fpsNum <= 0) return;
+      final last = framesOf(facts) - 1;
+      int frameOf(BridgeRational t) => t.den <= 0
+          ? 0
+          : (t.num * facts.fpsNum) ~/ (t.den * facts.fpsDen);
+      view.sourceFrame = frameOf(at).clamp(0, last);
+      if (markIn != null) view.sourceIn = frameOf(markIn).clamp(0, last);
+      if (markOut != null) {
+        view.sourceOut =
+            (frameOf(markOut) - 1).clamp(view.sourceIn ?? 0, last);
+      }
+      _askForView(view, force: true);
+      views.touch();
+    }
+
+    final facts = itemFacts(footage);
+    if (facts != null) {
+      stand(facts);
+    } else {
+      // Still being probed: the view stands on the start until the facts land.
+      footage.mediaInfo().then(stand).catchError((Object _) {});
+    }
     notifyListeners();
     rememberSession();
   }

@@ -100,6 +100,33 @@ impl ActionId {
             "cut.insert" => "Insert at the playhead",
             "cut.overwrite" => "Overwrite at the playhead",
             "cut.delete.ripple" => "Ripple delete",
+            "cut.tool.select" => "Select clips",
+            "cut.tool.razor" => "Cut clips with the razor",
+            "cut.tool.ripple" => "Ripple trim",
+            "cut.tool.roll" => "Roll an edit point",
+            "cut.tool.slip" => "Slip a clip",
+            "cut.tool.slide" => "Slide a clip",
+            "cut.trim.start.ripple" => "Ripple trim the start to the playhead",
+            "cut.trim.end.ripple" => "Ripple trim the end to the playhead",
+            "cut.trim.start" => "Trim the start to the playhead",
+            "cut.trim.end" => "Trim the end to the playhead",
+            "cut.roll.prev" => "Roll the previous edit point to the playhead",
+            "cut.roll.next" => "Roll the next edit point to the playhead",
+            "cut.add.edit" => "Cut at the playhead",
+            "cut.add.edit.all" => "Cut every track at the playhead",
+            "cut.nudge.left" => "Nudge clips one frame earlier",
+            "cut.nudge.right" => "Nudge clips one frame later",
+            "cut.nudge.left.many" => "Nudge clips five frames earlier",
+            "cut.nudge.right.many" => "Nudge clips five frames later",
+            "cut.nudge.up" => "Move clips up a track",
+            "cut.nudge.down" => "Move clips down a track",
+            "cut.select.at.playhead" => "Select the clip at the playhead",
+            "cut.snap.toggle" => "Turn snapping on or off",
+            "cut.linked.toggle" => "Turn linked selection on or off",
+            "cut.lift" => "Lift the work area",
+            "cut.extract" => "Extract the work area",
+            "cut.match.frame" => "Match frame",
+            "cut.transition.default" => "Add the default transition",
             "workarea.set.start" => "Set work-area start to the playhead",
             "workarea.set.end" => "Set work-area end to the playhead",
             "marker.add" => "Add a marker at the playhead",
@@ -1042,6 +1069,41 @@ pub fn default_keymap() -> Keymap {
         row(Cut, ",", "cut.insert"),
         row(Cut, ".", "cut.overwrite"),
         row(Cut, "Shift+Delete", "cut.delete.ripple"),
+        // The tools, the trims to the playhead and the nudges, on the
+        // letters editors already have under their fingers. Each shadows an
+        // app-wide key inside the Cut timeline alone.
+        row(Cut, "V", "cut.tool.select"),
+        row(Cut, "C", "cut.tool.razor"),
+        row(Cut, "B", "cut.tool.ripple"),
+        row(Cut, "N", "cut.tool.roll"),
+        row(Cut, "Y", "cut.tool.slip"),
+        row(Cut, "U", "cut.tool.slide"),
+        row(Cut, "Q", "cut.trim.start.ripple"),
+        row(Cut, "W", "cut.trim.end.ripple"),
+        row(Cut, "Alt+Q", "cut.trim.start"),
+        row(Cut, "Alt+W", "cut.trim.end"),
+        row(Cut, "Shift+Q", "cut.roll.prev"),
+        row(Cut, "Shift+W", "cut.roll.next"),
+        row(Cut, "Mod+K", "cut.add.edit"),
+        row(Cut, "Mod+Shift+K", "cut.add.edit.all"),
+        row(Cut, "Alt+ArrowLeft", "cut.nudge.left"),
+        row(Cut, "Alt+ArrowRight", "cut.nudge.right"),
+        row(Cut, "Alt+Shift+ArrowLeft", "cut.nudge.left.many"),
+        row(Cut, "Alt+Shift+ArrowRight", "cut.nudge.right.many"),
+        row(Cut, "Alt+ArrowUp", "cut.nudge.up"),
+        row(Cut, "Alt+ArrowDown", "cut.nudge.down"),
+        row(Cut, "D", "cut.select.at.playhead"),
+        row(Cut, "S", "cut.snap.toggle"),
+        row(Cut, "Shift+L", "cut.linked.toggle"),
+        row(Cut, ";", "cut.lift"),
+        row(Cut, "'", "cut.extract"),
+        row(Cut, "F", "cut.match.frame"),
+        row(Cut, "Mod+D", "cut.transition.default"),
+        row(Cut, "=", "timeline.zoom.in"),
+        row(Cut, "-", "timeline.zoom.out"),
+        row(Cut, "\\", "timeline.zoom.fit"),
+        row(Cut, "ArrowUp", "edit.point.prev"),
+        row(Cut, "ArrowDown", "edit.point.next"),
     ];
     let mut bindings: Vec<Binding> = rows.into_iter().flatten().collect();
     // Alt+Shift+1…9 switch workspace.
@@ -1258,7 +1320,7 @@ mod tests {
     }
 
     /// `L` reveals a layer's Audio in the Timeline and shuttles forward
-    /// everywhere else. That and the Cut timeline's four editing keys are the
+    /// everywhere else. That and the Cut timeline's editing keys are the
     /// shadows the default ships with, and they are deliberate.
     #[test]
     fn the_default_gives_the_timeline_l_and_leaves_the_shuttle_elsewhere() {
@@ -1282,7 +1344,7 @@ mod tests {
                 .iter()
                 .map(|s| s.chord.to_string())
                 .collect::<Vec<_>>(),
-            ["L", "I", "O", ",", "."],
+            ["L", "I", "O", ",", ".", "B", "N", "Mod+K", "Mod+Shift+K"],
             "the deliberate shadows, and no others"
         );
     }

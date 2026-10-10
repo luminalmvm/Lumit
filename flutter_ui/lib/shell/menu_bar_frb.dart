@@ -1947,6 +1947,9 @@ bool copySelectionFrb(LumitUiState ui) {
 /// Cut is Copy plus the removal, so the two can never disagree about what the
 /// selection was, effects included.
 bool cutSelectionFrb(LumitState app, LumitUiState ui) {
+  // A panel holding a finer selection takes the whole of Cut, so its copy is
+  // not followed by the layer under it going too.
+  if (ui.cutClaim?.call() ?? false) return true;
   final effects = ui.selectedEffects.value;
   final effectsLayer = ui.selectedEffectsLayer;
   final layer = ui.selectedLayer.value;

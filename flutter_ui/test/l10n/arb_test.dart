@@ -66,6 +66,9 @@ const _bannedWordIsAnotherSense = {
   'columnTrack',
   // The Cut timeline's notices about its own rows.
   'cutRefusedOverlap',
+  'keyCutEveryTrackAtThePlayhead',
+  'keyMoveClipsUpATrack',
+  'keyMoveClipsDownATrack',
   'cutRefusedLocked',
 };
 

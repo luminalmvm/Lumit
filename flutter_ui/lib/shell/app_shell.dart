@@ -33,6 +33,8 @@ import 'package:lumit_flutter/shell/tour_frb.dart';
 import 'package:lumit_flutter/shell/unsaved_changes_frb.dart';
 import 'package:lumit_flutter/shell/welcome_frb.dart';
 import 'package:lumit_flutter/shell/window_drop_frb.dart';
+import 'package:lumit_flutter/src/rust/api/composition.dart'
+    show CompositionReference;
 import 'package:lumit_flutter/src/rust/api/layer.dart' show BridgeLayerSwitch;
 import 'package:lumit_flutter/src/rust/api/state.dart' show OpenProgress;
 import 'package:lumit_flutter/src/rust/api/shell.dart' show bootLog;
@@ -577,6 +579,13 @@ class _LumitAppViewState extends State<LumitAppView> {
             'keyframe.next' ||
             'edit.point.prev' ||
             'edit.point.next':
+        // The Cut timeline walks its own tracks' edit points on its own key
+        // handler, on the picked clips' tracks rather than the selected
+        // layers; the chord is taken here so nothing else answers it.
+        if (ui.activePanel == Panel.cutTimeline &&
+            action.startsWith('edit.point')) {
+          break;
+        }
         final ids = ui.selectedLayerIds;
         final before = action.endsWith('prev');
         final at = ui.playheadFrame.value;
@@ -927,19 +936,8 @@ class _LumitAppViewState extends State<LumitAppView> {
       // menu. A comp that has never had one set reads as the whole comp, so B
       // and N always have something to move.
       case 'workarea.set.start' || 'workarea.set.end':
-        if (comp == null) {
-          handled = false;
-        } else {
-          comp.setWorkArea(
-            span: workAreaWith(
-              comp: comp,
-              current: comp.getWorkArea(),
-              wanted: ui.playheadFrame.value,
-              isStart: action == 'workarea.set.start',
-            ),
-          );
-          state.notifyDocumentChanged();
-        }
+        handled = _setWorkAreaEnd(state, ui, comp,
+            isStart: action == 'workarea.set.start');
       // Markers. `Shift+M` (or AE's numpad `*`) drops a plain cue at
       // the playhead; `Ctrl`+digit sets the numbered one and the bare digit
       // returns to it. The numbered pair is the whole point — the key that
@@ -983,20 +981,25 @@ class _LumitAppViewState extends State<LumitAppView> {
           // says rather than being overwritten by the next frame that arrives.
           ui.scrubTo(at);
         }
-      // The Cut arrangement's source side: the marks, and the two ways of
-      // putting the marked span down at the playhead. Nothing without a
-      // footage view on screen to mark.
+      // I and O go by where the keyboard is. In the Cut timeline they set the
+      // work area's ends at the playhead, which B and N cannot reach there;
+      // with a source view they mark the source. Nothing without one.
       case 'cut.mark.in' || 'cut.mark.out':
-        if (ui.sourceView case final view?) {
+        if (ui.activePanel == Panel.cutTimeline) {
+          handled = _setWorkAreaEnd(state, ui, comp,
+              isStart: action == 'cut.mark.in');
+        } else if (ui.sourceView case final view?) {
           ui.markSource(view, markIn: action == 'cut.mark.in');
         }
+      // The two ways of putting the marked span down at the playhead.
       case 'cut.insert' || 'cut.overwrite':
         if (ui.sourceView case final view?) {
           ui.placeSource(view, insert: action == 'cut.insert');
         }
-      // Ripple delete acts on the Cut timeline's own selection, which the
-      // panel answers for on its own key handler.
-      case 'cut.delete.ripple':
+      // The rest of the Cut context's keys act on the Cut timeline's own
+      // clips, which the panel answers for on its own key handler; the
+      // chord is taken here so nothing else answers it.
+      case final id when id.startsWith('cut.'):
         handled = ui.activePanel == Panel.cutTimeline;
       case 'edit.delete.selection':
         // A panel holding a finer selection than the layer one gets the key
@@ -1126,6 +1129,26 @@ class _LumitAppViewState extends State<LumitAppView> {
     }
     return handled ? KeyEventResult.handled : KeyEventResult.ignored;
   }
+}
+
+/// One end of the work area set to the playhead. The work area is the span
+/// the Viewer previews and the export writes, so this is a one-key job; a
+/// comp that has never had one set reads as the whole comp, so there is
+/// always an end to move. False with no comp to set it on.
+bool _setWorkAreaEnd(LumitState state, LumitUiState ui,
+    CompositionReference? comp,
+    {required bool isStart}) {
+  if (comp == null) return false;
+  comp.setWorkArea(
+    span: workAreaWith(
+      comp: comp,
+      current: comp.getWorkArea(),
+      wanted: ui.playheadFrame.value,
+      isStart: isStart,
+    ),
+  );
+  state.notifyDocumentChanged();
+  return true;
 }
 
 /// Whether a held key must not repeat [action]: the commands that flip
