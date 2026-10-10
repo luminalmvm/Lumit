@@ -5655,6 +5655,61 @@ fn custom_name_roundtrips_and_defaults_to_none() {
     assert_eq!(back.custom_name.as_deref(), Some("Blur the sign"));
 }
 
+/// A text row saves and loads, reaches the effect through the bag, names the
+/// frame, and reads its default in a project from before the row existed.
+#[test]
+fn a_text_row_round_trips_resolves_and_feeds_the_key() {
+    use crate::fx::effects::label_points::LabelPoints;
+
+    let read = |e: &EffectInstance| {
+        let stack = super::resolve_stack(
+            std::slice::from_ref(e),
+            0.0,
+            1000.0,
+            1.0,
+            &MarkerContext::NONE,
+            Arc::new(ExpressionContext::detached()),
+        );
+        let text = LabelPoints::read(stack.get(0).expect("one op").params).text;
+        let mut key: Vec<u8> = Vec::new();
+        stack.feed_hash(&mut |b| key.extend_from_slice(b));
+        (text.as_str().to_owned(), key)
+    };
+    let set = |e: &mut EffectInstance, text: &str| {
+        for p in &mut e.params {
+            if p.id == "text" {
+                p.value = EffectValue::Text(text.to_owned());
+            }
+        }
+    };
+
+    let fresh = instantiate("label_points").expect("label_points");
+    assert_eq!(fresh.param("text"), Some(&EffectValue::Text(String::new())));
+
+    let mut typed = fresh.clone();
+    set(&mut typed, "{index}: {x}");
+    let json = serde_json::to_string(&typed).unwrap();
+    let back: EffectInstance = serde_json::from_str(&json).unwrap();
+    assert_eq!(back, typed, "a saved text loads again");
+    assert_eq!(read(&back).0, "{index}: {x}");
+    assert_ne!(read(&back).1, read(&fresh).1, "the text names the frame");
+
+    // A project from before the row existed has no entry for it.
+    let mut older = vec![fresh.clone()];
+    older[0].params.retain(|p| p.id != "text");
+    assert_eq!(read(&older[0]).0, "");
+    backfill_builtin_params(&mut older);
+    assert_eq!(
+        older[0].param("text"),
+        Some(&EffectValue::Text(String::new()))
+    );
+
+    // A text longer than the cap is cut at a whole character, not refused.
+    let mut long = fresh;
+    set(&mut long, &"é".repeat(TEXT_MAX_BYTES));
+    assert_eq!(read(&long).0, "é".repeat(TEXT_MAX_BYTES / 2));
+}
+
 /// **Spectral radiometry preserves exposure and actually resolves the
 /// coating** (entry A2). Two halves:
 ///
@@ -6689,6 +6744,7 @@ fn a_vec4_is_its_own_kind_and_reads_back_whole() {
         Value::Vec4([1.0; 4]),
         Value::MaskPath(true),
         Value::Curve(CurvePoints::IDENTITY),
+        Value::Text(ShortText::new("a")),
     ];
     let mut tags: Vec<u8> = Vec::new();
     for k in kinds {
@@ -6733,6 +6789,8 @@ fn payload_len(v: Value) -> usize {
         // A length, then two floats a live point — the unused tail of
         // the fixed array is padding by another name and never feeds a key.
         Value::Curve(c) => 4 + 8 * c.points().len(),
+        // A length byte, then the bytes typed.
+        Value::Text(t) => 1 + t.as_str().len(),
     }
 }
 
@@ -8998,6 +9056,76 @@ fn two_points() -> PointsStream {
         projection: points::Projection::FLAT,
         ..PointsStream::default()
     }
+}
+
+/// A named column stays on the point it was written for through every helper
+/// that reorders, drops or joins points, and the reader answers an empty
+/// name, a built-in one and an unknown one as it says it does.
+#[test]
+fn a_named_column_stays_with_its_points() {
+    // Four points out of id order, each 10 px further across than the last.
+    let mut s = PointsStream {
+        position: (0..4).map(|i| [i as f32 * 10.0, 0.0, 0.0]).collect(),
+        speed: vec![[0.0; 3]; 4],
+        age: vec![0.0; 4],
+        life: vec![1.0; 4],
+        size: vec![2.0; 4],
+        rotation: vec![0.0; 4],
+        colour: vec![[1.0; 4]; 4],
+        id: vec![3, 1, 2, 0],
+        ..PointsStream::default()
+    };
+    // Ten times its id, so a weight on the wrong point shows.
+    let weights = s.named_mut("weight").expect("room for a name");
+    weights.copy_from_slice(&[30.0, 10.0, 20.0, 0.0]);
+    let weight_of = |s: &PointsStream| -> Vec<(u64, f32)> {
+        (0..s.len())
+            .map(|i| (s.id[i], s.value_of("weight", i)))
+            .collect()
+    };
+
+    assert_eq!(s.value_of("", 2), 2.0, "an empty name is its number");
+    assert_eq!(s.value_of("@X", 2), 20.0, "capitals do not matter");
+    assert_eq!(s.value_of("@n", 0), 4.0);
+    assert_eq!(s.value_of("@indexnorm", 3), 1.0);
+    assert_eq!(s.value_of("@id", 0), 3.0);
+    assert_eq!(s.value_of("wieght", 1), 0.0, "a slip reads nought");
+    assert_eq!(s.value("wieght", 1), None);
+    assert_eq!(s.value("@bogus", 1), None);
+    assert!(s.named_mut("@x").is_none(), "a built-in is never written");
+    // At half size a place still reads in px@comp.
+    let half = s.rescaled(0.5);
+    assert_eq!(half.value_of("@x", 2), 20.0);
+    assert_eq!(weight_of(&half), weight_of(&s));
+
+    s.sort_by_id();
+    assert_eq!(
+        weight_of(&s),
+        [(0, 0.0), (1, 10.0), (2, 20.0), (3, 30.0)],
+        "sorted"
+    );
+    s.retain(|i| i != 1);
+    assert_eq!(weight_of(&s), [(0, 0.0), (2, 20.0), (3, 30.0)], "retained");
+    s.keep_newest(2);
+    assert_eq!(weight_of(&s), [(2, 20.0), (3, 30.0)], "newest kept");
+
+    // Each side carries a name the other lacks, and the lack reads nought.
+    let mut other = two_points();
+    other.named_mut("tag").expect("room for a name").fill(1.0);
+    s.append(&other);
+    assert_eq!(
+        weight_of(&s),
+        [(2, 20.0), (3, 30.0), (0, 0.0), (1, 0.0)],
+        "appended"
+    );
+    let tags: Vec<f32> = (0..s.len()).map(|i| s.value_of("tag", i)).collect();
+    assert_eq!(tags, [0.0, 0.0, 1.0, 1.0]);
+
+    // A name past the cap is not written.
+    for k in 0..=points::NAMED_MAX {
+        s.named_mut(&format!("n{k}"));
+    }
+    assert_eq!(s.named.len(), points::NAMED_MAX);
 }
 
 /// A flat opaque sprite of `n × n` — a picture with nothing in it but coverage,

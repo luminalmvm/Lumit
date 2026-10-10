@@ -15,7 +15,7 @@ Grid is a **Generate** effect.
 
 ## What it does
 
-Puts points at even intervals — rows, columns, and planes receding into depth.
+Puts points at even intervals: rows, columns, and planes receding into depth.
 
 ## Parameters
 
@@ -85,7 +85,7 @@ In the Effect Controls panel:
   one on top of another until a Jitter or an effect below moves them apart. Every layout has
   Columns times Rows points on each plane.
 - **Columns**, **Rows** and **Planes**: how many cells across, down, and through the layer's
-  plane. Planes at 1 is flat, which is what a 2D layer wants; more than one only shows once
+  plane. Planes at 1 is flat, which is what a 2D layer wants. More than one only shows once
   the layer is 3D and the composition has a camera. See [Cameras and 3D](/use/camera/).
 - **Spacing x**, **Spacing y** and **Spacing z**: the gap between cells along each axis. The
   lattice is as big as its spacing makes it, unless **Fit to size** is on.
@@ -94,7 +94,7 @@ In the Effect Controls panel:
 - **Width** and **Height**: how wide and tall the fitted layout is. Rings and Spiral read
   them as their diameter across and down.
 - **Position x**, **Position y** and **Position z**: where the middle of the lattice sits.
-  Position z is how far in front of or behind the layer's own plane it floats; nought is on
+  Position z is how far in front of or behind the layer's own plane it floats. Nought is on
   the plane.
 - **Jitter x**, **Jitter y** and **Jitter z**: how far a cell may wander off its place.
   Each cell gets the same nudge every frame.
@@ -109,19 +109,18 @@ In the Effect Controls panel:
 - **Feather**: how soft that disc's edge is. At nought it is a hard circle.
 - **Colour**: what the discs are drawn in. Values above 1 are legal, and useful under a
   [Glow](/effects/stylise/glow/).
-- **Max points**: the most points that may exist at once. It is a capacity declaration
-  rather than a look control, so it does not animate; a lattice bigger than the cap is cut
-  off at the end.
+- **Max points**: the most points that may exist at once. It does not animate. A lattice
+  bigger than the cap is cut off at the end.
 - **Mix**: how much of the drawing lands on the picture. At nought the points are still
   emitted on the socket.
-- **Matte** and **Invert** drive the strength of the effect from another layer's brightness;
-  see [Effects](/use/effects/).
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness.
+  See [Effects](/use/effects/).
 
 ## Related
 
-- [Scatter](/effects/generate/scatter/) - points thrown at random rather than ruled out.
+- [Scatter](/effects/generate/scatter/)
 - [Clone to points](/effects/generate/clone-to-points/)
 - [Connect points](/effects/generate/connect-points/)
-- [The node graph](/use/nodes/) - where the Points socket is wired.
+- [The node graph](/use/nodes/)
 - [Generate](/effects/#generate)
 - [Effects](/use/effects/)

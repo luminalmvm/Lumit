@@ -412,6 +412,39 @@ pub fn points_projection(
     Some(lumit_core::fx::points::Projection { m })
 }
 
+/// The empty room a points effect is given round a Shape or Text layer's art:
+/// texels on each side, across and down, and the raster's px per comp px.
+/// `None` where the art already fills the frame.
+///
+/// The room reaches the frame's edges as the layer's position and anchor put
+/// them, so the effect draws into the frame as it does on a solid that fills
+/// it. `corner` is where the art's own corner sits in the frame. Scale and
+/// rotation then turn the wider picture as they would turn that solid.
+// ponytail: a grown picture is placed by its centre, so both sides get the
+// larger margin and art at one edge of the frame makes a picture near twice
+// the frame's width. A parent's move is not read either. Grow one side at a
+// time, and follow the parent, if a profile or a project shows it.
+fn points_room(
+    frame: (f32, f32),
+    natural: (f32, f32),
+    tex: (u32, u32),
+    corner: (f32, f32),
+) -> Option<([u32; 2], f32)> {
+    let scale = tex.0 as f32 / natural.0.max(1.0);
+    let side = |corner: f32, art: f32, frame: f32, tex: u32| {
+        // To the further of the frame's two edges, and never past a frame's
+        // width, however far off the layer has been moved.
+        let px = corner.max(frame - corner - art).clamp(0.0, frame);
+        let most = crate::plan::MAX_TEXTURE_SIDE.saturating_sub(tex) / 2;
+        ((px * scale).ceil() as u32).min(most)
+    };
+    let room = [
+        side(corner.0, natural.0, frame.0, tex.0),
+        side(corner.1, natural.1, frame.1, tex.1),
+    ];
+    (room != [0, 0]).then_some((room, scale))
+}
+
 /// **The stream a points consumer's wire brings it** (points-stream.md §3.3),
 /// in px@comp, and which effect it came from.
 ///
@@ -451,6 +484,28 @@ fn points_input_for(
 ) -> PointsInput {
     use lumit_core::graph::{InputRef, NodeRef, OutputRef};
     let mut found = PointsInput::default();
+    // A Bake points reading its bake is handed that in place of its wire, so
+    // nothing above it has to make the stream again.
+    if consumer.effect.match_name == lumit_core::fx::effects::bake_points::MATCH_NAME {
+        let read = context
+            .comp
+            .and_then(|id| context.document.comp(id))
+            .and_then(|comp| {
+                lumit_core::fx::effects::bake_points::reading(
+                    &context.document,
+                    comp,
+                    layer,
+                    consumer,
+                    t,
+                )
+                .stream(projection)
+            });
+        if let Some(stream) = read {
+            found.streams.push(stream);
+            found.from.push(None);
+            return found;
+        }
+    }
     // Which sockets, from the signature rather than from a name this file
     // would have to keep in step with the effect's own declaration.
     let ports: Vec<&lumit_core::fx::Port> = def
@@ -696,6 +751,51 @@ struct PointsInput {
     streams: Vec<lumit_core::fx::points::PointsStream>,
     /// Which effect in the stack each input is wired from, by index.
     from: Vec<Option<u32>>,
+}
+
+/// The stream wired into `effect` on `layer` at composition time `t_comp`,
+/// made the way a frame's builder makes it and without drawing anything.
+/// `None` where it can only be made during the render, because its points
+/// depend on a picture. What the Bake points job asks first.
+#[must_use]
+pub fn points_input_at(
+    doc: &Arc<lumit_core::model::Document>,
+    comp: &lumit_core::model::Composition,
+    layer: &lumit_core::model::Layer,
+    effect: &lumit_core::model::EffectInstance,
+    t_comp: f64,
+) -> Option<lumit_core::fx::points::PointsStream> {
+    let def = lumit_core::fx::BUILTIN_DEFS.get(&effect.effect.match_name)?;
+    let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
+    let context = Arc::new(ExpressionContext {
+        document: doc.clone(),
+        comp: Some(comp.id),
+        layer: Some(layer.id),
+        comp_time: t_comp,
+        current_depth: 0,
+        inputs: None,
+    });
+    let projection = points_projection(doc, comp, layer, t_comp, lt, context.clone());
+    let audio = crate::audio_tap::DocumentAudio::new(doc, comp, t_comp);
+    let found = points_input_for(
+        layer,
+        effect,
+        def,
+        lt,
+        1.0 / comp.frame_rate.fps().max(1.0),
+        projection.unwrap_or(lumit_core::fx::points::Projection::FLAT),
+        &context,
+        &audio,
+        lumit_core::fx::drivers::NO_CLONE,
+    );
+    // A wire that names an effect in this stack and brought nothing is a
+    // stream made on the card. Anything else that brought nothing is empty.
+    let late = found.from.first().is_some_and(Option::is_some);
+    match found.streams.into_iter().next() {
+        Some(stream) => Some(stream),
+        None if late => None,
+        None => Some(Default::default()),
+    }
 }
 
 /// A 3×3 inverse, or `None` when the matrix is singular — a layer scaled to
@@ -1161,7 +1261,7 @@ fn comp_walk(
     let keys = keys.filter(|_| clone_number == lumit_core::fx::drivers::NO_CLONE);
     // A rebuild at another moment draws each clip as it is at that moment,
     // where the planner fetched it.
-    let at_moment = pixels_at_moment(comp, t_comp, frame_t, pixels_by_layer);
+    let at_moment = pixels_at_moment(doc, comp, t_comp, frame_t, pixels_by_layer);
     let pixels_by_layer = at_moment.as_ref().unwrap_or(pixels_by_layer);
     let in_span = |l: &lumit_core::model::Layer| {
         t_comp >= l.in_point.0.to_f64() && t_comp < l.out_point.0.to_f64()
@@ -1950,7 +2050,11 @@ fn comp_walk(
             .filter(|_| !input.fx.is_empty());
         if let Some(src) = src {
             let slt = lumit_core::time::layer_time(t_comp, src.start_offset.0);
-            input.graph_fx = graph_fx_with(Some(src), &src.effects, slt, slt, &layer_slot_plain);
+            // The frame's own time on the layer's clock, so a comp the graph
+            // reads finds its clips at this walk's moment as well.
+            let frame_slt = lumit_core::time::layer_time(frame_t, src.start_offset.0);
+            input.graph_fx =
+                graph_fx_with(Some(src), &src.effects, slt, frame_slt, &layer_slot_plain);
         }
         Some(input)
     };
@@ -2293,10 +2397,13 @@ fn comp_walk(
     // stream, no wires to bring one in, and no layer id for an expression to
     // name: its schedules still fill one slot per declared row, so the 1:1
     // walk in `run_ops` holds.
+    // `room` is the empty margin a points effect is given round a Shape or
+    // Text layer's art, in texels each side, and the raster's px per comp px.
     let points_schedules_for = |owner: Option<&lumit_core::model::Layer>,
                                 effects: &[lumit_core::model::EffectInstance],
                                 slt: f64,
-                                frame_slt: f64|
+                                frame_slt: f64,
+                                room: Option<([u32; 2], f32)>|
      -> Vec<lumit_core::fx::points::PointsSchedule> {
         use lumit_core::model::EffectNamespace;
         let dt = 1.0 / comp.frame_rate.fps().max(1.0);
@@ -2331,6 +2438,34 @@ fn comp_walk(
                 wants.then_some((i, e, def))
             })
             .collect();
+        // The room is for the points effects the stack ends on, and the first
+        // of them is where it starts. Anything drawn after a points effect
+        // was placed on the art's own picture, so the points before it keep
+        // that picture and draw as they always did. Scatter and Emit from
+        // image count with the rest: they throw their candidates across the
+        // picture they are handed, and a wider one would move every point.
+        let draws = |e: &lumit_core::model::EffectInstance| {
+            e.enabled
+                && (e.effect.namespace != EffectNamespace::Builtin
+                    || lumit_core::fx::BUILTIN_DEFS
+                        .get(&e.effect.match_name)
+                        .is_none_or(|def| def.is_image_op()))
+        };
+        let asks = |i: usize, e: &lumit_core::model::EffectInstance| {
+            carried.iter().any(|(c, ..)| *c == i)
+                && !matches!(e.effect.match_name.as_str(), "scatter" | "emit_from_image")
+        };
+        let last_other = effects
+            .iter()
+            .enumerate()
+            .rev()
+            .find(|(i, e)| draws(e) && !asks(*i, e))
+            .map(|(i, _)| i);
+        let room_from = room.and_then(|_| {
+            carried
+                .iter()
+                .position(|(i, ..)| last_other.is_none_or(|other| *i > other))
+        });
         // Which slot of this list an effect holds, by its place in the stack.
         // A wire whose stream could not be made here names its producer's
         // slot, so the walk can ask that op for it on the card.
@@ -2349,7 +2484,8 @@ fn comp_walk(
         };
         carried
             .iter()
-            .map(|&(_, e, def)| {
+            .enumerate()
+            .map(|(k, &(_, e, def))| {
                 // A pinned effect is evaluated at the true playhead, so
                 // its schedule is scanned there too: the picture and the
                 // particles it draws must be of one moment.
@@ -2368,7 +2504,7 @@ fn comp_walk(
                 // (points-stream.md §3.3). In px@comp — the units a stream is
                 // data in — and rescaled into the raster by whichever
                 // consumer draws it.
-                let wired = match owner {
+                let mut wired = match owner {
                     Some(layer) => points_input_for(
                         layer,
                         e,
@@ -2383,6 +2519,31 @@ fn comp_walk(
                     // A group carries no graph, so no wire can bring a stream
                     // in: the consumer's documented empty input.
                     None => PointsInput::default(),
+                };
+                // The room this op's picture has round the art. The points
+                // are drawn that far in, which is one more move on the end
+                // of the camera's. A stream keeps its own positions, so a
+                // driver and another layer read what they always did.
+                let grow = room
+                    .filter(|_| room_from.is_some_and(|from| k >= from))
+                    .map_or([0, 0], |(texels, _)| texels);
+                let scale = room.map_or(1.0, |(_, scale)| scale.max(1e-6));
+                let inset = [grow[0] as f32 / scale, grow[1] as f32 / scale];
+                let moved = |p: lumit_core::fx::points::Projection| {
+                    let [mut x, mut y, w] = p.m;
+                    for ((x, y), w) in x.iter_mut().zip(y.iter_mut()).zip(w) {
+                        *x += inset[0] * w;
+                        *y += inset[1] * w;
+                    }
+                    lumit_core::fx::points::Projection { m: [x, y, w] }
+                };
+                let projection = if grow == [0, 0] {
+                    projection
+                } else {
+                    for stream in &mut wired.streams {
+                        stream.projection = moved(stream.projection);
+                    }
+                    Some(moved(projection.unwrap_or_default()))
                 };
                 // The Text layer that Text to points and Label points read.
                 let (text, label) = owner.map_or_else(Default::default, |layer| {
@@ -2414,6 +2575,7 @@ fn comp_walk(
                         input_from,
                         text,
                         label,
+                        grow,
                     };
                 }
                 let upto = (t / dt).floor() as i64;
@@ -2445,6 +2607,7 @@ fn comp_walk(
                     input_from,
                     text,
                     label,
+                    grow,
                 }
             })
             .collect()
@@ -2596,7 +2759,7 @@ fn comp_walk(
                 // propagated: a Roto brush on a header passes through.
                 roto_mattes: roto_mattes_for(&group.effects, 0),
                 planes: planes_for(&group.effects, 0),
-                points_schedules: points_schedules_for(None, &group.effects, t_comp, frame_t),
+                points_schedules: points_schedules_for(None, &group.effects, t_comp, frame_t, None),
                 flare_lens_files: flare_lens_files(&group.effects, t_comp),
                 // A Node graph effect on a group header applies to the
                 // wrapped unit, exactly as any other of its effects does.
@@ -2811,8 +2974,16 @@ fn comp_walk(
                 three_d: src.switches.three_d,
                 luma: matches!(mr.channel, lumit_core::model::MatteChannel::Luma),
                 inverted: mr.inverted,
-                fx,
                 colour_tables,
+                // The graphs the matte source's own Node graph effects apply,
+                // as a layer read through an effect's row carries them. Their
+                // further pictures are fetched plainly, which is the same bound.
+                graph_fx: if fx.is_empty() {
+                    Vec::new()
+                } else {
+                    graph_fx_with(Some(src), &src.effects, mlt, mlt, &layer_slot_plain)
+                },
+                fx,
                 roto_mattes: matte_roto,
                 planes: matte_planes,
                 nested,
@@ -3186,6 +3357,7 @@ fn comp_walk(
                         &layer.effects,
                         lt,
                         frame_lt,
+                        None,
                     ),
                     flare_lens_files: flare_lens_files(&layer.effects, lt),
                     // A Node graph effect on an adjustment layer runs on the
@@ -3333,6 +3505,29 @@ fn comp_walk(
                     .collect()
             })
             .unwrap_or_default();
+        // A Shape or Text layer's picture is only as big as its art, so the
+        // points effects its stack ends on are given room round it to draw
+        // in. A layer style is drawn after the stack, on the art's own
+        // picture, so a layer with one keeps that picture.
+        let room = match (&layer.kind, &source) {
+            (
+                LayerKind::Shape { .. } | LayerKind::Text { .. },
+                DrawSource::Pixels { tex_w, tex_h, .. },
+            ) if !layer.styles.iter().any(|s| s.enabled) => points_room(
+                (comp.width as f32, comp.height as f32),
+                natural,
+                (*tex_w, *tex_h),
+                (
+                    (tr.position_x.value_at_with_context(lt, context.clone())
+                        - tr.anchor_x.value_at_with_context(lt, context.clone()))
+                        as f32,
+                    (tr.position_y.value_at_with_context(lt, context.clone())
+                        - tr.anchor_y.value_at_with_context(lt, context.clone()))
+                        as f32,
+                ),
+            ),
+            _ => None,
+        };
 
         draws.push(CompLayerDraw {
             layer: layer.id,
@@ -3394,7 +3589,7 @@ fn comp_walk(
             mask_paths: mask_paths_for(&layer.effects, Some(layer), lt),
             roto_mattes: roto_mattes_for(&layer.effects, source_frame),
             planes: planes_for(&layer.effects, source_frame),
-            points_schedules: points_schedules_for(Some(layer), &layer.effects, lt, frame_lt),
+            points_schedules: points_schedules_for(Some(layer), &layer.effects, lt, frame_lt, room),
             flare_lens_files: flare_lens_files(&layer.effects, lt),
             // The graphs this layer's Node graph effects apply, lowered
             // (docs/impl/node-graph-comp.md §2.4); empty on every layer that
@@ -4721,6 +4916,7 @@ fn adjustment_flow_below(
 /// A clip with no picture for the moment (a Sequence clip, a dropped decode)
 /// keeps its frame-time pixels, which is what every rebuild used to draw.
 fn pixels_at_moment<'a>(
+    doc: &lumit_core::model::Document,
     comp: &lumit_core::model::Composition,
     t_comp: f64,
     frame_t: f64,
@@ -4751,7 +4947,62 @@ fn pixels_at_moment<'a>(
                 .insert(id, &**moment);
         }
     }
+    // A graph a layer applies files its clips under its own boxes too, and
+    // runs on that layer's clock. The planner fetched them by the offset on
+    // that clock in frames of the graph's own comp, so that is the offset
+    // they are looked up by.
+    for layer in &comp.layers {
+        let mut boxes = Vec::new();
+        applied_boxes(doc, &layer.effects, &mut Vec::new(), &mut boxes);
+        for (id, graph_dt) in boxes {
+            let offset = crate::plan::moment_offset(
+                lumit_core::time::layer_time(t_comp, layer.start_offset.0),
+                lumit_core::time::layer_time(frame_t, layer.start_offset.0),
+                graph_dt,
+            );
+            let moment = pixels_by_layer.get(&id).and_then(|lp| {
+                lp.shutter
+                    .iter()
+                    .find(|(o, _)| o.to_bits() == offset.to_bits())
+            });
+            if let Some((_, moment)) = moment {
+                out.get_or_insert_with(|| pixels_by_layer.clone())
+                    .insert(id, &**moment);
+            }
+        }
+    }
     out
+}
+
+/// Every box of the node graphs `effects` apply, graphs nested in them
+/// included, each with one frame of its own comp in seconds. A graph's Read
+/// of footage is filed under its box. `seen` stops a graph that applies
+/// itself.
+fn applied_boxes(
+    doc: &lumit_core::model::Document,
+    effects: &[lumit_core::model::EffectInstance],
+    seen: &mut Vec<Uuid>,
+    out: &mut Vec<(Uuid, f64)>,
+) {
+    for e in effects.iter().filter(|e| e.enabled) {
+        let Some(named) = lumit_core::fx::effects::node_graph::comp_of(e)
+            .filter(|id| !seen.contains(id))
+            .and_then(|id| doc.comp(id))
+        else {
+            continue;
+        };
+        let Some(graph) = named.graph.as_ref() else {
+            continue;
+        };
+        seen.push(named.id);
+        let dt = 1.0 / named.frame_rate.fps().max(1.0);
+        for node in &graph.nodes {
+            out.push((node.id(), dt));
+            if let lumit_core::comp_graph::GraphNode::Fx(inst) = node {
+                applied_boxes(doc, std::slice::from_ref(inst), seen, out);
+            }
+        }
+    }
 }
 
 /// Drop the neighbour frames and flow field a temporal effect reads, recursing

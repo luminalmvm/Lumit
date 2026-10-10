@@ -12,8 +12,8 @@
 use crate::fx::effects::vary_points::{Pattern, PatternKind, POINTS_IN, POINTS_OUT};
 use crate::fx::points::PointsStream;
 use crate::fx::{
-    EffectDef, EffectMetadata, EffectSchema, ParamGroup, ParamId, Params, ResolveCx, Signature,
-    Value,
+    EffectDef, EffectMetadata, EffectSchema, EnabledCond, EnabledWhen, ParamGroup, ParamId, Params,
+    ResolveCx, ShortText, Signature, Value,
 };
 use lumit_fx_macros::Effect;
 
@@ -33,7 +33,7 @@ const fn group(
 
 /// The pattern and its range, the rows only some patterns read, and the count.
 pub const PICK_GROUPS: &[ParamGroup] = &[
-    group("Pattern", &["pattern", "from", "to"], None),
+    group("Pattern", &["pattern", "from", "to", "invert"], None),
     group("", &["seed"], Some(("pattern", &[1, 2]))),
     group("", &["noise_scale"], Some(("pattern", &[2]))),
     group("", &["noise_speed"], Some(("pattern", &[2, 13]))),
@@ -43,14 +43,25 @@ pub const PICK_GROUPS: &[ParamGroup] = &[
         Some(("pattern", &[3, 6, 7, 11, 12, 13])),
     ),
     group("", &["radius"], Some(("pattern", &[3, 6, 7]))),
-    group("", &["number_range"], Some(("pattern", &[10]))),
+    group(
+        "",
+        &["number_range", "pattern_name"],
+        Some(("pattern", &[10])),
+    ),
     group("", &["spacing", "angle"], Some(("pattern", &[11, 12, 13]))),
     group("", &["band_width"], Some(("pattern", &[11]))),
     group("", &["wave", "rings"], Some(("pattern", &[13]))),
     group("", &["image_layer"], Some(("pattern", &[8]))),
-    group("Count", &["every_nth", "nth_offset", "invert"], None),
+    group("Count", &["every_nth", "nth_offset"], None),
     group("Point", &["feather"], None),
 ];
+
+/// Group name is only read while Result marks points.
+pub const PICK_ENABLED_WHEN: &[EnabledWhen] = &[EnabledWhen {
+    param: "group_name",
+    on: "result",
+    cond: EnabledCond::ChoiceIsNot(0),
+}];
 
 /// Pick points' controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
@@ -66,6 +77,7 @@ pub const PICK_GROUPS: &[ParamGroup] = &[
     // parameters.
     seeded = true,
     groups = PICK_GROUPS,
+    enabled_when = PICK_ENABLED_WHEN,
 )]
 pub struct PickPoints {
     /// What becomes of the points. Drop the rest removes the ones that fail.
@@ -84,6 +96,13 @@ pub struct PickPoints {
         default = 0
     )]
     pub result: u32,
+
+    /// The group the marks are written to, for the effects below to read by
+    /// that name: 1 for a point in it and 0 for the rest. Add to, Remove
+    /// from and Keep in then start from that group. Empty marks the points
+    /// as picked.
+    #[text(label = "Group name", default = "")]
+    pub group_name: ShortText,
 
     /// What gives each point its number.
     #[choice(label = "Pattern", options = *PatternKind::OPTIONS, default = 1)]
@@ -111,6 +130,10 @@ pub struct PickPoints {
         unit = Percent
     )]
     pub to: f32,
+
+    /// Keep what would have been dropped, and drop what would have been kept.
+    #[toggle(label = "Invert", default = false)]
+    pub invert: bool,
 
     /// Which dice, and which noise.
     #[seed]
@@ -172,6 +195,11 @@ pub struct PickPoints {
         unit = Raw
     )]
     pub number_range: f32,
+
+    /// Which of a point's numbers the Number pattern reads: a name written
+    /// above, or one of the `@` names. Empty is the number it carries.
+    #[text(label = "Name", default = "")]
+    pub pattern_name: ShortText,
 
     /// How far it is from one stripe, square or wave to the next, px@comp.
     #[slider(
@@ -244,10 +272,6 @@ pub struct PickPoints {
     )]
     pub nth_offset: i32,
 
-    /// Keep what would have been dropped, and drop what would have been kept.
-    #[toggle(label = "Invert", default = false)]
-    pub invert: bool,
-
     /// How soft the disc a point is drawn as is, per cent.
     #[slider(
         min = 0.0,
@@ -287,6 +311,7 @@ impl PickPoints {
             centre: [self.centre_x, self.centre_y],
             radius: self.radius,
             number_range: self.number_range,
+            name: self.pattern_name,
             spacing: self.spacing,
             angle: self.angle,
             width: self.band_width / 100.0,
@@ -326,8 +351,14 @@ impl PickPoints {
             out.retain(passes);
             return out;
         }
-        for (i, pick) in out.pick_mut().iter_mut().enumerate() {
-            let (was, pass) = (in_stream.picked(i), passes(i));
+        let name = self.group_name.as_str();
+        let marks = if name.is_empty() {
+            Some(out.pick_mut())
+        } else {
+            out.named_mut(name)
+        };
+        for (i, pick) in marks.into_iter().flatten().enumerate() {
+            let (was, pass) = (in_stream.in_group(name, 0.5, i), passes(i));
             let picked = match self.result {
                 1 => pass,
                 2 => was || pass,

@@ -810,6 +810,19 @@ class EffectParamRowFrb extends StatelessWidget {
         }
         return Text('—', style: t.small);
 
+      case BridgeParamKind_Text():
+        if (value case BridgeEffectValue_Text(:final field0)) {
+          return SizedBox(
+            width: effectCellWidth + 60,
+            child: _EffectTextField(
+              key: ValueKey<String>('fx-text-$id-${param.id}'),
+              text: field0,
+              onCommit: (text) => _set(BridgeEffectValue.text(text)),
+            ),
+          );
+        }
+        return Text('—', style: t.small);
+
       case BridgeParamKind_File(:final filter, :final filterName):
         if (value case BridgeEffectValue_File(:final field0)) {
           final paths = field0.paths;
@@ -2388,6 +2401,7 @@ BridgeEffectValue? defaultEffectValue(BridgeParamKind kind) => switch (kind) {
           const BridgeFileParam(paths: [], index: BridgeScalar.static_(0))),
       // Unset: the working space, or nothing - the engine's own default.
       BridgeParamKind_ColourName() => const BridgeEffectValue.text(''),
+      BridgeParamKind_Text(:final default_) => BridgeEffectValue.text(default_),
       BridgeParamKind_Layer() => const BridgeEffectValue.layer(),
       // Unset, as a layer reference is: the node reads the whole layer
       // until a clip is picked.
@@ -2643,6 +2657,69 @@ class _DropperButton extends StatelessWidget {
       },
     );
   }
+}
+
+/// A text row's field: one line, committed on Enter or on losing focus, and
+/// put back to the stored text on Escape.
+class _EffectTextField extends StatefulWidget {
+  final String text;
+  final ValueChanged<String> onCommit;
+  const _EffectTextField(
+      {super.key, required this.text, required this.onCommit});
+
+  @override
+  State<_EffectTextField> createState() => _EffectTextFieldState();
+}
+
+class _EffectTextFieldState extends State<_EffectTextField> {
+  late final TextEditingController _controller =
+      TextEditingController(text: widget.text);
+  late final FocusNode _focus = FocusNode()..addListener(_focusChanged);
+
+  /// The text last committed. Enter commits and then gives up the focus, and
+  /// this is what keeps that to one undo step.
+  late String _sent = widget.text;
+
+  void _focusChanged() {
+    if (!_focus.hasFocus) _commit();
+  }
+
+  void _commit() {
+    final text = _controller.text;
+    if (text == _sent) return;
+    _sent = text;
+    widget.onCommit(text);
+  }
+
+  @override
+  void didUpdateWidget(covariant _EffectTextField old) {
+    super.didUpdateWidget(old);
+    // Show what is stored after an undo, a reset, or the engine cutting a
+    // long text short. Typing in progress is left alone.
+    if (widget.text != old.text || !_focus.hasFocus) {
+      _sent = widget.text;
+      if (_controller.text != widget.text) _controller.text = widget.text;
+    }
+  }
+
+  @override
+  void dispose() {
+    _focus.dispose();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => HouseTextField(
+        controller: _controller,
+        focusNode: _focus,
+        width: double.infinity,
+        onSubmitted: (_) => _commit(),
+        onCancelled: () {
+          _controller.text = widget.text;
+          _focus.unfocus();
+        },
+      );
 }
 
 class EffectParamRowExpression extends StatefulWidget {

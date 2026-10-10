@@ -649,6 +649,29 @@ impl Side<'static> {
     };
 }
 
+thread_local! {
+    /// The effect instance whose incoming points stream this thread's next
+    /// walks report, and the last stream reported. Per thread, so a bake on
+    /// its own renderer never reads a stream the Viewer's walk was handed.
+    static WATCHED: std::cell::RefCell<Option<(uuid::Uuid, Option<lumit_core::fx::points::PointsStream>)>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Ask [`run_ops`] on this thread to report the points stream it hands to the
+/// effect instance `instance`, or to stop reporting with `None`. The Bake
+/// points job asks, since a stream that depends on a picture exists nowhere
+/// but inside a walk.
+pub fn watch_points(instance: Option<uuid::Uuid>) {
+    WATCHED.with(|w| *w.borrow_mut() = instance.map(|id| (id, None)));
+}
+
+/// The stream handed to the watched instance since it was last taken, in
+/// px@comp. `None` when no walk on this thread reached it.
+#[must_use]
+pub fn take_watched_points() -> Option<lumit_core::fx::points::PointsStream> {
+    WATCHED.with(|w| w.borrow_mut().as_mut().and_then(|(_, seen)| seen.take()))
+}
+
 /// Run `ops` over `tex` in order, returning the final texture (the input
 /// unchanged when `ops` is empty). `w`/`h` are the texture's raster size.
 /// `neighbours` are the layer's decoded neighbour frames keyed by offset
@@ -903,6 +926,9 @@ pub fn run_ops(
     // per op whose effect asks a model for a plane, which is what
     // `build.rs`'s `planes_for` fills by.
     let mut plane_i = 0usize;
+    // The size the picture had before it was given the room a points effect
+    // asks for round a Shape or Text layer's art. `None` while there is none.
+    let mut unroomed: Option<(u32, u32)> = None;
     for (i, resolved) in ops.iter().enumerate() {
         let role = resolved.def.schema().matte;
         let paths_n = resolved.def.schema().mask_path_count();
@@ -931,11 +957,29 @@ pub fn run_ops(
                     filled.input.resize(entry + 1, Default::default());
                 }
                 filled.input[entry] = stream.clone();
+                // The op above may have drawn before the room was made, and
+                // this one draws inside it.
+                if s.grow != [0, 0] {
+                    filled.input[entry].projection = s.projection.unwrap_or_default();
+                }
                 any = true;
             }
             any.then_some(filled)
         });
         let schedule = late_input.as_ref().or(schedule);
+        let asks = schedule.map(|s| s.grow).filter(|g| *g != [0, 0]);
+        // The stream this op is handed, for whoever asked to see it.
+        if let Some(carriage) = schedule {
+            WATCHED.with(|w| {
+                if let Some((_, seen)) = w
+                    .borrow_mut()
+                    .as_mut()
+                    .filter(|(id, _)| *id == resolved.instance)
+                {
+                    *seen = Some(carriage.input.first().cloned().unwrap_or_default());
+                }
+            });
+        }
         let matte = if role.param().is_some() {
             let slot = mattes.get(matte_i);
             matte_i += 1;
@@ -999,7 +1043,33 @@ pub fn run_ops(
             if let Some(into) = timings.as_mut() {
                 into.push(0.0);
             }
+            // A picture held from inside a run was made with its room.
+            unroomed = asks.map(|[across, down]| {
+                unroomed.unwrap_or((
+                    w.saturating_sub(across.saturating_mul(2)),
+                    h.saturating_sub(down.saturating_mul(2)),
+                ))
+            });
             continue;
+        }
+        // Room round the art for a run of points effects to draw in, grown the
+        // way Tile grows the picture. It lasts only as long as the run: an op
+        // that does not ask for it was placed on the art's own picture, so it
+        // is handed the picture cut back to that size, and every position on
+        // it is where it always was. A held op's picture has all this done.
+        match (asks, unroomed) {
+            (Some([across, down]), None) => {
+                unroomed = Some((w, h));
+                w = w.saturating_add(across.saturating_mul(2));
+                h = h.saturating_add(down.saturating_mul(2));
+                tex = lumit_gpu::fx::fit_centred(ctx, tex, w, h);
+            }
+            (None, Some(before)) => {
+                unroomed = None;
+                (w, h) = before;
+                tex = lumit_gpu::fx::fit_centred(ctx, tex, w, h);
+            }
+            _ => {}
         }
         // The picture this op is handed, kept for the recycling below: an op
         // that passes its input straight through has made nothing, and the one
@@ -1073,9 +1143,17 @@ pub fn run_ops(
             // As above: a Light wrap's background plate, sized to the
             // layer, grown into the margin an earlier op added. One picture
             // for most effects, a list for one with several layer rows.
+            // Inside the room a points effect was given, a picture that is
+            // stamped keeps the size it was made at, or every stamp would
+            // show it shrunk into the wider raster. One that is read under
+            // the points is read in place, and takes the room with the rest.
+            let (lw, lh) = match unroomed {
+                Some(before) if !resolved.def.points_need_picture(params) => before,
+                _ => (w, h),
+            };
             let fitted = |l: &LayerInput, size: Option<[f32; 2]>| {
                 l.texture(&tex).cloned().map(|t| LayerPicture {
-                    tex: lumit_gpu::fx::fit_centred(ctx, t, w, h),
+                    tex: lumit_gpu::fx::fit_centred(ctx, t, lw, lh),
                     size,
                 })
             };

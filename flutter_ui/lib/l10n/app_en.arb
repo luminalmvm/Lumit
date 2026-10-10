@@ -2876,6 +2876,50 @@
   "@fxPlaceY": {
     "description": "Effect controls — a control on Transform points: how far down the composition the points' anchor lands, per cent. Pairs with Place x."
   },
+  "fxColourRamp": "Colour ramp",
+  "@fxColourRamp": {
+    "description": "Effect controls — a group heading on Vary points: the switch and the red, green and blue curves that colour points along the pattern."
+  },
+  "fxUseColourRamp": "Use colour ramp",
+  "@fxUseColourRamp": {
+    "description": "Effect controls — a switch on Vary points: the points are coloured from the red, green and blue curves, read along the pattern, in place of the Start, Middle and end colours."
+  },
+  "fxBakePoints": "Bake points",
+  "@fxBakePoints": {
+    "description": "Effect controls — the name of the Bake points effect, which writes the points of a stream wired into it to disk and hands the written points on."
+  },
+  "fxBake": "Bake",
+  "@fxBake": {
+    "description": "Effect controls — a button on Bake points: write the points to disk now."
+  },
+  "fxRead": "Read",
+  "@fxRead": {
+    "description": "Effect controls — a Mode option on Bake points: hand on only the points that were written to disk, whatever has changed since."
+  },
+  "fxGroup": "Group",
+  "@fxGroup": {
+    "description": "Effect controls — a text box under Apply to on the points effects: the name of the group of points that Picked and Not picked go by. Left empty, they go by the points a Pick points effect picked. A noun."
+  },
+  "fxGroupName": "Group name",
+  "@fxGroupName": {
+    "description": "Effect controls — a text box on Pick points: the name the picked points are saved under as a group, so effects further down can ask for them by that name."
+  },
+  "fxName": "Name",
+  "@fxName": {
+    "description": "Effect controls — a text box on the points effects, under a Number option or Set number: the name of the per-point number to read or write. Left empty, it is the number each point carries."
+  },
+  "fxOrderBy": "Order by",
+  "@fxOrderBy": {
+    "description": "Effect controls — a text box on Connect points: the name of the per-point number the In order mode sorts the points by."
+  },
+  "fxFromGroup": "From group",
+  "@fxFromGroup": {
+    "description": "Effect controls — a text box on Connect points: the name of the group of points that lines start from, when Between limits which points are joined."
+  },
+  "fxToGroup": "To group",
+  "@fxToGroup": {
+    "description": "Effect controls — a text box on Connect points: the name of the group of points that lines run to, when Between joins one set of points to another."
+  },
   "fxClockwise": "Clockwise",
   "@fxClockwise": {
     "description": "Effect controls — a Wipe option on Radial wipe."
@@ -10548,6 +10592,28 @@
         "type": "String"
       }
     }
+  },
+  "bakeNotBaked": "Not baked yet",
+  "@bakeNotBaked": {
+    "description": "Bake points status line in Effect controls, before Bake has ever been pressed for these settings."
+  },
+  "bakeBaking": "Baking frame {done} of {total}",
+  "@bakeBaking": {
+    "description": "Bake points status line while the points are being baked. Both numbers are frame counts.",
+    "placeholders": { "done": { "type": "int" }, "total": { "type": "int" } }
+  },
+  "bakeStopped": "Bake stopped",
+  "@bakeStopped": {
+    "description": "Bake points status line after Cancel was pressed. Nothing was kept."
+  },
+  "bakeFailed": "The bake could not be made",
+  "@bakeFailed": {
+    "description": "Bake points status line when the bake failed."
+  },
+  "bakeBaked": "Baked {frames} frames",
+  "@bakeBaked": {
+    "description": "Bake points status line when a bake is in hand. {frames} is a frame count.",
+    "placeholders": { "frames": { "type": "int" } }
   },
   "trackNotAnalysed": "Not analysed yet",
   "@trackNotAnalysed": {

@@ -931,6 +931,7 @@ sealed class BridgeEffectValue with _$BridgeEffectValue {
   ) = BridgeEffectValue_Curve;
 
   /// A name from the OCIO config, as the config spells it; empty is unset.
+  /// Also what a [`BridgeParamKind::Text`] row holds: the text as typed.
   const factory BridgeEffectValue.text(
     String field0,
   ) = BridgeEffectValue_Text;
@@ -1227,6 +1228,13 @@ sealed class BridgeParamKind with _$BridgeParamKind {
   const factory BridgeParamKind.colourName({
     required BridgeColourNameRole role,
   }) = BridgeParamKind_ColourName;
+
+  /// A short text the user types, drawn as a single-line text field. The
+  /// value crossing is a [`BridgeEffectValue::Text`], and the engine cuts
+  /// what is set to its cap (`lumit_core::fx::TEXT_MAX_BYTES`).
+  const factory BridgeParamKind.text({
+    required String default_,
+  }) = BridgeParamKind_Text;
   const factory BridgeParamKind.layer() = BridgeParamKind_Layer;
 
   /// One clip on the layer a sibling [`BridgeParamKind::Layer`] row names

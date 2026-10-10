@@ -37,18 +37,22 @@ eight moments each.
 
 | Parameter | Control | Range | Default | Unit |
 | --- | --- | --- | --- | --- |
+| **Apply to** | Dropdown | All points · Picked · Not picked | All points | - |
+| **Group** | Text | A short line of text | Empty | - |
+| **Threshold** | Slider | 0 to 1; any value by typing | 0.5 | - |
 | **Clone layer** | Layer | Any layer in the composition | None | - |
 | **Clone layer 2** | Layer | Any layer in the composition | None | - |
 | **Clone layer ...** | Layer | Any layer in the composition | None | - |
 | **Clone layer 4** | Layer | Any layer in the composition | None | - |
 | **Choose by** | Dropdown | In order · Random · Number · Every layer | In order | - |
+| **More layers › Name** | Text | A short line of text | Empty | - |
 | **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
 | **Time offset** | Dropdown | Off · In order · Random · Number · Point age | Off | - |
+| **Time › Name** | Text | A short line of text | Empty | - |
 | **Time step** | Slider | 0 to 1; higher | 0.067 | Seconds |
 | **Time samples** | Slider, whole numbers | 1 to 32 | 8 | - |
 | **Per clone** | Dropdown | Auto · Off | Auto | - |
 | **Max renders** | Slider, whole numbers | 1 to 32 | 32 | - |
-| **Apply to** | Dropdown | All points · Picked · Not picked | All points | - |
 | **Size** | Dropdown | Point size · Layer size · Fit cell · Fill cell | Point size | - |
 | **Cell width** | Slider | 1 to 2000; higher | 200 | Pixels at composition size |
 | **Cell height** | Slider | 1 to 2000; higher | 200 | Pixels at composition size |
@@ -69,9 +73,13 @@ eight moments each.
 
 In the Effect Controls panel:
 
-- **More layers** groups **Clone layer 2**, **Clone layer 3**, **Clone layer 4**, **Choose by**, **Seed**, and starts closed.
-- **Time** groups **Time offset**, **Time step**, **Time samples**, and starts closed.
+- **More layers** groups **Clone layer 2**, **Clone layer 3**, **Clone layer 4**, **Choose by**, **Name**, **Seed**, and starts closed.
+- **Time** groups **Time offset**, **Name**, **Time step**, **Time samples**, and starts closed.
 - **Clone index** groups **Per clone**, **Max renders**, and starts closed.
+- **Group** is editable while **Apply to** is anything but All points.
+- **Threshold** is editable while **Apply to** is anything but All points.
+- **Name** is editable while **Choose by** is set to Number.
+- **Name** is editable while **Time offset** is set to Number.
 - **Time step** is editable while **Time offset** is anything but Off.
 - **Time samples** is editable while **Time offset** is anything but Off.
 - **Max renders** is editable while **Per clone** is set to Auto.
@@ -81,6 +89,11 @@ In the Effect Controls panel:
 
 ## What each control does
 
+- **Apply to**: which points get a stamp.
+- **Group**: the group Picked and Not picked go by, as a name. Left empty, they go by the
+  points a Pick points picked. See [Names](/effects/generate/vary-points/#names).
+- **Threshold**: what a point's Group must read above to be in it. It is read only with a
+  Group named.
 - **Clone layer**: the layer whose picture is stamped.
 - **Clone layer 2**, **Clone layer 3** and **Clone layer 4**: more layers to stamp. With
   more than one set, each point takes one of them.
@@ -88,11 +101,15 @@ In the Effect Controls panel:
   each in turn down the stream. **Random** rolls for it, the same every frame. **Number**
   reads the number the point carries. **Every layer** stamps them all at every point, the
   first row at the bottom. See [Pick points](/effects/generate/pick-points/) for the number.
+- **Name**, under **Choose by**: which of a point's numbers Number reads. Left empty, it is
+  the number the point carries. See [Names](/effects/generate/vary-points/#names).
 - **Seed**: which roll a Random choice of layer and a Random time offset give.
 - **Time offset**: shows each stamp its layer at another moment. **In order** steps back
   once a stamp. **Random** shuffles the same steps by the Seed. **Number** steps back by
   the number the point carries. **Point age** plays the layer from its start as the point
   ages.
+- **Name**, under **Time offset**: which of a point's numbers Number steps back by. Left
+  empty, it is the number the point carries.
 - **Time step**: how far apart two steps are.
 - **Time samples**: the most moments a layer is rendered at. Steps past the last wrap round
   to the first, and a point older than the last holds it. Each moment is another render of
@@ -102,7 +119,6 @@ In the Effect Controls panel:
   renders every copy alike. Under Point age the copies are alike too.
 - **Max renders**: the most copies rendered with a number of their own. Stamps past it
   share them in turn. Each is another render of the layer.
-- **Apply to**: which points get a stamp.
 - **Size**: what a stamp's size is. **Point size** is a square of the point's own size with
   the whole layer squeezed into it. **Layer size** is the layer at its own size and shape.
   **Fit cell** and **Fill cell** scale the layer into a cell and keep its shape. Fit leaves
@@ -123,8 +139,8 @@ In the Effect Controls panel:
 - **Max clones**: the most stamps that may be drawn. Under Every layer a point counts once
   for each layer.
 - **Mix**: how much of the result replaces the picture underneath.
-- **Matte** and **Invert** drive the strength of the effect from another layer's brightness;
-  see [Effects](/use/effects/).
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness.
+  See [Effects](/use/effects/).
 
 ## Related
 

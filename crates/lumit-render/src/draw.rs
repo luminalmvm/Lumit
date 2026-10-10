@@ -75,6 +75,11 @@ pub struct MatteDraw {
     /// not footage, one nobody has assigned, and a Precomp matte, whose layers
     /// were each interpreted as themselves when the nested comp was realised.
     pub colour_space: Option<String>,
+    /// The plans of the matte source's own Node graph effects, 1:1 with the
+    /// `node_graph` ops in `fx`, as [`DofInputDraw::graph_fx`] carries a
+    /// referenced layer's. Empty unless its stack is folded in and applies a
+    /// graph.
+    pub graph_fx: Vec<GraphDraw>,
 }
 
 /// One Roto brush's matte for one frame, as the draw carries it: the

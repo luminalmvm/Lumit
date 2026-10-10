@@ -29,13 +29,15 @@ The moved points go out on its own Points socket and are drawn as discs.
 
 | Parameter | Control | Range | Default | Unit |
 | --- | --- | --- | --- | --- |
+| **Apply to** | Dropdown | All points · Picked · Not picked | All points | - |
+| **Group** | Text | A short line of text | Empty | - |
+| **Threshold** | Slider | 0 to 1; any value by typing | 0.5 | - |
 | **Radius** | Slider | 0 to 200; higher | 30 | Pixels at composition size |
 | **Use point size** | Checkbox | On or off | Off | - |
 | **Spacing** | Slider | 0 to 300; higher | 100 | Per cent |
 | **Iterations** | Slider, whole numbers | 0 to 50; up to 100 | 8 | - |
 | **Strength** | Slider | 0 to 100 | 50 | Per cent |
 | **Bounds** | Dropdown | Free · Keep inside | Free | - |
-| **Apply to** | Dropdown | All points · Picked · Not picked | All points | - |
 | **Max points** | Slider, whole numbers | 1 to 200000; up to 1000000 | 20000 | - |
 | **Feather** | Slider | 0 to 100 | 100 | Per cent |
 | **Mix** | Slider | 0 to 100 | 100 | Per cent |
@@ -47,6 +49,8 @@ The moved points go out on its own Points socket and are drawn as discs.
 In the Effect Controls panel:
 
 - **Point** groups **Max points**, **Feather**.
+- **Group** is editable while **Apply to** is anything but All points.
+- **Threshold** is editable while **Apply to** is anything but All points.
 - **Radius** is editable while **Use point size** is off.
 - **Spacing** is editable while **Use point size** is on.
 - **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
@@ -55,6 +59,12 @@ In the Effect Controls panel:
 
 ## What each control does
 
+- **Apply to**: which points move. The rest stay where they are and still push the ones
+  that move.
+- **Group**: the group Picked and Not picked go by, as a name. Left empty, they go by the
+  points a Pick points picked. See [Names](/effects/generate/vary-points/#names).
+- **Threshold**: what a point's Group must read above to be in it. It is read only with a
+  Group named.
 - **Radius**: the space each point wants round itself. Two points end up at least twice
   this apart.
 - **Use point size**: each point's space is its own size instead.
@@ -65,8 +75,6 @@ In the Effect Controls panel:
   frame to frame.
 - **Bounds**: **Free** lets the points drift anywhere. **Keep inside** holds them in the
   box they started in.
-- **Apply to**: which points move. The rest stay where they are and still push the ones
-  that move. See [Pick points](/effects/generate/pick-points/).
 - **Max points**: the most points it works on. A longer stream is trimmed to its newest.
 - **Feather**: how soft the edge of a drawn disc is.
 - **Mix**: how much of the drawing lands on the picture. At nought the points are still

@@ -20087,18 +20087,24 @@ impl SseDecode for crate::api::effect::BridgeParamKind {
                 return crate::api::effect::BridgeParamKind::ColourName { role: var_role };
             }
             9 => {
-                return crate::api::effect::BridgeParamKind::Layer;
+                let mut var_default_ = <String>::sse_decode(deserializer);
+                return crate::api::effect::BridgeParamKind::Text {
+                    default: var_default_,
+                };
             }
             10 => {
-                return crate::api::effect::BridgeParamKind::Clip;
+                return crate::api::effect::BridgeParamKind::Layer;
             }
             11 => {
-                return crate::api::effect::BridgeParamKind::MaskPath;
+                return crate::api::effect::BridgeParamKind::Clip;
             }
             12 => {
-                return crate::api::effect::BridgeParamKind::Curve;
+                return crate::api::effect::BridgeParamKind::MaskPath;
             }
             13 => {
+                return crate::api::effect::BridgeParamKind::Curve;
+            }
+            14 => {
                 let mut var_default_ = <f64>::sse_decode(deserializer);
                 let mut var_min = <f64>::sse_decode(deserializer);
                 let mut var_max = <f64>::sse_decode(deserializer);
@@ -20110,7 +20116,7 @@ impl SseDecode for crate::api::effect::BridgeParamKind {
                     log: var_log,
                 };
             }
-            14 => {
+            15 => {
                 return crate::api::effect::BridgeParamKind::Action;
             }
             _ => {
@@ -28103,24 +28109,27 @@ impl flutter_rust_bridge::IntoDart for crate::api::effect::BridgeParamKind {
             crate::api::effect::BridgeParamKind::ColourName { role } => {
                 [8.into_dart(), role.into_into_dart().into_dart()].into_dart()
             }
-            crate::api::effect::BridgeParamKind::Layer => [9.into_dart()].into_dart(),
-            crate::api::effect::BridgeParamKind::Clip => [10.into_dart()].into_dart(),
-            crate::api::effect::BridgeParamKind::MaskPath => [11.into_dart()].into_dart(),
-            crate::api::effect::BridgeParamKind::Curve => [12.into_dart()].into_dart(),
+            crate::api::effect::BridgeParamKind::Text { default } => {
+                [9.into_dart(), default.into_into_dart().into_dart()].into_dart()
+            }
+            crate::api::effect::BridgeParamKind::Layer => [10.into_dart()].into_dart(),
+            crate::api::effect::BridgeParamKind::Clip => [11.into_dart()].into_dart(),
+            crate::api::effect::BridgeParamKind::MaskPath => [12.into_dart()].into_dart(),
+            crate::api::effect::BridgeParamKind::Curve => [13.into_dart()].into_dart(),
             crate::api::effect::BridgeParamKind::Slider {
                 default,
                 min,
                 max,
                 log,
             } => [
-                13.into_dart(),
+                14.into_dart(),
                 default.into_into_dart().into_dart(),
                 min.into_into_dart().into_dart(),
                 max.into_into_dart().into_dart(),
                 log.into_into_dart().into_dart(),
             ]
             .into_dart(),
-            crate::api::effect::BridgeParamKind::Action => [14.into_dart()].into_dart(),
+            crate::api::effect::BridgeParamKind::Action => [15.into_dart()].into_dart(),
             _ => {
                 unimplemented!("");
             }
@@ -32853,17 +32862,21 @@ impl SseEncode for crate::api::effect::BridgeParamKind {
                 <i32>::sse_encode(8, serializer);
                 <crate::api::effect::BridgeColourNameRole>::sse_encode(role, serializer);
             }
-            crate::api::effect::BridgeParamKind::Layer => {
+            crate::api::effect::BridgeParamKind::Text { default } => {
                 <i32>::sse_encode(9, serializer);
+                <String>::sse_encode(default, serializer);
             }
-            crate::api::effect::BridgeParamKind::Clip => {
+            crate::api::effect::BridgeParamKind::Layer => {
                 <i32>::sse_encode(10, serializer);
             }
-            crate::api::effect::BridgeParamKind::MaskPath => {
+            crate::api::effect::BridgeParamKind::Clip => {
                 <i32>::sse_encode(11, serializer);
             }
-            crate::api::effect::BridgeParamKind::Curve => {
+            crate::api::effect::BridgeParamKind::MaskPath => {
                 <i32>::sse_encode(12, serializer);
+            }
+            crate::api::effect::BridgeParamKind::Curve => {
+                <i32>::sse_encode(13, serializer);
             }
             crate::api::effect::BridgeParamKind::Slider {
                 default,
@@ -32871,14 +32884,14 @@ impl SseEncode for crate::api::effect::BridgeParamKind {
                 max,
                 log,
             } => {
-                <i32>::sse_encode(13, serializer);
+                <i32>::sse_encode(14, serializer);
                 <f64>::sse_encode(default, serializer);
                 <f64>::sse_encode(min, serializer);
                 <f64>::sse_encode(max, serializer);
                 <bool>::sse_encode(log, serializer);
             }
             crate::api::effect::BridgeParamKind::Action => {
-                <i32>::sse_encode(14, serializer);
+                <i32>::sse_encode(15, serializer);
             }
             _ => {
                 unimplemented!("");

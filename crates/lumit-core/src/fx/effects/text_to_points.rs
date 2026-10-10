@@ -167,6 +167,7 @@ impl TextToPoints {
     ) -> PointsStream {
         let mut out = PointsStream {
             projection,
+            px_scale,
             ..PointsStream::default()
         };
         let size = self.size.max(0.0);
@@ -192,6 +193,7 @@ impl TextToPoints {
             let (Some(first), Some(last)) = (piece.first(), piece.last()) else {
                 continue;
             };
+            let character = letters as f32;
             let number = match self.number {
                 1 => letters as f32,
                 2 => first.word as f32,
@@ -228,6 +230,20 @@ impl TextToPoints {
             out.colour.push(colour);
             out.id.push(n as u64);
             out.index.push(number);
+            // Every count under a name as well, and the piece's width in
+            // px@comp, whatever Number says.
+            let width = (last.end[0] - first.origin[0]).hypot(last.end[1] - first.origin[1]);
+            let named = [
+                ("character", character),
+                ("word", first.word as f32),
+                ("line", first.line as f32),
+                ("width", width),
+            ];
+            for (name, v) in named {
+                if let Some(last) = out.named_mut(name).and_then(|c| c.last_mut()) {
+                    *last = v;
+                }
+            }
         }
         out
     }

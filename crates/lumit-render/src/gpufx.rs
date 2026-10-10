@@ -467,6 +467,7 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &PointsModifier("merge_points"),
     &PointsModifier("relax_points"),
     &PointsModifier("flow_points"),
+    &PointsModifier("bake_points"),
     // The seven layer styles that render (docs/impl/layer-styles.md §8).
     // Satin and Bevel and emboss are declared in `lumit_core::fx::styles` but
     // have no pass here, so an instance of one resolves to an op this table
@@ -5466,7 +5467,7 @@ impl GpuEffect for LabelPoints {
         ) else {
             return tex.clone();
         };
-        let labels = inst.labels(stream, &doc.text, px_scale);
+        let labels = inst.labels(stream, inst.template(&doc.text), px_scale);
         let doc = label_document(doc, px_scale);
         // Labels that read the same share one drawing. Only ever looked up,
         // so the map's order decides nothing.
@@ -6279,13 +6280,17 @@ mod tests {
             clone_layer_3: false,
             clone_layer_4: false,
             choose_by: 0,
+            choose_name: Default::default(),
             seed: 0,
             time_offset: 0,
+            time_name: Default::default(),
             time_step: 0.067,
             time_samples: 8,
             per_clone: 0,
             max_renders: 32,
             apply_to: 0,
+            apply_group: Default::default(),
+            apply_threshold: 0.5,
             fit: 2,
             cell_width: 40.0,
             cell_height: 24.0,
@@ -6409,6 +6414,7 @@ mod tests {
             limit: false,
             invert: false,
             number_range: 100.0,
+            number_name: Default::default(),
             max_points: 20_000,
             mix: 100.0,
         };

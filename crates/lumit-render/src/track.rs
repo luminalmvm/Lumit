@@ -59,6 +59,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
 
+use lumit_core::fx::effects::bake_points;
 use lumit_core::fx::effects::track_points::{self, Analysis, Baked, Followed};
 use lumit_core::model::{
     CameraPose, Composition, Document, EffectInstance, EffectValue, Fingerprint, Layer, LayerKind,
@@ -385,6 +386,21 @@ impl AnalysisKey {
         AnalysisKey(*h.finalize().as_bytes())
     }
 
+    /// The key for a Bake points bake: the instance it was baked for and
+    /// nothing else, so one instance has one file and a new bake replaces the
+    /// old. What it was baked from is inside the file, where Auto checks it,
+    /// and Read hands the file on whatever it says.
+    #[must_use]
+    pub fn bake(effect: Uuid) -> Self {
+        let mut h = blake3::Hasher::new();
+        // The 2 is the layout of the file. A file in an older layout has
+        // another name, so it is never asked for.
+        h.update(b"lumit-track/bake/2/");
+        h.update(&FORMAT_VERSION.to_le_bytes());
+        h.update(effect.as_bytes());
+        AnalysisKey(*h.finalize().as_bytes())
+    }
+
     /// The key for a Track points analysis: the file's content and every row
     /// the analysis reads. Which footage item shows the file is left out, so
     /// two projects on the same clip share one analysis.
@@ -470,6 +486,10 @@ pub enum JobKind {
     /// progress readings and the sidecar with the others, and has a frame
     /// loop of its own ([`follow_points`]).
     TrackPoints(Analysis),
+    /// A Bake points bake being read back from the sidecar when a project
+    /// opens. Only ever a warm job: the bake itself needs the document, which
+    /// a [`Job`] does not carry, so it is started by [`request_bake`].
+    Bake,
 }
 
 /// A point track's search regions, in the analysis's own pixels.
@@ -714,6 +734,9 @@ pub enum Answer {
     Planar(Box<PlanarTrack>),
     /// A Track points analysis: every followed point's path, in id order.
     Points(Vec<Followed>),
+    /// A Bake points bake: a points stream for every frame of a layer's span,
+    /// as [`pack_bake`] writes it.
+    Bake(Vec<u8>),
 }
 
 /// What one sidecar file holds.
@@ -1070,6 +1093,7 @@ pub fn clear() {
         held.clear();
     }
     track_points::retain(|_| false);
+    bake_points::retain(|_| false);
     if let Ok(mut held) = jobs().lock() {
         held.progress.clear();
     }
@@ -1088,6 +1112,7 @@ pub fn forget(ids: &[Uuid]) {
         held.retain(|id, _| !ids.contains(id));
     }
     track_points::retain(|id| !ids.contains(id));
+    bake_points::retain(|id| !ids.contains(id));
     if let Ok(mut held) = jobs().lock() {
         held.progress.retain(|id, _| !ids.contains(id));
     }
@@ -1109,6 +1134,7 @@ pub fn owned_ids(doc: &Document) -> Vec<Uuid> {
                     .filter(|e| {
                         e.effect.match_name == PLANAR_TRACK
                             || e.effect.match_name == track_points::MATCH_NAME
+                            || e.effect.match_name == bake_points::MATCH_NAME
                     })
                     .map(|e| e.id),
             ),
@@ -1141,7 +1167,12 @@ pub enum Requested {
 /// no caller — least of all the interface thread — ever waits on the disk
 /// (docs/14 §1.1).
 pub fn request(job: Job) -> Requested {
-    let media = job.media;
+    start(job.media, move |cancel| run(job, cancel))
+}
+
+/// Claim the one analysis slot for `media` and run `work` on a thread of its
+/// own, handed the flag Cancel raises.
+fn start(media: Uuid, work: impl FnOnce(&AtomicBool) + Send + 'static) -> Requested {
     let cancel = Arc::new(AtomicBool::new(false));
     {
         let Ok(mut held) = jobs().lock() else {
@@ -1155,7 +1186,7 @@ pub fn request(job: Job) -> Requested {
     }
     let spawned = std::thread::Builder::new()
         .name("lumit-track".into())
-        .spawn(move || run(job, &cancel));
+        .spawn(move || work(&cancel));
     if spawned.is_err() {
         // The slot was claimed above and nothing will ever release it, so it is
         // released here — otherwise one failed spawn would answer `Busy` for the
@@ -1190,6 +1221,18 @@ pub fn warm_jobs(doc: &Document) -> Vec<Job> {
             continue;
         };
         for layer in &comp.layers {
+            // A bake is filed under its instance and may sit on any kind of
+            // layer, so it is read back before the footage test below.
+            let bakes = layer.effects.iter().filter(is_bake_points);
+            out.extend(bakes.map(|fx| Job {
+                media: fx.id,
+                key: Some(AnalysisKey::bake(fx.id)),
+                settings: AnalysisSettings::default(),
+                kind: JobKind::Bake,
+                masks: MaskTrack::default(),
+                open: Box::new(|| None),
+                analyse: false,
+            }));
             let LayerKind::Footage { item: media } = layer.kind else {
                 continue;
             };
@@ -1313,9 +1356,11 @@ fn run(job: Job, cancel: &AtomicBool) {
         .zip(dir.as_deref())
         .and_then(|(key, d)| read_sidecar(d, key))
     {
-        file(media, kind, fps, clip_frames, answer);
-        finish(media, Some(Progress::Done));
-        return;
+        // A file that held nothing readable is treated as no file.
+        if file(media, kind, fps, clip_frames, answer) {
+            finish(media, Some(Progress::Done));
+            return;
+        }
     }
     if !job.analyse {
         // A warm pass found nothing. That is not a failure and must not look
@@ -1346,8 +1391,9 @@ fn run(job: Job, cancel: &AtomicBool) {
 }
 
 /// Put whichever kind of answer this is into whichever table holds it — the one
-/// place a finished analysis and a cache hit both come through.
-fn file(id: Uuid, kind: JobKind, fps: f64, clip_frames: usize, answer: Answer) {
+/// place a finished analysis and a cache hit both come through. `false` for an
+/// answer that could not be read, which went nowhere.
+fn file(id: Uuid, kind: JobKind, fps: f64, clip_frames: usize, answer: Answer) -> bool {
     match answer {
         Answer::Camera(solve) => publish(id, fps, clip_frames, *solve),
         Answer::Planar(track) => publish_planar(id, fps, clip_frames, *track),
@@ -1367,7 +1413,13 @@ fn file(id: Uuid, kind: JobKind, fps: f64, clip_frames: usize, answer: Answer) {
                 );
             }
         }
+        // A file that will not unpack is no bake.
+        Answer::Bake(bytes) => match unpack_bake(&bytes) {
+            Some(baked) => bake_points::publish(id, baked),
+            None => return false,
+        },
     }
+    true
 }
 
 /// Put a solve in the store, converted.
@@ -1460,6 +1512,186 @@ fn analyse(
         )?;
     rescale(&mut solve, scale);
     Ok((fps, clip_frames, Answer::Camera(Box::new(solve))))
+}
+
+/// The most a bake's file may say it unpacks to: twice what a bake is
+/// allowed to hold. A bake's frames are counted against
+/// [`bake_points::MAX_BYTES`] at the size they are written, and the rest of
+/// the file is under a megabyte, so every file this program wrote fits.
+const BAKE_BYTES: usize = 2 * bake_points::MAX_BYTES;
+
+/// A bake as its sidecar holds it: laid out for a compressor by
+/// [`bake_points::Baked::stored`], then LZ4.
+fn pack_bake(baked: &bake_points::Baked) -> Option<Vec<u8>> {
+    let body = bincode::serialize(&baked.stored()).ok()?;
+    Some(lz4_flex::compress_prepend_size(&body))
+}
+
+/// The inverse. The size the file announces is checked before anything is
+/// allocated for it, since the file's number is not this program's.
+fn unpack_bake(bytes: &[u8]) -> Option<bake_points::Baked> {
+    let announced = u32::from_le_bytes(bytes.get(..4)?.try_into().ok()?);
+    if announced as usize > BAKE_BYTES {
+        return None;
+    }
+    let body = lz4_flex::decompress_size_prepended(bytes).ok()?;
+    bake_points::Baked::restored(&bincode::deserialize(&body).ok()?)
+}
+
+fn is_bake_points(fx: &&EffectInstance) -> bool {
+    fx.effect.match_name == bake_points::MATCH_NAME
+}
+
+/// Start baking the stream wired into the Bake points instance `effect`, on
+/// `layer` of `comp`, over the layer's whole span.
+///
+/// It shares the one slot, the progress readings and Cancel with the
+/// analyses, filed under the instance as a Planar track is. A bake is not a
+/// [`Job`] because it reads the document and not a file's frames. Pressing
+/// Bake always bakes: the file from last time is replaced, never read back,
+/// since what it was made from may have changed in a way the fingerprint
+/// cannot see.
+pub fn request_bake(doc: Arc<Document>, comp: Uuid, layer: Uuid, effect: Uuid) -> Requested {
+    start(effect, move |cancel| {
+        let step = |step| report(effect, step);
+        let outcome = match bake(&doc, comp, layer, effect, cancel, &step) {
+            Ok(baked) => {
+                // Written before the table is filled, as a solve is.
+                if let (Some(dir), Some(bytes)) = (cache_dir(), pack_bake(&baked)) {
+                    let (key, span) = (AnalysisKey::bake(effect), baked.span as usize);
+                    write_sidecar(&dir, key, baked.fps, span, &Answer::Bake(bytes));
+                }
+                bake_points::publish(effect, baked);
+                Progress::Done
+            }
+            Err(AnalysisError::Cancelled) => Progress::Cancelled,
+            Err(e) => Progress::Failed(e),
+        };
+        finish(effect, Some(outcome));
+    })
+}
+
+/// The whole of one bake, on the analysis thread: every frame of the layer's
+/// span inside the composition, and the stream wired into the effect at each.
+///
+/// Each frame is asked of the draw builder first, which answers without
+/// drawing anything for every stream it can work out. A stream whose points
+/// depend on a picture is not one of those. For that the frame is drawn, on a
+/// renderer this thread owns so the Viewer's is left alone, and the stream is
+/// read as the walk hands it to the effect.
+fn bake(
+    doc: &Arc<Document>,
+    comp_id: Uuid,
+    layer_id: Uuid,
+    effect: Uuid,
+    cancel: &AtomicBool,
+    report: &dyn Fn(Progress),
+) -> Result<bake_points::Baked, AnalysisError> {
+    let find = |doc: &Arc<Document>| {
+        let comp = doc.comp(comp_id)?;
+        let layer = comp.layers.iter().find(|l| l.id == layer_id)?;
+        let at = layer.effects.iter().position(|e| e.id == effect)?;
+        Some((comp.frame_rate, comp.duration, layer.clone(), at))
+    };
+    let (rate, duration, layer, at) = find(doc).ok_or(AnalysisError::Unreadable)?;
+    let fingerprint = doc
+        .comp(comp_id)
+        .and_then(|comp| bake_points::fingerprint(doc, comp, &layer, effect))
+        .ok_or(AnalysisError::Unreadable)?;
+    let first = rate.frame_at(layer.in_point).max(0);
+    let end = rate
+        .frame_at(layer.out_point)
+        .min(rate.frame_at(lumit_core::time::CompTime(duration.0)));
+    let span = usize::try_from(end.saturating_sub(first)).unwrap_or(0);
+    if span == 0 {
+        return Err(AnalysisError::NoFrames);
+    }
+
+    // What the frames are made from: the document with this effect on Bypass,
+    // so it is handed the live stream whatever bake is in hand, and with
+    // nothing after it on the layer, which no stream above could depend on.
+    // The layer is shown and nothing is soloed, so a walk reaches it, and
+    // there is no motion blur, so the one walk is at the frame's own moment.
+    let mut staged = Document::clone(doc);
+    if let Some(comp) = staged.comp_mut(comp_id) {
+        comp.motion_blur.enabled = false;
+        for l in &mut comp.layers {
+            l.switches.solo = false;
+            if l.id != layer_id {
+                continue;
+            }
+            l.switches.visible = true;
+            l.effects.truncate(at + 1);
+            if let Some(mode) = l
+                .effects
+                .last_mut()
+                .and_then(|e| e.params.iter_mut().find(|p| p.id == "mode"))
+            {
+                mode.value = EffectValue::Choice(bake_points::MODE_BYPASS);
+            }
+        }
+    }
+    let staged = Arc::new(staged);
+    let (_, _, layer, _) = find(&staged).ok_or(AnalysisError::Unreadable)?;
+    let comp = staged.comp(comp_id).ok_or(AnalysisError::Unreadable)?;
+    let inst = layer.effects.last().ok_or(AnalysisError::Unreadable)?;
+
+    let total = span.min(bake_points::MAX_FRAMES);
+    let mut baked = bake_points::Baked::new(
+        fingerprint,
+        rate.fps(),
+        first,
+        u32::try_from(span).unwrap_or(u32::MAX),
+    );
+    // ponytail: a drawn frame is the whole composition at full size, since
+    // the stream may read any of it. Drawing this layer's stack alone is the
+    // upgrade if baking a heavy composition is too slow.
+    let mut renderer: Option<crate::headless::HeadlessRenderer> = None;
+    let mut held = 0usize;
+    for k in 0..total {
+        if cancel.load(Ordering::Relaxed) {
+            return Err(AnalysisError::Cancelled);
+        }
+        report(Progress::Tracking { done: k, total });
+        let frame = first.saturating_add(k as i64);
+        let t = rate
+            .time_of_frame(frame)
+            .map_err(|_| AnalysisError::NoFrames)?
+            .0
+            .to_f64();
+        let mut stream = match crate::build::points_input_at(&staged, comp, &layer, inst, t) {
+            Some(stream) => stream,
+            None => {
+                let renderer = match &mut renderer {
+                    Some(renderer) => renderer,
+                    slot => {
+                        let mut made = crate::headless::HeadlessRenderer::new()
+                            .map_err(|_| AnalysisError::Unreadable)?;
+                        made.sync_colour(&staged);
+                        slot.insert(made)
+                    }
+                };
+                crate::fxops::watch_points(Some(effect));
+                let drawn =
+                    renderer.render_rgba(&staged, comp_id, u64::try_from(frame).unwrap_or(0), 1.0);
+                let seen = crate::fxops::take_watched_points();
+                crate::fxops::watch_points(None);
+                drawn.map_err(|_| AnalysisError::Unreadable)?;
+                seen.unwrap_or_default()
+            }
+        };
+        stream.keep_newest(bake_points::MAX_POINTS);
+        match baked.push(&stream, bake_points::MAX_BYTES.saturating_sub(held)) {
+            Some(added) => held += added,
+            None => break,
+        }
+    }
+    report(Progress::Tracking {
+        done: baked.frames.len(),
+        total,
+    });
+    baked.seal();
+    Ok(baked)
 }
 
 /// The most blobs followed on one frame.
@@ -3596,6 +3828,237 @@ mod tests {
             "the whole clip was followed"
         );
         assert!(Store.planar_corners(effect, 5).is_some());
+        clear();
+    }
+
+    /// A Scatter's points are made while a frame is drawn and exist nowhere
+    /// else, so a driver wired to them counts none. Baked, they are plain
+    /// data: a driver wired to the Bake points counts them, and the frame
+    /// drawn from the bake is the frame drawn from the live stream.
+    #[test]
+    fn a_baked_scatter_is_read_by_a_driver_and_draws_as_it_did_live() {
+        use lumit_core::fx::drivers::points_sample::{COUNT_PORT, POINTS_PORT};
+        use lumit_core::graph::{Edge, InputRef, NodeRef, OutputRef};
+        use lumit_core::model::SolidDef;
+
+        let _serial = serially();
+        let dir = tempfile::tempdir().unwrap();
+        with_cache(dir.path());
+        let Ok(mut renderer) = crate::headless::HeadlessRenderer::new() else {
+            eprintln!("skipping: no GPU adapter");
+            return;
+        };
+
+        let set = |inst: &mut EffectInstance, id: &str, value: EffectValue| {
+            inst.params.iter_mut().find(|p| p.id == id).unwrap().value = value;
+        };
+        let number = |v: f64| EffectValue::Float(Property::fixed(v));
+        let wire = |from: OutputRef, node: NodeRef, port: &str| Edge {
+            from,
+            to: InputRef::Param {
+                node,
+                port: port.into(),
+            },
+        };
+        let stream_of = |effect: Uuid| OutputRef::EffectData {
+            effect,
+            port: "points".into(),
+        };
+
+        // A board with a Scatter on it, baked, and a web drawn from the bake.
+        // Neither of the first two draws, so the web is the whole picture.
+        let mut scatter = lumit_core::fx::instantiate("scatter").unwrap();
+        set(&mut scatter, "density", number(3000.0));
+        set(&mut scatter, "mix", number(0.0));
+        // A Pick points between them marks half the points under a name, so
+        // the stream that is baked carries a named column.
+        let mut pick = lumit_core::fx::instantiate("pick_points").unwrap();
+        set(&mut pick, "result", EffectValue::Choice(1));
+        set(&mut pick, "group_name", EffectValue::Text("kept".into()));
+        set(&mut pick, "to", number(50.0));
+        set(&mut pick, "mix", number(0.0));
+        let mut bake = lumit_core::fx::instantiate(bake_points::MATCH_NAME).unwrap();
+        set(&mut bake, "mix", number(0.0));
+        let mut connect = lumit_core::fx::instantiate("connect_points").unwrap();
+        set(&mut connect, "max_distance", number(8.0));
+        let (scatter_id, bake_id, connect_id) = (scatter.id, bake.id, connect.id);
+        let pick_id = pick.id;
+
+        let (cw, ch) = (64u32, 36u32);
+        let def = Uuid::now_v7();
+        let mut board = layer("board", LayerKind::Solid { def }, secs(4, 24));
+        board.effects = vec![scatter, pick, bake, connect];
+        board.graph.edges = vec![
+            wire(stream_of(scatter_id), NodeRef::Effect(pick_id), "points"),
+            wire(stream_of(pick_id), NodeRef::Effect(bake_id), "points"),
+            wire(stream_of(bake_id), NodeRef::Effect(connect_id), "points"),
+        ];
+        let board_id = board.id;
+        let comp_id = Uuid::now_v7();
+        let mut doc = Document::new();
+        doc.items.push(ProjectItem::Solid(SolidDef {
+            id: def,
+            name: "Board".into(),
+            colour: LinearColour([0.1, 0.2, 0.9, 1.0]),
+            width: cw,
+            height: ch,
+            extra: serde_json::Map::new(),
+        }));
+        doc.items.push(ProjectItem::Composition(Composition {
+            graph: None,
+            master_volume_db: 0.0,
+            sound_mix: false,
+            groups: Vec::new(),
+            beat_grid: None,
+            id: comp_id,
+            name: "bake".into(),
+            width: cw,
+            height: ch,
+            frame_rate: FrameRate::new(24, 1).unwrap(),
+            duration: Duration(Rational::new(4, 24).unwrap()),
+            background: LinearColour([0.0, 0.0, 0.0, 1.0]),
+            work_area: None,
+            layers: vec![board],
+            markers: Vec::new(),
+            motion_blur: Default::default(),
+            extra: serde_json::Map::new(),
+        }));
+
+        // The same document with the Bake points on another Mode.
+        let with_mode = |mode: u32| {
+            let mut doc = doc.clone();
+            let board = &mut doc.comp_mut(comp_id).unwrap().layers[0];
+            set(&mut board.effects[2], "mode", EffectValue::Choice(mode));
+            Arc::new(doc)
+        };
+        let (auto, bypass) = (with_mode(0), with_mode(bake_points::MODE_BYPASS));
+        let mut frame_of =
+            |doc: &Arc<Document>| renderer.render_rgba(doc, comp_id, 2, 1.0).unwrap().0;
+        let live = frame_of(&bypass);
+        assert_eq!(frame_of(&auto), live, "nothing is baked, so Auto is live");
+
+        // And with two Points sample drivers: one counts the bake's stream
+        // and one Scatter's own, each onto a Slider control for the reading.
+        let counts = |doc: &Arc<Document>| {
+            let mut doc = Document::clone(doc);
+            let board = &mut doc.comp_mut(comp_id).unwrap().layers[0];
+            let mut read = Vec::new();
+            for source in [bake_id, scatter_id] {
+                let sample = lumit_core::fx::instantiate("points_sample").unwrap();
+                let slider = lumit_core::fx::instantiate("slider_control").unwrap();
+                board.graph.edges.extend([
+                    wire(stream_of(source), NodeRef::Driver(sample.id), POINTS_PORT),
+                    wire(
+                        OutputRef::Driver {
+                            node: sample.id,
+                            port: COUNT_PORT.into(),
+                        },
+                        NodeRef::Effect(slider.id),
+                        "slider",
+                    ),
+                ]);
+                read.push(NodeRef::Effect(slider.id));
+                board.graph.nodes.push(sample);
+                board.effects.push(slider);
+            }
+            let doc = Arc::new(doc);
+            let board = &doc.comp(comp_id).unwrap().layers[0];
+            let driven = lumit_core::fx::resolve_drivers(
+                &board.graph,
+                2.0 / 24.0,
+                Arc::new(lumit_core::expression::ExpressionContext {
+                    document: doc.clone(),
+                    comp: Some(comp_id),
+                    layer: Some(board_id),
+                    comp_time: 2.0 / 24.0,
+                    current_depth: 0,
+                    inputs: None,
+                }),
+                None,
+            );
+            read.iter()
+                .map(
+                    |node| match driven.param(*node, lumit_core::fx::ParamId::new("slider")) {
+                        Some(lumit_core::fx::Value::Float(v)) => v,
+                        _ => 0.0,
+                    },
+                )
+                .collect::<Vec<f32>>()
+        };
+        assert_eq!(counts(&auto), [0.0, 0.0], "nothing to count before a bake");
+
+        assert_eq!(
+            request_bake(Arc::clone(&auto), comp_id, board_id, bake_id),
+            Requested::Started
+        );
+        loop {
+            match progress(bake_id) {
+                Some(Progress::Done) => break,
+                Some(Progress::Failed(why)) => panic!("the bake failed: {why}"),
+                Some(Progress::Cancelled) => panic!("the bake was stopped"),
+                _ => std::thread::sleep(std::time::Duration::from_millis(10)),
+            }
+        }
+        let baked = bake_points::baked(bake_id).expect("the bake is in the table");
+        assert_eq!(
+            baked.frames.len(),
+            4,
+            "one stream for every frame of the span"
+        );
+
+        let read = counts(&auto);
+        assert!(read[0] > 0.0, "the driver counts the baked points");
+        assert_eq!(read[1], 0.0, "and still none of Scatter's own");
+        assert_eq!(
+            frame_of(&auto),
+            live,
+            "the bake draws what the live stream drew"
+        );
+        assert_eq!(counts(&bypass)[0], 0.0, "Bypass reads no bake");
+
+        // And the baked stream is the live one, named column and all: the
+        // stream a live walk hands the effect, against the bake read back.
+        crate::fxops::watch_points(Some(bake_id));
+        frame_of(&bypass);
+        let handed = crate::fxops::take_watched_points().expect("the walk reached the effect");
+        crate::fxops::watch_points(None);
+        let kept = handed.named.iter().find(|(name, _)| name == "kept");
+        let kept = &kept.expect("the live stream carries the named column").1;
+        assert!(
+            kept.contains(&1.0) && kept.contains(&0.0),
+            "some kept, some not"
+        );
+        let board = &auto.comp(comp_id).unwrap().layers[0];
+        let read = bake_points::reading(
+            &auto,
+            auto.comp(comp_id).unwrap(),
+            board,
+            &board.effects[2],
+            2.0 / 24.0,
+        )
+        .stream(handed.projection)
+        .expect("Auto reads the bake");
+        assert!(read == handed, "the bake is the stream that was live");
+
+        // The file holds the same: forgotten and read back the way opening
+        // the project reads it, the stream is still that one.
+        let read_back = || {
+            bake_points::retain(|_| false);
+            for job in warm_jobs(&auto) {
+                run(job, &AtomicBool::new(false));
+            }
+            let board = &auto.comp(comp_id).unwrap().layers[0];
+            let inst = &board.effects[2];
+            bake_points::reading(&auto, auto.comp(comp_id).unwrap(), board, inst, 2.0 / 24.0)
+                .stream(handed.projection)
+        };
+        assert!(read_back() == Some(handed.clone()), "the file round-trips");
+
+        // And a file that is not a bake reads as no bake at all.
+        let junk = Answer::Bake(vec![7; 64]);
+        write_sidecar(dir.path(), AnalysisKey::bake(bake_id), 24.0, 4, &junk);
+        assert_eq!(read_back(), None, "Auto is live again");
+        assert_eq!(progress(bake_id), None, "and nothing claims to be done");
         clear();
     }
 }

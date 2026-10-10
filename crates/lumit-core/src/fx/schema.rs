@@ -319,6 +319,17 @@ pub enum ParamKind {
     ColourName {
         role: ColourNameRole,
     },
+    /// A short piece of text the user types, such as a label's wording or a
+    /// name. The value is an [`EffectValue::Text`](crate::model::EffectValue::Text),
+    /// and an effect reads it from the bag as a
+    /// [`ShortText`](super::params::ShortText), which holds it to
+    /// [`TEXT_MAX_BYTES`](super::params::TEXT_MAX_BYTES). Static, and no wire
+    /// drives it.
+    Text {
+        /// What a fresh instance starts with, and what a project saved before
+        /// the row existed reads as.
+        default: &'static str,
+    },
     /// A reference to another layer in the composition (docs/impl/
     /// layer-input.md), sampled as an auxiliary picture — the depth pass a
     /// depth-of-field effect reads, the bright-source matte a Lens flare
@@ -490,6 +501,7 @@ impl ParamKind {
             | ParamKind::MaskPath { .. }
             | ParamKind::Curve { .. }
             | ParamKind::ColourName { .. }
+            | ParamKind::Text { .. }
             | ParamKind::Action => None,
         }
     }

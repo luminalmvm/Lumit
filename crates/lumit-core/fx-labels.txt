@@ -59,6 +59,8 @@ Auto
 B
 Background
 Backwards
+Bake
+Bake points
 Balance
 Band 1 Q
 Band 1 frequency
@@ -184,6 +186,7 @@ Colour edge
 Colour from image
 Colour noise
 Colour overlay
+Colour ramp
 Columns
 Combine
 Combine channels
@@ -380,6 +383,7 @@ Frame rate
 Free
 Frequency
 From
+From group
 Full body
 Full off
 Full on
@@ -410,6 +414,8 @@ Green blur
 Green from
 Greens
 Grid
+Group
+Group name
 Half
 Hard
 Hard colour
@@ -598,6 +604,7 @@ Motion blur
 Motion vectors
 Multiply
 NTSC
+Name
 Native
 Near blur
 Nearby
@@ -642,6 +649,7 @@ Open graph
 Operate on alpha
 Operation
 Orange
+Order by
 Orientation
 Origin
 Origin x
@@ -749,6 +757,7 @@ Randomness
 Range
 Rate
 Ratio
+Read
 Rec. 709
 Rectangle
 Rectangle outline
@@ -976,6 +985,7 @@ Time step
 Tint
 Tint colour
 To
+To group
 Tone
 Top
 Top and bottom
@@ -1023,6 +1033,7 @@ Upper left x
 Upper left y
 Upper right x
 Upper right y
+Use colour ramp
 Use focus point
 Use inner radius
 Use masks

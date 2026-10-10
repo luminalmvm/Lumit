@@ -840,6 +840,12 @@ pub enum BridgeParamKind {
     ColourName {
         role: BridgeColourNameRole,
     },
+    /// A short text the user types, drawn as a single-line text field. The
+    /// value crossing is a [`BridgeEffectValue::Text`], and the engine cuts
+    /// what is set to its cap (`lumit_core::fx::TEXT_MAX_BYTES`).
+    Text {
+        default: String,
+    },
     Layer,
     /// One clip on the layer a sibling [`BridgeParamKind::Layer`] row names
     /// (docs/impl/audio-nodes.md §3). The panel draws that layer's clips by
@@ -998,6 +1004,9 @@ pub(crate) fn bridge_param(param: &lumit_core::fx::ParamSchema) -> BridgeParamIn
                 lumit_core::fx::ColourNameRole::Look => BridgeColourNameRole::Look,
                 lumit_core::fx::ColourNameRole::Config => BridgeColourNameRole::Config,
             },
+        },
+        ParamKind::Text { default } => BridgeParamKind::Text {
+            default: default.to_owned(),
         },
         // `self_default` is an engine-side instantiation detail —
         // the panel draws the same picker either way, and
@@ -1569,6 +1578,7 @@ pub enum BridgeEffectValue {
     /// out of order.
     Curve(Vec<Vec<f32>>),
     /// A name from the OCIO config, as the config spells it; empty is unset.
+    /// Also what a [`BridgeParamKind::Text`] row holds: the text as typed.
     Text(String),
 }
 
@@ -2920,9 +2930,10 @@ impl BridgeEffectInstance {
         // An effect this build does not know has no schema to consult, so its
         // parameters stay unbounded rather than refused: a project carrying one
         // still opens and still edits, exactly as `list_parameters` allows.
-        let bounds = lumit_core::fx::schema(&self.effect.effect.match_name)
+        let kind = lumit_core::fx::schema(&self.effect.effect.match_name)
             .and_then(|schema| schema.params.iter().find(|p| p.id == id))
-            .map_or((None, None), |p| hard_bounds(&p.kind));
+            .map(|p| p.kind);
+        let bounds = kind.as_ref().map_or((None, None), hard_bounds);
 
         // Every parameter the schema declares is already present: `new` fills
         // the staged copy. A name that is still missing is one no schema
@@ -2936,6 +2947,12 @@ impl BridgeEffectInstance {
             .ok_or(BridgeError::InvalidParam)?;
 
         value.write_at(&mut param.value, offset, bounds)?;
+        // A typed text is held to its cap here, as a number is to its range.
+        if let (Some(lumit_core::fx::ParamKind::Text { .. }), EffectValue::Text(text)) =
+            (kind, &mut param.value)
+        {
+            text.truncate(lumit_core::fx::capped_text(text).len());
+        }
         // Writing to an offered row is the act that adopts it (§1.5): from
         // here it rides the commit like every row the document holds.
         self.offered.retain(|o| *o != id);

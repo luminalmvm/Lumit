@@ -10,9 +10,9 @@
 //! time in it and nothing is remembered. A layer with no mask makes no points.
 //!
 //! Follow set to Shape takes the outlines the Shape layer the effect is on
-//! draws instead, after any trim, offset or combine, every one of them in the
-//! layer's own order as one long run, so Count is shared between them by
-//! length. On any other layer it makes none.
+//! draws instead, after any trim, offset, combine or dashes, every one of
+//! them in the layer's own order as one long run, so Count is shared between
+//! them by length. On any other layer it makes none.
 
 use crate::fx::points::{self, DrawStyle, PointsStream, Projection, RenderMode};
 use crate::fx::{
@@ -291,6 +291,11 @@ impl PointsAlongPath {
             out.id.push(id);
             out.index
                 .push(if length > 0.0 { far / length } else { 0.0 });
+            // The same under a name, for the effects below to read by it.
+            let along = out.index.last().copied().unwrap_or(0.0);
+            if let Some(last) = out.named_mut("progress").and_then(|c| c.last_mut()) {
+                *last = along;
+            }
         };
         if placement == Placement::Corners {
             let corners = path.corners.iter().take(points::CAP_HARD as usize);

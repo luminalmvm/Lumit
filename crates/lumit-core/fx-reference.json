@@ -11565,6 +11565,35 @@
       "category_slug": "generate",
       "params": [
         {
+          "id": "apply_to",
+          "label": "Apply to",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "All points",
+            "Picked",
+            "Not picked"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "apply_group",
+          "label": "Group",
+          "kind": "text",
+          "unit": "raw",
+          "default": ""
+        },
+        {
+          "id": "apply_threshold",
+          "label": "Threshold",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.5,
+          "slider_min": 0.0,
+          "slider_max": 1.0
+        },
+        {
           "id": "clone_layer",
           "label": "Clone layer",
           "kind": "layer",
@@ -11607,6 +11636,13 @@
           "dividers_after": []
         },
         {
+          "id": "choose_name",
+          "label": "Name",
+          "kind": "text",
+          "unit": "raw",
+          "default": ""
+        },
+        {
           "id": "seed",
           "label": "Seed",
           "kind": "seed",
@@ -11626,6 +11662,13 @@
             "Point age"
           ],
           "dividers_after": []
+        },
+        {
+          "id": "time_name",
+          "label": "Name",
+          "kind": "text",
+          "unit": "raw",
+          "default": ""
         },
         {
           "id": "time_step",
@@ -11670,19 +11713,6 @@
           "slider_max": 32.0,
           "hard_min": 1.0,
           "hard_max": 32.0
-        },
-        {
-          "id": "apply_to",
-          "label": "Apply to",
-          "kind": "choice",
-          "unit": "raw",
-          "default": 0,
-          "options": [
-            "All points",
-            "Picked",
-            "Not picked"
-          ],
-          "dividers_after": []
         },
         {
           "id": "fit",
@@ -11889,6 +11919,7 @@
             "clone_layer_3",
             "clone_layer_4",
             "choose_by",
+            "choose_name",
             "seed"
           ],
           "collapsed": true
@@ -11897,6 +11928,7 @@
           "label": "Time",
           "params": [
             "time_offset",
+            "time_name",
             "time_step",
             "time_samples"
           ],
@@ -11927,6 +11959,30 @@
         }
       ],
       "enabled_when": [
+        {
+          "param": "apply_group",
+          "on": "apply_to",
+          "cond": "choice_is_not",
+          "value": 0
+        },
+        {
+          "param": "apply_threshold",
+          "on": "apply_to",
+          "cond": "choice_is_not",
+          "value": 0
+        },
+        {
+          "param": "choose_name",
+          "on": "choose_by",
+          "cond": "choice_is",
+          "value": 2
+        },
+        {
+          "param": "time_name",
+          "on": "time_offset",
+          "cond": "choice_is",
+          "value": 3
+        },
         {
           "param": "time_step",
           "on": "time_offset",
@@ -12176,6 +12232,13 @@
           "dividers_after": []
         },
         {
+          "id": "order_name",
+          "label": "Order by",
+          "kind": "text",
+          "unit": "raw",
+          "default": ""
+        },
+        {
           "id": "between",
           "label": "Between",
           "kind": "choice",
@@ -12187,6 +12250,20 @@
             "Picked and the rest"
           ],
           "dividers_after": []
+        },
+        {
+          "id": "between_from",
+          "label": "From group",
+          "kind": "text",
+          "unit": "raw",
+          "default": ""
+        },
+        {
+          "id": "between_to",
+          "label": "To group",
+          "kind": "text",
+          "unit": "raw",
+          "default": ""
         },
         {
           "id": "max_distance",
@@ -12373,7 +12450,10 @@
           "label": "Connections",
           "params": [
             "mode",
+            "order_name",
             "between",
+            "between_from",
+            "between_to",
             "max_distance",
             "max_links",
             "closed",
@@ -12388,7 +12468,13 @@
           "params": [
             "width",
             "feather",
-            "colour",
+            "colour"
+          ],
+          "collapsed": false
+        },
+        {
+          "label": "Point",
+          "params": [
             "max_points"
           ],
           "collapsed": false
@@ -12424,6 +12510,24 @@
           "on": "mode",
           "cond": "choice_is",
           "value": 1
+        },
+        {
+          "param": "order_name",
+          "on": "mode",
+          "cond": "choice_is",
+          "value": 1
+        },
+        {
+          "param": "between_from",
+          "on": "between",
+          "cond": "choice_is_not",
+          "value": 0
+        },
+        {
+          "param": "between_to",
+          "on": "between",
+          "cond": "choice_is",
+          "value": 2
         }
       ],
       "matte_role": "strength"
@@ -12483,6 +12587,13 @@
           "slider_min": 1.0,
           "slider_max": 1000.0,
           "hard_min": 0.001
+        },
+        {
+          "id": "number_name",
+          "label": "Name",
+          "kind": "text",
+          "unit": "raw",
+          "default": ""
         },
         {
           "id": "max_points",
@@ -12585,6 +12696,12 @@
           "on": "output",
           "cond": "choice_is",
           "value": 3
+        },
+        {
+          "param": "number_name",
+          "on": "output",
+          "cond": "choice_is",
+          "value": 3
         }
       ],
       "matte_role": "strength"
@@ -12598,11 +12715,47 @@
       "category_slug": "generate",
       "params": [
         {
+          "id": "apply_to",
+          "label": "Apply to",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "All points",
+            "Picked",
+            "Not picked"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "apply_group",
+          "label": "Group",
+          "kind": "text",
+          "unit": "raw",
+          "default": ""
+        },
+        {
+          "id": "apply_threshold",
+          "label": "Threshold",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.5,
+          "slider_min": 0.0,
+          "slider_max": 1.0
+        },
+        {
           "id": "text_layer",
           "label": "Text layer",
           "kind": "layer",
           "unit": "raw",
           "self_default": false
+        },
+        {
+          "id": "text",
+          "label": "Text",
+          "kind": "text",
+          "unit": "raw",
+          "default": ""
         },
         {
           "id": "decimals",
@@ -12643,19 +12796,6 @@
             "Left",
             "Centre",
             "Right"
-          ],
-          "dividers_after": []
-        },
-        {
-          "id": "apply_to",
-          "label": "Apply to",
-          "kind": "choice",
-          "unit": "raw",
-          "default": 0,
-          "options": [
-            "All points",
-            "Picked",
-            "Not picked"
           ],
           "dividers_after": []
         },
@@ -12748,6 +12888,20 @@
         }
       ],
       "groups": [],
+      "enabled_when": [
+        {
+          "param": "apply_group",
+          "on": "apply_to",
+          "cond": "choice_is_not",
+          "value": 0
+        },
+        {
+          "param": "apply_threshold",
+          "on": "apply_to",
+          "cond": "choice_is_not",
+          "value": 0
+        }
+      ],
       "matte_role": "strength"
     },
     {
@@ -12758,6 +12912,35 @@
       "category": "Generate",
       "category_slug": "generate",
       "params": [
+        {
+          "id": "apply_to",
+          "label": "Apply to",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "All points",
+            "Picked",
+            "Not picked"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "apply_group",
+          "label": "Group",
+          "kind": "text",
+          "unit": "raw",
+          "default": ""
+        },
+        {
+          "id": "apply_threshold",
+          "label": "Threshold",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.5,
+          "slider_min": 0.0,
+          "slider_max": 1.0
+        },
         {
           "id": "pattern",
           "label": "Pattern",
@@ -12863,6 +13046,13 @@
           "hard_min": 0.001
         },
         {
+          "id": "pattern_name",
+          "label": "Name",
+          "kind": "text",
+          "unit": "raw",
+          "default": ""
+        },
+        {
           "id": "spacing",
           "label": "Spacing",
           "kind": "float",
@@ -12925,19 +13115,6 @@
           "kind": "bool",
           "unit": "raw",
           "default": false
-        },
-        {
-          "id": "apply_to",
-          "label": "Apply to",
-          "kind": "choice",
-          "unit": "raw",
-          "default": 0,
-          "options": [
-            "All points",
-            "Picked",
-            "Not picked"
-          ],
-          "dividers_after": []
         },
         {
           "id": "size",
@@ -13090,11 +13267,73 @@
           "slider_max": 1000.0
         },
         {
+          "id": "use_ramp",
+          "label": "Use colour ramp",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "red",
+          "label": "Red",
+          "kind": "curve",
+          "unit": "raw",
+          "default": [
+            [
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0
+            ]
+          ]
+        },
+        {
+          "id": "green",
+          "label": "Green",
+          "kind": "curve",
+          "unit": "raw",
+          "default": [
+            [
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0
+            ]
+          ]
+        },
+        {
+          "id": "blue",
+          "label": "Blue",
+          "kind": "curve",
+          "unit": "raw",
+          "default": [
+            [
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0
+            ]
+          ]
+        },
+        {
           "id": "set_number",
           "label": "Set number",
           "kind": "bool",
           "unit": "raw",
           "default": false
+        },
+        {
+          "id": "number_name",
+          "label": "Name",
+          "kind": "text",
+          "unit": "raw",
+          "default": ""
         },
         {
           "id": "number_from",
@@ -13289,7 +13528,8 @@
         {
           "label": "",
           "params": [
-            "number_range"
+            "number_range",
+            "pattern_name"
           ],
           "collapsed": false,
           "visible_when": {
@@ -13353,7 +13593,6 @@
         {
           "label": "Change",
           "params": [
-            "apply_to",
             "size",
             "opacity",
             "stretch_x",
@@ -13373,9 +13612,20 @@
           "collapsed": false
         },
         {
+          "label": "Colour ramp",
+          "params": [
+            "use_ramp",
+            "red",
+            "green",
+            "blue"
+          ],
+          "collapsed": false
+        },
+        {
           "label": "Number",
           "params": [
             "set_number",
+            "number_name",
             "number_from",
             "number_to"
           ],
@@ -13391,8 +13641,68 @@
       ],
       "enabled_when": [
         {
+          "param": "apply_group",
+          "on": "apply_to",
+          "cond": "choice_is_not",
+          "value": 0
+        },
+        {
+          "param": "apply_threshold",
+          "on": "apply_to",
+          "cond": "choice_is_not",
+          "value": 0
+        },
+        {
+          "param": "number_name",
+          "on": "set_number",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
           "param": "colour_mid",
           "on": "use_colour_mid",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "colour_start",
+          "on": "use_ramp",
+          "cond": "bool_is",
+          "value": false
+        },
+        {
+          "param": "use_colour_mid",
+          "on": "use_ramp",
+          "cond": "bool_is",
+          "value": false
+        },
+        {
+          "param": "colour_mid",
+          "on": "use_ramp",
+          "cond": "bool_is",
+          "value": false
+        },
+        {
+          "param": "colour",
+          "on": "use_ramp",
+          "cond": "bool_is",
+          "value": false
+        },
+        {
+          "param": "red",
+          "on": "use_ramp",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "green",
+          "on": "use_ramp",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "blue",
+          "on": "use_ramp",
           "cond": "bool_is",
           "value": true
         },
@@ -13433,6 +13743,13 @@
             "Keep in picked"
           ],
           "dividers_after": []
+        },
+        {
+          "id": "group_name",
+          "label": "Group name",
+          "kind": "text",
+          "unit": "raw",
+          "default": ""
         },
         {
           "id": "pattern",
@@ -13479,6 +13796,13 @@
           "slider_max": 100.0,
           "hard_min": 0.0,
           "hard_max": 100.0
+        },
+        {
+          "id": "invert",
+          "label": "Invert",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
         },
         {
           "id": "seed",
@@ -13543,6 +13867,13 @@
           "slider_min": 1.0,
           "slider_max": 100.0,
           "hard_min": 0.001
+        },
+        {
+          "id": "pattern_name",
+          "label": "Name",
+          "kind": "text",
+          "unit": "raw",
+          "default": ""
         },
         {
           "id": "spacing",
@@ -13622,13 +13953,6 @@
           "slider_max": 100.0,
           "hard_min": 0.0,
           "hard_max": 1000000.0
-        },
-        {
-          "id": "invert",
-          "label": "Invert",
-          "kind": "bool",
-          "unit": "raw",
-          "default": false
         },
         {
           "id": "feather",
@@ -13724,7 +14048,8 @@
           "params": [
             "pattern",
             "from",
-            "to"
+            "to",
+            "invert"
           ],
           "collapsed": false
         },
@@ -13806,7 +14131,8 @@
         {
           "label": "",
           "params": [
-            "number_range"
+            "number_range",
+            "pattern_name"
           ],
           "collapsed": false,
           "visible_when": {
@@ -13876,8 +14202,7 @@
           "label": "Count",
           "params": [
             "every_nth",
-            "nth_offset",
-            "invert"
+            "nth_offset"
           ],
           "collapsed": false
         },
@@ -13887,6 +14212,14 @@
             "feather"
           ],
           "collapsed": false
+        }
+      ],
+      "enabled_when": [
+        {
+          "param": "group_name",
+          "on": "result",
+          "cond": "choice_is_not",
+          "value": 0
         }
       ],
       "matte_role": "strength"
@@ -13899,6 +14232,35 @@
       "category": "Generate",
       "category_slug": "generate",
       "params": [
+        {
+          "id": "apply_to",
+          "label": "Apply to",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "All points",
+            "Picked",
+            "Not picked"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "apply_group",
+          "label": "Group",
+          "kind": "text",
+          "unit": "raw",
+          "default": ""
+        },
+        {
+          "id": "apply_threshold",
+          "label": "Threshold",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.5,
+          "slider_min": 0.0,
+          "slider_max": 1.0
+        },
         {
           "id": "anchor_to_points",
           "label": "Anchor to points",
@@ -14090,19 +14452,6 @@
           "default": false
         },
         {
-          "id": "apply_to",
-          "label": "Apply to",
-          "kind": "choice",
-          "unit": "raw",
-          "default": 0,
-          "options": [
-            "All points",
-            "Picked",
-            "Not picked"
-          ],
-          "dividers_after": []
-        },
-        {
           "id": "feather",
           "label": "Feather",
           "kind": "float",
@@ -14281,13 +14630,24 @@
           "params": [
             "scale_sizes",
             "turn_points",
-            "apply_to",
             "feather"
           ],
           "collapsed": false
         }
       ],
       "enabled_when": [
+        {
+          "param": "apply_group",
+          "on": "apply_to",
+          "cond": "choice_is_not",
+          "value": 0
+        },
+        {
+          "param": "apply_threshold",
+          "on": "apply_to",
+          "cond": "choice_is_not",
+          "value": 0
+        },
         {
           "param": "anchor_in",
           "on": "anchor_to_points",
@@ -14471,6 +14831,35 @@
       "category_slug": "generate",
       "params": [
         {
+          "id": "apply_to",
+          "label": "Apply to",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "All points",
+            "Picked",
+            "Not picked"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "apply_group",
+          "label": "Group",
+          "kind": "text",
+          "unit": "raw",
+          "default": ""
+        },
+        {
+          "id": "apply_threshold",
+          "label": "Threshold",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.5,
+          "slider_min": 0.0,
+          "slider_max": 1.0
+        },
+        {
           "id": "radius",
           "label": "Radius",
           "kind": "float",
@@ -14528,19 +14917,6 @@
           "options": [
             "Free",
             "Keep inside"
-          ],
-          "dividers_after": []
-        },
-        {
-          "id": "apply_to",
-          "label": "Apply to",
-          "kind": "choice",
-          "unit": "raw",
-          "default": 0,
-          "options": [
-            "All points",
-            "Picked",
-            "Not picked"
           ],
           "dividers_after": []
         },
@@ -14655,6 +15031,18 @@
       ],
       "enabled_when": [
         {
+          "param": "apply_group",
+          "on": "apply_to",
+          "cond": "choice_is_not",
+          "value": 0
+        },
+        {
+          "param": "apply_threshold",
+          "on": "apply_to",
+          "cond": "choice_is_not",
+          "value": 0
+        },
+        {
           "param": "radius",
           "on": "use_size",
           "cond": "bool_is",
@@ -14677,6 +15065,35 @@
       "category": "Generate",
       "category_slug": "generate",
       "params": [
+        {
+          "id": "apply_to",
+          "label": "Apply to",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "All points",
+            "Picked",
+            "Not picked"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "apply_group",
+          "label": "Group",
+          "kind": "text",
+          "unit": "raw",
+          "default": ""
+        },
+        {
+          "id": "apply_threshold",
+          "label": "Threshold",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.5,
+          "slider_min": 0.0,
+          "slider_max": 1.0
+        },
         {
           "id": "field",
           "label": "Field",
@@ -14837,19 +15254,6 @@
           "slider_max": 120.0,
           "hard_min": 1.0,
           "hard_max": 240.0
-        },
-        {
-          "id": "apply_to",
-          "label": "Apply to",
-          "kind": "choice",
-          "unit": "raw",
-          "default": 0,
-          "options": [
-            "All points",
-            "Picked",
-            "Not picked"
-          ],
-          "dividers_after": []
         },
         {
           "id": "feather",
@@ -15023,7 +15427,152 @@
         {
           "label": "Point",
           "params": [
-            "apply_to",
+            "feather"
+          ],
+          "collapsed": false
+        }
+      ],
+      "enabled_when": [
+        {
+          "param": "apply_group",
+          "on": "apply_to",
+          "cond": "choice_is_not",
+          "value": 0
+        },
+        {
+          "param": "apply_threshold",
+          "on": "apply_to",
+          "cond": "choice_is_not",
+          "value": 0
+        }
+      ],
+      "matte_role": "strength"
+    },
+    {
+      "slug": "bake-points",
+      "match_name": "bake_points",
+      "label": "Bake points",
+      "version": 1,
+      "category": "Generate",
+      "category_slug": "generate",
+      "params": [
+        {
+          "id": "mode",
+          "label": "Mode",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Auto",
+            "Read",
+            "Bypass"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "bake",
+          "label": "Bake",
+          "kind": "action",
+          "unit": "raw"
+        },
+        {
+          "id": "cancel",
+          "label": "Cancel",
+          "kind": "action",
+          "unit": "raw"
+        },
+        {
+          "id": "feather",
+          "label": "Feather",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "mix",
+          "label": "Mix",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "blend",
+          "label": "Blend",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Normal",
+            "Darken",
+            "Multiply",
+            "Colour burn",
+            "Linear burn",
+            "Darker colour",
+            "Add",
+            "Lighten",
+            "Screen",
+            "Colour dodge",
+            "Lighter colour",
+            "Overlay",
+            "Soft light",
+            "Hard light",
+            "Linear light",
+            "Vivid light",
+            "Pin light",
+            "Hard mix",
+            "Difference",
+            "Exclusion",
+            "Subtract",
+            "Divide",
+            "Hue",
+            "Saturation",
+            "Colour",
+            "Luminosity"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "matte",
+          "label": "Matte",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "matte_invert",
+          "label": "Invert",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "matte_channel",
+          "label": "Channel",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Luminance",
+            "Alpha",
+            "Red",
+            "Green",
+            "Blue"
+          ],
+          "dividers_after": []
+        }
+      ],
+      "groups": [
+        {
+          "label": "Point",
+          "params": [
             "feather"
           ],
           "collapsed": false

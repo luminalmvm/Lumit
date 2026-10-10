@@ -29,9 +29,12 @@ another machine it has to be run again.
 
 Every point keeps one identity for as long as it is followed, and a
 [Trail](/effects/generate/trail/) or a
-[Clone to points](/effects/generate/clone-to-points/) below stays attached to it. A
-feature's number is the tracker's confidence in it, from 0 to 1. On a retimed layer the
-points stay on the picture.
+[Clone to points](/effects/generate/clone-to-points/) below stays attached to it. On a
+retimed layer the points stay on the picture.
+
+A feature's number is the tracker's confidence in it, from 0 to 1, and it carries the same
+under the name `confidence`. A blob carries its area under `area`, in pixels of the
+footage. See [Names](/effects/generate/vary-points/#names).
 
 Any points effect can read these points, and so can
 [Points sample](/effects/drivers/points-sample/) and

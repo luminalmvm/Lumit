@@ -100,9 +100,12 @@ impl MergePoints {
         let mut out = PointsStream::default();
         if let Some(first) = inputs.iter().find(|s| !s.is_empty()) {
             out.projection = first.projection;
+            out.px_scale = first.px_scale;
         }
         // The first number the next input may use, under Count nested inputs.
         let mut next = 0.0f32;
+        // The same for the sources written under a name.
+        let mut source = 0.0f32;
         for (k, input) in inputs.iter().take(MERGE_IN.len()).enumerate() {
             let mut part = (*input).clone();
             // Four inputs, so an old id times four plus the input is one no
@@ -127,6 +130,20 @@ impl MergePoints {
                 }
                 next += seen.len().max(1) as f32;
             }
+            // Which input each point came in on, under the name `source`,
+            // whatever the two switches say. An input that carries the name
+            // already, as a Merge points above hands it on, keeps its
+            // sources apart, and each input's count on from the one before.
+            let mut seen: Vec<f32> = (0..part.len())
+                .map(|i| part.value_of("source", i))
+                .collect();
+            seen.sort_by(f32::total_cmp);
+            seen.dedup_by(|a, b| a.total_cmp(b).is_eq());
+            for n in part.named_mut("source").into_iter().flatten() {
+                let place = seen.binary_search_by(|s| s.total_cmp(n)).unwrap_or(0);
+                *n = source + place as f32;
+            }
+            source += seen.len().max(1) as f32;
             out.append(&part);
         }
         out.sort_by_id();

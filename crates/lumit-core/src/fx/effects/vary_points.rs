@@ -14,12 +14,25 @@ use crate::fx::noise::value3;
 use crate::fx::points::{self, PointsStream};
 use crate::fx::{
     CurvePoints, EffectDef, EffectMetadata, EffectSchema, EnabledCond, EnabledWhen, ParamGroup,
-    ParamId, Params, Port, PortType, ResolveCx, Signature, Value,
+    ParamId, Params, Port, PortType, ResolveCx, ShortText, Signature, Value,
 };
 use lumit_fx_macros::Effect;
 
 /// The wire-only data input.
 pub const POINTS_PORT: &str = "points";
+
+/// Group and Threshold do nothing while Apply to is All points. Every effect
+/// with an Apply to row lists these two.
+pub(crate) const APPLY_GROUP_WHEN: EnabledWhen = EnabledWhen {
+    param: "apply_group",
+    on: "apply_to",
+    cond: EnabledCond::ChoiceIsNot(0),
+};
+pub(crate) const APPLY_THRESHOLD_WHEN: EnabledWhen = EnabledWhen {
+    param: "apply_threshold",
+    on: "apply_to",
+    cond: EnabledCond::ChoiceIsNot(0),
+};
 
 /// What a modifier takes in.
 pub(crate) const POINTS_IN: &[Port] = &[Port::new(POINTS_PORT, "Points", PortType::Points)];
@@ -114,6 +127,9 @@ pub struct Pattern {
     pub radius: f32,
     /// The number that reads as 1 under the Number pattern.
     pub number_range: f32,
+    /// Which of a point's numbers the Number pattern reads, by name. Empty
+    /// is the number it carries.
+    pub name: ShortText,
     /// How far it is from one stripe, square or wave to the next, in the
     /// stream's own units.
     pub spacing: f32,
@@ -200,7 +216,7 @@ impl Pattern {
                     0.0
                 }
             }
-            PatternKind::Number => s.index_of(i) / self.number_range.max(1e-3),
+            PatternKind::Number => s.value_of(self.name.as_str(), i) / self.number_range.max(1e-3),
             // At no Angle the stripes lie across, one below another.
             PatternKind::Stripes => on(turned()[1].rem_euclid(1.0) < self.width),
             PatternKind::Checker => {
@@ -259,7 +275,11 @@ pub const VARY_GROUPS: &[ParamGroup] = &[
         Some(("pattern", &[3, 6, 7, 11, 12, 13])),
     ),
     group("", &["radius"], Some(("pattern", &[3, 6, 7]))),
-    group("", &["number_range"], Some(("pattern", &[10]))),
+    group(
+        "",
+        &["number_range", "pattern_name"],
+        Some(("pattern", &[10])),
+    ),
     group("", &["spacing", "angle"], Some(("pattern", &[11, 12, 13]))),
     group("", &["band_width"], Some(("pattern", &[11]))),
     group("", &["wave", "rings"], Some(("pattern", &[13]))),
@@ -269,7 +289,6 @@ pub const VARY_GROUPS: &[ParamGroup] = &[
     group(
         "Change",
         &[
-            "apply_to",
             "size",
             "opacity",
             "stretch_x",
@@ -288,18 +307,46 @@ pub const VARY_GROUPS: &[ParamGroup] = &[
         ],
         None,
     ),
-    group("Number", &["set_number", "number_from", "number_to"], None),
+    group("Colour ramp", &["use_ramp", "red", "green", "blue"], None),
+    group(
+        "Number",
+        &["set_number", "number_name", "number_from", "number_to"],
+        None,
+    ),
     group("Point", &["feather"], None),
 ];
 
+const fn while_ramp(param: &'static str, on: bool) -> EnabledWhen {
+    EnabledWhen {
+        param,
+        on: "use_ramp",
+        cond: EnabledCond::BoolIs(on),
+    }
+}
+
 /// Number from and Number to do nothing until Set number is on, nor Middle
-/// colour until its own switch is.
+/// colour until its own switch is. The ramp's three curves do nothing until
+/// Use colour ramp is on, and the three colours nothing while it is.
 pub const VARY_ENABLED_WHEN: &[EnabledWhen] = &[
+    APPLY_GROUP_WHEN,
+    APPLY_THRESHOLD_WHEN,
+    EnabledWhen {
+        param: "number_name",
+        on: "set_number",
+        cond: EnabledCond::BoolIs(true),
+    },
     EnabledWhen {
         param: "colour_mid",
         on: "use_colour_mid",
         cond: EnabledCond::BoolIs(true),
     },
+    while_ramp("colour_start", false),
+    while_ramp("use_colour_mid", false),
+    while_ramp("colour_mid", false),
+    while_ramp("colour", false),
+    while_ramp("red", true),
+    while_ramp("green", true),
+    while_ramp("blue", true),
     EnabledWhen {
         param: "number_from",
         on: "set_number",
@@ -330,6 +377,25 @@ pub const VARY_ENABLED_WHEN: &[EnabledWhen] = &[
     enabled_when = VARY_ENABLED_WHEN,
 )]
 pub struct VaryPoints {
+    /// Which points are changed. The rest pass through as they came.
+    #[choice(
+        label = "Apply to",
+        options = ["All points", "Picked", "Not picked"],
+        default = 0
+    )]
+    pub apply_to: u32,
+
+    /// The group Picked and Not picked go by: a name a Pick points or a Vary
+    /// points above wrote, or one of the `@` names. Empty is the points a
+    /// Pick points picked.
+    #[text(label = "Group", default = "")]
+    pub apply_group: ShortText,
+
+    /// What a point's Group has to read above to be in it. Only read with a
+    /// Group named.
+    #[slider(label = "Threshold", min = 0.0, max = 1.0, default = 0.5, unit = Raw)]
+    pub apply_threshold: f32,
+
     /// What gives each point its number.
     #[choice(label = "Pattern", options = *PatternKind::OPTIONS, default = 1)]
     pub pattern: u32,
@@ -400,6 +466,11 @@ pub struct VaryPoints {
     )]
     pub number_range: f32,
 
+    /// Which of a point's numbers the Number pattern reads: a name written
+    /// above, or one of the `@` names. Empty is the number it carries.
+    #[text(label = "Name", default = "")]
+    pub pattern_name: ShortText,
+
     /// How far it is from one stripe, square or wave to the next, px@comp.
     #[slider(
         label = "Spacing",
@@ -450,14 +521,6 @@ pub struct VaryPoints {
     /// multiplies it.
     #[toggle(label = "Colour from image", default = false)]
     pub image_colour: bool,
-
-    /// Which points are changed. The rest pass through as they came.
-    #[choice(
-        label = "Apply to",
-        options = ["All points", "Picked", "Not picked"],
-        default = 0
-    )]
-    pub apply_to: u32,
 
     /// The size a point takes where the pattern reads 1, as a share of its
     /// own, per cent. Where it reads 0 the point keeps its size.
@@ -563,10 +626,36 @@ pub struct VaryPoints {
     )]
     pub offset_side: f32,
 
+    /// The colour a point is multiplied by is read off three curves, not
+    /// mixed from the colours above. Each curve runs along the pattern, from
+    /// where it reads 0 at the left to where it reads 1 at the right, and
+    /// gives its channel there. With up to 16 points on each, that is a ramp
+    /// of up to 16 stops.
+    #[toggle(label = "Use colour ramp", default = false)]
+    pub use_ramp: bool,
+
+    /// How much red the ramp leaves a point along the pattern. A flat line
+    /// at the top changes nothing.
+    #[curve(label = "Red", default = [[0.0, 1.0], [1.0, 1.0]])]
+    pub red: CurvePoints,
+
+    /// The same for green. See [`red`](Self::red).
+    #[curve(label = "Green", default = [[0.0, 1.0], [1.0, 1.0]])]
+    pub green: CurvePoints,
+
+    /// The same for blue. See [`red`](Self::red).
+    #[curve(label = "Blue", default = [[0.0, 1.0], [1.0, 1.0]])]
+    pub blue: CurvePoints,
+
     /// Write the number each point carries, which effects below read to
     /// choose a variant, a time offset or an order.
     #[toggle(label = "Set number", default = false)]
     pub set_number: bool,
+
+    /// The name the number is written under, for the effects below to read
+    /// by that name. Empty writes the number the point carries.
+    #[text(label = "Name", default = "")]
+    pub number_name: ShortText,
 
     /// The number a point gets where the pattern reads 0.
     #[slider(label = "Number from", min = 0.0, max = 100.0, default = 0.0, unit = Raw)]
@@ -615,6 +704,7 @@ impl VaryPoints {
             centre: [self.centre_x, self.centre_y],
             radius: self.radius,
             number_range: self.number_range,
+            name: self.pattern_name,
             spacing: self.spacing,
             angle: self.angle,
             width: self.band_width / 100.0,
@@ -655,20 +745,28 @@ impl VaryPoints {
         let tint_from = premultiplied(self.colour_start);
         let tint_mid = premultiplied(self.colour_mid);
         let tint_to = premultiplied(self.colour);
+        let ramp = self
+            .use_ramp
+            .then(|| [&self.red, &self.green, &self.blue].map(cpu::curve_table));
         // An optional column is only filled in when it is written, so a
         // stream this effect leaves alone stays as it came.
         if stretch != [1.0; 2] {
             out.stretch_mut();
         }
-        if self.set_number {
-            out.index_mut();
-        }
+        // The column Set number writes, taken out for the walk and put back
+        // after it. Nothing reads it off `out` in between.
+        let number_name = self.number_name.as_str();
+        let mut numbers = if self.set_number {
+            out.named_mut(number_name).map(std::mem::take)
+        } else {
+            None
+        };
         // Under Both ways a Random or Noise pattern rolls again for each axis.
         let own_rolls =
             self.both_ways && matches!(pattern.kind, PatternKind::Random | PatternKind::Noise);
         for i in 0..out.len() {
-            let picked = in_stream.picked(i);
-            if (self.apply_to == 1 && !picked) || (self.apply_to == 2 && picked) {
+            let group = self.apply_group.as_str();
+            if !in_stream.applies(self.apply_to, group, self.apply_threshold, i) {
                 continue;
             }
             let shaped = |axis: u32| {
@@ -704,23 +802,30 @@ impl VaryPoints {
                     *c = under.map(|ch| ch * alpha);
                 }
                 let fade = towards(opacity);
-                // Which two colours it lies between, and how far from the
-                // first to the second.
-                let (from, to, v) = if !self.use_colour_mid {
-                    (tint_from, tint_to, v)
-                } else if v < 0.5 {
-                    (tint_from, tint_mid, v * 2.0)
+                if let Some(ramp) = &ramp {
+                    // A multiplier for each of red, green and blue, read off
+                    // its curve. Coverage only takes the opacity.
+                    for (ch, table) in c.iter_mut().zip(ramp) {
+                        *ch *= cpu::curve_at(v, table).max(0.0) * fade;
+                    }
+                    c[3] *= fade;
                 } else {
-                    (tint_mid, tint_to, v * 2.0 - 1.0)
-                };
-                for ((ch, from), to) in c.iter_mut().zip(from).zip(to) {
-                    *ch *= (from + (to - from) * v) * fade;
+                    // Which two colours it lies between, and how far from
+                    // the first to the second.
+                    let (from, to, v) = if !self.use_colour_mid {
+                        (tint_from, tint_to, v)
+                    } else if v < 0.5 {
+                        (tint_from, tint_mid, v * 2.0)
+                    } else {
+                        (tint_mid, tint_to, v * 2.0 - 1.0)
+                    };
+                    for ((ch, from), to) in c.iter_mut().zip(from).zip(to) {
+                        *ch *= (from + (to - from) * v) * fade;
+                    }
                 }
             }
-            if self.set_number {
-                if let Some(n) = out.index.get_mut(i) {
-                    *n = self.number_from + (self.number_to - self.number_from) * v;
-                }
+            if let Some(n) = numbers.as_mut().and_then(|n| n.get_mut(i)) {
+                *n = self.number_from + (self.number_to - self.number_from) * v;
             }
             let facing = out.rotation.get(i).copied().unwrap_or(0.0);
             if let Some(p) = out.position.get_mut(i) {
@@ -735,6 +840,9 @@ impl VaryPoints {
                     p[1] += forward * sin + side * cos;
                 }
             }
+        }
+        if let (Some(numbers), Some(column)) = (numbers, out.named_mut(number_name)) {
+            *column = numbers;
         }
         out
     }

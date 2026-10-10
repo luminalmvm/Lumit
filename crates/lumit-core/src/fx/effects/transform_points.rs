@@ -10,11 +10,13 @@
 //! on the Points socket, and is drawn as discs unless Mix is 0. Nothing
 //! wired draws nothing.
 
-use crate::fx::effects::vary_points::{POINTS_IN, POINTS_OUT};
+use crate::fx::effects::vary_points::{
+    APPLY_GROUP_WHEN, APPLY_THRESHOLD_WHEN, POINTS_IN, POINTS_OUT,
+};
 use crate::fx::points::PointsStream;
 use crate::fx::{
     EffectDef, EffectMetadata, EffectSchema, EnabledCond, EnabledWhen, ParamGroup, ParamId, Params,
-    ResolveCx, Signature, Value,
+    ResolveCx, ShortText, Signature, Value,
 };
 use lumit_fx_macros::Effect;
 
@@ -55,11 +57,7 @@ pub const TRANSFORM_POINTS_GROUPS: &[ParamGroup] = &[
         &["position_x", "position_y"],
         Some(("place", &[0, PINNED])),
     ),
-    group(
-        "Point",
-        &["scale_sizes", "turn_points", "apply_to", "feather"],
-        None,
-    ),
+    group("Point", &["scale_sizes", "turn_points", "feather"], None),
 ];
 
 const fn while_anchor_to_points(param: &'static str, on: bool) -> EnabledWhen {
@@ -73,6 +71,8 @@ const fn while_anchor_to_points(param: &'static str, on: bool) -> EnabledWhen {
 /// The rows that place the anchor in the frame do nothing while it follows
 /// the points, and the Anchor on points pair nothing until it does.
 pub const TRANSFORM_POINTS_ENABLED_WHEN: &[EnabledWhen] = &[
+    APPLY_GROUP_WHEN,
+    APPLY_THRESHOLD_WHEN,
     while_anchor_to_points("anchor_in", false),
     while_anchor_to_points("anchor_x", false),
     while_anchor_to_points("anchor_y", false),
@@ -97,6 +97,25 @@ pub const TRANSFORM_POINTS_ENABLED_WHEN: &[EnabledWhen] = &[
     enabled_when = TRANSFORM_POINTS_ENABLED_WHEN,
 )]
 pub struct TransformPoints {
+    /// Which points are moved. The rest pass through as they came.
+    #[choice(
+        label = "Apply to",
+        options = ["All points", "Picked", "Not picked"],
+        default = 0
+    )]
+    pub apply_to: u32,
+
+    /// The group Picked and Not picked go by: a name a Pick points or a Vary
+    /// points above wrote, or one of the `@` names. Empty is the points a
+    /// Pick points picked.
+    #[text(label = "Group", default = "")]
+    pub apply_group: ShortText,
+
+    /// What a point's Group has to read above to be in it. Only read with a
+    /// Group named.
+    #[slider(label = "Threshold", min = 0.0, max = 1.0, default = 0.5, unit = Raw)]
+    pub apply_threshold: f32,
+
     /// The anchor is a place on the box round the points being moved, its
     /// middle unless the Anchor on points pair says otherwise, so a stream
     /// is scaled and turned about itself wherever it is.
@@ -248,14 +267,6 @@ pub struct TransformPoints {
     #[toggle(label = "Turn points", default = false)]
     pub turn_points: bool,
 
-    /// Which points are moved. The rest pass through as they came.
-    #[choice(
-        label = "Apply to",
-        options = ["All points", "Picked", "Not picked"],
-        default = 0
-    )]
-    pub apply_to: u32,
-
     /// How soft the disc a point is drawn as is, per cent.
     #[slider(
         min = 0.0,
@@ -311,8 +322,8 @@ impl TransformPoints {
         // two.
         let grow = (sx * sy).abs().sqrt();
         let moved = |i: usize| {
-            let picked = in_stream.picked(i);
-            !((self.apply_to == 1 && !picked) || (self.apply_to == 2 && picked))
+            let group = self.apply_group.as_str();
+            in_stream.applies(self.apply_to, group, self.apply_threshold, i)
         };
         let share = |of: f32, per_cent: f32| of * per_cent / 100.0;
         let mut anchor = if self.anchor_in == 1 {

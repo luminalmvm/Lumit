@@ -37,7 +37,7 @@ use std::collections::HashMap;
 use crate::fx::points::{self, PointsStream};
 use crate::fx::{
     EffectDef, EffectMetadata, EffectSchema, EnabledCond, EnabledWhen, ParamGroup, ParamId, Params,
-    Port, PortType, ResolveCx, Signature, Value,
+    Port, PortType, ResolveCx, ShortText, Signature, Value,
 };
 use lumit_fx_macros::Effect;
 
@@ -60,14 +60,17 @@ const fn group(label: &'static str, params: &'static [&'static str]) -> ParamGro
     }
 }
 
-/// Two kickers, as the generators have: which pairs are joined, and what the
-/// line between them looks like.
+/// Which pairs are joined, what the line between them looks like, and the
+/// budget under the family's own heading.
 pub const CONNECT_GROUPS: &[ParamGroup] = &[
     group(
         "Connections",
         &[
             "mode",
+            "order_name",
             "between",
+            "between_from",
+            "between_to",
             "max_distance",
             "max_links",
             "closed",
@@ -76,7 +79,8 @@ pub const CONNECT_GROUPS: &[ParamGroup] = &[
             "fade",
         ],
     ),
-    group("Line", &["width", "feather", "colour", "max_points"]),
+    group("Line", &["width", "feather", "colour"]),
+    group("Point", &["max_points"]),
 ];
 
 const fn grey(param: &'static str, cond: EnabledCond) -> EnabledWhen {
@@ -95,6 +99,19 @@ pub const CONNECT_ENABLED_WHEN: &[EnabledWhen] = &[
     grey("max_links", EnabledCond::ChoiceIsNot(3)),
     grey("max_distance", EnabledCond::ChoiceIsNot(4)),
     grey("closed", EnabledCond::ChoiceIs(1)),
+    grey("order_name", EnabledCond::ChoiceIs(1)),
+    // The first group is read by both of Between's choices, the second only
+    // by the one that joins two.
+    EnabledWhen {
+        param: "between_from",
+        on: "between",
+        cond: EnabledCond::ChoiceIsNot(0),
+    },
+    EnabledWhen {
+        param: "between_to",
+        on: "between",
+        cond: EnabledCond::ChoiceIs(2),
+    },
 ];
 
 /// Which pairs of points are joined.
@@ -185,10 +202,27 @@ pub struct ConnectPoints {
     #[choice(label = "Mode", options = *ConnectMode::OPTIONS, default = 0)]
     pub mode: u32,
 
+    /// What In order sorts the points by: a name written above, or one of
+    /// the `@` names. Empty is the number each point carries.
+    #[text(label = "Order by", default = "")]
+    pub order_name: ShortText,
+
     /// Which points a line may run between, by what a Pick points above
     /// picked.
     #[choice(label = "Between", options = *Between::OPTIONS, default = 0)]
     pub between: u32,
+
+    /// The group Picked reads, and the first of the two Picked and the rest
+    /// joins: a name written above, or one of the `@` names. Empty is the
+    /// picked points.
+    #[text(label = "From group", default = "")]
+    pub between_from: ShortText,
+
+    /// The second of the two groups Picked and the rest joins. Empty is the
+    /// points that are not picked. The same name in both joins that group
+    /// to itself.
+    #[text(label = "To group", default = "")]
+    pub between_to: ShortText,
 
     /// How far apart two points may be and still be joined, px@comp measured on
     /// the frame. **Nought joins nothing**, which is the documented no-op.
@@ -344,8 +378,9 @@ impl ConnectPoints {
         let mut points = in_stream.clone();
         let between = Between::from_code(self.between);
         // Picked alone is the same web drawn over the picked points only.
+        let (from, to) = (self.between_from.as_str(), self.between_to.as_str());
         if between == Between::Picked {
-            points.retain(|i| in_stream.picked(i));
+            points.retain(|i| in_stream.in_group(from, 0.5, i));
         }
         // The newest by birth index, which is the cap rule the whole family
         // applies — and here it is the ceiling on the pairing as much as on
@@ -366,7 +401,15 @@ impl ConnectPoints {
             return (out, tails);
         }
         let across = between == Between::PickedAndRest;
-        let allowed = |i: usize, j: usize| !across || points.picked(i) != points.picked(j);
+        // One end in the first group and the other in the second, either
+        // way round. With no names those are the picked points and the rest.
+        let first = |i: usize| points.in_group(from, 0.5, i);
+        let second = |i: usize| match to {
+            "" => !points.picked(i),
+            _ => points.in_group(to, 0.5, i),
+        };
+        let allowed =
+            |i: usize, j: usize| !across || (first(i) && second(j)) || (first(j) && second(i));
         // Where each point is *seen*, which is where "near enough" is judged.
         // On a 2D layer this is the pair the stream already holds.
         let seen: Vec<[f32; 2]> = (0..n).map(|i| points.projected(i)).collect();
@@ -435,7 +478,8 @@ impl ConnectPoints {
                     // By the number each point carries. The sort keeps the
                     // stream's own order where two carry the same.
                     let mut order: Vec<usize> = (0..n).collect();
-                    order.sort_by(|a, b| points.index_of(*a).total_cmp(&points.index_of(*b)));
+                    let by = |i: usize| points.value_of(self.order_name.as_str(), i);
+                    order.sort_by(|a, b| by(*a).total_cmp(&by(*b)));
                     let mut pairs: Vec<(usize, usize)> =
                         order.windows(2).map(|w| (w[0], w[1])).collect();
                     // Two points are already joined, so only three or more

@@ -9,11 +9,13 @@
 
 use std::collections::HashMap;
 
-use crate::fx::effects::vary_points::{POINTS_IN, POINTS_OUT};
+use crate::fx::effects::vary_points::{
+    APPLY_GROUP_WHEN, APPLY_THRESHOLD_WHEN, POINTS_IN, POINTS_OUT,
+};
 use crate::fx::points::{self, PointsStream};
 use crate::fx::{
     EffectDef, EffectMetadata, EffectSchema, EnabledCond, EnabledWhen, ParamGroup, ParamId, Params,
-    ResolveCx, Signature, Value,
+    ResolveCx, ShortText, Signature, Value,
 };
 use lumit_fx_macros::Effect;
 
@@ -44,6 +46,8 @@ pub const RELAX_GROUPS: &[ParamGroup] = &[group("Point", &["max_points", "feathe
 
 /// Radius is read while Use point size is off, and Spacing while it is on.
 pub const RELAX_ENABLED_WHEN: &[EnabledWhen] = &[
+    APPLY_GROUP_WHEN,
+    APPLY_THRESHOLD_WHEN,
     EnabledWhen {
         param: "radius",
         on: "use_size",
@@ -71,6 +75,26 @@ pub const RELAX_ENABLED_WHEN: &[EnabledWhen] = &[
     enabled_when = RELAX_ENABLED_WHEN,
 )]
 pub struct RelaxPoints {
+    /// Which points move. The rest stay where they are and still push the
+    /// ones that move.
+    #[choice(
+        label = "Apply to",
+        options = ["All points", "Picked", "Not picked"],
+        default = 0
+    )]
+    pub apply_to: u32,
+
+    /// The group Picked and Not picked go by: a name a Pick points or a Vary
+    /// points above wrote, or one of the `@` names. Empty is the points a
+    /// Pick points picked.
+    #[text(label = "Group", default = "")]
+    pub apply_group: ShortText,
+
+    /// What a point's Group has to read above to be in it. Only read with a
+    /// Group named.
+    #[slider(label = "Threshold", min = 0.0, max = 1.0, default = 0.5, unit = Raw)]
+    pub apply_threshold: f32,
+
     /// The space each point wants round itself, px@comp. Two points end up
     /// at least twice this apart.
     #[slider(min = 0.0, max = 200.0, default = 30.0, hard_min = 0.0, unit = Px)]
@@ -113,15 +137,6 @@ pub struct RelaxPoints {
     /// box they started in.
     #[choice(label = "Bounds", options = ["Free", "Keep inside"], default = 0)]
     pub bounds: u32,
-
-    /// Which points move. The rest stay where they are and still push the
-    /// ones that move.
-    #[choice(
-        label = "Apply to",
-        options = ["All points", "Picked", "Not picked"],
-        default = 0
-    )]
-    pub apply_to: u32,
 
     /// The most points it works on. A longer stream is trimmed to its
     /// newest, as the rest of the family does.
@@ -203,8 +218,8 @@ impl RelaxPoints {
         }
         let moves: Vec<bool> = (0..n)
             .map(|i| {
-                let picked = out.picked(i);
-                !((self.apply_to == 1 && !picked) || (self.apply_to == 2 && picked))
+                let group = self.apply_group.as_str();
+                out.applies(self.apply_to, group, self.apply_threshold, i)
             })
             .collect();
         let mut at: Vec<[f32; 2]> = (0..n)

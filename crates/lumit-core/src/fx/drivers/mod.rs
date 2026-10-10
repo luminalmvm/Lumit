@@ -930,6 +930,21 @@ impl Eval<'_> {
             source_matte: Vec::new(),
         };
 
+        // A Bake points reading its bake hands that out and asks nothing of
+        // the wire. So a stream that is only made during the render can be
+        // read here once it is baked.
+        if inst.effect.match_name == super::effects::bake_points::MATCH_NAME {
+            let read = layer.and_then(|layer| {
+                super::effects::bake_points::reading(doc, comp, layer, inst, t)
+                    .stream(self.projection)
+            });
+            if let Some(stream) = read {
+                let stream = Rc::new(stream);
+                self.streams.borrow_mut().push((effect, Rc::clone(&stream)));
+                return Some(stream);
+            }
+        }
+
         // An effect that changes a stream makes its own from the one wired
         // into it. Nothing wired is no stream.
         if points::consumes_points(def.signature()) {

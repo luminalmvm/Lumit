@@ -333,9 +333,48 @@ pub fn collect_comp_jobs(
     // layer, which is the shape of a session that ends without a message.
     let any_solo = lumit_core::model::any_picture_solo(comp);
     let mut wanted: Vec<Uuid> = Vec::new();
+    // Whether a layer is drawn, which is the walk below's own gate.
+    let drawn = |idx: usize, l: &lumit_core::model::Layer| {
+        !occluder.is_some_and(|o| idx > o)
+            && !l.audio_only
+            && l.switches.visible
+            && in_span(l)
+            && !(any_solo && !l.switches.solo)
+    };
     // The other moments a Clone to points shows its clone layers at, as the
-    // layer and the comp time. Empty unless one has a time offset on.
-    let mut clone_moments: Vec<(Uuid, f64)> = Vec::new();
+    // layer and the comp time. Empty unless one has a time offset on. It is
+    // the list the builder renders, asked of the same code, so a clone
+    // layer's footage is fetched at every moment a stamp shows. Gathered
+    // before the walk, which plans the graphs a layer applies at them too.
+    let clone_moments: Vec<(Uuid, f64)> = comp
+        .layers
+        .iter()
+        .enumerate()
+        .filter(|(idx, l)| drawn(*idx, l))
+        .flat_map(|(_, l)| {
+            let lt = lumit_core::time::layer_time(t, l.start_offset.0);
+            l.effects
+                .iter()
+                .filter(|e| e.enabled)
+                .flat_map(move |e| clone_moments_of(e, doc, comp, t, lt))
+        })
+        .collect();
+    // A clone layer out of its span now may be in it at a moment a stamp
+    // shows, so it is planned all the same.
+    let cloned_in_span = |l: &lumit_core::model::Layer| {
+        clone_moments.iter().any(|(id, tau)| {
+            *id == l.id && *tau >= l.in_point.0.to_f64() && *tau < l.out_point.0.to_f64()
+        })
+    };
+    // Those moments on a layer's own clock, which is the clock a graph it
+    // applies runs on.
+    let graph_moments = |l: &lumit_core::model::Layer| -> Vec<f64> {
+        clone_moments
+            .iter()
+            .filter(|(id, _)| *id == l.id)
+            .map(|(_, tau)| lumit_core::time::layer_time(*tau, l.start_offset.0))
+            .collect()
+    };
     for (idx, l) in comp.layers.iter().enumerate() {
         if occluder.is_some_and(|o| idx > o) {
             continue;
@@ -374,11 +413,6 @@ pub fn collect_comp_jobs(
                         }
                     }
                 }
-                // Clone to points with a time offset: the list the builder
-                // renders, asked of the same code, so a clone layer's footage
-                // is fetched at every moment a stamp shows.
-                let lt = lumit_core::time::layer_time(t, l.start_offset.0);
-                clone_moments.extend(clone_moments_of(e, doc, comp, t, lt));
                 // **A Node graph effect** (docs/impl/node-graph-comp.md §2.4)
                 // brings a whole comp's footage in through this layer's stack,
                 // so the graph it names is planned under the guard a Precomp
@@ -395,24 +429,25 @@ pub fn collect_comp_jobs(
                     lumit_core::time::layer_time(t, l.start_offset.0),
                     l.start_offset.0,
                 );
-                nested_graph_jobs(ctx, e, lt, jobs, visited);
+                nested_graph_jobs(ctx, e, lt, &graph_moments(l), jobs, visited);
             }
         }
     }
-    // A layer read only as another effect's picture is not drawn, so the walk
-    // above passed over its stack. Its Node graph effects still run when it
-    // is read, and the footage their graphs read is planned here.
+    // A layer read only as another effect's picture or as a matte is not
+    // drawn, so the walk above passed over its stack. Its Node graph effects
+    // still run when it is read, and the footage their graphs read is planned
+    // here, at the moments a stamp shows the layer as well.
     for (idx, l) in comp.layers.iter().enumerate() {
-        let drawn = !occluder.is_some_and(|o| idx > o)
-            && !l.audio_only
-            && l.switches.visible
-            && !(any_solo && !l.switches.solo);
-        if drawn || !wanted.contains(&l.id) || !in_span(l) || !l.switches.fx {
+        if drawn(idx, l)
+            || !wanted.contains(&l.id)
+            || !(in_span(l) || cloned_in_span(l))
+            || !l.switches.fx
+        {
             continue;
         }
         let lt = lumit_core::time::layer_time(t, l.start_offset.0);
         for e in l.effects.iter().filter(|e| e.enabled) {
-            nested_graph_jobs(ctx, e, lt, jobs, visited);
+            nested_graph_jobs(ctx, e, lt, &graph_moments(l), jobs, visited);
         }
     }
     // **And the same effect on a live group's header** (docs/impl/
@@ -425,7 +460,7 @@ pub fn collect_comp_jobs(
         .filter(|g| lumit_core::group::header_live(g))
     {
         for e in &group.effects {
-            nested_graph_jobs(ctx, e, t, jobs, visited);
+            nested_graph_jobs(ctx, e, t, &[], jobs, visited);
         }
     }
     // Posterize Time (docs/08 §3.25, FX-1): a layer covered by a live
@@ -471,13 +506,6 @@ pub fn collect_comp_jobs(
             );
         }
     }
-    // A clone layer out of its span now may be in it at a moment a stamp
-    // shows, so it is planned all the same.
-    let cloned_in_span = |l: &lumit_core::model::Layer| {
-        clone_moments.iter().any(|(id, tau)| {
-            *id == l.id && *tau >= l.in_point.0.to_f64() && *tau < l.out_point.0.to_f64()
-        })
-    };
     for (idx, layer) in comp.layers.iter().enumerate() {
         if !wanted.contains(&layer.id) || !(in_span(layer) || cloned_in_span(layer)) {
             continue;
@@ -886,7 +914,7 @@ fn collect_graph_jobs(
         // A nested Node graph box lowers the graph it names into this plan
         // (§2.3), so the inner Read boxes' footage is planned here too.
         if let lumit_core::comp_graph::GraphNode::Fx(inst) = node {
-            nested_graph_jobs(ctx, inst, t, jobs, visited);
+            nested_graph_jobs(ctx, inst, t, moments, jobs, visited);
             continue;
         }
         let (id, item) = match node {
@@ -1016,10 +1044,14 @@ fn collect_graph_jobs(
 ///
 /// A box that is bypassed, unbound, cyclic or naming a comp that is gone has
 /// nothing to plan, which is the passthrough the walk renders.
+///
+/// `moments` are the other times the graph is lowered at, on the clock `t` is
+/// on, so its Reads of footage are fetched at those too.
 fn nested_graph_jobs(
     ctx: &PlanContext<'_>,
     inst: &lumit_core::model::EffectInstance,
     t: f64,
+    moments: &[f64],
     jobs: &mut Vec<CompJob>,
     visited: &mut Vec<Uuid>,
 ) {
@@ -1039,10 +1071,10 @@ fn nested_graph_jobs(
     match nested.graph.as_ref() {
         // Applied or nested, so every picture Input arrives on a socket and no
         // preview item is drawn or decoded (§5.11).
-        Some(graph) => collect_graph_jobs(ctx, nested, graph, t, &[], jobs, visited, true),
+        Some(graph) => collect_graph_jobs(ctx, nested, graph, t, moments, jobs, visited, true),
         // A comp with layers: the dangling reference the walk renders as a
         // passthrough, planned as the Precomp it looks like.
-        None => collect_comp_jobs(ctx, nested, t, &[], jobs, visited, false),
+        None => collect_comp_jobs(ctx, nested, t, moments, jobs, visited, false),
     }
     visited.pop();
 }

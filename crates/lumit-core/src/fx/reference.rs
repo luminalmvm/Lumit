@@ -308,6 +308,10 @@ fn param(schema: &'static super::schema::ParamSchema) -> Param {
                 ColourNameRole::Config => "config",
             });
         }
+        ParamKind::Text { default } => {
+            p.kind = "text";
+            p.default = Some(default.into());
+        }
         ParamKind::Layer { self_default } => {
             p.kind = "layer";
             p.self_default = Some(self_default);

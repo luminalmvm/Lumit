@@ -1445,6 +1445,24 @@ impl Realiser<'_> {
                 planes: &planes,
                 late: None,
             };
+            // The graphs the matte source's own Node graph effects apply,
+            // at the raster its stack runs on.
+            let px = if m.natural_size.0 > 0.0 {
+                m.tex_w as f32 / m.natural_size.0
+            } else {
+                1.0
+            };
+            let plans: Vec<GraphClosure<'_>> = m
+                .graph_fx
+                .iter()
+                .map(|plan| {
+                    Box::new(move |tex: wgpu::Texture, gw: u32, gh: u32| {
+                        self.realise_graph(plan, Some(&tex), gw, gh, px)
+                    }) as GraphClosure<'_>
+                })
+                .collect();
+            let graphs: Vec<&dyn Fn(wgpu::Texture, u32, u32) -> wgpu::Texture> =
+                plans.iter().map(|f| &**f).collect();
             crate::fxops::run_ops(
                 self.fx,
                 &self.ctx,
@@ -1463,7 +1481,7 @@ impl Realiser<'_> {
                 &[],
                 &[],
                 &side,
-                &[],
+                &graphs,
                 // A matte's own stack is part of the layer it
                 // gates, not a row of its own.
                 None,

@@ -13,7 +13,7 @@
 use crate::fx::points::{self, PointsStream};
 use crate::fx::{
     EffectDef, EffectMetadata, EffectSchema, EnabledCond, EnabledWhen, ParamId, Params, Port,
-    PortType, ResolveCx, Signature, Value,
+    PortType, ResolveCx, ShortText, Signature, Value,
 };
 use lumit_fx_macros::Effect;
 
@@ -32,6 +32,11 @@ pub const FIELD_ENABLED_WHEN: &[EnabledWhen] = &[
     },
     EnabledWhen {
         param: "number_range",
+        on: "output",
+        cond: EnabledCond::ChoiceIs(3),
+    },
+    EnabledWhen {
+        param: "number_name",
         on: "output",
         cond: EnabledCond::ChoiceIs(3),
     },
@@ -132,6 +137,11 @@ pub struct PointsField {
     )]
     pub number_range: f32,
 
+    /// Which of a point's numbers Number draws: a name written above, or
+    /// one of the `@` names. Empty is the number it carries.
+    #[text(label = "Name", default = "")]
+    pub number_name: ShortText,
+
     /// The family's budget row: the most points the field is made from. A
     /// longer stream is trimmed to its newest.
     #[counter(
@@ -181,7 +191,7 @@ impl PointsField {
                 (at[0].is_finite() && at[1].is_finite()).then(|| Seed {
                     at,
                     colour: s.colour.get(i).copied().unwrap_or([0.0; 4]),
-                    number: s.index_of(i),
+                    number: s.value_of(self.number_name.as_str(), i),
                 })
             })
             .collect()

@@ -857,6 +857,23 @@ fn feed_effect_stack(
         {
             h.update(b"tracked/");
         }
+        // Bake points draws from a bake kept outside the document, and one
+        // landing changes no row. Which bake a frame reads, and which frame
+        // of it, joins the key, so a frame drawn before it is not served.
+        if e.effect.match_name == lumit_core::fx::effects::bake_points::MATCH_NAME {
+            use lumit_core::fx::effects::bake_points::{reading, Reading};
+            match marker_layer.map(|l| reading(doc, comp, l, e, lt)) {
+                Some(Reading::Baked(baked, frame)) => {
+                    h.update(b"baked/");
+                    h.update(&baked.content);
+                    h.update(&frame.to_le_bytes());
+                }
+                Some(Reading::Nothing) => {
+                    h.update(b"unbaked/");
+                }
+                _ => {}
+            }
+        }
         // **The Node graph effect's own graph** (docs/impl/node-graph-comp.md
         // §2.5), for the Custom shader's reason above: the loop below hashes
         // every stored parameter, which covers the graph's Inputs for free,

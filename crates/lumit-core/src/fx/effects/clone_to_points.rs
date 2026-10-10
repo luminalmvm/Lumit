@@ -50,10 +50,11 @@
 //! picture. The planner, the builder and the draw all go through them.
 
 use crate::fx::drivers::clone_index;
+use crate::fx::effects::vary_points::{APPLY_GROUP_WHEN, APPLY_THRESHOLD_WHEN};
 use crate::fx::points::{self, PointsStream, SpriteFit};
 use crate::fx::{
     EffectDef, EffectMetadata, EffectSchema, EnabledCond, EnabledWhen, ParamGroup, ParamId, Params,
-    Port, PortType, ResolveCx, Signature, Value,
+    Port, PortType, ResolveCx, ShortText, Signature, Value,
 };
 use crate::model::{Composition, Document, EffectInstance, EffectValue};
 use lumit_fx_macros::Effect;
@@ -166,6 +167,7 @@ pub const CLONE_GROUPS: &[ParamGroup] = &[
             "clone_layer_3",
             "clone_layer_4",
             "choose_by",
+            "choose_name",
             "seed",
         ],
         collapsed: true,
@@ -174,7 +176,7 @@ pub const CLONE_GROUPS: &[ParamGroup] = &[
     },
     ParamGroup {
         label: "Time",
-        params: &["time_offset", "time_step", "time_samples"],
+        params: &["time_offset", "time_name", "time_step", "time_samples"],
         collapsed: true,
         visible_when: None,
         visible_when_lens_elements: None,
@@ -200,6 +202,19 @@ pub const CLONE_GROUPS: &[ParamGroup] = &[
 /// for a Random choice of layer and for a Random time offset, and a row can
 /// only be greyed on one of them.
 pub const CLONE_ENABLED_WHEN: &[EnabledWhen] = &[
+    APPLY_GROUP_WHEN,
+    APPLY_THRESHOLD_WHEN,
+    // Each name is read by the Number option of the row above it.
+    EnabledWhen {
+        param: "choose_name",
+        on: "choose_by",
+        cond: EnabledCond::ChoiceIs(2),
+    },
+    EnabledWhen {
+        param: "time_name",
+        on: "time_offset",
+        cond: EnabledCond::ChoiceIs(TIME_NUMBER),
+    },
     EnabledWhen {
         param: "time_step",
         on: "time_offset",
@@ -246,6 +261,25 @@ const POINTS_IN: &[Port] = &[Port::new(POINTS_PORT, "Points", PortType::Points)]
     enabled_when = CLONE_ENABLED_WHEN,
 )]
 pub struct CloneToPoints {
+    /// Which points get a stamp.
+    #[choice(
+        label = "Apply to",
+        options = ["All points", "Picked", "Not picked"],
+        default = 0
+    )]
+    pub apply_to: u32,
+
+    /// The group Picked and Not picked go by: a name a Pick points or a Vary
+    /// points above wrote, or one of the `@` names. Empty is the points a
+    /// Pick points picked.
+    #[text(label = "Group", default = "")]
+    pub apply_group: ShortText,
+
+    /// What a point's Group has to read above to be in it. Only read with a
+    /// Group named.
+    #[slider(label = "Threshold", min = 0.0, max = 1.0, default = 0.5, unit = Raw)]
+    pub apply_threshold: f32,
+
     /// The layer stamped at every point. **Unset draws
     /// nothing**, the ordinary unset-is-identity reading — deliberately unlike
     /// Particulate's Sprite mode, which falls back to discs because a *render
@@ -276,6 +310,11 @@ pub struct CloneToPoints {
     )]
     pub choose_by: u32,
 
+    /// Which of a point's numbers Number chooses by: a name written above,
+    /// or one of the `@` names. Empty is the number it carries.
+    #[text(label = "Name", default = "")]
+    pub choose_name: ShortText,
+
     /// Which dice a Random choice of layer and a Random time offset roll.
     #[seed]
     pub seed: u32,
@@ -291,6 +330,11 @@ pub struct CloneToPoints {
         default = 0
     )]
     pub time_offset: u32,
+
+    /// Which of a point's numbers Number steps back by: a name written
+    /// above, or one of the `@` names. Empty is the number it carries.
+    #[text(label = "Name", default = "")]
+    pub time_name: ShortText,
 
     /// How far apart two steps are, seconds. The default is about two frames.
     #[slider(
@@ -336,14 +380,6 @@ pub struct CloneToPoints {
         unit = Raw
     )]
     pub max_renders: i32,
-
-    /// Which points get a stamp.
-    #[choice(
-        label = "Apply to",
-        options = ["All points", "Picked", "Not picked"],
-        default = 0
-    )]
-    pub apply_to: u32,
 
     /// What a stamp's size is. Point size is a square of the point's own
     /// size with the whole layer squeezed into it. Layer size is the layer at
@@ -510,8 +546,8 @@ impl CloneToPoints {
         // they sit in the list. The same for every point.
         let Stamped { step, count, .. } = self.picture_of(in_stream, 0, pictures);
         if self.apply_to != 0 {
-            let want = self.apply_to == 1;
-            out.retain(|i| in_stream.picked(i) == want);
+            let group = self.apply_group.as_str();
+            out.retain(|i| in_stream.applies(self.apply_to, group, self.apply_threshold, i));
         }
         // The newest by birth index, which is the cap rule the whole family
         // applies — deterministic, and the same from any scrub direction.
@@ -592,7 +628,10 @@ impl CloneToPoints {
                     ((roll * n as f32) as usize).min(n - 1)
                 }
                 // The number it carries, wrapped round the list. A NaN reads 0.
-                2 => (s.index_of(i).floor() as i64).rem_euclid(n as i64) as usize,
+                2 => {
+                    let number = s.value_of(self.choose_name.as_str(), i);
+                    (number.floor() as i64).rem_euclid(n as i64) as usize
+                }
                 _ => i % n,
             }
         };
@@ -610,7 +649,8 @@ impl CloneToPoints {
             return one(chosen(of.renders));
         }
         let age = s.age.get(i).copied().unwrap_or(0.0);
-        let moment = self.moment_of(i, id, s.index_of(i), age, of.moments);
+        let number = s.value_of(self.time_name.as_str(), i);
+        let moment = self.moment_of(i, id, number, age, of.moments);
         if every {
             return Stamped {
                 first: moment,

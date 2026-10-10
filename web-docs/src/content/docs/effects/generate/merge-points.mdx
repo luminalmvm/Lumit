@@ -26,6 +26,11 @@ The points are drawn as discs. No two share an identity, and a
 [Trail](/effects/generate/trail/) below still follows each of them. The merged stream holds
 at most 1,000,000 points, and past that the newest are kept.
 
+Every point carries the socket it came in on under the name `source`, 0 for Points to 3
+for Points D, whatever the two rows below say. An input that carries a `source` already
+keeps its own apart, and each input's count on from the one before. See
+[Names](/effects/generate/vary-points/#names).
+
 ## Parameters
 
 {/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
@@ -52,8 +57,7 @@ In the Effect Controls panel:
 ## What each control does
 
 - **Number by input**: sets the number each point carries to the socket it came in on, 0
-  for Points to 3 for Points D. Off, each point keeps the number it came with. See
-  [Pick points](/effects/generate/pick-points/).
+  for Points to 3 for Points D. Off, each point keeps the number it came with.
 - **Count nested inputs**: an input whose points already carry different numbers keeps them
   apart, and each input's numbers count on from the input before. A merge of an already
   merged pair and a third stream numbers them 0, 1 and 2.

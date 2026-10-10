@@ -48,6 +48,19 @@ String planarStatusSentence(BridgePlanarStatus? status) => switch (status?.stage
           : l10n.planarTracked(status.frames),
     };
 
+/// The sentence for one reading of a Bake points bake. It is filed and
+/// reported like a planar track, and worded as a bake.
+String bakeStatusSentence(BridgePlanarStatus? status) => switch (status?.stage) {
+      null || BridgeTrackStage.idle => l10n.bakeNotBaked,
+      BridgeTrackStage.queued => l10n.trackWaiting,
+      BridgeTrackStage.tracking ||
+      BridgeTrackStage.solving =>
+        l10n.bakeBaking(status!.done, status.total),
+      BridgeTrackStage.cancelled => l10n.bakeStopped,
+      BridgeTrackStage.failed => l10n.bakeFailed,
+      BridgeTrackStage.done => l10n.bakeBaked(status!.frames),
+    };
+
 /// The line under the Planar track's buttons.
 class PlanarTrackDisplayFrb extends StatefulWidget {
   /// The layer the effect sits on — what a press is fired against.
@@ -79,7 +92,11 @@ class PlanarTrackDisplayFrb extends StatefulWidget {
     required this.onChanged,
     required this.pressed,
     this.fetch,
+    this.bake = false,
   });
+
+  /// Whether this is Bake points' line, which reads as a bake.
+  final bool bake;
 
   @override
   State<PlanarTrackDisplayFrb> createState() => _PlanarTrackDisplayFrbState();
@@ -134,7 +151,9 @@ class _PlanarTrackDisplayFrbState extends State<PlanarTrackDisplayFrb>
               total: status.clipFrames,
             ),
           Text(
-            planarStatusSentence(status),
+            widget.bake
+                ? bakeStatusSentence(status)
+                : planarStatusSentence(status),
             key: const ValueKey('fx-planar-track-status'),
             style: t.small.copyWith(color: t.textMuted),
             overflow: TextOverflow.ellipsis,

@@ -203,6 +203,7 @@ impl EmitFromImage {
         let n = self.candidate_count(w, h, px_scale);
         let mut out = PointsStream {
             projection,
+            px_scale,
             ..PointsStream::default()
         };
         let size = self.size.max(0.0);
@@ -291,6 +292,7 @@ impl EmitFromImage {
         let all = self.candidates(w, h, px_scale, projection);
         let mut out = PointsStream {
             projection,
+            px_scale,
             ..PointsStream::default()
         };
         for i in 0..all.len() {

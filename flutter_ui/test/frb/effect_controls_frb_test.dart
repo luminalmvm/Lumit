@@ -1525,6 +1525,33 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
       );
     });
 
+    /// A text row keeps what is typed into it, and one undo takes it back.
+    testWidgets('a text row commits what is typed, in one undo step',
+        (tester) async {
+      final p = withLayer();
+      p.layer.addEffect(name: 'label_points');
+      await mount(tester, p, transform: false);
+
+      final id = p.layer.getEffects().single.id();
+      String text() => (p.layer.getEffects().single.getValue(id: 'text')
+              as BridgeEffectValue_Text)
+          .field0;
+      final row = find.byKey(ValueKey<String>('fx-text-$id-text'));
+      expect(row, findsOneWidget);
+      expect(text(), isEmpty);
+
+      await tester.enterText(row, '{index}: {x}');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(text(), '{index}: {x}',
+          reason: 'the typed text reached the document');
+
+      p.state.project!.undo();
+      p.uiState.model.refresh();
+      await tester.pumpAndSettle();
+      expect(text(), isEmpty, reason: 'one commit, one undo step');
+    });
+
     /// **The Node graph card's Open graph row** (docs/impl/node-graph-comp.md
     /// §4.4): it fronts the composition the effect applies, the way the Custom
     /// shader's Edit enters its inner graph. Fronting a comp is not an event

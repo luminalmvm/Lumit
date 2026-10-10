@@ -623,6 +623,14 @@ fn points_above(match_name: &str) -> Vec<(&'static str, EffectInstance)> {
     match match_name {
         "vary_points" => vec![("points", lattice(16.0, 7.0, 105.0, 0.0))],
         "flow_points" => vec![("points", lattice(24.0, 10.0, 70.0, 0.0))],
+        // Nothing is baked here, so it draws the stream as it comes: a
+        // spiral, so the figure is not Grid's own over again.
+        "bake_points" => {
+            let mut spiral = lattice(20.0, 14.0, 23.0, 0.0);
+            set(&mut spiral, "layout", choice(3));
+            set(&mut spiral, "colour", colour([1.0, 0.4, 0.05, 1.0]));
+            vec![("points", spiral)]
+        }
         "pick_points" | "transform_points" => {
             vec![("points", lattice(16.0, 7.0, 105.0, 30.0))]
         }

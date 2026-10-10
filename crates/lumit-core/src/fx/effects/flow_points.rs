@@ -12,12 +12,14 @@
 //! draws nothing.
 
 use crate::fx::cpu;
-use crate::fx::effects::vary_points::{POINTS_IN, POINTS_OUT};
+use crate::fx::effects::vary_points::{
+    APPLY_GROUP_WHEN, APPLY_THRESHOLD_WHEN, POINTS_IN, POINTS_OUT,
+};
 use crate::fx::noise::perlin3;
 use crate::fx::points::PointsStream;
 use crate::fx::{
-    CurvePoints, EffectDef, EffectMetadata, EffectSchema, ParamGroup, ParamId, Params, ResolveCx,
-    Signature, Value,
+    CurvePoints, EffectDef, EffectMetadata, EffectSchema, EnabledWhen, ParamGroup, ParamId, Params,
+    ResolveCx, ShortText, Signature, Value,
 };
 use lumit_fx_macros::Effect;
 use std::sync::Mutex;
@@ -134,8 +136,10 @@ pub const FLOW_GROUPS: &[ParamGroup] = &[
     ),
     group("", &["direction"], Some(("field", &[WIND, COMBINED]))),
     group("Time", &["clock", "steps"], None),
-    group("Point", &["apply_to", "feather"], None),
+    group("Point", &["feather"], None),
 ];
+
+pub const FLOW_ENABLED_WHEN: &[EnabledWhen] = &[APPLY_GROUP_WHEN, APPLY_THRESHOLD_WHEN];
 
 /// Flow points' controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
@@ -151,8 +155,28 @@ pub const FLOW_GROUPS: &[ParamGroup] = &[
     // Seeded, since the points move under constant parameters.
     seeded = true,
     groups = FLOW_GROUPS,
+    enabled_when = FLOW_ENABLED_WHEN,
 )]
 pub struct FlowPoints {
+    /// Which points are carried. The rest stay where they are.
+    #[choice(
+        label = "Apply to",
+        options = ["All points", "Picked", "Not picked"],
+        default = 0
+    )]
+    pub apply_to: u32,
+
+    /// The group Picked and Not picked go by: a name a Pick points or a Vary
+    /// points above wrote, or one of the `@` names. Empty is the points a
+    /// Pick points picked.
+    #[text(label = "Group", default = "")]
+    pub apply_group: ShortText,
+
+    /// What a point's Group has to read above to be in it. Only read with a
+    /// Group named.
+    #[slider(label = "Threshold", min = 0.0, max = 1.0, default = 0.5, unit = Raw)]
+    pub apply_threshold: f32,
+
     /// What carries the points. Curl noise swirls them without bunching
     /// them up, Vortex turns them round Centre, Pull draws them to it, Wind
     /// blows them one way, and Combined adds the four together, each by its
@@ -284,14 +308,6 @@ pub struct FlowPoints {
         unit = Raw
     )]
     pub steps: i32,
-
-    /// Which points are carried. The rest stay where they are.
-    #[choice(
-        label = "Apply to",
-        options = ["All points", "Picked", "Not picked"],
-        default = 0
-    )]
-    pub apply_to: u32,
 
     /// How soft the disc a point is drawn as is, per cent.
     #[slider(
@@ -451,8 +467,8 @@ impl FlowPoints {
         let mut out = in_stream.clone();
         let moved: Vec<usize> = (0..out.len())
             .filter(|i| {
-                let picked = in_stream.picked(*i);
-                !((self.apply_to == 1 && !picked) || (self.apply_to == 2 && picked))
+                let group = self.apply_group.as_str();
+                in_stream.applies(self.apply_to, group, self.apply_threshold, *i)
             })
             .collect();
         if moved.is_empty() || self.speed == 0.0 {
@@ -626,6 +642,8 @@ mod tests {
             clock: 0,
             steps: 30,
             apply_to: 0,
+            apply_group: ShortText::EMPTY,
+            apply_threshold: 0.5,
             feather: 100.0,
             mix: 100.0,
         };

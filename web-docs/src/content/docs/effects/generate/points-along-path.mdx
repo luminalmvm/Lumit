@@ -21,7 +21,12 @@ with no mask has no points.
 On a Shape layer, **Follow** can take the outline the layer draws in place of a mask.
 
 **Placement** can put them at random places instead, or one on each of the mask's corners.
-Each point's number is how far along the path it sits, from 0 to 1.
+Each point's number is how far along the path it sits, from 0 to 1. It carries the same
+under the name `progress`. See [Names](/effects/generate/vary-points/#names).
+
+On a Shape or Text layer, a points effect that is last in the stack draws past the art's
+edges into the whole frame. With another effect or a layer style after it, the points are
+cut at the art's box.
 
 ## Parameters
 
@@ -63,15 +68,17 @@ In the Effect Controls panel:
 ## What each control does
 
 - **Follow**: what the points sit along. **Mask** is one of the layer's masks. **Shape** is
-  the outline the Shape layer the effect is on draws, after any trim, offset or combine and
-  before any dashes cut it. Every outline is followed in the layer's order as one long run,
+  the outline the Shape layer the effect is on draws, after any trim, offset or combine,
+  and dashes as drawn. Every line of it is followed in the layer's order as one long run,
   repeater copies included, and Count is shared between them by length. A shape with no
   fill or stroke is followed too. On any other layer Shape makes no points.
 - **Mask path**: the mask the points follow.
 - **Placement**: where along the path the points are put. **Even** spaces them by distance.
   **Random** puts them at random places, the same on every frame. **Corners** puts one on
-  each of the mask's own vertices between Start and End, and ignores Count. An outline that
-  a trim, an offset or a combine has reshaped has a point at every joint of its curves.
+  each of the mask's own vertices between Start and End, and ignores Count. On a Shape
+  layer's outline that is each end of a line and each of the shape's own vertices on it.
+  After an offset or a combine it is wherever the line turns, and a curve has a point at
+  every joint.
 - **Count**: how many points.
 - **Start** and **End**: where along the path the first and last points sit, as a per cent
   of its length.

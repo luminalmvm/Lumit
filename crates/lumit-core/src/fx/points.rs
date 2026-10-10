@@ -517,9 +517,150 @@ pub struct PointsStream {
     /// several layers to stamp, how far to offset it in time, where it comes
     /// in an order. **Empty means its place in the stream.**
     pub index: Vec<f32>,
+    /// The named columns: a number for each point under a name an effect
+    /// gave it, for the effects below to read by that name. Never more than
+    /// [`NAMED_MAX`] of them. Written through [`named_mut`](Self::named_mut)
+    /// and read with [`value_of`](Self::value_of).
+    pub named: Vec<(String, Vec<f32>)>,
+    /// How many of this stream's pixels make one px@comp, which is what the
+    /// `@x`, `@y`, `@z` and `@size` names are read in at any preview size.
+    /// **Nought means 1**, which is what a stream made in px@comp carries.
+    pub px_scale: f32,
 }
 
+/// The most named columns one stream carries. A new name past it is not
+/// written.
+pub const NAMED_MAX: usize = 16;
+
+/// The dice `@rand01` rolls, kept off the numbers every effect uses for its
+/// own.
+const RAND01_ATTR: u32 = 96;
+
 impl PointsStream {
+    /// The named column `name`, filled in for every point so it can be
+    /// written. A new one starts at 0. An empty name is the number each
+    /// point carries. `None` for a name starting with `@`, which is only
+    /// ever read, and for a new name on a stream that carries
+    /// [`NAMED_MAX`] already.
+    pub fn named_mut(&mut self, name: &str) -> Option<&mut Vec<f32>> {
+        if name.is_empty() {
+            return Some(self.index_mut());
+        }
+        if name.starts_with('@') {
+            return None;
+        }
+        let n = self.len();
+        let at = match self.named.iter().position(|(k, _)| k == name) {
+            Some(at) => at,
+            None if self.named.len() < NAMED_MAX => {
+                self.named.push((name.to_owned(), Vec::new()));
+                self.named.len() - 1
+            }
+            None => return None,
+        };
+        let column = &mut self.named.get_mut(at)?.1;
+        column.resize(n, 0.0);
+        Some(column)
+    }
+
+    /// What `name` reads at point `i`, or `None` for a name that is neither
+    /// carried nor built in. The one reader every effect goes through.
+    ///
+    /// An empty name is the number the point carries. A name starting with
+    /// `@` is worked out here and never stored, in any mix of capitals:
+    /// `@index` its place in the stream, `@id`, `@x`, `@y` and `@z` where it
+    /// is, `@n` how many points there are, `@indexnorm` its place from 0 at
+    /// the first to 1 at the last, `@rand01` a roll of its own dice that is
+    /// the same every frame, `@size`, `@age` and `@picked`. Anything else is
+    /// a named column.
+    #[must_use]
+    pub fn value(&self, name: &str, i: usize) -> Option<f32> {
+        if name.is_empty() {
+            return Some(self.index_of(i));
+        }
+        let Some(built_in) = name.strip_prefix('@') else {
+            // ponytail: the name is found again for every point. Find the
+            // column once for a whole loop if a profile shows this on a
+            // stream with many names.
+            let column = &self.named.iter().find(|(k, _)| k == name)?.1;
+            return Some(column.get(i).copied().unwrap_or(0.0));
+        };
+        let is = |want: &str| built_in.eq_ignore_ascii_case(want);
+        let units = if self.px_scale > 0.0 {
+            self.px_scale
+        } else {
+            1.0
+        };
+        let place = |axis: usize| self.position.get(i).map_or(0.0, |p| p[axis]) / units;
+        let of = |column: &[f32]| column.get(i).copied().unwrap_or(0.0);
+        let id = self.id.get(i).copied().unwrap_or(0);
+        Some(if is("index") {
+            i as f32
+        } else if is("id") {
+            id as f32
+        } else if is("x") {
+            place(0)
+        } else if is("y") {
+            place(1)
+        } else if is("z") {
+            place(2)
+        } else if is("n") {
+            self.len() as f32
+        } else if is("indexnorm") {
+            // A single point reads as the first.
+            i as f32 / self.len().saturating_sub(1).max(1) as f32
+        } else if is("rand01") {
+            draw(0, id, RAND01_ATTR)
+        } else if is("size") {
+            of(&self.size) / units
+        } else if is("age") {
+            of(&self.age)
+        } else if is("picked") {
+            f32::from(u8::from(self.picked(i)))
+        } else {
+            return None;
+        })
+    }
+
+    /// [`value`](Self::value), with 0 for a name that reads nothing. So a
+    /// name nobody wrote puts no point in a group.
+    #[must_use]
+    pub fn value_of(&self, name: &str, i: usize) -> f32 {
+        self.value(name, i).unwrap_or(0.0)
+    }
+
+    /// Whether point `i` is in the group `name`: picked for an empty name,
+    /// and for any other a value above `threshold`.
+    #[must_use]
+    pub fn in_group(&self, name: &str, threshold: f32, i: usize) -> bool {
+        if name.is_empty() {
+            self.picked(i)
+        } else {
+            self.value_of(name, i) > threshold
+        }
+    }
+
+    /// Whether an effect acts on point `i`, by its Apply to, Group and
+    /// Threshold rows: every point, the ones in the group, or the ones
+    /// not in it.
+    #[must_use]
+    pub fn applies(&self, apply_to: u32, group: &str, threshold: f32, i: usize) -> bool {
+        match apply_to {
+            1 => self.in_group(group, threshold, i),
+            2 => !self.in_group(group, threshold, i),
+            _ => true,
+        }
+    }
+
+    /// Every named column made as long as the stream, so the helpers that
+    /// drop or reorder points can treat it like any other.
+    fn fill_named(&mut self) {
+        let n = self.len();
+        for (_, column) in &mut self.named {
+            column.resize(n, 0.0);
+        }
+    }
+
     /// Point `i`'s stretch, `[1, 1]` where none was set.
     #[must_use]
     pub fn stretch_of(&self, i: usize) -> [f32; 2] {
@@ -591,6 +732,15 @@ impl PointsStream {
             if index {
                 self.index.push(other.index_of(i));
             }
+        }
+        // A named column either side carries goes across, and the side
+        // without it reads 0.
+        self.fill_named();
+        for (name, _) in &other.named {
+            self.named_mut(name);
+        }
+        for (name, column) in &mut self.named {
+            column.extend((0..other.len()).map(|i| other.value_of(name, i)));
         }
         self.position.extend_from_slice(&other.position);
         self.speed.extend_from_slice(&other.speed);
@@ -674,6 +824,12 @@ impl PointsStream {
             stretch: self.stretch.clone(),
             pick: self.pick.clone(),
             index: self.index.clone(),
+            named: self.named.clone(),
+            px_scale: s * if self.px_scale > 0.0 {
+                self.px_scale
+            } else {
+                1.0
+            },
         }
     }
 
@@ -721,6 +877,7 @@ impl PointsStream {
         fn pick<T: Copy>(v: &mut Vec<T>, order: &[usize]) {
             *v = order.iter().filter_map(|i| v.get(*i).copied()).collect();
         }
+        self.fill_named();
         pick(&mut self.position, order);
         pick(&mut self.speed, order);
         pick(&mut self.age, order);
@@ -732,6 +889,9 @@ impl PointsStream {
         pick(&mut self.stretch, order);
         pick(&mut self.pick, order);
         pick(&mut self.index, order);
+        for (_, column) in &mut self.named {
+            pick(column, order);
+        }
     }
 
     /// Keep the points `keep` answers true for, by index, in the order they
@@ -762,6 +922,9 @@ impl PointsStream {
         if !self.index.is_empty() {
             sift(&mut self.index, &flags);
         }
+        for (_, column) in &mut self.named {
+            sift(column, &flags);
+        }
     }
 
     /// Keep the **newest `n`** particles by birth index, dropping the rest.
@@ -777,6 +940,10 @@ impl PointsStream {
             return;
         }
         let cut = len - n;
+        self.fill_named();
+        for (_, column) in &mut self.named {
+            column.drain(..cut);
+        }
         self.position.drain(..cut);
         self.speed.drain(..cut);
         self.age.drain(..cut);
@@ -1140,6 +1307,14 @@ pub struct PointsSchedule {
     /// For Label points: the Text layer its row names, with `text` already
     /// the words it reads at this frame's time. Folded into the frame key.
     pub label: Option<Box<crate::model::TextDocument>>,
+    /// How many texels of empty room this op's picture has on each side of
+    /// the layer's art, across and down. A Shape or Text layer's picture is
+    /// only as big as its art, and a point may fall anywhere, so the walk adds
+    /// the room before the first op that asks and cuts it away again before
+    /// one that does not. `projection` already carries the points the same
+    /// distance in. Only the points effects a stack ends on are given any,
+    /// and it is nought on every other layer.
+    pub grow: [u32; 2],
 }
 
 /// One letter of a Text layer as it is laid out, in the layer's own px. A

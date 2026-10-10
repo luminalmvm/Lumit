@@ -30,6 +30,9 @@ The changed points go out on its own Points socket and are drawn as discs.
 
 | Parameter | Control | Range | Default | Unit |
 | --- | --- | --- | --- | --- |
+| **Apply to** | Dropdown | All points · Picked · Not picked | All points | - |
+| **Group** | Text | A short line of text | Empty | - |
+| **Threshold** | Slider | 0 to 1; any value by typing | 0.5 | - |
 | **Anchor to points** | Checkbox | On or off | Off | - |
 | **Anchor in** | Dropdown | Pixels · Share of frame | Pixels | - |
 | **Anchor x** | Slider | 0 to 3840; any value by typing | 960 | Pixels at composition size |
@@ -50,7 +53,6 @@ The changed points go out on its own Points socket and are drawn as discs.
 | **Rotation** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
 | **Scale sizes** | Checkbox | On or off | Off | - |
 | **Turn points** | Checkbox | On or off | Off | - |
-| **Apply to** | Dropdown | All points · Picked · Not picked | All points | - |
 | **Feather** | Slider | 0 to 100 | 100 | Per cent |
 | **Mix** | Slider | 0 to 100 | 100 | Per cent |
 | **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
@@ -62,7 +64,9 @@ In the Effect Controls panel:
 
 - **Anchor** groups **Anchor to points**, **Anchor in**.
 - **Transform** groups **Place**.
-- **Point** groups **Scale sizes**, **Turn points**, **Apply to**, **Feather**.
+- **Point** groups **Scale sizes**, **Turn points**, **Feather**.
+- **Group** is editable while **Apply to** is anything but All points.
+- **Threshold** is editable while **Apply to** is anything but All points.
 - **Anchor in** is editable while **Anchor to points** is off.
 - **Anchor x** is editable while **Anchor to points** is off.
 - **Anchor y** is editable while **Anchor to points** is off.
@@ -76,6 +80,11 @@ In the Effect Controls panel:
 
 ## What each control does
 
+- **Apply to**: which points are moved. The rest pass through as they came.
+- **Group**: the group Picked and Not picked go by, as a name. Left empty, they go by the
+  points a Pick points picked. See [Names](/effects/generate/vary-points/#names).
+- **Threshold**: what a point's Group must read above to be in it. It is read only with a
+  Group named.
 - **Anchor to points**: puts the anchor on the box round the points being moved, in place
   of a place in the frame.
 - **Anchor in**: how an anchor in the frame is given. **Pixels** is a place in pixels.
@@ -103,8 +112,6 @@ In the Effect Controls panel:
 - **Rotation**: how far the stream is turned round the anchor.
 - **Scale sizes**: the points grow and shrink with the stream.
 - **Turn points**: the points turn with the stream.
-- **Apply to**: which points are moved. The rest pass through as they came. See
-  [Pick points](/effects/generate/pick-points/).
 - **Feather**: how soft the edge of a drawn disc is.
 - **Mix**: how much of the drawing lands on the picture. At nought the points are still
   handed on.

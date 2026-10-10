@@ -69,6 +69,7 @@ import 'roto_display_frb.dart';
 import 'shader_editor.dart';
 import 'fx_section.dart';
 import 'timeline_extras_frb.dart' show DoubleTap;
+import 'timeline_metrics_frb.dart' show dimmedIf;
 import 'transform_rows_frb.dart';
 import '../state/clipboard.dart';
 import '../theme/theme.dart';
@@ -2208,7 +2209,11 @@ class _EffectSection extends StatelessWidget {
     // stacked squares would be five times the height and would still make the
     // user compare shapes across them. The same folding the `_x`/`_y` point
     // pair takes, over as many parameters as declare a curve in a row.
-    Widget curveEditor(List<BridgeParamInfo> run) => CurveChannelEditor(
+    // Greyed like a row when a switch has taken every curve in it out of
+    // play, as Vary points' colour ramp is until it is switched on.
+    Widget curveEditor(List<BridgeParamInfo> run) => dimmedIf(
+        run.every((p) => disabled.contains(p.id)),
+        CurveChannelEditor(
           key: ValueKey<String>('fx-curves-$id'),
           keyPrefix: 'fx-curves-$id',
           labels: [for (final p in run) engineLabel(p.label)],
@@ -2230,7 +2235,7 @@ class _EffectSection extends StatelessWidget {
           onPlotSize: onCurvePlotSize,
           onLive: (c, points) => onLive(id, run[c].id, curveValue(points)),
           onCommit: (c, points) => onWrite(id, run[c].id, curveValue(points)),
-        );
+        ));
 
     // Fold a run of params into rows, pairing x/y neighbours and gathering
     // curve runs. Both folds live here rather than only in the outer walk,
@@ -2817,6 +2822,15 @@ Widget? customEffectDisplay(
           effectId: effectId,
           onChanged: onChanged,
           pressed: pressed,
+        ),
+      // Bake points' bake is filed and reported the same way, in its own words.
+      'bake_points' => PlanarTrackDisplayFrb(
+          key: ValueKey<String>('fx-planar-track-display-$effectId'),
+          layer: layer,
+          effectId: effectId,
+          onChanged: onChanged,
+          pressed: pressed,
+          bake: true,
         ),
       // The Roto brush's is a status too, with one control in it: the
       // base frame the propagation runs outward from, which is the one thing

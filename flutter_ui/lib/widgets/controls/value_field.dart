@@ -714,22 +714,31 @@ class _DragValueFieldState extends State<DragValueField>
           child: Align(
             alignment: Alignment.centerRight,
             widthFactor: 1,
-            child: Text(
-              _format(widget.value),
-              textAlign: TextAlign.right,
-              style: _valueStyle(t).copyWith(
-                color: _dragging
-                    ? t.accent
-                    : widget.keyed
-                        ? t.animated
-                        // A bare number has no well to say "editable", so it
-                        // rests where the drawing puts it — a bar's own
-                        // secondary reading rather than the well's primary.
-                        : widget.bare
-                            ? (_hover || _focused
-                                ? t.textPrimary
-                                : t.textSecondary)
-                            : t.textPrimary,
+            // A number too long for its box is drawn smaller, on one line. It
+            // used to wrap, and a ten-digit seed lost its last digit to a
+            // second line the box cut off.
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerRight,
+              child: Text(
+                _format(widget.value),
+                textAlign: TextAlign.right,
+                maxLines: 1,
+                softWrap: false,
+                style: _valueStyle(t).copyWith(
+                  color: _dragging
+                      ? t.accent
+                      : widget.keyed
+                          ? t.animated
+                          // A bare number has no well to say "editable", so it
+                          // rests where the drawing puts it — a bar's own
+                          // secondary reading rather than the well's primary.
+                          : widget.bare
+                              ? (_hover || _focused
+                                  ? t.textPrimary
+                                  : t.textSecondary)
+                              : t.textPrimary,
+                ),
               ),
             ),
           ),

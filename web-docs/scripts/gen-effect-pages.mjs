@@ -63,6 +63,7 @@ const CONTROL = {
   file: "File",
   // A name from the project's OCIO config, offered as a dropdown.
   colour_name: "Dropdown",
+  text: "Text",
   layer: "Layer",
   mask_path: "Masks",
   curve: "Curve",
@@ -127,6 +128,8 @@ function rangeCell(p) {
       return p.file_filter.map((e) => `\`.${e}\``).join(", ");
     case "colour_name":
       return COLOUR_ROLE[p.colour_role] ?? "-";
+    case "text":
+      return "A short line of text";
     case "layer":
       return "Any layer in the composition";
     case "mask_path":
@@ -159,6 +162,8 @@ function defaultCell(p) {
     case "colour_name":
       if (p.colour_role === "config") return "-";
       return p.colour_role === "space" ? "Working space" : "None";
+    case "text":
+      return p.default || "Empty";
     case "layer":
       return p.self_default ? "This layer" : "None";
     case "mask_path":

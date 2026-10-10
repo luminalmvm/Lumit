@@ -22,9 +22,17 @@ animator pushes a letter.
 A point's number is its count along the text, or the count **Number** asks for. On a path
 it turns to face the way the path runs.
 
+Every point carries four names as well. `character`, `word` and `line` are the counts of
+the character, word and line its piece starts with, and `width` is the width of its piece
+in pixels at composition size. See [Names](/effects/generate/vary-points/#names).
+
 The points effects below it in the same layer's stack can read its points.
 [Points sample](/effects/drivers/points-sample/) cannot, and neither can
-[Layer points](/effects/drivers/layer-points/) from another layer.
+[Layer points](/effects/drivers/layer-points/) from another layer. A
+[Bake points](/effects/generate/bake-points/) below it makes its points readable by both.
+
+On the Text layer itself its points are cut at the text's box unless it is at the end of the
+stack. See [Points along path](/effects/generate/points-along-path/).
 
 ## Parameters
 

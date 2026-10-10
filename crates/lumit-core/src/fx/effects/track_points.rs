@@ -374,6 +374,7 @@ impl TrackPoints {
         };
         let me = Self::read(p);
         let scale = Self::px_scale_of(p);
+        out.px_scale = scale;
         let fps = baked.fps as f32;
         let size = me.size.max(0.0);
         // Premultiplied, as every colour in the working space is.
@@ -428,6 +429,12 @@ impl TrackPoints {
             // stream.
             if !blobs {
                 out.index.push(extra);
+            }
+            // The same under a name: how sure the tracker is of a feature,
+            // or a blob's area in its own px.
+            let name = if blobs { "area" } else { "confidence" };
+            if let Some(last) = out.named_mut(name).and_then(|c| c.last_mut()) {
+                *last = extra;
             }
         }
         out
