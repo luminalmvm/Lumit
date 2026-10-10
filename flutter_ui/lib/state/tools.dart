@@ -346,8 +346,10 @@ class ToolsState extends ChangeNotifier {
   }
 
   /// The style new text is set in: what the Text panel was last set to with
-  /// no text layer selected.
-  BridgeTextStyle _textStyle = plainTextStyle;
+  /// no text layer selected. It starts kerned, and only a layer from an older
+  /// project is unkerned.
+  BridgeTextStyle _textStyle =
+      plainTextStyle.copyWith(kerning: BridgeKerning.metrics);
   BridgeTextStyle get textStyle => _textStyle;
   set textStyle(BridgeTextStyle value) {
     if (_textStyle == value) return;

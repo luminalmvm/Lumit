@@ -1671,6 +1671,30 @@ fn feed_layer(
                     h.update(&r?.0.to_le_bytes());
                 }
             }
+        } else if let LayerKind::Sequence { clips } = &layer.kind {
+            // A Sequence layer's neighbours are whichever clip is live then,
+            // across an edit point too, and a gap is no neighbour.
+            h.update(b"temporal-clips/");
+            let native = wants_flow(layer, &lumit_core::retime::Interpolation::Nearest);
+            for o in window() {
+                h.update(&o.to_le_bytes());
+                let stamp = match lumit_core::sequence::resolve(clips, lt + f64::from(o) * comp_dt)
+                {
+                    Some((_, lumit_core::sequence::ClipSource::Footage(item), st)) => {
+                        stamper.stamp(item, st, native)
+                    }
+                    _ => None,
+                };
+                match stamp {
+                    Some((identity, frame)) => {
+                        h.update(identity.as_bytes());
+                        h.update(&frame.to_le_bytes());
+                    }
+                    None => {
+                        h.update(b"gap");
+                    }
+                }
+            }
         }
     }
 
@@ -4447,5 +4471,31 @@ mod tests {
                 "and a still stretch keeps one name"
             );
         }
+
+        // A Sequence layer's neighbour is whichever clip is live then. One
+        // shot twice and then another: the last frame of each showing is the
+        // same picture, and only the second is followed by the other shot.
+        // Four frames a second, so every time here is exact.
+        use lumit_core::sequence::{Clip, ClipSource};
+        let (a, b) = (Uuid::now_v7(), Uuid::now_v7());
+        let r = |n| Rational::new(n, 1).unwrap();
+        let clip = |item, at| Clip::new(ClipSource::Footage(item), r(0), r(2), r(at), r(2));
+        let mut cut = text_layer("", 0.0, 10.0, 0.0);
+        cut.kind = LayerKind::Sequence {
+            clips: vec![clip(a, 0), clip(a, 2), clip(b, 4)],
+        };
+        cut.effects.push(blur());
+        let mut comp = comp_with(vec![cut]);
+        comp.frame_rate = lumit_core::time::FrameRate::new(4, 1).unwrap();
+        assert_ne!(
+            key(&doc, &comp, 1.75),
+            key(&doc, &comp, 3.75),
+            "the same frame before two different clips: two names"
+        );
+        assert_eq!(
+            key(&doc, &comp, 0.0),
+            key(&doc, &comp, 2.0),
+            "and the same frame before the same one keeps one name"
+        );
     }
 }

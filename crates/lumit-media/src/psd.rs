@@ -10,9 +10,11 @@
 //! layer sits where it sat in Photoshop with no transform at all.
 //!
 //! A layer mask and a clipping mask are baked into the alpha, since both are
-//! part of what the layer looks like.
+//! part of what the layer looks like. A solid colour fill layer has no pixels
+//! in the file, so its picture is made here from its colour.
 //!
 //! Read: 8 and 16 bit, RGB and greyscale, every compression Photoshop writes.
+//! An 8 bit layer comes back as sRGB bytes and a 16 bit one as linear floats.
 //! Refused, with an error that says so: PSB, 32 bit, CMYK, Lab and indexed.
 //!
 //! Every number in the file is checked against the file's own length and
@@ -64,6 +66,10 @@ impl Rect {
     fn height(self) -> u64 {
         u64::try_from(i64::from(self.bottom) - i64::from(self.top)).unwrap_or(0)
     }
+
+    fn is_empty(self) -> bool {
+        self.width() == 0 || self.height() == 0
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -82,6 +88,13 @@ struct Mask {
     disabled: bool,
 }
 
+/// One value out of a Photoshop descriptor. A switch is a number, 0 or 1.
+#[derive(Debug, Clone, PartialEq)]
+enum Note {
+    Number(f64),
+    Code(String),
+}
+
 /// One record of the layer list.
 #[derive(Debug, Clone)]
 pub struct PsdLayer {
@@ -89,7 +102,8 @@ pub struct PsdLayer {
     /// 0 to 255.
     pub opacity: u8,
     pub visible: bool,
-    /// Photoshop's four-letter blend key, such as `norm` or `mul `.
+    /// Photoshop's four-letter blend key, such as `norm` or `mul `. A group
+    /// with no blend of its own says `pass`.
     pub blend: [u8; 4],
     /// Clipped to the layer below it.
     pub clipped: bool,
@@ -97,14 +111,70 @@ pub struct PsdLayer {
     rect: Rect,
     channels: Vec<Channel>,
     mask: Option<Mask>,
+    vector_mask: bool,
+    adjustment: bool,
+    /// What the record's fill, layer style and adjustment blocks hold, by
+    /// path.
+    notes: Vec<(String, Note)>,
 }
 
 impl PsdLayer {
-    /// Whether there is a picture here to read. An adjustment layer, a fill
-    /// layer and an empty layer all answer no.
+    /// Whether there is a picture here to read. An adjustment layer, a
+    /// gradient or pattern fill and an empty layer all answer no.
     #[must_use]
     pub fn has_pixels(&self) -> bool {
-        self.section == Section::Layer && self.rect.width() > 0 && self.rect.height() > 0
+        self.section == Section::Layer && (!self.rect.is_empty() || self.fill().is_some())
+    }
+
+    /// The colour of a solid colour fill layer, as sRGB from 0 to 255.
+    ///
+    /// `None` for a shape, which is a fill with pixels of its own in the file.
+    #[must_use]
+    pub fn fill(&self) -> Option<[f64; 3]> {
+        if !self.rect.is_empty() || self.vector_mask {
+            return None;
+        }
+        Some([
+            self.number("SoCo/Clr /Rd  ")?,
+            self.number("SoCo/Clr /Grn ")?,
+            self.number("SoCo/Clr /Bl  ")?,
+        ])
+    }
+
+    /// Whether a layer mask may hide part of the layer.
+    #[must_use]
+    pub fn has_mask(&self) -> bool {
+        self.mask
+            .is_some_and(|m| !m.disabled && (m.default != 255 || !m.rect.is_empty()))
+    }
+
+    /// A number or a switch from the record's fill or layer styles, by
+    /// Photoshop's own keys: `lfx2/DrSh/Opct` is the drop shadow's opacity.
+    ///
+    /// An adjustment layer's block is kept as its first 16 bit numbers by
+    /// place, so `post/0` is Posterize's levels, and the block's own key
+    /// answers when the block is there at all. Exposure keeps its stops as
+    /// `expA/0`, and Curves count from after their first byte.
+    #[must_use]
+    pub fn number(&self, path: &str) -> Option<f64> {
+        match self.note(path)? {
+            Note::Number(n) => Some(*n),
+            Note::Code(_) => None,
+        }
+    }
+
+    /// The same for a choice, which Photoshop stores as a code such as `Mltp`.
+    #[must_use]
+    pub fn code(&self, path: &str) -> Option<&str> {
+        match self.note(path)? {
+            Note::Code(code) => Some(code),
+            Note::Number(_) => None,
+        }
+    }
+
+    fn note(&self, path: &str) -> Option<&Note> {
+        let (_, note) = self.notes.iter().find(|(at, _)| at == path)?;
+        Some(note)
     }
 }
 
@@ -116,8 +186,22 @@ pub struct PsdDocument {
     /// In the file's order, which is bottom to top. A layer's place in this
     /// list is the index [`read_layer`] takes.
     pub layers: Vec<PsdLayer>,
+    /// The angle of the light that layer styles share, in degrees, when the
+    /// file says what it is.
+    pub global_angle: Option<f64>,
     depth: u16,
     grey: bool,
+}
+
+impl PsdDocument {
+    /// How many bytes one sample takes: one at 8 bit, two at 16.
+    fn sample(&self) -> usize {
+        if self.depth == 16 {
+            2
+        } else {
+            1
+        }
+    }
 }
 
 fn bad(what: &'static str) -> MediaError {
@@ -141,8 +225,7 @@ pub fn open(path: &Path) -> Result<PsdDocument, MediaError> {
 /// One layer's pixels on a transparent frame the size of the document.
 ///
 /// `index` counts through [`PsdDocument::layers`]. A record with no picture
-/// reads as an empty frame.
-// ponytail: 16 bit is read down to 8. A float frame per layer is the upgrade.
+/// reads as an empty frame, and an adjustment layer reads as where it acts.
 pub fn read_layer(path: &Path, index: u32) -> Result<DecodedFrame, MediaError> {
     let mut r = Reader::new(BufReader::new(std::fs::File::open(path)?))?;
     read_layer_from(&mut r, index)
@@ -160,23 +243,59 @@ fn read_layer_from<R: Read + Seek>(
     // A clipped layer shows only where the layer it is clipped to does.
     // ponytail: baked in, so the clip stays put if the base layer is moved in
     // Lumit. A matte on the Lumit layer is the upgrade.
+    let sample = doc.sample();
     if doc.layers.get(index).is_some_and(|l| l.clipped) {
         if let Some(base) = clip_base(&doc, index) {
             let base = layer_rgba(&doc, r, &mut budget, base)?;
-            for (px, base_px) in rgba.chunks_exact_mut(4).zip(base.chunks_exact(4)) {
-                px[3] = mul255(px[3], base_px[3]);
+            let pairs = rgba
+                .chunks_exact_mut(4 * sample)
+                .zip(base.chunks_exact(4 * sample));
+            for (px, base_px) in pairs {
+                fade(&mut px[3 * sample..], &base_px[3 * sample..]);
             }
         }
     }
+    let (rgba, format) = if sample == 2 {
+        (linear_f32(&rgba, &mut budget)?, PixelFormat::LinearF32)
+    } else {
+        (rgba, PixelFormat::Srgb8)
+    };
     Ok(DecodedFrame {
         width: doc.width,
         height: doc.height,
         rgba,
-        format: PixelFormat::Srgb8,
+        format,
     })
 }
 
-/// Box-average an 8-bit frame down to `target_width`, keeping its aspect.
+/// A 16 bit frame as the linear floats the compositor works in. A document's
+/// colour is sRGB encoded and its alpha is not.
+fn linear_f32(deep: &[u8], budget: &mut Budget) -> Result<Vec<u8>, MediaError> {
+    // The decode is a power for each sample, so it is worked out once for
+    // each value a sample can take.
+    let decode: Vec<f32> = (0..=u16::MAX)
+        .map(|v| {
+            let encoded = f32::from(v) / 65535.0;
+            if encoded <= 0.040_45 {
+                encoded / 12.92
+            } else {
+                ((encoded + 0.055) / 1.055).powf(2.4)
+            }
+        })
+        .collect();
+    let mut out = budget.vec_with_capacity::<u8>(deep.len() * 2)?;
+    for (i, pair) in deep.chunks_exact(2).enumerate() {
+        let v = u16::from_be_bytes([pair[0], pair[1]]);
+        let value = match decode.get(usize::from(v)) {
+            Some(linear) if i % 4 != 3 => *linear,
+            _ => f32::from(v) / 65535.0,
+        };
+        out.extend_from_slice(&value.to_le_bytes());
+    }
+    Ok(out)
+}
+
+/// Box-average a frame down to `target_width`, keeping its aspect.
 ///
 /// Colour is weighted by alpha, since a layer is mostly empty and an empty
 /// pixel's colour would otherwise darken every edge.
@@ -185,49 +304,74 @@ pub fn downsample(frame: DecodedFrame, target_width: Option<u32>) -> DecodedFram
     let Some(dst_w) = target_width.filter(|w| *w < frame.width && *w >= 1) else {
         return frame;
     };
-    if frame.format != PixelFormat::Srgb8 {
-        return frame;
-    }
+    let float = frame.format == PixelFormat::LinearF32;
+    let size = frame.format.bytes_per_px();
+    // One channel of a pixel as a number, at either width.
+    let read = |px: &[u8], c: usize| {
+        if float {
+            let bytes = px.get(c * 4..c * 4 + 4).and_then(|b| b.try_into().ok());
+            bytes.map_or(0.0, |b| f64::from(f32::from_le_bytes(b)))
+        } else {
+            px.get(c).map_or(0.0, |v| f64::from(*v))
+        }
+    };
     let (sw, sh) = (frame.width as usize, frame.height as usize);
     let dw = dst_w as usize;
     let dh = ((sh * dw) / sw.max(1)).max(1);
-    let mut out = Vec::with_capacity(dw * dh * 4);
+    let mut out = Vec::with_capacity(dw * dh * size);
     for y in 0..dh {
         let (y0, y1) = ((y * sh) / dh, (((y + 1) * sh) / dh).max((y * sh) / dh + 1));
         for x in 0..dw {
             let (x0, x1) = ((x * sw) / dw, (((x + 1) * sw) / dw).max((x * sw) / dw + 1));
-            let mut colour = [0u64; 3];
-            let (mut alpha, mut count) = (0u64, 0u64);
+            let mut colour = [0f64; 3];
+            let (mut alpha, mut count) = (0f64, 0f64);
             for sy in y0..y1.min(sh) {
                 for sx in x0..x1.min(sw) {
-                    let Some(px) = frame.rgba.get((sy * sw + sx) * 4..(sy * sw + sx) * 4 + 4)
-                    else {
+                    let at = (sy * sw + sx) * size;
+                    let Some(px) = frame.rgba.get(at..at + size) else {
                         continue;
                     };
-                    let a = u64::from(px[3]);
-                    for (sum, c) in colour.iter_mut().zip(px) {
-                        *sum += u64::from(*c) * a;
+                    let a = read(px, 3);
+                    for (c, sum) in colour.iter_mut().enumerate() {
+                        *sum += read(px, c) * a;
                     }
                     alpha += a;
-                    count += 1;
+                    count += 1.0;
                 }
             }
-            for sum in colour {
-                out.push(sum.checked_div(alpha).unwrap_or(0) as u8);
+            let [r, g, b] = colour.map(|sum| if alpha > 0.0 { sum / alpha } else { 0.0 });
+            for v in [r, g, b, alpha / count.max(1.0)] {
+                if float {
+                    out.extend_from_slice(&(v as f32).to_le_bytes());
+                } else {
+                    out.push(v as u8);
+                }
             }
-            out.push(alpha.checked_div(count).unwrap_or(0) as u8);
         }
     }
     DecodedFrame {
         width: dst_w,
         height: dh as u32,
         rgba: out,
-        format: PixelFormat::Srgb8,
+        format: frame.format,
     }
 }
 
 fn mul255(a: u8, b: u8) -> u8 {
     ((u16::from(a) * u16::from(b) + 127) / 255) as u8
+}
+
+/// Multiply one alpha sample by another of the same width.
+fn fade(alpha: &mut [u8], by: &[u8]) {
+    match (alpha, by) {
+        ([a], [b]) => *a = mul255(*a, *b),
+        ([a0, a1], [b0, b1]) => {
+            let product = u32::from(u16::from_be_bytes([*a0, *a1]))
+                * u32::from(u16::from_be_bytes([*b0, *b1]));
+            [*a0, *a1] = (((product + 32767) / 65535) as u16).to_be_bytes();
+        }
+        _ => {}
+    }
 }
 
 /// The layer a clipped layer is clipped to: the nearest one below it that is
@@ -316,6 +460,11 @@ impl<R: Read + Seek> Reader<R> {
         })
     }
 
+    fn skip(&mut self, len: u64) -> Result<(), MediaError> {
+        let end = self.block(len)?;
+        self.seek(end)
+    }
+
     fn bytes(&mut self, n: usize, budget: &mut Budget) -> Result<Vec<u8>, MediaError> {
         self.block(n as u64)?;
         let mut out = budget.vec_with_capacity::<u8>(n)?;
@@ -354,12 +503,15 @@ fn parse<R: Read + Seek>(
         _ => return Err(bad("only RGB and greyscale documents are read")),
     };
 
-    // Colour mode data and image resources: nothing in either is needed.
-    for _ in 0..2 {
-        let len = r.u32()?;
-        let end = r.block(u64::from(len))?;
-        r.seek(end)?;
-    }
+    // Colour mode data: nothing in it is needed.
+    let len = r.u32()?;
+    r.skip(u64::from(len))?;
+    // The image resources hold the light that layer styles can share. A list
+    // that will not read costs that angle and nothing else.
+    let len = r.u32()?;
+    let resources_end = r.block(u64::from(len))?;
+    let global_angle = global_angle(r, resources_end).ok().flatten();
+    r.seek(resources_end)?;
 
     let mut layers = Vec::new();
     let section_len = r.u32()?;
@@ -400,9 +552,27 @@ fn parse<R: Read + Seek>(
         width,
         height,
         layers,
+        global_angle,
         depth,
         grey,
     })
+}
+
+/// Image resource 1037, the global light angle, from a list ending at `end`.
+fn global_angle<R: Read + Seek>(r: &mut Reader<R>, end: u64) -> Result<Option<f64>, MediaError> {
+    while r.pos()? + 12 <= end {
+        r.array::<4>()?;
+        let id = r.u16()?;
+        // A name, padded with its length byte to an even count.
+        let name = r.u8()?;
+        r.skip(u64::from(name | 1))?;
+        let len = u64::from(r.u32()?);
+        if id == 1037 && len >= 4 {
+            return Ok(Some(f64::from(r.i32()?)));
+        }
+        r.skip(len + (len & 1))?;
+    }
+    Ok(None)
 }
 
 /// The layer records, then where each one's channel data sits. `end` is the
@@ -454,7 +624,7 @@ fn layer_record<R: Read + Seek>(
     if &r.array::<4>()? != b"8BIM" {
         return Err(bad("a layer record is malformed"));
     }
-    let blend = r.array::<4>()?;
+    let mut blend = r.array::<4>()?;
     let opacity = r.u8()?;
     let clipped = r.u8()? != 0;
     let flags = r.u8()?;
@@ -492,6 +662,9 @@ fn layer_record<R: Read + Seek>(
     let mut at = name_start + ((u64::from(name_len) + 4) & !3);
 
     let mut section = Section::Layer;
+    let mut vector_mask = false;
+    let mut adjustment = false;
+    let mut notes = Vec::new();
     while at + 12 <= extra_end {
         r.seek(at)?;
         let signature = r.array::<4>()?;
@@ -504,6 +677,7 @@ fn layer_record<R: Read + Seek>(
         if end > extra_end {
             break;
         }
+        let from = notes.len();
         match &key {
             b"luni" if len >= 4 => {
                 let units = u64::from(r.u32()?).min((len - 4) / 2);
@@ -522,9 +696,52 @@ fn layer_record<R: Read + Seek>(
                     3 => Section::GroupEnd,
                     _ => Section::Layer,
                 };
+                // A group's own blend key follows, after a signature.
+                if len >= 12 {
+                    r.array::<4>()?;
+                    blend = r.array()?;
+                }
+            }
+            b"vmsk" | b"vsms" => vector_mask = true,
+            b"SoCo" | b"lfx2" | b"CgEd" | b"blwh" | b"vibA" => {
+                // A block that will not read costs the layer its fill, its
+                // styles or its adjustment, never the document.
+                adjustment |= !matches!(&key, b"SoCo" | b"lfx2");
+                if describe(r, key, end, &mut notes).is_err() {
+                    notes.truncate(from);
+                }
+            }
+            b"nvrt" | b"post" | b"thrs" | b"brit" | b"hue2" | b"levl" | b"expA" | b"curv"
+            | b"blnc" | b"phfl" => {
+                // An adjustment layer's settings. Each kind lays its own out
+                // differently, so what is kept is the block's first numbers.
+                adjustment = true;
+                let name: String = key.iter().map(|b| char::from(*b)).collect();
+                if &key == b"expA" {
+                    // A version, then the exposure in stops.
+                    if len >= 6 {
+                        r.u16()?;
+                        let stops = f64::from(f32::from_be_bytes(r.array()?));
+                        notes.push((format!("{name}/0"), Note::Number(stops)));
+                    }
+                } else {
+                    // Curves open with a byte that is set when they are drawn
+                    // tables and not points. Those are not kept.
+                    let words = match &key {
+                        b"curv" if len == 0 || r.u8()? != 0 => 0,
+                        b"curv" => (len - 1) / 2,
+                        _ => len / 2,
+                    };
+                    for i in 0..words.min(WORDS) {
+                        let word = f64::from(r.i16()?);
+                        notes.push((format!("{name}/{i}"), Note::Number(word)));
+                    }
+                }
+                notes.push((name, Note::Number(1.0)));
             }
             _ => {}
         }
+        budget.take_bytes(((notes.len() - from) * NOTE_BYTES) as u64)?;
         // Photoshop writes even lengths here. Other writers pad an odd one.
         at = end + (len & 1);
     }
@@ -540,14 +757,122 @@ fn layer_record<R: Read + Seek>(
         rect,
         channels,
         mask,
+        vector_mask,
+        adjustment,
+        notes,
     })
+}
+
+/// Roughly what one kept descriptor value costs in memory.
+const NOTE_BYTES: usize = 128;
+
+/// How many numbers of an adjustment block are kept: room for four curves of
+/// nineteen points, which is the longest kind.
+const WORDS: u64 = 160;
+
+/// Read the descriptor in a `SoCo` or `lfx2` block ending at `end` into
+/// `notes`, each value under its path from the block's key down.
+fn describe<R: Read + Seek>(
+    r: &mut Reader<R>,
+    key: [u8; 4],
+    end: u64,
+    notes: &mut Vec<(String, Note)>,
+) -> Result<(), MediaError> {
+    // A version first, and layer styles carry two.
+    r.skip(if &key == b"lfx2" { 8 } else { 4 })?;
+    // A budget of its own, so a document full of styles cannot use up the
+    // records the layer list needs.
+    let mut budget = Budget::new(Limits {
+        items: 1 << 12,
+        depth: 16,
+        ..LIMITS
+    });
+    let path: String = key.iter().map(|b| char::from(*b)).collect();
+    descriptor(r, &mut budget, &path, notes)?;
+    if r.pos()? > end {
+        return Err(bad("a descriptor runs past its block"));
+    }
+    Ok(())
+}
+
+/// A descriptor key or class: a length and that many bytes, or four bytes
+/// when the length is zero.
+fn ident<R: Read + Seek>(r: &mut Reader<R>, budget: &mut Budget) -> Result<String, MediaError> {
+    let len = match r.u32()? {
+        0 => 4,
+        len @ 1..=64 => len as usize,
+        _ => return Err(bad("a descriptor is malformed")),
+    };
+    Ok(r.bytes(len, budget)?
+        .iter()
+        .map(|b| char::from(*b))
+        .collect())
+}
+
+fn descriptor<R: Read + Seek>(
+    r: &mut Reader<R>,
+    budget: &mut Budget,
+    path: &str,
+    notes: &mut Vec<(String, Note)>,
+) -> Result<(), MediaError> {
+    // A name in UTF-16 and a class, neither of which is needed.
+    let name = r.u32()?;
+    r.skip(u64::from(name) * 2)?;
+    ident(r, budget)?;
+    for _ in 0..r.u32()? {
+        let key = ident(r, budget)?;
+        budget.nested(|budget| value(r, budget, &format!("{path}/{key}"), notes))?;
+    }
+    Ok(())
+}
+
+/// One descriptor value. Numbers, switches and codes are kept, objects and
+/// lists are walked, text and raw data are stepped over.
+fn value<R: Read + Seek>(
+    r: &mut Reader<R>,
+    budget: &mut Budget,
+    path: &str,
+    notes: &mut Vec<(String, Note)>,
+) -> Result<(), MediaError> {
+    let note = match &r.array::<4>()? {
+        b"Objc" | b"GlbO" => return descriptor(r, budget, path, notes),
+        b"VlLs" => {
+            for i in 0..r.u32()? {
+                budget.nested(|budget| value(r, budget, &format!("{path}/{i}"), notes))?;
+            }
+            return Ok(());
+        }
+        b"doub" => Note::Number(f64::from_be_bytes(r.array()?)),
+        b"UntF" => {
+            r.array::<4>()?;
+            Note::Number(f64::from_be_bytes(r.array()?))
+        }
+        b"long" => Note::Number(f64::from(r.i32()?)),
+        b"bool" => Note::Number(f64::from(r.u8()?)),
+        b"enum" => {
+            ident(r, budget)?;
+            Note::Code(ident(r, budget)?)
+        }
+        b"TEXT" => {
+            let units = r.u32()?;
+            return r.skip(u64::from(units) * 2);
+        }
+        b"tdta" | b"alis" => {
+            let len = r.u32()?;
+            return r.skip(u64::from(len));
+        }
+        _ => return Err(bad("a descriptor holds a kind that is not read")),
+    };
+    notes.push((path.to_owned(), note));
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
 // The pixels
 // ---------------------------------------------------------------------------
 
-/// One layer on a document-sized frame, with its mask applied.
+/// One layer on a document-sized frame, with its mask applied. A pixel is
+/// four samples of the document's own depth, the high byte first.
 fn layer_rgba<R: Read + Seek>(
     doc: &PsdDocument,
     r: &mut Reader<R>,
@@ -556,38 +881,54 @@ fn layer_rgba<R: Read + Seek>(
 ) -> Result<Vec<u8>, MediaError> {
     let layer = doc.layers.get(index).ok_or_else(|| bad("no such layer"))?;
     let (width, height) = (u64::from(doc.width), u64::from(doc.height));
-    let bytes = checked_usize(checked_raster_bytes(width, height, 4, 1)?)?;
+    let sample = doc.sample();
+    let bytes = checked_usize(checked_raster_bytes(width, height, 4, sample as u64)?)?;
     let mut out = budget.vec_with_capacity::<u8>(bytes)?;
     out.resize(bytes, 0);
-    if !layer.has_pixels() {
+    // An adjustment layer has no picture, but where it acts is one: white
+    // across the document, cut by its mask and by what it is clipped to.
+    let flood = match layer.fill() {
+        None if layer.adjustment && layer.rect.is_empty() => Some([255.0; 3]),
+        fill => fill,
+    };
+    if !layer.has_pixels() && flood.is_none() {
         return Ok(out);
     }
 
-    // A layer with no transparency channel is solid across its rectangle.
-    if !layer.channels.iter().any(|c| c.id == -1) {
-        blit(&mut out, doc.width, layer.rect, &[3], None);
-    }
-    for channel in &layer.channels {
-        let slots: &[usize] = match (channel.id, doc.grey) {
-            (0, true) => &[0, 1, 2],
-            (0, false) => &[0],
-            (1, false) => &[1],
-            (2, false) => &[2],
-            (-1, _) => &[3],
-            _ => continue,
-        };
-        let plane = read_plane(r, budget, channel, layer.rect, doc.depth)?;
-        blit(&mut out, doc.width, layer.rect, slots, Some(&plane));
+    if let Some([red, green, blue]) = flood {
+        let wide = [red, green, blue, 255.0].map(|c| ((c * 257.0).round() as u16).to_be_bytes());
+        for px in out.chunks_exact_mut(4 * sample) {
+            for (slot, value) in px.chunks_exact_mut(sample).zip(&wide) {
+                slot.copy_from_slice(&value[..sample]);
+            }
+        }
+    } else {
+        // A layer with no transparency channel is solid across its rectangle.
+        if !layer.channels.iter().any(|c| c.id == -1) {
+            blit(&mut out, doc.width, layer.rect, &[3], None, sample);
+        }
+        for channel in &layer.channels {
+            let slots: &[usize] = match (channel.id, doc.grey) {
+                (0, true) => &[0, 1, 2],
+                (0, false) => &[0],
+                (1, false) => &[1],
+                (2, false) => &[2],
+                (-1, _) => &[3],
+                _ => continue,
+            };
+            let plane = read_plane(r, budget, channel, layer.rect, doc.depth)?;
+            blit(&mut out, doc.width, layer.rect, slots, Some(&plane), sample);
+        }
     }
 
     if let Some(mask) = layer.mask.filter(|m| !m.disabled) {
         if let Some(channel) = layer.channels.iter().find(|c| c.id == -2) {
-            let plane = if mask.rect.width() > 0 && mask.rect.height() > 0 {
-                read_plane(r, budget, channel, mask.rect, doc.depth)?
-            } else {
+            let plane = if mask.rect.is_empty() {
                 Vec::new()
+            } else {
+                read_plane(r, budget, channel, mask.rect, doc.depth)?
             };
-            apply_mask(&mut out, doc.width, &plane, mask);
+            apply_mask(&mut out, doc.width, &plane, mask, sample);
         }
     }
     Ok(out)
@@ -625,10 +966,17 @@ fn overlap(rect: Rect, canvas_w: usize, canvas_h: usize) -> Option<Overlap> {
 }
 
 /// Write a plane into `slots` of every canvas pixel its rectangle covers.
-/// With no plane, write 255.
-fn blit(out: &mut [u8], width: u32, rect: Rect, slots: &[usize], plane: Option<&[u8]>) {
+/// With no plane, write full. A sample is `sample` bytes wide.
+fn blit(
+    out: &mut [u8],
+    width: u32,
+    rect: Rect,
+    slots: &[usize],
+    plane: Option<&[u8]>,
+    sample: usize,
+) {
     let canvas_w = (width as usize).max(1);
-    let Some(o) = overlap(rect, canvas_w, out.len() / 4 / canvas_w) else {
+    let Some(o) = overlap(rect, canvas_w, out.len() / (4 * sample) / canvas_w) else {
         return;
     };
     let plane_w = usize::try_from(rect.width()).unwrap_or(0);
@@ -636,15 +984,16 @@ fn blit(out: &mut [u8], width: u32, rect: Rect, slots: &[usize], plane: Option<&
         for x in o.x0..o.x1 {
             let value = match plane {
                 Some(plane) => {
-                    let at = (y - o.y0 + o.skip_y) * plane_w + (x - o.x0 + o.skip_x);
-                    plane.get(at).copied().unwrap_or(0)
+                    let at = ((y - o.y0 + o.skip_y) * plane_w + (x - o.x0 + o.skip_x)) * sample;
+                    plane.get(at..at + sample).unwrap_or(&[0; 2][..sample])
                 }
-                None => 255,
+                None => &[255; 2][..sample],
             };
             let px = (y * canvas_w + x) * 4;
             for slot in slots {
-                if let Some(byte) = out.get_mut(px + slot) {
-                    *byte = value;
+                let at = (px + slot) * sample;
+                if let Some(target) = out.get_mut(at..at + sample) {
+                    target.copy_from_slice(value);
                 }
             }
         }
@@ -653,24 +1002,26 @@ fn blit(out: &mut [u8], width: u32, rect: Rect, slots: &[usize], plane: Option<&
 
 /// Multiply the frame's alpha by a layer mask. Outside its own rectangle a
 /// mask is its default colour, which is what hides or shows the rest.
-fn apply_mask(out: &mut [u8], width: u32, plane: &[u8], mask: Mask) {
+fn apply_mask(out: &mut [u8], width: u32, plane: &[u8], mask: Mask, sample: usize) {
     let canvas_w = (width as usize).max(1);
-    let inside = overlap(mask.rect, canvas_w, out.len() / 4 / canvas_w);
+    let inside = overlap(mask.rect, canvas_w, out.len() / (4 * sample) / canvas_w);
     let plane_w = usize::try_from(mask.rect.width()).unwrap_or(0);
-    for (i, px) in out.chunks_exact_mut(4).enumerate() {
+    let default = [mask.default; 2];
+    let default = &default[..sample];
+    for (i, px) in out.chunks_exact_mut(4 * sample).enumerate() {
         let (x, y) = (i % canvas_w, i / canvas_w);
         let value = match &inside {
             Some(o) if (o.x0..o.x1).contains(&x) && (o.y0..o.y1).contains(&y) => {
-                let at = (y - o.y0 + o.skip_y) * plane_w + (x - o.x0 + o.skip_x);
-                plane.get(at).copied().unwrap_or(mask.default)
+                let at = ((y - o.y0 + o.skip_y) * plane_w + (x - o.x0 + o.skip_x)) * sample;
+                plane.get(at..at + sample).unwrap_or(default)
             }
-            _ => mask.default,
+            _ => default,
         };
-        px[3] = mul255(px[3], value);
+        fade(&mut px[3 * sample..], value);
     }
 }
 
-/// One channel of a layer as 8-bit samples, `rect` across and down.
+/// One channel of a layer at the document's depth, `rect` across and down.
 fn read_plane<R: Read + Seek>(
     r: &mut Reader<R>,
     budget: &mut Budget,
@@ -688,7 +1039,7 @@ fn read_plane<R: Read + Seek>(
         .ok_or_else(|| bad("a channel is too short"))?;
 
     r.seek(channel.offset)?;
-    let mut raw = match r.u16()? {
+    Ok(match r.u16()? {
         0 => {
             if body < raw_len as u64 {
                 return Err(bad("a channel is too short"));
@@ -741,16 +1092,7 @@ fn read_plane<R: Read + Seek>(
             out
         }
         _ => return Err(bad("a channel uses a compression that is not read")),
-    };
-
-    // Sixteen bit keeps its high byte.
-    if sample == 2 {
-        for i in 0..raw.len() / 2 {
-            raw[i] = raw[i * 2];
-        }
-        raw.truncate(raw_len / 2);
-    }
-    Ok(raw)
+    })
 }
 
 /// Unpack one PackBits row. A row that runs short is left at zero, and one
@@ -819,9 +1161,77 @@ pub mod fixture {
         /// A layer mask: its rectangle, its default colour and its samples.
         pub mask: Option<([i32; 4], u8, Vec<u8>)>,
         pub packing: Packing,
+        /// Further tagged blocks, by key, such as the ones [`described`] makes.
+        pub blocks: Vec<([u8; 4], Vec<u8>)>,
+    }
+
+    /// A value in a descriptor to write.
+    #[derive(Debug, Clone)]
+    pub enum Value {
+        Number(f64),
+        Switch(bool),
+        Code(&'static str),
+        Object(Vec<(&'static str, Value)>),
+    }
+
+    fn ident(out: &mut Vec<u8>, id: &str) {
+        let len = if id.len() == 4 { 0 } else { id.len() as u32 };
+        out.extend_from_slice(&len.to_be_bytes());
+        out.extend_from_slice(id.as_bytes());
+    }
+
+    fn object(out: &mut Vec<u8>, items: &[(&'static str, Value)]) {
+        // An empty name, a class, then the items.
+        out.extend_from_slice(&0u32.to_be_bytes());
+        ident(out, "null");
+        out.extend_from_slice(&(items.len() as u32).to_be_bytes());
+        for (key, value) in items {
+            ident(out, key);
+            match value {
+                Value::Number(n) => {
+                    out.extend_from_slice(b"doub");
+                    out.extend_from_slice(&n.to_be_bytes());
+                }
+                Value::Switch(on) => {
+                    out.extend_from_slice(b"bool");
+                    out.push(u8::from(*on));
+                }
+                Value::Code(code) => {
+                    out.extend_from_slice(b"enum");
+                    ident(out, "null");
+                    ident(out, code);
+                }
+                Value::Object(inner) => {
+                    out.extend_from_slice(b"Objc");
+                    object(out, inner);
+                }
+            }
+        }
+    }
+
+    /// A fill (`SoCo`) or layer styles (`lfx2`) block holding `items`.
+    #[must_use]
+    pub fn described(key: [u8; 4], items: &[(&'static str, Value)]) -> ([u8; 4], Vec<u8>) {
+        // A version first, and layer styles carry two.
+        let mut body = vec![0; if &key == b"lfx2" { 8 } else { 4 }];
+        object(&mut body, items);
+        body.resize(body.len().next_multiple_of(2), 0);
+        (key, body)
     }
 
     impl Layer {
+        /// A solid colour fill layer, which has no pixels of its own. `colour`
+        /// is sRGB from 0 to 255.
+        #[must_use]
+        pub fn fill(name: &str, colour: [f64; 3]) -> Self {
+            let [red, green, blue] = colour.map(Value::Number);
+            let colour = Value::Object(vec![("Rd  ", red), ("Grn ", green), ("Bl  ", blue)]);
+            Self {
+                blocks: vec![described(*b"SoCo", &[("Clr ", colour)])],
+                ..Self::solid(name, [0, 0, 0, 0], [0; 4])
+            }
+        }
+
         /// A solid rectangle of one colour.
         #[must_use]
         pub fn solid(name: &str, rect: [i32; 4], colour: [u8; 4]) -> Self {
@@ -837,6 +1247,7 @@ pub mod fixture {
                 section: None,
                 mask: None,
                 packing: Packing::Raw,
+                blocks: Vec::new(),
             }
         }
 
@@ -942,7 +1353,9 @@ pub mod fixture {
                 records.extend_from_slice(&(body.len() as u32).to_be_bytes());
             }
             records.extend_from_slice(b"8BIM");
-            records.extend_from_slice(&layer.blend);
+            // Photoshop writes a group's real blend key in its section block.
+            let grouped = layer.section.is_some();
+            records.extend_from_slice(if grouped { b"norm" } else { &layer.blend });
             records.push(layer.opacity);
             records.push(u8::from(layer.clipped));
             records.push(if layer.visible { 0 } else { 0x02 });
@@ -969,13 +1382,19 @@ pub mod fixture {
             if !luni.len().is_multiple_of(4) {
                 luni.extend_from_slice(&[0, 0]);
             }
-            let mut blocks = vec![(b"luni", luni)];
+            let mut blocks = vec![(*b"luni", luni)];
             if let Some(kind) = layer.section {
-                blocks.push((b"lsct", kind.to_be_bytes().to_vec()));
+                let mut body = kind.to_be_bytes().to_vec();
+                if kind != 3 {
+                    body.extend_from_slice(b"8BIM");
+                    body.extend_from_slice(&layer.blend);
+                }
+                blocks.push((*b"lsct", body));
             }
+            blocks.extend(layer.blocks.iter().cloned());
             for (key, body) in blocks {
                 extra.extend_from_slice(b"8BIM");
-                extra.extend_from_slice(key);
+                extra.extend_from_slice(&key);
                 extra.extend_from_slice(&(body.len() as u32).to_be_bytes());
                 extra.extend_from_slice(&body);
             }
@@ -1042,7 +1461,7 @@ pub mod fixture {
 mod tests {
     use std::io::Cursor;
 
-    use super::fixture::{document, Layer, Packing};
+    use super::fixture::{described, document, Layer, Packing, Value};
     use super::*;
 
     const RED: [u8; 4] = [255, 0, 0, 255];
@@ -1109,6 +1528,7 @@ mod tests {
         );
         assert!(hat.has_pixels());
         assert!(!doc.layers[3].has_pixels(), "a group header has no picture");
+        assert_eq!(&doc.layers[3].blend, b"pass", "a group's own blend key");
     }
 
     #[test]
@@ -1149,7 +1569,26 @@ mod tests {
             ] {
                 layer.packing = packing;
                 let frame = pixels(&document(4, 3, depth, std::slice::from_ref(&layer)), 0);
-                assert_eq!(frame.rgba, want, "{packing:?} at {depth} bit");
+                if depth == 8 {
+                    assert_eq!(frame.rgba, want, "{packing:?} at {depth} bit");
+                    continue;
+                }
+                // Sixteen bit keeps its depth: the same colour as linear
+                // floats, and the alpha as it was.
+                assert_eq!(frame.format, PixelFormat::LinearF32);
+                assert_eq!(frame.rgba.len(), want.len() * 4);
+                for (i, (got, byte)) in frame.rgba.chunks_exact(4).zip(&want).enumerate() {
+                    let got = f32::from_le_bytes(got.try_into().unwrap());
+                    let encoded = f32::from(*byte) / 255.0;
+                    let linear = if i % 4 == 3 {
+                        encoded
+                    } else if encoded <= 0.040_45 {
+                        encoded / 12.92
+                    } else {
+                        ((encoded + 0.055) / 1.055).powf(2.4)
+                    };
+                    assert!((got - linear).abs() < 1e-5, "{packing:?}, sample {i}");
+                }
             }
         }
     }
@@ -1168,6 +1607,29 @@ mod tests {
         let frame = pixels(&document(4, 3, 8, &[layer]), 0);
         assert_eq!(px(&frame, 0, 1)[3], 128);
         assert_eq!(px(&frame, 1, 1)[3], 255);
+
+        // A fill layer has no pixels in the file. It is its colour wherever
+        // its mask shows.
+        let mut fill = Layer::fill("Fill", [0.0, 128.0, 255.0]);
+        let bare = structure(&document(4, 3, 8, &[fill.clone()])).unwrap();
+        assert!(!bare.layers[0].has_mask());
+        fill.mask = Some(([0, 0, 3, 1], 0, vec![255; 3]));
+        let bytes = document(4, 3, 8, &[fill]);
+        assert!(structure(&bytes).unwrap().layers[0].has_mask());
+        let frame = pixels(&bytes, 0);
+        assert_eq!(px(&frame, 0, 1), [0, 128, 255, 255]);
+        assert_eq!(px(&frame, 1, 1)[3], 0);
+
+        // An adjustment layer has no picture either. It reads as where it
+        // acts, which is white wherever its mask shows.
+        let mut invert = Layer::solid("Invert", [0, 0, 0, 0], [0; 4]);
+        invert.blocks = vec![(*b"nvrt", Vec::new())];
+        invert.mask = Some(([0, 0, 3, 1], 0, vec![255; 3]));
+        let bytes = document(4, 3, 8, &[invert]);
+        assert!(!structure(&bytes).unwrap().layers[0].has_pixels());
+        let frame = pixels(&bytes, 0);
+        assert_eq!(px(&frame, 0, 1), [255; 4]);
+        assert_eq!(px(&frame, 1, 1)[3], 0);
     }
 
     #[test]
@@ -1208,7 +1670,33 @@ mod tests {
         let mut zipped = Layer::solid("Zipped", [1, 1, 3, 3], BLUE);
         zipped.packing = Packing::ZipPredicted;
         zipped.clipped = true;
+        let shadow = Value::Object(vec![
+            ("enab", Value::Switch(true)),
+            ("Md  ", Value::Code("Mltp")),
+            ("Opct", Value::Number(75.0)),
+        ]);
+        // Posterize to four levels, as an adjustment layer stores it.
+        let posterize = (*b"post", vec![0, 4, 0, 0]);
+        // Curves: a byte, a version, which curves are there, then two points
+        // on the first. A Vibrance block is a descriptor.
+        let curves = (
+            *b"curv",
+            vec![0, 0, 1, 0, 0, 0, 1, 0, 2, 0, 0, 0, 0, 0, 255, 0, 255, 0],
+        );
+        zipped.blocks = vec![
+            described(*b"lfx2", &[("DrSh", shadow)]),
+            posterize,
+            curves,
+            described(*b"vibA", &[("vibrance", Value::Number(30.0))]),
+        ];
         let good = document(4, 3, 8, &[masked, zipped]);
+        let styled = &structure(&good).unwrap().layers[1];
+        assert_eq!(styled.number("lfx2/DrSh/Opct"), Some(75.0));
+        assert_eq!(styled.code("lfx2/DrSh/Md  "), Some("Mltp"));
+        assert_eq!(styled.number("post/0"), Some(4.0));
+        assert_eq!(styled.number("curv/3"), Some(2.0));
+        assert_eq!(styled.number("curv/6"), Some(255.0));
+        assert_eq!(styled.number("vibA/vibrance"), Some(30.0));
 
         let read_all = |bytes: &[u8]| {
             for index in 0..3 {
@@ -1280,5 +1768,17 @@ mod tests {
         let small = downsample(frame, Some(1));
         assert_eq!((small.width, small.height), (1, 1));
         assert_eq!(small.rgba, [255, 0, 0, 63]);
+
+        // The same at 16 bit, where a frame is floats.
+        let floats = [1.0f32, 0.0, 0.0, 1.0].into_iter().chain([0.0; 12]);
+        let frame = DecodedFrame {
+            width: 2,
+            height: 2,
+            rgba: floats.flat_map(f32::to_le_bytes).collect(),
+            format: PixelFormat::LinearF32,
+        };
+        let small = downsample(frame, Some(1));
+        let want = [1.0f32, 0.0, 0.0, 0.25].map(f32::to_le_bytes).concat();
+        assert_eq!(small.rgba, want);
     }
 }

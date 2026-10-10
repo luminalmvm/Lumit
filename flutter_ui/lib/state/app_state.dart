@@ -88,6 +88,10 @@ class LumitState extends ChangeNotifier {
   /// until there is a window to ask in.
   Future<bool> Function()? askUnsaved;
 
+  /// How the shell offers back the edits a crash left behind, for the project
+  /// at a path. Null until there is a window to ask in.
+  Future<void> Function(String path)? offerRecovery;
+
   bool _askingUnsaved = false;
 
   /// Whether the open project has unsaved changes somebody can be asked about.
@@ -320,7 +324,9 @@ class LumitState extends ChangeNotifier {
     opening.value = false;
   }
 
-  Future<void> openProject(String path) async {
+  /// [recover] false opens the file as it is, for the recovery dialogue's own
+  /// opens, which must not ask the question again.
+  Future<void> openProject(String path, {bool recover = true}) async {
     // One at a time: the change sink below is a single pending field, and two
     // opens in flight would have the second take the first's.
     if (opening.value) return;
@@ -381,6 +387,18 @@ class LumitState extends ChangeNotifier {
     } else {
       // Nothing will come down it, so its port is let go of.
       shareEvents.stream.listen((_) {}).cancel();
+    }
+    // A run that never closed this project left edits in its journal, which
+    // is a crash. They are offered back before anything else is done to it.
+    // A guest's copy has its own from the edits kept for it.
+    if (recover && !guest) {
+      var crashed = false;
+      try {
+        crashed = opened.endedBadly();
+      } catch (_) {
+        // Closed again already.
+      }
+      if (crashed) unawaited(offerRecovery?.call(path));
     }
   }
 

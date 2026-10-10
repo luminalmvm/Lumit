@@ -1957,6 +1957,7 @@ version = "0.6.0"
 dependencies = [
  "lumit-core",
  "lumit-project",
+ "lumit-text",
  "serde",
  "serde_json",
  "tempfile",

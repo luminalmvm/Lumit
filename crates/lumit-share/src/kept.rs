@@ -7,20 +7,26 @@
 //!
 //! A guest that has lost its host keeps the last document both had and each
 //! edit made since. Its own copy of the project, opened again, carries on
-//! from there and merges when the host is found.
+//! from there and merges when the host is found. A conflict it has not
+//! answered is kept too, and a copy closed without saving keeps only the
+//! edits its file holds.
 //!
 //! Both are a line of JSON per edit, written as the edit is made and not
 //! synced, so they survive Lumit going down and not the machine. A line that
 //! does not read is passed over. Written from the share threads and, for a
-//! host, from the store's tap.
+//! host, from the store's tap. One that nobody has written to for thirty
+//! days is cleared out the next time a host shares or a guest keeps.
 
 use crate::host::VERSION;
+use crate::wire::DOCUMENT_LIMIT;
+use lumit_core::shared::Conflict;
 use lumit_core::{Document, Op};
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::{Duration, SystemTime};
 use uuid::Uuid;
 
 /// An edit and what it replaced where it was made.
@@ -28,6 +34,32 @@ pub(crate) type Pair = (Op, Op);
 
 fn file(kind: &str, id: Uuid) -> Option<PathBuf> {
     Some(lumit_project::shared_dir()?.join(format!("{kind}-{id}.jsonl")))
+}
+
+/// How long a kept file nobody has written to is kept for.
+const STALE: Duration = Duration::from_secs(30 * 24 * 60 * 60);
+
+/// Clear out what was kept for projects nobody came back to: the kept files
+/// in the shared folder itself that were last written to over thirty days
+/// ago. Never one for `mine`, the project that is open here.
+fn prune(mine: Uuid) {
+    let Some(entries) = lumit_project::shared_dir().and_then(|dir| fs::read_dir(dir).ok()) else {
+        return;
+    };
+    let mine = mine.to_string();
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        let ours = name.starts_with("host-") || name.starts_with("guest-");
+        // Not through a link, and not a clock that has gone backwards.
+        let stale = entry.metadata().is_ok_and(|file| {
+            let age = file.modified().ok().and_then(|at| at.elapsed().ok());
+            file.is_file() && age.is_some_and(|age| age > STALE)
+        });
+        if ours && stale && !name.contains(&mine) {
+            let _ = fs::remove_file(entry.path());
+        }
+    }
 }
 
 fn line(value: &impl Serialize) -> Option<String> {
@@ -87,12 +119,19 @@ impl HostLog {
     /// whatever was kept under the last one goes.
     pub(crate) fn open(id: Uuid, fresh: bool) -> Option<(Self, Vec<Pair>)> {
         let path = file("host", id)?;
+        prune(id);
         if fresh {
             let _ = fs::remove_file(&path);
         }
         let held = File::open(&path)
             .map(|file| pairs(BufReader::new(file).lines()))
             .unwrap_or_default();
+        // Edits put back are in use from now, however long ago they were
+        // written, so another Lumit clearing out leaves them be.
+        if !held.is_empty() {
+            let file = OpenOptions::new().append(true).open(&path);
+            let _ = file.and_then(|file| file.set_modified(SystemTime::now()));
+        }
         let log = HostLog {
             path,
             file: None,
@@ -115,6 +154,10 @@ impl HostLog {
             .is_some_and(|(file, line)| file.write_all(line.as_bytes()).is_ok());
         if written {
             self.count += 1;
+            // Synced the way the crash journal is, so a power cut keeps it.
+            if let Some(file) = &self.file {
+                let _ = file.sync_data();
+            }
         }
     }
 
@@ -182,7 +225,7 @@ impl Finding {
 
 /// What a guest without its host has kept: the file's first line is how to
 /// find the host, its second the last document both had, and the rest the
-/// edits made since.
+/// conflicts not yet answered and the edits made since.
 ///
 /// It grows by an edit at a time while the host is away, and goes when the
 /// merge is made or the guest leaves.
@@ -192,28 +235,40 @@ pub(crate) struct Kept {
     /// The document the file's edits follow, to tell when the store has
     /// moved on to another and the file has to be written again.
     pub(crate) base: Arc<Document>,
-    /// The file's first line is out of date: the host is looked for by a
-    /// new invite. Written again at the next chance.
+    /// The file is out of date: the host is looked for by a new invite, or
+    /// a conflict in it was answered. Written again at the next chance.
     pub(crate) stale: bool,
     /// How many edits the file holds.
     pub(crate) written: usize,
+    /// How many of them the copy's own file holds, which is what a close
+    /// without saving goes back to.
+    pub(crate) saved: usize,
 }
 
 impl Kept {
     /// Start keeping for the guest's copy `base` is, over whatever was there.
     /// Written beside the file and moved over it, so a file already there is
     /// whole until this one is.
-    pub(crate) fn begin(finding: &Finding, base: &Arc<Document>, since: &[Pair]) -> Option<Self> {
+    pub(crate) fn begin(
+        finding: &Finding,
+        base: &Arc<Document>,
+        since: &[Pair],
+        held: &[Conflict],
+    ) -> Option<Self> {
         let path = file("guest", base.id)?;
+        prune(base.id);
         fs::create_dir_all(path.parent()?).ok()?;
         let fresh = path.with_extension("new");
-        fs::write(&fresh, line(finding)? + line(&**base)?.as_str()).ok()?;
+        let held = held.iter().map(line).collect::<Option<String>>()?;
+        let head = line(finding)? + line(&**base)?.as_str() + held.as_str();
+        fs::write(&fresh, head).ok()?;
         let mut kept = Kept {
             file: appending(&fresh)?,
             path: fresh.clone(),
             base: base.clone(),
             stale: false,
             written: 0,
+            saved: 0,
         };
         kept.append(since);
         fs::rename(&fresh, &path).ok()?;
@@ -229,19 +284,38 @@ impl Kept {
             }
             self.written += 1;
         }
+        // One sync for the run, so a power cut keeps what was just kept.
+        let _ = self.file.sync_data();
     }
 
     /// What was kept for the guest's copy `copy`, if anything was: how to
-    /// find the host, the last document both had, and the edits made since.
-    pub(crate) fn read(copy: Uuid) -> Option<(Finding, Document, Vec<Pair>)> {
+    /// find the host, the last document both had, the edits made since and
+    /// the conflicts not yet answered. No line is read past the size of a
+    /// document on the wire, so a damaged file is not taken whole.
+    pub(crate) fn read(copy: Uuid) -> Option<(Finding, Document, Vec<Pair>, Vec<Conflict>)> {
         let path = file("guest", copy)?;
-        let mut lines = BufReader::new(File::open(path).ok()?).lines();
-        let finding: Finding = serde_json::from_str(&lines.next()?.ok()?).ok()?;
+        let mut file = BufReader::new(File::open(path).ok()?);
+        let mut next = || {
+            let mut line = String::new();
+            let mut some = (&mut file).take(u64::from(DOCUMENT_LIMIT));
+            (some.read_line(&mut line).ok()? > 0).then_some(line)
+        };
+        let finding: Finding = serde_json::from_str(&next()?).ok()?;
         if finding.version != VERSION {
             return None;
         }
-        let base = serde_json::from_str(&lines.next()?.ok()?).ok()?;
-        Some((finding, base, pairs(lines)))
+        let base = serde_json::from_str(&next()?).ok()?;
+        let (mut since, mut held) = (Vec::new(), Vec::new());
+        // An edit is a pair and a conflict is not. A line that reads as
+        // neither is passed over.
+        while let Some(line) = next() {
+            if let Ok(pair) = serde_json::from_str(&line) {
+                since.push(pair);
+            } else if let Ok(conflict) = serde_json::from_str(&line) {
+                held.push(conflict);
+            }
+        }
+        Some((finding, base, since, held))
     }
 
     /// The merge is made, or the guest has left.

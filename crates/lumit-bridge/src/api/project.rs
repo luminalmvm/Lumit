@@ -488,13 +488,14 @@ impl ProjectReference {
 
     /// Bring a layered image file in as a composition, as one undo step: a
     /// footage item per layer, filed in a folder named for the file, and a
-    /// composition the document's size holding a Footage layer for each.
+    /// composition the document's size holding a layer for each. A group
+    /// that can't be a layer group becomes a composition of its own.
     ///
     /// `None` when `path` is not a layered file this build reads, which is
     /// anything but a Photoshop document, one of a kind that is not read, or
     /// one with fewer than two layers. The caller then imports it as plain
     /// footage. Otherwise the number of layers left out because they hold no
-    /// picture, which is what an adjustment layer or a fill layer is.
+    /// picture, which is what an adjustment layer or a gradient fill is.
     ///
     /// Only the layer list is read here. The pixels are read when a layer is
     /// first drawn.
@@ -526,7 +527,7 @@ impl ProjectReference {
                 height: psd.height,
                 ..BridgeCompSettings::defaults()
             };
-            let (_, duration) = settings.to_engine().ok_or(BridgeError::InvalidFrameRate)?;
+            let (rate, duration) = settings.to_engine().ok_or(BridgeError::InvalidFrameRate)?;
 
             let state = self.state()?;
             let left_out = {
@@ -542,6 +543,7 @@ impl ProjectReference {
                     &file,
                     comp,
                     (psd.width.clamp(16, 16384), psd.height.clamp(16, 16384)),
+                    rate,
                     duration.0,
                     doc.items.len() + queued,
                 );
@@ -701,8 +703,8 @@ impl ProjectReference {
     ///
     /// Media paths are rebased against the destination directory before writing,
     /// so a project saved somewhere new keeps relative links that work.
-    /// A successful save clears the crash journal: the journal covers work
-    /// *between* saves, so once the document is on disk it is redundant.
+    /// A successful save drops the edits it wrote from the crash journal, and
+    /// the journal carries on for the edits made after it.
     ///
     /// A packed project is saved with its footage still inside
     /// ([`Self::save_packed`] is the same save with a progress stream).
@@ -871,11 +873,19 @@ impl ProjectReference {
         // (`crate::autosave::sweep_one`); the lock comes back at the end only
         // to record where the file went.
         // A host's document comes with how many of the edits it keeps are in
-        // it. Asked before this project's own lock, which is the order the
-        // share registry is always taken in.
+        // it, and so does a guest's whose host is away. Asked before this
+        // project's own lock, the order the share registry is always taken in.
         let hosted = crate::api::share::saving(self.id);
-        let (document, target, revision, previous) = {
+        let (document, target, revision, previous, journalled) = {
             let state = project.read().map_err(|_| BridgeError::ReadFailed)?;
+            // How much of the journal the file is about to hold. An edit takes
+            // this project's lock, so none lands between this and the document.
+            let journalled = state
+                .journal
+                .lock()
+                .ok()
+                .and_then(|journal| journal.as_ref().map(lumit_project::JournalFile::size))
+                .unwrap_or(0);
             let target = if path.trim().is_empty() {
                 // Never saved and no path given: the caller has to pick one.
                 state.path.clone().ok_or(BridgeError::NoProjectPath)?
@@ -900,7 +910,7 @@ impl ProjectReference {
                     .store
                     .frozen(|document| (document, state.store.revision())),
             };
-            (document, target, revision, state.path.clone())
+            (document, target, revision, state.path.clone(), journalled)
         };
 
         // Everything from here is outside the lock.
@@ -925,7 +935,9 @@ impl ProjectReference {
             None
         } else {
             crate::packing::begin();
-            let sources = crate::packing::sources(&doc, dir, all);
+            // From the open document, which says where each file is read
+            // from now. The one being written says where it used to be.
+            let sources = crate::packing::sources(&document, dir, all);
             let mut progress = crate::packing::progress(|fraction| {
                 if let Some(sink) = on_progress {
                     let _ = sink.add(fraction);
@@ -955,8 +967,14 @@ impl ProjectReference {
                         && (all || doc.packed.contains_key(&item.id()))
                 })
                 .count();
-            result.packed = packed.packed.len() as u32;
-            result.left_out = asked.saturating_sub(packed.packed.len()) as u32;
+            // Footage only: a proxy or the colour config rides along uncounted.
+            let footage = packed
+                .packed
+                .keys()
+                .filter(|id| is_footage(&doc, **id))
+                .count();
+            result.packed = footage as u32;
+            result.left_out = asked.saturating_sub(footage) as u32;
             Some(packed.packed)
         };
 
@@ -968,7 +986,7 @@ impl ProjectReference {
             // An item deleted since it was packed keeps its entry in the open
             // document, so undoing the delete brings it back packed.
             for (id, media) in &document.packed {
-                if !is_footage(&document, *id) {
+                if document.packed_path(*id).is_none() {
                     packed.insert(*id, media.clone());
                 }
             }
@@ -977,14 +995,14 @@ impl ProjectReference {
             }
         }
 
-        // The journal covers work *between* saves, so once the document is on
-        // disk it is redundant — and keeping it would mean a later recovery
-        // replaying edits the saved file already contains.
-        if let Ok(mut journal) = state.journal.lock() {
+        // The journal covers work between saves. What the file now holds is
+        // dropped from it, or a recovery would replay those edits twice. An
+        // edit made while the disk was busy stays, and the journal carries on
+        // for the edits after this save.
+        if let Ok(journal) = state.journal.lock() {
             if let Some(file) = journal.as_ref() {
-                let _ = file.clear();
+                let _ = file.forget(journalled);
             }
-            *journal = None;
         }
         state.path = Some(target);
         // The revision the file *contains*, read before the write — not

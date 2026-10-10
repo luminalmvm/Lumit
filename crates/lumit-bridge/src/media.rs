@@ -154,10 +154,20 @@ pub(crate) fn thumb_decode(
     // frame never lands in memory at full size. Portrait media comes back
     // taller than `max_edge`, which the box filter below still trims.
     let decoded = decode_frame(src, frame.max(0).unsigned_abs(), Some(max_edge))?;
+    // A deep source decodes to linear floats, and a thumbnail is eight bit.
+    let rgba = match decoded.format {
+        lumit_media::PixelFormat::Srgb8 => decoded.rgba,
+        lumit_media::PixelFormat::LinearF32 => (0..decoded.rgba.len() / 16)
+            .flat_map(|n| {
+                let px = lumit_core::pixels::f32_px(&decoded.rgba, n);
+                lumit_core::pixels::solid_rgba(lumit_core::model::LinearColour(px))
+            })
+            .collect(),
+    };
     Some(downscale_to_max_edge(
         decoded.width,
         decoded.height,
-        &decoded.rgba,
+        &rgba,
         max_edge,
     ))
 }

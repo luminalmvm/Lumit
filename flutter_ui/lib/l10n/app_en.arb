@@ -6550,6 +6550,10 @@
   "@replaceFootageEllipsis": {
     "description": "Project panel, a footage item's right-click menu: point the item at a different file. The same command as Relink, offered under this name when the file is not missing. The ellipsis means a file dialogue opens."
   },
+  "projectShowInFolder": "Show in folder",
+  "@projectShowInFolder": {
+    "description": "Project panel right-click menu, on a footage item whose file is there: opens the folder the file is in, in the desktop's own file manager, with the file selected."
+  },
   "tipOpenFolder": "Open folder",
   "@tipOpenFolder": {
     "description": "Hover text on a finished export's path in the bottom strip and on a finished row in the export queue: a click opens the folder the file was written to, in the desktop's own file manager. The same words as the export dialog's Open folder tick. Two words at most."
@@ -6744,6 +6748,10 @@
   "settingsCustomColours": "Custom colours",
   "@settingsCustomColours": {
     "description": "Settings window: the name of one setting."
+  },
+  "settingsHardwareDecode": "Hardware video decoding",
+  "@settingsHardwareDecode": {
+    "description": "Settings window: the name of the tick that lets the graphics card decode video. On by default. Turning it off is slower, and is what to try when importing video freezes the computer."
   },
   "settingsFullResolutionWhileDragging": "Full resolution while dragging",
   "@settingsFullResolutionWhileDragging": {
@@ -10388,9 +10396,9 @@
   "@aeShapeContentsNotMapped": {
     "description": "Import report row reason, lower case. A shape layer's paths, fills and strokes are a later stage of the importer."
   },
-  "aeTextStylingNotMapped": "the words, size and fill colour imported; the rest of the styling did not",
+  "aeTextStylingNotMapped": "the text imported, but not its animators, path, tsume, fully justified last line or changing source text",
   "@aeTextStylingNotMapped": {
-    "description": "Import report row reason, lower case. A text layer arrives readable but not fully styled."
+    "description": "Import report row reason, lower case. A text layer arrived with its font and styling, but used at least one thing Lumit's text has no place for: text animators, text on a path, tsume, a justified last line, or source text that changes over time."
   },
   "aeLightKindApproximated": "a {aeKind} light has no equivalent — imported as the nearest kind",
   "@aeLightKindApproximated": {
@@ -12751,6 +12759,27 @@
   "@tipViewerSnapshotNone": {
     "description": "Tooltip on the Viewer bar's show-snapshot mark while it is muted, saying why it does nothing: nothing has been photographed to show. One or two words."
   },
+  "fileTypeExpressions": "Lumit expressions",
+  "@fileTypeExpressions": {
+    "description": "File dialogue: the name of the file type that holds expressions saved from the Expressions panel."
+  },
+  "expressionsExported": "Expressions exported.",
+  "@expressionsExported": {
+    "description": "Status-line notice after the Expressions panel wrote every saved expression out as one file."
+  },
+  "expressionsImported": "{count, plural, =1{1 expression imported.} other{{count} expressions imported.}}",
+  "@expressionsImported": {
+    "description": "Status-line notice after the Expressions panel read a file of saved expressions in. {count} is how many it held.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "expressionsFileNotExpressions": "That file does not hold Lumit expressions.",
+  "@expressionsFileNotExpressions": {
+    "description": "Status-line notice when the file chosen for Import in the Expressions panel is not a file of saved expressions."
+  },
   "fileTypeWorkspace": "Lumit workspace",
   "@fileTypeWorkspace": {
     "description": "A file type in the system's file dialogues: a .lumworkspace panel arrangement, the workspace's counterpart of the shared theme file."
@@ -12890,7 +12919,7 @@
   },
   "importLayersLeftOut": "{count, plural, =1{One layer had no picture and was left out} other{{count} layers had no picture and were left out}}",
   "@importLayersLeftOut": {
-    "description": "Status-line notice after a Photoshop document was imported as a composition of its layers. {count} is how many of the document's layers hold no pixels of their own, such as adjustment layers and fill layers, and so were not brought in.",
+    "description": "Status-line notice after a Photoshop document was imported as a composition of its layers. {count} is how many of the document's layers hold no pixels of their own, such as empty layers, gradient fill layers and adjustment layers of a kind Lumit has no effect for, and so were not brought in.",
     "placeholders": {
       "count": {
         "type": "int"
@@ -14725,6 +14754,14 @@
   "tipParagraphAlignRight": "Align right",
   "@tipParagraphAlignRight": {
     "description": "Tooltip on the Paragraph panel button that lines the text up on its right side."
+  },
+  "tipParagraphJustify": "Justify",
+  "@tipParagraphJustify": {
+    "description": "Tooltip on the Paragraph panel button that stretches every line but a paragraph's last across the text's box. Greyed out until the text has a box width."
+  },
+  "paragraphBoxWidth": "Box width",
+  "@paragraphBoxWidth": {
+    "description": "Paragraph panel: label beside the width the words wrap to, in pixels. Nought means no box, so a line only ends where the user broke it."
   },
   "paragraphIndentLeft": "Indent left",
   "@paragraphIndentLeft": {

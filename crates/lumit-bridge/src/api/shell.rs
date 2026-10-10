@@ -96,6 +96,20 @@ pub fn set_full_res_drag_previews(full_res: bool) {
     crate::realtime::set_full_res_drags(full_res);
 }
 
+/// Let footage be decoded by the graphics card's video unit, or keep it on the
+/// processor.
+///
+/// On is quicker. Off is the way out on a machine whose graphics driver
+/// misbehaves with it. It reaches footage opened from here on, so a project
+/// already open wants reopening. Held the way the drag setting above is.
+#[frb(sync)]
+pub fn set_hardware_decode(on: bool) {
+    #[cfg(feature = "media")]
+    lumit_media::set_hardware_decode(on);
+    #[cfg(not(feature = "media"))]
+    let _ = on;
+}
+
 /// One rotating autosave beside a project.
 #[frb(non_opaque)]
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -202,6 +216,45 @@ impl ProjectReference {
         lumit_project::autosave(&doc, &target, keep.max(1) as usize)
             .map(|written| written.to_string_lossy().into_owned())
             .map_err(|_| BridgeError::WriteFailed)
+    }
+
+    /// Whether the journal holds edits from a run that never closed this
+    /// project, which is a crash or a power cut. Asked once, as the project
+    /// opens, to decide whether to offer them back.
+    #[frb(sync)]
+    #[must_use]
+    pub fn ended_badly(&self) -> bool {
+        self.journal_file()
+            .is_some_and(|journal| journal.ended_badly())
+    }
+
+    /// Note that the project is being left on purpose, for the application
+    /// quitting. Closing or replacing a project notes it by itself.
+    #[frb(sync)]
+    pub fn note_clean_exit(&self) {
+        // Quitting drops nothing, so sharing is let go of as a close does it.
+        crate::api::share::stop(self.id);
+        if let Ok(state) = self.state() {
+            if let Ok(state) = state.read() {
+                crate::api::state::discard_unsaved_journal(&state);
+            }
+        }
+    }
+
+    /// Throw away the edits a crash left in the journal, for somebody who was
+    /// offered them and said no.
+    #[frb(sync)]
+    pub fn discard_journal(&self) {
+        if let Some(journal) = self.journal_file() {
+            let _ = journal.clear();
+        }
+    }
+
+    fn journal_file(&self) -> Option<lumit_project::JournalFile> {
+        let state = self.state().ok()?;
+        let state = state.read().ok()?;
+        let journal = state.journal.lock().ok()?;
+        journal.clone()
     }
 
     /// Open `project_path` and replay its crash journal on top of it.

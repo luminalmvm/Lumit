@@ -885,16 +885,24 @@ fn the_3d_layer_the_camera_and_the_light_come_across_as_far_as_they_map() {
 
 /// **§5 rows: the text layer's source string, and the shape layer's slot.**
 ///
-/// Lumit's text layer has the words, the size and the fill colour, so those
-/// three convert (the fill through the same sRGB curve as everything else) and
-/// the rest of the styling — the stroke, the tracking, the justification the
-/// builder sets — is a report row. The shape layer keeps its place, its
-/// transform and its parenting and draws nothing, which is also a row.
+/// The words, the size and the fill colour convert (the fill through the same
+/// sRGB curve as everything else), and so does the styling the builder sets:
+/// the stroke, the tracking and the centred justification. Nothing on this
+/// layer is left behind, so it raises no row. The shape layer keeps its place,
+/// its transform and its parenting and draws nothing, which is a row.
+///
+/// After Effects hangs centred point text from the middle of its first
+/// baseline, and the builder leaves the anchor at that origin. Lumit measures
+/// from the raster's corner, so the anchor has to land on the same point of
+/// the block Lumit lays out, whichever font this machine sets it in.
 #[test]
 fn the_text_layers_words_arrive_and_the_shape_layer_keeps_its_slot() {
+    use lumit_core::text::{Kerning, TextAlign};
+
     let c = fixture();
 
-    let LayerKind::Text { document } = &layer(c, "Lumit fixture").kind else {
+    let words = layer(c, "Lumit fixture");
+    let LayerKind::Text { document } = &words.kind else {
         panic!("a text layer");
     };
     assert_eq!(document.text, "Lumit fixture");
@@ -902,7 +910,33 @@ fn the_text_layers_words_arrive_and_the_shape_layer_keeps_its_slot() {
     // fillColor [1, 0.55, 0.1].
     assert_close(f64::from(document.fill.0[1]), to_linear(0.550_000_011));
     assert_close(f64::from(document.fill.0[2]), to_linear(0.100_000_001));
-    assert!(reported(|r| matches!(r, Reason::TextStylingNotMapped)));
+
+    let style = &document.style;
+    assert_eq!(style.family, "Times New Roman");
+    assert_eq!(style.face, "Regular");
+    assert_eq!(style.kerning, Kerning::Metrics);
+    assert_eq!(style.tracking, 20.0);
+    assert!(style.fill_on && style.stroke_on && style.stroke_over);
+    assert_eq!(style.stroke_width, 3.0);
+    assert_eq!(style.stroke.0, [0.0, 0.0, 0.0, 1.0]);
+    // Auto leading, and the scales After Effects writes as 1.
+    assert_eq!(style.leading, None);
+    assert_eq!((style.scale_x, style.scale_y), (100.0, 100.0));
+    assert_eq!(document.paragraph.align, TextAlign::Centre);
+    assert_eq!(document.paragraph.box_width, 0.0);
+    assert!(!reported(|r| matches!(r, Reason::TextStylingNotMapped)));
+
+    let block = lumit_text::layout(&lumit_text::TextBlock::of(document, &document.text), false);
+    assert_close(
+        words.transform.anchor_x.value_at(0.0),
+        f64::from(block.left + block.right) / 2.0,
+    );
+    assert_close(
+        words.transform.anchor_y.value_at(0.0),
+        f64::from(block.lines[0].baseline),
+    );
+    assert_eq!(words.transform.position_x.value_at(0.0), 320.0);
+    assert_eq!(words.transform.position_y.value_at(0.0), 180.0);
 
     assert_eq!(
         layer(c, "shape").kind,
@@ -1096,7 +1130,8 @@ fn the_report_counts_what_it_says_and_names_its_placeholder() {
             // the camera gained its second node: the fixture's two-node
             // camera and its point of interest cross over whole.
             // One more for the 3D card's Casts Shadows.
-            adjusted: 58,
+            // One fewer since the text layer's styling carries.
+            adjusted: 57,
             placeholders: 1,
             skipped: 1,
         }

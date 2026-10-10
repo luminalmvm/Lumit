@@ -103,6 +103,20 @@ pub struct CompJob {
     /// otherwise, and the moments crossfade: flow can tear on footage it
     /// cannot measure, and it runs only where the user switched it on.
     pub shutter_flow: Option<lumit_core::retime::FlowParams>,
+    /// A Sequence layer at the other times it is asked for, where the clip
+    /// live then is not this job's file. Empty for every other layer.
+    pub cuts: Vec<Cut>,
+}
+
+/// A Sequence layer at another time, across an edit point: the clip live then
+/// as a job of its own, one whole frame of it.
+pub enum Cut {
+    /// A neighbour of the layer's own temporal stack, by [`CompJob::temporal`]'s
+    /// offset. Joins the decoded neighbours when it is the same size.
+    Neighbour(i32, CompJob),
+    /// The layer at a moment a temporal effect above builds it again at, by
+    /// [`CompJob::shutter`]'s offset. `None` in a gap, where it shows nothing.
+    Moment(f64, Option<CompJob>),
 }
 
 /// One sub-frame moment a covered clip is decoded at for accumulation motion
@@ -155,7 +169,8 @@ pub struct CompLayerPixels {
     /// sample's below-stack without copying a frame. A moment that failed to
     /// decode is simply absent, and that sample falls back to the frame-time
     /// pixels. Boxed so a layer with no shutter costs a pointer, not a struct.
-    pub shutter: Vec<(f64, Box<CompLayerPixels>)>,
+    /// `None` is a Sequence layer in a gap at that moment ([`Cut::Moment`]).
+    pub shutter: Vec<(f64, Option<Box<CompLayerPixels>>)>,
     /// The content name of this decode: a hash of the [`CompJob`]
     /// identity [`crate::plan::same_decode`] compares — item, path, source
     /// frame, decode width, slate, blend partner, flow settings, temporal
@@ -240,7 +255,8 @@ fn weigh(layers: &[CompLayerPixels]) -> u64 {
             let shutter: u64 = l
                 .shutter
                 .iter()
-                .map(|(_, m)| weigh(std::slice::from_ref(m)))
+                .filter_map(|(_, m)| m.as_deref())
+                .map(|m| weigh(std::slice::from_ref(m)))
                 .sum();
             rgba.saturating_add(temporal)
                 .saturating_add(flow)
@@ -1216,7 +1232,7 @@ fn decode_comp(
         // for a plain layer, so this loop does nothing then). A neighbour
         // that fails to decode is simply dropped — a missing echo tap
         // degrades the effect, never the frame.
-        let temporal: Vec<(i32, Vec<u8>)> = job
+        let mut temporal: Vec<(i32, Vec<u8>)> = job
             .temporal
             .iter()
             .filter_map(|&(offset, frame)| {
@@ -1327,7 +1343,7 @@ fn decode_comp(
         // been, so the refusal an export must not swallow is carried out of the
         // closure rather than read off the error the moment was dropped with.
         let mut refused: Option<SynthesisRefusal> = None;
-        let shutter: Vec<(f64, Box<CompLayerPixels>)> = job
+        let mut shutter: Vec<(f64, Option<Box<CompLayerPixels>>)> = job
             .shutter
             .iter()
             .filter_map(|s| {
@@ -1361,7 +1377,7 @@ fn decode_comp(
                 .ok()?;
                 Some((
                     s.offset,
-                    Box::new(CompLayerPixels {
+                    Some(Box::new(CompLayerPixels {
                         layer: job.layer,
                         width,
                         height,
@@ -1379,7 +1395,7 @@ fn decode_comp(
                         // frame-time output.
                         source_key: moment_key(source_key, s.offset),
                         source_frame: i64::try_from(s.source_frame).unwrap_or(0),
-                    }),
+                    })),
                 ))
             })
             .collect();
@@ -1388,6 +1404,45 @@ fn decode_comp(
         // further down (docs/08 §3.1).
         if let Some(why) = &refused {
             return Err(refusal_sentence(why));
+        }
+        // A Sequence layer across an edit point: the other clip is decoded as
+        // the job it is. After the flow above, which is never measured across
+        // a cut. One that fails is dropped, as any neighbour is.
+        for cut in &job.cuts {
+            let mut other = |other: &CompJob| {
+                decode_comp(
+                    decoders,
+                    cache,
+                    flow_engine,
+                    synthesis,
+                    refuse,
+                    flow_cache,
+                    gpu,
+                    comp,
+                    frame,
+                    std::slice::from_ref(other),
+                    media_epoch,
+                    &|_| {},
+                )
+                .ok()
+                .and_then(|decoded| decoded.layers.into_iter().next())
+            };
+            match cut {
+                // The stack reads its neighbours at the frame's own size.
+                Cut::Neighbour(offset, clip) => {
+                    if let Some(p) = other(clip)
+                        .filter(|p| (p.width, p.height, p.format) == (px.width, px.height, format))
+                    {
+                        temporal.push((*offset, Arc::unwrap_or_clone(p.rgba)));
+                    }
+                }
+                Cut::Moment(offset, None) => shutter.push((*offset, None)),
+                Cut::Moment(offset, Some(clip)) => {
+                    if let Some(p) = other(clip) {
+                        shutter.push((*offset, Some(Box::new(p))));
+                    }
+                }
+            }
         }
         // Blend / Flow policy: combine with the next source frame.
         let (width, height) = (px.width, px.height);
@@ -1484,7 +1539,8 @@ mod tests {
             "and the motion measured against them"
         );
 
-        layer.shutter = vec![(0.0, Box::new(pixels(100))), (0.5, Box::new(pixels(100)))];
+        let moment = || Some(Box::new(pixels(100)));
+        layer.shutter = vec![(0.0, moment()), (0.5, moment())];
         assert_eq!(
             weigh(std::slice::from_ref(&layer)),
             300 + 120 + 200,
@@ -1580,6 +1636,7 @@ mod tests {
             channels: None,
             shutter: Vec::new(),
             shutter_flow: None,
+            cuts: Vec::new(),
         };
 
         let mut pool = DecodePool::new();

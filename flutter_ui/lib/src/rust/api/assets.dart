@@ -91,6 +91,12 @@ enum BridgeKerning {
 /// How the lines of a text layer are laid out against each other. All px.
 class BridgeParagraphStyle {
   final BridgeTextAlign align;
+
+  /// Px the words wrap to. Unset is point text.
+  final double? boxWidth;
+
+  /// Stretch every line but a paragraph's last to the box.
+  final bool justify;
   final double indentLeft;
   final double indentRight;
   final double indentFirst;
@@ -99,6 +105,8 @@ class BridgeParagraphStyle {
 
   const BridgeParagraphStyle({
     required this.align,
+    this.boxWidth,
+    required this.justify,
     required this.indentLeft,
     required this.indentRight,
     required this.indentFirst,
@@ -109,6 +117,8 @@ class BridgeParagraphStyle {
   @override
   int get hashCode =>
       align.hashCode ^
+      boxWidth.hashCode ^
+      justify.hashCode ^
       indentLeft.hashCode ^
       indentRight.hashCode ^
       indentFirst.hashCode ^
@@ -121,6 +131,8 @@ class BridgeParagraphStyle {
       other is BridgeParagraphStyle &&
           runtimeType == other.runtimeType &&
           align == other.align &&
+          boxWidth == other.boxWidth &&
+          justify == other.justify &&
           indentLeft == other.indentLeft &&
           indentRight == other.indentRight &&
           indentFirst == other.indentFirst &&

@@ -143,8 +143,9 @@ void main() {
       // which now import as real instances with three adjusted rows.
       // One fewer adjusted since the two-node camera brings its point of
       // interest whole. One more since a layer that casts shadows is
-      // reported rather than dropped.
-      expect(find.text(l10n.aeSummary(63, 55, 0, 0)), findsOneWidget,
+      // reported rather than dropped. One moved from adjusted to skipped,
+      // since a text layer whose words can't be read is now said to be that.
+      expect(find.text(l10n.aeSummary(63, 54, 0, 1)), findsOneWidget,
           reason: 'what the direct parse recovers, end to end');
 
       await tester.tap(find.text(l10n.close));

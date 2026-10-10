@@ -43,8 +43,9 @@ Otherwise it reads the packed copy, which is copied into Lumit's cache when the 
 A file that has changed on disk since it was packed is packed again on the next save.
 
 :::note
-Proxies and the OCIO config are not packed. Autosave copies hold the document only, and an
-autosave reads its footage from the project file it was written beside.
+Proxies and the files effects read, such as a LUT, are packed with the footage, and so is
+the OCIO config with the look-up tables in its folder. Autosave copies hold the document
+only, and an autosave reads its footage from the project file it was written beside.
 :::
 
 ## Shared projects
@@ -107,9 +108,9 @@ is held back and listed in the **Conflicts** window, where each is settled with 
 mine** or **Keep theirs**. An edit to something that no longer exists is dropped.
 
 A guest's saved copy that is closed while the host is away is still a guest when it is
-opened again. It opens with every edit made while away, saved or not, looks for the host,
-and merges when it finds it. **Leave** ends that. A conflict not settled before the copy is
-closed is settled as **Keep theirs**.
+opened again. It opens with the edits made while away that were saved, or all of them if
+Lumit crashed, looks for the host, and merges when it finds it. **Leave** ends that. A
+conflict not settled before the copy is closed is listed again when it is opened.
 
 A host that closes the project, or Lumit, without **Stop sharing** keeps its invite. When
 it opens the project and shares it again on the same port, the guests who are waiting come
@@ -120,13 +121,16 @@ A host keeps every edit made since its last save, its guests' included. If it cl
 without saving, or Lumit crashed, **Start sharing** puts those edits back. Closing a host
 project that was never saved stops sharing.
 
-**Stop sharing** finishes with the invite, and sharing again makes a new one. A removed
-guest keeps its copy, and the invite it holds still works until then.
+**Stop sharing** finishes with the invite, and sharing again makes a new one. **Remove**
+replaces the invite. The removed guest keeps its copy, the invite it holds stops working,
+and the guests still connected carry on. A guest that had lost the host at that moment
+needs the new invite.
 
 :::note
 Everyone needs the same version of Lumit. Proxies, files an effect reads such as a LUT, and
-the results of tracking, roto and depth analysis are not sent. A shared project takes up to
-16 people.
+the results of tracking, roto and depth analysis are not sent. A proxy is looked for in the
+footage folder as footage is, and a file an effect reads by its name at the top of that
+folder. A shared project takes up to 16 people.
 :::
 
 ## Autosave
@@ -139,8 +143,9 @@ A project that has not changed since its last save or autosave writes nothing.
 
 ## Crash recovery
 
-Between saves, Lumit also records every edit. After a crash, open the project and choose
-**File ▸ Recover…**. The dialogue has three choices:
+Between saves, Lumit also records every edit. After a crash, open the project and Lumit
+asks whether to restore them. **File ▸ Recover…** asks again later. The dialogue has
+three choices:
 
 | Choice | Recovers |
 | --- | --- |
@@ -149,11 +154,8 @@ Between saves, Lumit also records every edit. After a crash, open the project an
 | **Don't restore changes** | Nothing. The project stays as it was opened. |
 
 The command is live once the project has been saved to a file, and does nothing while
-there is no autosave beside it.
-
-:::note[Not built yet]
-Lumit does not offer recovery by itself on the next launch.
-:::
+there is no autosave beside it. After a crash, an answer other than **Restore all
+changes** throws the recorded edits away.
 
 ## Related
 

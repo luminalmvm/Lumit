@@ -24,6 +24,10 @@ __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 0x00000001;
 // This puts that folder on the search path, straight after the exe's own. It
 // has to run before anything touches Flutter, which is why those libraries
 // are delay-loaded (windows/CMakeLists.txt).
+//
+// A delay-loaded library that can't be found ends the process without a word,
+// so Flutter is loaded here first. If lib\ has gone, Windows gets to say so
+// in its own words and the user's language.
 static void AddLibFolderToSearchPath() {
   // 32,768 characters is the longest path Windows has.
   std::wstring path(32768, L'\0');
@@ -32,6 +36,20 @@ static void AddLibFolderToSearchPath() {
   path.resize(path.find_last_of(L'\\') + 1);
   path += L"lib";
   ::SetDllDirectoryW(path.c_str());
+
+  const std::wstring flutter = path + L"\\flutter_windows.dll";
+  if (::LoadLibraryW(flutter.c_str()) == nullptr) {
+    wchar_t *why = nullptr;
+    ::FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER |
+                         FORMAT_MESSAGE_FROM_SYSTEM |
+                         FORMAT_MESSAGE_IGNORE_INSERTS,
+                     nullptr, ::GetLastError(), 0,
+                     reinterpret_cast<wchar_t *>(&why), 0, nullptr);
+    const std::wstring message =
+        flutter + L"\n\n" + (why != nullptr ? why : L"");
+    ::MessageBoxW(nullptr, message.c_str(), L"Lumit", MB_OK | MB_ICONERROR);
+    ::ExitProcess(EXIT_FAILURE);
+  }
 }
 
 int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,

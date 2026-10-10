@@ -5,10 +5,13 @@
 //! Runs on the frb worker thread that is saving or opening. No project lock is
 //! held across any of it.
 
-use std::path::{Path, PathBuf};
+use std::collections::BTreeMap;
+use std::fs::File;
+use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 
-use lumit_core::model::ProjectItem;
+use lumit_core::model::{packed_id, MediaRef, ProjectItem};
 use lumit_core::Document;
 use lumit_project::PackSource;
 use uuid::Uuid;
@@ -16,6 +19,12 @@ use uuid::Uuid;
 /// Set to stop the pack or unpack in flight. One flag for the process, because
 /// one project is open at a time, and each job clears it as it starts.
 static CANCEL: AtomicBool = AtomicBool::new(false);
+
+/// The read-out folders this process has taken, by document
+/// (`lumit_project::hold_read_out`). Kept until the process ends and never let
+/// go sooner: a project that has been closed may still have a file open, and
+/// holding a folder costs one small handle. One entry a document opened.
+static HELD: Mutex<BTreeMap<Uuid, File>> = Mutex::new(BTreeMap::new());
 
 /// A pack or an unpack is starting: forget any earlier cancel.
 pub(crate) fn begin() {
@@ -50,28 +59,71 @@ pub(crate) fn progress(mut report: impl FnMut(f64)) -> impl FnMut(u64, u64) -> b
 }
 
 /// The files a save offers for packing: every footage item's when `all`,
-/// otherwise only those of the items the project already packs. An item whose
-/// file is not on disk offers nothing.
+/// otherwise only those of the items the project already packs. Proxies, the
+/// colour config and the files effects read are offered by the same rule. An
+/// item whose file is not on disk offers nothing.
 pub(crate) fn sources(doc: &Document, project_dir: &Path, all: bool) -> Vec<PackSource> {
-    doc.items
-        .iter()
-        .filter_map(|item| {
-            let ProjectItem::Footage(f) = item else {
-                return None;
-            };
-            if !all && !doc.packed.contains_key(&f.id) {
-                return None;
-            }
-            let path = if f.media.absolute_path.is_empty() {
-                project_dir.join(&f.media.relative_path)
-            } else {
-                PathBuf::from(&f.media.absolute_path)
-            };
-            path.is_file().then(|| PackSource {
-                item: f.id,
-                files: run_files(path, f.sequence.is_some()),
-            })
+    // The file a reference names, when it is wanted and on disk.
+    let file = |id: Uuid, media: &MediaRef| {
+        if !all && !doc.packed.contains_key(&id) {
+            return None;
+        }
+        let path = if media.absolute_path.is_empty() {
+            project_dir.join(&media.relative_path)
+        } else {
+            PathBuf::from(&media.absolute_path)
+        };
+        path.is_file().then_some(path)
+    };
+    let footage = doc.items.iter().filter_map(|item| {
+        let ProjectItem::Footage(f) = item else {
+            return None;
+        };
+        Some(PackSource {
+            item: f.id,
+            files: run_files(file(f.id, &f.media)?, f.sequence.is_some()),
         })
+    });
+    let proxies = doc.proxies.iter().filter_map(|(item, proxy)| {
+        let id = packed_id(*item);
+        Some(PackSource {
+            item: id,
+            files: vec![file(id, &proxy.media)?],
+        })
+    });
+    // A config is no use without the look-up tables it names. The ones in its
+    // own folder or below go with it. One kept anywhere else has no place in
+    // the pack and stays behind.
+    let config = doc.colour.config.as_ref().and_then(|config| {
+        let id = packed_id(doc.id);
+        let path = file(id, config)?;
+        let dir = path.parent()?.to_path_buf();
+        let tables = lumit_render::colour::config_files(&path)
+            .into_iter()
+            .filter(|table| {
+                table.strip_prefix(&dir).is_ok_and(|below| {
+                    below
+                        .components()
+                        .all(|part| matches!(part, Component::Normal(_)))
+                })
+            });
+        Some(PackSource {
+            item: id,
+            files: std::iter::once(path).chain(tables).collect(),
+        })
+    });
+    // A file an effect reads, such as a LUT's cube, is a path and nothing else.
+    let effects = doc.effect_files().filter_map(|(id, path)| {
+        let wanted = all || doc.packed.contains_key(&id);
+        (wanted && Path::new(path).is_file()).then(|| PackSource {
+            item: id,
+            files: vec![PathBuf::from(path)],
+        })
+    });
+    footage
+        .chain(proxies)
+        .chain(config)
+        .chain(effects)
         .collect()
 }
 
@@ -125,10 +177,19 @@ pub(crate) fn restore(
     project_dir: &Path,
     mut report: impl FnMut(f64),
 ) {
+    let dest = read_out_dir(doc.id);
+    // Taken before anything is read out, so no other Lumit clears the folder
+    // away under this one. Every open also clears the folders nobody holds
+    // and nobody has opened for a week.
+    if let Some(root) = dest.parent() {
+        let held = lumit_project::hold_read_out(root, doc.id, !doc.packed.is_empty());
+        if let (Some(held), Ok(mut all)) = (held, HELD.lock()) {
+            all.insert(doc.id, held);
+        }
+    }
     if doc.packed.is_empty() {
         return;
     }
-    let dest = read_out_dir(doc.id);
     // An open is not cancelled from here, so the flag is not read.
     let mut copied = |done: u64, total: u64| {
         if total > 0 {

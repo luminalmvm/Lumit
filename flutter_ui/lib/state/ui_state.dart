@@ -40,7 +40,7 @@ import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:lumit_flutter/src/rust/api/shell.dart'
-    show setAutosave, setFullResDragPreviews;
+    show setAutosave, setFullResDragPreviews, setHardwareDecode;
 import 'package:lumit_flutter/src/rust/api/state.dart';
 import 'package:lumit_flutter/state/addons.dart';
 import 'package:lumit_flutter/state/addons_engine.dart';
@@ -221,11 +221,13 @@ class LumitUiState extends ChangeNotifier {
   final ValueNotifier<int> panelSearchRequest = ValueNotifier(0);
 
   /// Ask the focused panel for its search box, and say whether there is one to
-  /// ask for. Only two panels have one (docs/07 §15); anywhere else the chord
+  /// ask for. Only three panels have one (docs/07 §15); anywhere else the chord
   /// is left alone rather than swallowed.
   bool requestPanelSearch() {
     final panel = activePanel;
-    if (panel != Panel.project && panel != Panel.effectsAndPresets) {
+    if (panel != Panel.project &&
+        panel != Panel.effectsAndPresets &&
+        panel != Panel.expressions) {
       return false;
     }
     panelSearchRequest.value++;
@@ -523,7 +525,10 @@ class LumitUiState extends ChangeNotifier {
   /// Everything about *how* playback runs — which frame is next, whether the
   /// clock has moved on, when to give up a tier — belongs to the engine.
   /// This says go, and [_arrived] follows the frames back.
-  void play() {
+  ///
+  /// `shuttle` is the run's place on the J and L ladder ([shuttle]), zero for
+  /// ordinary playback.
+  void play({int shuttle = 0}) {
     final comp = selectedComp;
     if (comp == null) return;
     // The work area is the span being worked on, so it is the span playback
@@ -542,9 +547,19 @@ class LumitUiState extends ChangeNotifier {
       playhead: playheadFrame.value,
       lastFrame: last,
     );
-    _playedFrom = playheadFrame.value;
-    _reverse = false;
+    _shuttle = shuttle;
+    // A shuttle is a way of getting somewhere, so it has nowhere to go back to.
+    _playedFrom = shuttle == 0 ? playheadFrame.value : null;
+    _reverse = shuttle < 0;
     _turned = false;
+    // A backwards shuttle runs down to the start of the span it began inside,
+    // or to the first frame when it began before that.
+    final start = _loop?.start ?? 0;
+    _clockEnd = !_reverse
+        ? _loop?.end ?? last
+        : playheadFrame.value > start
+            ? start
+            : 0;
     // Adaptive keeps time by skipping frames, so between pictures the
     // playhead is counted on at the comp's rate ([clockFrame]). Anchored by
     // the first picture, not by the press: the engine banks a pre-roll before
@@ -552,8 +567,7 @@ class LumitUiState extends ChangeNotifier {
     // frames ahead of the first picture shown.
     if (workspace.performance.playback == PlaybackMode.adaptive) {
       _clockAnchor = null;
-      _clockFps = comp.fps();
-      _clockEnd = _loop?.end ?? last;
+      _clockFps = comp.fps() * _speed;
       _clockWatch
         ..reset()
         ..start();
@@ -587,6 +601,34 @@ class LumitUiState extends ChangeNotifier {
   /// leg. The engine plays one leg at a time and the loop mode is the
   /// frontend's, so the direction is remembered here.
   bool _reverse = false;
+
+  /// The run's place on the J and L shuttle ladder: 1, 2, 4 or 8 times the
+  /// comp's rate, negative for backwards. Zero is ordinary playback.
+  int _shuttle = 0;
+
+  /// How many times the comp's rate the run plays at.
+  int get _speed => _shuttle == 0 ? 1 : _shuttle.abs();
+
+  /// J and L: one step along the shuttle ladder, `direction` being -1 or 1.
+  ///
+  /// Each press towards the way the picture is going doubles the speed, up to
+  /// eight times. A press the other way steps back down, through the comp's
+  /// own rate and stopped, before it turns round. The engine keeps the time
+  /// and chooses the frames, as it does for any run.
+  void shuttle(int direction) {
+    const ladder = [-8, -4, -2, -1, 0, 1, 2, 4, 8];
+    final now = !playing.value
+        ? 0
+        : _shuttle != 0
+            ? _shuttle
+            : (_reverse ? -1 : 1);
+    final next =
+        ladder[(ladder.indexOf(now) + direction).clamp(0, ladder.length - 1)];
+    if (next == now) return;
+    // Stopped in place: the next rung starts from the frame on screen.
+    if (playing.value) stopPlayback(restorePlayhead: false);
+    if (next != 0) play(shuttle: next);
+  }
 
   /// Whether a turn has been asked for and the new leg has not yet shown a
   /// frame. The worker is still on the old leg until the turn reaches it, so
@@ -636,6 +678,7 @@ class LumitUiState extends ChangeNotifier {
             : BridgePlaybackMode.everyFrame,
         view: views.previewing?.engineId ?? activeViewId,
         reverse: _reverse,
+        speed: _speed,
       );
 
   /// Stop the transport, and — unless the user is taking hold of the playhead
@@ -1020,6 +1063,11 @@ class LumitUiState extends ChangeNotifier {
       if (frame < loop.start || frame > loop.end) return;
       _turned = false;
     }
+    // A backwards shuttle stops at the start of its span rather than turning.
+    if (_shuttle < 0 && frame <= _clockEnd) {
+      scrubTo(_clockEnd);
+      return;
+    }
     _clockAnchor = (frame: frame, micros: _clockWatch.elapsedMicroseconds);
     // The adaptive clock may already stand a frame past this picture, and pulling
     // the playhead back would make it twitch at every present.
@@ -1032,7 +1080,7 @@ class LumitUiState extends ChangeNotifier {
     // scheduler's clock both take their baseline from the frame play was
     // asked for.
     final comp = selectedComp;
-    if (loop == null || comp == null) return;
+    if (loop == null || comp == null || _shuttle < 0) return;
     switch (workspace.performance.loop) {
       case LoopMode.workArea:
         if (frame >= loop.end) {
@@ -1945,6 +1993,13 @@ class LumitUiState extends ChangeNotifier {
         if (_app.unsavedNeedsAsking && !await _app.askBeforeLeaving()) {
           return AppExitResponse.cancel;
         }
+        // A quit is a clean way out, so the next open doesn't read what is
+        // left in the journal as a crash.
+        try {
+          _app.project?.noteCleanExit();
+        } catch (_) {
+          // Closed already.
+        }
         return AppExitResponse.exit;
       },
     );
@@ -1969,6 +2024,7 @@ class LumitUiState extends ChangeNotifier {
     // unconditionally rather than only when on: it is the engine's live state
     // with no store behind it, so "off" has to be said as plainly as "on".
     setFullResDragPreviews(fullRes: perf.fullResDragPreviews);
+    setHardwareDecode(on_: perf.hardwareDecode);
     // Which output Lumit is heard through. Same arrangement as the budgets: the
     // engine holds the live choice with no store behind it, so the settings
     // file carries it and hands it back here. Null means the system default,

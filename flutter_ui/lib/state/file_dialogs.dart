@@ -243,6 +243,25 @@ Future<String?> pickWorkspaceSaveLocation(String suggestedName) async {
   return location?.path;
 }
 
+/// The saved expressions type group.
+XTypeGroup _expressionsGroup() => XTypeGroup(
+    label: l10n.fileTypeExpressions, extensions: const ['lumexpressions']);
+
+/// Pick an expressions file to import, or null when the dialogue was cancelled.
+Future<String?> pickExpressionsToOpen() async {
+  final file = await openFile(acceptedTypeGroups: [_expressionsGroup()]);
+  return file?.path;
+}
+
+/// Choose where to write the saved expressions, or null when cancelled.
+Future<String?> pickExpressionsSaveLocation() async {
+  final location = await getSaveLocation(
+    acceptedTypeGroups: [_expressionsGroup()],
+    suggestedName: 'expressions.lumexpressions',
+  );
+  return location?.path;
+}
+
 /// The After Effects import's own type group: the project file itself,
 /// and the zip a Bridge bundle travels in.
 XTypeGroup _aeGroup() => XTypeGroup(

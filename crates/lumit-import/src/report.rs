@@ -183,7 +183,8 @@ pub enum Reason {
     /// A shape layer: the paths, fills and strokes are a later stage, so the
     /// layer keeps its slot, transform and parenting but draws nothing.
     ShapeContentsNotMapped,
-    /// A text layer whose styling beyond size and fill colour has no home yet.
+    /// A text layer using something Lumit's text has no place for: animators,
+    /// a path, tsume, a justified last line, or source text that changes.
     TextStylingNotMapped,
     /// A light kind Lumit does not have; imported as the nearest.
     LightKindApproximated { ae_kind: String },
@@ -410,7 +411,8 @@ impl std::fmt::Display for Reason {
             Self::TextStylingNotMapped => {
                 write!(
                     f,
-                    "the words, size and fill colour imported; the rest of the styling did not"
+                    "the text imported, but not its animators, path, tsume, fully justified last \
+                     line or changing source text"
                 )
             }
             Self::LightKindApproximated { ae_kind } => {

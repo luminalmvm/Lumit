@@ -528,11 +528,22 @@ fn composition(
         masks: Vec::new(),
         self_index: 0,
     };
-    let layers = ae
+    let mut text_origins = BTreeMap::new();
+    let mut layers: Vec<_> = ae
         .layers
         .iter()
-        .filter_map(|layer| layers::map_layer(&mut conv, &path, layer, items, &ids))
+        .filter_map(|layer| {
+            layers::map_layer(&mut conv, &path, layer, items, &ids, &mut text_origins)
+        })
         .collect();
+    // A layer parented to text sits in that text's own space, whose origin
+    // moved with its anchor.
+    for layer in &mut layers {
+        if let Some(&(x, y)) = layer.parent.and_then(|parent| text_origins.get(&parent)) {
+            layers::shift(&mut layer.transform.position_x, x);
+            layers::shift(&mut layer.transform.position_y, y);
+        }
+    }
     let markers = layers::markers(&mut conv, &ae.markers);
 
     Composition {

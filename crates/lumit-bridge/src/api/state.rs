@@ -109,20 +109,22 @@ pub(crate) fn journals_in(dir: &Path) -> TestJournals {
     TestJournals
 }
 
-/// Throw away the journal of a project that was never saved.
+/// Throw away the journal of a project that was never saved, and note on a
+/// saved one's that it was closed on purpose.
 ///
 /// Recovery replays a journal onto a saved file, so without a file nothing can
 /// read this one back, and leaving it is how the cache filled with a folder
 /// per project. Only a clean close or a replaced project gets here, a crash
-/// never does.
+/// never does, which is how the next open tells the two apart.
 #[frb(ignore)]
 pub(crate) fn discard_unsaved_journal(state: &LumitBridgeState) {
-    if state.path.is_some() {
-        return;
-    }
     if let Ok(journal) = state.journal.lock() {
         if let Some(file) = journal.as_ref() {
-            let _ = file.clear();
+            if state.path.is_some() {
+                file.mark_closed();
+            } else {
+                let _ = file.clear();
+            }
         }
     }
 }
@@ -883,8 +885,7 @@ impl LumitBridgeState {
             // picker's problem, and Dart shows its own notice for None.
             return Ok(None);
         };
-        // What was kept holds every edit made while the host was away, saved
-        // or not, so it is what opens.
+        // What was kept is the copy as a guest left it, so it is what opens.
         let beside = path.parent().unwrap_or_else(|| Path::new(""));
         let (doc, resuming) = match lumit_share::resume(&mut doc, beside) {
             Some((kept, resuming)) => (kept, Some(resuming)),

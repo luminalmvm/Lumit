@@ -130,6 +130,10 @@ pub struct BridgeTextStyle {
 #[derive(Debug, Clone, PartialEq)]
 pub struct BridgeParagraphStyle {
     pub align: BridgeTextAlign,
+    /// Px the words wrap to. Unset is point text.
+    pub box_width: Option<f64>,
+    /// Stretch every line but a paragraph's last to the box.
+    pub justify: bool,
     pub indent_left: f64,
     pub indent_right: f64,
     pub indent_first: f64,
@@ -869,6 +873,8 @@ fn read_paragraph(paragraph: &lumit_core::text::ParagraphStyle) -> BridgeParagra
             TextAlign::Centre => BridgeTextAlign::Centre,
             TextAlign::Right => BridgeTextAlign::Right,
         },
+        box_width: Some(paragraph.box_width).filter(|w| *w > 0.0),
+        justify: paragraph.justify,
         indent_left: paragraph.indent_left,
         indent_right: paragraph.indent_right,
         indent_first: paragraph.indent_first,
@@ -885,6 +891,11 @@ fn paragraph_of(paragraph: BridgeParagraphStyle) -> lumit_core::text::ParagraphS
             BridgeTextAlign::Centre => TextAlign::Centre,
             BridgeTextAlign::Right => TextAlign::Right,
         },
+        box_width: paragraph
+            .box_width
+            .filter(|w| w.is_finite() && *w > 0.0)
+            .unwrap_or(0.0),
+        justify: paragraph.justify,
         indent_left: paragraph.indent_left,
         indent_right: paragraph.indent_right,
         indent_first: paragraph.indent_first,

@@ -1,9 +1,9 @@
 // The Paragraph panel: which side a text layer's lines line up on, and the
 // room round them.
 //
-// Text in Lumit is point text, so each line the user breaks is a paragraph of
-// its own. There is no box to justify the lines against yet, which is why the
-// panel offers left, centre and right alone.
+// Text is point text until it is given a box width, so each line the user
+// breaks is a paragraph of its own. With a box the words wrap to it, and
+// Justify stretches every line but a paragraph's last across it.
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
@@ -56,14 +56,15 @@ class _ParagraphPanelFrbState extends State<ParagraphPanelFrb>
         Widget px(
           String keyName,
           double value,
-          BridgeParagraphStyle Function(BridgeParagraphStyle, double) set,
-        ) =>
+          BridgeParagraphStyle Function(BridgeParagraphStyle, double) set, {
+          double min = -8000,
+        }) =>
             SizedBox(
               width: 72,
               child: DragValueField(
                 key: ValueKey<String>(keyName),
                 value: value,
-                min: -8000,
+                min: min,
                 max: 8000,
                 decimals: 1,
                 suffix: ' px',
@@ -94,10 +95,43 @@ class _ParagraphPanelFrbState extends State<ParagraphPanelFrb>
                         l10n.tipParagraphAlignCentre),
                     align(BridgeTextAlign.right, LumitIcon.textAlignRight,
                         l10n.tipParagraphAlignRight),
+                    LumitTooltip(
+                      message: l10n.tipParagraphJustify,
+                      child: HouseButton(
+                        key: const ValueKey<String>('paragraph-justify'),
+                        small: true,
+                        frameless: !paragraph.justify,
+                        active: paragraph.justify,
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        // There is nothing to stretch a line to without a box.
+                        onPressed: paragraph.boxWidth == null
+                            ? null
+                            : () => commitText(
+                                ui,
+                                target,
+                                reflow((p) =>
+                                    p.copyWith(justify: !paragraph.justify))),
+                        child: lumitIcon(LumitIcon.textJustify,
+                            size: iconSize,
+                            color: paragraph.justify
+                                ? t.textPrimary
+                                : t.textMuted),
+                      ),
+                    ),
                   ],
                 ),
               ),
               textGrid([
+                textCell(
+                  t,
+                  l10n.paragraphBoxWidth,
+                  // Nought is no box, which is point text.
+                  px('paragraph-box-width', paragraph.boxWidth ?? 0,
+                      (p, v) => v > 0
+                          ? p.copyWith(boxWidth: v)
+                          : p.copyWith(noBox: true),
+                      min: 0),
+                ),
                 textCell(
                   t,
                   l10n.paragraphIndentLeft,

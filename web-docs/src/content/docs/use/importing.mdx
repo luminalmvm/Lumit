@@ -47,14 +47,24 @@ one layer for each Photoshop layer. Each layer is also a footage item, filed in 
 named after the file.
 
 - Name, opacity, visibility and blend mode are kept.
-- A top-level group becomes a layer group.
+- A top-level group becomes a layer group. A group inside a group, or one with its own
+  opacity or blend mode, becomes a composition of its own and a Precomp layer.
 - A layer mask and a clipping mask are applied to the layer's picture.
+- A solid colour fill layer becomes a Solid layer.
+- Drop shadow, inner shadow, outer glow, inner glow, colour overlay and stroke become
+  layer styles.
+- An Invert, Posterize, Threshold, Brightness/Contrast, Exposure, Hue/Saturation, Levels,
+  Curves, Black and White, Vibrance, Colour Balance or Photo Filter adjustment layer
+  becomes an Adjustment layer carrying the nearest effect. It arrives switched off, since
+  the same numbers give a different picture in Lumit. Switch it on and set it by eye.
+- A 16 bit document keeps its depth.
 
 :::note[Not built yet]
-Layer styles, adjustment layers and fill layers are not imported. A group inside a group
-joins the outer group, and a group's own opacity and blend mode are dropped. PSB, 32 bit,
-CMYK, Lab and indexed documents are not split into layers. Illustrator and Affinity files
-are not read.
+The other adjustment layers, a Vibrance below zero, a Curves drawn freehand or with more
+than sixteen points, a Photo Filter whose colour isn't stored as Lab, gradient and pattern
+fills, and the other layer styles are not imported. A group's own mask and styles are
+dropped. PSB, 32 bit, CMYK, Lab and indexed documents are not split into layers.
+Illustrator and Affinity files are not read.
 :::
 
 ## Interpretation
@@ -85,7 +95,7 @@ not to. See [Proxies](/use/proxies/).
 A whole After Effects project can be imported via **File ▸ Import ▸ After Effects
 project**, with support for compositions, markers, layers, keyframes, and built-in
 effects. Third-party effects are not imported, but do not stop the rest of the project
-importing.
+importing. A text layer keeps its font, spacing, outline, alignment, and box width.
 
 ## Related
 

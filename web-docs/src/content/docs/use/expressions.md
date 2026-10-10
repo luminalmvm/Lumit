@@ -54,6 +54,9 @@ fit(layer().time, 0, 2, 0, 100)    // nought to a hundred over two seconds
 - **Delete** removes the selected entry.
 - **Apply** puts the script on every property row selected in the Timeline. Double-clicking
   an entry does the same.
+- **Export…** writes every saved expression to one file. **Import…** adds a file's
+  expressions to yours. A name you already have for a different script is kept, and the new
+  one gets a number after it.
 
 The search box matches names and scripts.
 

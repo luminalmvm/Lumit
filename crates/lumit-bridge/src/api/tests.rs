@@ -2889,12 +2889,14 @@ fn every_commit_is_journalled_and_a_save_clears_it() {
         "the journal is cleared by a save"
     );
 
-    // …and an edit after the save is not journalled against the stale handle:
-    // the project disarmed it, so recovery from here is the saved file itself.
+    // An edit after the save is journalled again, or a crash from here would
+    // lose everything since the save.
     project
         .new_composition("After".into(), None)
         .expect("an edit");
-    assert!(journal.read().expect("journal read").is_empty());
+    assert_eq!(journal.read().expect("journal read").len(), 1);
+    // Nothing has closed the project, so this is what a crash leaves behind.
+    assert!(journal.ended_badly());
 
     std::fs::remove_dir_all(&dir).ok();
 }
@@ -2929,11 +2931,18 @@ fn closing_a_saved_project_keeps_its_journal() {
     let project = LumitBridgeState::new_project(None).expect("a new project");
     project.new_composition("Saved".into(), None).expect("comp");
     project.save(target.clone()).expect("saved");
-    // A save switches the journal off, and recovery is what arms it again.
+    // Recovery reopens the file, so the edit below lands on what was saved.
     project.restore_journal(target).expect("restored");
     project
         .new_composition("Unsaved".into(), None)
         .expect("an edit");
+    assert!(project.ended_badly(), "an open project with unsaved edits");
+    let journal = {
+        let state = project.state().expect("state");
+        let state = state.read().expect("read");
+        let handle = state.journal.lock().expect("journal");
+        handle.clone().expect("a journal")
+    };
 
     project.close().expect("closed");
     assert_eq!(
@@ -2941,6 +2950,7 @@ fn closing_a_saved_project_keeps_its_journal() {
         1,
         "the unsaved edit is still there to recover"
     );
+    assert!(!journal.ended_badly(), "a close on purpose is not a crash");
 }
 
 /// Two threads opening projects and editing them at once must not deadlock.
@@ -3739,13 +3749,16 @@ fn a_text_style_round_trips_and_undoes() {
     let comp = CompositionReference::new(project.id, layer.comp_id());
     let text = comp.add_text_layer(None).expect("a text layer");
     let plain = text.get_text().expect("text").expect("it is text");
-    assert_eq!(plain.style, crate::api::assets::default_text_style());
+    // New text is the default style with kerning on.
+    let mut kerned = crate::api::assets::default_text_style();
+    kerned.kerning = BridgeKerning::Metrics;
+    assert_eq!(plain.style, kerned);
 
     let mut styled = plain.clone();
     styled.style.family = "Arial".into();
     styled.style.face = "Bold".into();
     styled.style.leading = Some(90.0);
-    styled.style.kerning = BridgeKerning::Metrics;
+    styled.style.kerning = BridgeKerning::Off;
     styled.style.tracking = 50.0;
     styled.style.caps = BridgeCaps::Small;
     styled.style.stroke_on = true;
@@ -8884,8 +8897,8 @@ fn an_addon_installs_lists_and_removes_and_is_refused_honestly() {
 #[cfg(feature = "media")]
 #[test]
 fn a_photoshop_document_imports_as_a_comp_of_its_layers_in_one_undo_step() {
-    use lumit_core::model::{BlendMode, LayerKind};
-    use lumit_media::psd::fixture::{document, Layer};
+    use lumit_core::model::{BlendMode, EffectValue, LayerKind};
+    use lumit_media::psd::fixture::{described, document, Layer, Value};
 
     let dir = tempfile::tempdir().expect("temp dir");
     let path = dir.path().join("poster.psd");
@@ -8894,15 +8907,35 @@ fn a_photoshop_document_imports_as_a_comp_of_its_layers_in_one_undo_step() {
     hat.blend = *b"mul ";
     let mut props = Layer::group("Props", true);
     props.visible = false;
-    // Bottom first, as the file lists them. "Levels" has no picture.
+    // A drop shadow lit from 120 degrees, which is Photoshop's own default.
+    let mut title = Layer::solid("Title", [4, 4, 12, 28], [255, 255, 255, 255]);
+    let black = ["Rd  ", "Grn ", "Bl  "].map(|key| (key, Value::Number(0.0)));
+    let shadow = Value::Object(vec![
+        ("enab", Value::Switch(true)),
+        ("Clr ", Value::Object(black.to_vec())),
+        ("Opct", Value::Number(40.0)),
+        ("lagl", Value::Number(120.0)),
+    ]);
+    title.blocks = vec![described(*b"lfx2", &[("DrSh", shadow)])];
+    // Threshold at 128 of 255, with a mask over the left half.
+    let mut threshold = Layer::solid("Threshold", [0, 0, 0, 0], [0; 4]);
+    threshold.blocks = vec![(*b"thrs", vec![0, 128, 0, 0])];
+    threshold.mask = Some(([0, 0, 32, 16], 0, vec![255; 32 * 16]));
+    // Bottom first, as the file lists them. "Empty" has no picture, "Sky" is
+    // a fill layer, and "Brim" is a group inside "Props".
     let layers = [
         Layer::solid("Background", [0, 0, 32, 32], [255, 0, 0, 255]),
         Layer::group("</Layer group>", false),
         hat,
+        Layer::group("</Layer group>", false),
+        Layer::solid("Feather", [0, 0, 4, 4], [255, 255, 0, 255]),
+        Layer::group("Brim", true),
         Layer::solid("Scarf", [0, 0, 8, 8], [0, 255, 0, 255]),
         props,
-        Layer::solid("Levels", [0, 0, 0, 0], [0; 4]),
-        Layer::solid("Title", [4, 4, 12, 28], [255, 255, 255, 255]),
+        Layer::solid("Empty", [0, 0, 0, 0], [0; 4]),
+        Layer::fill("Sky", [0.0, 0.0, 255.0]),
+        threshold,
+        title,
     ];
     std::fs::write(&path, document(32, 32, 8, &layers)).expect("the fixture writes");
 
@@ -8930,7 +8963,20 @@ fn a_photoshop_document_imports_as_a_comp_of_its_layers_in_one_undo_step() {
         .expect("a comp named for the file");
     assert_eq!((comp.width, comp.height), (32, 32));
     let names: Vec<&str> = comp.layers.iter().map(|l| l.name.as_str()).collect();
-    assert_eq!(names, ["Title", "Scarf", "Hat", "Background"], "top first");
+    assert_eq!(
+        names,
+        [
+            "Title",
+            "Threshold",
+            "Threshold",
+            "Sky",
+            "Scarf",
+            "Brim",
+            "Hat",
+            "Background"
+        ],
+        "top first"
+    );
 
     // Each layer reads its own record of the file, by its place in the list.
     let picks: Vec<Option<u32>> = comp
@@ -8944,9 +8990,39 @@ fn a_photoshop_document_imports_as_a_comp_of_its_layers_in_one_undo_step() {
             _ => None,
         })
         .collect();
-    assert_eq!(picks, [Some(6), Some(3), Some(2), Some(0)]);
+    assert_eq!(
+        picks,
+        [
+            Some(11),
+            None,
+            Some(10),
+            None,
+            Some(6),
+            None,
+            Some(2),
+            Some(0)
+        ]
+    );
 
-    let hat = &comp.layers[2];
+    // An adjustment layer is an Adjustment layer carrying the nearest effect.
+    // Its mask is the record read as a picture, on a hidden layer under it
+    // that it takes as its matte.
+    let (threshold, mask) = (&comp.layers[1], &comp.layers[2]);
+    assert_eq!(threshold.kind, LayerKind::Adjustment);
+    assert!(!threshold.switches.visible, "it arrives switched off");
+    assert_eq!(threshold.matte.map(|m| m.layer), Some(mask.id));
+    assert!(!mask.switches.visible);
+    let [effect] = threshold.effects.as_slice() else {
+        panic!("the adjustment carries one effect");
+    };
+    assert_eq!(effect.effect.match_name, "threshold");
+    let level = effect.params.iter().find(|p| p.id == "level");
+    let Some(EffectValue::Float(level)) = level.map(|p| &p.value) else {
+        panic!("Threshold has a level");
+    };
+    assert!((level.value_at(0.0) - 50.2).abs() < 0.1, "128 of 255");
+
+    let hat = &comp.layers[6];
     assert_eq!(hat.blend, BlendMode::Multiply);
     let opacity = hat.transform.opacity.value_at(0.0);
     assert!((opacity - 50.2).abs() < 0.1, "128 of 255 is {opacity}");
@@ -8955,10 +9031,43 @@ fn a_photoshop_document_imports_as_a_comp_of_its_layers_in_one_undo_step() {
 
     assert_eq!(comp.groups.len(), 1);
     assert_eq!(comp.groups[0].name, "Props");
-    assert_eq!(
-        comp.groups[0].members,
-        [comp.layers[1].id, comp.layers[2].id]
-    );
+    let members: Vec<_> = comp.layers[4..7].iter().map(|l| l.id).collect();
+    assert_eq!(comp.groups[0].members, members);
+
+    // A group inside a group is a composition of its own, placed in the outer
+    // group as a Precomp layer that lets its layers blend through.
+    let brim = &comp.layers[5];
+    let LayerKind::Precomp { comp: inner } = brim.kind else {
+        panic!("the inner group is a Precomp layer");
+    };
+    assert!(brim.switches.collapse);
+    let inner = doc.comp(inner).expect("the inner group's composition");
+    let names: Vec<&str> = inner.layers.iter().map(|l| l.name.as_str()).collect();
+    assert_eq!(names, ["Feather"]);
+
+    // A fill layer is a Solid layer of its colour.
+    let LayerKind::Solid { def } = comp.layers[3].kind else {
+        panic!("the fill is a Solid layer");
+    };
+    let Some(ProjectItem::Solid(sky)) = doc.item(def) else {
+        panic!("the fill has a solid");
+    };
+    assert_eq!(sky.colour.0, [0.0, 0.0, 1.0, 1.0]);
+
+    // A layer style is the Lumit style of the same name. Light from 120
+    // degrees throws a shadow at 150.
+    let [shadow] = comp.layers[0].styles.as_slice() else {
+        panic!("the title wears one style");
+    };
+    assert_eq!(shadow.effect.match_name, "style_drop_shadow");
+    let row = |id: &str| match shadow.params.iter().find(|p| p.id == id) {
+        Some(param) => match &param.value {
+            EffectValue::Float(value) => value.value_at(0.0),
+            _ => f64::NAN,
+        },
+        None => f64::NAN,
+    };
+    assert_eq!((row("opacity"), row("direction")), (40.0, 150.0));
 
     let folder = doc
         .items
@@ -8968,7 +9077,9 @@ fn a_photoshop_document_imports_as_a_comp_of_its_layers_in_one_undo_step() {
             _ => None,
         })
         .expect("a folder for the layer items");
-    assert_eq!(folder.children.len(), 4);
+    // Five pictures, the adjustment's mask, the fill's solid and the inner
+    // group's composition.
+    assert_eq!(folder.children.len(), 8);
 
     project.undo().expect("one import, one step");
     assert_eq!(snapshot().items.len(), before, "undo takes all of it back");
@@ -8982,4 +9093,117 @@ fn a_photoshop_document_imports_as_a_comp_of_its_layers_in_one_undo_step() {
         assert_eq!(answer.expect("no error"), None);
     }
     assert_eq!(snapshot().items.len(), before, "and nothing was added");
+
+    // The adjustment kinds whose numbers are reshaped on the way in. Over two
+    // pictures, bottom first: Photoshop's own Warming Filter (85), a green
+    // curve turned upside down, a tinted Black and White, a Vibrance with a
+    // Saturation, a negative Vibrance, which is left out, and a Colour
+    // Balance.
+    let adjust = |name: &str, block: ([u8; 4], Vec<u8>)| {
+        let mut layer = Layer::solid(name, [0, 0, 0, 0], [0; 4]);
+        layer.blocks = vec![block];
+        layer
+    };
+    let words = |lead: &[u8], words: &[i16], tail: &[u8]| {
+        let words = words.iter().flat_map(|w| w.to_be_bytes());
+        [lead, &words.collect::<Vec<u8>>(), tail].concat()
+    };
+    let white = ["Rd  ", "Grn ", "Bl  "].map(|key| (key, Value::Number(255.0)));
+    let grey = [
+        ("Rd  ", Value::Number(-10.0)),
+        ("Yllw", Value::Number(60.0)),
+        ("Grn ", Value::Number(40.0)),
+        ("Cyn ", Value::Number(60.0)),
+        ("Bl  ", Value::Number(20.0)),
+        ("Mgnt", Value::Number(80.0)),
+        ("useTint", Value::Switch(true)),
+        ("tintColor", Value::Object(white.to_vec())),
+    ];
+    let vibrance = |vibrance: f64| {
+        let items = [("vibrance", vibrance), ("Strt", -20.0)].map(|(k, v)| (k, Value::Number(v)));
+        described(*b"vibA", &items)
+    };
+    let curve = words(&[0], &[1, 0, 4, 2, 255, 0, 0, 255], &[0]);
+    let balance = words(&[], &[0, 0, 0, 100, 0, -100, 0, 0, 100], &[1, 0, 0, 0]);
+    // The older layout, in Lab: 67.06, 32 and 120, then 25 per cent.
+    let glass = words(&[], &[2, 7, 6706, 3200, 12000, 0, 0, 25], &[1, 0, 0, 0]);
+    let layers = [
+        Layer::solid("Background", [0, 0, 32, 32], [255, 0, 0, 255]),
+        Layer::solid("Hat", [8, 8, 16, 16], [0, 0, 255, 255]),
+        adjust("Glass", (*b"phfl", glass)),
+        adjust("Curves", (*b"curv", curve)),
+        adjust("Grey", described(*b"blwh", &grey)),
+        adjust("Vibrance", vibrance(30.0)),
+        adjust("Faded", vibrance(-30.0)),
+        adjust("Balance", (*b"blnc", balance)),
+    ];
+    let grade = dir.path().join("grade.psd");
+    std::fs::write(&grade, document(32, 32, 8, &layers)).expect("the fixture writes");
+    let left_out = project.import_layers(grade.to_string_lossy().into_owned());
+    assert_eq!(left_out.expect("the document imports"), Some(1));
+    let doc = snapshot();
+    let comp = doc
+        .items
+        .iter()
+        .find_map(|i| match i {
+            ProjectItem::Composition(c) if c.name == "grade" => Some(c),
+            _ => None,
+        })
+        .expect("a comp named for the file");
+    let carried: Vec<Vec<&str>> = comp
+        .layers
+        .iter()
+        .map(|l| l.effects.iter().map(|e| &*e.effect.match_name).collect())
+        .collect();
+    assert_eq!(
+        carried,
+        [
+            vec!["colour_balance"],
+            vec!["vibrancy", "saturation"],
+            vec!["black_and_white"],
+            vec!["curves"],
+            vec!["photo_filter"],
+            vec![],
+            vec![]
+        ]
+    );
+    let row = |layer: usize, effect: usize, id: &str| -> Vec<f64> {
+        let params = &comp.layers[layer].effects[effect].params;
+        match params.iter().find(|p| p.id == id).map(|p| &p.value) {
+            Some(EffectValue::Float(v)) => vec![v.value_at(0.0)],
+            Some(EffectValue::Colour(c)) => c.iter().map(|v| v.value_at(0.0)).collect(),
+            Some(EffectValue::Bool(on)) => vec![f64::from(u8::from(*on))],
+            Some(EffectValue::Curve(points)) => {
+                points.iter().flatten().map(|v| f64::from(*v)).collect()
+            }
+            _ => Vec::new(),
+        }
+    };
+    assert_eq!(
+        row(3, 0, "green"),
+        [0.0, 1.0, 1.0, 0.0],
+        "input, then output"
+    );
+    assert_eq!(row(3, 0, "master"), [0.0, 0.0, 1.0, 1.0]);
+    assert_eq!(
+        (row(2, 0, "reds"), row(2, 0, "tint")),
+        (vec![-10.0], vec![1.0])
+    );
+    assert_eq!(row(2, 0, "tint_colour"), [1.0; 4]);
+    assert_eq!(
+        (row(1, 0, "amount"), row(1, 1, "saturation")),
+        (vec![30.0], vec![80.0])
+    );
+    assert_eq!(row(0, 0, "lift"), [0.0, 0.0, 0.0, 1.0]);
+    assert_eq!(
+        row(0, 0, "gamma"),
+        [2.0, 1.0, 0.5, 1.0],
+        "a stop a full slider"
+    );
+    assert_eq!(row(0, 0, "gain"), [1.0, 1.0, 2.0, 1.0]);
+    // That filter is the orange Photoshop shows as 236, 138, 0.
+    let glass = row(4, 0, "colour");
+    assert!((glass[0] - 0.84).abs() < 0.01 && (glass[1] - 0.255).abs() < 0.01);
+    assert_eq!((glass[2], row(4, 0, "density")), (0.0, vec![25.0]));
+    assert_eq!(row(4, 0, "preserve_luminosity"), [1.0]);
 }

@@ -685,6 +685,24 @@ impl FootageReference {
     /// Display data — the Project panel's Path column. It says where the
     /// reference points, not whether anything is there; `get_status` is the
     /// question about the disk, and this deliberately touches none.
+    /// Show this footage's file in the desktop's own file manager. False when
+    /// the file can't be found, or no window could be opened.
+    #[frb(sync)]
+    #[must_use]
+    pub fn reveal(&self) -> bool {
+        let path = self.project().ok().and_then(|proj| {
+            let proj = proj.read().ok()?;
+            let snapshot = proj.store.snapshot();
+            match snapshot.item(self.id) {
+                Some(lumit_core::model::ProjectItem::Footage(footage)) => {
+                    Self::resolve_path(&proj, footage)
+                }
+                _ => None,
+            }
+        });
+        path.is_some_and(|path| crate::export::reveal_in_folder(&path.to_string_lossy()))
+    }
+
     #[frb(sync)]
     pub fn file_path(&self) -> Result<String, BridgeError> {
         let proj = self.project()?;
