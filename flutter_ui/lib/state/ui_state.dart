@@ -43,6 +43,7 @@ import 'package:lumit_flutter/src/rust/api/shell.dart'
     show setAutosave, setFullResDragPreviews, setHardwareDecode;
 import 'package:lumit_flutter/src/rust/api/state.dart';
 import 'package:lumit_flutter/state/addons.dart';
+import 'package:lumit_flutter/state/extensions.dart';
 import 'package:lumit_flutter/state/addons_engine.dart';
 import 'package:lumit_flutter/state/comp_model.dart';
 import 'package:lumit_flutter/state/clipboard.dart';
@@ -126,6 +127,27 @@ class LumitUiState extends ChangeNotifier {
   /// that sends the user to that page reads the same answer. Built lazily, so a
   /// widget test that never opens the page never asks the engine anything.
   late final AddonService addons = createAddonService();
+
+  /// The extensions installed, and which pane each is shown in. Not lazy:
+  /// the dock asks it what to call an extension's tab from the first frame.
+  late final ExtensionService extensions = ExtensionService(workspace);
+
+  /// Whether the extension [id] has its panel in the arrangement.
+  bool extensionShown(String id) =>
+      panesIn(split).contains(extensions.pane(id));
+
+  /// Put the extension [id]'s panel up, or take it down.
+  void toggleExtension(String id) {
+    final pane = extensions.pane(id);
+    if (panesIn(split).contains(pane)) {
+      closePane(split, pane);
+    } else {
+      showPane(split, pane);
+      activePane.value = pane;
+    }
+    workspace.touch();
+    saveLayout();
+  }
 
   /// How big each layer's content is, for the Viewer's boxes and hit-testing.
   /// Held here because the answer is the document's, not a panel's, and

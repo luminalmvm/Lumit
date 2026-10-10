@@ -1,0 +1,12 @@
+{
+  "format": 1,
+  "id": "reluduali",
+  "name": "Reluduali",
+  "version": "0.1.0",
+  "summary": "A contest timer, an editing partner and the render fingerprint, in a panel inside Lumit.",
+  "author": "Reluduali",
+  "homepage": "https://reluduali.com",
+  "entry": "index.html",
+  "permissions": ["project", "activity", "export", "import", "share"],
+  "hosts": ["reluduali.com", "vegaography.com"]
+}

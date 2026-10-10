@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="utf-8" />
+    <title>Reluduali</title>
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; padding: 12px; background: #131417; color: #d6d8dc;
+        font: 12px/1.45 system-ui, "Segoe UI", sans-serif;
+      }
+      h1 { margin: 0 0 10px; font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; }
+      section { border: 1px solid #2a2c31; border-radius: 6px; padding: 10px; margin-bottom: 10px; }
+      section > h2 { margin: 0 0 6px; font-size: 10px; color: #8b8f97; letter-spacing: 0.1em; text-transform: uppercase; }
+      .clock { font: 28px/1 ui-monospace, Consolas, monospace; }
+      .muted { color: #8b8f97; }
+      .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+      button {
+        background: #1d1f23; color: inherit; border: 1px solid #3a3d44; border-radius: 4px;
+        padding: 4px 10px; font: inherit; cursor: pointer;
+      }
+      button:hover { border-color: #6c7078; }
+      button.primary { background: #e8e9eb; color: #131417; border-color: #e8e9eb; }
+      input { background: #0c0d0f; color: inherit; border: 1px solid #2a2c31; border-radius: 4px; padding: 4px 6px; font: inherit; flex: 1; min-width: 0; }
+      progress { width: 100%; height: 6px; }
+      code { font: 11px ui-monospace, Consolas, monospace; word-break: break-all; }
+      #log { margin: 0; padding: 0; list-style: none; max-height: 160px; overflow: auto; }
+      #log li { padding: 2px 0; border-top: 1px solid #1d1f23; }
+    </style>
+  </head>
+  <body>
+    <h1>Reluduali</h1>
+
+    <section>
+      <h2>Contest timer</h2>
+      <div class="clock" id="clock">00:00:00</div>
+      <div class="muted" id="split">Editing 00:00:00 · away 00:00:00 · 0 steps</div>
+      <div class="row">
+        <button class="primary" id="timer">Start</button>
+        <span class="muted" id="project">No project</span>
+      </div>
+    </section>
+
+    <section>
+      <h2>Editing partner</h2>
+      <div id="people" class="muted">Not shared</div>
+      <div class="row">
+        <button id="share">Share with a partner</button>
+        <button id="copy" hidden>Copy invite link</button>
+        <button id="leave" hidden>Stop</button>
+      </div>
+      <div class="row">
+        <input id="link" type="password" placeholder="Paste a partner's invite link" />
+        <button id="join">Join</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>Recordings</h2>
+      <div id="watching" class="muted">No folder is watched</div>
+      <div class="row"><button id="watch">Watch a folder</button></div>
+    </section>
+
+    <section>
+      <h2>Render</h2>
+      <div id="export" class="muted">Nothing has been exported yet</div>
+      <progress id="bar" max="1" value="0" hidden></progress>
+      <div id="print"></div>
+    </section>
+
+    <section>
+      <h2>What this panel has been told</h2>
+      <ul id="log"></ul>
+    </section>
+
+    <script>
+      // A starting point, not the finished thing. Everything Lumit offers an
+      // extension is used once below: docs.lumitlab.com/use/extensions lists it.
+      // What is not here is anything of Reluduali's own: signing in, the
+      // friends list and the Demo Database go through lumit.call("net.fetch")
+      // to the sites named under "hosts" in extension.json.
+
+      // Set this to a relay's address to offer it whenever a partner is invited.
+      const RELAY = null;
+      // How long after the last edit somebody still counts as editing.
+      const EDITING_FOR = 60_000;
+      const WATCHED = "reluduali.watched";
+
+      const $ = (id) => document.getElementById(id);
+      const clock = (ms) => new Date(ms).toISOString().slice(11, 19);
+      function log(text) {
+        const item = document.createElement("li");
+        item.textContent = `${new Date().toLocaleTimeString()}  ${text}`;
+        $("log").prepend(item);
+        while ($("log").children.length > 100) $("log").lastChild.remove();
+      }
+
+      const timer = { running: false, total: 0, editing: 0, steps: 0, lastEdit: 0, focused: true };
+      setInterval(() => {
+        if (timer.running) {
+          timer.total += 1000;
+          if (timer.focused && Date.now() - timer.lastEdit < EDITING_FOR) timer.editing += 1000;
+        }
+        $("clock").textContent = clock(timer.total);
+        $("split").textContent =
+          `Editing ${clock(timer.editing)} · away ${clock(timer.total - timer.editing)} · ${timer.steps} steps`;
+      }, 1000);
+      $("timer").onclick = () => {
+        timer.running = !timer.running;
+        $("timer").textContent = timer.running ? "Pause" : "Start";
+        log(timer.running ? "Timer started" : "Timer paused");
+      };
+
+      function showProject(project) {
+        $("project").textContent = !project.open ? "No project"
+          : (project.name || "Unsaved project") + (project.dirty ? " (unsaved changes)" : "");
+      }
+      function showShare(share) {
+        const names = share.people.map((p) => p.name + (p.me ? " (you)" : "")).join(", ");
+        $("people").textContent = share.role === "none" ? "Not shared"
+          : `${share.role === "host" ? "Hosting" : "Joined"}: ${names}` + (share.away ? " · host out of reach" : "");
+        $("copy").hidden = share.role !== "host";
+        $("leave").hidden = share.role === "none";
+        $("share").hidden = share.role !== "none";
+      }
+      function showExport(state) {
+        $("bar").hidden = state.state !== "running";
+        if (state.state === "running") {
+          $("bar").value = state.total ? state.frame / state.total : 0;
+          $("export").textContent = `Exporting frame ${state.frame} of ${state.total || "?"}`;
+        } else if (state.state === "failed") {
+          $("export").textContent = `The export stopped: ${state.error}`;
+        }
+      }
+      async function watch(folder) {
+        try {
+          const answer = await lumit.call("import.watch", folder ? { folder } : {});
+          if (!answer.folder) return;
+          localStorage.setItem(WATCHED, answer.folder);
+          $("watching").textContent = `Watching ${answer.folder}`;
+          log(`Watching ${answer.folder} for recordings`);
+        } catch (error) {
+          localStorage.removeItem(WATCHED);
+          log(`Could not watch the folder: ${error.message}`);
+        }
+      }
+
+      async function start() {
+        const info = await lumit.call("app.info");
+        log(`Lumit ${info.lumit}, extension API ${info.api}`);
+
+        showProject(await lumit.call("project.info"));
+        lumit.on("project.changed", (project) => { showProject(project); log("The project changed"); });
+
+        lumit.on("activity.edit", (edit) => {
+          timer.lastEdit = edit.at;
+          timer.steps += 1;
+          log(`Edit: ${edit.step || "a change"}`);
+        });
+        lumit.on("activity.focus", (focus) => {
+          timer.focused = focus.focused;
+          log(focus.focused ? "Lumit is in front" : "Lumit is in the background");
+        });
+
+        showShare(await lumit.call("share.state"));
+        lumit.on("share.changed", (share) => { showShare(share); log("Who is in the project changed"); });
+        $("share").onclick = () => lumit.call("share.start", RELAY ? { relay: RELAY } : {});
+        $("leave").onclick = () => lumit.call("share.stop");
+        $("join").onclick = () => $("link").value && lumit.call("share.join", { link: $("link").value.trim() });
+        $("copy").onclick = async () => {
+          // Reluduali would send this to the partner picked from the friends
+          // list. Until then it goes on the clipboard.
+          const link = await lumit.call("share.link");
+          if (link) await navigator.clipboard.writeText(link);
+          log(link ? "Invite link copied" : "There is no invite link yet");
+        };
+
+        const watched = localStorage.getItem(WATCHED);
+        if (watched) watch(watched);
+        $("watch").onclick = () => watch(null);
+        lumit.on("import.added", (file) => log(`Imported ${file.path}`));
+
+        showExport(await lumit.call("export.state"));
+        lumit.on("export.started", (state) => { showExport(state); log("An export started"); });
+        lumit.on("export.progress", showExport);
+        lumit.on("export.failed", (state) => { showExport(state); log("An export stopped"); });
+        lumit.on("export.finished", async (state) => {
+          showExport(state);
+          const print = await lumit.call("export.fingerprint");
+          $("export").textContent = `Exported ${print.path}`;
+          $("print").innerHTML = "";
+          const code = document.createElement("code");
+          code.textContent = `sha256 ${print.sha256} · ${print.bytes} bytes`;
+          $("print").append(code);
+          log("An export finished and was fingerprinted");
+          // This is where a submission would be committed to Reluduali.
+        });
+      }
+
+      if (window.lumit) start(); else window.addEventListener("lumitready", start);
+    </script>
+  </body>
+</html>
