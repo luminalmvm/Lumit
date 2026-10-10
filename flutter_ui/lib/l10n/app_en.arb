@@ -12249,6 +12249,10 @@
   "@makeProxy": {
     "description": "Project panel row menu, on a footage row: transcode a smaller stand-in file for this item and attach it."
   },
+  "makeProxies": "Make proxies",
+  "@makeProxies": {
+    "description": "Project panel row menu, on a folder row: make a proxy for every footage item in the folder, one after another."
+  },
   "useProxy": "Use proxy",
   "@useProxy": {
     "description": "Project panel row menu, on a footage row that has a proxy: a ticked entry, read from the proxy or from the original. Also names that edit in the Edit > History window."
