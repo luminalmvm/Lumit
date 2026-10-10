@@ -2895,6 +2895,8 @@ fn every_commit_is_journalled_and_a_save_clears_it() {
         .new_composition("After".into(), None)
         .expect("an edit");
     assert_eq!(journal.read().expect("journal read").len(), 1);
+    // Nothing has closed the project, so this is what a crash leaves behind.
+    assert!(journal.ended_badly());
 
     std::fs::remove_dir_all(&dir).ok();
 }
@@ -2934,6 +2936,13 @@ fn closing_a_saved_project_keeps_its_journal() {
     project
         .new_composition("Unsaved".into(), None)
         .expect("an edit");
+    assert!(project.ended_badly(), "an open project with unsaved edits");
+    let journal = {
+        let state = project.state().expect("state");
+        let state = state.read().expect("read");
+        let handle = state.journal.lock().expect("journal");
+        handle.clone().expect("a journal")
+    };
 
     project.close().expect("closed");
     assert_eq!(
@@ -2941,6 +2950,7 @@ fn closing_a_saved_project_keeps_its_journal() {
         1,
         "the unsaved edit is still there to recover"
     );
+    assert!(!journal.ended_badly(), "a close on purpose is not a crash");
 }
 
 /// Two threads opening projects and editing them at once must not deadlock.

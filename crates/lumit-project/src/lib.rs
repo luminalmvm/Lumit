@@ -1437,6 +1437,14 @@ impl JournalFile {
         if let Some(parent) = self.path.parent() {
             fs::create_dir_all(parent)?;
         }
+        // The first edit after a clean close starts the journal afresh. What
+        // was left in it are edits somebody chose not to save, and they must
+        // not come back underneath new ones.
+        let closed = self.closed_marker();
+        if closed.exists() {
+            let _ = fs::remove_file(&self.path);
+            let _ = fs::remove_file(&closed);
+        }
         let mut f = OpenOptions::new()
             .create(true)
             .append(true)
@@ -1500,7 +1508,28 @@ impl JournalFile {
         Ok(())
     }
 
+    /// Note that the project was closed on purpose. The edits still in the
+    /// journal are then ones somebody chose not to save, and not what a crash
+    /// left behind.
+    pub fn mark_closed(&self) {
+        if self.size() > 0 {
+            let _ = fs::write(self.closed_marker(), b"");
+        }
+    }
+
+    /// Whether the journal holds edits from a run that never closed the
+    /// project, which is a crash or a power cut.
+    #[must_use]
+    pub fn ended_badly(&self) -> bool {
+        self.size() > 0 && !self.closed_marker().exists()
+    }
+
+    fn closed_marker(&self) -> PathBuf {
+        self.path.with_extension("closed")
+    }
+
     pub fn clear(&self) -> Result<(), ProjectError> {
+        let _ = fs::remove_file(self.closed_marker());
         match fs::remove_file(&self.path) {
             Ok(()) => {}
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}

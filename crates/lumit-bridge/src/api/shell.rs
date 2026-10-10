@@ -215,6 +215,43 @@ impl ProjectReference {
             .map_err(|_| BridgeError::WriteFailed)
     }
 
+    /// Whether the journal holds edits from a run that never closed this
+    /// project, which is a crash or a power cut. Asked once, as the project
+    /// opens, to decide whether to offer them back.
+    #[frb(sync)]
+    #[must_use]
+    pub fn ended_badly(&self) -> bool {
+        self.journal_file()
+            .is_some_and(|journal| journal.ended_badly())
+    }
+
+    /// Note that the project is being left on purpose, for the application
+    /// quitting. Closing or replacing a project notes it by itself.
+    #[frb(sync)]
+    pub fn note_clean_exit(&self) {
+        if let Ok(state) = self.state() {
+            if let Ok(state) = state.read() {
+                crate::api::state::discard_unsaved_journal(&state);
+            }
+        }
+    }
+
+    /// Throw away the edits a crash left in the journal, for somebody who was
+    /// offered them and said no.
+    #[frb(sync)]
+    pub fn discard_journal(&self) {
+        if let Some(journal) = self.journal_file() {
+            let _ = journal.clear();
+        }
+    }
+
+    fn journal_file(&self) -> Option<lumit_project::JournalFile> {
+        let state = self.state().ok()?;
+        let state = state.read().ok()?;
+        let journal = state.journal.lock().ok()?;
+        journal.clone()
+    }
+
     /// Open `project_path` and replay its crash journal on top of it.
     ///
     /// This is the whole point of the journal: a session that ended badly left

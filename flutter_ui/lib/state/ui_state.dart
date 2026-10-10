@@ -1939,6 +1939,13 @@ class LumitUiState extends ChangeNotifier {
         if (_app.unsavedNeedsAsking && !await _app.askBeforeLeaving()) {
           return AppExitResponse.cancel;
         }
+        // A quit is a clean way out, so the next open doesn't read what is
+        // left in the journal as a crash.
+        try {
+          _app.project?.noteCleanExit();
+        } catch (_) {
+          // Closed already.
+        }
         return AppExitResponse.exit;
       },
     );

@@ -124,8 +124,9 @@ A project that has not changed since its last save or autosave writes nothing.
 
 ## Crash recovery
 
-Between saves, Lumit also records every edit. After a crash, open the project and choose
-**File ▸ Recover…**. The dialogue has three choices:
+Between saves, Lumit also records every edit. After a crash, open the project and Lumit
+asks whether to restore them. **File ▸ Recover…** asks again later. The dialogue has
+three choices:
 
 | Choice | Recovers |
 | --- | --- |
@@ -134,11 +135,8 @@ Between saves, Lumit also records every edit. After a crash, open the project an
 | **Don't restore changes** | Nothing. The project stays as it was opened. |
 
 The command is live once the project has been saved to a file, and does nothing while
-there is no autosave beside it.
-
-:::note[Not built yet]
-Lumit does not offer recovery by itself on the next launch.
-:::
+there is no autosave beside it. After a crash, an answer other than **Restore all
+changes** throws the recorded edits away.
 
 ## Related
 

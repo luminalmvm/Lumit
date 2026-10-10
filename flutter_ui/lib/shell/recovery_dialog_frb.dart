@@ -59,18 +59,26 @@ const double recoveryDialogWidth = 350;
 /// Offer recovery for `projectPath`. Returns null when there is nothing to
 /// recover, so the caller can open the project normally without a dialogue
 /// nobody needed.
+///
+/// [crashed] is the offer made as a project opens with a crash's edits still
+/// in its journal. There is then something to restore whether or not there is
+/// an autosave, and an answer other than restoring them throws them away, so
+/// the question is not asked again and they never come back under new edits.
 Future<RecoveryChoice?> showRecoveryDialogFrb({
   required BuildContext context,
   required LumitState state,
   required String projectPath,
+  bool crashed = false,
 }) async {
   final autosaves = listAutosaves(project: projectPath);
-  if (autosaves.isEmpty) return null;
+  if (autosaves.isEmpty && !crashed) return null;
+  if (!context.mounted) return null;
 
   final choice = await showLumitModal<RecoveryChoice>(
     context: context,
     id: 'recovery',
-    builder: (close) => _RecoveryDialog(onChoose: close),
+    builder: (close) => _RecoveryDialog(
+        onChoose: close, hasAutosave: autosaves.isNotEmpty),
   );
   if (choice == null) return null;
 
@@ -79,9 +87,10 @@ Future<RecoveryChoice?> showRecoveryDialogFrb({
       state.project?.restoreJournal(projectPath: projectPath);
       state.sharingLetGo();
     case RecoveryChoice.autosave:
-      await state.openProject(autosaves.first.path);
+      await state.openProject(autosaves.first.path, recover: false);
+      if (crashed) state.project?.discardJournal();
     case RecoveryChoice.discard:
-      break;
+      if (crashed) state.project?.discardJournal();
   }
   state.notifyDocumentChanged();
   return choice;
@@ -90,7 +99,10 @@ Future<RecoveryChoice?> showRecoveryDialogFrb({
 class _RecoveryDialog extends StatelessWidget {
   final ValueChanged<RecoveryChoice?> onChoose;
 
-  const _RecoveryDialog({required this.onChoose});
+  /// Whether there is a timed copy to offer.
+  final bool hasAutosave;
+
+  const _RecoveryDialog({required this.onChoose, this.hasAutosave = true});
 
   @override
   Widget build(BuildContext context) {
@@ -116,8 +128,9 @@ class _RecoveryDialog extends StatelessWidget {
           actions: [
             _button(t, 'recover-discard', l10n.recoveryRestoreNone,
                 l10n.tipRecoverNone, RecoveryChoice.discard),
-            _button(t, 'recover-autosave', l10n.recoveryRestoreAutosave,
-                l10n.tipRecoverAutosave, RecoveryChoice.autosave),
+            if (hasAutosave)
+              _button(t, 'recover-autosave', l10n.recoveryRestoreAutosave,
+                  l10n.tipRecoverAutosave, RecoveryChoice.autosave),
             // The window's default action: focused on open, so Enter
             // restores everything — the answer that loses nothing.
             _button(t, 'recover-journal', l10n.recoveryRestoreAll,
