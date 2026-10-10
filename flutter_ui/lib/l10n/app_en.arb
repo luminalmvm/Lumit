@@ -6283,6 +6283,82 @@
   "@panelViewer": {
     "description": "The name of the panel showing the picture."
   },
+  "sourceTitle": "Source",
+  "@sourceTitle": {
+    "description": "Title of the Viewer's source side, where one footage item is looked at before it is placed in a composition."
+  },
+  "sourceEmptyHint": "Double-click footage in the Project panel to load it here.",
+  "@sourceEmptyHint": {
+    "description": "Empty-state line in the Viewer's source side before any footage has been loaded into it."
+  },
+  "sourcePlay": "Play this footage",
+  "@sourcePlay": {
+    "description": "Tooltip for the play button under the source picture, which plays the loaded footage item by itself."
+  },
+  "sourceStop": "Stop",
+  "@sourceStop": {
+    "description": "Tooltip for the same button under the source picture while the footage item is playing."
+  },
+  "sourceMarkIn": "In",
+  "@sourceMarkIn": {
+    "description": "Button under the source picture that marks the current frame as the start of the stretch to place. Kept to one short word."
+  },
+  "sourceMarkInTip": "Mark In at this frame",
+  "@sourceMarkInTip": {
+    "description": "Tooltip for the source side's In button."
+  },
+  "sourceMarkOut": "Out",
+  "@sourceMarkOut": {
+    "description": "Button under the source picture that marks the current frame as the end of the stretch to place. Kept to one short word."
+  },
+  "sourceMarkOutTip": "Mark Out at this frame",
+  "@sourceMarkOutTip": {
+    "description": "Tooltip for the source side's Out button."
+  },
+  "sourceInsert": "Insert",
+  "@sourceInsert": {
+    "description": "Button that places the marked stretch of the source at the playhead and moves the clips after it later."
+  },
+  "sourceInsertTip": "Place the marked stretch at the playhead and move what follows along",
+  "@sourceInsertTip": {
+    "description": "Tooltip for the source side's Insert button."
+  },
+  "sourceOverwrite": "Overwrite",
+  "@sourceOverwrite": {
+    "description": "Button that places the marked stretch of the source at the playhead, replacing whatever is there."
+  },
+  "sourceOverwriteTip": "Place the marked stretch at the playhead, over what is there",
+  "@sourceOverwriteTip": {
+    "description": "Tooltip for the source side's Overwrite button."
+  },
+  "cutRefusedOverlap": "That would move a clip onto one that stays. Lock that track or clear the space first.",
+  "@cutRefusedOverlap": {
+    "description": "Status-line notice when an edit in the Cut timeline is refused because a clip it would carry along would land on a clip that does not move."
+  },
+  "cutRefusedBeforeStart": "A clip cannot start before the composition does.",
+  "@cutRefusedBeforeStart": {
+    "description": "Status-line notice when an edit in the Cut timeline is refused because it would move a clip before the start of the composition."
+  },
+  "cutRefusedLocked": "A track this edit has to change is locked.",
+  "@cutRefusedLocked": {
+    "description": "Status-line notice when an edit in the Cut timeline is refused because it needs to change a locked track."
+  },
+  "cutRefusedLimit": "The clip has no more to give that way.",
+  "@cutRefusedLimit": {
+    "description": "Status-line notice when a trim, roll, slip or slide in the Cut timeline is refused because a clip or its neighbour would be left with no length, or would run off the start of its source."
+  },
+  "cutRefusedUncuttable": "A clip whose Retime is driven by an expression cannot be cut.",
+  "@cutRefusedUncuttable": {
+    "description": "Status-line notice when a cut in the Cut timeline is refused because the clip's Retime is an expression."
+  },
+  "cutRefusedNothing": "Nothing there to edit.",
+  "@cutRefusedNothing": {
+    "description": "Status-line notice when an edit in the Cut timeline finds nothing to act on: no clip under the razor, no gap, or no edit point."
+  },
+  "cutRefusedWrongLayer": "Picture clips go on picture tracks and sound clips on sound tracks.",
+  "@cutRefusedWrongLayer": {
+    "description": "Status-line notice when a clip in the Cut timeline is refused because it was put on the wrong kind of track."
+  },
   "pasteSequenceShape": "Paste sequence shape",
   "@pasteSequenceShape": {
     "description": "Context-menu item: apply a copied speed curve."

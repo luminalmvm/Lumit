@@ -384,7 +384,8 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
 
   /// **Opening a row**, and what opening means is the item's own answer: a
   /// composition fronts in the Timeline, footage raises New composition
-  /// sized and timed to it, a folder opens and shuts.
+  /// sized and timed to it (or loads into the Viewer's source side when one
+  /// is on screen), a folder opens and shuts.
   ///
   /// On the double-tap, which is the gesture it always meant — the row's own
   /// recogniser, which fires on the second click's *up* rather than waiting a
@@ -402,6 +403,13 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
     // already the size, rate and length of the media, because that dialogue
     // reads the selection (the longest item wins when there are several).
     if (item case ItemReference_Footage(:final field0)) {
+      // With a source side on screen, as the Cut workspace has, the clip
+      // loads into it to be marked and placed.
+      final ui = Provider.of<LumitUiState>(context, listen: false);
+      if (ui.hasSourceView) {
+        ui.openFootageView(field0);
+        return;
+      }
       final selected = widget.selectedFootage();
       widget.onNewComposition(selected.isEmpty ? [field0] : selected);
       return;

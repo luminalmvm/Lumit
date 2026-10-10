@@ -49,9 +49,9 @@ const _banned = {
 /// calls a track matte. The menu rows are for work not built yet;
 /// `fxCameraTrack` is the effect itself, which is built.
 ///
-/// The Audio timeline panel is the one place a row is called a track in what
-/// the user reads (docs/01-GLOSSARY.md, docs/07-UI-SPEC.md §4.8), so that
-/// panel's own strings are the exception the glossary already grants.
+/// The Audio timeline and Cut timeline panels are the two places a row is
+/// called a track in what the user reads (docs/01-GLOSSARY.md), so those
+/// panels' own strings are the exception the glossary already grants.
 const _bannedWordIsAnotherSense = {
   'menuTrackCamera',
   'menuTrackMotion',
@@ -64,6 +64,9 @@ const _bannedWordIsAnotherSense = {
   'fxTrackPoints',
   // The Audio timeline's own column header.
   'columnTrack',
+  // The Cut timeline's notices about its own rows.
+  'cutRefusedOverlap',
+  'cutRefusedLocked',
 };
 
 /// Every `.arb` in lib/l10n, source and translations alike, in a stable order.

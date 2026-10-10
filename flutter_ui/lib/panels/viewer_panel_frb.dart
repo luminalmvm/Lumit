@@ -49,6 +49,7 @@ import 'dart:ui' as dartui;
 import 'package:flutter/gestures.dart';
 // For [RenderRepaintBoundary], which is what a snapshot is photographed from.
 import 'package:flutter/rendering.dart';
+import 'package:flutter/scheduler.dart' show Ticker;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
@@ -62,17 +63,20 @@ import 'package:lumit_flutter/src/rust/lib.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
+import '../icons/icons.dart';
 import '../l10n/strings.dart';
 import '../shell/dock_widget.dart' show DockPaneHandle;
 import '../shell/welcome_frb.dart' show EmptyStageFrb;
 import '../state/dock.dart';
 import '../state/settings.dart';
+import '../state/timecode.dart';
 import '../state/viewer_views.dart';
 import '../state/viewer_view.dart';
 import '../state/workspace.dart';
 import '../widgets/controls.dart';
 import '../theme/theme.dart';
 import '../widgets/colour_picker.dart';
+import 'placeholder.dart';
 import 'viewer_bar.dart';
 import 'viewer_compare.dart';
 import 'viewer_deck.dart';
@@ -1161,6 +1165,15 @@ class FootageStageFrb extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = Provider.of<LumitUiState>(context);
     final footage = ui.footageOf(view);
+    // A source side with nothing loaded yet says how to load something.
+    if (view.itemId == null) {
+      return PlaceholderPanel(
+        key: const ValueKey('footage-view-empty'),
+        icon: LumitIcon.footage,
+        title: l10n.sourceTitle,
+        hint: l10n.sourceEmptyHint,
+      );
+    }
     final facts = footage == null ? null : ui.itemFacts(footage);
     // Being probed, gone from the project, or a file with no picture in it:
     // the empty state is the honest answer to all three.
@@ -1174,6 +1187,29 @@ class FootageStageFrb extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // The side's own name and the clip's, where the composition's side
+          // has its header.
+          Container(
+            key: const ValueKey('footage-view-header'),
+            height: viewerStripHeightFor(t),
+            decoration: viewerStripDecoration(t, false),
+            padding:
+                EdgeInsets.symmetric(horizontal: viewerStripPaddingFor(t)),
+            child: Row(
+              children: [
+                Text(t.kickerCase(l10n.sourceTitle), style: t.kickerOn),
+                const SizedBox(width: viewerBarGap),
+                Expanded(
+                  child: Text(
+                    ui.sourceNameOf(view),
+                    style: t.small.copyWith(color: t.textSecondary),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
           Expanded(
             child: LayoutBuilder(
               key: const ValueKey('footage-view-picture'),
@@ -1207,6 +1243,7 @@ class FootageStageFrb extends StatelessWidget {
             frames: frames,
             onSeek: (frame) => ui.seekFootageView(view, frame),
           ),
+          _SourceBar(view: view, facts: facts),
         ],
       ),
     );
@@ -1243,9 +1280,8 @@ class _FootagePicture extends StatelessWidget {
 /// **The item's own time**, under the picture (docs/07 §2.1): the one control a
 /// file has. A press or a drag anywhere along it stands the view on that frame.
 ///
-/// ponytail: the source in and out points the note asks for are not here yet.
-/// Trimming a clip before it is placed is the next rung, and it hangs off this
-/// same strip.
+/// The stretch between the In and Out marks is tinted, and the frame the view
+/// stands on is a line across it.
 class _SourceStrip extends StatelessWidget {
   final ViewerSurface view;
   final int frames;
@@ -1275,15 +1311,240 @@ class _SourceStrip extends StatelessWidget {
           child: Container(
             height: viewerStripHeight,
             decoration: viewerStripDecoration(t, false),
-            alignment: Alignment.centerLeft,
-            child: FractionallySizedBox(
-              widthFactor: frames <= 1 ? 1 : (view.sourceFrame + 1) / frames,
-              heightFactor: 1,
-              child: ColoredBox(color: t.accent.withValues(alpha: 0.35)),
+            child: CustomPaint(
+              size: Size.infinite,
+              painter: _SourceStripPainter(
+                frames: frames,
+                at: view.sourceFrame,
+                markIn: view.sourceIn,
+                markOut: view.sourceOut,
+                colour: t.accent,
+              ),
             ),
           ),
         );
       },
+    );
+  }
+}
+
+class _SourceStripPainter extends CustomPainter {
+  final int frames;
+  final int at;
+  final int? markIn;
+  final int? markOut;
+  final Color colour;
+
+  const _SourceStripPainter({
+    required this.frames,
+    required this.at,
+    required this.markIn,
+    required this.markOut,
+    required this.colour,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final count = frames < 1 ? 1 : frames;
+    double x(int frame) => size.width * frame / count;
+    if (markIn != null || markOut != null) {
+      // Out is the last frame kept, so the tint runs to that frame's far edge.
+      canvas.drawRect(
+        Rect.fromLTRB(
+            x(markIn ?? 0), 0, x((markOut ?? count - 1) + 1), size.height),
+        Paint()..color = colour.withValues(alpha: 0.35),
+      );
+    }
+    canvas.drawRect(
+      Rect.fromLTWH(x(at).clamp(0, size.width - 2), 0, 2, size.height),
+      Paint()..color = colour,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_SourceStripPainter old) =>
+      old.frames != frames ||
+      old.at != at ||
+      old.markIn != markIn ||
+      old.markOut != markOut ||
+      old.colour != colour;
+}
+
+/// The source side's own bar: mark the stretch to take, then put it in the
+/// cut. Insert moves what follows the playhead along, Overwrite lands on top
+/// of it.
+///
+/// Play runs the item from the frame it stands on. With sound in the file the
+/// sound is the clock, as it is for a composition, and the picture follows it.
+/// A silent file is counted on at its own rate.
+class _SourceBar extends StatefulWidget {
+  final ViewerSurface view;
+  final BridgeMediaInfo facts;
+
+  const _SourceBar({required this.view, required this.facts});
+
+  @override
+  State<_SourceBar> createState() => _SourceBarState();
+}
+
+class _SourceBarState extends State<_SourceBar>
+    with SingleTickerProviderStateMixin {
+  late final Ticker _ticker = createTicker(_tick);
+  LumitUiState? _ui;
+
+  /// The frame this run began on.
+  int _from = 0;
+
+  /// Whether this run is following the file's sound, and whether that sound
+  /// has started: a long file takes a moment to decode, and the picture waits
+  /// for it.
+  bool _sound = false;
+  bool _heard = false;
+
+  ViewerSurface get view => widget.view;
+  BridgeMediaInfo get facts => widget.facts;
+  double get _rate => facts.fpsNum / (facts.fpsDen <= 0 ? 1 : facts.fpsDen);
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    if (identical(ui, _ui)) return;
+    _ui?.playing.removeListener(_onTransport);
+    _ui = ui..playing.addListener(_onTransport);
+  }
+
+  @override
+  void didUpdateWidget(_SourceBar old) {
+    super.didUpdateWidget(old);
+    // Another clip was loaded under a run: the run was the old clip's.
+    if (old.view.itemId != view.itemId) _stop();
+  }
+
+  @override
+  void dispose() {
+    _ui?.playing.removeListener(_onTransport);
+    if (_ticker.isActive && _sound) audioStop();
+    _ticker.dispose();
+    super.dispose();
+  }
+
+  /// One pair of speakers: the composition starting takes them.
+  void _onTransport() {
+    if (_ui?.playing.value == true && _ticker.isActive) {
+      _ticker.stop();
+      if (mounted) setState(() {});
+    }
+  }
+
+  void _toggle() => _ticker.isActive ? _stop() : _start();
+
+  void _start() {
+    final ui = _ui;
+    final footage = ui?.footageOf(view);
+    if (ui == null || footage == null || facts.fpsNum <= 0) return;
+    if (ui.playing.value) ui.requestTogglePlay();
+    final frames = LumitUiState.framesOf(facts);
+    // From the top when it stands on the last frame, as a transport does.
+    if (view.sourceFrame >= frames - 1) ui.seekFootageView(view, 0);
+    _from = view.sourceFrame;
+    _heard = false;
+    _sound = false;
+    if (facts.audioCodec != null) {
+      try {
+        _sound = footage.previewAudioFrom(startSeconds: _from / _rate);
+      } catch (_) {
+        // No sound to follow, so the picture is counted on by itself.
+      }
+    }
+    _ticker.start();
+    setState(() {});
+  }
+
+  void _stop() {
+    if (!_ticker.isActive) return;
+    _ticker.stop();
+    if (_sound) audioStop();
+    if (mounted) setState(() {});
+  }
+
+  void _tick(Duration elapsed) {
+    final ui = _ui;
+    if (ui == null) return;
+    var seconds = _from / _rate + elapsed.inMicroseconds / 1e6;
+    if (_sound) {
+      final clock = audioClock();
+      if (clock.playing) {
+        _heard = true;
+        seconds = clock.seconds;
+      } else if (_heard || elapsed > const Duration(seconds: 20)) {
+        // The sound ran out or was stopped, or never came.
+        _stop();
+        return;
+      } else {
+        return;
+      }
+    }
+    final last = LumitUiState.framesOf(facts) - 1;
+    final frame = (seconds * _rate).floor();
+    ui.seekFootageView(view, frame.clamp(0, last));
+    if (frame >= last) _stop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    final t = ThemeScope.of(context).theme;
+    Widget button(String id, String label, String tip, VoidCallback? onPressed,
+            {String? action}) =>
+        LumitTooltip(
+          message: tip,
+          action: action,
+          child: HouseButton(
+            key: ValueKey('source-$id'),
+            small: true,
+            onPressed: onPressed,
+            child: Text(label),
+          ),
+        );
+    final canPlace = ui.selectedComp != null;
+    return Container(
+      height: viewerStripHeightFor(t),
+      decoration: viewerStripDecoration(t, false),
+      padding: EdgeInsets.symmetric(horizontal: viewerStripPaddingFor(t)),
+      child: Row(
+        children: [
+          viewerBarMark(
+            key: const ValueKey('source-play'),
+            icon: _ticker.isActive ? LumitIcon.pause : LumitIcon.play,
+            colour: t.textPrimary,
+            onPressed: _toggle,
+            tip: _ticker.isActive ? l10n.sourceStop : l10n.sourcePlay,
+          ),
+          const SizedBox(width: viewerBarGap),
+          button('mark-in', l10n.sourceMarkIn, l10n.sourceMarkInTip,
+              () => ui.markSource(view, markIn: true),
+              action: 'cut.mark.in'),
+          const SizedBox(width: viewerHeaderGap),
+          button('mark-out', l10n.sourceMarkOut, l10n.sourceMarkOutTip,
+              () => ui.markSource(view, markIn: false),
+              action: 'cut.mark.out'),
+          const SizedBox(width: viewerBarGap * 2),
+          button('insert', l10n.sourceInsert, l10n.sourceInsertTip,
+              canPlace ? () => ui.placeSource(view, insert: true) : null,
+              action: 'cut.insert'),
+          const SizedBox(width: viewerHeaderGap),
+          button('overwrite', l10n.sourceOverwrite, l10n.sourceOverwriteTip,
+              canPlace ? () => ui.placeSource(view, insert: false) : null,
+              action: 'cut.overwrite'),
+          const Spacer(),
+          Text(
+            timecodeOfRate(view.sourceFrame, facts.fpsNum, facts.fpsDen),
+            style: t.mono.copyWith(
+                fontSize: viewerTimecodeSize, color: t.textSecondary),
+          ),
+        ],
+      ),
     );
   }
 }

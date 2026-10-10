@@ -32,6 +32,8 @@ import 'package:lumit_flutter/src/rust/api/audio.dart'
 import 'package:lumit_flutter/src/rust/api/cache.dart';
 import 'package:lumit_flutter/src/rust/api/colour.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
+import 'package:lumit_flutter/src/rust/api/cut.dart' show BridgeCutResult;
+import 'package:lumit_flutter/src/rust/api/effect.dart' show BridgeRational;
 import 'package:lumit_flutter/src/rust/api/footage.dart'
     show BridgeMediaInfo, FootageReference;
 import 'package:lumit_flutter/src/rust/api/graph.dart'
@@ -1947,6 +1949,7 @@ class LumitUiState extends ChangeNotifier {
     // the controls file has no other way to reach the store.
     modalPlacementStore = this.workspace;
     selectedLayer.addListener(_syncSelection);
+    _app.addListener(_sourceNames.clear);
     // A layer that has gone must leave the selection with it. The
     // model is the one place that knows which layers exist, so the pruning
     // hangs off its refresh rather than off each of the several ways a layer
@@ -2253,6 +2256,8 @@ class LumitUiState extends ChangeNotifier {
   void dispose() {
     _app.removeListener(_adoptProjectSession);
     _app.removeListener(refreshColourSummary);
+    _app.removeListener(_sourceNames.clear);
+    cutLinked.dispose();
     _lifecycle.dispose();
     _clock.dispose();
     sub?.cancel();
@@ -2339,7 +2344,7 @@ class LumitUiState extends ChangeNotifier {
     // unlocked view otherwise, and in a new view when every one of them is
     // locked — which is the only answer that still shows what was opened.
     if (reference != null && !_restoring) {
-      final into = _viewForOpening();
+      final into = _viewForOpening(prefer: ViewMode.composition);
       if (into != null) {
         into.mode = ViewMode.composition;
         into.compId = reference.internalid.toString();
@@ -2386,12 +2391,12 @@ class LumitUiState extends ChangeNotifier {
   ///
   /// Null only when the workspace has no Viewer at all, in which case there is
   /// nowhere for a picture to go and nothing is opened.
-  ViewerSurface? _viewForOpening() {
-    final into = views.viewForOpening(currentViewerPane);
+  ViewerSurface? _viewForOpening({ViewMode? prefer}) {
+    final into = views.viewForOpening(currentViewerPane, prefer: prefer);
     if (into != null) return into;
     if (_firstViewerPane() == null) return null;
     addViewerPanel();
-    return views.viewForOpening(currentViewerPane);
+    return views.viewForOpening(currentViewerPane, prefer: prefer);
   }
 
   /// **Open a piece of footage on its own** — the footage view
@@ -2402,12 +2407,15 @@ class LumitUiState extends ChangeNotifier {
   /// so the panels that follow the active view stay where they were: looking
   /// at a clip is not leaving the shot you are working on.
   void openFootageView(FootageReference footage) {
-    final into = _viewForOpening();
+    final into = _viewForOpening(prefer: ViewMode.footage);
     if (into == null) return;
     into.mode = ViewMode.footage;
     into.itemId = footage.internalid.toString();
     into.compId = null;
     into.sourceFrame = 0;
+    // The marks belong to the item that was here.
+    into.sourceIn = null;
+    into.sourceOut = null;
     views.front(into.id);
     // The facts the request is made of. Already in hand for an item looked at
     // once before, in which case this asks for the picture on the spot.
@@ -2444,6 +2452,24 @@ class LumitUiState extends ChangeNotifier {
     return null;
   }
 
+  /// The name of the item a footage view shows, for the source side's header.
+  /// Read once per item and dropped when the document changes, since a rename
+  /// is an edit like any other.
+  final Map<String, String> _sourceNames = {};
+
+  String sourceNameOf(ViewerSurface view) {
+    final footage = footageOf(view);
+    if (footage == null) return '';
+    return _sourceNames[view.itemId!] ??= () {
+      try {
+        return ItemReference.footage(footage).name();
+      } catch (_) {
+        // The item has gone: the view is about to show its empty state.
+        return '';
+      }
+    }();
+  }
+
   /// The item behind a footage view, or null when the view is bound to nothing
   /// or the project has gone.
   FootageReference? footageOf(ViewerSurface view) {
@@ -2474,6 +2500,135 @@ class LumitUiState extends ChangeNotifier {
     view.sourceFrame = frame;
     _askForView(view);
     views.touch();
+  }
+
+  /// Whether a footage view is on screen for an opened clip to load into,
+  /// which is what the Cut workspace's source side is.
+  bool get hasSourceView =>
+      views.views.any((view) => view.mode == ViewMode.footage);
+
+  /// Put a source side in the Viewer the keyboard is in: two views across,
+  /// the left one a footage view waiting for a clip. What applying the Cut
+  /// workspace does. Nothing to do when one is already there, or when the
+  /// arrangement has no Viewer.
+  void showSourceView() {
+    final pane = currentViewerPane;
+    if (pane == null || hasSourceView) return;
+    if (views.layoutOf(pane).views < 2) {
+      views.setLayout(pane, ViewLayout.twoAcross);
+    }
+    final source = views.forPane(pane).first;
+    // The composition keeps a view: the one beside it takes what this showed.
+    final beside = views.forPane(pane)[1];
+    if (beside.mode != ViewMode.composition) {
+      beside.mode = ViewMode.composition;
+      beside.compId = source.compId;
+      beside.itemId = null;
+    }
+    source.mode = ViewMode.footage;
+    source.compId = null;
+    source.itemId = null;
+    views.front(beside.id);
+    views.touch();
+    saveLayout();
+    rememberSession();
+    requestFrame();
+  }
+
+  /// Set a footage view's In or Out mark to the frame it stands on. A mark
+  /// that would cross the other one moves it out of the way, so In is never
+  /// after Out.
+  void markSource(ViewerSurface view, {required bool markIn}) {
+    final at = view.sourceFrame;
+    if (markIn) {
+      view.sourceIn = at;
+      if (view.sourceOut != null && view.sourceOut! < at) view.sourceOut = null;
+    } else {
+      view.sourceOut = at;
+      if (view.sourceIn != null && view.sourceIn! > at) view.sourceIn = null;
+    }
+    views.touch();
+  }
+
+  /// Whether edits in the Cut timeline carry linked clips along: the panel's
+  /// Linked switch, and what the source side's Insert and Overwrite read.
+  /// Not written down.
+  final ValueNotifier<bool> cutLinked = ValueNotifier(true);
+
+  /// The Viewer's source side: the first footage view on screen, or null.
+  ViewerSurface? get sourceView {
+    for (final view in views.views) {
+      if (view.mode == ViewMode.footage) return view;
+    }
+    return null;
+  }
+
+  /// Say why a Cut edit was refused, on the status line. Quiet for one that
+  /// went through.
+  void reportCut(BridgeCutResult result) {
+    final why = switch (result) {
+      BridgeCutResult.done => null,
+      BridgeCutResult.overlap => l10n.cutRefusedOverlap,
+      BridgeCutResult.beforeStart => l10n.cutRefusedBeforeStart,
+      BridgeCutResult.locked => l10n.cutRefusedLocked,
+      BridgeCutResult.limit => l10n.cutRefusedLimit,
+      BridgeCutResult.uncuttable => l10n.cutRefusedUncuttable,
+      BridgeCutResult.nothing => l10n.cutRefusedNothing,
+      BridgeCutResult.wrongLayer => l10n.cutRefusedWrongLayer,
+    };
+    if (why != null) _app.postNotice(why);
+  }
+
+  /// Put a footage view's marked stretch into the fronted composition at the
+  /// playhead: the source side's Insert and Overwrite. Unmarked ends read as
+  /// the item's own.
+  ///
+  /// It lands on the selected layer when that is a picture Sequence layer,
+  /// else on the lowest one the composition has, else on a new one. The
+  /// playhead moves to the end of what was placed, ready for the next.
+  void placeSource(ViewerSurface view, {required bool insert}) {
+    final comp = _selectedComp;
+    final footage = footageOf(view);
+    final facts = footage == null ? null : itemFacts(footage);
+    if (comp == null || footage == null || facts == null) return;
+    if (facts.fpsNum <= 0) return;
+    final frames = framesOf(facts);
+    final first = (view.sourceIn ?? 0).clamp(0, frames - 1);
+    final last = (view.sourceOut ?? frames - 1).clamp(first, frames - 1);
+    // A frame count over the item's rate is its time in seconds, exactly.
+    BridgeRational seconds(int frame) =>
+        BridgeRational(num: frame * facts.fpsDen, den: facts.fpsNum);
+    // Top of the stack first, so the last one found is the lowest.
+    LayerReference? target;
+    final selected = selectedLayer.value?.internallayerId;
+    for (final entry in model.layers) {
+      if (entry.info.kind != BridgeLayerKind.sequence) continue;
+      target = entry.layer;
+      if (entry.layer.internallayerId == selected) break;
+    }
+    final at = playheadFrame.value;
+    final BridgeCutResult result;
+    try {
+      result = comp.cutPlace(
+        target: target,
+        footage: footage,
+        sourceIn: seconds(first),
+        sourceOut: seconds(last + 1),
+        atFrame: at,
+        insert: insert,
+        linked: cutLinked.value,
+      );
+    } catch (_) {
+      // The item or the composition went away under the press.
+      return;
+    }
+    reportCut(result);
+    if (result != BridgeCutResult.done) return;
+    _app.notifyDocumentChanged();
+    final placed =
+        ((last + 1 - first) * facts.fpsDen / facts.fpsNum * model.fps).round();
+    final end = model.durationFrames - 1;
+    playheadFrame.value = end <= 0 ? at : (at + placed).clamp(0, end);
   }
 
   /// Open the composition a Precomp layer draws, landing on the frame that
