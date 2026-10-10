@@ -44,6 +44,7 @@ import 'package:lumit_flutter/src/rust/api/shell.dart'
 import 'package:lumit_flutter/src/rust/api/state.dart';
 import 'package:lumit_flutter/src/rust/api/share.dart' as bridge_share
     show shareSetLimits, shareSetFootage;
+import 'package:lumit_flutter/state/account.dart';
 import 'package:lumit_flutter/state/addons.dart';
 import 'package:lumit_flutter/state/extensions.dart';
 import 'package:lumit_flutter/state/addons_engine.dart';
@@ -60,6 +61,8 @@ import 'package:lumit_flutter/state/layer_bounds.dart';
 import 'package:lumit_flutter/state/panel_folds.dart';
 import 'package:lumit_flutter/state/playback_loop.dart';
 import 'package:lumit_flutter/state/preview_progress.dart';
+import 'package:lumit_flutter/state/profiles.dart';
+import 'package:lumit_flutter/state/relay_door.dart';
 import 'package:lumit_flutter/state/render_timings.dart';
 import 'package:lumit_flutter/state/settings.dart';
 import 'package:lumit_flutter/state/tools.dart';
@@ -113,6 +116,30 @@ class LumitUiState extends ChangeNotifier {
 
   /// The keyboard map every shortcut is looked up in (docs/07 §15).
   late final KeymapState keymap;
+
+  /// The account the profile in use is signed in to, if it is. Lumit needs
+  /// none. Lumit Pro hangs off one.
+  final AccountState account = AccountState();
+
+  /// The profiles on this machine and the one in use: its settings, and
+  /// keeping them in step with the server when the account has Pro.
+  late final ProfilesState profiles =
+      ProfilesState(workspace, account, afterApply: _afterProfile);
+
+  /// The way to Lumit's own relay, for a shared project.
+  late final RelayDoor relayDoor = RelayDoor(account);
+
+  /// Settings came in from a profile or the server. The workspace has them.
+  /// This hands on the ones something else acts on.
+  void _afterProfile() {
+    unawaited(keymap.restore());
+    try {
+      setAutosave(
+          minutes: workspace.autosaveMinutes, keep: workspace.autosaveKeep);
+    } catch (_) {
+      // No engine to tell, in a test that has none.
+    }
+  }
 
   /// Whether there is a newer Lumit, and fetching it.
   ///
@@ -2296,6 +2323,9 @@ class LumitUiState extends ChangeNotifier {
     _app.removeListener(refreshColourSummary);
     _lifecycle.dispose();
     _clock.dispose();
+    profiles.dispose();
+    unawaited(relayDoor.close());
+    account.dispose();
     sub?.cancel();
     _changes?.cancel();
     tools.dispose();

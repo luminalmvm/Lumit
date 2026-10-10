@@ -1,0 +1,389 @@
+---
+import Base from "../../layouts/Base.astro";
+import SectionHead from "../../components/SectionHead.astro";
+import { Image } from "astro:assets";
+import card from "../../assets/shots/pro-card.png";
+import share from "../../assets/shots/pro-share.png";
+
+// What Pro is, what it costs, and how to get it. Nothing is bought on this
+// page: Pro is bought from inside Lumit, where the account is. The prices are
+// written here in dollars, and the server is only asked whether Pro is free
+// for now.
+const CLOUD = "https://cloud.lumitlab.com";
+const MONTHLY = 6;
+const YEARLY = 60;
+const SAVING = Math.round((1 - YEARLY / (MONTHLY * 12)) * 100);
+
+const features = [
+  {
+    h: "Share from anywhere",
+    p: "Guests join through Lumit's relay. Nothing to set up.",
+    c: "mint",
+  },
+  {
+    h: "Settings on every device",
+    p: "Shortcuts, themes, workspaces, and presets follow you.",
+    c: "azure",
+  },
+  {
+    h: "Support Lumit",
+    p: "Helps pay for servers and development.",
+    c: "amber",
+  },
+];
+
+// The whole editor is on the left and it stays there.
+const compare = [
+  { what: "Every effect, export format, and resolution", free: true, pro: true },
+  { what: "Shared projects on your own network or VPN", free: true, pro: true },
+  { what: "Shared projects through a relay you run yourself", free: true, pro: true },
+  { what: "Profiles on one machine, each with its own settings", free: true, pro: true },
+  { what: "Shared projects through Lumit's relay, from anywhere", free: false, pro: true },
+  { what: "Settings synced across your machines", free: false, pro: true },
+];
+
+const steps = [
+  {
+    h: "Open Lumit",
+    p: "Press your name at the bottom left.",
+  },
+  {
+    h: "Sign in",
+    p: "With Google, Discord, or an email.",
+  },
+  {
+    h: "Pick monthly or yearly",
+    p: "You pay in your browser.",
+  },
+];
+
+const questions = [
+  {
+    q: "Is Lumit still free?",
+    a: "Yes. Nothing that was free has moved behind Pro.",
+  },
+  {
+    q: "Can the relay read my project?",
+    a: "No. Everything is encrypted with the invite's key, which the relay never gets.",
+  },
+  {
+    q: "Do my guests need Pro?",
+    a: "No, only the host does. Guests don't need an account.",
+  },
+  {
+    q: "What do you keep about me?",
+    a: "Your email, your name, and the settings you sync. Never your projects, footage, or card.",
+  },
+  {
+    q: "What happens if I cancel?",
+    a: "Pro runs to the end of what you paid for, and your settings stay on each machine.",
+  },
+  {
+    q: "Can I get a refund?",
+    a: "Yes, within 14 days of paying.",
+  },
+];
+---
+
+<Base
+  title="Lumit Pro"
+  description="Share a Lumit project from anywhere and take your settings to every machine. Lumit itself stays free and open source."
+>
+  <section class="pt-14 pb-20 sm:pt-20 sm:pb-24">
+    <div class="wrap flex flex-col gap-12">
+      <p class="lockup" aria-hidden="true">
+        <img src="/lumit-wordmark.svg" alt="" height="30" />
+        <span class="badge"><span class="sweep">Pro</span></span>
+      </p>
+      <SectionHead page kicker="Lumit Pro" title="Work together from anywhere.">
+        <Fragment slot="lede">
+          Lumit is free and open source, and that isn't changing.
+        </Fragment>
+      </SectionHead>
+
+      <p class="preview" id="pro-preview" hidden>
+        <i class="key" style="--k:var(--label-mint)"></i>
+        Pro is free while we test it.
+      </p>
+
+      <div class="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.1fr)]">
+        <div class="plan card" data-plan="monthly">
+          <p class="tag">Monthly</p>
+          <p class="price"><span>${MONTHLY}</span><small>a month</small></p>
+        </div>
+        <div class="plan plan-pick card" data-plan="yearly">
+          <p class="tag"><span>Yearly</span><span class="save">Save {SAVING}%</span></p>
+          <p class="price"><span>${YEARLY}</span><small>a year</small></p>
+        </div>
+        <div class="card flex flex-col justify-between gap-6">
+          <p class="text-[15px] leading-[1.45] text-fg-2">
+            Get Pro inside Lumit, from your name at the bottom left.
+          </p>
+          <div class="flex flex-wrap gap-3">
+            <a class="btn border-white" href="/download">Download Lumit</a>
+            <a class="btn btn-ghost" href="#get">How to get Pro</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="pb-20 sm:pb-24">
+    <div class="wrap flex flex-col gap-12">
+      <SectionHead kicker="What you get" title="What Pro adds." />
+      <div class="grid gap-5 md:grid-cols-3">
+        {
+          features.map((f, i) => (
+            <div class="card lit" style={`--c:var(--label-${f.c})`} data-reveal>
+              <p class="num"><i />{String(i + 1).padStart(2, "0")}</p>
+              <h3 class="mt-8 text-[19px] text-fg">{f.h}</h3>
+              <p class="mt-2.5 text-[15px] leading-[1.45] text-fg-3">{f.p}</p>
+            </div>
+          ))
+        }
+      </div>
+      <div class="grid items-start gap-5 md:grid-cols-2">
+        <figure class="shot m-0" data-reveal>
+          <Image src={share} alt="Lumit's Shared project window, with guests joining through Lumit's relay." widths={[640, 1000]} sizes="(min-width: 768px) 580px, 100vw" />
+          <figcaption class="mt-3 text-[13px] text-fg-4">One tick, and anyone with the link can join.</figcaption>
+        </figure>
+        <figure class="shot m-0" data-reveal>
+          <Image src={card} alt="Lumit's profile card, showing a Pro account with its settings in sync." widths={[640, 1000]} sizes="(min-width: 768px) 580px, 100vw" />
+          <figcaption class="mt-3 text-[13px] text-fg-4">Your profile, at the bottom left.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <section class="pb-20 sm:pb-24">
+    <div class="wrap flex flex-col gap-12">
+      <SectionHead kicker="Free and Pro" title="The editor stays free." />
+      <div class="card overflow-x-auto p-0">
+        <table class="compare">
+          <thead>
+            <tr><th></th><th>Free</th><th><span class="sweep">Pro</span></th></tr>
+          </thead>
+          <tbody>
+            {
+              compare.map((row) => (
+                <tr>
+                  <td>{row.what}</td>
+                  <td>{row.free ? <i class="key" style="--k:var(--color-fg-3)" aria-label="Yes" /> : <i class="key key-hollow" style="--k:var(--color-line-2)" aria-label="No" />}</td>
+                  <td>{row.pro ? <i class="key" style="--k:var(--label-mint)" aria-label="Yes" /> : <i class="key key-hollow" aria-label="No" />}</td>
+                </tr>
+              ))
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="pb-20 sm:pb-24" id="get">
+    <div class="wrap flex flex-col gap-12">
+      <SectionHead kicker="Getting it" title="Three steps, inside Lumit." />
+      <ol class="m-0 grid list-none gap-5 p-0 md:grid-cols-3">
+        {
+          steps.map((s, i) => (
+            <li class="card" data-reveal>
+              <p class="num"><i style="background:var(--color-accent-2)" />{String(i + 1).padStart(2, "0")}</p>
+              <h3 class="mt-8 text-[19px] text-fg">{s.h}</h3>
+              <p class="mt-2.5 text-[15px] leading-[1.45] text-fg-3">{s.p}</p>
+            </li>
+          ))
+        }
+      </ol>
+    </div>
+  </section>
+
+  <section class="pb-24 sm:pb-32">
+    <div class="wrap flex flex-col gap-12">
+      <SectionHead kicker="Questions" title="The short answers." />
+      <div class="faq">
+        {
+          questions.map((item) => (
+            <details>
+              <summary>{item.q}</summary>
+              <p>{item.a}</p>
+            </details>
+          ))
+        }
+      </div>
+      <p class="text-[13px] leading-[1.5] text-fg-4">
+        Payments are handled by Paddle.
+        <a class="link" href="/terms">Terms</a>, <a class="link" href="/privacy">privacy</a>, and
+        <a class="link" href="/refunds">refunds</a>.
+      </p>
+    </div>
+  </section>
+</Base>
+
+<script is:inline define:vars={{ CLOUD }}>
+  // Whether Pro is free for now, which only the server knows.
+  (async () => {
+    try {
+      const config = await (await fetch(CLOUD + "/v1/config")).json();
+      if (config.preview) document.getElementById("pro-preview").hidden = false;
+    } catch {}
+  })();
+</script>
+
+<style>
+  /* The two keys of the mark run together. Only Pro is drawn in it. */
+  .sweep {
+    background: linear-gradient(135deg, var(--key-jade), var(--key-sky));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .lockup {
+    display: flex;
+    align-items: center;
+    /* The wordmark's file has room either side of the mark, which is taken
+       back here so the badge stands beside the letters. */
+    gap: 0;
+    margin: 0 0 -8px -20px;
+  }
+  .lockup img {
+    display: block;
+    height: 30px;
+    width: auto;
+  }
+  /* The badge Lumit itself puts beside a Pro account's name. */
+  .badge {
+    position: relative;
+    padding: 1px;
+    border-radius: 4px;
+    background: linear-gradient(135deg, var(--key-jade), var(--key-sky));
+  }
+  .badge::before {
+    content: "";
+    position: absolute;
+    inset: 1px;
+    border-radius: 3px;
+    background: var(--color-ink);
+  }
+  .badge .sweep {
+    position: relative;
+    display: block;
+    padding: 4px 8px 3px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .preview {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 0;
+    color: var(--color-fg-2);
+    font-size: 15px;
+  }
+  .plan .tag {
+    display: flex;
+    justify-content: space-between;
+  }
+  .plan .save {
+    color: var(--label-mint);
+  }
+  .price {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin: 32px 0 0;
+    color: var(--color-fg);
+    font-size: 40px;
+    line-height: 1;
+    font-feature-settings: "tnum";
+  }
+  .price small {
+    color: var(--color-fg-4);
+    font-size: 15px;
+  }
+  /* The plan most people should take, edged in the sweep. */
+  .plan-pick {
+    --pick: color-mix(in srgb, var(--key-jade) 5%, var(--color-ink-2));
+    position: relative;
+    border-color: transparent;
+    background:
+      linear-gradient(var(--pick), var(--pick)) padding-box,
+      linear-gradient(135deg, var(--key-jade), var(--key-sky)) border-box;
+  }
+  .num {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--color-fg-4);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1;
+    font-feature-settings: "zero";
+  }
+  .num i {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--c);
+  }
+  .compare {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 15px;
+  }
+  .compare th {
+    padding: 16px 28px;
+    color: var(--color-fg-3);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 400;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .compare td {
+    padding: 14px 28px;
+    border-top: 1px solid var(--color-line);
+    color: var(--color-fg-2);
+  }
+  .compare th:not(:first-child),
+  .compare td:not(:first-child) {
+    width: 96px;
+    text-align: center;
+  }
+  .faq {
+    border-top: 1px solid var(--color-line);
+  }
+  .faq details {
+    border-bottom: 1px solid var(--color-line);
+  }
+  .faq summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 0;
+    color: var(--color-fg);
+    font-size: 17px;
+    cursor: pointer;
+    list-style: none;
+  }
+  .faq summary::-webkit-details-marker {
+    display: none;
+  }
+  .faq summary::after {
+    content: "+";
+    color: var(--color-fg-4);
+    font-family: var(--font-mono);
+    transition: transform 0.2s;
+  }
+  .faq details[open] summary::after {
+    transform: rotate(45deg);
+  }
+  .faq p {
+    max-width: 680px;
+    margin: 0 0 22px;
+    color: var(--color-fg-3);
+    font-size: 15px;
+    line-height: 1.5;
+  }
+</style>

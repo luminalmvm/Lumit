@@ -33,6 +33,7 @@ import 'package:lumit_flutter/src/rust/api/audio.dart'
     show BridgeAudioMeter, audioMeters;
 
 import 'cache_confirm_frb.dart';
+import 'profile_chip.dart';
 import 'share_dialog_frb.dart';
 
 /// Bumped by whatever starts an export — the export dialogue, the console's
@@ -225,6 +226,10 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
       child: _line(
         t,
         (width) => [
+          // Whose settings these are, first on the line: it is about the
+          // person, and everything after it is about the project.
+          _bubble(t, const ProfileChip()),
+          _divider(t),
           _bubble(t, _savedState(t, state)),
           _divider(t),
           // Deliberately NOT const: a const child is skipped by the tick's

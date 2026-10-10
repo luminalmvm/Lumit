@@ -161,7 +161,7 @@ After editing `crates/lumit-bridge/src/api/**`, run `.\scripts\codegen.ps1`. The
 |---|---|
 | `shell/` | Menu bar, tool bar, dock, status line, dialogues, settings, command palette |
 | `panels/` | One file per panel: Viewer, Timeline, Graph editor, effect controls, project, scopes, audio |
-| `state/` | App state and Dart-side caches |
+| `state/` | App state and Dart-side caches. Also profiles, and the account and what it asks Lumit's server for |
 | `widgets/` | Shared controls |
 | `theme/` | The only place a colour is spelled out |
 | `l10n/` | Strings and translations |
@@ -195,7 +195,7 @@ One Cargo workspace. Every `crates/lumit-*` folder is a member, one job each.
 | `lumit-keymap` | Shortcuts |
 | `lumit-ingress` | Limits for reading untrusted input |
 | `lumit-peer` | Authenticating the plugin broker pipes |
-| `lumit-share` | Shared projects: the host's end, a guest's end, and the encrypted channel between them |
+| `lumit-share` | Shared projects: the host's end, a guest's end, and the encrypted channel between them. Lumit's own relay is dialled through a door the interface keeps (`state/relay_door.dart`) |
 | `lumit-relay` | The relay a shared project can meet at, and what both ends say to one. Also a program, `lumit-relay`, with nothing but std in it |
 | `lumit-extensions` | Installed extensions: reading an `extension.json`, and the folder they live in |
 | `lumit-fx-macros` | `#[derive(Effect)]` |

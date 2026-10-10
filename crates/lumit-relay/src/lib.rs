@@ -2,11 +2,12 @@
 //! in: the host and its guests each connect out to it, and it passes what
 //! one says on to the other.
 //!
-//! It is somebody's own server. Lumit's makers run none, and Lumit uses one
-//! only when it is given its address. What crosses it is already encrypted
-//! between the host and each guest with the invite's secret, which the relay
-//! is never told, so the person who runs one sees who connected and how much
-//! they said and nothing of the project.
+//! It is somebody's own server, and Lumit uses one only when it is given
+//! its address. Lumit's makers run a relay too, which is not this program
+//! and is reached another way (`lumit_share::CLOUD_RELAY`). What crosses
+//! either is already encrypted between the host and each guest with the
+//! invite's secret, which the relay is never told, so the person who runs
+//! one sees who connected and how much they said and nothing of the project.
 //!
 //! How it goes. A host keeps one connection open and names a room on it. A
 //! guest connects and names the same room, and the host is told someone is

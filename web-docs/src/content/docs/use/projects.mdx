@@ -101,7 +101,11 @@ the other. Both connect out to it. What passes through is encrypted with the inv
 which the relay is never given. The relay's owner can see the addresses that connected and
 how much was sent.
 
-Lumit has no relay of its own and uses one only when its address is in **Relay**. A relay
+**Lumit relay** on **Share this project** uses the relay Lumit itself runs. It is part of
+[Lumit Pro](/use/profiles/#lumit-pro): the host needs it, and guests do not. It is used when
+**Relay** is empty.
+
+Any other relay is used only when its address is in **Relay**. It
 is the `lumit-relay` program from Lumit's source, run on a server its owner controls:
 `cargo run --release -p lumit-relay`, with a port number after it to listen on a port other
 than 47857. A second number is a speed in kilobytes a second that each connection is held

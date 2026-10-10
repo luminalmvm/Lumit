@@ -30,6 +30,10 @@
 :root {
   /* Film grain as a tile, for the lit grounds outside the hero's own shader. */
   --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 0 0 0 0 1'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23n)'/%3E%3C/svg%3E");
+  /* One stop from each key of the mark. Run together they are the sweep,
+     which is only drawn on Lumit Pro. */
+  --key-jade: #6fdca8;
+  --key-sky: #86e2ff;
   /* The application's label colours (flutter_ui/lib/theme/theme.dart, `_labelSet`). */
   --label-azure: #4aa3e0;
   --label-amber: #e0a33c;

@@ -74,6 +74,7 @@ import 'layer_settings_frb.dart';
 import 'menu_animation_frb.dart';
 import 'menu_layer_frb.dart';
 import 'precompose_dialog_frb.dart';
+import 'pro_window.dart';
 import 'export_dialog_frb.dart';
 import 'export_queue_frb.dart';
 import 'recovery_dialog_frb.dart';
@@ -1645,6 +1646,7 @@ List<MenuSection> lumitMenus(
       title: l10n.menuHelp,
       items: () => [
             MenuEntry(l10n.menuAboutLumit, () => showAboutWindowFrb(context)),
+            MenuEntry(l10n.menuLumitPro, () => showProWindow(context)),
             MenuEntry.live(
               ui.updates,
               () => updateMenuEntry(context, app, ui, savePicker: savePicker),

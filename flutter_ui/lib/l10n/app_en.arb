@@ -16107,5 +16107,508 @@
   "extensionBack": "Go back",
   "@extensionBack": {
     "description": "Button on the warning strip of an extension's dock panel. Loads the extension's own page again."
+  },
+  "profileUnnamed": "You",
+  "@profileUnnamed": {
+    "description": "Name shown for a profile that has not been given one, on the profile button at the left of the bottom strip and in its card."
+  },
+  "profileLocal": "On this machine only",
+  "@profileLocal": {
+    "description": "Quiet line under a profile's name in the profile card when it is not signed in to a Lumit account."
+  },
+  "profileSignIn": "Sign in",
+  "@profileSignIn": {
+    "description": "Button in the profile card and in Settings that opens the sign-in window."
+  },
+  "profileSignOut": "Sign out",
+  "@profileSignOut": {
+    "description": "Row in the profile card and button in Settings: sign this profile out of its Lumit account."
+  },
+  "profileProfiles": "Profiles",
+  "@profileProfiles": {
+    "description": "Small heading over the list of profiles in the profile card. A profile is one person's settings on this machine."
+  },
+  "profileAdd": "Add profile…",
+  "@profileAdd": {
+    "description": "Row at the foot of the profile list. Opens a small window asking for the new profile's name."
+  },
+  "profileAddTitle": "New profile",
+  "@profileAddTitle": {
+    "description": "Title of the small window that asks what a new profile is called."
+  },
+  "profileAddHint": "Starts with your current settings.",
+  "@profileAddHint": {
+    "description": "Quiet line in the New profile window, under the name field."
+  },
+  "profileAddConfirm": "Add",
+  "@profileAddConfirm": {
+    "description": "The filled button in the New profile window."
+  },
+  "profileRenameTitle": "Rename profile",
+  "@profileRenameTitle": {
+    "description": "Title of the small window that asks for a profile's new name."
+  },
+  "profileRename": "Rename…",
+  "@profileRename": {
+    "description": "Button in Settings beside a profile's name."
+  },
+  "profileRemove": "Remove",
+  "@profileRemove": {
+    "description": "Button in Settings beside a profile that is not the one in use: take it off this machine."
+  },
+  "profileRemoveAsk": "Remove {name} from this machine? Its settings here are deleted, its account isn't.",
+  "@profileRemoveAsk": {
+    "description": "Confirmation before a profile is removed. {name} is the profile's name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "profileInUse": "In use",
+  "@profileInUse": {
+    "description": "Quiet word beside the profile that is in use, in the profile list in Settings."
+  },
+  "profileAccountSettings": "Account settings…",
+  "@profileAccountSettings": {
+    "description": "Row in the profile card that opens Settings on the Account page."
+  },
+  "profileButtonTip": "Profile and account",
+  "@profileButtonTip": {
+    "description": "Tooltip on the profile button at the left of the bottom strip."
+  },
+  "proTag": "Pro",
+  "@proTag": {
+    "description": "Small badge beside the name of a profile whose account has Lumit Pro. Lumit Pro is the paid plan and is not translated; keep this as Pro."
+  },
+  "proPreviewTag": "Pro preview",
+  "@proPreviewTag": {
+    "description": "Small badge beside a profile's name while Lumit Pro is free for everyone who signs in, before it goes on sale."
+  },
+  "proCardTitle": "Lumit Pro",
+  "@proCardTitle": {
+    "description": "Heading of the card inviting someone to look at Lumit Pro, in the profile card. A product name: do not translate."
+  },
+  "proCardLine": "Share anywhere, and reflect settings on any device.",
+  "@proCardLine": {
+    "description": "One line under the Lumit Pro heading in the profile card."
+  },
+  "proCardAction": "See what is in Pro",
+  "@proCardAction": {
+    "description": "Button on the Lumit Pro card in the profile card. Opens the Lumit Pro window."
+  },
+  "proManage": "Manage subscription",
+  "@proManage": {
+    "description": "Button that opens the shop's page for changing or ending a Lumit Pro subscription, in the browser."
+  },
+  "syncStatusSynced": "Settings in sync",
+  "@syncStatusSynced": {
+    "description": "Line in the profile card when this profile's settings match what is kept on Lumit's server."
+  },
+  "syncStatusSyncing": "Syncing…",
+  "@syncStatusSyncing": {
+    "description": "Line in the profile card while settings are being sent to or fetched from Lumit's server."
+  },
+  "syncStatusFailed": "Could not sync. Lumit will try again soon.",
+  "@syncStatusFailed": {
+    "description": "Line in the profile card when the last attempt to sync settings failed."
+  },
+  "syncStatusOff": "Sync is off",
+  "@syncStatusOff": {
+    "description": "Line in the profile card for a Pro account whose profile has sync switched off."
+  },
+  "signInTitle": "Sign in",
+  "@signInTitle": {
+    "description": "Title strip of the sign-in window."
+  },
+  "signInHeading": "Sign in to Lumit",
+  "@signInHeading": {
+    "description": "Large heading in the sign-in window."
+  },
+  "signInCreateHeading": "Create your account",
+  "@signInCreateHeading": {
+    "description": "Large heading in the sign-in window when making a new account."
+  },
+  "signInCodeHeading": "Check your email",
+  "@signInCodeHeading": {
+    "description": "Large heading in the sign-in window after a code has been emailed."
+  },
+  "signInResetHeading": "Choose a new password",
+  "@signInResetHeading": {
+    "description": "Large heading in the sign-in window when resetting a password."
+  },
+  "signInEmail": "Email",
+  "@signInEmail": {
+    "description": "Label and placeholder of the email field in the sign-in window."
+  },
+  "signInPassword": "Password",
+  "@signInPassword": {
+    "description": "Label and placeholder of the password field in the sign-in window."
+  },
+  "signInNewPassword": "New password",
+  "@signInNewPassword": {
+    "description": "Placeholder of the password field when choosing a new password."
+  },
+  "signInName": "Name",
+  "@signInName": {
+    "description": "Placeholder of the name field when creating an account: the name other people see."
+  },
+  "signInCode": "Six-digit code",
+  "@signInCode": {
+    "description": "Placeholder of the field where the emailed code is typed."
+  },
+  "signInAction": "Sign in",
+  "@signInAction": {
+    "description": "The filled button in the sign-in window."
+  },
+  "signInCreateAction": "Create account",
+  "@signInCreateAction": {
+    "description": "The filled button when creating an account."
+  },
+  "signInContinue": "Continue",
+  "@signInContinue": {
+    "description": "The filled button on the code page and the new password page of the sign-in window."
+  },
+  "signInOr": "or",
+  "@signInOr": {
+    "description": "The word in the middle of the line that divides signing in by email from the Discord and Google buttons. Lower case."
+  },
+  "signInGoogle": "Continue with Google",
+  "@signInGoogle": {
+    "description": "Button that signs in with a Google account, in the browser."
+  },
+  "signInDiscord": "Continue with Discord",
+  "@signInDiscord": {
+    "description": "Button that signs in with a Discord account, in the browser."
+  },
+  "signInForgot": "Forgot password?",
+  "@signInForgot": {
+    "description": "Link under the password field in the sign-in window."
+  },
+  "signInNoAccount": "Create an account",
+  "@signInNoAccount": {
+    "description": "Link at the foot of the sign-in window, for someone who has no account yet."
+  },
+  "signInHaveAccount": "I already have an account",
+  "@signInHaveAccount": {
+    "description": "Link at the foot of the create-account page, back to signing in."
+  },
+  "signInBack": "Back",
+  "@signInBack": {
+    "description": "Link on the code and new password pages of the sign-in window, back to the first page."
+  },
+  "signInCodeLead": "We sent a six-digit code to {email}.",
+  "@signInCodeLead": {
+    "description": "Line on the code page of the sign-in window. {email} is the address typed.",
+    "placeholders": {
+      "email": {
+        "type": "String"
+      }
+    }
+  },
+  "signInResetLead": "Enter the code we sent to {email}, and a new password.",
+  "@signInResetLead": {
+    "description": "Line on the new password page of the sign-in window. {email} is the address typed.",
+    "placeholders": {
+      "email": {
+        "type": "String"
+      }
+    }
+  },
+  "signInResend": "Send another code",
+  "@signInResend": {
+    "description": "Link on the code page of the sign-in window."
+  },
+  "signInResent": "Sent.",
+  "@signInResent": {
+    "description": "Shown in place of the Send another code link for a moment after it is clicked."
+  },
+  "signInBrowser": "Finish signing in in your browser.",
+  "@signInBrowser": {
+    "description": "Line shown in the sign-in window while it waits for a Google or Discord sign-in to finish in the browser."
+  },
+  "signInWorking": "One moment…",
+  "@signInWorking": {
+    "description": "Shown on the filled button of the sign-in window while it is busy, which takes a couple of seconds."
+  },
+  "signInUnavailable": "Signing in is not switched on yet.",
+  "@signInUnavailable": {
+    "description": "Shown in the sign-in window when Lumit's server offers no way to sign in."
+  },
+  "signInErrorCredentials": "That email and password do not match an account.",
+  "@signInErrorCredentials": {
+    "description": "Error in the sign-in window."
+  },
+  "signInErrorCode": "That code is not right, or it has run out.",
+  "@signInErrorCode": {
+    "description": "Error on the code page of the sign-in window."
+  },
+  "signInErrorSlow": "Too many tries. Wait a few minutes and try again.",
+  "@signInErrorSlow": {
+    "description": "Error in the sign-in window when the server is limiting attempts."
+  },
+  "signInErrorOffline": "Lumit's server could not be reached. Check your connection.",
+  "@signInErrorOffline": {
+    "description": "Error in the sign-in window and the Lumit Pro window."
+  },
+  "signInErrorEmail": "That does not look like an email address.",
+  "@signInErrorEmail": {
+    "description": "Error in the sign-in window."
+  },
+  "signInErrorPassword": "Use at least {count} characters.",
+  "@signInErrorPassword": {
+    "description": "Error in the sign-in window when the password chosen is too short. {count} is the least it may be.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "signInErrorName": "Type the name people will see.",
+  "@signInErrorName": {
+    "description": "Error when creating an account with the name left empty."
+  },
+  "signInErrorProvider": "That account's email isn't confirmed, so it can't be used to sign in.",
+  "@signInErrorProvider": {
+    "description": "Error after trying to sign in with a Google or Discord account whose email address is not verified."
+  },
+  "signInErrorTimedOut": "Sign-in wasn't finished in the browser. Try again.",
+  "@signInErrorTimedOut": {
+    "description": "Error when a Google or Discord sign-in was started and never finished."
+  },
+  "signInErrorBrowser": "The browser could not be opened.",
+  "@signInErrorBrowser": {
+    "description": "Error when Lumit could not open the web browser for signing in or for the shop."
+  },
+  "signInErrorGeneric": "That did not work. Try again in a moment.",
+  "@signInErrorGeneric": {
+    "description": "Error in the sign-in window and the Lumit Pro window for anything unexpected."
+  },
+  "proTitle": "Lumit Pro",
+  "@proTitle": {
+    "description": "Title strip of the Lumit Pro window. A product name: do not translate."
+  },
+  "proHeadline": "Work together from anywhere.",
+  "@proHeadline": {
+    "description": "Large heading in the Lumit Pro window."
+  },
+  "proFeatureRelayTitle": "Share from anywhere",
+  "@proFeatureRelayTitle": {
+    "description": "First feature in the Lumit Pro window."
+  },
+  "proFeatureRelayBody": "Guests join through Lumit's relay. Nothing to set up.",
+  "@proFeatureRelayBody": {
+    "description": "What the first Lumit Pro feature does. A relay passes a shared project's edits between people who cannot reach each other."
+  },
+  "proFeatureSyncTitle": "Settings on every device",
+  "@proFeatureSyncTitle": {
+    "description": "Second feature in the Lumit Pro window."
+  },
+  "proFeatureSyncBody": "Shortcuts, themes, workspaces, and presets follow you.",
+  "@proFeatureSyncBody": {
+    "description": "What the second Lumit Pro feature does."
+  },
+  "proFeatureSupportTitle": "Support Lumit",
+  "@proFeatureSupportTitle": {
+    "description": "Third feature in the Lumit Pro window."
+  },
+  "proFeatureSupportBody": "Helps pay for servers and development.",
+  "@proFeatureSupportBody": {
+    "description": "What the third Lumit Pro feature does."
+  },
+  "proMonthly": "Monthly",
+  "@proMonthly": {
+    "description": "One of the two ways to pay for Lumit Pro, on a two-way switch."
+  },
+  "proYearly": "Yearly",
+  "@proYearly": {
+    "description": "One of the two ways to pay for Lumit Pro, on a two-way switch."
+  },
+  "proPerMonth": "a month",
+  "@proPerMonth": {
+    "description": "Follows the price of Lumit Pro paid monthly, for example \"£5.00 a month\"."
+  },
+  "proPerYear": "a year",
+  "@proPerYear": {
+    "description": "Follows the price of Lumit Pro paid yearly, for example \"£48.00 a year\"."
+  },
+  "proSaving": "Save {percent}%",
+  "@proSaving": {
+    "description": "Small badge on the Yearly option when it costs less than twelve months paid monthly. {percent} is a whole number.",
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "proBuy": "Get Lumit Pro",
+  "@proBuy": {
+    "description": "The filled button in the Lumit Pro window. Opens the shop in the browser."
+  },
+  "proSignInFirst": "Sign in to get Pro",
+  "@proSignInFirst": {
+    "description": "The filled button in the Lumit Pro window when nobody is signed in."
+  },
+  "proSignInPreview": "Sign in to try Pro",
+  "@proSignInPreview": {
+    "description": "The filled button in the Lumit Pro window when nobody is signed in and Pro is free for now."
+  },
+  "proWaiting": "Finish paying in your browser.",
+  "@proWaiting": {
+    "description": "Line in the Lumit Pro window after the shop has been opened in the browser."
+  },
+  "proWaitingCancel": "Not now",
+  "@proWaitingCancel": {
+    "description": "Link in the Lumit Pro window that stops waiting for the shop."
+  },
+  "proThanksHeadline": "You have Lumit Pro",
+  "@proThanksHeadline": {
+    "description": "Large heading in the Lumit Pro window once the account has Pro."
+  },
+  "proThanksBody": "Thank you. Relay sharing and sync are on.",
+  "@proThanksBody": {
+    "description": "Line under the heading once the account has Pro."
+  },
+  "proPreviewNote": "Pro is free while we test it.",
+  "@proPreviewNote": {
+    "description": "Line in the Lumit Pro window while Pro is free for everyone, before it goes on sale."
+  },
+  "proRenews": "Renews on {date}.",
+  "@proRenews": {
+    "description": "Line in the Lumit Pro window and Settings. {date} is a written date.",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "proEnds": "Ends on {date}.",
+  "@proEnds": {
+    "description": "Line in the Lumit Pro window and Settings for a subscription that has been cancelled and runs to the end of what was paid for. {date} is a written date.",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "proPastDue": "The last payment failed. Update your card to keep Pro.",
+  "@proPastDue": {
+    "description": "Warning in the Lumit Pro window and Settings."
+  },
+  "proNotOnSale": "Pro is not on sale yet.",
+  "@proNotOnSale": {
+    "description": "Line in the Lumit Pro window when a subscription cannot be bought yet."
+  },
+  "proSmallPrint": "Cancel any time. Payments are handled by Paddle.",
+  "@proSmallPrint": {
+    "description": "Quiet line at the foot of the Lumit Pro window. Paddle is the company that takes payments; do not translate its name."
+  },
+  "proClose": "Done",
+  "@proClose": {
+    "description": "Button that closes the Lumit Pro window once the account has Pro."
+  },
+  "settingsAccount": "Account",
+  "@settingsAccount": {
+    "description": "Name of the Settings page for profiles, the Lumit account and sync."
+  },
+  "settingsAccountProfiles": "Profiles",
+  "@settingsAccountProfiles": {
+    "description": "Group heading on the Account page of Settings: the profiles on this machine."
+  },
+  "settingsAccountProfilesHint": "Each profile has its own settings.",
+  "@settingsAccountProfilesHint": {
+    "description": "Quiet line under the profile list in Settings."
+  },
+  "settingsAccountGroup": "Lumit account",
+  "@settingsAccountGroup": {
+    "description": "Group heading on the Account page of Settings."
+  },
+  "settingsAccountSignedOut": "Not signed in. Settings stay on this machine.",
+  "@settingsAccountSignedOut": {
+    "description": "Line on the Account page of Settings, under a profile that is not signed in."
+  },
+  "settingsAccountPlanFree": "Free",
+  "@settingsAccountPlanFree": {
+    "description": "The plan of an account without Lumit Pro, on the Account page of Settings."
+  },
+  "settingsAccountPlan": "Plan",
+  "@settingsAccountPlan": {
+    "description": "Row label on the Account page of Settings: Free, or Lumit Pro."
+  },
+  "settingsAccountDelete": "Delete account…",
+  "@settingsAccountDelete": {
+    "description": "Button on the Account page of Settings."
+  },
+  "settingsAccountDeleteAsk": "Delete your Lumit account? Any subscription ends now and synced settings are removed. Settings on this machine stay.",
+  "@settingsAccountDeleteAsk": {
+    "description": "Confirmation before a Lumit account is deleted."
+  },
+  "settingsAccountDeleteConfirm": "Delete account",
+  "@settingsAccountDeleteConfirm": {
+    "description": "The button that confirms deleting a Lumit account."
+  },
+  "settingsSync": "Sync",
+  "@settingsSync": {
+    "description": "Group heading on the Account page of Settings."
+  },
+  "settingsSyncOn": "Keep this profile in sync",
+  "@settingsSyncOn": {
+    "description": "Checkbox on the Account page of Settings: keep this profile's settings on Lumit's server and in step across machines."
+  },
+  "settingsSyncHint": "Cache, audio device, and recent projects stay on each machine.",
+  "@settingsSyncHint": {
+    "description": "Quiet line under the sync checkbox in Settings."
+  },
+  "settingsSyncNeedsPro": "Sync is part of Lumit Pro.",
+  "@settingsSyncNeedsPro": {
+    "description": "Line in the Sync group of Settings for an account without Pro."
+  },
+  "settingsSyncNow": "Sync now",
+  "@settingsSyncNow": {
+    "description": "Button in the Sync group of Settings."
+  },
+  "syncGroupAppearance": "Appearance and themes",
+  "@syncGroupAppearance": {
+    "description": "One of the kinds of setting that can be synced, ticked on or off in Settings."
+  },
+  "syncGroupShortcuts": "Shortcuts",
+  "@syncGroupShortcuts": {
+    "description": "One of the kinds of setting that can be synced, ticked on or off in Settings."
+  },
+  "syncGroupLayout": "Panel layout and workspaces",
+  "@syncGroupLayout": {
+    "description": "One of the kinds of setting that can be synced, ticked on or off in Settings."
+  },
+  "syncGroupPreferences": "Preferences",
+  "@syncGroupPreferences": {
+    "description": "One of the kinds of setting that can be synced, ticked on or off in Settings: the options on the other Settings pages."
+  },
+  "syncGroupLibrary": "Easings, expressions and favourites",
+  "@syncGroupLibrary": {
+    "description": "One of the kinds of setting that can be synced, ticked on or off in Settings."
+  },
+  "syncGroupPresets": "Effect presets",
+  "@syncGroupPresets": {
+    "description": "One of the kinds of setting that can be synced, ticked on or off in Settings."
+  },
+  "shareCloud": "Lumit relay",
+  "@shareCloud": {
+    "description": "Row label on the Share this project page: whether guests can come in through the relay Lumit itself runs for people with Lumit Pro."
+  },
+  "shareCloudUse": "Let guests join through Lumit's relay",
+  "@shareCloudUse": {
+    "description": "Checkbox on the Share this project page, for an account with Lumit Pro."
+  },
+  "shareCloudPro": "Lumit Pro lets guests join from anywhere.",
+  "@shareCloudPro": {
+    "description": "Line on the Share this project page for someone without Lumit Pro, beside a button that opens the Lumit Pro window."
+  },
+  "shareCloudSee": "Lumit Pro…",
+  "@shareCloudSee": {
+    "description": "Button on the Share this project page that opens the Lumit Pro window."
+  },
+  "menuLumitPro": "Lumit Pro…",
+  "@menuLumitPro": {
+    "description": "Help menu row that opens the Lumit Pro window. Lumit Pro is a product name: do not translate it."
   }
 }

@@ -85,6 +85,9 @@ Future<void> _start(List<String> args) async {
   // Shared project window opens on it once there is a window to open it in.
   state.launchInvite = inviteFromArgs(args);
   final ui = LumitUiState(state);
+  // The account and its sync, which a test never starts: nothing else at
+  // start-up speaks to a server of Lumit's.
+  unawaited(ui.profiles.start());
   // The one start-up plugin scan (docs/12 §2.6). Not awaited: opening
   // other people's bundles and spawning a broker apiece takes as long as it
   // takes, and the shell must come up whether the machine has eighty plugins on

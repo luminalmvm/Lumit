@@ -53,6 +53,18 @@ bool shareLinkLocked({required String text}) =>
 /// address typed without one.
 int shareRelayPort() => BridgeLib.instance.api.crateApiShareShareRelayPort();
 
+/// What Lumit's own relay is called in an invite, to give [`ProjectReference::share`]
+/// as its relay. It is reached through the door [`share_cloud_door`] names.
+String shareCloudRelay() =>
+    BridgeLib.instance.api.crateApiShareShareCloudRelay();
+
+/// Say which port on this machine the door to Lumit's own relay is on, or
+/// `None` when it has shut. The interface keeps the door, since it is what
+/// holds the account the relay asks a host for. With none, an invite that
+/// names the relay is tried at its other addresses only.
+void shareCloudDoor({int? port}) =>
+    BridgeLib.instance.api.crateApiShareShareCloudDoor(port: port);
+
 /// Join the project an invite names. It opens as a new, unsaved project in
 /// place of whatever was open, so saving it writes this person's own copy.
 ///
