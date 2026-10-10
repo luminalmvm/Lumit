@@ -15480,27 +15480,27 @@
   },
   "shareShowLink": "Show",
   "@shareShowLink": {
-    "description": "Small button beside an invite link in the Shared project window. The link is drawn blurred until this is pressed and a warning agreed to."
+    "description": "Small button beside an invite link in the Shared project window. The link is hidden until this is pressed and a warning agreed to."
   },
   "shareHideLink": "Hide",
   "@shareHideLink": {
-    "description": "Small button beside an invite link in the Shared project window, once the link is showing. Blurs it again."
+    "description": "Small button beside an invite link in the Shared project window, once the link is showing. Hides it again."
   },
   "shareShowTitle": "Show the invite link?",
   "@shareShowTitle": {
-    "description": "Title of the small question that opens when Show is pressed beside a blurred invite link."
+    "description": "Title of the small question that opens when Show is pressed beside a hidden invite link."
   },
   "shareShowBody": "Anyone who sees this link can join the project and change it, and the link holds your internet address. Keep it off streams, recordings and screenshots.",
   "@shareShowBody": {
-    "description": "Body of the question asked before a blurred invite link is shown."
+    "description": "Body of the question asked before a hidden invite link is shown."
   },
   "shareKeepHidden": "Keep hidden",
   "@shareKeepHidden": {
-    "description": "Default button of the question asked before a blurred invite link is shown. Closes the question and leaves the link blurred."
+    "description": "Default button of the question asked before a hidden invite link is shown. Closes the question and leaves the link hidden."
   },
   "shareShowConfirm": "Show link",
   "@shareShowConfirm": {
-    "description": "Button of the question asked before a blurred invite link is shown. Shows the link."
+    "description": "Button of the question asked before a hidden invite link is shown. Shows the link."
   },
   "shareAdvanced": "Advanced",
   "@shareAdvanced": {
