@@ -180,6 +180,8 @@ impl ProjectReference {
     pub fn close(&self) -> Result<(), BridgeError> {
         // A shared project stops being shared when it closes.
         crate::api::share::stop(self.id);
+        // Clips copied in the Cut workspace name this project's items.
+        crate::api::cut::forget_copied(self.id);
         // One registry at a time, never nested — the lock order rule in
         // `state.rs`. The state's last strong reference is usually the one
         // removed here; binding it keeps the drop (and the worker channel's
@@ -389,7 +391,7 @@ impl ProjectReference {
     /// The ops that add a composition and file it, with the new comp's id.
     /// Nothing is committed, so a caller can add to the batch.
     #[frb(ignore)]
-    fn new_comp_ops(
+    pub(crate) fn new_comp_ops(
         doc: &lumit_core::Document,
         name: String,
         settings: Option<BridgeCompSettings>,

@@ -2940,6 +2940,23 @@ fn bus_chain_of(
     audio_chain_of(doc, comp, layer, offset_s, base_s)
 }
 
+/// A nested comp's own **master fader**, riding down with the Volume of the
+/// layer or clip that plays it. A master is a stage only for the comp being
+/// mixed. One comp deep it is just another gain on what that comp
+/// contributes, which is exactly what a carrier is. `None` at unity.
+///
+/// It goes last, so it sits inside the bus: the rack hears the comp at the
+/// level its own master fader sets, and the parent's insert comes after it.
+fn master_carrier(nested: &Composition, offset_s: f64) -> Option<crate::export::Carrier> {
+    (nested.master_volume_db != 0.0).then(|| crate::export::Carrier {
+        volume: lumit_core::anim::Property::fixed(nested.master_volume_db),
+        pan: lumit_core::anim::Property::zero(),
+        offset_s,
+        fade: None,
+        chain: None,
+    })
+}
+
 /// The **clip's own** rack, or `None` where the clip has no stack or has
 /// bypassed it (docs/impl/audio-timeline.md §4).
 ///
@@ -3156,28 +3173,13 @@ impl AudioJobsBuilder {
                     volume: layer.volume_db.clone(),
                     pan: layer.pan.clone(),
                     offset_s,
+                    fade: None,
                     // The layer's own rack is the **bus**: the mixer sums what
                     // arrives through this carrier and the rack hears the sum,
                     // ahead of the Volume and Pan beside it here.
                     chain: bus_chain_of(doc, comp, layer, offset_s, base_s),
                 });
-                // The nested comp's own **master fader** rides down with
-                // the Precomp layer's Volume. A master is a stage
-                // only for the comp being mixed; one comp deep it is just
-                // another gain on what that comp contributes, which is
-                // exactly what a carrier is.
-                if nested.master_volume_db != 0.0 {
-                    inner.push(crate::export::Carrier {
-                        volume: lumit_core::anim::Property::fixed(nested.master_volume_db),
-                        pan: lumit_core::anim::Property::zero(),
-                        offset_s,
-                        // Inside the bus, so the rack hears the comp at the
-                        // level its own master fader sets: a master is a stage
-                        // on that comp's sum, and the parent's insert comes
-                        // after it.
-                        chain: None,
-                    });
-                }
+                inner.extend(master_carrier(nested, offset_s));
                 visited.push(*nested_id);
                 self.walk(
                     doc,
@@ -3217,11 +3219,13 @@ impl AudioJobsBuilder {
     /// Either way the curve is the clip's stored shape
     /// (docs/impl/audio-timeline.md §3).
     ///
-    /// Two exclusions, both docs/09's: a **retimed** clip is silent (§7 —
-    /// retime mutes audio in v1, and a clip's map is as much a retime as a
-    /// layer's), and a clip whose source is a **composition** is silent, since
-    /// mixing a nested comp through a clip's trim is the Sequence-of-comps
-    /// case nothing yet asks for.
+    /// **A clip whose source is a composition** sounds as that comp's own
+    /// mix over the clip's span, carried the way a Precomp layer carries one:
+    /// the row's Volume, Pan and rack ride on the sum, and the clip's ramps
+    /// and level ride beside them, worked out as any clip's are.
+    ///
+    /// One exclusion, docs/09's: a **retimed** clip is silent (§7: retime
+    /// mutes audio in v1, and a clip's map is as much a retime as a layer's).
     #[allow(clippy::too_many_arguments)]
     fn sequence_jobs(
         &mut self,
@@ -3235,6 +3239,7 @@ impl AudioJobsBuilder {
         out_s: f64,
         offset_s: f64,
         carriers: &[crate::export::Carrier],
+        visited: &mut Vec<Uuid>,
         jobs: &mut Vec<AudioJob>,
     ) {
         // The row read left to right, so the jobs come out in the order the
@@ -3446,18 +3451,14 @@ impl AudioJobsBuilder {
                 volume: layer.volume_db.clone(),
                 pan: layer.pan.clone(),
                 carriers: carriers.to_vec(),
-                // Kept for a gain with no ramp on it too. `volume_bake` reads
-                // a fade that does nothing as the constant it is, and
-                // `jobs_signature` hashes the whole of it, so neither needed a
-                // line changing for the gain.
-                fade: (fade.is_active() || clip.gain_db != 0.0).then_some(fade),
+                fade,
                 // The row's own duck, riding every clip exactly as the row's
                 // Volume does — the layer's clock, not the clip's.
-                driven: driven_volume_of(doc, comp, layer, offset_s, base_s),
+                driven: driven.clone(),
                 // And the row's own rack, on each clip. See `AudioChain`: a
                 // chain per clip is not a chain on the row's mixed output, so a
                 // tail does not cross a join.
-                chain: audio_chain_of(doc, comp, layer, offset_s, base_s),
+                chain: chain.clone(),
                 clip_chain: clip_chain_of(doc, comp, layer, clip, start_s, base_s),
             });
         }
@@ -3539,13 +3540,20 @@ impl AudioJobsBuilder {
             LayerKind::Sequence { clips } => {
                 let mut has = false;
                 for clip in clips {
-                    let lumit_core::sequence::ClipSource::Footage(item) = clip.source else {
-                        continue;
+                    let sounds = match clip.source {
+                        lumit_core::sequence::ClipSource::Footage(item) => match doc.item(item) {
+                            Some(ProjectItem::Footage(f)) => {
+                                self.item_has_audio(item, &footage_path(f))
+                            }
+                            _ => false,
+                        },
+                        // A clip of a composition sounds as a Precomp layer
+                        // of it would.
+                        lumit_core::sequence::ClipSource::Comp(comp) => {
+                            self.kind_has_audio(doc, &LayerKind::Precomp { comp }, visited)
+                        }
                     };
-                    let Some(ProjectItem::Footage(f)) = doc.item(item) else {
-                        continue;
-                    };
-                    if self.item_has_audio(item, &footage_path(f)) {
+                    if sounds {
                         has = true;
                         break;
                     }
@@ -4861,6 +4869,60 @@ mod tests {
             2,
             "the retimed clip drops out of the mix"
         );
+    }
+
+    /// **A clip whose source is a composition is heard.** The comp's own mix
+    /// plays over the clip's span from the clip's trim, filed under the
+    /// clip's row, and the clip's fade and level reach the bake. It used to
+    /// be skipped, so a clip turned into a composition fell silent.
+    #[test]
+    fn a_composition_clip_sounds_over_its_span_through_its_fade_and_gain() {
+        use lumit_core::sequence::{Clip, ClipSource, Fade, FadeShape};
+        let r = |n: i64, d: i64| Rational::new(n, d).expect("rational");
+        let mut doc = Document::new();
+        let song = push_footage_item(&mut doc, "song.wav");
+        let inner = push_comp(&mut doc, "A", 32, 32);
+        push_layer(&mut doc, inner, LayerKind::Footage { item: song });
+        let outer = push_comp(&mut doc, "cut", 32, 32);
+        // Two seconds of A from its second 1, placed at 3 on the row, pulled
+        // down 6 dB and coming up over half a second.
+        let mut clip = Clip::new(ClipSource::Comp(inner), r(1, 1), r(3, 1), r(3, 1), r(2, 1));
+        clip.gain_db = -6.0;
+        clip.fade_in = Fade {
+            seconds: r(1, 2),
+            shape: FadeShape::Linear,
+        };
+        push_layer(&mut doc, outer, LayerKind::Sequence { clips: vec![clip] });
+
+        let mut builder = AudioJobsBuilder::new();
+        seed_has_audio(song);
+        let comp = doc.comp(outer).expect("comp").clone();
+        assert!(
+            builder.layer_has_audio(&doc, &comp.layers[0]),
+            "a row whose composition clip carries sound wears a mute switch"
+        );
+        let jobs = builder.audio_jobs(&Arc::new(doc.clone()), &comp);
+        assert_eq!(jobs.len(), 1, "the song inside the clip's comp is heard");
+        let job = &jobs[0];
+        assert_eq!((job.item, job.layer), (song, comp.layers[0].id));
+        assert!((job.in_s - 3.0).abs() < 1e-9, "in_s was {}", job.in_s);
+        assert!((job.out_s - 5.0).abs() < 1e-9, "out_s was {}", job.out_s);
+        assert!(
+            (job.offset_s - 2.0).abs() < 1e-9,
+            "A's second 1 is heard at 3, so its start sits at 2, got {}",
+            job.offset_s
+        );
+
+        // A hundred points a second from the clip's start: silent at the
+        // start, half way up a quarter of a second in, then at the clip's
+        // own level.
+        let (_, envelope) = crate::export::volume_bake(job, 3 * 48_000, 2 * 48_000, 48_000);
+        let envelope = envelope.expect("a fade is an envelope");
+        let level = lumit_audio::mix::db_to_gain(-6.0);
+        for (point, want) in [(0, 0.0), (25, 0.5 * level), (50, level), (150, level)] {
+            let got = envelope.points[point][0];
+            assert!((got - want).abs() < 1e-4, "point {point}: {got} for {want}");
+        }
     }
 
     /// **A clip carries a rack of its own, and each fx switch drops one
@@ -6577,6 +6639,248 @@ mod tests {
                 "{name}: the interactive and export paths must be bit-identical"
             );
         }
+    }
+
+    /// **A fade and a dissolve reach the picture.** Two flat stills on one
+    /// Sequence layer over a black comp: the first comes up from nothing over
+    /// its own second, the two overlap for a second, and the second goes
+    /// down to nothing. The middle of the overlap is the even mix of the two
+    /// pictures' light and its first frame is the outgoing clip alone.
+    /// Skips (with a note) when no ffmpeg CLI is present to write the stills.
+    #[test]
+    fn a_sequence_layer_fades_at_a_lone_end_and_dissolves_across_an_overlap() {
+        use lumit_core::sequence::{Clip, ClipSource, Fade, FadeShape};
+        let mut r = match HeadlessRenderer::shared() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let Some(bin) = lumit_media::index::tests_support::ffmpeg_bin() else {
+            eprintln!("skipping: no ffmpeg CLI to write the stills");
+            return;
+        };
+        let dir = tempfile::tempdir().expect("a directory");
+        let (mut doc, comp_id, _) = matrix_base(64, 64, LinearColour::BLACK);
+        let red = still_item(&mut doc, dir.path(), bin, "red.png", "color=c=red:s=64x64");
+        let blue = still_item(
+            &mut doc,
+            dir.path(),
+            bin,
+            "blue.png",
+            "color=c=blue:s=64x64",
+        );
+
+        let at = |n: i64| Rational::new(n, 1).unwrap();
+        let linear = |seconds: i64| Fade {
+            seconds: at(seconds),
+            shape: FadeShape::Linear,
+        };
+        // Red on [0, 3) and blue on [2, 5): they share [2, 3).
+        let mut first = Clip::new(ClipSource::Footage(red), at(0), at(3), at(0), at(3));
+        let mut second = Clip::new(ClipSource::Footage(blue), at(0), at(3), at(2), at(3));
+        (first.fade_in, second.fade_in, second.fade_out) = (linear(1), linear(1), linear(1));
+        if let Some(ProjectItem::Composition(c)) = doc.item_mut(comp_id) {
+            c.layers = vec![matrix_layer(
+                "Cut",
+                LayerKind::Sequence {
+                    clips: vec![first, second],
+                },
+                64,
+                64,
+            )];
+        }
+        let doc = DocumentStore::new(doc).snapshot();
+        // The middle pixel of a frame, thirty frames to the second.
+        let mut centre = |frame: u64| -> [i32; 3] {
+            let (px, w, h) = r
+                .render_rgba(&doc, comp_id, frame, 1.0)
+                .unwrap_or_else(|e| panic!("frame {frame}: {e}"));
+            let i = ((h / 2 * w + w / 2) * 4) as usize;
+            [px[i].into(), px[i + 1].into(), px[i + 2].into()]
+        };
+        let near = |a: [i32; 3], b: [i32; 3]| a.iter().zip(b).all(|(a, b)| (a - b).abs() <= 2);
+
+        // Each clip whole, in the second it has to itself.
+        let (whole_red, whole_blue) = (centre(45), centre(105));
+        assert!(whole_red[0] > 200 && whole_blue[2] > 200, "the stills draw");
+
+        // The lone ends: nothing at all, then part of the way, on the way up
+        // and on the way down.
+        assert!(near(centre(0), [0, 0, 0]), "transparent at the start");
+        let rising = centre(15)[0];
+        assert!(rising > 20 && rising < whole_red[0] - 20, "red at {rising}");
+        let falling = centre(135)[2];
+        assert!(
+            falling > 20 && falling < whole_blue[2] - 20,
+            "blue at {falling}"
+        );
+
+        // The overlap: the outgoing clip alone on its first frame, and half
+        // the light of each in its middle.
+        assert!(near(centre(60), whole_red), "the dissolve starts on red");
+        let light = |v: i32| lumit_core::pixels::srgb_decode(v as u8);
+        let even = [0, 1, 2].map(|c| {
+            let half = (light(whole_red[c]) + light(whole_blue[c])) / 2.0;
+            i32::from(lumit_core::pixels::srgb_encode(half))
+        });
+        let middle = centre(75);
+        assert!(near(middle, even), "{middle:?} for {even:?}");
+
+        // Playback's read-ahead asks for both files inside the overlap, and
+        // opens the incoming one ahead of it and not the one playing.
+        let quality = crate::plan::Quality::default();
+        let files = |wants: Vec<PrefetchWant>| wants.iter().map(|w| w.item).collect::<Vec<_>>();
+        assert_eq!(
+            files(r.prefetch_wants(&doc, comp_id, 75, quality)),
+            [blue, red]
+        );
+        assert_eq!(files(r.cut_wants(&doc, comp_id, 30, 60, quality)), [blue]);
+    }
+
+    /// **A clip that plays a composition draws it.** A still on a Sequence
+    /// layer, and the same row with the clip pointed at a composition holding
+    /// that still as Open as composition makes one: the two rows draw the
+    /// same picture where the clip is whole, inside its fade, and in the
+    /// middle of a dissolve with a composition on one side of it or on both.
+    /// Skips (with a note) when no ffmpeg CLI is present to write the stills.
+    #[test]
+    fn a_composition_clip_draws_what_its_footage_drew_whole_fading_and_dissolving() {
+        use lumit_core::sequence::{Clip, ClipSource, Fade, FadeShape};
+        let mut r = match HeadlessRenderer::shared() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let Some(bin) = lumit_media::index::tests_support::ffmpeg_bin() else {
+            eprintln!("skipping: no ffmpeg CLI to write the stills");
+            return;
+        };
+        let dir = tempfile::tempdir().expect("a directory");
+        let (mut doc, base, _) = matrix_base(64, 64, LinearColour::BLACK);
+        let chart = still_item(&mut doc, dir.path(), bin, "chart.png", "testsrc=s=64x64");
+        let blue = still_item(
+            &mut doc,
+            dir.path(),
+            bin,
+            "blue.png",
+            "color=c=blue:s=64x64",
+        );
+        let template = doc.comp(base).expect("the base comp").clone();
+        let comp_of = |doc: &mut Document, layer: lumit_core::model::Layer| {
+            let mut comp = template.clone();
+            comp.id = Uuid::now_v7();
+            comp.layers = vec![layer];
+            let id = comp.id;
+            doc.items.push(ProjectItem::Composition(comp));
+            id
+        };
+        // What Open as composition makes: the footage as one layer from zero.
+        let held = |doc: &mut Document, item: Uuid| {
+            comp_of(
+                doc,
+                matrix_layer("Held", LayerKind::Footage { item }, 64, 64),
+            )
+        };
+        let (chart_comp, blue_comp) = (held(&mut doc, chart), held(&mut doc, blue));
+        let at = |n: i64| Rational::new(n, 1).unwrap();
+        // The first clip on [0, 3), coming up over its first second, and the
+        // second on [2, 5): they share [2, 3).
+        let row = |doc: &mut Document, first: ClipSource, second: ClipSource| {
+            let mut a = Clip::new(first, at(0), at(3), at(0), at(3));
+            a.fade_in = Fade {
+                seconds: at(1),
+                shape: FadeShape::Linear,
+            };
+            let mut b = Clip::new(second, at(0), at(3), at(2), at(3));
+            b.fade_in.shape = FadeShape::Linear;
+            let clips = vec![a, b];
+            comp_of(
+                doc,
+                matrix_layer("Cut", LayerKind::Sequence { clips }, 64, 64),
+            )
+        };
+        let footage = ClipSource::Footage;
+        let files = row(&mut doc, footage(chart), footage(blue));
+        let opened = row(&mut doc, ClipSource::Comp(chart_comp), footage(blue));
+        let both = row(
+            &mut doc,
+            ClipSource::Comp(chart_comp),
+            ClipSource::Comp(blue_comp),
+        );
+        let doc = DocumentStore::new(doc).snapshot();
+        let mut frame = |comp: Uuid, frame: u64| {
+            r.render_rgba(&doc, comp, frame, 1.0)
+                .unwrap_or_else(|e| panic!("frame {frame}: {e}"))
+                .0
+        };
+        // The furthest any byte of one frame is from the other's.
+        let apart = |a: &[u8], b: &[u8]| {
+            let most = a.iter().zip(b).map(|(a, b)| a.abs_diff(*b)).max();
+            most.unwrap_or(u8::MAX)
+        };
+
+        // The second the clip has to itself: the chart, and the same chart
+        // through its composition.
+        let still = frame(files, 45);
+        assert!(
+            still.chunks_exact(4).any(|px| px[..3] != still[..3]),
+            "the chart draws, and is not one flat colour"
+        );
+        let whole = apart(&frame(opened, 45), &still);
+        assert!(
+            whole <= 1,
+            "the composition's picture is {whole} off the still"
+        );
+
+        // Half way up the fade, and half way through the dissolve.
+        for (what, at_frame) in [("the fade", 15), ("the dissolve", 75)] {
+            let was = frame(files, at_frame);
+            for (which, comp) in [("one composition", opened), ("two", both)] {
+                let off = apart(&frame(comp, at_frame), &was);
+                assert!(off <= 2, "{what} with {which}: {off} off the footage");
+            }
+        }
+
+        // Read-ahead sees the footage inside a clip's composition, and opens
+        // the file in the one about to start.
+        let quality = crate::plan::Quality::default();
+        let wanted = |wants: Vec<PrefetchWant>| wants.iter().map(|w| w.item).collect::<Vec<_>>();
+        assert_eq!(wanted(r.prefetch_wants(&doc, opened, 45, quality)), [chart]);
+        assert_eq!(wanted(r.cut_wants(&doc, both, 30, 60, quality)), [blue]);
+    }
+
+    /// A still written by ffmpeg from a lavfi `source`, filed in `doc` as a
+    /// footage item.
+    fn still_item(doc: &mut Document, dir: &Path, bin: &str, name: &str, source: &str) -> Uuid {
+        let path = dir.join(name);
+        let wrote = std::process::Command::new(bin)
+            .args(["-v", "error", "-y", "-f", "lavfi", "-i", source])
+            .args(["-frames:v", "1"])
+            .arg(&path)
+            .status()
+            .is_ok_and(|s| s.success());
+        assert!(wrote, "ffmpeg wrote {name}");
+        let id = Uuid::now_v7();
+        doc.items
+            .push(ProjectItem::Footage(lumit_core::model::FootageItem {
+                sequence: None,
+                id,
+                name: name.into(),
+                media: lumit_core::model::MediaRef {
+                    relative_path: name.into(),
+                    absolute_path: path.to_string_lossy().into_owned(),
+                    fingerprint: None,
+                    extra: serde_json::Map::new(),
+                },
+                extra: serde_json::Map::new(),
+                colour_space: None,
+                source_layer: None,
+            }));
+        id
     }
 
     /// A footage fixture written into a directory of this test's own, and the

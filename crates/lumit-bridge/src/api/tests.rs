@@ -4321,6 +4321,231 @@ fn a_linked_ripple_delete_closes_both_layers_in_one_step() {
     );
 }
 
+/// A Sequence layer's clips as the document holds them, in order of start.
+fn row_clips(row: &LayerReference) -> Vec<lumit_core::sequence::Clip> {
+    let lumit_core::model::LayerKind::Sequence { mut clips } = row.item().expect("row").kind else {
+        panic!("a Sequence layer");
+    };
+    clips.sort_by_key(|c| c.place_start);
+    clips
+}
+
+/// Where a Sequence layer's clips start and end, in comp frames.
+fn row_frames(row: &LayerReference) -> Vec<(i64, i64)> {
+    let clips = row.get_clips().expect("clips");
+    let mut frames: Vec<(i64, i64)> = clips.iter().map(|c| (c.start_frame, c.end_frame)).collect();
+    frames.sort_unstable();
+    frames
+}
+
+/// A composition with one picture Sequence layer holding clips of seconds
+/// one to three of a file, end to end: the layer, and a clip's length in
+/// frames.
+fn cut_row(clips: i64) -> (ProjectReference, CompositionReference, LayerReference, i64) {
+    use crate::api::cut::BridgeCutResult;
+    let project = LumitBridgeState::new_project(None).expect("a new project");
+    let comp = project.new_composition("Scene".into(), None).expect("comp");
+    let footage = project
+        .import_footage("C:/clips/shot.mov".into())
+        .expect("imported");
+    let span = |n: i64| BridgeRational { num: n, den: 1 };
+    let place = |target: Option<LayerReference>, at: i64| {
+        let done = comp.cut_place(target, &footage, span(1), span(3), at, false, true);
+        assert_eq!(done.expect("placed"), BridgeCutResult::Done);
+    };
+    place(None, 0);
+    let top = comp.get_layers().expect("layers").remove(0);
+    let length = row_frames(&top)[0].1;
+    for n in 1..clips {
+        place(Some(top), n * length);
+    }
+    (project, comp, top, length)
+}
+
+/// A transition at a cut overlaps the two clips about it and comes off
+/// leaving the cut where it was, a dissolve is dragged by its edge, and an
+/// edge is still not pulled over a neighbour it only meets. A clip is never
+/// carried past the top of its source to make one.
+#[test]
+fn a_transition_overlaps_two_clips_and_its_edge_drags() {
+    use crate::api::cut::BridgeCutResult;
+    use lumit_core::sequence::FadeShape;
+    let (project, comp, top, join) = cut_row(3);
+    let ids: Vec<Uuid> = row_clips(&top).iter().map(|c| c.id).collect();
+    let (a, b) = (ids[0], ids[1]);
+    let cut = [(0, join), (join, 2 * join), (2 * join, 3 * join)];
+
+    let over = comp.cut_trim(a, 0, join + 4, false, false);
+    assert_eq!(over.expect("answered"), BridgeCutResult::Overlap);
+
+    // Eleven frames: five after the edit point and six before it.
+    let done = comp.cut_transition(a, true, 11, false);
+    assert_eq!(done.expect("made"), BridgeCutResult::Done);
+    assert_eq!(
+        row_frames(&top),
+        [(0, join + 5), (join - 6, 2 * join), cut[2]]
+    );
+    assert_eq!(row_clips(&top)[1].fade_in.shape, FadeShape::Linear);
+    let done = comp.cut_transition(b, false, 0, false);
+    assert_eq!(done.expect("taken off"), BridgeCutResult::Done);
+    assert_eq!(row_frames(&top), cut, "the cut is where it was");
+    // One step back, and the dissolve is there again.
+    project.undo().expect("undo");
+
+    // Its edge drags, within the neighbour and within the clip's own media:
+    // the incoming clip has a second of source before it, less the six
+    // frames the dissolve took.
+    let done = comp.cut_trim(a, 0, join + 8, false, false);
+    assert_eq!(done.expect("dragged"), BridgeCutResult::Done);
+    assert_eq!(row_frames(&top)[0], (0, join + 8));
+    let past = comp.cut_trim(a, 0, 2 * join + 1, false, false);
+    assert_eq!(past.expect("answered"), BridgeCutResult::Overlap);
+    let dry = comp.cut_trim(b, join - 6 - 60, 2 * join, false, false);
+    assert_eq!(dry.expect("answered"), BridgeCutResult::Limit);
+
+    // An edge nothing meets fades on its own.
+    let done = comp.cut_transition(a, false, 30, false);
+    assert_eq!(done.expect("faded"), BridgeCutResult::Done);
+    let half = lumit_core::Rational::new(1, 2).expect("½ s");
+    assert_eq!(row_clips(&top)[0].fade_in.seconds, half);
+}
+
+/// An extract cuts at both ends of a span, takes out what lies between and
+/// closes it, and one undo puts all of it back. A lift leaves the gap.
+#[test]
+fn extracting_a_span_cuts_both_ends_and_closes_it_in_one_step() {
+    use crate::api::cut::BridgeCutResult;
+    let (project, comp, top, join) = cut_row(2);
+    // From the middle of the first clip to the middle of the second.
+    let (from, to) = (join / 2, join + join / 2);
+
+    let done = comp.cut_remove_span(from, to, Vec::new(), true);
+    assert_eq!(done.expect("extracted"), BridgeCutResult::Done);
+    assert_eq!(row_frames(&top), [(0, from), (from, join)]);
+    let later = &row_clips(&top)[1];
+    assert_eq!(
+        later.source_in,
+        lumit_core::Rational::new(2, 1).expect("2 s"),
+        "the later piece opens on the frame the span ended at"
+    );
+
+    project.undo().expect("undo");
+    assert_eq!(row_frames(&top), [(0, join), (join, 2 * join)]);
+
+    let done = comp.cut_remove_span(from, to, vec![top], false);
+    assert_eq!(done.expect("lifted"), BridgeCutResult::Done);
+    assert_eq!(row_frames(&top), [(0, from), (to, 2 * join)]);
+}
+
+/// A paste puts copies down as clips of their own, linked to each other and
+/// not to the clips they were copied from, and answers where they end. With
+/// no layer to land on it makes one for the picture and one for the sound.
+#[test]
+fn a_paste_links_the_copies_to_each_other_and_answers_where_they_end() {
+    use crate::api::cut::BridgeCutResult;
+    let (project, comp, top, length) = cut_row(1);
+    // A sound row holding a clip of the same length, linked to the picture.
+    let footage = FootageReference {
+        project: project.id,
+        id: match row_clips(&top)[0].source {
+            lumit_core::sequence::ClipSource::Footage(id) => id,
+            other => panic!("a footage clip, not {other:?}"),
+        },
+    };
+    comp.add_audio_layer(&footage).expect("placed");
+    let below = comp.get_layers().expect("layers").remove(0);
+    below.convert_to_sequenced().expect("a row of clips");
+    let sound = row_clips(&below)[0].id;
+    let done = comp.cut_trim(sound, 0, length, false, false);
+    assert_eq!(done.expect("trimmed"), BridgeCutResult::Done);
+    let link = Uuid::now_v7();
+    for row in [top, below] {
+        let mut clips = row_clips(&row);
+        clips[0].link = Some(link);
+        row.commit(Op::SetSequenceClips {
+            comp: comp.id(),
+            layer: row.id(),
+            clips,
+        })
+        .expect("linked");
+    }
+    let picture = row_clips(&top)[0].id;
+
+    let done = comp.cut_copy(vec![picture], true);
+    assert_eq!(done.expect("copied"), BridgeCutResult::Done);
+    let pasted = comp.cut_paste(3 * length, Some(top)).expect("pasted");
+    assert_eq!(pasted.result, BridgeCutResult::Done);
+    assert_eq!(pasted.end_frame, 4 * length, "where the playhead goes");
+    let (seen, heard) = (row_clips(&top), row_clips(&below));
+    assert_eq!((seen.len(), heard.len()), (2, 2), "both came across");
+    assert_eq!(row_frames(&top)[1], (3 * length, 4 * length));
+    assert_eq!(row_frames(&below)[1], (3 * length, 4 * length));
+    assert_ne!(seen[1].id, picture, "a clip of its own");
+    assert!(seen[1].link.is_some() && seen[1].link != Some(link));
+    assert_eq!(seen[1].link, heard[1].link, "linked to its own sound");
+    assert_eq!((seen[0].link, heard[0].link), (Some(link), Some(link)));
+
+    project.undo().expect("undo");
+    assert_eq!(row_clips(&top).len(), 1, "one step");
+    assert_eq!(row_clips(&below).len(), 1);
+
+    // No layer named: a new picture layer on top, and a new sound layer at
+    // the bottom, since the one there has no room at that time.
+    let before = comp.get_layers().expect("layers").len();
+    let pasted = comp.cut_paste(0, None).expect("pasted");
+    assert_eq!(pasted.result, BridgeCutResult::Done);
+    let layers = comp.get_layers().expect("layers");
+    assert_eq!(layers.len(), before + 2);
+    assert_eq!(row_frames(&layers[0]), [(0, length)]);
+    assert_eq!(row_frames(&layers[before + 1]), [(0, length)]);
+    assert_eq!(row_clips(&top).len(), 1, "and nothing was overwritten");
+}
+
+/// A clip made into a composition shows exactly what it showed: its trim is
+/// as it was, and composition time in there is source time. One undo takes
+/// the composition away and gives the clip its footage back.
+#[test]
+fn a_clip_made_a_composition_shows_what_it_showed() {
+    use lumit_core::sequence::{resolve, ClipSource};
+    let (project, comp, top, _) = cut_row(1);
+    let before = row_clips(&top).remove(0);
+    let shown = |clip: &lumit_core::sequence::Clip| {
+        let under = resolve(std::slice::from_ref(clip), 0.75).expect("a clip there");
+        under.2
+    };
+
+    let made = comp.cut_clip_to_composition(before.id).expect("made");
+    let made = made.expect("the layer is not locked");
+    let after = row_clips(&top).remove(0);
+    assert_eq!(after.source, ClipSource::Comp(made.id()));
+    assert_eq!(shown(&after), shown(&before), "the same source time");
+    assert_eq!(
+        (after.source_in, after.source_out, &after.retime),
+        (before.source_in, before.source_out, &before.retime)
+    );
+
+    // One layer of the footage from time zero, long enough for the clip,
+    // with the work area on the stretch the clip plays.
+    let inner = made.composition().expect("the new composition");
+    assert_eq!(inner.layers.len(), 1);
+    let layer = &inner.layers[0];
+    assert!(matches!(
+        layer.kind,
+        lumit_core::model::LayerKind::Footage { item } if ClipSource::Footage(item) == before.source
+    ));
+    assert!(layer.start_offset.0.is_zero() && inner.duration.0 >= before.source_out);
+    assert_eq!(
+        inner.work_area.map(|(a, b)| (a.0, b.0)),
+        Some((before.source_in, before.source_out))
+    );
+
+    let again = comp.cut_clip_to_composition(before.id).expect("asked");
+    assert_eq!(again, Some(made.clone()), "the one it already plays");
+    project.undo().expect("undo");
+    assert_eq!(row_clips(&top)[0].source, before.source);
+    assert!(made.composition().is_err(), "the composition went with it");
+}
+
 /// A clip's own effect stack is reached by every effect command the layer's
 /// stack already has, through the one instance lookup
 /// (docs/impl/audio-timeline.md §2).

@@ -10,18 +10,21 @@
 //!
 //! Runs on the UI thread, like every other document edit.
 
+use std::sync::Mutex;
+
 use flutter_rust_bridge::frb;
 use lumit_core::model::{Composition, FootageItem, Layer, LayerKind, ProjectItem};
-use lumit_core::sequence::{self, Clip, ClipSource};
+use lumit_core::sequence::{self, Clip, ClipSource, FadeShape};
 use lumit_core::time::{CompTime, Duration, Rational, TimeError};
 use lumit_core::Op;
 use uuid::Uuid;
 
 use crate::api::{
-    composition::CompositionReference,
+    composition::{BridgeCompSettings, CompositionReference},
     effect::BridgeRational,
     footage::FootageReference,
-    layer::{placed, trimmed, LayerReference},
+    layer::{clip_source_duration, placed, trimmed, LayerReference},
+    project::ProjectReference,
     state::LumitBridgeState,
     BridgeError,
 };
@@ -51,6 +54,57 @@ pub enum BridgeCutResult {
     /// The layer cannot take the clip: a picture on a sound layer, or sound
     /// on a picture layer.
     WrongLayer,
+}
+
+/// How a paste ended, and where the playhead goes after it.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BridgeCutPaste {
+    pub result: BridgeCutResult,
+    /// The frame the pasted clips end on, the first one after the last of
+    /// them. The frame asked for when nothing was pasted.
+    pub end_frame: i64,
+}
+
+/// What a clip is showing at a frame: the footage item, and the moment of it
+/// in seconds of source time.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BridgeMatchFrame {
+    pub footage: FootageReference,
+    pub source_time: BridgeRational,
+}
+
+/// One copied clip as a paste needs it.
+#[frb(ignore)]
+#[derive(Clone)]
+struct Held {
+    /// The clip, placed from the earliest of the clips copied with it.
+    clip: Clip,
+    /// Whether it came off an audio-only layer.
+    sound: bool,
+    /// Its layer's place among the Sequence layers of its kind, the top one
+    /// being nought.
+    lane: usize,
+}
+
+/// The clips last copied, and the project they name the items of. Kept here
+/// and not in the document, so it is never saved and outlives a change of
+/// composition. A copy replaces it and closing that project empties it.
+///
+/// ponytail: one slot for the whole process, and a paste into another project
+/// finds nothing. Carrying clips between projects wants their footage items
+/// brought across with them.
+static COPIED: Mutex<Option<(Uuid, Vec<Held>)>> = Mutex::new(None);
+
+/// Empty the copied clips if they came from `project`, which is closing.
+#[frb(ignore)]
+pub(crate) fn forget_copied(project: Uuid) {
+    if let Ok(mut copied) = COPIED.lock() {
+        if copied.as_ref().is_some_and(|(from, _)| *from == project) {
+            *copied = None;
+        }
+    }
 }
 
 /// Why an edit stopped: a refusal for the panel to show, or a fault.
@@ -94,6 +148,8 @@ struct Row {
     clips: Vec<Clip>,
     /// A layer this edit makes, added with its clips when the edit commits.
     fresh: Option<Layer>,
+    /// Where in the stack a layer this edit makes goes.
+    at: usize,
 }
 
 /// An edit in progress: the composition as it was read, and its rows as they
@@ -109,6 +165,9 @@ struct Edit<'a> {
     rows: Vec<Row>,
     /// Layers of other kinds a ripple has carried, moved in `comp` itself.
     carried: Vec<Uuid>,
+    /// Ops to run ahead of the rows in the same batch: a composition made
+    /// for a clip to play.
+    first: Vec<Op>,
 }
 
 /// Open an edit on `of`, run it, and turn how it ended into the answer.
@@ -142,10 +201,61 @@ fn has_sound(state: &LumitBridgeState, footage: &FootageItem) -> bool {
     }
 }
 
+/// Whether this media is a still: a picture with no length of its own. Media
+/// that will not probe answers false.
+#[frb(ignore)]
+fn is_still(state: &LumitBridgeState, footage: &FootageItem) -> bool {
+    #[cfg(feature = "media")]
+    {
+        FootageReference::resolve_source(state, footage)
+            .and_then(|src| crate::probe::ensure_probed(&src))
+            .is_some_and(|info| info.has_picture() && !info.runs_as_video())
+    }
+
+    #[cfg(not(feature = "media"))]
+    {
+        let _ = (state, footage);
+        false
+    }
+}
+
 /// Whether `clip` shares any of the row with the span `start..end`.
 #[frb(ignore)]
 fn covers(clip: &Clip, start: Rational, end: Rational) -> bool {
     clip.place_start < end && start < clip.place_end()
+}
+
+/// Whether `after` follows `before` across an edit point: it starts inside
+/// `before` or at its end, and runs on past it. Abutting, the two are a cut.
+/// Overlapping, they are a dissolve, or a crossfade on a sound row.
+#[frb(ignore)]
+fn follows(before: &Clip, after: &Clip) -> bool {
+    before.place_start <= after.place_start
+        && after.place_start <= before.place_end()
+        && before.place_end() <= after.place_end()
+}
+
+/// Make clips into clips of their own: fresh ids, fresh effect instance ids,
+/// and each link among them swapped for a fresh one, so the copies are linked
+/// to each other and not to what they were copied from.
+#[frb(ignore)]
+fn renew<'c>(clips: impl Iterator<Item = &'c mut Clip>) {
+    let mut links: Vec<(Uuid, Uuid)> = Vec::new();
+    for clip in clips {
+        *clip = clip.duplicate();
+        let Some(was) = clip.link else {
+            continue;
+        };
+        let link = match links.iter().find(|(old, _)| *old == was) {
+            Some((_, new)) => *new,
+            None => {
+                let new = Uuid::now_v7();
+                links.push((was, new));
+                new
+            }
+        };
+        clip.link = Some(link);
+    }
 }
 
 /// One clip with its edges moved by `by_start` and `by_end`. With `ripple` a
@@ -235,6 +345,7 @@ impl<'a> Edit<'a> {
                 offset,
                 clips,
                 fresh: None,
+                at: 0,
             });
         }
         Ok(Edit {
@@ -242,12 +353,37 @@ impl<'a> Edit<'a> {
             comp,
             rows,
             carried: Vec::new(),
+            first: Vec::new(),
         })
     }
 
     /// The comp time of a frame, or the length of that many frames.
     fn time(&self, frame: i64) -> Cut<Rational> {
         Ok(self.comp.frame_rate.time_of_frame(frame)?.0)
+    }
+
+    /// The first whole frame at or after a comp time.
+    fn frame_up(&self, time: Rational) -> Cut<i64> {
+        let frame = self.comp.frame_rate.frame_at(CompTime(time));
+        Ok(frame + i64::from(self.time(frame)? < time))
+    }
+
+    /// How far a clip's edge can be carried outward before it runs out of
+    /// media, or `None` when nothing holds it ([`Clip::spare`]). A still has
+    /// no length to run out of.
+    fn room(&self, clip: &Clip, at_start: bool) -> Cut<Option<Rational>> {
+        let proj = self.of.project()?;
+        let state = proj.read().map_err(|_| BridgeError::ReadFailed)?;
+        let doc = state.store.snapshot();
+        if let ClipSource::Footage(item) = clip.source {
+            if let Some(ProjectItem::Footage(f)) = doc.item(item) {
+                if is_still(&state, f) {
+                    return Ok(None);
+                }
+            }
+        }
+        let length = clip_source_duration(&state, &doc, clip.source);
+        Ok(clip.spare(at_start, length))
     }
 
     fn row_of(&self, layer: Uuid) -> Option<usize> {
@@ -264,8 +400,8 @@ impl<'a> Edit<'a> {
     }
 
     /// The named clips, and with `linked` every clip sharing a link with one
-    /// of them. Refused when any of them sits on a locked layer.
-    fn chosen(&self, clips: &[Uuid], linked: bool) -> Cut<Vec<Uuid>> {
+    /// of them.
+    fn with_linked(&self, clips: &[Uuid], linked: bool) -> Cut<Vec<Uuid>> {
         let mut ids: Vec<Uuid> = Vec::new();
         let mut links: Vec<Uuid> = Vec::new();
         for id in clips {
@@ -275,16 +411,25 @@ impl<'a> Edit<'a> {
                 links.extend(self.rows[r].clips[c].link);
             }
         }
-        for row in &self.rows {
-            for c in &row.clips {
-                let partner = linked && c.link.is_some_and(|l| links.contains(&l));
-                if partner && !ids.contains(&c.id) {
-                    ids.push(c.id);
-                }
-                if row.locked && ids.contains(&c.id) {
-                    return Err(BridgeCutResult::Locked.into());
-                }
+        for c in self.rows.iter().flat_map(|row| &row.clips) {
+            let partner = linked && c.link.is_some_and(|l| links.contains(&l));
+            if partner && !ids.contains(&c.id) {
+                ids.push(c.id);
             }
+        }
+        Ok(ids)
+    }
+
+    /// [`Self::with_linked`] for an edit that changes the clips: refused when
+    /// any of them sits on a locked layer.
+    fn chosen(&self, clips: &[Uuid], linked: bool) -> Cut<Vec<Uuid>> {
+        let ids = self.with_linked(clips, linked)?;
+        let locked = self.rows.iter().filter(|row| row.locked);
+        if locked
+            .flat_map(|row| &row.clips)
+            .any(|c| ids.contains(&c.id))
+        {
+            return Err(BridgeCutResult::Locked.into());
         }
         Ok(ids)
     }
@@ -298,6 +443,11 @@ impl<'a> Edit<'a> {
             crate::edits::centred_transform(width, height, self.comp.width, self.comp.height),
         );
         layer.audio_only = audio_only;
+        // A sound row wears the label an Audio layer starts on, so picture and
+        // sound are told apart at a glance, as `base_layer` tells kinds apart.
+        if audio_only {
+            layer.label = 1;
+        }
         // The sound of what a picture row shows lives in the linked clip on a
         // sound row. The mixer would play the picture clip's own sound as
         // well, so a picture row is made silent and nothing is heard twice.
@@ -311,8 +461,28 @@ impl<'a> Edit<'a> {
             offset: Rational::ZERO,
             clips: Vec::new(),
             fresh: Some(layer),
+            // A sound row at the bottom of the stack and a picture row on top.
+            at: if audio_only {
+                self.comp.layers.len()
+            } else {
+                0
+            },
         });
         self.rows.len() - 1
+    }
+
+    /// Put clips down, each on its row, overwriting what it lands on and
+    /// never a clip that came with it: two that overlapped before still do.
+    fn land(&mut self, clips: Vec<(usize, Clip)>) {
+        for (landing, clip) in &clips {
+            let row = &mut self.rows[*landing];
+            row.clips.push(clip.clone());
+            row.clips = placed(std::mem::take(&mut row.clips), clip.id, false);
+            row.clips.retain(|c| c.id != clip.id);
+        }
+        for (landing, clip) in clips {
+            self.rows[landing].clips.push(clip);
+        }
     }
 
     /// The ripple rule. On every unlocked Sequence layer the clips starting
@@ -384,8 +554,12 @@ impl<'a> Edit<'a> {
         let (project, comp) = (self.of.project_id(), self.comp.id);
         let ends = self.rows.iter().flat_map(|row| &row.clips);
         let last = ends.map(Clip::place_end).max();
-        let mut ops: Vec<Op> = Vec::new();
-        let mut added: Vec<Layer> = Vec::new();
+        let grown = match last.filter(|last| *last > self.comp.duration.0) {
+            Some(last) => Some(self.time(self.frame_up(last)?)?),
+            None => None,
+        };
+        let mut ops = self.first;
+        let mut added: Vec<(usize, Layer)> = Vec::new();
         for row in self.rows {
             // A clip's place is layer time and cannot go negative, so a clip
             // put before the layer's own zero takes the zero back with it, as
@@ -402,7 +576,7 @@ impl<'a> Edit<'a> {
                     layer.out_point = CompTime(end);
                 }
                 layer.kind = LayerKind::Sequence { clips };
-                added.push(layer);
+                added.push((row.at, layer));
                 continue;
             }
             let unchanged = self.comp.layers.iter().any(|l| {
@@ -426,17 +600,13 @@ impl<'a> Edit<'a> {
                 });
             }
         }
-        // A sound row goes in at the bottom before a picture row goes in on
-        // top, so neither index is moved by the other.
-        added.sort_by_key(|layer| !layer.audio_only);
-        for layer in added {
+        // A sound row goes in at the bottom before a picture row goes in
+        // above it, so neither index is moved by the other.
+        added.sort_by_key(|(_, layer)| !layer.audio_only);
+        for (index, layer) in added {
             ops.push(Op::AddLayer {
                 comp,
-                index: if layer.audio_only {
-                    self.comp.layers.len()
-                } else {
-                    0
-                },
+                index,
                 layer: Box::new(layer),
             });
         }
@@ -447,21 +617,13 @@ impl<'a> Edit<'a> {
         // out of sight. So it grows to the last clip's end, on to the next
         // whole frame, in the same batch and so the same undo step. It is
         // never shortened, and its work area is left as it stands.
-        if let Some(last) = last.filter(|last| *last > self.comp.duration.0) {
-            let rate = self.comp.frame_rate;
-            let frames = rate.frame_at(CompTime(last));
-            let whole = rate.time_of_frame(frames)?.0;
-            let end = if whole < last {
-                rate.time_of_frame(frames + 1)?.0
-            } else {
-                whole
-            };
+        if let Some(end) = grown {
             ops.push(Op::SetCompSettings {
                 comp,
                 name: self.comp.name.clone(),
                 width: self.comp.width,
                 height: self.comp.height,
-                frame_rate: rate,
+                frame_rate: self.comp.frame_rate,
                 duration: Duration(end),
                 background: self.comp.background,
             });
@@ -629,6 +791,7 @@ impl<'a> Edit<'a> {
         by_frames: i64,
         target: Option<LayerReference>,
         linked: bool,
+        copy: bool,
     ) -> Cut {
         let delta = self.time(by_frames)?;
         let mut named = clips.to_vec();
@@ -670,6 +833,10 @@ impl<'a> Edit<'a> {
                 .into_iter()
                 .partition(|c| moving.contains(&c.id));
             self.rows[r].clips = stay;
+            if copy {
+                // The originals stay where they are and copies make the move.
+                self.rows[r].clips.extend(go.iter().cloned());
+            }
             for mut clip in go {
                 clip.place_start = clip.place_start.checked_add(delta)?;
                 if clip.place_start.is_negative() {
@@ -678,17 +845,10 @@ impl<'a> Edit<'a> {
                 lifted.push((landing, clip));
             }
         }
-        // Each clip overwrites what it lands on, and never a clip that moved
-        // with it: two that overlapped before the move still do after it.
-        for (landing, clip) in &lifted {
-            let row = &mut self.rows[*landing];
-            row.clips.push(clip.clone());
-            row.clips = placed(std::mem::take(&mut row.clips), clip.id, false);
-            row.clips.retain(|c| c.id != clip.id);
+        if copy {
+            renew(lifted.iter_mut().map(|(_, clip)| clip));
         }
-        for (landing, clip) in lifted {
-            self.rows[landing].clips.push(clip);
-        }
+        self.land(lifted);
         self.commit()
     }
 
@@ -706,17 +866,31 @@ impl<'a> Edit<'a> {
         let by_end = self.time(end_frame)?.checked_sub(was.place_end())?;
         for id in self.chosen(&[clip], linked)? {
             let (r, c) = self.find(id)?;
-            let row = &mut self.rows[r];
-            let next =
-                retrimmed(&row.clips[c], by_start, by_end, ripple).ok_or(BridgeCutResult::Limit)?;
-            // A picture row shows one clip at a time, so an edge is not
-            // pulled over a neighbour. A ripple moves the neighbour instead.
+            let row = &self.rows[r];
+            let old = &row.clips[c];
+            let next = retrimmed(old, by_start, by_end, ripple).ok_or(BridgeCutResult::Limit)?;
+            // A picture row shows one clip at a time outside a dissolve, so
+            // an edge is not pulled over a neighbour it only met. A ripple
+            // moves the neighbour instead. An edge already dissolving into
+            // its neighbour is dragged longer or shorter within that clip's
+            // span, and no further out than its own media runs.
             let (start, end) = (next.place_start, next.place_end());
-            let over = |o: &Clip| o.id != id && covers(o, start, end);
-            if !ripple && !row.audio_only && row.clips.iter().any(over) {
-                return Err(BridgeCutResult::Overlap.into());
+            let over = |o: &&Clip| o.id != id && covers(o, start, end);
+            let picture = !ripple && !row.audio_only;
+            for o in row.clips.iter().filter(over).filter(|_| picture) {
+                let was = covers(o, old.place_start, old.place_end());
+                let (at_start, grown) = if was && follows(old, o) && follows(&next, o) {
+                    (false, by_end)
+                } else if was && follows(o, old) && follows(o, &next) {
+                    (true, Rational::ZERO.checked_sub(by_start)?)
+                } else {
+                    return Err(BridgeCutResult::Overlap.into());
+                };
+                if self.room(old, at_start)?.is_some_and(|room| grown > room) {
+                    return Err(BridgeCutResult::Limit.into());
+                }
             }
-            row.clips[c] = next;
+            self.rows[r].clips[c] = next;
         }
         if ripple {
             // Everything after the clip's old end follows its change of
@@ -834,6 +1008,340 @@ impl<'a> Edit<'a> {
         }
         self.commit()
     }
+
+    fn transition(mut self, clip: Uuid, end_edge: bool, frames: i64, linked: bool) -> Cut {
+        let frames = frames.max(0);
+        let (frame, length) = (self.time(1)?, self.time(frames)?);
+        for id in self.chosen(&[clip], linked)? {
+            let (r, c) = self.find(id)?;
+            let row = &self.rows[r];
+            let this = &row.clips[c];
+            // The clip across the edit point: one this edge meets, or
+            // already runs into.
+            let across = |o: &&Clip| {
+                o.id != id
+                    && if end_edge {
+                        follows(this, o)
+                    } else {
+                        follows(o, this)
+                    }
+            };
+            let Some(other) = row.clips.iter().find(across) else {
+                // Nothing to dissolve with, so the edge fades on its own.
+                let seconds = length.min(this.place_duration);
+                let slot = &mut self.rows[r].clips[c];
+                if end_edge {
+                    slot.fade_out.seconds = seconds;
+                } else {
+                    slot.fade_in.seconds = seconds;
+                }
+                continue;
+            };
+            let (outgoing, incoming) = if end_edge {
+                (this, other)
+            } else {
+                (other, this)
+            };
+            let room = (self.room(outgoing, false)?, self.room(incoming, true)?);
+            let incoming = incoming.id;
+            let mut next =
+                sequence::dissolve(&row.clips, outgoing.id, incoming, frames, frame, room)
+                    .ok_or(BridgeCutResult::Limit)?;
+            // A picture dissolves in a straight line. A crossfade keeps the
+            // shape it has, which holds the level.
+            if !row.audio_only && frames > 0 {
+                for clip in next.iter_mut().filter(|c| c.id == incoming) {
+                    clip.fade_in.shape = FadeShape::Linear;
+                }
+            }
+            self.rows[r].clips = next;
+        }
+        self.commit()
+    }
+
+    fn remove_span(
+        mut self,
+        start_frame: i64,
+        end_frame: i64,
+        layers: &[LayerReference],
+        ripple: bool,
+    ) -> Cut {
+        let (start, end) = (self.time(start_frame)?, self.time(end_frame)?);
+        if end <= start {
+            return Err(BridgeCutResult::Nothing.into());
+        }
+        let rows: Vec<usize> = if layers.is_empty() {
+            let open = |r: &usize| !self.rows[*r].locked;
+            (0..self.rows.len()).filter(open).collect()
+        } else {
+            layers.iter().filter_map(|l| self.row_of(l.id())).collect()
+        };
+        if rows.iter().any(|r| self.rows[*r].locked) {
+            return Err(BridgeCutResult::Locked.into());
+        }
+        // Cut at both ends, and what still shares the span lies inside it.
+        self.razor(&rows, start, false)?;
+        self.razor(&rows, end, false)?;
+        let mut gone = 0;
+        for r in rows {
+            let clips = &mut self.rows[r].clips;
+            let had = clips.len();
+            clips.retain(|c| !covers(c, start, end));
+            gone += had - clips.len();
+        }
+        if ripple {
+            self.ripple(end, start.checked_sub(end)?)?;
+        } else if gone == 0 {
+            return Err(BridgeCutResult::Nothing.into());
+        }
+        self.commit()
+    }
+
+    fn copy(self, clips: &[Uuid], linked: bool) -> Cut {
+        let ids = self.with_linked(clips, linked)?;
+        let mut held: Vec<Held> = Vec::new();
+        for (r, row) in self.rows.iter().enumerate() {
+            let above = self.rows[..r].iter();
+            let lane = above.filter(|o| o.audio_only == row.audio_only).count();
+            for clip in row.clips.iter().filter(|c| ids.contains(&c.id)) {
+                held.push(Held {
+                    clip: clip.clone(),
+                    sound: row.audio_only,
+                    lane,
+                });
+            }
+        }
+        let starts = held.iter().map(|h| h.clip.place_start);
+        let first = starts.min().ok_or(BridgeCutResult::Nothing)?;
+        for h in &mut held {
+            h.clip.place_start = h.clip.place_start.checked_sub(first)?;
+        }
+        let mut copied = COPIED.lock().map_err(|_| BridgeError::WriteFailed)?;
+        *copied = Some((self.of.project_id(), held));
+        Ok(())
+    }
+
+    fn paste(mut self, at_frame: i64, target: Option<LayerReference>, end_frame: &mut i64) -> Cut {
+        let at = self.time(at_frame.max(0))?;
+        let held = {
+            let copied = COPIED.lock().map_err(|_| BridgeError::ReadFailed)?;
+            match copied.as_ref() {
+                Some((project, held)) if *project == self.of.project_id() => held.clone(),
+                _ => return Err(BridgeCutResult::Nothing.into()),
+            }
+        };
+        let mut clips: Vec<Clip> = Vec::with_capacity(held.len());
+        for h in &held {
+            let mut clip = h.clip.clone();
+            clip.place_start = clip.place_start.checked_add(at)?;
+            clips.push(clip);
+        }
+        let of_lane = |sound: bool, lane: usize| {
+            let pairs = held.iter().zip(&clips);
+            pairs.filter_map(move |(h, clip)| ((h.sound, h.lane) == (sound, lane)).then_some(clip))
+        };
+
+        // Each lane of the copy, top first with the picture lanes ahead of
+        // the sound, beside what a layer made for it would be called and how
+        // big its picture is, and the row it lands on once that is known.
+        type Lane = ((bool, usize), (String, f64, f64), Option<usize>);
+        let mut lanes: Vec<Lane> = Vec::new();
+        {
+            let proj = self.of.project()?;
+            let state = proj.read().map_err(|_| BridgeError::ReadFailed)?;
+            let doc = state.store.snapshot();
+            let mut keys: Vec<(bool, usize)> = held.iter().map(|h| (h.sound, h.lane)).collect();
+            keys.sort_unstable();
+            keys.dedup();
+            for (sound, lane) in keys {
+                let mut look = None;
+                for clip in of_lane(sound, lane) {
+                    // A composition cannot play itself, and an item deleted
+                    // since the copy is nothing to paste.
+                    let named = match clip.source {
+                        ClipSource::Comp(id) if id == self.comp.id => {
+                            return Err(BridgeCutResult::WrongLayer.into())
+                        }
+                        ClipSource::Comp(id) => {
+                            let inner = doc.comp(id).ok_or(BridgeCutResult::Nothing)?;
+                            let (w, h) = (f64::from(inner.width), f64::from(inner.height));
+                            (inner.name.clone(), w, h)
+                        }
+                        ClipSource::Footage(id) => {
+                            let Some(ProjectItem::Footage(f)) = doc.item(id) else {
+                                return Err(BridgeCutResult::Nothing.into());
+                            };
+                            let (_, w, h) =
+                                CompositionReference::footage_span_and_size(&state, f, &self.comp);
+                            (f.name.clone(), w, h)
+                        }
+                    };
+                    look.get_or_insert(named);
+                }
+                lanes.extend(look.map(|look| ((sound, lane), look, None)));
+            }
+        }
+        let Some(&((lead_sound, lead_lane), ..)) = lanes.first() else {
+            return Err(BridgeCutResult::Nothing.into());
+        };
+        let of_kind = |sound: bool| -> Vec<usize> {
+            let kind = |r: &usize| self.rows[*r].audio_only == sound;
+            (0..self.rows.len()).filter(kind).collect()
+        };
+        let (pictures, sounds) = (of_kind(false), of_kind(true));
+        // The target is for the top-most picture clip, or the top-most sound
+        // clip when no picture was copied: its place among rows of that kind.
+        let target = match target {
+            Some(layer) => {
+                let r = self.row_of(layer.id()).ok_or(BridgeError::NotSequence)?;
+                if self.rows[r].audio_only != lead_sound {
+                    return Err(BridgeCutResult::WrongLayer.into());
+                }
+                let rows = if lead_sound { &sounds } else { &pictures };
+                rows.iter().position(|o| *o == r)
+            }
+            None => None,
+        };
+        let mut next_sound = 0;
+        for ((sound, lane), _, landing) in &mut lanes {
+            let rows = if *sound { &sounds } else { &pictures };
+            *landing = match target {
+                // As a move chooses rows: the lanes of the lead clip's kind
+                // cross as many layers as it does, and the rest keep theirs.
+                Some(to) if *sound == lead_sound => rows.get(*lane - lead_lane + to).copied(),
+                Some(_) => rows.get(*lane).copied(),
+                // As a placed clip chooses them: a sound lane takes the first
+                // sound layer with room, below the one the lane above took,
+                // and a picture lane a layer of its own.
+                None if *sound => {
+                    let free = |i: &usize| {
+                        let row = &self.rows[rows[*i]];
+                        let mut mine = of_lane(*sound, *lane);
+                        !row.locked
+                            && !mine.any(|m| {
+                                let (start, end) = (m.place_start, m.place_end());
+                                row.clips.iter().any(|c| covers(c, start, end))
+                            })
+                    };
+                    let found = (next_sound..rows.len()).find(free);
+                    next_sound = found.map_or(rows.len(), |i| i + 1);
+                    found.map(|i| rows[i])
+                }
+                None => None,
+            };
+            if landing.is_some_and(|r| self.rows[r].locked) {
+                return Err(BridgeCutResult::Locked.into());
+            }
+        }
+        // A lane with no layer gets one. A picture layer missing below the
+        // ones a target counted from goes under the last of them, and the
+        // bottom lane is made first, so each lands above the one before it
+        // and the lanes keep their order.
+        let under = pictures.last().and_then(|r| {
+            let id = self.rows[*r].id;
+            self.comp.layers.iter().position(|l| l.id == id)
+        });
+        let (width, height) = (f64::from(self.comp.width), f64::from(self.comp.height));
+        for ((sound, _), (name, w, h), landing) in lanes.iter_mut().rev() {
+            if landing.is_some() {
+                continue;
+            }
+            let (w, h) = if *sound { (width, height) } else { (*w, *h) };
+            let made = self.add_row(name.clone(), *sound, w, h);
+            if let (false, Some(_), Some(under)) = (*sound, target, under) {
+                self.rows[made].at = under + 1;
+            }
+            *landing = Some(made);
+        }
+
+        let mut lifted: Vec<(usize, Clip)> = Vec::with_capacity(clips.len());
+        let mut last = at;
+        for (h, clip) in held.iter().zip(clips) {
+            let lane = lanes.iter().find(|(key, ..)| *key == (h.sound, h.lane));
+            if let Some((.., Some(row))) = lane {
+                last = last.max(clip.place_end());
+                lifted.push((*row, clip));
+            }
+        }
+        renew(lifted.iter_mut().map(|(_, clip)| clip));
+        self.land(lifted);
+        *end_frame = self.frame_up(last)?;
+        self.commit()
+    }
+
+    /// Point a clip at a composition holding its footage, made here, and
+    /// answer which. A clip that already plays a composition answers that
+    /// one and changes nothing.
+    fn make_composition(mut self, clip: Uuid, made: &mut Option<Uuid>) -> Cut {
+        let (r, c) = self.find(clip)?;
+        let this = self.rows[r].clips[c].clone();
+        let item = match this.source {
+            ClipSource::Comp(id) => {
+                *made = Some(id);
+                return Ok(());
+            }
+            ClipSource::Footage(item) => item,
+        };
+        if self.rows[r].locked {
+            return Err(BridgeCutResult::Locked.into());
+        }
+        let (id, ops) = {
+            let proj = self.of.project()?;
+            let state = proj.read().map_err(|_| BridgeError::ReadFailed)?;
+            let doc = state.store.snapshot();
+            let Some(ProjectItem::Footage(f)) = doc.item(item) else {
+                return Err(BridgeError::InvalidItem.into());
+            };
+            // The file's whole length and its own size. A still has no
+            // length and a sound file no size, and each takes this
+            // composition's. Never shorter than what the clip plays, which
+            // a still held past the composition's end would be.
+            let (length, width, height) =
+                CompositionReference::footage_span_and_size(&state, f, &self.comp);
+            let length = length.max(self.time(self.frame_up(this.source_out)?)?);
+            let rate = self.comp.frame_rate;
+            let settings = BridgeCompSettings {
+                width: width as u32,
+                height: height as u32,
+                fps_num: rate.num(),
+                fps_den: rate.den(),
+                duration: BridgeRational {
+                    num: length.num(),
+                    den: length.den(),
+                },
+                ..BridgeCompSettings::defaults()
+            };
+            let (id, mut ops) =
+                ProjectReference::new_comp_ops(&doc, f.name.clone(), Some(settings), None)?;
+            for op in &mut ops {
+                let Op::AddItem { item: added, .. } = op else {
+                    continue;
+                };
+                let ProjectItem::Composition(inner) = added.as_mut() else {
+                    continue;
+                };
+                let mut layer = crate::edits::base_layer(
+                    f.name.clone(),
+                    LayerKind::Footage { item },
+                    length,
+                    crate::edits::centred_transform(width, height, inner.width, inner.height),
+                );
+                layer.audio_only = !CompositionReference::has_picture(&state, f);
+                inner.layers = vec![layer];
+                // Composition time is source time in there, so the work
+                // area is the stretch the clip plays.
+                let start = this.source_in.max(Rational::ZERO);
+                if start < this.source_out {
+                    inner.work_area = Some((CompTime(start), CompTime(this.source_out)));
+                }
+            }
+            (id, ops)
+        };
+        self.first = ops;
+        self.rows[r].clips[c].source = ClipSource::Comp(id);
+        *made = Some(id);
+        self.commit()
+    }
 }
 
 impl CompositionReference {
@@ -908,7 +1416,25 @@ impl CompositionReference {
         linked: bool,
     ) -> Result<BridgeCutResult, BridgeError> {
         cut(self, |edit| {
-            edit.move_by(&clips, grabbed, by_frames, target, linked)
+            edit.move_by(&clips, grabbed, by_frames, target, linked, false)
+        })
+    }
+
+    /// Duplicate clips: [`Self::cut_move`] with the clips left where they
+    /// are and copies of them making the move, overwriting what they land
+    /// on. The copies are clips of their own, and a copied picture clip and
+    /// its copied sound are linked to each other and not to the originals.
+    #[frb(sync)]
+    pub fn cut_duplicate(
+        &self,
+        clips: Vec<Uuid>,
+        grabbed: Uuid,
+        by_frames: i64,
+        target: Option<LayerReference>,
+        linked: bool,
+    ) -> Result<BridgeCutResult, BridgeError> {
+        cut(self, |edit| {
+            edit.move_by(&clips, grabbed, by_frames, target, linked, true)
         })
     }
 
@@ -919,8 +1445,11 @@ impl CompositionReference {
     /// With `ripple` everything after the clip follows its change of length,
     /// and a trimmed head leaves the clip starting where it did. Without it
     /// nothing else moves, and on a picture layer an edge is refused where it
-    /// would cover a neighbour. With `linked` the clips linked to it take the
-    /// same change at the same edges.
+    /// would cover a neighbour it only met. An edge that already overlaps its
+    /// neighbour is a dissolve, and is dragged longer or shorter: it stays
+    /// within the neighbour's span, and is refused as `Limit` past the end
+    /// of its own media. With `linked` the clips linked to it take the same
+    /// change at the same edges.
     #[frb(sync)]
     pub fn cut_trim(
         &self,
@@ -1002,5 +1531,178 @@ impl CompositionReference {
         linked: bool,
     ) -> Result<BridgeCutResult, BridgeError> {
         cut(self, |edit| edit.razor_at(&layers, at_frame, linked))
+    }
+
+    /// Put a transition of `frames` on one edge of a clip: its end when
+    /// `end_edge` is set, and its start otherwise.
+    ///
+    /// Where another clip on the layer meets that edge, or already overlaps
+    /// it, the two are made to overlap by that length, centred on the edit
+    /// point: each is carried on by half into its own source, and the odd
+    /// frame goes to the incoming clip. The overlap is the transition, a
+    /// dissolve on a picture layer, drawn in a straight line, and a crossfade
+    /// on a sound layer. A clip is not carried past the end of its media, so
+    /// the overlap is the longest the two have source for, and `Limit` when
+    /// neither has any.
+    ///
+    /// Where nothing meets the edge, the clip fades there on its own for that
+    /// length, held to the clip's.
+    ///
+    /// No `frames` takes the transition off: an overlap is trimmed back to
+    /// its middle so the clips abut, and a fade is cleared. With `linked` the
+    /// clips linked to this one take the same at the same edge on their own
+    /// layers.
+    #[frb(sync)]
+    pub fn cut_transition(
+        &self,
+        clip: Uuid,
+        end_edge: bool,
+        frames: i64,
+        linked: bool,
+    ) -> Result<BridgeCutResult, BridgeError> {
+        cut(self, |edit| edit.transition(clip, end_edge, frames, linked))
+    }
+
+    /// Lift or extract a span: cut at `start_frame` and `end_frame` on
+    /// `layers`, or on every unlocked Sequence layer when the list is empty,
+    /// and delete what lies between.
+    ///
+    /// With `ripple` the span is closed, an extract: everything after it
+    /// moves earlier by its length on every unlocked Sequence layer, refused
+    /// as `Overlap` where a layer left out still holds a clip in the way.
+    /// Without it the gap is left, a lift, and `Nothing` says no clip was in
+    /// the span.
+    #[frb(sync)]
+    pub fn cut_remove_span(
+        &self,
+        start_frame: i64,
+        end_frame: i64,
+        layers: Vec<LayerReference>,
+        ripple: bool,
+    ) -> Result<BridgeCutResult, BridgeError> {
+        cut(self, |edit| {
+            edit.remove_span(start_frame, end_frame, &layers, ripple)
+        })
+    }
+
+    /// Copy clips, and with `linked` the clips linked to them, for
+    /// [`Self::cut_paste`]. They are kept until the next copy or until the
+    /// project closes, through any change of composition, and the document
+    /// is not touched.
+    #[frb(sync)]
+    pub fn cut_copy(&self, clips: Vec<Uuid>, linked: bool) -> Result<BridgeCutResult, BridgeError> {
+        cut(self, |edit| edit.copy(&clips, linked))
+    }
+
+    /// Paste the copied clips with the earliest of them at `at_frame`,
+    /// overwriting what they land on. They arrive as clips of their own,
+    /// linked to each other as the copied ones were.
+    ///
+    /// Clips copied off one layer land on one layer. With a `target`, that
+    /// is the layer for the top-most picture clip, or the top-most sound clip
+    /// when no picture was copied, and the rest follow as in
+    /// [`Self::cut_move`]: clips of that kind keep their distance from it in
+    /// layers, and clips of the other kind go back to the layers they were
+    /// copied from, counted from the top. Without one they land as in
+    /// [`Self::cut_place`]: picture on new layers at the top of the stack,
+    /// and sound on the first sound layers with room. A layer that is
+    /// missing is made, and a locked one refuses the paste.
+    ///
+    /// `Nothing` when nothing has been copied in this project, or an item a
+    /// copied clip plays has since been deleted.
+    #[frb(sync)]
+    pub fn cut_paste(
+        &self,
+        at_frame: i64,
+        target: Option<LayerReference>,
+    ) -> Result<BridgeCutPaste, BridgeError> {
+        let mut end_frame = at_frame;
+        let result = cut(self, |edit| edit.paste(at_frame, target, &mut end_frame))?;
+        Ok(BridgeCutPaste {
+            result,
+            end_frame: if result == BridgeCutResult::Done {
+                end_frame
+            } else {
+                at_frame
+            },
+        })
+    }
+
+    /// Match frame: the footage item and the moment of it that the clip
+    /// under `frame` is showing, read through the clip's Retime.
+    ///
+    /// The clip is the one on `layer`, or without one on the top-most
+    /// unlocked picture Sequence layer that has a clip there. `None` over a
+    /// gap, and for a clip that plays a composition.
+    #[frb(sync)]
+    pub fn cut_match_frame(
+        &self,
+        frame: i64,
+        layer: Option<LayerReference>,
+    ) -> Result<Option<BridgeMatchFrame>, BridgeError> {
+        let comp = self.composition()?;
+        let at = comp.frame_rate.time_of_frame(frame);
+        let at = at.map_err(|_| BridgeError::InvalidTime)?.0;
+        // Through a dissolve, the incoming clip is the one on top.
+        let under = |l: &Layer| {
+            let LayerKind::Sequence { clips } = &l.kind else {
+                return None;
+            };
+            let local = at.checked_sub(l.start_offset.0).ok()?;
+            let there = |c: &&Clip| c.place_start <= local && local < c.place_end();
+            let clip = clips.iter().filter(there).max_by_key(|c| c.place_start)?;
+            Some((clip.source, clip.source_at(local)?))
+        };
+        let found = match layer {
+            Some(layer) => comp
+                .layers
+                .iter()
+                .find(|l| l.id == layer.id())
+                .and_then(under),
+            None => {
+                let mut open = comp
+                    .layers
+                    .iter()
+                    .filter(|l| !l.audio_only && !l.switches.locked);
+                open.find_map(under)
+            }
+        };
+        let Some((ClipSource::Footage(item), shown)) = found else {
+            return Ok(None);
+        };
+        Ok(Some(BridgeMatchFrame {
+            footage: FootageReference {
+                project: self.project_id(),
+                id: item,
+            },
+            source_time: BridgeRational {
+                num: shown.num(),
+                den: shown.den(),
+            },
+        }))
+    }
+
+    /// The composition a clip plays, made for it when it plays footage, for
+    /// work on one clip that a Sequence layer has no room for.
+    ///
+    /// A clip that already plays a composition answers that one. Otherwise a
+    /// composition is made, named for the footage and holding it as one
+    /// layer from time zero: the file's own picture size and whole length at
+    /// this composition's frame rate, with its work area on the stretch the
+    /// clip plays. A still takes this composition's length and a sound file
+    /// its size. The clip then plays the new composition and shows exactly
+    /// what it showed, since its trim and its Retime are left as they are.
+    /// One undo step, and a clip linked to this one is not touched.
+    ///
+    /// `None` when the clip's layer is locked.
+    #[frb(sync)]
+    pub fn cut_clip_to_composition(
+        &self,
+        clip: Uuid,
+    ) -> Result<Option<CompositionReference>, BridgeError> {
+        let mut made = None;
+        let result = cut(self, |edit| edit.make_composition(clip, &mut made))?;
+        let made = made.filter(|_| result == BridgeCutResult::Done);
+        Ok(made.map(|id| CompositionReference::new(self.project_id(), id)))
     }
 }
