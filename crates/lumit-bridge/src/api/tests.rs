@@ -3325,6 +3325,12 @@ fn a_pin_is_aimed_at_the_mesh_placed_moved_and_undone() {
         },
     );
 
+    // Another project closing takes its own wireframes and leaves this one's.
+    LumitBridgeState::new_project(None)
+        .expect("a second project")
+        .close()
+        .expect("closed");
+
     // Outside the deformed triangle: refused, still no block, never a floating
     // pin.
     assert!(matches!(

@@ -7,10 +7,9 @@
 #
 #   packaging/macos/make-dmg.sh [version]
 #
-# Needs: flutter, rust, `brew install dylibbundler create-dmg`, and an FFmpeg
-# 8 keg (see below; `brew install ffmpeg` alone is 9.x now, which
-# this refuses). create-dmg is optional - without it the image has no
-# drag-to-Applications window dressing.
+# Needs: flutter, rust, `brew install dylibbundler create-dmg ffmpeg@8` (plain
+# `ffmpeg` is 9.x now, which this refuses). create-dmg is optional - without
+# it the image has no drag-to-Applications window dressing.
 #
 # The bundling is the same move the Windows installer makes with the FFmpeg
 # DLLs: the bridge links the shared FFmpeg, so the libraries must travel with
@@ -48,9 +47,9 @@ command -v dylibbundler >/dev/null || {
 # the wrong offsets - so find 8.x on purpose rather than take whatever `ffmpeg`
 # resolves to today, which is already 9.x.
 #
-# Three places 8.x can live, in order of preference: a real ffmpeg@8 keg if
-# Homebrew ever ships one, the 8.1.2 formula extracted out of homebrew-core's
-# history (.github/actions/ffmpeg8-macos builds and links exactly this prefix),
+# Three places 8.x can live, in order of preference: Homebrew's ffmpeg@8 keg,
+# the 8.1.2 formula extracted out of homebrew-core's history
+# (.github/actions/ffmpeg8-macos builds and links exactly this prefix),
 # and the plain formula on a machine that still has 8.x installed. The test is
 # libavutil's own version - 60.x is FFmpeg 8's, and it is what will be linked,
 # unlike a formula name.
@@ -66,8 +65,7 @@ for p in "$(brew --prefix)/opt/ffmpeg@8" \
 done
 [ -n "$ffprefix" ] || {
     echo "No FFmpeg 8 keg found (looked for libavutil 60.x under ffmpeg@8," >&2
-    echo "ffmpeg@8.1.2 and ffmpeg). The route is 'brew extract --version=8.1.2" >&2
-    echo "ffmpeg <tap>' then a source build; see docs/GUIDE.md." >&2
+    echo "ffmpeg@8.1.2 and ffmpeg). Run 'brew install ffmpeg@8'; see docs/GUIDE.md." >&2
     exit 1
 }
 

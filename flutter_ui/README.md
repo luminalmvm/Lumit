@@ -8,13 +8,17 @@ through `crates/lumit-bridge`.
 
 ## Running
 
-Requires the Flutter SDK (stable) and the same VS 2022 C++ tools the Rust
-build uses.
+Requires the Flutter SDK (stable, `mise.toml` has the version CI uses) and
+everything the Rust build needs, as `flutter run` builds the engine too. Set up
+FFmpeg and LLVM first, from "Building from source" in the
+[top-level README](../README.md). On Windows it's the same VS 2022 C++ tools
+the Rust build uses, on macOS it's Xcode 26 or newer, and on Linux it's
+`clang cmake ninja-build libgtk-3-dev libgles-dev` as well.
 
 ```
-flutter run -d windows    # launch
-flutter test              # the test suite
-flutter analyze           # the lint pass (must stay clean)
+flutter run -d windows                # launch, or -d macos, -d linux
+flutter test test/theme_test.dart     # one file at a time, never the whole suite
+flutter analyze                       # the lint pass (must stay clean)
 ```
 
 ## House rules
