@@ -96,6 +96,17 @@ pub fn set_full_res_drag_previews(full_res: bool) {
     crate::realtime::set_full_res_drags(full_res);
 }
 
+/// Let footage be decoded by the graphics card's video unit, or keep it on the
+/// processor.
+///
+/// On is quicker. Off is the way out on a machine whose graphics driver
+/// misbehaves with it. It reaches footage opened from here on, so a project
+/// already open wants reopening. Held the way the drag setting above is.
+#[frb(sync)]
+pub fn set_hardware_decode(on: bool) {
+    lumit_media::set_hardware_decode(on);
+}
+
 /// One rotating autosave beside a project.
 #[frb(non_opaque)]
 #[derive(Debug, Clone, PartialEq, Eq)]

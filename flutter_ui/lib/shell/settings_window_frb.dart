@@ -886,6 +886,8 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           workspace.performance.fullResDragPreviews =
               shipped.fullResDragPreviews;
           setFullResDragPreviews(fullRes: shipped.fullResDragPreviews);
+          workspace.performance.hardwareDecode = shipped.hardwareDecode;
+          setHardwareDecode(on_: shipped.hardwareDecode);
           workspace.settingsChanged();
           resetRealtime();
         });
@@ -2752,6 +2754,12 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               value: ui.workspace.performance.fullResDragPreviews, set: (on) {
             ui.workspace.performance.fullResDragPreviews = on;
             setFullResDragPreviews(fullRes: on);
+            ui.workspace.settingsChanged();
+          }),
+          _flag(t, 'settings-hardware-decode', l10n.settingsHardwareDecode,
+              value: ui.workspace.performance.hardwareDecode, set: (on) {
+            ui.workspace.performance.hardwareDecode = on;
+            setHardwareDecode(on_: on);
             ui.workspace.settingsChanged();
           }),
           _row(

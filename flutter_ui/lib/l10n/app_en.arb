@@ -6085,6 +6085,10 @@
   "@settingsCustomColours": {
     "description": "Settings window: the name of one setting."
   },
+  "settingsHardwareDecode": "Hardware video decoding",
+  "@settingsHardwareDecode": {
+    "description": "Settings window: the name of the tick that lets the graphics card decode video. On by default. Turning it off is slower, and is what to try when importing video freezes the computer."
+  },
   "settingsFullResolutionWhileDragging": "Full resolution while dragging",
   "@settingsFullResolutionWhileDragging": {
     "description": "Settings window: the name of the setting that renders a value drag at the Viewer's own resolution instead of the reduced one, so previews stay sharp and get slower."

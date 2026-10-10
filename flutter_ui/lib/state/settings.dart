@@ -74,6 +74,11 @@ class PerformanceSettings {
   /// whose machine can afford it, not a better default.
   bool fullResDragPreviews;
 
+  /// Whether footage is decoded by the graphics card's video unit. On by
+  /// default. Off is slower, and is the way out when a graphics driver
+  /// misbehaves with it.
+  bool hardwareDecode;
+
   /// Where parked frames live, as the engine's own enum name
   /// (`appData` / `besideProject` / `custom`). Null means the engine's default.
   /// The frontend never interprets it beyond showing the choice — it hands the
@@ -99,6 +104,7 @@ class PerformanceSettings {
     this.diskCacheLocation,
     this.diskCacheFolder,
     this.fullResDragPreviews = false,
+    this.hardwareDecode = true,
   });
 
   Map<String, dynamic> toJson() => {
@@ -110,6 +116,7 @@ class PerformanceSettings {
         if (diskCacheLocation != null) 'disk_cache_location': diskCacheLocation,
         if (diskCacheFolder != null) 'disk_cache_folder': diskCacheFolder,
         'full_res_drag_previews': fullResDragPreviews,
+        'hardware_decode': hardwareDecode,
       };
 
   factory PerformanceSettings.fromJson(Map<String, dynamic> j) =>
@@ -137,6 +144,8 @@ class PerformanceSettings {
         // Absent — a file written before the switch existed — is off, which is
         // the behaviour that file was written under.
         fullResDragPreviews: j['full_res_drag_previews'] == true,
+        // Absent is on, which is what every file before the switch ran with.
+        hardwareDecode: j['hardware_decode'] != false,
       );
 }
 

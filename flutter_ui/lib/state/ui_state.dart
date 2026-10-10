@@ -39,7 +39,7 @@ import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:lumit_flutter/src/rust/api/shell.dart'
-    show setAutosave, setFullResDragPreviews;
+    show setAutosave, setFullResDragPreviews, setHardwareDecode;
 import 'package:lumit_flutter/src/rust/api/state.dart';
 import 'package:lumit_flutter/state/addons.dart';
 import 'package:lumit_flutter/state/addons_engine.dart';
@@ -1963,6 +1963,7 @@ class LumitUiState extends ChangeNotifier {
     // unconditionally rather than only when on: it is the engine's live state
     // with no store behind it, so "off" has to be said as plainly as "on".
     setFullResDragPreviews(fullRes: perf.fullResDragPreviews);
+    setHardwareDecode(on_: perf.hardwareDecode);
     // Which output Lumit is heard through. Same arrangement as the budgets: the
     // engine holds the live choice with no store behind it, so the settings
     // file carries it and hands it back here. Null means the system default,
