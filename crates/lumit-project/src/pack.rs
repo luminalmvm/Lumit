@@ -1,6 +1,8 @@
 //! Footage carried inside the `.lum` (docs/01-GLOSSARY.md: Packed project):
 //! packing it in on a save, reading it back out on an open, and writing it
-//! beside the project again on an unpack.
+//! beside the project again on an unpack. Proxies, the colour config and the
+//! files effects read ride along as if each were one more footage item
+//! (`lumit_core::model::packed_id`, `packed_file_id`).
 //!
 //! Runs on whichever thread saves or opens the project, never the UI thread.
 //! Every copy here is as long as the footage is big, so each one reports how
@@ -10,14 +12,17 @@
 //! `media/<folder>/<file name>`. Footage is compressed already, so deflating
 //! it again would cost minutes and save nothing. An image sequence's files
 //! share one folder. The folder is named for the item that was packed first
-//! and means nothing beyond keeping two files of one name apart.
+//! and means nothing beyond keeping two files of one name apart. A colour
+//! config's look-up tables keep their own folders below it, because the config
+//! finds them by those.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::fs::{self, File};
+use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
+use std::time::{Duration, SystemTime};
 
-use lumit_core::model::{Fingerprint, MediaRef, PackedMedia, ProjectItem};
+use lumit_core::model::{Fingerprint, MediaRef, PackedMedia};
 use lumit_core::Document;
 use uuid::Uuid;
 use zip::write::SimpleFileOptions;
@@ -36,12 +41,15 @@ const CHUNK: usize = 1 << 20;
 /// [`ProjectError::Cancelled`] and leaves nothing half-written behind.
 pub type Progress<'a> = &'a mut dyn FnMut(u64, u64) -> bool;
 
-/// One footage item's files on disk, offered to a save for packing.
+/// One footage item's files on disk, offered to a save for packing. A proxy
+/// or the colour config is offered the same way, under its packed id.
 #[derive(Debug, Clone)]
 pub struct PackSource {
     pub item: Uuid,
     /// The file the item's reference names, then the rest of its numbered run
-    /// when the item is an image sequence. Never empty.
+    /// when the item is an image sequence, or the look-up tables a colour
+    /// config names. Never empty. A file below the first one's folder keeps
+    /// its path from there.
     pub files: Vec<PathBuf>,
 }
 
@@ -93,16 +101,32 @@ type Zips = Vec<Option<ZipArchive<File>>>;
 type HeldFolders = HashMap<String, Vec<HeldFile>>;
 
 /// `media/<folder>/<name>` taken apart, or `None` for an entry that is not
-/// one. Both parts have to be plain names: an archive is somebody else's
-/// file, and a name with a separator or a `..` in it would be written
-/// wherever it pointed.
+/// one. Every part has to be a plain name: an archive is somebody else's
+/// file, and a name with a `..` or a drive in it would be written wherever it
+/// pointed. The name may sit in folders of its own below `<folder>`.
 fn split_entry(entry: &str) -> Option<(&str, &str)> {
     let (folder, name) = entry.strip_prefix(MEDIA_PREFIX)?.split_once('/')?;
-    (plain_name(folder) && plain_name(name)).then_some((folder, name))
+    (plain_name(folder) && plain_path(name)).then_some((folder, name))
 }
 
 fn plain_name(name: &str) -> bool {
     !name.is_empty() && name != "." && name != ".." && !name.contains(['/', '\\', ':', '\0'])
+}
+
+fn plain_path(name: &str) -> bool {
+    name.split('/').all(plain_name)
+}
+
+/// What `file` is called in a packed folder whose first file sits in `dir`:
+/// its path from there with forward slashes, or its bare name when it is
+/// somewhere else.
+fn name_under(dir: &Path, file: &Path) -> Option<String> {
+    let below = file
+        .strip_prefix(dir)
+        .ok()
+        .or(file.file_name().map(Path::new))?;
+    let parts: Vec<_> = below.iter().map(|part| part.to_string_lossy()).collect();
+    Some(parts.join("/"))
 }
 
 /// The stored media files of an archive, by folder.
@@ -201,9 +225,10 @@ fn copy_chunks(
 /// by the caller. The rest of a run is compared this way because hashing two
 /// thousand frames on every save is the cost packing is meant to avoid.
 fn same_files(files: &[PathBuf], held: &[HeldFile]) -> bool {
+    let dir = files.first().and_then(|first| first.parent());
     files.len() == held.len()
         && files.iter().all(|file| {
-            let name = file.file_name().map(|n| n.to_string_lossy());
+            let name = dir.and_then(|dir| name_under(dir, file));
             let size = fs::metadata(file).map(|m| m.len()).ok();
             held.iter()
                 .any(|h| Some(h.name.as_str()) == name.as_deref() && Some(h.size) == size)
@@ -265,7 +290,7 @@ pub fn save_packed(
             .filter(|s| !s.files.is_empty())
             .map(|s| (s.item, s))
             .collect();
-        let live = |id: Uuid| matches!(doc.item(id), Some(ProjectItem::Footage(_)));
+        let live = |id: Uuid| doc.packed_path(id).is_some();
 
         // What goes in, folder by folder, and which items each one serves.
         let mut plan: Vec<(String, Vec<HeldFile>)> = Vec::new();
@@ -330,12 +355,12 @@ pub fn save_packed(
             let mut files = Vec::with_capacity(source.files.len());
             let mut names = HashSet::new();
             for file in &source.files {
-                let name = file.file_name().map(|n| n.to_string_lossy().into_owned());
+                let name = main.parent().and_then(|dir| name_under(dir, file));
                 let size = fs::metadata(file).map(|m| m.len()).ok();
                 let (Some(name), Some(size)) = (name, size) else {
                     continue;
                 };
-                if plain_name(&name) && names.insert(name.clone()) {
+                if plain_path(&name) && names.insert(name.clone()) {
                     files.push(HeldFile {
                         name,
                         size,
@@ -356,6 +381,11 @@ pub fn save_packed(
             let media = PackedMedia {
                 entry: format!("{MEDIA_PREFIX}{folder}/{name}"),
                 fingerprint,
+                // Packed again from a copy, it is still the same file's.
+                original: doc
+                    .packed
+                    .get(&source.item)
+                    .and_then(|was| was.original.clone()),
                 extra: serde_json::Map::new(),
             };
             plan.push((folder, files));
@@ -468,7 +498,6 @@ fn write_out(
     total: u64,
     progress: Progress<'_>,
 ) -> Result<u64, ProjectError> {
-    fs::create_dir_all(dest_dir)?;
     let mut written = 0;
     for file in files {
         let out = dest_dir.join(&file.name);
@@ -478,8 +507,10 @@ fn write_out(
         }
         // Written under another name and renamed, so a copy cut short is
         // never taken for the file.
-        let part = dest_dir.join(format!(".{}.part", file.name));
+        let leaf = out.file_name().unwrap_or_default().to_string_lossy();
+        let part = out.with_file_name(format!(".{leaf}.part"));
         let copied = (|| -> Result<(), ProjectError> {
+            fs::create_dir_all(out.parent().unwrap_or(dest_dir))?;
             let mut to = File::create(&part)?;
             match &file.from {
                 Held::Archive { archive, index } => {
@@ -539,18 +570,24 @@ pub fn restore_packed(
     // Which items need the archive's copy, and of which folder.
     let mut wanted: Vec<(Uuid, PackedMedia)> = Vec::new();
     for (id, media) in doc.packed.clone() {
-        let Some(ProjectItem::Footage(f)) = doc.item_mut(id) else {
+        // A file an effect reads has the one path and nothing relative.
+        let relative = doc
+            .packed_ref(id)
+            .map(|r| project_dir.join(&r.relative_path));
+        let Some(stored) = doc.packed_path_mut(id) else {
             continue;
         };
-        let stored = Path::new(&f.media.absolute_path).to_path_buf();
-        let relative = project_dir.join(&f.media.relative_path);
-        let in_place = [stored, relative].into_iter().find(|path| {
-            !path.as_os_str().is_empty()
-                && path.is_file()
-                && fingerprint_path(path).is_ok_and(|fp| fp.likely_same_content(&media.fingerprint))
-        });
+        let in_place = [Some(PathBuf::from(&*stored)), relative]
+            .into_iter()
+            .flatten()
+            .find(|path| {
+                !path.as_os_str().is_empty()
+                    && path.is_file()
+                    && fingerprint_path(path)
+                        .is_ok_and(|fp| fp.likely_same_content(&media.fingerprint))
+            });
         match in_place {
-            Some(path) => f.media.absolute_path = path.to_string_lossy().into_owned(),
+            Some(path) => *stored = path.to_string_lossy().into_owned(),
             None => wanted.push((id, media)),
         }
     }
@@ -599,13 +636,40 @@ pub fn restore_packed(
         // the file that was packed.
         let main = dest_dir.join(name);
         if fingerprint_path(&main).is_ok_and(|fp| fp.likely_same_content(&media.fingerprint)) {
-            if let Some(ProjectItem::Footage(f)) = doc.item_mut(*id) {
-                f.media.absolute_path = main.to_string_lossy().into_owned();
+            // An effect's file has only the one path, so the one it held is
+            // kept on the entry for the next save to write back.
+            let file = doc.packed_ref(*id).is_none();
+            if let Some(stored) = doc.packed_path_mut(*id) {
+                let was = std::mem::replace(stored, main.to_string_lossy().into_owned());
                 restored += 1;
+                if file && !Path::new(&was).starts_with(dest_root) {
+                    if let Some(entry) = doc.packed.get_mut(id) {
+                        entry.original = Some(was);
+                    }
+                }
             }
         }
     }
     Ok(restored)
+}
+
+/// Put back the path each effect's file had before an open pointed its
+/// parameter at a copy under `copies`. Every save does this to the document it
+/// writes, so a file never keeps a path inside one machine's cache.
+pub(crate) fn keep_original_paths(doc: &mut Document, copies: &Path) {
+    let originals: Vec<(Uuid, String)> = doc
+        .packed
+        .iter()
+        .filter_map(|(id, entry)| Some((*id, entry.original.clone()?)))
+        .collect();
+    for (id, original) in originals {
+        let copy = doc
+            .packed_path_mut(id)
+            .filter(|path| Path::new(path.as_str()).starts_with(copies));
+        if let Some(path) = copy {
+            *path = original;
+        }
+    }
 }
 
 /// Write the packed footage of `doc` back out as files beside the project, in
@@ -632,10 +696,9 @@ pub fn unpack(
     // The folders to write, and the items each one serves.
     let mut folders: Vec<(String, String, Fingerprint, Vec<Uuid>)> = Vec::new();
     for (id, media) in &doc.packed {
-        let Some(ProjectItem::Footage(f)) = doc.item(*id) else {
+        let Some(now) = doc.packed_path(*id).map(Path::new) else {
             continue;
         };
-        let now = Path::new(&f.media.absolute_path);
         if now.is_file() && !now.starts_with(dest_root) {
             continue; // the original is where it always was
         }
@@ -655,6 +718,8 @@ pub fn unpack(
     }
 
     // An archive that no longer has a folder leaves the copy an open read.
+    // ponytail: the top of that folder only, so a config comes back without
+    // the tables in folders below it. Walk the tree if that is ever met.
     for (folder, ..) in &folders {
         if held.contains_key(folder) {
             continue;
@@ -735,10 +800,13 @@ pub fn unpack(
         }
         let main = dest_dir.join(&as_name);
         for id in items {
-            let Some(ProjectItem::Footage(f)) = doc.item(*id) else {
-                continue;
-            };
-            let mut media = f.media.clone();
+            // A file an effect reads has no reference to keep anything of.
+            let mut media = doc.packed_ref(*id).cloned().unwrap_or(MediaRef {
+                relative_path: String::new(),
+                absolute_path: String::new(),
+                fingerprint: None,
+                extra: serde_json::Map::new(),
+            });
             media.relative_path = relative_between(project_dir, &main)
                 .unwrap_or_else(|| main.to_string_lossy().into_owned());
             media.absolute_path = main.to_string_lossy().into_owned();
@@ -816,7 +884,9 @@ pub fn autosave_owner(path: &Path) -> Option<PathBuf> {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
-    use lumit_core::model::FootageItem;
+    use lumit_core::model::{
+        packed_file_id, packed_id, EffectValue, FileParam, FootageItem, ProjectItem, ProxyRef,
+    };
 
     /// A project in `dir` with one footage item reading `dir/footage/<name>`,
     /// which holds `bytes`.
@@ -850,21 +920,77 @@ mod tests {
         }
     }
 
-    /// The whole promise: pack, delete the original, and the footage is still
-    /// there on the next open and still in the file after the next save.
+    /// A reference to `dir/<relative>`, which is written holding `bytes`.
+    fn file_ref(dir: &Path, relative: &str, bytes: &[u8]) -> MediaRef {
+        let file = dir.join(relative);
+        fs::create_dir_all(file.parent().unwrap()).unwrap();
+        fs::write(&file, bytes).unwrap();
+        MediaRef {
+            relative_path: relative.into(),
+            absolute_path: file.to_string_lossy().into_owned(),
+            fingerprint: None,
+            extra: serde_json::Map::new(),
+        }
+    }
+
+    /// The whole promise: pack, delete the originals, and the footage, its
+    /// proxy, the colour config and a file an effect reads are still there on
+    /// the next open and still in the file after the next save.
     #[test]
     fn packed_footage_outlives_its_original() {
         let dir = tempfile::tempdir().unwrap();
         let bytes: Vec<u8> = (0..300_000u32).map(|n| (n % 251) as u8).collect();
-        let (doc, id, original) = project_with(dir.path(), "clip.mov", &bytes);
+        let (mut doc, id, _) = project_with(dir.path(), "clip.mov", &bytes);
+        // A proxy goes in with it, and a colour config whose table sits in a
+        // folder of its own.
+        let (proxy_id, config_id) = (packed_id(id), packed_id(doc.id));
+        doc.proxies.insert(
+            id,
+            ProxyRef {
+                media: file_ref(dir.path(), "footage/clip_proxy.mov", b"small picture"),
+                enabled: true,
+                extra: serde_json::Map::new(),
+            },
+        );
+        doc.colour.config = Some(file_ref(dir.path(), "ocio/config.ocio", b"a config"));
+        file_ref(dir.path(), "ocio/luts/grade.cube", b"a table");
+        // And a LUT on a layer, whose file is a path in a parameter.
+        let look = file_ref(dir.path(), "looks/look.cube", b"a look").absolute_path;
+        let mut lut = lumit_core::fx::instantiate("lut").unwrap();
+        let look_id = packed_file_id(lut.id, "file", 0);
+        let slot = lut.params.iter_mut().find(|p| p.id == "file").unwrap();
+        slot.value = EffectValue::File(FileParam::single(look.clone()));
+        let stress = crate::fixtures::stress_document(&crate::fixtures::StressParams::TINY);
+        let comp = stress.items.into_iter().find_map(|item| match item {
+            ProjectItem::Composition(comp) => Some(comp),
+            _ => None,
+        });
+        let mut comp = comp.unwrap();
+        comp.layers[0].effects.push(lut);
+        doc.items.push(ProjectItem::Composition(comp));
+        // What a save is offered: each file from wherever the project reads it.
+        let offered = |doc: &Document| {
+            let at = |id| PathBuf::from(doc.packed_path(id).unwrap());
+            let table = at(config_id).with_file_name("luts").join("grade.cube");
+            vec![
+                source(id, &at(id)),
+                source(proxy_id, &at(proxy_id)),
+                source(look_id, &at(look_id)),
+                PackSource {
+                    item: config_id,
+                    files: vec![at(config_id), table],
+                },
+            ]
+        };
         let lum = dir.path().join("scene.lum");
 
-        let first =
-            save_packed(&doc, &lum, None, &[source(id, &original)], &mut |_, _| true).unwrap();
-        assert_eq!(first.files, 1);
-        fs::remove_file(&original).unwrap();
+        let first = save_packed(&doc, &lum, None, &offered(&doc), &mut |_, _| true).unwrap();
+        assert_eq!(first.files, 5);
+        fs::remove_dir_all(dir.path().join("footage")).unwrap();
+        fs::remove_dir_all(dir.path().join("ocio")).unwrap();
+        fs::remove_dir_all(dir.path().join("looks")).unwrap();
 
-        // Reopened with the original gone, the item reads the archive's copy.
+        // Reopened with the originals gone, each reads the archive's copy.
         let (mut opened, _) = crate::open(&lum).unwrap();
         let cache = dir.path().join("cache");
         let restored = restore_packed(
@@ -875,24 +1001,25 @@ mod tests {
             &mut |_, _| true,
         )
         .unwrap();
-        assert_eq!(restored, 1);
+        assert_eq!(restored, 4);
         let ProjectItem::Footage(f) = opened.item(id).unwrap() else {
             panic!("the footage item");
         };
         let copy = PathBuf::from(&f.media.absolute_path);
         assert_eq!(fs::read(&copy).unwrap(), bytes);
+        // The LUT reads its copy, and what a save writes is the path it had.
+        assert!(Path::new(opened.packed_path(look_id).unwrap()).starts_with(&cache));
+        let mut written = opened.clone();
+        keep_original_paths(&mut written, &cache);
+        assert_eq!(written.packed_path(look_id), Some(look.as_str()));
 
-        // Saved over itself with nothing on disk to pack from but that copy,
-        // the archive still carries the bytes.
-        let again = save_packed(
-            &opened,
-            &lum,
-            Some(&lum),
-            &[source(id, &copy)],
-            &mut |_, _| true,
-        )
+        // Saved over itself with nothing on disk to pack from but those
+        // copies, the archive still carries the bytes.
+        let again = save_packed(&opened, &lum, Some(&lum), &offered(&opened), &mut |_, _| {
+            true
+        })
         .unwrap();
-        assert!(again.packed.contains_key(&id));
+        assert_eq!(again.packed.len(), 4);
         fs::remove_dir_all(&cache).unwrap();
         let (mut reopened, _) = crate::open(&lum).unwrap();
         restore_packed(
@@ -907,14 +1034,28 @@ mod tests {
             panic!("the footage item");
         };
         assert_eq!(fs::read(&f.media.absolute_path).unwrap(), bytes);
+        let proxy = &reopened.packed_ref(proxy_id).unwrap().absolute_path;
+        assert_eq!(fs::read(proxy).unwrap(), b"small picture");
+        let config = Path::new(&reopened.packed_ref(config_id).unwrap().absolute_path);
+        assert_eq!(fs::read(config).unwrap(), b"a config");
+        let table = config.with_file_name("luts").join("grade.cube");
+        assert_eq!(fs::read(table).unwrap(), b"a table");
+        let look = reopened.packed_path(look_id).unwrap();
+        assert_eq!(fs::read(look).unwrap(), b"a look");
 
-        // And unpacking writes it beside the project again.
+        // And unpacking writes them beside the project again.
         let unpacked = unpack(&reopened, &[lum], dir.path(), &cache, &mut |_, _| true).unwrap();
         assert!(unpacked.kept.is_empty());
-        assert_eq!(unpacked.moved[0].1.relative_path, "media/clip.mov");
+        let moved: HashMap<Uuid, MediaRef> = unpacked.moved.into_iter().collect();
+        assert_eq!(moved[&id].relative_path, "media/clip.mov");
+        assert_eq!(moved[&proxy_id].relative_path, "media/clip_proxy.mov");
+        assert_eq!(moved[&config_id].relative_path, "media/config/config.ocio");
+        assert_eq!(moved[&look_id].relative_path, "media/look.cube");
+        let media = dir.path().join("media");
+        assert_eq!(fs::read(media.join("clip.mov")).unwrap(), bytes);
         assert_eq!(
-            fs::read(dir.path().join("media").join("clip.mov")).unwrap(),
-            bytes
+            fs::read(media.join("config/luts/grade.cube")).unwrap(),
+            b"a table"
         );
     }
 
@@ -959,6 +1100,7 @@ mod tests {
             PackedMedia {
                 entry: "media/../../escaped.mov".into(),
                 fingerprint,
+                original: None,
                 extra: serde_json::Map::new(),
             },
         );

@@ -933,7 +933,9 @@ impl ProjectReference {
             None
         } else {
             crate::packing::begin();
-            let sources = crate::packing::sources(&doc, dir, all);
+            // From the open document, which says where each file is read
+            // from now. The one being written says where it used to be.
+            let sources = crate::packing::sources(&document, dir, all);
             let mut progress = crate::packing::progress(|fraction| {
                 if let Some(sink) = on_progress {
                     let _ = sink.add(fraction);
@@ -963,8 +965,14 @@ impl ProjectReference {
                         && (all || doc.packed.contains_key(&item.id()))
                 })
                 .count();
-            result.packed = packed.packed.len() as u32;
-            result.left_out = asked.saturating_sub(packed.packed.len()) as u32;
+            // Footage only: a proxy or the colour config rides along uncounted.
+            let footage = packed
+                .packed
+                .keys()
+                .filter(|id| is_footage(&doc, **id))
+                .count();
+            result.packed = footage as u32;
+            result.left_out = asked.saturating_sub(footage) as u32;
             Some(packed.packed)
         };
 
@@ -976,7 +984,7 @@ impl ProjectReference {
             // An item deleted since it was packed keeps its entry in the open
             // document, so undoing the delete brings it back packed.
             for (id, media) in &document.packed {
-                if !is_footage(&document, *id) {
+                if document.packed_path(*id).is_none() {
                     packed.insert(*id, media.clone());
                 }
             }

@@ -370,8 +370,11 @@ impl DocumentStore {
         let mut doc = Document::clone(&self.snapshot());
         doc.packed = packed;
         for (id, media) in moved {
-            if let Some(crate::model::ProjectItem::Footage(f)) = doc.item_mut(id) {
-                f.media = media;
+            if let Some(slot) = doc.packed_ref_mut(id) {
+                *slot = media;
+            } else if let Some(path) = doc.packed_path_mut(id) {
+                // An effect's file: its parameter holds the one path.
+                *path = media.absolute_path;
             }
         }
         self.current.store(Arc::new(doc));

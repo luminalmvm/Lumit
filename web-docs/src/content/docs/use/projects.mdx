@@ -43,8 +43,9 @@ Otherwise it reads the packed copy, which is copied into Lumit's cache when the 
 A file that has changed on disk since it was packed is packed again on the next save.
 
 :::note
-Proxies and the OCIO config are not packed. Autosave copies hold the document only, and an
-autosave reads its footage from the project file it was written beside.
+Proxies and the files effects read, such as a LUT, are packed with the footage, and so is
+the OCIO config with the look-up tables in its folder. Autosave copies hold the document
+only, and an autosave reads its footage from the project file it was written beside.
 :::
 
 ## Shared projects

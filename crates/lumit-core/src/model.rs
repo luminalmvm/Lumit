@@ -238,7 +238,7 @@ pub struct ProxyRef {
 }
 
 /// One footage item's file carried inside the `.lum` (docs/01-GLOSSARY.md:
-/// Packed project).
+/// Packed project). A proxy and the colour config are carried the same way.
 ///
 /// The reference in [`FootageItem::media`] stays what it was. This sits beside
 /// it and says the file's bytes are also in the archive, so the project still
@@ -253,10 +253,37 @@ pub struct PackedMedia {
     /// still matches it is read in place; one that does not, or is not there,
     /// is read from the copy the archive carries.
     pub fingerprint: Fingerprint,
+    /// For a file an effect reads: the path its parameter held before an open
+    /// pointed it at the copy read out of the archive. A save writes this back,
+    /// so a file never keeps a path inside one machine's cache.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub original: Option<String>,
     /// Unknown fields from newer Lumit versions, preserved on load/save
     /// (docs/10-FILE-FORMAT.md §1.1 — mandatory forward compatibility).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
+/// The id a second file is packed under in [`Document::packed`]: a footage
+/// item's proxy from the item's id, and the colour config from the document's.
+///
+/// It is the owner's id marked as a custom one (a version 8 UUID), which no
+/// item's id is, so it never meets one. A Lumit from before these were packed
+/// finds no item under it and opens the project without that file.
+#[must_use]
+pub fn packed_id(owner: Uuid) -> Uuid {
+    uuid::Builder::from_custom_bytes(*owner.as_bytes()).into_uuid()
+}
+
+/// The id the `n`th file of an effect's parameter is packed under in
+/// [`Document::packed`]. A custom id as [`packed_id`]'s is, hashed from all
+/// three, so it meets no item's id and two parameters never share one.
+#[must_use]
+pub fn packed_file_id(effect: Uuid, param: &str, n: usize) -> Uuid {
+    let hash = blake3::hash(format!("{effect}/{param}/{n}").as_bytes());
+    let mut bytes = [0u8; 16];
+    bytes.copy_from_slice(&hash.as_bytes()[..16]);
+    uuid::Builder::from_custom_bytes(bytes).into_uuid()
 }
 
 /// A shared solid definition (docs/03-DATA-MODEL.md §2): solids are assets,
@@ -2014,6 +2041,52 @@ pub fn stored_camera_pose_lt(layer: &Layer, lt: f64) -> Option<CameraPose> {
 }
 
 impl Composition {
+    /// Every effect instance this composition holds, wherever it sits: on a
+    /// layer's stack, among its styles, in its graph, on a clip, on a group's
+    /// header, or as a box of the composition's own node graph.
+    pub fn effects(&self) -> impl Iterator<Item = &EffectInstance> {
+        let boxes = self.graph.iter().flat_map(|graph| &graph.nodes);
+        let boxes = boxes.filter_map(|node| match node {
+            crate::comp_graph::GraphNode::Fx(inst) => Some(inst),
+            _ => None,
+        });
+        let headers = self.groups.iter().flat_map(|group| &group.effects);
+        let layers = self.layers.iter().flat_map(|layer| {
+            let clips = match &layer.kind {
+                LayerKind::Sequence { clips } => clips.as_slice(),
+                _ => &[],
+            };
+            (layer.effects.iter())
+                .chain(&layer.styles)
+                .chain(&layer.graph_inputs)
+                .chain(&layer.graph.nodes)
+                .chain(clips.iter().flat_map(|clip| &clip.effects))
+        });
+        boxes.chain(headers).chain(layers)
+    }
+
+    /// [`Self::effects`], to change them.
+    pub fn effects_mut(&mut self) -> impl Iterator<Item = &mut EffectInstance> {
+        let boxes = self.graph.iter_mut().flat_map(|graph| &mut graph.nodes);
+        let boxes = boxes.filter_map(|node| match node {
+            crate::comp_graph::GraphNode::Fx(inst) => Some(inst),
+            _ => None,
+        });
+        let headers = self.groups.iter_mut().flat_map(|group| &mut group.effects);
+        let layers = self.layers.iter_mut().flat_map(|layer| {
+            let clips = match &mut layer.kind {
+                LayerKind::Sequence { clips } => clips.as_mut_slice(),
+                _ => &mut [],
+            };
+            (layer.effects.iter_mut())
+                .chain(&mut layer.styles)
+                .chain(&mut layer.graph_inputs)
+                .chain(&mut layer.graph.nodes)
+                .chain(clips.iter_mut().flat_map(|clip| &mut clip.effects))
+        });
+        boxes.chain(headers).chain(layers)
+    }
+
     /// The topmost visible Camera layer whose span contains `t` — the one that
     /// is *active*. None → the comp renders flat (3D switches ignored).
     ///
@@ -3004,6 +3077,11 @@ pub struct Document {
     /// than by an op: see `DocumentStore::set_packed`. An entry whose item has
     /// been deleted stays here so undoing the delete brings it back packed,
     /// and is left out of the file.
+    ///
+    /// A proxy and the colour config are carried the same way, under the ids
+    /// [`packed_id`] gives them, and a file an effect reads under
+    /// [`packed_file_id`]'s. [`Document::packed_path`] says which file an id
+    /// stands for.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub packed: std::collections::BTreeMap<Uuid, PackedMedia>,
     /// Pack every footage item on every save, the ones imported since the
@@ -3446,6 +3524,101 @@ impl Document {
         }
         let p = self.proxies.get(&id)?;
         p.enabled.then_some(&p.media)
+    }
+
+    /// The reference a packed id stands for ([`Document::packed`]): a footage
+    /// item's own, its proxy's, or the colour config's. `None` when nothing
+    /// live is behind the id, such as a deleted item or the proxy of one.
+    #[must_use]
+    pub fn packed_ref(&self, id: Uuid) -> Option<&MediaRef> {
+        if id == packed_id(self.id) {
+            return self.colour.config.as_ref();
+        }
+        let proxy_of = self.packed_proxy_owner(id);
+        match (self.item(proxy_of.unwrap_or(id))?, proxy_of) {
+            (ProjectItem::Footage(_), Some(item)) => self.proxies.get(&item).map(|p| &p.media),
+            (ProjectItem::Footage(f), None) => Some(&f.media),
+            _ => None,
+        }
+    }
+
+    /// [`Self::packed_ref`], to point the reference somewhere else.
+    pub fn packed_ref_mut(&mut self, id: Uuid) -> Option<&mut MediaRef> {
+        if id == packed_id(self.id) {
+            return self.colour.config.as_mut();
+        }
+        let proxy_of = self.packed_proxy_owner(id);
+        let ProjectItem::Footage(_) = self.item(proxy_of.unwrap_or(id))? else {
+            return None;
+        };
+        match proxy_of {
+            Some(item) => self.proxies.get_mut(&item).map(|p| &mut p.media),
+            None => match self.item_mut(id)? {
+                ProjectItem::Footage(f) => Some(&mut f.media),
+                _ => None,
+            },
+        }
+    }
+
+    /// The footage item whose proxy is packed under `id`, if it is one's.
+    fn packed_proxy_owner(&self, id: Uuid) -> Option<Uuid> {
+        self.proxies
+            .keys()
+            .copied()
+            .find(|item| packed_id(*item) == id)
+    }
+
+    /// Every file an effect's parameter names, such as a LUT's `.cube`, with
+    /// the id it is packed under ([`packed_file_id`]).
+    pub fn effect_files(&self) -> impl Iterator<Item = (Uuid, &str)> {
+        self.comps().flat_map(Composition::effects).flat_map(|fx| {
+            fx.params.iter().flat_map(move |param| {
+                let paths = match &param.value {
+                    EffectValue::File(file) => file.paths.as_slice(),
+                    _ => &[],
+                };
+                let id = move |n| packed_file_id(fx.id, &param.id, n);
+                (paths.iter().enumerate()).map(move |(n, path)| (id(n), path.as_str()))
+            })
+        })
+    }
+
+    /// Where the file behind a packed id is read from: the path
+    /// [`Self::packed_ref`]'s reference was found at, or the one an effect's
+    /// parameter holds. `None` when nothing live is behind the id.
+    #[must_use]
+    pub fn packed_path(&self, id: Uuid) -> Option<&str> {
+        match self.packed_ref(id) {
+            Some(reference) => Some(&reference.absolute_path),
+            None => self
+                .effect_files()
+                .find(|file| file.0 == id)
+                .map(|file| file.1),
+        }
+    }
+
+    /// [`Self::packed_path`], to read the file from somewhere else. An effect's
+    /// parameter has only the one path, so for that this is also what a save
+    /// writes.
+    pub fn packed_path_mut(&mut self, id: Uuid) -> Option<&mut String> {
+        if self.packed_ref(id).is_some() {
+            return self.packed_ref_mut(id).map(|r| &mut r.absolute_path);
+        }
+        let comps = self.items.iter_mut().filter_map(|item| match item {
+            ProjectItem::Composition(c) => Some(c),
+            _ => None,
+        });
+        comps.flat_map(Composition::effects_mut).find_map(|fx| {
+            let effect = fx.id;
+            fx.params.iter_mut().find_map(|param| {
+                let EffectValue::File(file) = &mut param.value else {
+                    return None;
+                };
+                let n =
+                    (0..file.paths.len()).find(|n| packed_file_id(effect, &param.id, *n) == id)?;
+                file.paths.get_mut(n)
+            })
+        })
     }
 
     /// Whether any composition places `id` as a layer — the Project panel's

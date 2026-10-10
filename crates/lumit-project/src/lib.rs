@@ -1070,7 +1070,17 @@ pub fn rebase_for_save(doc: &Document, project_dir: &Path) -> Document {
     if let Some(config) = doc.colour.config.as_mut() {
         rebase_one(config, project_dir);
     }
+    keep_original_paths(&mut doc);
     doc
+}
+
+/// Give each file an effect reads the path it had, and not the copy's in this
+/// machine's cache that an open pointed its parameter at. For anything that
+/// leaves the open project: a save, the clipboard, a preset.
+pub fn keep_original_paths(doc: &mut Document) {
+    if let Some(cache) = cache_dir() {
+        pack::keep_original_paths(doc, &cache.join("packed"));
+    }
 }
 
 /// One media reference rebased against `project_dir`: the relative path
@@ -1188,7 +1198,17 @@ pub fn resolve_all_media(
     // this list would open the relink dialogue over footage that is perfectly
     // present. It also does not count as a relink, which is a count of the
     // project's real media.
-    for proxy in doc.proxies.values_mut() {
+    // A packed proxy or config that `restore_packed` has placed stays where it
+    // was put, as a packed item does above.
+    let packed = &doc.packed;
+    let placed = |id: Uuid, media: &MediaRef| {
+        packed.contains_key(&lumit_core::model::packed_id(id))
+            && Path::new(&media.absolute_path).is_file()
+    };
+    for (item, proxy) in &mut doc.proxies {
+        if placed(*item, &proxy.media) {
+            continue;
+        }
         if let Resolved::Found { path, .. } = resolve_media(&proxy.media, project_dir, search_roots)
         {
             proxy.media.absolute_path = path.to_string_lossy().into_owned();
@@ -1199,7 +1219,7 @@ pub fn resolve_all_media(
     // still keeps every colour space name it was given, and simply previews
     // through the built-in family until the file comes back. Opening the
     // relink dialogue over it would be a lie about what is wrong.
-    if let Some(config) = doc.colour.config.as_mut() {
+    if let Some(config) = doc.colour.config.as_mut().filter(|c| !placed(doc.id, c)) {
         if let Resolved::Found { path, .. } = resolve_media(config, project_dir, search_roots) {
             config.absolute_path = path.to_string_lossy().into_owned();
         }
