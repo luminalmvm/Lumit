@@ -197,89 +197,94 @@ class _ClipFadePopoverState extends State<_ClipFadePopover> {
         boxShadow: t.floatShadow,
       ),
       clipBehavior: Clip.antiAlias,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(
-            height: t.density.laneRow,
-            decoration: BoxDecoration(
-              color: t.surface2,
-              border: Border(bottom: BorderSide(color: t.hairline)),
+      child: Entrance.content(
+        spec: ThemeScope.of(context).motion.content,
+        rise: ThemeScope.of(context).motion.contentRise,
+        blur: ThemeScope.of(context).motion.contentBlur,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              height: t.density.laneRow,
+              decoration: BoxDecoration(
+                color: t.surface2,
+                border: Border(bottom: BorderSide(color: t.hairline)),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(t.kickerCase(l10n.clipFadeShapeTitle),
+                    style: t.kickerOn),
+              ),
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(t.kickerCase(l10n.clipFadeShapeTitle),
-                  style: t.kickerOn),
-            ),
-          ),
-          // The empty drag handlers put the box in the gesture arena, where the
-          // inner member beats an enclosing scroll; the Listener does the work,
-          // because it hears the first pointer-down rather than waiting out the
-          // drag slop.
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onVerticalDragUpdate: (_) {},
-            onHorizontalDragUpdate: (_) {},
-            child: Listener(
-              key: const ValueKey<String>('atl-fade-box'),
-              onPointerDown: (e) => _grab(e.localPosition),
-              onPointerMove: (e) => _drag(e.localPosition),
-              onPointerUp: (_) => setState(() => _dragging = null),
-              onPointerCancel: (_) => setState(() => _dragging = null),
-              child: CustomPaint(
-                size: const Size(_popoverWidth, _boxSide + _marginY * 2),
-                painter: _FadeBoxPainter(
-                  box: _box,
-                  outgoing: _out == null ? null : fadeCurveOf(_out!),
-                  incoming: _in == null ? null : fadeCurveOf(_in!),
-                  theme: t,
+            // The empty drag handlers put the box in the gesture arena, where
+            // the inner member beats an enclosing scroll; the Listener does the
+            // work, because it hears the first pointer-down rather than waiting
+            // out the drag slop.
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onVerticalDragUpdate: (_) {},
+              onHorizontalDragUpdate: (_) {},
+              child: Listener(
+                key: const ValueKey<String>('atl-fade-box'),
+                onPointerDown: (e) => _grab(e.localPosition),
+                onPointerMove: (e) => _drag(e.localPosition),
+                onPointerUp: (_) => setState(() => _dragging = null),
+                onPointerCancel: (_) => setState(() => _dragging = null),
+                child: CustomPaint(
+                  size: const Size(_popoverWidth, _boxSide + _marginY * 2),
+                  painter: _FadeBoxPainter(
+                    box: _box,
+                    outgoing: _out == null ? null : fadeCurveOf(_out!),
+                    incoming: _in == null ? null : fadeCurveOf(_in!),
+                    theme: t,
+                  ),
                 ),
               ),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(10, 4, 10, 8),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (_pair) _keepRow(t),
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: 4,
-                  runSpacing: 4,
-                  children: [
-                    for (final preset in clipFadeShapes)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 4, 10, 8),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (_pair) _keepRow(t),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 4,
+                    runSpacing: 4,
+                    children: [
+                      for (final preset in clipFadeShapes)
+                        HouseButton(
+                          key: ValueKey<String>('atl-fade-preset-${preset.id}'),
+                          small: true,
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          onPressed: () => _pick(preset.shape),
+                          child: Text(clipFadeShapeName(preset.id),
+                              style: t.body.copyWith(color: t.textPrimary)),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
                       HouseButton(
-                        key: ValueKey<String>('atl-fade-preset-${preset.id}'),
+                        key: const ValueKey<String>('atl-fade-apply'),
                         small: true,
-                        padding: const EdgeInsets.symmetric(horizontal: 6),
-                        onPressed: () => _pick(preset.shape),
-                        child: Text(clipFadeShapeName(preset.id),
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        onPressed: () => widget.onApply(_out, _in),
+                        child: Text(l10n.apply,
                             style: t.body.copyWith(color: t.textPrimary)),
                       ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    HouseButton(
-                      key: const ValueKey<String>('atl-fade-apply'),
-                      small: true,
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                      onPressed: () => widget.onApply(_out, _in),
-                      child: Text(l10n.apply,
-                          style: t.body.copyWith(color: t.textPrimary)),
-                    ),
-                  ],
-                ),
-              ],
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

@@ -127,8 +127,9 @@ Future<void> showFxConsoleFrb({
   entry = OverlayEntry(
     // It fades up where the pointer is and takes the keyboard from its first
     // frame. Closing it is immediate (docs/15 §8).
-    builder: (context) => Entrance.fade(
+    builder: (context) => Entrance(
       spec: ThemeScope.of(context).motion.popup,
+      leads: true,
       child: _FxConsole(model: model, anchor: at, onClose: close),
     ),
   );
@@ -151,8 +152,9 @@ VoidCallback showFxConsoleExhibitFrb({
 }) {
   final at = anchor == null ? null : overlayLocal(context, anchor);
   final entry = OverlayEntry(
-    builder: (context) => Entrance.fade(
+    builder: (context) => Entrance(
       spec: ThemeScope.of(context).motion.popup,
+      leads: true,
       child:
           _FxConsole(model: model, anchor: at, onClose: () {}, exhibit: true),
     ),
@@ -482,32 +484,37 @@ class _FxConsoleState extends State<_FxConsole> {
           border: Border.all(color: t.hairline, width: 1),
           boxShadow: t.floatShadow,
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _searchRow(t, matches),
-            if (_groups.isNotEmpty) ...[
+        child: Entrance.content(
+          spec: ThemeScope.of(context).motion.content,
+          rise: ThemeScope.of(context).motion.contentRise,
+          blur: ThemeScope.of(context).motion.contentBlur,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _searchRow(t, matches),
+              if (_groups.isNotEmpty) ...[
+                Container(height: 1, color: t.hairline),
+                _categoryStrip(t),
+              ],
               Container(height: 1, color: t.hairline),
-              _categoryStrip(t),
-            ],
-            Container(height: 1, color: t.hairline),
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: _list(t, matches, room),
-            ),
-            if (widget.model.footer case final footer?) ...[
-              Container(height: 1, color: t.hairline),
-              Container(
-                height: _footHeight,
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                alignment: Alignment.centerLeft,
-                child: Text(footer,
-                    key: const ValueKey('fx-console-foot'),
-                    style: t.kicker.copyWith(letterSpacing: 0.54)),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: _list(t, matches, room),
               ),
+              if (widget.model.footer case final footer?) ...[
+                Container(height: 1, color: t.hairline),
+                Container(
+                  height: _footHeight,
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  alignment: Alignment.centerLeft,
+                  child: Text(footer,
+                      key: const ValueKey('fx-console-foot'),
+                      style: t.kicker.copyWith(letterSpacing: 0.54)),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       );
 

@@ -66,14 +66,20 @@ bool showFlowchartFrb({
 
   final at = anchor == null ? null : overlayLocal(context, anchor);
   entry = OverlayEntry(
-    builder: (_) => _Flowchart(
-      comp: comp,
-      flow: flow,
-      read: read,
-      anchor: at,
-      keyHint: keyHint,
-      onOpen: onOpen,
-      onClose: close,
+    // It fades up as a menu does, and takes the keyboard from its first
+    // frame.
+    builder: (context) => Entrance(
+      spec: ThemeScope.of(context).motion.popup,
+      leads: true,
+      child: _Flowchart(
+        comp: comp,
+        flow: flow,
+        read: read,
+        anchor: at,
+        keyHint: keyHint,
+        onOpen: onOpen,
+        onClose: close,
+      ),
     ),
   );
   overlay.insert(entry);
@@ -336,30 +342,35 @@ class _FlowchartState extends State<_Flowchart> {
                 border: Border.all(color: t.hairline, width: _edge),
                 boxShadow: t.floatShadow,
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(_pad, _pad, _pad, 0),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (!alone) _kickers(t, g),
-                        SizedBox(
-                          height: chart,
-                          child: SingleChildScrollView(
-                            controller: _scroll,
-                            child: _chart(t, g),
+              child: Entrance.content(
+                spec: ThemeScope.of(context).motion.content,
+                rise: ThemeScope.of(context).motion.contentRise,
+                blur: ThemeScope.of(context).motion.contentBlur,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(_pad, _pad, _pad, 0),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (!alone) _kickers(t, g),
+                          SizedBox(
+                            height: chart,
+                            child: SingleChildScrollView(
+                              controller: _scroll,
+                              child: _chart(t, g),
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: _pad),
-                  Container(height: _edge, color: t.hairline),
-                  _foot(t, alone),
-                ],
+                    const SizedBox(height: _pad),
+                    Container(height: _edge, color: t.hairline),
+                    _foot(t, alone),
+                  ],
+                ),
               ),
             ),
           ),

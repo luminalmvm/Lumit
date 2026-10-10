@@ -502,30 +502,35 @@ class _SettingsWindowState extends State<_SettingsWindow> {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(t.tokens.floatRadius),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _titleStrip(t),
-            Expanded(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  SizedBox(
-                    width: settingsSidebarWidth,
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Expanded(child: _sidebar(t)),
-                        Container(width: 1, color: t.hairline),
-                      ],
+        child: Entrance.content(
+          spec: ThemeScope.of(context).motion.content,
+          rise: ThemeScope.of(context).motion.contentRise,
+          blur: ThemeScope.of(context).motion.contentBlur,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _titleStrip(t),
+              Expanded(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SizedBox(
+                      width: settingsSidebarWidth,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(child: _sidebar(t)),
+                          Container(width: 1, color: t.hairline),
+                        ],
+                      ),
                     ),
-                  ),
-                  Expanded(child: _pageBody(t, ui)),
-                ],
+                    Expanded(child: _pageBody(t, ui)),
+                  ],
+                ),
               ),
-            ),
-            _footer(t, ui),
-          ],
+              _footer(t, ui),
+            ],
+          ),
         ),
       ),
     );
