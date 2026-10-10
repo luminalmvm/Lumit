@@ -502,7 +502,7 @@ String columnGroupLabel(TimelineGroup group) => switch (group) {
 /// [reveal] names the layers drawn **filtered**, and by which rule: each builds
 /// its fold-out as though every twirl in it were down, and then keeps only the
 /// rows that answer ([revealFoldRows]). A layer with nothing qualifying comes
-/// back shut.
+/// back shut. [revealShut] names the headings twirled shut by hand since.
 ///
 /// Three things ask for it. The **Animated filter** (6.43) asks for the
 /// whole comp, and passes [everyLayerKeyframed]. A single **`U`** asks for the
@@ -522,6 +522,7 @@ List<LayerRow> layerRows({
   Map<String, BridgeScalar> volumeDb = const {},
   Map<String, Map<String, DrivenParam>> driven = const {},
   Map<String, RevealFilter> reveal = const {},
+  Set<String> revealShut = const {},
   Map<String, GroupHeader> groupHeaders = const {},
   double compWidth = 0,
   double compHeight = 0,
@@ -539,8 +540,10 @@ List<LayerRow> layerRows({
         driven: driven[id] ?? const {});
     final fold = filter == null
         ? built
-        : revealFoldRows(built, filter,
-            compWidth: compWidth, compHeight: compHeight);
+        : withHeadingsShut(
+            revealFoldRows(built, filter,
+                compWidth: compWidth, compHeight: compHeight),
+            revealShut);
     final isOpen = filter != null ? fold.isNotEmpty : open.contains(id);
     out.add(LayerRow(
       entry: entry,

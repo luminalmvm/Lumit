@@ -685,6 +685,38 @@ List<LayerFoldRow> revealFoldRows(
   ];
 }
 
+/// [rows] with the headings in [shut] twirled up: each keeps its own row,
+/// reads as shut, and loses the rows under it.
+///
+/// Applied after [revealFoldRows], not before. A heading shut first has no
+/// keyed row left under it, so the filter would drop the heading itself and
+/// leave nothing to twirl back down.
+List<LayerFoldRow> withHeadingsShut(
+    List<LayerFoldRow> rows, Set<String> shut) {
+  if (shut.isEmpty) return rows;
+  final out = <LayerFoldRow>[];
+  // The depth of the shut heading whose rows are being passed over.
+  int? under;
+  for (final row in rows) {
+    if (under != null && row.depth > under) continue;
+    under = null;
+    if (row is FoldGroupRow && shut.contains(row.path)) {
+      under = row.depth;
+      out.add(FoldGroupRow(
+        path: row.path,
+        label: row.label,
+        open: false,
+        depth: row.depth,
+        enabled: row.enabled,
+        named: row.named,
+      ));
+    } else {
+      out.add(row);
+    }
+  }
+  return out;
+}
+
 /// Whether one row answers [filter] on its own account — headings aside, which
 /// [revealFoldRows] decides from what is under them.
 bool foldRowRevealed(
