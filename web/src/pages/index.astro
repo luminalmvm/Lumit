@@ -311,33 +311,38 @@ const words = tagline.split(" ");
       });
   }
 
-  // Meet the interface: one panel open at a time, and always one. Clicking a
-  // name opens its panel; the arrow keys walk the row, which is what a tablist
-  // is expected to do and is four lines here.
-  const tabsRoot = document.querySelector<HTMLElement>("[data-tabs]");
-  if (tabsRoot) {
-    const tabs = [...tabsRoot.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
-    const panels = [...tabsRoot.querySelectorAll<HTMLElement>('[role="tabpanel"]')];
-
-    const open = (want: number, focus = false) => {
-      tabs.forEach((tab, i) => {
-        const on = i === want;
-        tab.setAttribute("aria-selected", on ? "true" : "false");
-        tab.tabIndex = on ? 0 : -1;
-        panels[i].hidden = !on;
-      });
-      if (focus) tabs[want].focus();
-    };
-
-    tabs.forEach((tab, i) => {
-      tab.addEventListener("click", () => open(i));
-      tab.addEventListener("keydown", (e) => {
-        const step = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
-        if (!step) return;
-        e.preventDefault();
-        open((i + step + tabs.length) % tabs.length, true);
-      });
-    });
+  // Meet the interface: four windows in a stack. A click on one behind brings
+  // it to the front with the rest in turn behind it, and only the front one's
+  // clip plays. The front one is a screenshot like any other, so its click is
+  // left to the code below.
+  const stack = document.querySelector<HTMLElement>("[data-stack]");
+  if (stack) {
+    const layers = [...stack.querySelectorAll<HTMLButtonElement>("[data-layer]")];
+    // Heard on the way down, so a window behind comes forward before the
+    // click can reach it as a screenshot to enlarge.
+    stack.addEventListener(
+      "click",
+      (e) => {
+        const picked = (e.target as Element).closest<HTMLButtonElement>("[data-layer]");
+        if (!picked || picked.hasAttribute("aria-current")) return;
+        e.stopPropagation();
+        const front = layers.indexOf(picked);
+        layers.forEach((layer, i) => {
+          const on = i === front;
+          layer.style.setProperty("--o", String((i - front + layers.length) % layers.length));
+          layer.ariaCurrent = on ? "true" : null;
+          layer.ariaLabel = on ? "Enlarge this screenshot" : `Show the ${layer.dataset.name} workspace`;
+          // A clip's first frame is its picture, so one sent back looks as
+          // it did before it played.
+          const clip = layer.querySelector("video");
+          if (!clip) return;
+          clip.pause();
+          clip.currentTime = 0;
+          if (on && !matchMedia("(prefers-reduced-motion: reduce)").matches) clip.play().catch(() => {});
+        });
+      },
+      true,
+    );
   }
 
   // A screenshot comes forward from where it sits on the page, with a little

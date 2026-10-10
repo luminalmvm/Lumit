@@ -5,6 +5,12 @@ import workspaceShot from "../../assets/shots/workspace.png";
 import graphShot from "../../assets/shots/graph-workspace.png";
 import nodesShot from "../../assets/shots/nodes-workspace.png";
 import audioShot from "../../assets/shots/audio-workspace.png";
+// A workspace's clip: the same window being worked in, and the picture is the
+// clip's first frame.
+import workspaceClip from "../../assets/clips/workspace.mp4";
+import graphClip from "../../assets/clips/graph-workspace.mp4";
+import nodesClip from "../../assets/clips/nodes-workspace.mp4";
+import audioClip from "../../assets/clips/audio-workspace.mp4";
 
 const fullSize = async (src: ImageMetadata) => ({
   url: (await getImage({ src, width: src.width, quality: 90 })).src,
@@ -12,24 +18,27 @@ const fullSize = async (src: ImageMetadata) => ({
   h: src.height,
 });
 
-// Meet the interface: one picture at a time, chosen by name.
+// Meet the interface: one picture in front, chosen from the four.
 const tabs = [
   {
     src: workspaceShot,
+    clip: workspaceClip,
     full: await fullSize(workspaceShot),
-    alt: "The Lumit workspace: effect controls, the viewer and scopes, the effects search open over a full timeline",
+    alt: "The Lumit workspace: effect controls, the Viewer, effects and presets, and a full timeline of layers and keyframes",
     h: "Timeline",
     p: "Layers, keyframes, effect controls, and the Viewer in one window.",
   },
   {
     src: graphShot,
+    clip: graphClip,
     full: await fullSize(graphShot),
-    alt: "The Graph workspace: effect controls, the viewer and scopes, with a property's curve open in the timeline",
+    alt: "The Graph workspace: effect controls, the Viewer, and a property's curve open in the Timeline",
     h: "Graph",
     p: "A property's curve open in the Timeline, as a value graph or a speed graph.",
   },
   {
     src: nodesShot,
+    clip: nodesClip,
     full: await fullSize(nodesShot),
     alt: "The Nodes workspace: a wired effect chain across the window, the viewer beside it",
     h: "Nodes",
@@ -37,8 +46,9 @@ const tabs = [
   },
   {
     src: audioShot,
+    clip: audioClip,
     full: await fullSize(audioShot),
-    alt: "The Audio workspace: mixer strips and levels at the left, beat detection at the right, a waveform under the timeline",
+    alt: "The Audio workspace: mixer strips at the left, levels and beat detection at the right, a waveform under the Timeline",
     h: "Audio",
     p: "Mixer strips, levels, and beat detection, with the waveform under the Timeline.",
   },
@@ -52,123 +62,119 @@ const tabs = [
     </Fragment>
   </SectionHead>
 
-  {/* The names sit on the picture's own strip, the way a workspace's tabs sit
-      on the window. One is always open, so the frame is never empty and the
-      row never reads as four things you have not chosen yet. */}
-  <div class="shot overflow-hidden rounded-card border border-line-2 bg-ink-2" data-tabs data-reveal>
-    <div class="shot-bar bar">
-      <div class="flex self-stretch" role="tablist" aria-label="Meet the interface">
-        {
-          tabs.map((c, i) => (
-            <button
-              type="button"
-              role="tab"
-              id={`tab-${i}`}
-              aria-controls={`panel-${i}`}
-              aria-selected={i === 0 ? "true" : "false"}
-              tabindex={i === 0 ? 0 : -1}
-              class="tab"
-            >
-              {c.h}
-            </button>
-          ))
-        }
-      </div>
-      <span class="max-sm:hidden">Click to bring forward</span>
-    </div>
+  {/* Four windows in a stack, the way the media page stacks a mark's three
+      grounds. The ones behind stand up and to the right of the one in front,
+      far enough that each shows its name and some of its picture. A click on
+      one behind brings it forward, and a click on the front one enlarges
+      it. */}
+  <div class="stack" data-stack data-reveal>
     {
       tabs.map((c, i) => (
-        <div id={`panel-${i}`} role="tabpanel" aria-labelledby={`tab-${i}`} hidden={i !== 0}>
-          <button type="button" class="zoom" data-zoom={c.full.url} data-w={c.full.w} data-h={c.full.h} aria-label="Enlarge this screenshot">
+        <button
+          type="button"
+          class="layer zoom shot"
+          data-layer
+          data-name={c.h}
+          data-zoom={c.full.url}
+          data-w={c.full.w}
+          data-h={c.full.h}
+          aria-current={i === 0 ? "true" : undefined}
+          aria-label={i === 0 ? "Enlarge this screenshot" : `Show the ${c.h} workspace`}
+          style={`--o:${i}`}
+        >
+          <span class="shot-bar bar">
+            <span class="name">
+              <span class="no">{String(i + 1).padStart(2, "0")}</span>
+              {c.h}
+            </span>
+            <span class="hint max-sm:hidden">Click to bring forward</span>
+          </span>
+          <span class="relative block">
             <Image
               class="block w-full"
               src={c.src}
               alt={c.alt}
               widths={[720, 1200, 1800]}
-              sizes="(min-width: 1360px) 1200px, 100vw"
+              sizes="(min-width: 1360px) 1032px, 100vw"
               loading="lazy"
               quality={90}
             />
-          </button>
-          <p class="cap">
-            <span class="cap-no">{String(i + 1).padStart(2, "0")}</span>
-            {c.p}
-          </p>
-        </div>
+            <video class="clip" data-clip src={c.clip} muted loop playsinline preload="none" tabindex="-1" aria-hidden="true" />
+          </span>
+          <span class="cap">{c.p}</span>
+        </button>
       ))
     }
   </div>
 </section>
 
 <style>
-  .bar {
-    min-height: 40px;
-    padding-left: 0;
+  /* --o is a window's place in the stack, 0 the front. A step is one strip
+     up, so the names read as a column, and --dx to the right. */
+  .stack {
+    --dx: 8px;
+    --dy: 35px;
+    display: grid;
+    padding: calc(3 * var(--dy)) calc(3 * var(--dx)) 0 0;
   }
-  /* The open workspace's name takes the full text colour and a tick of the
-     accent along its top edge, the application's own mark for the tab you are
-     on. Nothing changes size, so the row never shifts as you switch. */
-  .tab {
-    position: relative;
-    padding: 0 16px;
-    border: 0;
-    border-right: 1px solid var(--color-line);
-    background: none;
-    color: var(--color-fg-3);
-    font: inherit;
-    letter-spacing: inherit;
-    text-transform: inherit;
-    cursor: pointer;
-    transition:
-      color 0.15s,
-      background-color 0.15s;
-  }
-  .tab::before {
-    content: "";
-    position: absolute;
-    inset: 0 0 auto 0;
-    height: 2px;
-    background: var(--color-accent-2);
-    transform: scaleX(0);
-    transition: transform 0.2s ease-out;
-  }
-  .tab:hover {
-    color: var(--color-fg-2);
-  }
-  .tab[aria-selected="true"] {
+  .layer {
+    grid-area: 1 / 1;
+    z-index: calc(4 - var(--o));
+    overflow: hidden;
+    border: 1px solid var(--color-line-2);
+    border-radius: var(--radius-card);
     background: var(--color-ink-2);
-    color: var(--color-fg);
+    text-align: left;
+    translate: calc(var(--o) * var(--dx)) calc(var(--o) * var(--dy) * -1);
+    transition:
+      translate 0.5s cubic-bezier(0.2, 0.8, 0.2, 1.12),
+      scale 350ms cubic-bezier(0.2, 0.8, 0.2, 1.3),
+      border-color 0.2s,
+      filter 0.3s;
   }
-  .tab[aria-selected="true"]::before {
-    transform: scaleX(1);
+  /* A window behind is dimmer than the one in front, and lights under the
+     pointer. */
+  .layer:not([aria-current]) {
+    filter: brightness(0.8);
   }
-  .cap {
+  .layer:not([aria-current]):hover {
+    border-color: var(--color-accent-2);
+    filter: none;
+  }
+  .bar {
+    height: 34px;
+  }
+  .name {
     display: flex;
     align-items: baseline;
-    gap: 12px;
-    margin: 0;
+    gap: 10px;
+    color: var(--color-fg);
+  }
+  .no {
+    color: var(--color-fg-4);
+    font-feature-settings: "zero";
+  }
+  /* Half a line of a window behind says nothing, so only the front one has
+     its words. */
+  .layer:not([aria-current]) :is(.hint, .cap) {
+    visibility: hidden;
+  }
+  .cap {
+    display: block;
     padding: 14px 16px 15px;
     border-top: 1px solid var(--color-line);
     color: var(--color-fg-2);
     font-size: 15px;
     line-height: 1.4;
   }
-  .cap-no {
-    color: var(--color-fg-4);
-    font-family: var(--font-mono);
-    font-size: 11px;
-    font-feature-settings: "zero";
+  @media (min-width: 640px) {
+    .stack {
+      --dx: 28px;
+    }
   }
-  @media (max-width: 639px) {
-    .tab {
-      flex: 1;
-      padding: 0 12px;
-    }
-    .bar > div {
-      flex: 1;
-    }
-    .tab:last-child {
-      border-right: 0;
+  @media (min-width: 1024px) {
+    .stack {
+      --dx: 56px;
     }
   }
 </style>
