@@ -245,6 +245,10 @@ class LayerArea extends StatelessWidget {
   final ValueListenable<Set<String>> selectedKeys;
   final ValueChanged<Set<String>> onKeysSelected;
 
+  /// The marquee's box while it is being dragged. The gesture sits behind the
+  /// bars and the box is drawn over the row lines, so the two meet here.
+  final ValueNotifier<Rect?> marquee;
+
   /// Whether the project is shared. The marks for what other people are
   /// doing are only in the tree while it is.
   final bool sharing;
@@ -354,6 +358,7 @@ class LayerArea extends StatelessWidget {
     required this.selectedKeys,
     this.sharing = false,
     required this.onKeysSelected,
+    required this.marquee,
     required this.onKeyMenu,
     required this.stretch,
     required this.project,
@@ -711,6 +716,7 @@ class LayerArea extends StatelessWidget {
                             Positioned.fill(
                               child: MarqueeSelect(
                                 key: const ValueKey('tl-lane-marquee'),
+                                box: marquee,
                                 // **Additive with `Shift` or `Ctrl`** held when
                                 // the drag began: the box adds to what was
                                 // already in hand rather than replacing it,
@@ -1091,6 +1097,9 @@ class LayerArea extends StatelessWidget {
                                 ),
                               ),
                             ),
+                            // The marquee's box, over the bars and the seams
+                            // it is dragged across.
+                            MarqueeOverlay(box: marquee),
                             // The block-selection box, over the keys it holds
                             // and over the seams that cross it: it is
                             // the one thing here that describes the *whole*

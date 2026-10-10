@@ -1747,6 +1747,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// they need to repaint while a handle is being dragged.
   final ValueNotifier<KeyStretch?> _keyStretch = ValueNotifier(null);
 
+  /// The lane marquee's box while it is being dragged.
+  final ValueNotifier<Rect?> _laneMarquee = ValueNotifier(null);
+
   /// The lane view's selected keyframes, as `rowId#index` (docs/07 §4.3) —
   /// what the marquee gathered. Session state, like the twirl set.
   final Set<String> _laneKeySelection = {};
@@ -4716,6 +4719,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                           _razorCutAt(ui, entry, frame, ui.model.refresh),
                       vScroll: _vLane,
                       selectedKeys: _laneKeys,
+                      marquee: _laneMarquee,
                       sharing: _sharing,
                       stretch: _keyStretch,
                       project: Provider.of<LumitState>(context, listen: false)
