@@ -2313,14 +2313,21 @@ class LumitUiState extends ChangeNotifier {
 
   /// Write down part of where the user is in a comp. Fields left null keep
   /// whatever was already recorded, so neither owner can wipe the other's half.
-  void rememberCompView(String id, {int? frame, double? zoom, double? scroll}) {
+  void rememberCompView(String id,
+      {int? frame, double? zoom, double? scroll, double? scrollY}) {
     final was = compViews[id] ?? newCompView;
     compViews[id] = (
       frame: frame ?? was.frame,
       zoom: zoom ?? was.zoom,
       scroll: scroll ?? was.scroll,
+      scrollY: scrollY ?? was.scrollY,
     );
   }
+
+  /// Set by the Timeline while it is mounted. Writes the view it is showing
+  /// into [compViews], since the fronted comp's is otherwise only written
+  /// when the comp is left.
+  VoidCallback? noteTimelineView;
 
   /// Front a composition, landing the playhead where the user left it.
   ///
@@ -2960,12 +2967,15 @@ class LumitUiState extends ChangeNotifier {
     // live playhead is folded in here: a session written mid-work has to say
     // where the user actually is, not where they last arrived from.
     final front = _selectedComp?.internalid.toString();
+    // The same goes for the Timeline's zoom and scroll.
+    noteTimelineView?.call();
     final compRecords = Map.of(compViews);
     if (front != null) {
       compRecords[front] = (
         frame: playheadFrame.value,
         zoom: compRecords[front]?.zoom ?? newCompView.zoom,
         scroll: compRecords[front]?.scroll ?? newCompView.scroll,
+        scrollY: compRecords[front]?.scrollY ?? newCompView.scrollY,
       );
     }
     return SavedSession(

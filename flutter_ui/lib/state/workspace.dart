@@ -36,14 +36,15 @@ const ViewerLook neutralLook = (stops: 0.0, toneMap: false);
 /// frame, the Timeline's magnification, and how far through its scrollable
 /// range the lanes were scrolled (0 at the left, 1 at the right — a fraction
 /// rather than a pixel offset so the view comes back to the same stretch of
-/// time whatever width the panel has since been dragged to).
+/// time whatever width the panel has since been dragged to). [scrollY] is how
+/// far down the layers were scrolled, in pixels, since rows keep their height.
 ///
-/// A record for the same reason [ViewerLook] is: three numbers with no
+/// A record for the same reason [ViewerLook] is: a few numbers with no
 /// behaviour, compared by value.
-typedef CompView = ({int frame, double zoom, double scroll});
+typedef CompView = ({int frame, double zoom, double scroll, double scrollY});
 
-/// A comp nobody has been in yet: frame one, fitted, at the left.
-const CompView newCompView = (frame: 0, zoom: 1.0, scroll: 0.0);
+/// A comp nobody has been in yet: frame one, fitted, at the top left.
+const CompView newCompView = (frame: 0, zoom: 1.0, scroll: 0.0, scrollY: 0.0);
 
 /// Which of the Viewer's marks are drawn over one composition: the proportional
 /// grid, the title/action safe rectangles, and the rulers along the picture's
@@ -200,6 +201,7 @@ class SavedSession {
               'frame': e.value.frame,
               'zoom': e.value.zoom,
               'scroll': e.value.scroll,
+              'scroll_y': e.value.scrollY,
             },
         },
       };
@@ -350,11 +352,14 @@ Map<String, CompView> _compViewsFromJson(Object? raw) {
     if (k is! String || v is! Map || v['frame'] is! num) continue;
     final zoom = v['zoom'] is num ? (v['zoom'] as num).toDouble() : 1.0;
     final scroll = v['scroll'] is num ? (v['scroll'] as num).toDouble() : 0.0;
-    if (!zoom.isFinite || !scroll.isFinite) continue;
+    final scrollY =
+        v['scroll_y'] is num ? (v['scroll_y'] as num).toDouble() : 0.0;
+    if (!zoom.isFinite || !scroll.isFinite || !scrollY.isFinite) continue;
     out[k] = (
       frame: max(0, (v['frame'] as num).toInt()),
       zoom: zoom < 1.0 ? 1.0 : zoom,
       scroll: scroll.clamp(0.0, 1.0),
+      scrollY: max(0.0, scrollY),
     );
   }
   return out;
