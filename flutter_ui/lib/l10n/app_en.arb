@@ -16144,7 +16144,7 @@
   "@profileAddTitle": {
     "description": "Title of the small window that asks what a new profile is called."
   },
-  "profileAddHint": "It starts with the settings you have now.",
+  "profileAddHint": "Starts with your current settings.",
   "@profileAddHint": {
     "description": "Quiet line in the New profile window, under the name field."
   },
@@ -16164,7 +16164,7 @@
   "@profileRemove": {
     "description": "Button in Settings beside a profile that is not the one in use: take it off this machine."
   },
-  "profileRemoveAsk": "Remove the profile {name} from this machine? Its settings here are deleted. An account it was signed in to is not.",
+  "profileRemoveAsk": "Remove {name} from this machine? Its settings here are deleted, its account isn't.",
   "@profileRemoveAsk": {
     "description": "Confirmation before a profile is removed. {name} is the profile's name.",
     "placeholders": {
@@ -16197,7 +16197,7 @@
   "@proCardTitle": {
     "description": "Heading of the card inviting someone to look at Lumit Pro, in the profile card. A product name: do not translate."
   },
-  "proCardLine": "Share from anywhere, and take your settings to every machine.",
+  "proCardLine": "Share anywhere, and reflect settings on any device.",
   "@proCardLine": {
     "description": "One line under the Lumit Pro heading in the profile card."
   },
@@ -16244,10 +16244,6 @@
   "signInResetHeading": "Choose a new password",
   "@signInResetHeading": {
     "description": "Large heading in the sign-in window when resetting a password."
-  },
-  "signInLead": "Lumit works without an account. One is what Lumit Pro is kept on.",
-  "@signInLead": {
-    "description": "Quiet line under the heading of the sign-in window."
   },
   "signInEmail": "Email",
   "@signInEmail": {
@@ -16309,7 +16305,7 @@
   "@signInBack": {
     "description": "Link on the code and new password pages of the sign-in window, back to the first page."
   },
-  "signInCodeLead": "We sent a six-digit code to {email}. It works for fifteen minutes.",
+  "signInCodeLead": "We sent a six-digit code to {email}.",
   "@signInCodeLead": {
     "description": "Line on the code page of the sign-in window. {email} is the address typed.",
     "placeholders": {
@@ -16318,7 +16314,7 @@
       }
     }
   },
-  "signInResetLead": "Type the code we sent to {email}, then a new password.",
+  "signInResetLead": "Enter the code we sent to {email}, and a new password.",
   "@signInResetLead": {
     "description": "Line on the new password page of the sign-in window. {email} is the address typed.",
     "placeholders": {
@@ -16335,17 +16331,13 @@
   "@signInResent": {
     "description": "Shown in place of the Send another code link for a moment after it is clicked."
   },
-  "signInBrowser": "Finish signing in in your browser, then come back here.",
+  "signInBrowser": "Finish signing in in your browser.",
   "@signInBrowser": {
     "description": "Line shown in the sign-in window while it waits for a Google or Discord sign-in to finish in the browser."
   },
   "signInWorking": "One moment…",
   "@signInWorking": {
     "description": "Shown on the filled button of the sign-in window while it is busy, which takes a couple of seconds."
-  },
-  "signInPrivacy": "Lumit keeps your email, your name and the settings you sync. Nothing about your projects leaves this machine.",
-  "@signInPrivacy": {
-    "description": "Quiet line at the foot of the sign-in window."
   },
   "signInUnavailable": "Signing in is not switched on yet.",
   "@signInUnavailable": {
@@ -16384,11 +16376,11 @@
   "@signInErrorName": {
     "description": "Error when creating an account with the name left empty."
   },
-  "signInErrorProvider": "That account's email has not been confirmed with them, so it cannot be used to sign in.",
+  "signInErrorProvider": "That account's email isn't confirmed, so it can't be used to sign in.",
   "@signInErrorProvider": {
     "description": "Error after trying to sign in with a Google or Discord account whose email address is not verified."
   },
-  "signInErrorTimedOut": "Nobody came back from the browser. Try again.",
+  "signInErrorTimedOut": "Sign-in wasn't finished in the browser. Try again.",
   "@signInErrorTimedOut": {
     "description": "Error when a Google or Discord sign-in was started and never finished."
   },
@@ -16408,31 +16400,27 @@
   "@proHeadline": {
     "description": "Large heading in the Lumit Pro window."
   },
-  "proLead": "Lumit is free and stays free. Pro adds the parts that need a server, and pays for running them.",
-  "@proLead": {
-    "description": "Line under the heading of the Lumit Pro window."
-  },
   "proFeatureRelayTitle": "Share from anywhere",
   "@proFeatureRelayTitle": {
     "description": "First feature in the Lumit Pro window."
   },
-  "proFeatureRelayBody": "Guests join through Lumit's relay when your router will not let them in. Nothing to set up, and it cannot read your project.",
+  "proFeatureRelayBody": "Guests join through Lumit's relay. Nothing to set up.",
   "@proFeatureRelayBody": {
     "description": "What the first Lumit Pro feature does. A relay passes a shared project's edits between people who cannot reach each other."
   },
-  "proFeatureSyncTitle": "Your settings on every machine",
+  "proFeatureSyncTitle": "Settings on every device",
   "@proFeatureSyncTitle": {
     "description": "Second feature in the Lumit Pro window."
   },
-  "proFeatureSyncBody": "Shortcuts, themes, workspaces and presets follow you. Change one here and it changes there.",
+  "proFeatureSyncBody": "Shortcuts, themes, workspaces, and presets follow you.",
   "@proFeatureSyncBody": {
     "description": "What the second Lumit Pro feature does."
   },
-  "proFeatureSupportTitle": "Keep Lumit going",
+  "proFeatureSupportTitle": "Support Lumit",
   "@proFeatureSupportTitle": {
     "description": "Third feature in the Lumit Pro window."
   },
-  "proFeatureSupportBody": "Pro pays for the servers, and for the time that goes into the free editor.",
+  "proFeatureSupportBody": "Helps pay for servers and development.",
   "@proFeatureSupportBody": {
     "description": "What the third Lumit Pro feature does."
   },
@@ -16473,7 +16461,7 @@
   "@proSignInPreview": {
     "description": "The filled button in the Lumit Pro window when nobody is signed in and Pro is free for now."
   },
-  "proWaiting": "Finish in your browser. This window will notice when you are done.",
+  "proWaiting": "Finish paying in your browser.",
   "@proWaiting": {
     "description": "Line in the Lumit Pro window after the shop has been opened in the browser."
   },
@@ -16485,11 +16473,11 @@
   "@proThanksHeadline": {
     "description": "Large heading in the Lumit Pro window once the account has Pro."
   },
-  "proThanksBody": "Thank you. Sharing through Lumit's relay and sync are on.",
+  "proThanksBody": "Thank you. Relay sharing and sync are on.",
   "@proThanksBody": {
     "description": "Line under the heading once the account has Pro."
   },
-  "proPreviewNote": "Pro is free for everyone who signs in while it is being tried out.",
+  "proPreviewNote": "Pro is free while we test it.",
   "@proPreviewNote": {
     "description": "Line in the Lumit Pro window while Pro is free for everyone, before it goes on sale."
   },
@@ -16511,7 +16499,7 @@
       }
     }
   },
-  "proPastDue": "The last payment did not go through. Update your card to keep Pro.",
+  "proPastDue": "The last payment failed. Update your card to keep Pro.",
   "@proPastDue": {
     "description": "Warning in the Lumit Pro window and Settings."
   },
@@ -16519,7 +16507,7 @@
   "@proNotOnSale": {
     "description": "Line in the Lumit Pro window when a subscription cannot be bought yet."
   },
-  "proSmallPrint": "Cancel whenever you like. Payments are taken by Paddle, and Lumit never sees your card.",
+  "proSmallPrint": "Cancel any time. Payments are handled by Paddle.",
   "@proSmallPrint": {
     "description": "Quiet line at the foot of the Lumit Pro window. Paddle is the company that takes payments; do not translate its name."
   },
@@ -16535,7 +16523,7 @@
   "@settingsAccountProfiles": {
     "description": "Group heading on the Account page of Settings: the profiles on this machine."
   },
-  "settingsAccountProfilesHint": "A profile is one person's settings: appearance, shortcuts, layout and what they have saved. Switch from the button at the left of the bottom strip.",
+  "settingsAccountProfilesHint": "Each profile has its own settings.",
   "@settingsAccountProfilesHint": {
     "description": "Quiet line under the profile list in Settings."
   },
@@ -16543,7 +16531,7 @@
   "@settingsAccountGroup": {
     "description": "Group heading on the Account page of Settings."
   },
-  "settingsAccountSignedOut": "This profile is not signed in to a Lumit account. Its settings are kept on this machine.",
+  "settingsAccountSignedOut": "Not signed in. Settings stay on this machine.",
   "@settingsAccountSignedOut": {
     "description": "Line on the Account page of Settings, under a profile that is not signed in."
   },
@@ -16559,7 +16547,7 @@
   "@settingsAccountDelete": {
     "description": "Button on the Account page of Settings."
   },
-  "settingsAccountDeleteAsk": "Delete your Lumit account? Any subscription ends now, and your synced settings are removed from Lumit's server. The settings on this machine stay.",
+  "settingsAccountDeleteAsk": "Delete your Lumit account? Any subscription ends now and synced settings are removed. Settings on this machine stay.",
   "@settingsAccountDeleteAsk": {
     "description": "Confirmation before a Lumit account is deleted."
   },
@@ -16575,7 +16563,7 @@
   "@settingsSyncOn": {
     "description": "Checkbox on the Account page of Settings: keep this profile's settings on Lumit's server and in step across machines."
   },
-  "settingsSyncHint": "With Lumit Pro, what is ticked below follows you to every machine you sign in on. The cache, the audio device and recent projects stay with each machine.",
+  "settingsSyncHint": "Cache, audio device, and recent projects stay on each machine.",
   "@settingsSyncHint": {
     "description": "Quiet line under the sync checkbox in Settings."
   },
@@ -16619,7 +16607,7 @@
   "@shareCloudUse": {
     "description": "Checkbox on the Share this project page, for an account with Lumit Pro."
   },
-  "shareCloudPro": "With Lumit Pro, guests anywhere can join without a relay of your own.",
+  "shareCloudPro": "Lumit Pro lets guests join from anywhere.",
   "@shareCloudPro": {
     "description": "Line on the Share this project page for someone without Lumit Pro, beside a button that opens the Lumit Pro window."
   },

@@ -6,24 +6,28 @@ import card from "../../assets/shots/pro-card.png";
 import share from "../../assets/shots/pro-share.png";
 
 // What Pro is, what it costs, and how to get it. Nothing is bought on this
-// page: Pro is bought from inside Lumit, where the account is, so all this
-// page asks the server for is the prices.
+// page: Pro is bought from inside Lumit, where the account is. The prices are
+// written here in dollars, and the server is only asked whether Pro is free
+// for now.
 const CLOUD = "https://cloud.lumitlab.com";
+const MONTHLY = 6;
+const YEARLY = 60;
+const SAVING = Math.round((1 - YEARLY / (MONTHLY * 12)) * 100);
 
 const features = [
   {
     h: "Share from anywhere",
-    p: "Guests join through Lumit's relay when your router won't let them in. Nothing to set up, no ports to open, and no VPN.",
+    p: "Guests join through Lumit's relay. Nothing to set up.",
     c: "mint",
   },
   {
-    h: "Your settings on every machine",
-    p: "Shortcuts, themes, workspaces, and presets follow you. Change one at home and it has changed at the studio.",
+    h: "Settings on every device",
+    p: "Shortcuts, themes, workspaces, and presets follow you.",
     c: "azure",
   },
   {
-    h: "Keep Lumit going",
-    p: "Pro pays for the servers, and for the time that goes into the free editor.",
+    h: "Support Lumit",
+    p: "Helps pay for servers and development.",
     c: "amber",
   },
 ];
@@ -41,42 +45,42 @@ const compare = [
 const steps = [
   {
     h: "Open Lumit",
-    p: "Press your name at the left of the bottom strip, then See what is in Pro.",
+    p: "Press your name at the bottom left.",
   },
   {
     h: "Sign in",
-    p: "With an email and a password, or with Discord or Google.",
+    p: "With Google, Discord, or an email.",
   },
   {
     h: "Pick monthly or yearly",
-    p: "The payment page opens in your browser. Lumit notices when you are done.",
+    p: "You pay in your browser.",
   },
 ];
 
 const questions = [
   {
     q: "Is Lumit still free?",
-    a: "Yes. The editor is free and open source under GPLv3, and nothing that was free has moved behind Pro. Pro is only the parts that need a server of ours to work.",
+    a: "Yes. Nothing that was free has moved behind Pro.",
   },
   {
     q: "Can the relay read my project?",
-    a: "No. Everything that passes through is encrypted with the invite's key, which the relay is never given. It can see that two computers are connected and how much they send.",
+    a: "No. Everything is encrypted with the invite's key, which the relay never gets.",
   },
   {
     q: "Do my guests need Pro?",
-    a: "No. Only the person sharing the project does, guests join for free and don't need an account.",
+    a: "No, only the host does. Guests don't need an account.",
   },
   {
     q: "What do you keep about me?",
-    a: "Your email, your name, and the settings you choose to sync. Nothing about your projects or footage leaves your machine, and your card is only ever seen by Paddle.",
+    a: "Your email, your name, and the settings you sync. Never your projects, footage, or card.",
   },
   {
     q: "What happens if I cancel?",
-    a: "Pro runs to the end of what you paid for. After that your settings stay on each machine, and sharing still works on your own network or through a relay of your own.",
+    a: "Pro runs to the end of what you paid for, and your settings stay on each machine.",
   },
   {
     q: "Can I get a refund?",
-    a: "Yes, within 14 days of paying. The refunds page has the details.",
+    a: "Yes, within 14 days of paying.",
   },
 ];
 ---
@@ -93,31 +97,27 @@ const questions = [
       </p>
       <SectionHead page kicker="Lumit Pro" title="Work together from anywhere.">
         <Fragment slot="lede">
-          Lumit is free and open source, and that isn't changing. Pro adds the parts that
-          need a server, and pays for running them.
+          Lumit is free and open source, and that isn't changing.
         </Fragment>
       </SectionHead>
 
       <p class="preview" id="pro-preview" hidden>
         <i class="key" style="--k:var(--label-mint)"></i>
-        Pro is free for everyone who signs in while we test it.
+        Pro is free while we test it.
       </p>
 
       <div class="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.1fr)]">
         <div class="plan card" data-plan="monthly">
           <p class="tag">Monthly</p>
-          <p class="price" hidden><span id="price-monthly"></span><small>a month</small></p>
-          <p class="mt-3 text-[15px] leading-[1.45] text-fg-3">Pay as you go, and cancel whenever you like.</p>
+          <p class="price"><span>${MONTHLY}</span><small>a month</small></p>
         </div>
         <div class="plan plan-pick card" data-plan="yearly">
-          <p class="tag"><span>Yearly</span><span class="save" id="price-saving" hidden></span></p>
-          <p class="price" hidden><span id="price-yearly"></span><small>a year</small></p>
-          <p class="mt-3 text-[15px] leading-[1.45] text-fg-3">One payment, and less than paying by the month.</p>
+          <p class="tag"><span>Yearly</span><span class="save">Save {SAVING}%</span></p>
+          <p class="price"><span>${YEARLY}</span><small>a year</small></p>
         </div>
         <div class="card flex flex-col justify-between gap-6">
-          <p class="text-[15px] leading-[1.45] text-fg-2" id="pro-how">
-            Pro is bought from inside Lumit, where your account is. Press your name at
-            the left of the bottom strip.
+          <p class="text-[15px] leading-[1.45] text-fg-2">
+            Get Pro inside Lumit, from your name at the bottom left.
           </p>
           <div class="flex flex-wrap gap-3">
             <a class="btn border-white" href="/download">Download Lumit</a>
@@ -145,11 +145,11 @@ const questions = [
       <div class="grid items-start gap-5 md:grid-cols-2">
         <figure class="shot m-0" data-reveal>
           <Image src={share} alt="Lumit's Shared project window, with guests joining through Lumit's relay." widths={[640, 1000]} sizes="(min-width: 768px) 580px, 100vw" />
-          <figcaption class="mt-3 text-[13px] text-fg-4">Tick one box and anyone you send the link to can join.</figcaption>
+          <figcaption class="mt-3 text-[13px] text-fg-4">One tick, and anyone with the link can join.</figcaption>
         </figure>
         <figure class="shot m-0" data-reveal>
           <Image src={card} alt="Lumit's profile card, showing a Pro account with its settings in sync." widths={[640, 1000]} sizes="(min-width: 768px) 580px, 100vw" />
-          <figcaption class="mt-3 text-[13px] text-fg-4">Your profile says when your settings are in sync.</figcaption>
+          <figcaption class="mt-3 text-[13px] text-fg-4">Your profile, at the bottom left.</figcaption>
         </figure>
       </div>
     </div>
@@ -157,11 +157,7 @@ const questions = [
 
   <section class="pb-20 sm:pb-24">
     <div class="wrap flex flex-col gap-12">
-      <SectionHead kicker="Free and Pro" title="The editor stays free." >
-        <Fragment slot="lede">
-          Nothing that was free has moved. Pro only adds what we have to run a server for.
-        </Fragment>
-      </SectionHead>
+      <SectionHead kicker="Free and Pro" title="The editor stays free." />
       <div class="card overflow-x-auto p-0">
         <table class="compare">
           <thead>
@@ -185,7 +181,7 @@ const questions = [
 
   <section class="pb-20 sm:pb-24" id="get">
     <div class="wrap flex flex-col gap-12">
-      <SectionHead kicker="Getting it" title="Three steps, all inside Lumit." />
+      <SectionHead kicker="Getting it" title="Three steps, inside Lumit." />
       <ol class="m-0 grid list-none gap-5 p-0 md:grid-cols-3">
         {
           steps.map((s, i) => (
@@ -214,7 +210,7 @@ const questions = [
         }
       </div>
       <p class="text-[13px] leading-[1.5] text-fg-4">
-        Payments are taken by Paddle, who sell Pro on our behalf and handle the tax.
+        Payments are handled by Paddle.
         <a class="link" href="/terms">Terms</a>, <a class="link" href="/privacy">privacy</a>, and
         <a class="link" href="/refunds">refunds</a>.
       </p>
@@ -223,25 +219,11 @@ const questions = [
 </Base>
 
 <script is:inline define:vars={{ CLOUD }}>
-  // The prices as the shop has them today. A server that doesn't answer
-  // leaves them off, and Lumit shows the prices itself anyway.
+  // Whether Pro is free for now, which only the server knows.
   (async () => {
     try {
       const config = await (await fetch(CLOUD + "/v1/config")).json();
       if (config.preview) document.getElementById("pro-preview").hidden = false;
-      const prices = config.prices;
-      if (!prices) return;
-      const written = (p) =>
-        new Intl.NumberFormat("en-GB", { style: "currency", currency: p.currency }).format(Number(p.amount));
-      document.getElementById("price-monthly").textContent = written(prices.monthly);
-      document.getElementById("price-yearly").textContent = written(prices.yearly);
-      for (const price of document.querySelectorAll(".price")) price.hidden = false;
-      const saved = Math.round((1 - Number(prices.yearly.amount) / (Number(prices.monthly.amount) * 12)) * 100);
-      if (saved >= 1) {
-        const badge = document.getElementById("price-saving");
-        badge.textContent = "Save " + saved + "%";
-        badge.hidden = false;
-      }
     } catch {}
   })();
 </script>
@@ -315,9 +297,6 @@ const questions = [
     font-size: 40px;
     line-height: 1;
     font-feature-settings: "tnum";
-  }
-  .price[hidden] {
-    display: none;
   }
   .price small {
     color: var(--color-fg-4);

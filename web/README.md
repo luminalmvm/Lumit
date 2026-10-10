@@ -73,8 +73,8 @@ Pro is bought inside Lumit, and paid for on `/pro/checkout`, where Paddle's scri
 its form over the page. The page takes Paddle's client-side token from the build, so the
 `lumit` Worker's build needs two variables: `PUBLIC_PADDLE_TOKEN`, and
 `PUBLIC_PADDLE_ENV=sandbox` while it is the sandbox's token. Without the token the page
-only points people back to Lumit. `/pro` asks `cloud.lumitlab.com` for the prices and shows none if
-it doesn't answer.
+only points people back to Lumit. The two prices on `/pro` are written into the page, in
+dollars.
 
 ## Release notes
 

@@ -183,7 +183,7 @@ class _ProWindowState extends State<_ProWindow>
           headline: pro ? l10n.proThanksHeadline : l10n.proHeadline,
           lead: pro
               ? (account!.preview ? l10n.proPreviewNote : l10n.proThanksBody)
-              : l10n.proLead,
+              : null,
           pro: pro,
           preview: pro ? account!.preview : (config?.preview ?? false),
         ),
@@ -343,7 +343,10 @@ class _ProWindowState extends State<_ProWindow>
 /// in front of a slow wash of the sweep.
 class _Hero extends StatelessWidget {
   final Animation<double> arrive;
-  final String headline, lead;
+  final String headline;
+
+  /// A line under the headline, once there is something to say there.
+  final String? lead;
   final bool pro, preview;
 
   const _Hero({
@@ -397,14 +400,16 @@ class _Hero extends StatelessWidget {
                     style: t.heading.copyWith(fontSize: 20, height: 1.2),
                   ),
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  lead,
-                  key: const ValueKey('pro-lead'),
-                  textAlign: TextAlign.center,
-                  style:
-                      t.body.copyWith(color: t.textSecondary, height: 1.45),
-                ),
+                if (lead case final lead?) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    lead,
+                    key: const ValueKey('pro-lead'),
+                    textAlign: TextAlign.center,
+                    style:
+                        t.body.copyWith(color: t.textSecondary, height: 1.45),
+                  ),
+                ],
               ],
             ),
           ),

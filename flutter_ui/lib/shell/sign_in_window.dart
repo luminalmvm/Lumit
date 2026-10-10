@@ -1,7 +1,7 @@
 // Signing in to a Lumit account.
 //
 // One window with a few pages. An email and a password, then a line that
-// says "or", then Discord and Google. Creating an account, typing the code
+// says "or", then Google and Discord. Creating an account, typing the code
 // that was emailed and choosing a new password are the same window turned to
 // another page, so nobody is sent somewhere else to do them.
 //
@@ -270,17 +270,23 @@ class _SignInState extends State<_SignIn> {
                 textAlign: TextAlign.center,
                 style: t.heading,
               ),
-              const SizedBox(height: 6),
-              Text(
-                switch (_page) {
-                  _Page.code => l10n.signInCodeLead(_email.text.trim()),
-                  _Page.reset => l10n.signInResetLead(_email.text.trim()),
-                  _Page.browser => l10n.signInBrowser,
-                  _ => l10n.signInLead,
-                },
-                textAlign: TextAlign.center,
-                style: t.small.copyWith(color: t.textSecondary, height: 1.4),
-              ),
+              // Only the pages that have something to say: where the code
+              // went, or that the browser is waiting.
+              if (switch (_page) {
+                _Page.code => l10n.signInCodeLead(_email.text.trim()),
+                _Page.reset => l10n.signInResetLead(_email.text.trim()),
+                _Page.browser => l10n.signInBrowser,
+                _ => null,
+              }
+                  case final words?) ...[
+                const SizedBox(height: 6),
+                Text(
+                  words,
+                  textAlign: TextAlign.center,
+                  style:
+                      t.small.copyWith(color: t.textSecondary, height: 1.4),
+                ),
+              ],
               const SizedBox(height: 16),
               if (config == null && !_asked)
                 const Padding(
@@ -298,10 +304,6 @@ class _SignInState extends State<_SignIn> {
                 const SizedBox(height: 10),
                 _note(t, error, warning: true),
               ],
-              const SizedBox(height: 16),
-              Text(l10n.signInPrivacy,
-                  textAlign: TextAlign.center,
-                  style: t.caption.copyWith(color: t.textMuted, height: 1.4)),
             ],
           ),
         ),
@@ -416,14 +418,14 @@ class _SignInState extends State<_SignIn> {
             ],
           ),
         ),
+      if (config.google)
+        _provider(t, SignInWith.google, l10n.signInGoogle,
+            'assets/brand/google.svg'),
+      if (config.discord && config.google) const SizedBox(height: 8),
       if (config.discord)
         _provider(t, SignInWith.discord, l10n.signInDiscord,
             'assets/brand/discord.svg',
             tinted: true),
-      if (config.discord && config.google) const SizedBox(height: 8),
-      if (config.google)
-        _provider(t, SignInWith.google, l10n.signInGoogle,
-            'assets/brand/google.svg'),
     ];
   }
 
