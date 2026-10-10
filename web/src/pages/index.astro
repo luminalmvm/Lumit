@@ -134,10 +134,17 @@ const words = tagline.split(" ");
       shape a point of light takes through an out-of-focus lens, where a
       Gaussian would only make a soft dot. The small blur first fills in
       between the copies. The script sets every distance, so the blur can
-      open up and close down. Units are CSS pixels. */}
+      open up and close down. Units are CSS pixels. The two tables either
+      side are the script's too: the picture is blurred through a curve that
+      makes its bright end count for more, and comes back through the inverse. */}
   <svg class="lens-defs" width="0" height="0" aria-hidden="true" focusable="false">
     <filter id="lens" color-interpolation-filters="sRGB">
-      <feGaussianBlur in="SourceGraphic" stdDeviation="0" data-lens-soft result="s"></feGaussianBlur>
+      <feComponentTransfer in="SourceGraphic" result="lit">
+        <feFuncR type="table" data-lens-in></feFuncR>
+        <feFuncG type="table" data-lens-in></feFuncG>
+        <feFuncB type="table" data-lens-in></feFuncB>
+      </feComponentTransfer>
+      <feGaussianBlur in="lit" stdDeviation="0" data-lens-soft result="s"></feGaussianBlur>
       <feOffset in="s" data-lens="1 0" result="a1"></feOffset>
       <feOffset in="s" data-lens="-1 0" result="a2"></feOffset>
       <feComposite in="a1" in2="a2" operator="arithmetic" k1="0" k2="0.5" k3="0.5" k4="0" result="a"></feComposite>
@@ -149,7 +156,12 @@ const words = tagline.split(" ");
       <feComposite in="c1" in2="c2" operator="arithmetic" k1="0" k2="0.5" k3="0.5" k4="0" result="c"></feComposite>
       <feOffset in="c" data-lens="0.7071 -0.7071" result="d1"></feOffset>
       <feOffset in="c" data-lens="-0.7071 0.7071" result="d2"></feOffset>
-      <feComposite in="d1" in2="d2" operator="arithmetic" k1="0" k2="0.5" k3="0.5" k4="0"></feComposite>
+      <feComposite in="d1" in2="d2" operator="arithmetic" k1="0" k2="0.5" k3="0.5" k4="0" result="d"></feComposite>
+      <feComponentTransfer in="d">
+        <feFuncR type="table" data-lens-out></feFuncR>
+        <feFuncG type="table" data-lens-out></feFuncG>
+        <feFuncB type="table" data-lens-out></feFuncB>
+      </feComponentTransfer>
     </filter>
   </svg>
 </Base>
@@ -242,7 +254,7 @@ const words = tagline.split(" ");
     inset: 0;
     background-color: color-mix(in srgb, var(--color-ink) 38%, transparent);
     background-image: var(--grain, none);
-    background-size: 256px 256px;
+    background-size: 128px 128px;
     opacity: 0;
     transition: opacity 300ms ease-out;
   }
@@ -270,6 +282,12 @@ const words = tagline.split(" ");
   html.lens body > main,
   html.lens body > footer {
     filter: url(#lens);
+  }
+  /* The page's own ground under its words while the lens is on. Without it
+     they stand on nothing, and the lens can only fade them out where it
+     should be weighing light against dark. */
+  html.lens body > main {
+    background-color: var(--color-ink);
   }
 </style>
 
@@ -345,10 +363,10 @@ const words = tagline.split(" ");
     );
   }
 
-  // A screenshot comes forward from where it sits on the page, with a little
-  // spring, to something short of the whole window. The page behind goes out
-  // of focus and takes the hero's grain. A click anywhere, Escape, or a
-  // scroll sends it back to its place.
+  // A screenshot comes forward where it sits on the page, with a little
+  // spring, to half as big again or what the window has room for. The page
+  // behind goes out of focus and takes the hero's grain. A click anywhere,
+  // Escape, or a scroll sends it back to its size.
   const box = document.querySelector<HTMLDialogElement>("[data-lightbox]");
   if (box) {
     const full = box.querySelector<HTMLImageElement>("[data-full]")!;
@@ -363,12 +381,34 @@ const words = tagline.split(" ");
       const [x, y] = el.dataset.lens!.split(" ").map(Number);
       return { el, x, y };
     });
-    const REACH = 6; // each stage pushes its two copies this far apart, each way
+    const REACH = 4.5; // each stage pushes its two copies this far apart, each way
+    // Averaging the page's own values lets a bright point sink into the dark
+    // around it, where a lens leaves it standing as a ring. So the page goes
+    // through this curve first and back through its inverse after. The
+    // straight part is what keeps the dark greys apart in the eight bits a
+    // filter works in, which a plain gamma would not.
+    const light = (x: number) => 0.5 * x + 0.5 * x ** 4;
+    const unlight = (y: number) => {
+      let lo = 0;
+      let hi = 1;
+      for (let i = 0; i < 20; i++) {
+        const mid = (lo + hi) / 2;
+        if (light(mid) < y) lo = mid;
+        else hi = mid;
+      }
+      return lo;
+    };
+    // A filter drops the fraction when it turns a table into eight bits, and
+    // twice over that darkens the page's ground. Half a step up rounds it.
+    const table = (f: (x: number) => number) =>
+      Array.from({ length: 65 }, (_, i) => Math.min(1, f(i / 64) + 0.5 / 255).toFixed(4)).join(" ");
+    for (const el of document.querySelectorAll("[data-lens-in]")) el.setAttribute("tableValues", table(light));
+    for (const el of document.querySelectorAll("[data-lens-out]")) el.setAttribute("tableValues", table(unlight));
     let lens = 0;
     let lensRun = 0;
     const setLens = (k: number) => {
       lens = k;
-      soft.setAttribute("stdDeviation", (3.2 * k).toFixed(2));
+      soft.setAttribute("stdDeviation", (2.4 * k).toFixed(2));
       for (const o of offsets) {
         o.el.setAttribute("dx", (o.x * REACH * k).toFixed(2));
         o.el.setAttribute("dy", (o.y * REACH * k).toFixed(2));
@@ -390,11 +430,10 @@ const words = tagline.split(" ");
 
     // ---- the grain ----
     // The hero field's own grain (HeroField.astro, `phash`), a screen pixel at
-    // a time, as a tile: white where it would add and black where it would
-    // take away, each as faint as the amount.
+    // a time whatever the screen, as a tile: white where it would add and
+    // black where it would take away, each as faint as the amount.
     const grain = () => {
-      const dpr = Math.min(2, devicePixelRatio || 1);
-      const n = Math.round(256 * dpr);
+      const n = Math.round(128 * (devicePixelRatio || 1));
       const tile = document.createElement("canvas");
       tile.width = tile.height = n;
       const ctx = tile.getContext("2d");
@@ -410,7 +449,7 @@ const words = tagline.split(" ");
           qx += d;
           qy += d;
           qz += d;
-          const v = (fract((qx + qy) * qz) - 0.5) * 0.036 * 1.5;
+          const v = (fract((qx + qy) * qz) - 0.5) * 0.036 * 1.1;
           const i = (y * n + x) * 4;
           img.data[i] = img.data[i + 1] = img.data[i + 2] = v > 0 ? 255 : 0;
           img.data[i + 3] = Math.round(Math.abs(v) * 255);
@@ -462,18 +501,35 @@ const words = tagline.split(" ");
       };
       big.src = url;
 
-      // Forward is most of the window and never all of it, and never bigger
+      // Forward is a step towards the visitor: half as big again as it stands
+      // on the page, less where the window has not the room, and never bigger
       // than the capture itself.
+      const start = small.getBoundingClientRect();
       const phone = innerWidth < 640;
-      const width = Math.min(innerWidth * (phone ? 0.94 : 0.84), (innerHeight * 0.8 * w) / h, w);
+      const width = Math.min(start.width * 1.5, innerWidth * (phone ? 0.94 : 0.8), (innerHeight * 0.78 * w) / h, w);
       const height = (width * h) / w;
-      home = { left: (innerWidth - width) / 2, top: (innerHeight - height) / 2, width, height };
+      // It grows where it is and does not travel: the corner furthest from
+      // the middle of the window stays put, so it grows towards the middle.
+      // One that sits near the middle grows evenly instead. Then it moves
+      // only as far as it takes to be wholly in the window.
+      const pad = phone ? 12 : 24;
+      const within = (at: number, size: number, room: number) =>
+        Math.max(Math.min(at, room - pad - size), Math.min(pad, (room - size) / 2));
+      // How much of the growth goes to the near side: none of it out at the
+      // left or top, all of it at the right or bottom, half in the middle.
+      const share = (at: number, size: number, room: number) =>
+        Math.min(1, Math.max(0, 0.5 + ((at + size / 2) / room - 0.5) * 4));
+      home = {
+        left: within(start.left - (width - start.width) * share(start.left, start.width, innerWidth), width, innerWidth),
+        top: within(start.top - (height - start.height) * share(start.top, start.height, innerHeight), height, innerHeight),
+        width,
+        height,
+      };
       full.style.left = `${home.left}px`;
       full.style.top = `${home.top}px`;
       full.style.width = `${width}px`;
       full.style.height = `${height}px`;
 
-      const start = small.getBoundingClientRect();
       box.showModal();
       box.classList.add("open");
       small.style.visibility = "hidden";
