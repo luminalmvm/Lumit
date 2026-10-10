@@ -13,8 +13,9 @@
 // **What the three levels keep.** Full plays everything. Minimal keeps the
 // motion that says something, where a row went or that a menu opened, as a
 // 50ms fade or slide, and drops the motion that is only manner: nothing rises,
-// grows, overshoots or trails. None plays nothing, and a widget given a still
-// spec does not mount a controller at all.
+// grows, overshoots or trails. The one thing it keeps whole is what is on a
+// menu or a dialogue following it in. None plays nothing, and a widget given a
+// still spec does not mount a controller at all.
 //
 // **What the three shapes change.** Studio is quick and quiet. Desk is an
 // instrument, so its movements are shorter, stop dead and never bounce, and a
@@ -241,9 +242,11 @@ class Motion {
 
   /// Minimal is the same under every shape: what is left is too short to
   /// carry a manner. A 50ms fade or slide where the motion says something,
-  /// and nothing where it only decorates.
+  /// and nothing where it only decorates. Only the content of a menu or a
+  /// dialogue moves as its shape does at Full.
   static Motion _minimal(ThemeShape shape) {
     const snap = MotionSpec(_ms50, Curves.easeOut);
+    final full = of(shape, AnimationLevel.all);
     return Motion._(
       shape: shape,
       level: AnimationLevel.minimal,
@@ -257,9 +260,9 @@ class Motion {
       popup: snap,
       popupRise: 0,
       popupScale: 1,
-      content: MotionSpec.still,
-      contentRise: 0,
-      contentBlur: 0,
+      content: full.content,
+      contentRise: full.contentRise,
+      contentBlur: full.contentBlur,
       flyout: MotionSpec.still,
       tooltip: MotionSpec.still,
       tooltipRise: 0,
