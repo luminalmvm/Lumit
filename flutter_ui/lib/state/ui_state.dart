@@ -863,7 +863,7 @@ class LumitUiState extends ChangeNotifier {
     final id = view.compId;
     final project = _app.project;
     if (id == null) {
-      return view.id == views.activeId || views.views.length <= 1
+      return _followsPlayhead(view) || views.views.length <= 1
           ? _selectedComp
           : null;
     }
@@ -1051,9 +1051,17 @@ class LumitUiState extends ChangeNotifier {
   /// user is working in, and the frame its own composition was left at for
   /// every other.
   int frameFor(ViewerSurface view) {
-    if (view.id == views.activeId) return playheadFrame.value;
+    if (_followsPlayhead(view)) return playheadFrame.value;
     return compViews[view.compId]?.frame ?? 0;
   }
+
+  /// Whether a view shows the live playhead: the active view, and the view the
+  /// transport plays into when the active one is a footage view. With a source
+  /// side beside the composition, loading or marking a clip makes the source
+  /// the active view, and the composition beside it must go on following the
+  /// playhead.
+  bool _followsPlayhead(ViewerSurface view) =>
+      view.id == views.activeId || view.id == views.previewing?.id;
 
   /// A frame arrived. While playing, the picture leads and the playhead follows
   /// it — that is what makes the transport show the frame actually on screen

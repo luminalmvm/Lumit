@@ -1182,68 +1182,98 @@ class FootageStageFrb extends StatelessWidget {
     }
     final t = ThemeScope.of(context).theme;
     final frames = LumitUiState.framesOf(facts);
+    // Roomed panes part the bars from the picture, flush panes weld them on:
+    // the composition's side beside this one does the same.
+    final round = t.tokens.roomed;
+    // The side's own name and the clip's, where the composition's side has its
+    // header.
+    final header = Container(
+      key: const ValueKey('footage-view-header'),
+      height: viewerStripHeightFor(t),
+      decoration: viewerStripDecoration(t, round),
+      padding: EdgeInsets.symmetric(horizontal: viewerStripPaddingFor(t)),
+      child: Row(
+        children: [
+          Text(t.kickerCase(l10n.sourceTitle), style: t.kickerOn),
+          const SizedBox(width: viewerBarGap),
+          Expanded(
+            child: Text(
+              ui.sourceNameOf(view),
+              style: t.small.copyWith(color: t.textSecondary),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+    // The composition stage's own ground, so the two pictures stand side by
+    // side on one surround whatever the scheme.
+    final picture = ColoredBox(
+      color: viewerSurroundFor(t,
+          themed: ui.workspace.themedViewerSurround),
+      child: LayoutBuilder(
+        key: const ValueKey('footage-view-picture'),
+        builder: (context, box) {
+          final drawn = _fitted(box, facts);
+          // How much of the item's own resolution is actually on screen, which
+          // is what the picture is asked for at. Reported after the frame, not
+          // during it: a render asked for from a layout would rebuild the tree
+          // it is measuring.
+          WidgetsBinding.instance.addPostFrameCallback(
+              (_) => ui.reportViewerScale(drawn.width / facts.width));
+          return Stack(
+            children: [
+              Center(
+                child: SizedBox(
+                  width: drawn.width,
+                  height: drawn.height,
+                  child: _FootagePicture(uiState: ui, view: view),
+                ),
+              ),
+              // The same message the composition's stage shows when the runner
+              // has had to refuse the texture.
+              const Positioned.fill(child: ViewerGpuMismatchNotice()),
+            ],
+          );
+        },
+      ),
+    );
+    final strip = _SourceStrip(
+      view: view,
+      frames: frames,
+      detached: round,
+      onSeek: (frame) => ui.seekFootageView(view, frame),
+    );
+    final bar = _SourceBar(view: view, facts: facts, detached: round);
+    if (!round) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [header, Expanded(child: picture), strip, bar],
+      );
+    }
+    final gap = SizedBox(height: t.tokens.tileGap);
     return ColoredBox(
-      color: t.surface0,
+      color: t.room,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // The side's own name and the clip's, where the composition's side
-          // has its header.
-          Container(
-            key: const ValueKey('footage-view-header'),
-            height: viewerStripHeightFor(t),
-            decoration: viewerStripDecoration(t, false),
-            padding:
-                EdgeInsets.symmetric(horizontal: viewerStripPaddingFor(t)),
-            child: Row(
-              children: [
-                Text(t.kickerCase(l10n.sourceTitle), style: t.kickerOn),
-                const SizedBox(width: viewerBarGap),
-                Expanded(
-                  child: Text(
-                    ui.sourceNameOf(view),
-                    style: t.small.copyWith(color: t.textSecondary),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-          ),
+          header,
+          gap,
           Expanded(
-            child: LayoutBuilder(
-              key: const ValueKey('footage-view-picture'),
-              builder: (context, box) {
-                final drawn = _fitted(box, facts);
-                // How much of the item's own resolution is actually on screen,
-                // which is what the picture is asked for at. Reported after the
-                // frame, not during it: a render asked for from a layout would
-                // rebuild the tree it is measuring.
-                WidgetsBinding.instance.addPostFrameCallback(
-                    (_) => ui.reportViewerScale(drawn.width / facts.width));
-                return Stack(
-                  children: [
-                    Center(
-                      child: SizedBox(
-                        width: drawn.width,
-                        height: drawn.height,
-                        child: _FootagePicture(uiState: ui, view: view),
-                      ),
-                    ),
-                    // The same message the composition's stage shows when the
-                    // runner has had to refuse the texture.
-                    const Positioned.fill(child: ViewerGpuMismatchNotice()),
-                  ],
-                );
-              },
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(t.tokens.cardRadius),
+                boxShadow: t.tokens.cardShadow,
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: picture,
             ),
           ),
-          _SourceStrip(
-            view: view,
-            frames: frames,
-            onSeek: (frame) => ui.seekFootageView(view, frame),
-          ),
-          _SourceBar(view: view, facts: facts),
+          gap,
+          strip,
+          gap,
+          bar,
         ],
       ),
     );
@@ -1287,10 +1317,14 @@ class _SourceStrip extends StatelessWidget {
   final int frames;
   final ValueChanged<int> onSeek;
 
+  /// Standing apart as a pill of its own, as the strips do in a roomed pane.
+  final bool detached;
+
   const _SourceStrip({
     required this.view,
     required this.frames,
     required this.onSeek,
+    this.detached = false,
   });
 
   @override
@@ -1310,7 +1344,9 @@ class _SourceStrip extends StatelessWidget {
           onHorizontalDragUpdate: (drag) => seekTo(drag.localPosition.dx),
           child: Container(
             height: viewerStripHeight,
-            decoration: viewerStripDecoration(t, false),
+            decoration: viewerStripDecoration(t, detached),
+            // The marked stretch runs to the strip's ends, so a pill clips it.
+            clipBehavior: detached ? Clip.antiAlias : Clip.none,
             child: CustomPaint(
               size: Size.infinite,
               painter: _SourceStripPainter(
@@ -1381,7 +1417,14 @@ class _SourceBar extends StatefulWidget {
   final ViewerSurface view;
   final BridgeMediaInfo facts;
 
-  const _SourceBar({required this.view, required this.facts});
+  /// Standing apart as a pill of its own, as the bars do in a roomed pane.
+  final bool detached;
+
+  const _SourceBar({
+    required this.view,
+    required this.facts,
+    this.detached = false,
+  });
 
   @override
   State<_SourceBar> createState() => _SourceBarState();
@@ -1510,7 +1553,7 @@ class _SourceBarState extends State<_SourceBar>
     final canPlace = ui.selectedComp != null;
     return Container(
       height: viewerStripHeightFor(t),
-      decoration: viewerStripDecoration(t, false),
+      decoration: viewerStripDecoration(t, widget.detached),
       padding: EdgeInsets.symmetric(horizontal: viewerStripPaddingFor(t)),
       child: Row(
         children: [
