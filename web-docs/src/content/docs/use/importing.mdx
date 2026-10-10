@@ -108,7 +108,7 @@ every layer using it recovers.
 
 ## Proxies
 
-A **proxy** is a smaller stand-in for a footage item that keeps preview fast, made or
+A **proxy** is a smaller copy of a footage item that keeps preview fast, made or
 attached from the footage row's own menu. Exports read the originals unless you ask them
 not to. See [Proxies](/use/proxies/).
 
@@ -118,6 +118,14 @@ A whole After Effects project can be imported via **File ▸ Import ▸ After Ef
 project**, with support for compositions, markers, layers, keyframes, and built-in
 effects. Third-party effects are not imported, but do not stop the rest of the project
 importing. A text layer keeps its font, spacing, outline, alignment, and box width.
+
+Expressions come across as JavaScript and run as written, and a pseudo effect arrives as
+[Custom controls](/effects/controls/custom-controls/). A property with both keyframes and
+an expression keeps its keyframes. See
+[Expressions](/use/expressions/#what-javascript-can-read).
+
+An animation preset (`.ffx`) is applied to a layer from **Animation ▸ Apply animation
+preset**. See [Effects & presets](/panels/effects-presets/#after-effects-presets).
 
 ## Related
 

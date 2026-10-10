@@ -44,7 +44,10 @@ import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:lumit_flutter/src/rust/api/shell.dart'
     show setAutosave, setFullResDragPreviews, setHardwareDecode;
 import 'package:lumit_flutter/src/rust/api/state.dart';
+import 'package:lumit_flutter/src/rust/api/share.dart' as bridge_share
+    show shareSetLimits, shareSetFootage;
 import 'package:lumit_flutter/state/addons.dart';
+import 'package:lumit_flutter/state/extensions.dart';
 import 'package:lumit_flutter/state/addons_engine.dart';
 import 'package:lumit_flutter/state/comp_model.dart';
 import 'package:lumit_flutter/state/clipboard.dart';
@@ -128,6 +131,27 @@ class LumitUiState extends ChangeNotifier {
   /// that sends the user to that page reads the same answer. Built lazily, so a
   /// widget test that never opens the page never asks the engine anything.
   late final AddonService addons = createAddonService();
+
+  /// The extensions installed, and which pane each is shown in. Not lazy:
+  /// the dock asks it what to call an extension's tab from the first frame.
+  late final ExtensionService extensions = ExtensionService(workspace);
+
+  /// Whether the extension [id] has its panel in the arrangement.
+  bool extensionShown(String id) =>
+      panesIn(split).contains(extensions.pane(id));
+
+  /// Put the extension [id]'s panel up, or take it down.
+  void toggleExtension(String id) {
+    final pane = extensions.pane(id);
+    if (panesIn(split).contains(pane)) {
+      closePane(split, pane);
+    } else {
+      showPane(split, pane);
+      activePane.value = pane;
+    }
+    workspace.touch();
+    saveLayout();
+  }
 
   /// How big each layer's content is, for the Viewer's boxes and hit-testing.
   /// Held here because the answer is the document's, not a panel's, and
@@ -1945,6 +1969,18 @@ class LumitUiState extends ChangeNotifier {
   /// is what says which comps still exist.
   final LumitState _app;
 
+  void _applyShareFootage() {
+    try {
+      bridge_share.shareSetLimits(
+          upKilobytes: workspace.shareUpLimit,
+          downKilobytes: workspace.shareDownLimit);
+      bridge_share.shareSetFootage(
+          give: workspace.shareGive, take: workspace.shareTake);
+    } catch (_) {
+      // No engine to tell, as in a widget test.
+    }
+  }
+
   LumitUiState(LumitState state, {Workspace? workspace})
       : _app = state,
         workspace = workspace ?? (Workspace()..load()) {
@@ -1958,6 +1994,11 @@ class LumitUiState extends ChangeNotifier {
     // Appearance and layout live in the workspace, so a change there is a
     // change here as far as any listening widget is concerned.
     this.workspace.addListener(notifyListeners);
+    // How fast footage crosses in a shared project, and whether this
+    // computer sends and asks for any, are the person's settings and the
+    // engine's to keep to.
+    this.workspace.onShareFootage = _applyShareFootage;
+    _applyShareFootage();
     // Floating windows read and write where they were left through this;
     // the controls file has no other way to reach the store.
     modalPlacementStore = this.workspace;
@@ -2333,14 +2374,21 @@ class LumitUiState extends ChangeNotifier {
 
   /// Write down part of where the user is in a comp. Fields left null keep
   /// whatever was already recorded, so neither owner can wipe the other's half.
-  void rememberCompView(String id, {int? frame, double? zoom, double? scroll}) {
+  void rememberCompView(String id,
+      {int? frame, double? zoom, double? scroll, double? scrollY}) {
     final was = compViews[id] ?? newCompView;
     compViews[id] = (
       frame: frame ?? was.frame,
       zoom: zoom ?? was.zoom,
       scroll: scroll ?? was.scroll,
+      scrollY: scrollY ?? was.scrollY,
     );
   }
+
+  /// Set by the Timeline while it is mounted. Writes the view it is showing
+  /// into [compViews], since the fronted comp's is otherwise only written
+  /// when the comp is left.
+  VoidCallback? noteTimelineView;
 
   /// Front a composition, landing the playhead where the user left it.
   ///
@@ -3204,12 +3252,15 @@ class LumitUiState extends ChangeNotifier {
     // live playhead is folded in here: a session written mid-work has to say
     // where the user actually is, not where they last arrived from.
     final front = _selectedComp?.internalid.toString();
+    // The same goes for the Timeline's zoom and scroll.
+    noteTimelineView?.call();
     final compRecords = Map.of(compViews);
     if (front != null) {
       compRecords[front] = (
         frame: playheadFrame.value,
         zoom: compRecords[front]?.zoom ?? newCompView.zoom,
         scroll: compRecords[front]?.scroll ?? newCompView.scroll,
+        scrollY: compRecords[front]?.scrollY ?? newCompView.scrollY,
       );
     }
     return SavedSession(

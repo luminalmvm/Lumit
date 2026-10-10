@@ -2951,6 +2951,7 @@ mod tests {
             duration: None,
             label: "beat".into(),
             kind: lumit_core::markers::MarkerKind::Beat { confidence: 1.0 },
+            colour: None,
             extra: serde_json::Map::new(),
         });
         assert_eq!(before, key(&doc, &comp, 1.0), "a marker is a label");

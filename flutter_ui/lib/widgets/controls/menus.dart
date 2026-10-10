@@ -10,6 +10,7 @@ import '../../icons/lumit_icons.dart';
 import '../../l10n/strings.dart';
 import '../hover_intent.dart';
 import 'base.dart';
+import 'motion.dart';
 import 'popups.dart';
 
 /// The tick column of a menu row: the set's checkmark where the row is on, and
@@ -365,7 +366,8 @@ class _FloatSurfaceState extends State<FloatSurface> {
 
   @override
   Widget build(BuildContext context) {
-    final t = ThemeScope.of(context).theme;
+    final scope = ThemeScope.of(context);
+    final t = scope.theme;
     final surface = Container(
       width: widget.width,
       padding: const EdgeInsets.all(6),
@@ -375,7 +377,12 @@ class _FloatSurfaceState extends State<FloatSurface> {
         border: Border.all(color: t.hairline, width: 1),
         boxShadow: t.floatShadow,
       ),
-      child: widget.child,
+      child: Entrance.content(
+        spec: scope.motion.content,
+        rise: scope.motion.contentRise,
+        blur: scope.motion.contentBlur,
+        child: widget.child,
+      ),
     );
     return _MenuHoverScope(
       hovered: _hovered,

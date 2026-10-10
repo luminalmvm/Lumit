@@ -57,6 +57,7 @@ import 'package:lumit_flutter/src/rust/api/colour.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/export.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
+import 'package:lumit_flutter/src/rust/api/share.dart';
 import 'package:provider/provider.dart';
 
 import '../l10n/strings.dart';
@@ -381,6 +382,22 @@ class _ExportDialogState extends State<_ExportDialog> {
   bool _makeANoise = false;
   String? _refused;
 
+  /// The footage this composition uses that this computer has no original
+  /// of, in a shared project. Empty everywhere else.
+  List<BridgeFootageLack> _lacking = const [];
+
+  /// What the export does about [_lacking]: one of the three below, or the
+  /// number of the person whose computer does the export instead.
+  int _footage = _footageAsItIs;
+  static const int _footageAsItIs = -1;
+  static const int _footageFrames = -2;
+  static const int _footageOriginals = -3;
+
+  /// The footage is on its way, or someone else's computer is exporting,
+  /// and this is what the footer says about it meanwhile.
+  String? _waiting;
+  Timer? _waitTimer;
+
   /// Whether [_refused] is the addon one, which is the only refusal with
   /// somewhere to send the reader: the Addons page.
   bool _refusedForAddon = false;
@@ -544,11 +561,22 @@ class _ExportDialogState extends State<_ExportDialog> {
     _seedDestination(defaults);
     _recompute();
     _scroll.addListener(_spy);
+    try {
+      _lacking = widget.comp.shareLacking();
+    } catch (_) {
+      // No engine to ask, as in a widget test.
+    }
+    // The frames it reads, where everything can be had from someone: the
+    // least to send that still delivers at full quality.
+    if (_lacking.isNotEmpty && _lacking.every((l) => l.holders.isNotEmpty)) {
+      _footage = _footageFrames;
+    }
   }
 
   @override
   void dispose() {
     _flashTimer?.cancel();
+    _waitTimer?.cancel();
     _scroll.dispose();
     _presetName.dispose();
     for (final field in _metadata) {
@@ -757,9 +785,18 @@ class _ExportDialogState extends State<_ExportDialog> {
         ),
         dialogFooter(
           t,
-          summary: _refused ?? (_check.isNotEmpty ? _check : _summary),
+          summary:
+              _waiting ?? _refused ?? (_check.isNotEmpty ? _check : _summary),
           keyPrefix: 'export',
           actions: [
+            // While footage is on its way there is one thing to press.
+            if (_waiting != null)
+              HouseButton(
+                key: const ValueKey('export-footage-cancel'),
+                onPressed: _stopWaiting,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Text(l10n.cancel),
+              ),
             // Only beside the one refusal that has somewhere to go: the page
             // where the missing addon is installed.
             if (_refusedForAddon)
@@ -795,11 +832,12 @@ class _ExportDialogState extends State<_ExportDialog> {
   /// Somewhere to write, and a spec the format will actually carry. A refusal
   /// stands in the footer where the summary was, so the reason is read before
   /// the button is missed.
-  bool get _canQueue => _path != null && _check.isEmpty;
+  bool get _canQueue => _path != null && _check.isEmpty && _waiting == null;
 
   /// The page, in the order it reads. Composition follows Output and belongs to
   /// its tab; every other group is a section of its own.
   List<Widget> _groups(LumitTheme t) => [
+        if (_lacking.isNotEmpty) _footageGroup(t),
         _section_(ExportSection.output, _outputGroup(t)),
         _compositionGroup(t),
         _section_(ExportSection.time, _timeGroup(t)),
@@ -2115,6 +2153,140 @@ class _ExportDialogState extends State<_ExportDialog> {
         ),
       );
 
+  /// What to do about footage this computer has no original of: the choices
+  /// that can be had, the least to send first.
+  Widget _footageGroup(LumitTheme t) {
+    final share = context.read<LumitState>().share;
+    final everyone = _lacking.every((l) => l.holders.isNotEmpty);
+    // The people who have every one of them, and so could do the export.
+    final able = [
+      if (everyone)
+        for (final person in share.others)
+          if (_lacking.every((l) => l.holders.contains(person.id))) person.id,
+    ];
+    final bytes = _lacking.fold<int>(0, (sum, l) => sum + l.bytes.toInt());
+    final megabytes = (bytes / (1 << 20)).ceil();
+    return dialogGroup(t, l10n.exportFootageGroup, [
+      _row(
+        t,
+        l10n.exportFootage,
+        dialogDropdown<int>(
+          t,
+          id: 'export-footage',
+          value: _footage,
+          options: [
+            if (everyone) ...[_footageFrames, _footageOriginals],
+            ...able,
+            _footageAsItIs,
+          ],
+          label: (choice) => switch (choice) {
+            _footageFrames => l10n.exportFootageFrames,
+            _footageOriginals => l10n.exportFootageOriginals(megabytes),
+            _footageAsItIs => l10n.exportFootageStandIns,
+            final person => l10n.exportFootageOn(
+                share.nameOf(person) ?? l10n.shareDefaultName),
+          },
+          onChanged: _waiting != null
+              ? null
+              : (choice) => setState(() => _footage = choice),
+        ),
+      ),
+      _reading(t, l10n.exportFootageCount(_lacking.length)),
+    ]);
+  }
+
+  /// Give up waiting on footage or on someone else's export. What has
+  /// arrived is kept, and an export already asked of someone carries on
+  /// there: its file still comes back.
+  void _stopWaiting() {
+    _waitTimer?.cancel();
+    _waitTimer = null;
+    if (_footage < 0) context.read<LumitState>().share.cancelFetch();
+    if (mounted) setState(() => _waiting = null);
+  }
+
+  /// Get the footage first, or hand the export to someone who has it, and
+  /// say in the footer how that is going until it is done.
+  void _queueWithFootage(String path, {required bool start}) {
+    final app = context.read<LumitState>();
+    try {
+      if (_footage >= 0) {
+        widget.comp.shareAskExport(to: _footage, spec: _spec, path: path);
+      } else {
+        widget.comp.shareFetchExport(
+            spec: _spec,
+            path: path,
+            parts: _footage == _footageFrames,
+            start: start);
+      }
+    } catch (error) {
+      setState(() => _refused = '$error');
+      return;
+    }
+    setState(() {
+      _refused = null;
+      _waiting = l10n.exportFootageStarting;
+    });
+    _waitTimer?.cancel();
+    _waitTimer = Timer.periodic(const Duration(milliseconds: 300),
+        (_) => _watchFootage(app, start: start));
+  }
+
+  void _watchFootage(LumitState app, {required bool start}) {
+    if (!mounted) return;
+    int percent(BigInt done, BigInt total) =>
+        total == BigInt.zero ? 0 : (done.toInt() * 100 / total.toInt()).round();
+    void failed(String why) {
+      _waitTimer?.cancel();
+      setState(() {
+        _waiting = null;
+        _refused = why;
+      });
+    }
+
+    final String text;
+    if (_footage >= 0) {
+      final who = app.share.nameOf(_footage) ?? l10n.shareDefaultName;
+      switch (app.share.asking()) {
+        case BridgeShareAsking_Idle() || BridgeShareAsking_Waiting():
+          text = l10n.exportRemoteWaiting(who);
+        case BridgeShareAsking_Running(:final frame, :final total):
+          text = l10n.exportRemoteRunning(who, frame.toInt(), total.toInt());
+        case BridgeShareAsking_Fetching(:final done, :final total):
+          text = l10n.exportRemoteFetching(percent(done, total));
+        case BridgeShareAsking_Done(:final path):
+          _waitTimer?.cancel();
+          app.postNotice(l10n.exportRemoteDone(_leaf(path)));
+          return widget.onClose();
+        case BridgeShareAsking_Failed(:final why):
+          return failed(switch (why) {
+            'refused' => l10n.exportRemoteRefused(who),
+            'lacking' => l10n.exportRemoteLacking(who),
+            _ => l10n.exportRemoteStopped(who),
+          });
+      }
+    } else {
+      switch (app.share.fetching()) {
+        case BridgeShareFetching_Idle():
+          text = l10n.exportFootageStarting;
+        case BridgeShareFetching_Working(:final done, :final total):
+          // Nothing has crossed while the others' computers are still
+          // making what was asked for.
+          text = total == BigInt.zero
+              ? l10n.exportFootageMaking
+              : l10n.exportFootageFetching(percent(done, total));
+        case BridgeShareFetching_Queued():
+          _waitTimer?.cancel();
+          if (start) statusLineExportStarted.value++;
+          showExportQueueFrb(context: context);
+          return widget.onClose();
+        case BridgeShareFetching_Failed():
+          return failed(l10n.exportFootageFailed);
+      }
+    }
+    if (text != _waiting) setState(() => _waiting = text);
+  }
+
   /// A factual line under a group's rows, in the label column's own indent.
   Widget _reading(LumitTheme t, String text, {Key? key}) => Padding(
         padding: const EdgeInsets.only(
@@ -2399,6 +2571,9 @@ class _ExportDialogState extends State<_ExportDialog> {
       _refused = null;
       _refusedForAddon = false;
     });
+    if (_lacking.isNotEmpty && _footage != _footageAsItIs) {
+      return _queueWithFootage(path, start: start);
+    }
     try {
       widget.comp.queueExport(spec: _spec, path: path, start: start);
     } catch (error) {

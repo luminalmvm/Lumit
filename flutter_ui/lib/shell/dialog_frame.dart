@@ -82,7 +82,8 @@ class DialogFrame extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final t = ThemeScope.of(context).theme;
+    final scope = ThemeScope.of(context);
+    final t = scope.theme;
     return SizedBox(
       width: width,
       child: Container(
@@ -97,10 +98,15 @@ class DialogFrame extends StatelessWidget {
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(t.tokens.floatRadius),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: children,
+          child: Entrance.content(
+            spec: scope.motion.content,
+            rise: scope.motion.contentRise,
+            blur: scope.motion.contentBlur,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: children,
+            ),
           ),
         ),
       ),

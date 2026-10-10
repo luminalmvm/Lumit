@@ -1079,7 +1079,7 @@ class _BarState extends State<Bar> {
                   onTap: widget.onSelect,
                   child: MarkerFlag(
                     label: m.marker.label,
-                    fill: t.marker,
+                    fill: markerColour(t, m.marker),
                     pill: t.surface4,
                     text: markerLabelStyle(t),
                   ),

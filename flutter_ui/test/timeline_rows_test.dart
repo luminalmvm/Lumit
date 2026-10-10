@@ -122,7 +122,8 @@ void main() {
     // Rotation, driven by an expression: no diamonds, and a different number
     // at every frame all the same.
     final expressed = row('Rotation', BridgeTransformProp.rotation,
-        fresh(rotation: const BridgeScalar.expression('time * 10')));
+        fresh(rotation: const BridgeScalar.expression(
+            'time * 10', BridgeExpressionLanguage.rhai)));
     // Scale, typed to something else and left there.
     final changed = row('Scale', BridgeTransformProp.scaleX, fresh(scale: st(50)));
 

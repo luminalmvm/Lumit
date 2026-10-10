@@ -4,17 +4,20 @@
 //!
 //! One thread reads and reconnects. Each connection has a writer.
 
+use crate::bulk::{self, Footage, Held, Limits, Wanted};
 use crate::host::VERSION;
 use crate::kept::{Finding, Kept, Pair};
 use crate::local::{carry, place, sane, sane_document, settle};
 use crate::wire::{self, decode, encode, Message, Names, Out, Receiver, Sender};
-use crate::{Conflict, Ending, Event, Events, Invite, Person, Presence, ShareError};
+use crate::{
+    room, Conflict, Ending, Event, Events, Invite, Person, Presence, ShareError, MAX_ADDRESSES,
+};
 use lumit_core::shared::land;
 use lumit_core::store::{Moved, RemoteTag, Tap};
 use lumit_core::{Document, DocumentStore};
 use lumit_project::resolve_all_media;
 use parking_lot::Mutex;
-use std::net::{Shutdown, TcpStream, ToSocketAddrs};
+use std::net::{Shutdown, SocketAddr, TcpStream, ToSocketAddrs};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::mpsc::{sync_channel, SyncSender};
@@ -132,16 +135,69 @@ pub fn resume(file: &mut Document, folder: &Path) -> Option<(Document, Resuming)
     Some((document, resuming))
 }
 
+/// How long a relay is left untried, for the host to answer by itself.
+const HEAD_START: Duration = Duration::from_millis(400);
+
+/// A connection that has proved both ends hold the invite's secret.
+type Opened = (TcpStream, Sender, Receiver);
+
+/// `relay` is for an address that is a relay's, where the host is asked for
+/// by the room it keeps there.
+fn open(at: SocketAddr, relay: bool, key: &[u8; 32]) -> Result<Opened, ShareError> {
+    let socket = if relay {
+        lumit_relay::join(at, &room(key))?
+    } else {
+        TcpStream::connect_timeout(&at, wire::GREETING)?
+    };
+    let (sender, receiver) = wire::open(socket.try_clone()?, key, true)?;
+    Ok((socket, sender, receiver))
+}
+
+/// Find the host by an invite: every address in it is tried at once, and the
+/// first to answer with the invite's secret is the host. An address that
+/// leads to some other machine, as the host's address on its own network
+/// does from anywhere else, fails that and is never said another word to.
+/// A relay is asked for the host a moment later than the host itself.
+fn reach(invite: &Invite) -> Result<Opened, ShareError> {
+    let mut places: Vec<(SocketAddr, bool)> = Vec::new();
+    let direct = invite.addresses.iter().map(|address| (address, false));
+    let relayed = invite.relays.iter().map(|address| (address, true));
+    for (address, relay) in direct.chain(relayed).take(MAX_ADDRESSES) {
+        for at in address.to_socket_addrs().into_iter().flatten() {
+            if places.len() < MAX_ADDRESSES && !places.contains(&(at, relay)) {
+                places.push((at, relay));
+            }
+        }
+    }
+    if let [(only, relay)] = places[..] {
+        return open(only, relay, &invite.key).map_err(|_| ShareError::Unreachable);
+    }
+    // Room for every answer, so a try that loses has nowhere to wait and
+    // goes, closing its connection as it does.
+    let (found, answers) = sync_channel(places.len());
+    for (at, relay) in places {
+        let (found, key) = (found.clone(), invite.key);
+        let _ = thread::Builder::new()
+            .name("lumit-share-reach".into())
+            .spawn(move || {
+                // A host that can be reached itself is the better way to
+                // it, and a moment's start is all it needs to answer first.
+                if relay {
+                    thread::sleep(HEAD_START);
+                }
+                if let Ok(opened) = open(at, relay, &key) {
+                    let _ = found.try_send(opened);
+                }
+            });
+    }
+    drop(found);
+    answers.recv().map_err(|_| ShareError::Unreachable)
+}
+
 /// Reach the host an invite names, and say hello.
 fn connect(seat: &Seat) -> Result<(Connected, Document), ShareError> {
     let invite = seat.invite.lock().clone();
-    let socket = invite
-        .address
-        .to_socket_addrs()
-        .map_err(|_| ShareError::Unreachable)?
-        .find_map(|addr| TcpStream::connect_timeout(&addr, wire::GREETING).ok())
-        .ok_or(ShareError::Unreachable)?;
-    let (mut sender, mut receiver) = wire::open(socket.try_clone()?, &invite.key, true)?;
+    let (socket, mut sender, mut receiver) = reach(&invite)?;
     let hello = Message::Hello {
         protocol: wire::PROTOCOL,
         version: VERSION.to_owned(),
@@ -188,6 +244,9 @@ pub fn join(
     name: &str,
     root: Option<PathBuf>,
 ) -> Result<(Document, Joining), ShareError> {
+    if invite.locked {
+        return Err(ShareError::Locked);
+    }
     let seat = Seat {
         invite: Mutex::new(invite),
         name: name.chars().take(64).collect(),
@@ -234,6 +293,12 @@ struct Inner {
     left: AtomicBool,
     /// The person is closing the copy without saving it.
     discard: AtomicBool,
+    /// The footage this guest sends and takes, once it has been given some
+    /// to carry.
+    bulk: Mutex<Option<Arc<bulk::Hub>>>,
+    /// Which footage this machine has the original of, as last said, to
+    /// say again to a host that has been found again.
+    holds: Mutex<Option<Vec<Held>>>,
 }
 
 /// A project shared from someone else's machine. Leaving it is [`Self::stop`]
@@ -259,6 +324,8 @@ impl Inner {
             kept: Mutex::new(None),
             left: AtomicBool::new(false),
             discard: AtomicBool::new(false),
+            bulk: Mutex::new(None),
+            holds: Mutex::new(None),
         })
     }
 
@@ -327,6 +394,49 @@ impl Guest {
 
     pub fn set_presence(&self, presence: Presence) {
         *self.inner.presence.lock() = Some(presence.tidied());
+    }
+
+    /// Send and take footage. See [`crate::Sharing::carry_footage`].
+    pub fn carry_footage(&self, footage: Arc<dyn Footage>, limits: Arc<Limits>) {
+        let mut bulk = self.inner.bulk.lock();
+        if bulk.is_some() || self.inner.stop.load(Ordering::Relaxed) {
+            return;
+        }
+        let hub = bulk::Hub::new(footage, limits, false);
+        let (inner, carried) = (self.inner.clone(), hub.clone());
+        let spawned = thread::Builder::new()
+            .name("lumit-share-bulk".into())
+            .spawn(move || inner.carry(&carried));
+        if spawned.is_ok() {
+            *bulk = Some(hub);
+        }
+    }
+
+    /// Which footage this machine has the original of, told to the host.
+    pub fn set_holds(&self, items: Vec<Held>) {
+        *self.inner.holds.lock() = Some(items);
+        self.inner.say_holds();
+    }
+
+    /// Who has the original of `item`, as the host last said.
+    #[must_use]
+    pub fn holders(&self, item: Uuid) -> Vec<(u32, u64)> {
+        let bulk = self.inner.bulk.lock().clone();
+        bulk.map_or_else(Vec::new, |bulk| bulk.holders(item))
+    }
+
+    /// Ask the host for `wanted`.
+    pub fn want(&self, wanted: Wanted) {
+        let bulk = self.inner.bulk.lock().clone();
+        if let Some(bulk) = bulk {
+            bulk.want(wanted);
+        }
+    }
+
+    /// Say `body` to the person numbered `to`, by way of the host.
+    pub fn note(&self, to: u32, body: serde_json::Value) {
+        let from = self.me();
+        self.inner.say(&Message::Note { to, from, body });
     }
 
     /// The edits a merge held back, each waiting on [`Self::resolve`].
@@ -475,6 +585,52 @@ impl Inner {
         }
     }
 
+    /// Say something to the host that is not an edit, if it is there. What
+    /// cannot be queued is let go: none of it is anything the document
+    /// depends on.
+    fn say(&self, message: &Message) {
+        let Ok(bytes) = encode(message, &self.seat.names) else {
+            return;
+        };
+        if let Some((out, _)) = self.link.lock().as_ref() {
+            let _ = out.try_send(Out::Bytes(bytes));
+        }
+    }
+
+    fn say_holds(&self) {
+        let items = self.holds.lock().clone();
+        if let Some(items) = items {
+            self.say(&Message::Holds { peer: 0, items });
+        }
+    }
+
+    /// The footage thread: keep a second connection to the host for as long
+    /// as there is a host, and run it.
+    fn carry(&self, hub: &Arc<bulk::Hub>) {
+        while !self.stop.load(Ordering::Relaxed) && !hub.stopped() {
+            if self.link.lock().is_some() {
+                let invite = self.seat.invite.lock().clone();
+                if let Ok((socket, mut sender, receiver)) = reach(&invite) {
+                    let hello = Message::Bulk {
+                        protocol: wire::PROTOCOL,
+                        token: self.seat.token,
+                    };
+                    let said = encode(&hello, &self.seat.names)
+                        .is_ok_and(|bytes| sender.send(&bytes).is_ok());
+                    if said {
+                        hub.link(0, socket, sender, receiver);
+                    }
+                }
+            }
+            for _ in 0..20 {
+                if self.stop.load(Ordering::Relaxed) || hub.stopped() {
+                    break;
+                }
+                thread::sleep(Duration::from_millis(100));
+            }
+        }
+    }
+
     fn tell_people(&self, people: Vec<Person>) {
         let me = self.me.load(Ordering::Relaxed);
         (self.events)(Event::People { me, people });
@@ -513,6 +669,9 @@ impl Inner {
     /// shared again, as a host's or another guest's.
     fn end(&self) {
         self.stop.store(true, Ordering::Relaxed);
+        if let Some(bulk) = self.bulk.lock().take() {
+            bulk.stop();
+        }
         self.hang_up();
         self.store.unshare();
     }
@@ -606,6 +765,7 @@ impl Inner {
     fn run(self: Arc<Self>, mut live: Option<Live>) {
         loop {
             if let Some(mut live) = live.take() {
+                self.say_holds();
                 self.tell_people(live.people);
                 let ended = self.listen(&mut live.receiver);
                 self.hang_up();
@@ -769,6 +929,12 @@ impl Inner {
                     self.tell_people(people);
                 }
                 Ok(Message::Ping) => {}
+                Ok(Message::Holds { peer, items }) => {
+                    if let Some(bulk) = self.bulk.lock().clone() {
+                        bulk.holds(peer, items);
+                    }
+                }
+                Ok(Message::Note { from, body, .. }) => (self.events)(Event::Note { from, body }),
                 Ok(Message::Invite { key }) => self.seat.invite.lock().key = key,
                 Ok(Message::Closed) => return Some(Ending::Closed),
                 Ok(Message::Removed) => return Some(Ending::Removed),

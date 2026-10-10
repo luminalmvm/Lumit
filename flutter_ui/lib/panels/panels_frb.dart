@@ -26,6 +26,7 @@ import 'node_panel.dart';
 import 'project_panel_frb.dart';
 import 'paragraph_panel_frb.dart';
 import 'scopes_panel_frb.dart';
+import 'extension_panel.dart';
 import 'text_panel_frb.dart';
 import 'timeline_panel_frb.dart';
 import 'viewer_panel_frb.dart';
@@ -51,4 +52,5 @@ Widget buildPanelBodyFrb(BuildContext context, PaneId pane) => switch (pane.pane
       Panel.paragraph => const ParagraphPanelFrb(),
       Panel.expressions => const ExpressionsPanelFrb(),
       Panel.debug => const DebugPanel(),
+      Panel.extension => ExtensionPanel(slot: pane.instance),
     };

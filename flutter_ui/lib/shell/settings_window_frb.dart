@@ -40,7 +40,10 @@ import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/audio.dart';
 import 'package:lumit_flutter/src/rust/api/cache.dart';
+import 'package:lumit_flutter/src/rust/api/effect.dart'
+    show BridgeExpressionLanguage;
 import 'package:lumit_flutter/src/rust/api/export.dart';
+import 'package:lumit_flutter/src/rust/api/extensions.dart';
 import 'package:lumit_flutter/src/rust/api/keymap.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/shell.dart';
@@ -52,6 +55,8 @@ import '../icons/lumit_icons.dart';
 import '../l10n/engine_labels.dart' show addonTask;
 import '../l10n/strings.dart';
 import '../state/addons.dart';
+import '../state/expression_language.dart';
+import '../state/extensions.dart';
 import '../state/external_links.dart';
 import '../state/file_dialogs.dart';
 import '../state/keymap.dart';
@@ -68,6 +73,7 @@ import '../widgets/escape_ladder.dart';
 import '../widgets/theme_swatches.dart';
 import 'about_window_frb.dart';
 import 'cache_confirm_frb.dart';
+import 'extension_install_frb.dart';
 import 'export_dialog_frb.dart'
     show
         exportDestinationAsk,
@@ -499,30 +505,35 @@ class _SettingsWindowState extends State<_SettingsWindow> {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(t.tokens.floatRadius),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _titleStrip(t),
-            Expanded(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  SizedBox(
-                    width: settingsSidebarWidth,
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Expanded(child: _sidebar(t)),
-                        Container(width: 1, color: t.hairline),
-                      ],
+        child: Entrance.content(
+          spec: ThemeScope.of(context).motion.content,
+          rise: ThemeScope.of(context).motion.contentRise,
+          blur: ThemeScope.of(context).motion.contentBlur,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _titleStrip(t),
+              Expanded(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SizedBox(
+                      width: settingsSidebarWidth,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(child: _sidebar(t)),
+                          Container(width: 1, color: t.hairline),
+                        ],
+                      ),
                     ),
-                  ),
-                  Expanded(child: _pageBody(t, ui)),
-                ],
+                    Expanded(child: _pageBody(t, ui)),
+                  ],
+                ),
               ),
-            ),
-            _footer(t, ui),
-          ],
+              _footer(t, ui),
+            ],
+          ),
         ),
       ),
     );
@@ -904,6 +915,22 @@ class _SettingsWindowState extends State<_SettingsWindow> {
 
   // ---- the pages -----------------------------------------------------------
 
+  /// A speed limit for footage in a shared project, in kilobytes a second,
+  /// from a short list. Whatever was typed in the Shared project window is
+  /// in the list too, so this never shows a number that is not the one set.
+  Widget _shareLimit(String key, int now, ValueChanged<int> set) =>
+      _dropdown<int>(
+        key: key,
+        value: now,
+        options: {0, 128, 256, 512, 1024, 2048, 5120, 10240, 25600, now}.toList()
+          ..sort(),
+        width: _ddWide,
+        label: (limit) => limit == 0
+            ? l10n.settingsShareNoLimit
+            : l10n.settingsShareLimitValue(limit),
+        onChanged: (limit) => setState(() => set(limit)),
+      );
+
   List<Widget> _general(LumitTheme t, LumitUiState ui) => _sections(t, [
         (
           l10n.settingsGroupDisplay,
@@ -926,6 +953,26 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                     : languageNames[tag]!,
                 onChanged: (tag) => setState(() => ui.setLanguage(tag)),
               ),
+            ),
+          ],
+        ),
+        (
+          l10n.settingsGroupSharing,
+          [
+            _row(
+              t,
+              l10n.settingsShareUpLimit,
+              _shareLimit('settings-share-up-limit', ui.workspace.shareUpLimit,
+                  (limit) => ui.workspace.setShareLimits(up: limit)),
+              description: l10n.settingsShareLimitHint,
+            ),
+            _row(
+              t,
+              l10n.settingsShareDownLimit,
+              _shareLimit(
+                  'settings-share-down-limit',
+                  ui.workspace.shareDownLimit,
+                  (limit) => ui.workspace.setShareLimits(down: limit)),
             ),
           ],
         ),
@@ -1729,6 +1776,20 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             settings.playheadStaysOnStop = on;
             changed();
           }),
+          // Which language a new expression starts in. Each expression keeps
+          // its own afterwards, and its editor can change it.
+          _row(
+            t,
+            l10n.settingsNewExpressionsLanguage,
+            _dropdown<BridgeExpressionLanguage>(
+              key: 'settings-new-expressions-language',
+              value: ui.workspace.defaultExpressionLanguage,
+              options: expressionLanguages,
+              label: expressionLanguageLabel,
+              onChanged: (language) => setState(
+                  () => ui.workspace.setDefaultExpressionLanguage(language)),
+            ),
+          ),
         ],
       ),
       (
@@ -2163,11 +2224,111 @@ class _SettingsWindowState extends State<_SettingsWindow> {
     // The page's one engine read: the scan, the runtime and the folder. Every
     // other reading it draws came with this one.
     service.refresh();
+    // The extensions are listed on the same page, from their own service.
+    final extensions = context.read<LumitUiState>().extensions;
+    if (!identical(_extensions, extensions)) {
+      _extensions?.removeListener(_addonsChanged);
+      extensions.addListener(_addonsChanged);
+      _extensions = extensions;
+    }
+    extensions.refresh();
   }
+
+  ExtensionService? _extensions;
 
   void _unwatchAddons() {
     _addons?.removeListener(_addonsChanged);
     _addons = null;
+    _extensions?.removeListener(_addonsChanged);
+    _extensions = null;
+  }
+
+  /// One installed extension: its panel put up or taken down, and Remove.
+  Widget? _extensionRow(
+          LumitTheme t, LumitUiState ui, BridgeExtension extension) =>
+      _row(
+        t,
+        l10n.settingsExtensionName(extension.name, extension.version),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (extension.broken) ...[
+              Text(l10n.settingsAddonsBroken,
+                  style: t.small.copyWith(color: t.warning)),
+              const SizedBox(width: 8),
+            ],
+            HouseButton(
+              key: ValueKey<String>('settings-extension-show-${extension.id}'),
+              small: true,
+              onPressed: () => setState(() => ui.toggleExtension(extension.id)),
+              child: Text(
+                  ui.extensionShown(extension.id)
+                      ? l10n.settingsExtensionHide
+                      : l10n.settingsExtensionShow,
+                  style: t.small),
+            ),
+            HouseButton(
+              key:
+                  ValueKey<String>('settings-extension-remove-${extension.id}'),
+              small: true,
+              frameless: true,
+              onPressed: () {
+                if (ui.extensionShown(extension.id)) {
+                  ui.toggleExtension(extension.id);
+                }
+                ui.extensions.remove(extension.id);
+              },
+              child: Text(l10n.settingsAddonsRemove, style: t.small),
+            ),
+          ],
+        ),
+        description: extension.summary,
+      );
+
+  List<Widget?> _extensionRows(LumitTheme t, LumitUiState ui) {
+    final service = ui.extensions;
+    // Every extension sits in the one folder, so the first one's shows it.
+    final first = service.installed.firstOrNull?.folder;
+    final folder = first == null ? null : File(first).parent.path;
+    return [
+      for (final extension in service.installed)
+        _extensionRow(t, ui, extension),
+      if (service.installed.isEmpty && _query.isEmpty)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+              settingsRowPadding, 4, settingsRowPadding, settingsSectionGap),
+          child: Text(
+            l10n.settingsExtensionsNone,
+            key: const ValueKey('settings-extensions-none'),
+            style: t.small.copyWith(color: t.textMuted),
+          ),
+        ),
+      _row(
+        t,
+        l10n.settingsExtensionsInstall,
+        HouseButton(
+          key: const ValueKey('settings-extension-install'),
+          small: true,
+          onPressed: service.busy
+              ? null
+              : () => unawaited(installExtensionFromFolder(
+                  context, context.read<LumitState>(), service)),
+          child: Text(l10n.chooseEllipsis, style: t.small),
+        ),
+        description: l10n.settingsExtensionsInstallHint,
+      ),
+      _row(
+        t,
+        l10n.settingsExtensionsFolder,
+        HouseButton(
+          key: const ValueKey('settings-extension-show-folder'),
+          small: true,
+          onPressed:
+              folder == null ? null : () => revealInFolder(path: folder),
+          child: Text(l10n.settingsAddonsShow, style: t.small),
+        ),
+      ),
+    ];
   }
 
   void _addonsChanged() {
@@ -2237,6 +2398,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           ),
         ]
       ),
+      (l10n.settingsGroupExtensions, _extensionRows(t, ui)),
     ]);
   }
 

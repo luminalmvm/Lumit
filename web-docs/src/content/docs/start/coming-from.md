@@ -35,6 +35,10 @@ report will appear telling you what was carried across with or without adjustmen
 This cannot port across third-party effects at this time, but it will still import the rest of 
 a project which uses these.
 
+Expressions written for After Effects run as written, and an animation preset (`.ffx`)
+is applied from **Animation ▸ Apply animation preset**. See
+[Expressions](/use/expressions/#what-javascript-can-read).
+
 ## Vegas to Lumit
 
 | Vegas | Lumit |

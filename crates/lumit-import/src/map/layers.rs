@@ -840,6 +840,12 @@ pub(crate) fn markers(conv: &mut Conv<'_>, ae: &[AeMarker]) -> Vec<Marker> {
                 } else {
                     MarkerKind::User
                 },
+                // AE numbers its labels from one and keeps nought for "None",
+                // which is a plain marker here too.
+                colour: m
+                    .label
+                    .filter(|label| *label > 0)
+                    .and_then(|label| u8::try_from(label).ok()),
                 extra: serde_json::Map::new(),
             }
         })

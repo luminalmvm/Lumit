@@ -13,7 +13,7 @@ use std::{
 use flutter_rust_bridge::frb;
 use lumit_core::{Document, DocumentStore};
 use lumit_share::{
-    Conflict, Ending, Event, Invite, Person, Presence, Reach, Refusal, ShareError, Sharing,
+    Conflict, Ending, Event, Invite, Person, Presence, Reach, Refusal, Relayed, ShareError, Sharing,
 };
 use uuid::Uuid;
 
@@ -116,6 +116,32 @@ fn reach(reach: Reach) -> BridgeShareReach {
     }
 }
 
+/// Whether a host has a room at a relay, for people no address of this
+/// machine lets in.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BridgeShareRelayed {
+    /// It was given no relay.
+    Off,
+    /// The relay is being asked.
+    Asking,
+    /// The room is open, and the link leads to it.
+    Open,
+    /// The relay did not answer or would not open a room. It is asked again
+    /// every few seconds.
+    Unreachable,
+}
+
+#[frb(ignore)]
+fn relayed(relayed: Relayed) -> BridgeShareRelayed {
+    match relayed {
+        Relayed::Off => BridgeShareRelayed::Off,
+        Relayed::Asking => BridgeShareRelayed::Asking,
+        Relayed::Open => BridgeShareRelayed::Open,
+        Relayed::Unreachable => BridgeShareRelayed::Unreachable,
+    }
+}
+
 /// What a shared project tells the frontend as it goes.
 #[frb(non_opaque)]
 #[derive(Debug, Clone)]
@@ -137,6 +163,21 @@ pub enum BridgeShareEvent {
     /// For a host: what came of asking the router to let people outside
     /// this network in.
     Reach { reach: BridgeShareReach },
+    /// For a host: what came of asking a relay for a room.
+    Relayed { relayed: BridgeShareRelayed },
+    /// Something about the project's footage changed: who has what, a
+    /// transfer, or an export being fetched for or done by someone else.
+    /// Whoever shows any of it reads it again. `placed` is a footage item
+    /// now being read from a file that has just arrived, so every picture
+    /// of it on screen is stale.
+    Footage { placed: bool },
+    /// The person numbered `from` asks this machine to export `comp` and
+    /// send them the file. Answered with [`ProjectReference::share_answer_export`].
+    ExportAsked {
+        job: String,
+        from: u32,
+        comp: String,
+    },
 }
 
 pub type ShareEventStream = StreamSink<BridgeShareEvent>;
@@ -147,7 +188,8 @@ pub type ShareEventStream = StreamSink<BridgeShareEvent>;
 pub enum BridgeShareStarted {
     /// Sharing, and listening on `port`. `key` is the invite's secret, to
     /// hand back to [`ProjectReference::share`] when this project is shared
-    /// again, so the invite people already hold still finds it. `restored`
+    /// again, so the invite people already hold still finds it, with the
+    /// password it had. `restored`
     /// edits made since the project was last saved were put back first: the
     /// project had been closed without saving, and the people coming back
     /// were working on a document with them in.
@@ -171,7 +213,10 @@ pub enum BridgeJoinOutcome {
     },
     /// The text is not an invite.
     BadInvite,
-    /// Nobody answered at that address, or the invite was not accepted.
+    /// The host set a password, and none was given with the invite.
+    PasswordNeeded,
+    /// Nobody answered at that address, or the invite was not accepted. A
+    /// wrong password looks the same: the host does not answer to one.
     Unreachable,
     VersionMismatch {
         host: String,
@@ -202,11 +247,319 @@ pub fn share_default_port() -> u16 {
     lumit_share::DEFAULT_PORT
 }
 
-/// This machine's address on its network, to offer in an invite. A guess the
-/// person can type over, for a VPN or a forwarded port.
+/// The invite in `text`, written as a link, or `None` when there is none in
+/// it. What tells a link Lumit was started with from a file to open, and
+/// what tidies whatever a person pasted.
 #[frb(sync)]
-pub fn share_local_address() -> String {
-    lumit_share::local_address()
+pub fn share_link_in(text: String) -> Option<String> {
+    let invite = text.parse::<Invite>().ok()?;
+    Some(invite.to_string())
+}
+
+/// Where one footage item is on this machine, in a shared project.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BridgeFootageHere {
+    /// The file itself: this person's own, or one fetched from someone.
+    Original,
+    /// A stand-in someone sent: the whole clip, small, to cut with.
+    StandIn,
+    /// Neither.
+    Missing,
+}
+
+/// One footage item as a shared project knows it from this machine.
+#[frb(non_opaque)]
+#[derive(Debug, Clone)]
+pub struct BridgeFootageShare {
+    pub here: BridgeFootageHere,
+    /// The people who have the original, by the number the people list
+    /// gives them. Empty when nobody here has it.
+    pub holders: Vec<u32>,
+    /// How big the original is on a holder's disk, which is what fetching
+    /// it costs. 0 when nobody has it.
+    pub bytes: u64,
+    /// Nobody could send it when it was last asked for.
+    pub refused: bool,
+}
+
+/// One transfer in flight.
+#[frb(non_opaque)]
+#[derive(Debug, Clone)]
+pub struct BridgeShareTransfer {
+    /// The footage item's name, or empty for an export's file.
+    pub name: String,
+    /// The original, and otherwise a stand-in or the frames of one.
+    pub original: bool,
+    /// This machine is sending it, and otherwise taking it.
+    pub sending: bool,
+    pub done: u64,
+    pub total: u64,
+}
+
+/// A footage item a composition uses that this machine has no original of.
+#[frb(non_opaque)]
+#[derive(Debug, Clone)]
+pub struct BridgeFootageLack {
+    pub name: String,
+    /// There is a stand-in of it here, and otherwise nothing at all.
+    pub stand_in: bool,
+    pub holders: Vec<u32>,
+    pub bytes: u64,
+}
+
+/// How fetching what an export lacks is getting on.
+#[frb(non_opaque)]
+#[derive(Debug, Clone)]
+pub enum BridgeShareFetching {
+    Idle,
+    /// `done` of `total` bytes are here. Both 0 while the others' machines
+    /// are still making the files.
+    Working {
+        done: u64,
+        total: u64,
+    },
+    /// Everything arrived and the export is in the queue under `id`.
+    Queued {
+        id: u32,
+    },
+    /// Nobody could send something, or the export would not queue.
+    Failed,
+}
+
+/// How an export asked of someone else's machine is getting on.
+#[frb(non_opaque)]
+#[derive(Debug, Clone)]
+pub enum BridgeShareAsking {
+    Idle,
+    /// Sent, and the other person has not answered.
+    Waiting,
+    Running {
+        frame: u64,
+        total: u64,
+    },
+    /// Their export finished and the file is on its way here.
+    Fetching {
+        done: u64,
+        total: u64,
+    },
+    Done {
+        path: String,
+    },
+    /// `why` is `refused` when they said no, `lacking` when their machine
+    /// has not all the footage either, and anything else when it stopped.
+    Failed {
+        why: String,
+    },
+}
+
+/// How fast this machine sends and takes footage in a shared project, in
+/// kilobytes a second. Nought is as fast as the line goes. For the machine,
+/// not one project, and takes effect on transfers already running.
+#[frb(sync)]
+pub fn share_set_limits(up_kilobytes: u32, down_kilobytes: u32) {
+    let bytes = |kilobytes: u32| u64::from(kilobytes) * 1024;
+    crate::footage::LIMITS.set(bytes(up_kilobytes), bytes(down_kilobytes));
+}
+
+/// Whether this machine makes stand-ins of its own footage for the others
+/// (`give`), and whether it asks for a stand-in of what it lacks without
+/// being told to (`take`).
+#[frb(sync)]
+pub fn share_set_footage(give: bool, take: bool) {
+    crate::footage::set_sharing(give, take);
+}
+
+#[frb(ignore)]
+fn asking(asking: crate::footage::Asking) -> BridgeShareAsking {
+    use crate::footage::Asking;
+    match asking {
+        Asking::Idle => BridgeShareAsking::Idle,
+        Asking::Waiting => BridgeShareAsking::Waiting,
+        Asking::Running { frame, total } => BridgeShareAsking::Running { frame, total },
+        Asking::Fetching { done, total } => BridgeShareAsking::Fetching { done, total },
+        Asking::Done { path } => BridgeShareAsking::Done { path },
+        Asking::Failed { why } => BridgeShareAsking::Failed { why },
+    }
+}
+
+/// Who has the original of `item`, and how big it is.
+#[frb(ignore)]
+fn holders_of(project: Uuid, item: Uuid) -> (Vec<u32>, u64) {
+    let holders = with_sharing(project, |sharing| sharing.holders(item)).unwrap_or_default();
+    let bytes = holders.iter().map(|(_, bytes)| *bytes).max().unwrap_or(0);
+    (holders.into_iter().map(|(peer, _)| peer).collect(), bytes)
+}
+
+impl crate::api::footage::FootageReference {
+    /// Where this footage item is on this machine and who has the original,
+    /// while its project is shared. An item of a project that is not shared
+    /// reads as the original or missing, with nobody holding it.
+    #[frb(sync)]
+    pub fn share_state(&self) -> Result<BridgeFootageShare, BridgeError> {
+        use crate::footage::Here;
+        let project = ProjectReference::new(self.project);
+        let doc = {
+            let state = project.state()?;
+            let state = state.read().map_err(|_| BridgeError::ReadFailed)?;
+            state.store.snapshot()
+        };
+        let here = match doc.item(self.id) {
+            Some(lumit_core::model::ProjectItem::Footage(footage)) => {
+                match crate::footage::here(footage) {
+                    Here::Original(_) => BridgeFootageHere::Original,
+                    Here::StandIn(_) => BridgeFootageHere::StandIn,
+                    Here::Missing => BridgeFootageHere::Missing,
+                }
+            }
+            _ => BridgeFootageHere::Missing,
+        };
+        let (holders, bytes) = holders_of(self.project, self.id);
+        let wanted = lumit_share::Wanted::StandIn { item: self.id };
+        let refused = crate::footage::carrier(self.project).is_some_and(|c| c.was_refused(&wanted));
+        Ok(BridgeFootageShare {
+            here,
+            holders,
+            bytes,
+            refused,
+        })
+    }
+
+    /// Ask the others for this footage item: a stand-in of it, or with
+    /// `original` the file itself. Does nothing when the project is not
+    /// shared. What comes of it arrives as [`BridgeShareEvent::Footage`].
+    #[frb(sync)]
+    pub fn share_fetch(&self, original: bool) -> Result<(), BridgeError> {
+        if let Some(carrier) = crate::footage::carrier(self.project) {
+            carrier.fetch(self.id, original);
+        }
+        Ok(())
+    }
+}
+
+impl CompositionReference {
+    /// The footage this composition uses, through every composition inside
+    /// it, that this machine has no original of. Empty when the project is
+    /// not shared: there is then nobody to get any of it from.
+    #[frb(sync)]
+    pub fn share_lacking(&self) -> Result<Vec<BridgeFootageLack>, BridgeError> {
+        if crate::footage::carrier(self.project).is_none() {
+            return Ok(Vec::new());
+        }
+        let project = ProjectReference::new(self.project);
+        let doc = {
+            let state = project.state()?;
+            let state = state.read().map_err(|_| BridgeError::ReadFailed)?;
+            state.store.snapshot()
+        };
+        let lacks = crate::footage::lacking(&doc, self.id).into_iter();
+        Ok(lacks
+            .filter_map(|id| {
+                let Some(lumit_core::model::ProjectItem::Footage(footage)) = doc.item(id) else {
+                    return None;
+                };
+                let (holders, bytes) = holders_of(self.project, id);
+                Some(BridgeFootageLack {
+                    name: footage.name.clone(),
+                    stand_in: crate::footage::here(footage) != crate::footage::Here::Missing,
+                    holders,
+                    bytes,
+                })
+            })
+            .collect())
+    }
+
+    /// Fetch what an export of this composition lacks and then queue it, as
+    /// [`Self::queue_export`] would: the originals whole, or with `parts`
+    /// only the frames the export reads, at a quality fit to deliver from.
+    /// Answers at once. [`ProjectReference::share_fetching`] says how it is
+    /// going, and a [`BridgeShareEvent::Footage`] when that has changed.
+    #[frb(sync)]
+    pub fn share_fetch_export(
+        &self,
+        spec: crate::api::export::BridgeExportSpec,
+        path: String,
+        parts: bool,
+        start: bool,
+    ) -> Result<(), BridgeError> {
+        let name = self.get_settings()?.name;
+        if let Some(carrier) = crate::footage::carrier(self.project) {
+            carrier.fetch_then_export(self.id, name, spec, path, parts, start);
+        }
+        Ok(())
+    }
+
+    /// Ask the person numbered `to` to export this composition on their
+    /// machine and send the file back, to be written at `path`. They are
+    /// asked first. [`ProjectReference::share_asking`] says how it is going.
+    #[frb(sync)]
+    pub fn share_ask_export(
+        &self,
+        to: u32,
+        spec: crate::api::export::BridgeExportSpec,
+        path: String,
+    ) -> Result<(), BridgeError> {
+        if let Some(carrier) = crate::footage::carrier(self.project) {
+            carrier.ask_export(to, self.id, &spec, &path);
+        }
+        Ok(())
+    }
+}
+
+/// Whether the invite in `text` needs a password given with it. False for
+/// anything that is not an invite.
+#[frb(sync)]
+pub fn share_link_locked(text: String) -> bool {
+    text.parse::<Invite>().is_ok_and(|invite| invite.locked)
+}
+
+/// What a host keeps to share by the same invite again: its secret, and
+/// after a full stop what its password came to if it set one.
+#[frb(ignore)]
+fn kept_text(host: &lumit_share::Host) -> String {
+    let key = lumit_share::key_text(&host.key());
+    match host.lock() {
+        Some(lock) => format!("{key}.{}", lumit_share::key_text(&lock)),
+        None => key,
+    }
+}
+
+/// The invite in `text` with `password` given, or `None` when it needs one
+/// and has none.
+#[frb(ignore)]
+fn unlocked(invite: Invite, password: Option<&str>) -> Option<Invite> {
+    match password.filter(|password| !password.is_empty()) {
+        Some(password) => Some(invite.unlocked(password)),
+        None if invite.locked => None,
+        None => Some(invite),
+    }
+}
+
+/// The port a relay listens on unless its owner picked another, for an
+/// address typed without one.
+#[frb(sync)]
+pub fn share_relay_port() -> u16 {
+    lumit_share::RELAY_PORT
+}
+
+/// A relay's address as typed, with the usual port when it has none.
+#[frb(ignore)]
+fn at_relay(typed: &str) -> String {
+    let typed = typed.trim();
+    // A name or an IPv4 address with a port has one colon, and an IPv6
+    // address with one ends its brackets before it.
+    let ported = match typed.rsplit_once(':') {
+        Some((host, port)) => {
+            port.parse::<u16>().is_ok() && (!host.contains(':') || host.ends_with(']'))
+        }
+        None => false,
+    };
+    if ported || typed.is_empty() {
+        return typed.to_owned();
+    }
+    let bare = typed.contains(':') && !typed.starts_with('[');
+    let (open, close) = if bare { ("[", "]") } else { ("", "") };
+    format!("{open}{typed}{close}:{}", lumit_share::RELAY_PORT)
 }
 
 #[frb(ignore)]
@@ -266,10 +619,18 @@ fn person(project: Uuid, doc: &Document, me: u32, person: Person) -> BridgeShare
 fn events_for(
     project: Uuid,
     store: Arc<DocumentStore>,
-    sink: Option<ShareEventStream>,
+    sink: Arc<Option<ShareEventStream>>,
 ) -> lumit_share::Events {
     Arc::new(move |event| {
         let event = match event {
+            // Not for the frontend as it comes: the footage carrier reads it
+            // and says what, if anything, the person needs to see.
+            Event::Note { from, body } => {
+                if let Some(carrier) = crate::footage::carrier(project) {
+                    carrier.note(from, body);
+                }
+                return;
+            }
             Event::People { me, people } => {
                 let doc = store.snapshot();
                 let people = people.into_iter();
@@ -287,11 +648,58 @@ fn events_for(
                 reason: ending(reason),
             },
             Event::Reach(now) => BridgeShareEvent::Reach { reach: reach(now) },
+            Event::Relayed(now) => BridgeShareEvent::Relayed {
+                relayed: relayed(now),
+            },
         };
-        if let Some(sink) = &sink {
+        if let Some(sink) = sink.as_ref() {
             _ = sink.add(event);
         }
     })
+}
+
+/// Start carrying footage for a project that has just become shared.
+#[frb(ignore)]
+fn carry(
+    project: Uuid,
+    store: Arc<DocumentStore>,
+    sink: Arc<Option<ShareEventStream>>,
+    sharing: &Sharing,
+) {
+    use crate::footage::{Carrier, Told};
+    let tell: crate::footage::Tell = Arc::new(move |told| {
+        let event = match told {
+            Told::Changed => BridgeShareEvent::Footage { placed: false },
+            Told::Placed => BridgeShareEvent::Footage { placed: true },
+            Told::Asked { job, from, comp } => BridgeShareEvent::ExportAsked {
+                job: job.to_string(),
+                from,
+                comp,
+            },
+        };
+        if let Some(sink) = sink.as_ref() {
+            _ = sink.add(event);
+        }
+    });
+    let carrier = Carrier::start(project, store, tell);
+    sharing.carry_footage(carrier, crate::footage::LIMITS.clone());
+}
+
+/// File a sharing under a project that the registry has no project for.
+#[cfg(test)]
+#[frb(ignore)]
+pub(crate) fn share_for_test(project: Uuid, sharing: Sharing) {
+    if let Ok(mut shared) = SHARED.lock() {
+        shared.insert(project, sharing);
+    }
+}
+
+/// Do something with `project`'s sharing, if it is shared. Never from a
+/// share thread: see [`SHARED`].
+#[frb(ignore)]
+pub(crate) fn with_sharing<T>(project: Uuid, with: impl FnOnce(&Sharing) -> T) -> Option<T> {
+    let shared = SHARED.lock().ok()?;
+    shared.get(&project).map(with)
 }
 
 /// Let go of one end of a shared project whose project is closing.
@@ -317,6 +725,7 @@ fn let_go(project: Uuid, sharing: Sharing) {
 #[frb(ignore)]
 pub(crate) fn stop(project: Uuid) {
     let sharing = SHARED.lock().ok().and_then(|mut s| s.remove(&project));
+    crate::footage::Carrier::stop(project);
     // Let go of here, outside the registry lock.
     if let Some(sharing) = sharing {
         let_go(project, sharing);
@@ -328,6 +737,7 @@ pub(crate) fn stop(project: Uuid) {
 pub(crate) fn stop_all() {
     let shared = SHARED.lock().map(|mut s| std::mem::take(&mut *s));
     for (project, sharing) in shared.into_iter().flatten() {
+        crate::footage::Carrier::stop(project);
         let_go(project, sharing);
     }
 }
@@ -378,12 +788,15 @@ pub(crate) fn resume(
         let state = state.read().map_err(|_| BridgeError::ReadFailed)?;
         state.store.clone()
     };
-    let events = events_for(project.id, store.clone(), events);
-    if let Ok(guest) = resuming.start(store, events) {
+    let sink = Arc::new(events);
+    let events = events_for(project.id, store.clone(), sink.clone());
+    if let Ok(guest) = resuming.start(store.clone(), events) {
+        let sharing = Sharing::Guest(guest);
+        carry(project.id, store, sink, &sharing);
         SHARED
             .lock()
             .map_err(|_| BridgeError::WriteFailed)?
-            .insert(project.id, Sharing::Guest(guest));
+            .insert(project.id, sharing);
     }
     Ok(())
 }
@@ -418,24 +831,32 @@ fn describe(doc: &Document, conflict: &Conflict) -> BridgeShareConflict {
 }
 
 impl ProjectReference {
-    /// Share this project from this machine. Others join with the text
-    /// [`Self::share_invite`] gives.
+    /// Share this project from this machine. Others join with the link
+    /// [`Self::share_link`] gives.
     ///
     /// `name` is what the others see this person called. Port 0 takes any
     /// free one. `key` is what the last [`BridgeShareStarted::Sharing`] for
-    /// this project gave, or `None` for a new invite. `outside` asks this
+    /// this project gave, or `None` for a new invite. `password` is one every
+    /// guest has to give as well as holding the link. Empty or `None` keeps
+    /// whatever `key` was shared with, which is no password for a new
+    /// invite. `outside` asks this
     /// network's router to send the port here, so people outside the network
     /// can join without a VPN. It answers later, as a
-    /// [`BridgeShareEvent::Reach`]. `events` is optional the way a project's
+    /// [`BridgeShareEvent::Reach`]. `relay` is the `host:port` of a relay to
+    /// keep a room at, for people the router does not let in, and answers as
+    /// a [`BridgeShareEvent::Relayed`]. `events` is optional the way a project's
     /// change stream is, and for the same reason: nothing about sharing
     /// depends on someone watching.
     #[frb(sync)]
+    #[allow(clippy::too_many_arguments)]
     pub fn share(
         &self,
         name: String,
         port: u16,
         key: Option<String>,
+        password: Option<String>,
         outside: bool,
+        relay: Option<String>,
         events: Option<ShareEventStream>,
     ) -> Result<BridgeShareStarted, BridgeError> {
         let (store, root) = {
@@ -448,19 +869,35 @@ impl ProjectReference {
         if shared.contains_key(&self.id) {
             return Ok(BridgeShareStarted::Failed);
         }
-        let events = events_for(self.id, store.clone(), events);
-        // A key that does not read as one is as good as none.
-        let key = key.and_then(|key| lumit_share::key_from(&key));
+        let sink = Arc::new(events);
+        let events = events_for(self.id, store.clone(), sink.clone());
+        // A key that does not read as one is as good as none. What a
+        // password came to last time follows it after a full stop.
+        let kept = key
+            .as_deref()
+            .map(|kept| kept.split_once('.').unwrap_or((kept, "")));
+        let key = kept.and_then(|(key, _)| lumit_share::key_from(key));
+        let lock = match password.filter(|password| !password.is_empty()) {
+            Some(password) => Some(lumit_share::lock_of(&password)),
+            None => key
+                .and(kept)
+                .and_then(|(_, lock)| lumit_share::key_from(lock)),
+        };
         Ok(
-            match lumit_share::host(store, &name, LISTEN, port, key, root, events) {
+            match lumit_share::host(store.clone(), &name, LISTEN, port, key, lock, root, events) {
                 Ok(host) => {
-                    let (port, key) = (host.port(), lumit_share::key_text(&host.key()));
+                    let (port, key) = (host.port(), kept_text(&host));
                     let restored = host.restored() as u32;
                     // A test never asks the machine's real router anything.
                     if outside && !cfg!(test) {
                         host.reach_out();
                     }
-                    shared.insert(self.id, Sharing::Host(host));
+                    if let Some(relay) = relay.as_deref().map(at_relay) {
+                        host.relay_through(&relay);
+                    }
+                    let sharing = Sharing::Host(host);
+                    carry(self.id, store, sink, &sharing);
+                    shared.insert(self.id, sharing);
                     BridgeShareStarted::Sharing {
                         port,
                         key,
@@ -486,13 +923,39 @@ impl ProjectReference {
         })
     }
 
-    /// The invite for a host reached at `address`, to send to whoever is
-    /// joining. `None` when this machine is not hosting the project.
+    /// Whether this machine has a room at a relay, while it hosts the
+    /// project. The events carry it as it changes.
     #[frb(sync)]
-    pub fn share_invite(&self, address: String) -> Result<Option<String>, BridgeError> {
+    pub fn share_relayed(&self) -> Result<BridgeShareRelayed, BridgeError> {
         let shared = SHARED.lock().map_err(|_| BridgeError::ReadFailed)?;
         Ok(match shared.get(&self.id) {
-            Some(Sharing::Host(host)) => Some(host.invite(address.trim()).to_string()),
+            Some(Sharing::Host(host)) => relayed(host.relayed()),
+            _ => BridgeShareRelayed::Off,
+        })
+    }
+
+    /// The link to send to whoever is joining. It holds every way to this
+    /// machine the engine knows of just now, so it is asked for again when
+    /// the router or a relay answers. `address` is one more the person
+    /// typed, for a VPN or a port forwarded by hand. `None` when this
+    /// machine is not hosting the project.
+    #[frb(sync)]
+    pub fn share_link(&self, address: Option<String>) -> Result<Option<String>, BridgeError> {
+        let shared = SHARED.lock().map_err(|_| BridgeError::ReadFailed)?;
+        Ok(match shared.get(&self.id) {
+            Some(Sharing::Host(host)) => Some(host.invite_anywhere(address.as_deref()).to_string()),
+            _ => None,
+        })
+    }
+
+    /// The secret of the invite as it stands, to hand to [`Self::share`] the
+    /// next time this project is shared. `None` when this machine is not
+    /// hosting it.
+    #[frb(sync)]
+    pub fn share_key(&self) -> Result<Option<String>, BridgeError> {
+        let shared = SHARED.lock().map_err(|_| BridgeError::ReadFailed)?;
+        Ok(match shared.get(&self.id) {
+            Some(Sharing::Host(host)) => Some(kept_text(host)),
             _ => None,
         })
     }
@@ -537,6 +1000,7 @@ impl ProjectReference {
     #[frb(sync)]
     pub fn stop_sharing(&self) -> Result<(), BridgeError> {
         let sharing = SHARED.lock().ok().and_then(|mut s| s.remove(&self.id));
+        crate::footage::Carrier::stop(self.id);
         if let Some(sharing) = sharing {
             sharing.stop();
         }
@@ -546,8 +1010,8 @@ impl ProjectReference {
     /// Take a guest out of the project this machine hosts, by the id the
     /// people list gives them. Their Lumit is told and stops coming back.
     /// The invite is replaced, so the one they hold stops working. Everyone
-    /// still here is sent the new one, and [`Self::share_invite`] gives it,
-    /// with the key to hand to [`Self::share`] next time.
+    /// still here is sent the new one, [`Self::share_link`] gives it, and
+    /// [`Self::share_key`] the key to hand to [`Self::share`] next time.
     #[frb(sync)]
     pub fn share_remove(&self, person: u32) -> Result<(), BridgeError> {
         let shared = SHARED.lock().map_err(|_| BridgeError::ReadFailed)?;
@@ -558,15 +1022,22 @@ impl ProjectReference {
     }
 
     /// Give a guest that has lost its host a new invite to look for it by,
-    /// for a host that has moved or made a new one. False when the text is
-    /// not an invite or this machine is not a guest of the project.
+    /// for a host that has moved or made a new one. `password` goes with it
+    /// when the host set one. False when the text is not an invite, it needs
+    /// a password and has none, or this machine is not a guest of the
+    /// project.
     #[frb(sync)]
-    pub fn share_reinvite(&self, invite: String) -> Result<bool, BridgeError> {
+    pub fn share_reinvite(
+        &self,
+        invite: String,
+        password: Option<String>,
+    ) -> Result<bool, BridgeError> {
         let shared = SHARED.lock().map_err(|_| BridgeError::ReadFailed)?;
         let Some(Sharing::Guest(guest)) = shared.get(&self.id) else {
             return Ok(false);
         };
-        let Ok(invite) = invite.parse::<Invite>() else {
+        let invite = invite.parse::<Invite>().ok();
+        let Some(invite) = invite.and_then(|invite| unlocked(invite, password.as_deref())) else {
             return Ok(false);
         };
         guest.reinvite(invite);
@@ -615,6 +1086,74 @@ impl ProjectReference {
         Ok(())
     }
 
+    /// Every footage transfer in flight, to and from this machine.
+    #[frb(sync)]
+    pub fn share_transfers(&self) -> Result<Vec<BridgeShareTransfer>, BridgeError> {
+        let Some(carrier) = crate::footage::carrier(self.id) else {
+            return Ok(Vec::new());
+        };
+        let state = self.state()?;
+        let doc = {
+            let state = state.read().map_err(|_| BridgeError::ReadFailed)?;
+            state.store.snapshot()
+        };
+        let name = |item: Option<Uuid>| {
+            let item = item.and_then(|id| doc.item(id));
+            item.map_or_else(String::new, |item| item.name().to_owned())
+        };
+        let moving = carrier.moving().into_iter();
+        Ok(moving
+            .map(|(wanted, done, total, sending)| BridgeShareTransfer {
+                name: name(wanted.item()),
+                original: matches!(wanted, lumit_share::Wanted::Original { .. }),
+                sending,
+                done,
+                total,
+            })
+            .collect())
+    }
+
+    /// How fetching what an export lacks is getting on.
+    #[frb(sync)]
+    pub fn share_fetching(&self) -> Result<BridgeShareFetching, BridgeError> {
+        use crate::footage::Fetching;
+        let fetching = crate::footage::carrier(self.id).map(|carrier| carrier.fetching());
+        Ok(match fetching {
+            Some(Fetching::Working { done, total }) => BridgeShareFetching::Working { done, total },
+            Some(Fetching::Queued { id }) => BridgeShareFetching::Queued { id },
+            Some(Fetching::Failed) => BridgeShareFetching::Failed,
+            Some(Fetching::Idle) | None => BridgeShareFetching::Idle,
+        })
+    }
+
+    /// Give up fetching what an export lacks. What has arrived is kept.
+    #[frb(sync)]
+    pub fn share_fetch_cancel(&self) -> Result<(), BridgeError> {
+        if let Some(carrier) = crate::footage::carrier(self.id) {
+            carrier.cancel_fetch();
+        }
+        Ok(())
+    }
+
+    /// How the export asked of someone else's machine is getting on.
+    #[frb(sync)]
+    pub fn share_asking(&self) -> Result<BridgeShareAsking, BridgeError> {
+        let carrier = crate::footage::carrier(self.id);
+        Ok(carrier.map_or(BridgeShareAsking::Idle, |carrier| asking(carrier.asking())))
+    }
+
+    /// Answer an export another person asked this machine to do, by the job
+    /// a [`BridgeShareEvent::ExportAsked`] named. Yes puts it in this
+    /// machine's export queue and starts it.
+    #[frb(sync)]
+    pub fn share_answer_export(&self, job: String, yes: bool) -> Result<(), BridgeError> {
+        let carrier = crate::footage::carrier(self.id);
+        if let (Some(carrier), Ok(job)) = (carrier, job.parse::<Uuid>()) {
+            carrier.answer_export(job, yes);
+        }
+        Ok(())
+    }
+
     /// The conflicts a merge left for this guest to choose between, in the
     /// order [`Self::share_resolve`] indexes them.
     #[frb(sync)]
@@ -660,20 +1199,25 @@ impl ProjectReference {
 /// Join the project an invite names. It opens as a new, unsaved project in
 /// place of whatever was open, so saving it writes this person's own copy.
 ///
-/// `footage` is the folder this machine keeps the project's footage in. Each
-/// item is looked for there by name and then by fingerprint, and what is not
-/// found shows as missing, to be relinked like any other.
+/// `password` is the host's, when it set one. `footage` is the folder this
+/// machine keeps the project's footage in. Each item is looked for there by
+/// name and then by fingerprint, and what is not found shows as missing, to
+/// be relinked like any other.
 ///
 /// Not sync: it waits on the network and on the whole document arriving.
 pub fn join_shared_project(
     invite: String,
     name: String,
+    password: Option<String>,
     footage: Option<String>,
     on_change_stream: Option<CallbackStream>,
     events: Option<ShareEventStream>,
 ) -> Result<BridgeJoinOutcome, BridgeError> {
     let Ok(invite) = invite.parse::<Invite>() else {
         return Ok(BridgeJoinOutcome::BadInvite);
+    };
+    let Some(invite) = unlocked(invite, password.as_deref()) else {
+        return Ok(BridgeJoinOutcome::PasswordNeeded);
     };
     let root = footage.filter(|f| !f.trim().is_empty()).map(PathBuf::from);
     let (document, joining) = match lumit_share::join(invite, &name, root.clone()) {
@@ -699,13 +1243,16 @@ pub fn join_shared_project(
         let state = state.read().map_err(|_| BridgeError::ReadFailed)?;
         state.store.clone()
     };
-    let events = events_for(project.id, store.clone(), events);
-    let Ok(guest) = joining.start(store, events) else {
+    let sink = Arc::new(events);
+    let events = events_for(project.id, store.clone(), sink.clone());
+    let Ok(guest) = joining.start(store.clone(), events) else {
         return Ok(BridgeJoinOutcome::Failed);
     };
+    let sharing = Sharing::Guest(guest);
+    carry(project.id, store, sink, &sharing);
     SHARED
         .lock()
         .map_err(|_| BridgeError::WriteFailed)?
-        .insert(project.id, Sharing::Guest(guest));
+        .insert(project.id, sharing);
     Ok(BridgeJoinOutcome::Joined { project })
 }

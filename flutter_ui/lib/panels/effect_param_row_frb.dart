@@ -38,6 +38,7 @@ import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../state/comp_time.dart';
 import '../state/dropper.dart';
+import '../state/expression_language.dart';
 import '../state/file_dialogs.dart';
 import '../state/preview_throttle.dart';
 import '../state/timeline_columns.dart';
@@ -246,6 +247,11 @@ class EffectParamRowFrb extends StatelessWidget {
   /// asks for a driven number, which is what keeps this off the rebuild path.
   final ({String driver, BridgePortType type, bool noStream})? driven;
 
+  /// Whether a closed range draws its track beside the number. The Timeline's
+  /// fold-out passes false: its value column is one well wide, and the track
+  /// ran on past it under the columns to its right.
+  final bool sliderTrack;
+
   const EffectParamRowFrb({
     super.key,
     required this.effectId,
@@ -269,6 +275,7 @@ class EffectParamRowFrb extends StatelessWidget {
     this.onAction,
     this.driven,
     this.nameGroup,
+    this.sliderTrack = true,
   });
 
   @override
@@ -616,8 +623,8 @@ class EffectParamRowFrb extends StatelessWidget {
                         scalar: field0,
                         time: timeOfFrame(comp, frame),
                         layer: currentLayer!);
-                    _set(BridgeEffectValue.float(
-                        BridgeScalar.expression(sampled.toString())));
+                    _set(BridgeEffectValue.float(BridgeScalar.expression(
+                        sampled.toString(), newExpressionLanguage(context))));
                   },
             frame: frame,
             sliderMin: sliderMin,
@@ -1209,8 +1216,8 @@ class EffectParamRowFrb extends StatelessWidget {
                   scalar: scalar,
                   time: timeOfFrame(comp, frame),
                   layer: currentLayer!);
-              _set(BridgeEffectValue.float(
-                  BridgeScalar.expression(sampled.toString())));
+              _set(BridgeEffectValue.float(BridgeScalar.expression(
+                  sampled.toString(), newExpressionLanguage(context))));
             },
     );
 
@@ -1222,7 +1229,7 @@ class EffectParamRowFrb extends StatelessWidget {
         .workspace
         .interface
         .rangeSliders;
-    if (!rangeSliders) return field;
+    if (!rangeSliders || !sliderTrack) return field;
 
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -1897,6 +1904,17 @@ class EffectPointRowFrb extends StatelessWidget {
       stem = stem.substring(0, stem.length - 2);
     }
 
+    // Both halves as one op where the caller can commit one, so a point moved
+    // is one undo step and not one per axis.
+    void writeBoth(BridgeEffectValue x, BridgeEffectValue y) {
+      if (onWritePair != null) {
+        onWritePair!(id, {xParam.id: x, yParam.id: y});
+        return;
+      }
+      onWrite(id, xParam.id, x);
+      onWrite(id, yParam.id, y);
+    }
+
     final keyframes = (sx == null || sy == null)
         ? null
         : KeyframeControlsFrb(
@@ -1905,12 +1923,10 @@ class EffectPointRowFrb extends StatelessWidget {
             onSeek: onSeek,
             rowKey: '$id-${xParam.id}-pair',
             fixedColumns: twoColumn,
-            // Two parameters, so two writes: a keyframe op on the pair costs
-            // two undo steps today (the staged editor commits per param).
             onWrite: (next) {
               if (next.length == 2) {
-                onWrite(id, xParam.id, BridgeEffectValue.float(next[0]));
-                onWrite(id, yParam.id, BridgeEffectValue.float(next[1]));
+                writeBoth(BridgeEffectValue.float(next[0]),
+                    BridgeEffectValue.float(next[1]));
               }
             },
           );
@@ -2087,13 +2103,6 @@ class EffectPointRowFrb extends StatelessWidget {
                       ? BridgeScalar.static_(v)
                       : scalarWithValueAt(was, v, comp, frame));
 
-              void put(
-                void Function(UuidValue, String, BridgeEffectValue) write,
-                DropperSample sample,
-              ) {
-                write(id, xParam.id, at(sx, sample.xFrac * spanX));
-                write(id, yParam.id, at(sy, sample.yFrac * spanY));
-              }
 
               ui.armDropper(DropperArm(
                 id: 'fx-$id-${xParam.id}',
@@ -2101,8 +2110,12 @@ class EffectPointRowFrb extends StatelessWidget {
                 label: stem,
                 // **The drag is the pick**: the point follows the
                 // pointer through the preview, and the release states it once.
-                onPreview: (sample) => put(onLive, sample),
-                onPick: (sample) => put(onWrite, sample),
+                onPreview: (sample) {
+                  onLive(id, xParam.id, at(sx, sample.xFrac * spanX));
+                  onLive(id, yParam.id, at(sy, sample.yFrac * spanY));
+                },
+                onPick: (sample) => writeBoth(
+                    at(sx, sample.xFrac * spanX), at(sy, sample.yFrac * spanY)),
                 // Abandoned: the two numbers the row had, back through the
                 // same preview path. Nothing was committed either half.
                 onRevert: (sx == null || sy == null)
@@ -2177,12 +2190,69 @@ BridgeEffectValue? chainedSibling({
 
 /// The effect schema, fetched once per session and then answered from here.
 ///
-/// `listEffects` serialises every built-in's declaration and `listParameters`
-/// one effect's worth; both are static for the life of the process, yet they
-/// were being re-fetched per card per rebuild — the whole schema crossing the
-/// bridge to look up one display label. Memoised, a rebuild costs nothing here.
-List<BridgeEffectInfo>? _effectSchema;
-List<BridgeEffectInfo> cachedListEffects() => _effectSchema ??= listEffects();
+/// `listEffects` serialises every effect's declaration and `listParameters`
+/// one effect's worth, yet they were being re-fetched per card per rebuild —
+/// the whole schema crossing the bridge to look up one display label.
+/// Memoised, a rebuild costs nothing here.
+///
+/// Plugins are not there from the start, each one joins the catalogue as the
+/// start-up scan reaches it. So while [scanned] is running a plugin's name is
+/// asked for afresh every time, and nothing about it is kept.
+class EffectSchemaMemo {
+  EffectSchemaMemo({
+    this.readEffects = listEffects,
+    this.readParameters = _listParameters,
+    this.readGroups = _listParameterGroups,
+  });
+
+  /// The engine's three reads, which a test stands in for.
+  final List<BridgeEffectInfo> Function() readEffects;
+  final List<BridgeParamInfo> Function(String effect) readParameters;
+  final List<BridgeParamGroup> Function(String effect) readGroups;
+
+  static List<BridgeParamInfo> _listParameters(String effect) =>
+      listParameters(effect: effect);
+  static List<BridgeParamGroup> _listParameterGroups(String effect) =>
+      listParameterGroups(effect: effect);
+
+  List<BridgeEffectInfo>? _effects;
+  final Map<String, List<BridgeParamInfo>> _parameters = {};
+  final Map<String, List<BridgeParamGroup>> _groups = {};
+  bool _scanning = false;
+
+  /// Run the plugin [scan], then drop what was read before the plugins were
+  /// in the catalogue.
+  Future<T> scanned<T>(Future<T> Function() scan) async {
+    _scanning = true;
+    try {
+      return await scan();
+    } finally {
+      _scanning = false;
+      _effects = null;
+      _parameters.clear();
+      _groups.clear();
+    }
+  }
+
+  /// Whether [effect] may only be missing because the scan has not reached it.
+  /// The host mints a plugin's name with a prefix (`ofx:`, `clap:`, `vst3:`),
+  /// and no built-in has a colon in its own.
+  bool _arriving(String effect) => _scanning && effect.contains(':');
+
+  /// The list to look [effect] up in.
+  List<BridgeEffectInfo> effectsFor(String effect) =>
+      _arriving(effect) ? readEffects() : _effects ??= readEffects();
+
+  List<BridgeParamInfo> parameters(String effect) => _arriving(effect)
+      ? readParameters(effect)
+      : _parameters[effect] ??= readParameters(effect);
+
+  List<BridgeParamGroup> groups(String effect) => _arriving(effect)
+      ? readGroups(effect)
+      : _groups[effect] ??= readGroups(effect);
+}
+
+final EffectSchemaMemo effectSchema = EffectSchemaMemo();
 
 /// The order a category's effects are listed in wherever one is chosen from:
 /// alphabetical by the label on the row. The engine's own order is the order
@@ -2191,7 +2261,7 @@ int byEffectLabel(BridgeEffectInfo a, BridgeEffectInfo b) =>
     engineLabel(a.label).toLowerCase().compareTo(
         engineLabel(b.label).toLowerCase());
 
-/// All nine layer styles, memoised for exactly [cachedListEffects]'
+/// All nine layer styles, memoised for exactly [effectSchema]'s
 /// reason: a fixed table that was crossing the bridge every time a menu tree or
 /// a panel heading was rebuilt.
 ///
@@ -2205,17 +2275,14 @@ List<BridgeStyleInfo> styleCatalogue() => _styleSchema ??= listStyles();
 Iterable<BridgeStyleInfo> offeredStyles() =>
     styleCatalogue().where((s) => s.offered);
 
-final Map<String, List<BridgeParamInfo>> _paramSchema = {};
 List<BridgeParamInfo> cachedListParameters(String effect) =>
-    _paramSchema[effect] ??= listParameters(effect: effect);
-
-final Map<String, List<BridgeParamGroup>> _groupSchema = {};
+    effectSchema.parameters(effect);
 
 /// An effect's parameter groups (docs/08 §1.2), memoised like
 /// the parameters: the twirls and conditional runs the panel folds the flat
 /// parameter list into.
 List<BridgeParamGroup> cachedListParameterGroups(String effect) =>
-    _groupSchema[effect] ??= listParameterGroups(effect: effect);
+    effectSchema.groups(effect);
 
 /// Whether a conditional group is showing, given the values in play. A group
 /// with `visible_when` is skipped whole, members included, while the named
@@ -2394,7 +2461,7 @@ Set<String> disabledParams(
 /// heading reading `style_drop_shadow` is what leaving them out looks like.
 /// The engine makes the same join in `fx::def`, and for the same reason.
 String effectLabelOf(String name) {
-  for (final info in cachedListEffects()) {
+  for (final info in effectSchema.effectsFor(name)) {
     if (info.name == name) return engineLabel(info.label);
   }
   for (final style in styleCatalogue()) {
@@ -2516,6 +2583,11 @@ class EffectStackEditor {
   /// unaffected: [write] still commits the one parameter it is given.
   final Map<(UuidValue, String), BridgeEffectValue> _staged = {};
 
+  /// The same values, published while a drag is in flight, so the Viewer's
+  /// point marks move with the picture and not on release. Empty otherwise.
+  static final ValueNotifier<Map<(UuidValue, String), BridgeEffectValue>>
+      staging = ValueNotifier(const {});
+
   /// Roughly one preview render per 20 ms, so a fast drag cannot outrun the
   /// renderer and queue up work it will only throw away — but the tick that
   /// lands inside the interval is *held*, not dropped, so the pointer's last
@@ -2571,6 +2643,7 @@ class EffectStackEditor {
     required double scale,
   }) {
     _staged[(effect, param)] = value;
+    staging.value = Map.of(_staged);
     // A group header's drag stages without a live preview render: the
     // preview overlay stands a stack in for the LAYER's own, and a header's
     // stack is not that — the picture would blur the carrier alone. The row
@@ -2629,11 +2702,15 @@ class EffectStackEditor {
       // Someone else edited the stack mid-drag. Drop ours and re-read.
     }
     _staged.clear();
+    staging.value = const {};
   }
 
   /// Forget any drag in progress — a cancelled gesture.
   void clear() {
     _throttle.cancel();
+    // Told once this call is over: it runs from `dispose`, where nothing may
+    // be asked to rebuild.
+    if (_staged.isNotEmpty) Future.microtask(() => staging.value = const {});
     _staged.clear();
   }
 }
@@ -2758,6 +2835,12 @@ class _EffectTextFieldState extends State<_EffectTextField> {
       );
 }
 
+/// The language a new expression starts in: Settings ▸ Interface ▸ Editing.
+BridgeExpressionLanguage newExpressionLanguage(BuildContext context) =>
+    Provider.of<LumitUiState>(context, listen: false)
+        .workspace
+        .defaultExpressionLanguage;
+
 class EffectParamRowExpression extends StatefulWidget {
   const EffectParamRowExpression(
       {required this.value,
@@ -2794,13 +2877,18 @@ class ExpressionTextEditingController extends TextEditingController {
   static HighlighterTheme? darkTheme;
   static HighlighterTheme? lightTheme;
 
+  /// The grammar the text is coloured with: `rhai` or `javascript` for an
+  /// expression ([expressionGrammar]), `wgsl` for a shader. An editor that
+  /// lets its language change sets this as it rebuilds.
   String language;
 
   static Future<void> initSyntaxHighlighting() async {
-    await Highlighter.initialize(["dart"]);
+    await Highlighter.initialize(["javascript"]);
 
     /// YOINK: https://github.com/PolyMeilex/vscode-wgsl/blob/master/syntaxes/wgsl.tmLanguage.json
     Highlighter.addLanguage("wgsl", await rootBundle.loadString("assets/data/grammar/wgsl.json"));
+    // The highlighter ships no Rhai grammar, so Lumit carries a small one.
+    Highlighter.addLanguage("rhai", await rootBundle.loadString("assets/data/grammar/rhai.json"));
 
     darkTheme = await HighlighterTheme.loadFromAssets(
         _defaultDarkThemeFiles, LumitTheme.dark().mono);
@@ -2809,7 +2897,7 @@ class ExpressionTextEditingController extends TextEditingController {
         _defaultLightThemeFiles, LumitTheme.light().mono);
   }
 
-  ExpressionTextEditingController({super.text, this.language = "dart"});
+  ExpressionTextEditingController({super.text, this.language = "rhai"});
 
   @override
   TextSpan buildTextSpan(
@@ -2841,7 +2929,7 @@ class ExpressionTextEditingController extends TextEditingController {
 }
 
 class _EffectParamRowExpressionState extends State<EffectParamRowExpression> {
-  late TextEditingController controller;
+  late ExpressionTextEditingController controller;
 
   double value = 0.0;
   late ValueNotifier<int> playhead;
@@ -2858,7 +2946,9 @@ class _EffectParamRowExpressionState extends State<EffectParamRowExpression> {
 
     playhead.addListener(onFrameChanged);
 
-    controller = ExpressionTextEditingController(text: widget.value.field0);
+    controller = ExpressionTextEditingController(
+        text: widget.value.field0,
+        language: expressionGrammar(widget.value.field1));
     controller.addListener(onTextChanged);
     lastText = controller.text;
 
@@ -2888,6 +2978,8 @@ class _EffectParamRowExpressionState extends State<EffectParamRowExpression> {
 
   @override
   void didUpdateWidget(covariant EffectParamRowExpression oldWidget) {
+    // The row is rebuilding, so the field redraws in the new colours.
+    controller.language = expressionGrammar(widget.value.field1);
     if (widget.value.field0 != controller.text) {
       // we dont want to trigger the update when setting text manually, so remove it then add it back
       controller.removeListener(onTextChanged);
@@ -2904,7 +2996,7 @@ class _EffectParamRowExpressionState extends State<EffectParamRowExpression> {
 
     setState(() {
       value = sampleScalarWithContext(
-          scalar: BridgeScalar_Expression(expr),
+          scalar: BridgeScalar_Expression(expr, _language),
           time: timeOfFrame(widget.comp, playhead.value),
           layer: widget.layer);
     });
@@ -2913,11 +3005,12 @@ class _EffectParamRowExpressionState extends State<EffectParamRowExpression> {
   void onTextChanged() {
     final expr = controller.text;
     if (expr != lastText) {
-      widget.setLive(BridgeEffectValue.float(BridgeScalar.expression(expr)));
+      widget.setLive(
+          BridgeEffectValue.float(BridgeScalar.expression(expr, _language)));
 
       setState(() {
         value = sampleScalarWithContext(
-            scalar: BridgeScalar_Expression(expr),
+            scalar: BridgeScalar_Expression(expr, _language),
             time: timeOfFrame(widget.comp, playhead.value),
             layer: widget.layer);
       });
@@ -2926,11 +3019,21 @@ class _EffectParamRowExpressionState extends State<EffectParamRowExpression> {
     lastText = expr;
   }
 
+  /// The language the row's expression is written in. The text field edits
+  /// the text and leaves this alone; the row's menu changes it.
+  BridgeExpressionLanguage get _language => widget.value.field1;
+
+  void _setLanguage(BridgeExpressionLanguage language) {
+    if (language == _language) return;
+    widget.set(BridgeEffectValue.float(
+        BridgeScalar.expression(controller.text, language)));
+  }
+
   void removeExpression() {
     final expr = controller.text;
 
     var v = sampleScalarWithContext(
-        scalar: BridgeScalar_Expression(expr),
+        scalar: BridgeScalar_Expression(expr, _language),
         time: timeOfFrame(widget.comp, playhead.value),
         layer: widget.layer);
 
@@ -2959,7 +3062,18 @@ class _EffectParamRowExpressionState extends State<EffectParamRowExpression> {
                   close();
                 },
                 child: Text(l10n.removeExpression),
-              )
+              ),
+              // A row has no room for a dropdown, so the language is two
+              // lines of its menu with the current one marked.
+              for (final language in expressionLanguages)
+                MenuRow(
+                  selected: language == _language,
+                  onPressed: () {
+                    _setLanguage(language);
+                    close();
+                  },
+                  child: Text(expressionLanguageLabel(language)),
+                ),
             ];
           },
           child: HouseTextField(
@@ -2969,8 +3083,8 @@ class _EffectParamRowExpressionState extends State<EffectParamRowExpression> {
             submitOnLostFocus: true,
             autofill: ExpressionAutofillGenerator(),
             onSubmitted: (value) {
-              widget
-                  .set(BridgeEffectValue.float(BridgeScalar_Expression(value)));
+              widget.set(BridgeEffectValue.float(
+                  BridgeScalar_Expression(value, _language)));
               onTextChanged();
             },
           ),

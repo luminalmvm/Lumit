@@ -193,8 +193,19 @@ fn run(jobs: &Receiver<Vec<PrefetchWant>>, done: &SyncSender<Prefetched>) {
     // The widths already read by the file's own reader. Such a file is a
     // still, and every coming frame asks for it again.
     let mut read: HashSet<Option<u32>> = HashSet::new();
+    // The file this stream is reading. An item whose file has changed, as
+    // one relinked or one whose stand-in gave way to the original has, is
+    // opened again rather than read on from the old file.
+    let mut source: Option<std::path::PathBuf> = None;
     while let Ok(frame) = jobs.recv() {
         for want in frame {
+            if source.as_ref() != Some(&want.source.path) {
+                if source.is_some() {
+                    decoders.close(want.item);
+                    read.clear();
+                }
+                source = Some(want.source.path.clone());
+            }
             // One layer of a layered file, or an Illustrator document, is
             // read by the file's own reader, as the render reads it. ffmpeg
             // would hand back the flattened picture of the one and can't open

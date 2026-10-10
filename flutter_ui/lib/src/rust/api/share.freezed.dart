@@ -53,6 +53,7 @@ extension BridgeJoinOutcomePatterns on BridgeJoinOutcome {
   TResult maybeMap<TResult extends Object?>({
     TResult Function(BridgeJoinOutcome_Joined value)? joined,
     TResult Function(BridgeJoinOutcome_BadInvite value)? badInvite,
+    TResult Function(BridgeJoinOutcome_PasswordNeeded value)? passwordNeeded,
     TResult Function(BridgeJoinOutcome_Unreachable value)? unreachable,
     TResult Function(BridgeJoinOutcome_VersionMismatch value)? versionMismatch,
     TResult Function(BridgeJoinOutcome_Full value)? full,
@@ -66,6 +67,8 @@ extension BridgeJoinOutcomePatterns on BridgeJoinOutcome {
         return joined(_that);
       case BridgeJoinOutcome_BadInvite() when badInvite != null:
         return badInvite(_that);
+      case BridgeJoinOutcome_PasswordNeeded() when passwordNeeded != null:
+        return passwordNeeded(_that);
       case BridgeJoinOutcome_Unreachable() when unreachable != null:
         return unreachable(_that);
       case BridgeJoinOutcome_VersionMismatch() when versionMismatch != null:
@@ -98,6 +101,8 @@ extension BridgeJoinOutcomePatterns on BridgeJoinOutcome {
   TResult map<TResult extends Object?>({
     required TResult Function(BridgeJoinOutcome_Joined value) joined,
     required TResult Function(BridgeJoinOutcome_BadInvite value) badInvite,
+    required TResult Function(BridgeJoinOutcome_PasswordNeeded value)
+        passwordNeeded,
     required TResult Function(BridgeJoinOutcome_Unreachable value) unreachable,
     required TResult Function(BridgeJoinOutcome_VersionMismatch value)
         versionMismatch,
@@ -111,6 +116,8 @@ extension BridgeJoinOutcomePatterns on BridgeJoinOutcome {
         return joined(_that);
       case BridgeJoinOutcome_BadInvite():
         return badInvite(_that);
+      case BridgeJoinOutcome_PasswordNeeded():
+        return passwordNeeded(_that);
       case BridgeJoinOutcome_Unreachable():
         return unreachable(_that);
       case BridgeJoinOutcome_VersionMismatch():
@@ -140,6 +147,7 @@ extension BridgeJoinOutcomePatterns on BridgeJoinOutcome {
   TResult? mapOrNull<TResult extends Object?>({
     TResult? Function(BridgeJoinOutcome_Joined value)? joined,
     TResult? Function(BridgeJoinOutcome_BadInvite value)? badInvite,
+    TResult? Function(BridgeJoinOutcome_PasswordNeeded value)? passwordNeeded,
     TResult? Function(BridgeJoinOutcome_Unreachable value)? unreachable,
     TResult? Function(BridgeJoinOutcome_VersionMismatch value)? versionMismatch,
     TResult? Function(BridgeJoinOutcome_Full value)? full,
@@ -152,6 +160,8 @@ extension BridgeJoinOutcomePatterns on BridgeJoinOutcome {
         return joined(_that);
       case BridgeJoinOutcome_BadInvite() when badInvite != null:
         return badInvite(_that);
+      case BridgeJoinOutcome_PasswordNeeded() when passwordNeeded != null:
+        return passwordNeeded(_that);
       case BridgeJoinOutcome_Unreachable() when unreachable != null:
         return unreachable(_that);
       case BridgeJoinOutcome_VersionMismatch() when versionMismatch != null:
@@ -183,6 +193,7 @@ extension BridgeJoinOutcomePatterns on BridgeJoinOutcome {
   TResult maybeWhen<TResult extends Object?>({
     TResult Function(ProjectReference project)? joined,
     TResult Function()? badInvite,
+    TResult Function()? passwordNeeded,
     TResult Function()? unreachable,
     TResult Function(String host)? versionMismatch,
     TResult Function()? full,
@@ -196,6 +207,8 @@ extension BridgeJoinOutcomePatterns on BridgeJoinOutcome {
         return joined(_that.project);
       case BridgeJoinOutcome_BadInvite() when badInvite != null:
         return badInvite();
+      case BridgeJoinOutcome_PasswordNeeded() when passwordNeeded != null:
+        return passwordNeeded();
       case BridgeJoinOutcome_Unreachable() when unreachable != null:
         return unreachable();
       case BridgeJoinOutcome_VersionMismatch() when versionMismatch != null:
@@ -228,6 +241,7 @@ extension BridgeJoinOutcomePatterns on BridgeJoinOutcome {
   TResult when<TResult extends Object?>({
     required TResult Function(ProjectReference project) joined,
     required TResult Function() badInvite,
+    required TResult Function() passwordNeeded,
     required TResult Function() unreachable,
     required TResult Function(String host) versionMismatch,
     required TResult Function() full,
@@ -240,6 +254,8 @@ extension BridgeJoinOutcomePatterns on BridgeJoinOutcome {
         return joined(_that.project);
       case BridgeJoinOutcome_BadInvite():
         return badInvite();
+      case BridgeJoinOutcome_PasswordNeeded():
+        return passwordNeeded();
       case BridgeJoinOutcome_Unreachable():
         return unreachable();
       case BridgeJoinOutcome_VersionMismatch():
@@ -269,6 +285,7 @@ extension BridgeJoinOutcomePatterns on BridgeJoinOutcome {
   TResult? whenOrNull<TResult extends Object?>({
     TResult? Function(ProjectReference project)? joined,
     TResult? Function()? badInvite,
+    TResult? Function()? passwordNeeded,
     TResult? Function()? unreachable,
     TResult? Function(String host)? versionMismatch,
     TResult? Function()? full,
@@ -281,6 +298,8 @@ extension BridgeJoinOutcomePatterns on BridgeJoinOutcome {
         return joined(_that.project);
       case BridgeJoinOutcome_BadInvite() when badInvite != null:
         return badInvite();
+      case BridgeJoinOutcome_PasswordNeeded() when passwordNeeded != null:
+        return passwordNeeded();
       case BridgeJoinOutcome_Unreachable() when unreachable != null:
         return unreachable();
       case BridgeJoinOutcome_VersionMismatch() when versionMismatch != null:
@@ -380,6 +399,27 @@ class BridgeJoinOutcome_BadInvite extends BridgeJoinOutcome {
   @override
   String toString() {
     return 'BridgeJoinOutcome.badInvite()';
+  }
+}
+
+/// @nodoc
+
+class BridgeJoinOutcome_PasswordNeeded extends BridgeJoinOutcome {
+  const BridgeJoinOutcome_PasswordNeeded() : super._();
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is BridgeJoinOutcome_PasswordNeeded);
+  }
+
+  @override
+  int get hashCode => runtimeType.hashCode;
+
+  @override
+  String toString() {
+    return 'BridgeJoinOutcome.passwordNeeded()';
   }
 }
 
@@ -527,6 +567,590 @@ class BridgeJoinOutcome_Failed extends BridgeJoinOutcome {
   @override
   String toString() {
     return 'BridgeJoinOutcome.failed()';
+  }
+}
+
+/// @nodoc
+mixin _$BridgeShareAsking {
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType && other is BridgeShareAsking);
+  }
+
+  @override
+  int get hashCode => runtimeType.hashCode;
+
+  @override
+  String toString() {
+    return 'BridgeShareAsking()';
+  }
+}
+
+/// @nodoc
+class $BridgeShareAskingCopyWith<$Res> {
+  $BridgeShareAskingCopyWith(
+      BridgeShareAsking _, $Res Function(BridgeShareAsking) __);
+}
+
+/// Adds pattern-matching-related methods to [BridgeShareAsking].
+extension BridgeShareAskingPatterns on BridgeShareAsking {
+  /// A variant of `map` that fallback to returning `orElse`.
+  ///
+  /// It is equivalent to doing:
+  /// ```dart
+  /// switch (sealedClass) {
+  ///   case final Subclass value:
+  ///     return ...;
+  ///   case _:
+  ///     return orElse();
+  /// }
+  /// ```
+
+  @optionalTypeArgs
+  TResult maybeMap<TResult extends Object?>({
+    TResult Function(BridgeShareAsking_Idle value)? idle,
+    TResult Function(BridgeShareAsking_Waiting value)? waiting,
+    TResult Function(BridgeShareAsking_Running value)? running,
+    TResult Function(BridgeShareAsking_Fetching value)? fetching,
+    TResult Function(BridgeShareAsking_Done value)? done,
+    TResult Function(BridgeShareAsking_Failed value)? failed,
+    required TResult orElse(),
+  }) {
+    final _that = this;
+    switch (_that) {
+      case BridgeShareAsking_Idle() when idle != null:
+        return idle(_that);
+      case BridgeShareAsking_Waiting() when waiting != null:
+        return waiting(_that);
+      case BridgeShareAsking_Running() when running != null:
+        return running(_that);
+      case BridgeShareAsking_Fetching() when fetching != null:
+        return fetching(_that);
+      case BridgeShareAsking_Done() when done != null:
+        return done(_that);
+      case BridgeShareAsking_Failed() when failed != null:
+        return failed(_that);
+      case _:
+        return orElse();
+    }
+  }
+
+  /// A `switch`-like method, using callbacks.
+  ///
+  /// Callbacks receives the raw object, upcasted.
+  /// It is equivalent to doing:
+  /// ```dart
+  /// switch (sealedClass) {
+  ///   case final Subclass value:
+  ///     return ...;
+  ///   case final Subclass2 value:
+  ///     return ...;
+  /// }
+  /// ```
+
+  @optionalTypeArgs
+  TResult map<TResult extends Object?>({
+    required TResult Function(BridgeShareAsking_Idle value) idle,
+    required TResult Function(BridgeShareAsking_Waiting value) waiting,
+    required TResult Function(BridgeShareAsking_Running value) running,
+    required TResult Function(BridgeShareAsking_Fetching value) fetching,
+    required TResult Function(BridgeShareAsking_Done value) done,
+    required TResult Function(BridgeShareAsking_Failed value) failed,
+  }) {
+    final _that = this;
+    switch (_that) {
+      case BridgeShareAsking_Idle():
+        return idle(_that);
+      case BridgeShareAsking_Waiting():
+        return waiting(_that);
+      case BridgeShareAsking_Running():
+        return running(_that);
+      case BridgeShareAsking_Fetching():
+        return fetching(_that);
+      case BridgeShareAsking_Done():
+        return done(_that);
+      case BridgeShareAsking_Failed():
+        return failed(_that);
+    }
+  }
+
+  /// A variant of `map` that fallback to returning `null`.
+  ///
+  /// It is equivalent to doing:
+  /// ```dart
+  /// switch (sealedClass) {
+  ///   case final Subclass value:
+  ///     return ...;
+  ///   case _:
+  ///     return null;
+  /// }
+  /// ```
+
+  @optionalTypeArgs
+  TResult? mapOrNull<TResult extends Object?>({
+    TResult? Function(BridgeShareAsking_Idle value)? idle,
+    TResult? Function(BridgeShareAsking_Waiting value)? waiting,
+    TResult? Function(BridgeShareAsking_Running value)? running,
+    TResult? Function(BridgeShareAsking_Fetching value)? fetching,
+    TResult? Function(BridgeShareAsking_Done value)? done,
+    TResult? Function(BridgeShareAsking_Failed value)? failed,
+  }) {
+    final _that = this;
+    switch (_that) {
+      case BridgeShareAsking_Idle() when idle != null:
+        return idle(_that);
+      case BridgeShareAsking_Waiting() when waiting != null:
+        return waiting(_that);
+      case BridgeShareAsking_Running() when running != null:
+        return running(_that);
+      case BridgeShareAsking_Fetching() when fetching != null:
+        return fetching(_that);
+      case BridgeShareAsking_Done() when done != null:
+        return done(_that);
+      case BridgeShareAsking_Failed() when failed != null:
+        return failed(_that);
+      case _:
+        return null;
+    }
+  }
+
+  /// A variant of `when` that fallback to an `orElse` callback.
+  ///
+  /// It is equivalent to doing:
+  /// ```dart
+  /// switch (sealedClass) {
+  ///   case Subclass(:final field):
+  ///     return ...;
+  ///   case _:
+  ///     return orElse();
+  /// }
+  /// ```
+
+  @optionalTypeArgs
+  TResult maybeWhen<TResult extends Object?>({
+    TResult Function()? idle,
+    TResult Function()? waiting,
+    TResult Function(BigInt frame, BigInt total)? running,
+    TResult Function(BigInt done, BigInt total)? fetching,
+    TResult Function(String path)? done,
+    TResult Function(String why)? failed,
+    required TResult orElse(),
+  }) {
+    final _that = this;
+    switch (_that) {
+      case BridgeShareAsking_Idle() when idle != null:
+        return idle();
+      case BridgeShareAsking_Waiting() when waiting != null:
+        return waiting();
+      case BridgeShareAsking_Running() when running != null:
+        return running(_that.frame, _that.total);
+      case BridgeShareAsking_Fetching() when fetching != null:
+        return fetching(_that.done, _that.total);
+      case BridgeShareAsking_Done() when done != null:
+        return done(_that.path);
+      case BridgeShareAsking_Failed() when failed != null:
+        return failed(_that.why);
+      case _:
+        return orElse();
+    }
+  }
+
+  /// A `switch`-like method, using callbacks.
+  ///
+  /// As opposed to `map`, this offers destructuring.
+  /// It is equivalent to doing:
+  /// ```dart
+  /// switch (sealedClass) {
+  ///   case Subclass(:final field):
+  ///     return ...;
+  ///   case Subclass2(:final field2):
+  ///     return ...;
+  /// }
+  /// ```
+
+  @optionalTypeArgs
+  TResult when<TResult extends Object?>({
+    required TResult Function() idle,
+    required TResult Function() waiting,
+    required TResult Function(BigInt frame, BigInt total) running,
+    required TResult Function(BigInt done, BigInt total) fetching,
+    required TResult Function(String path) done,
+    required TResult Function(String why) failed,
+  }) {
+    final _that = this;
+    switch (_that) {
+      case BridgeShareAsking_Idle():
+        return idle();
+      case BridgeShareAsking_Waiting():
+        return waiting();
+      case BridgeShareAsking_Running():
+        return running(_that.frame, _that.total);
+      case BridgeShareAsking_Fetching():
+        return fetching(_that.done, _that.total);
+      case BridgeShareAsking_Done():
+        return done(_that.path);
+      case BridgeShareAsking_Failed():
+        return failed(_that.why);
+    }
+  }
+
+  /// A variant of `when` that fallback to returning `null`
+  ///
+  /// It is equivalent to doing:
+  /// ```dart
+  /// switch (sealedClass) {
+  ///   case Subclass(:final field):
+  ///     return ...;
+  ///   case _:
+  ///     return null;
+  /// }
+  /// ```
+
+  @optionalTypeArgs
+  TResult? whenOrNull<TResult extends Object?>({
+    TResult? Function()? idle,
+    TResult? Function()? waiting,
+    TResult? Function(BigInt frame, BigInt total)? running,
+    TResult? Function(BigInt done, BigInt total)? fetching,
+    TResult? Function(String path)? done,
+    TResult? Function(String why)? failed,
+  }) {
+    final _that = this;
+    switch (_that) {
+      case BridgeShareAsking_Idle() when idle != null:
+        return idle();
+      case BridgeShareAsking_Waiting() when waiting != null:
+        return waiting();
+      case BridgeShareAsking_Running() when running != null:
+        return running(_that.frame, _that.total);
+      case BridgeShareAsking_Fetching() when fetching != null:
+        return fetching(_that.done, _that.total);
+      case BridgeShareAsking_Done() when done != null:
+        return done(_that.path);
+      case BridgeShareAsking_Failed() when failed != null:
+        return failed(_that.why);
+      case _:
+        return null;
+    }
+  }
+}
+
+/// @nodoc
+
+class BridgeShareAsking_Idle extends BridgeShareAsking {
+  const BridgeShareAsking_Idle() : super._();
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType && other is BridgeShareAsking_Idle);
+  }
+
+  @override
+  int get hashCode => runtimeType.hashCode;
+
+  @override
+  String toString() {
+    return 'BridgeShareAsking.idle()';
+  }
+}
+
+/// @nodoc
+
+class BridgeShareAsking_Waiting extends BridgeShareAsking {
+  const BridgeShareAsking_Waiting() : super._();
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is BridgeShareAsking_Waiting);
+  }
+
+  @override
+  int get hashCode => runtimeType.hashCode;
+
+  @override
+  String toString() {
+    return 'BridgeShareAsking.waiting()';
+  }
+}
+
+/// @nodoc
+
+class BridgeShareAsking_Running extends BridgeShareAsking {
+  const BridgeShareAsking_Running({required this.frame, required this.total})
+      : super._();
+
+  final BigInt frame;
+  final BigInt total;
+
+  /// Create a copy of BridgeShareAsking
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  @pragma('vm:prefer-inline')
+  $BridgeShareAsking_RunningCopyWith<BridgeShareAsking_Running> get copyWith =>
+      _$BridgeShareAsking_RunningCopyWithImpl<BridgeShareAsking_Running>(
+          this, _$identity);
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is BridgeShareAsking_Running &&
+            (identical(other.frame, frame) || other.frame == frame) &&
+            (identical(other.total, total) || other.total == total));
+  }
+
+  @override
+  int get hashCode => Object.hash(runtimeType, frame, total);
+
+  @override
+  String toString() {
+    return 'BridgeShareAsking.running(frame: $frame, total: $total)';
+  }
+}
+
+/// @nodoc
+abstract mixin class $BridgeShareAsking_RunningCopyWith<$Res>
+    implements $BridgeShareAskingCopyWith<$Res> {
+  factory $BridgeShareAsking_RunningCopyWith(BridgeShareAsking_Running value,
+          $Res Function(BridgeShareAsking_Running) _then) =
+      _$BridgeShareAsking_RunningCopyWithImpl;
+  @useResult
+  $Res call({BigInt frame, BigInt total});
+}
+
+/// @nodoc
+class _$BridgeShareAsking_RunningCopyWithImpl<$Res>
+    implements $BridgeShareAsking_RunningCopyWith<$Res> {
+  _$BridgeShareAsking_RunningCopyWithImpl(this._self, this._then);
+
+  final BridgeShareAsking_Running _self;
+  final $Res Function(BridgeShareAsking_Running) _then;
+
+  /// Create a copy of BridgeShareAsking
+  /// with the given fields replaced by the non-null parameter values.
+  @pragma('vm:prefer-inline')
+  $Res call({
+    Object? frame = null,
+    Object? total = null,
+  }) {
+    return _then(BridgeShareAsking_Running(
+      frame: null == frame
+          ? _self.frame
+          : frame // ignore: cast_nullable_to_non_nullable
+              as BigInt,
+      total: null == total
+          ? _self.total
+          : total // ignore: cast_nullable_to_non_nullable
+              as BigInt,
+    ));
+  }
+}
+
+/// @nodoc
+
+class BridgeShareAsking_Fetching extends BridgeShareAsking {
+  const BridgeShareAsking_Fetching({required this.done, required this.total})
+      : super._();
+
+  final BigInt done;
+  final BigInt total;
+
+  /// Create a copy of BridgeShareAsking
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  @pragma('vm:prefer-inline')
+  $BridgeShareAsking_FetchingCopyWith<BridgeShareAsking_Fetching>
+      get copyWith =>
+          _$BridgeShareAsking_FetchingCopyWithImpl<BridgeShareAsking_Fetching>(
+              this, _$identity);
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is BridgeShareAsking_Fetching &&
+            (identical(other.done, done) || other.done == done) &&
+            (identical(other.total, total) || other.total == total));
+  }
+
+  @override
+  int get hashCode => Object.hash(runtimeType, done, total);
+
+  @override
+  String toString() {
+    return 'BridgeShareAsking.fetching(done: $done, total: $total)';
+  }
+}
+
+/// @nodoc
+abstract mixin class $BridgeShareAsking_FetchingCopyWith<$Res>
+    implements $BridgeShareAskingCopyWith<$Res> {
+  factory $BridgeShareAsking_FetchingCopyWith(BridgeShareAsking_Fetching value,
+          $Res Function(BridgeShareAsking_Fetching) _then) =
+      _$BridgeShareAsking_FetchingCopyWithImpl;
+  @useResult
+  $Res call({BigInt done, BigInt total});
+}
+
+/// @nodoc
+class _$BridgeShareAsking_FetchingCopyWithImpl<$Res>
+    implements $BridgeShareAsking_FetchingCopyWith<$Res> {
+  _$BridgeShareAsking_FetchingCopyWithImpl(this._self, this._then);
+
+  final BridgeShareAsking_Fetching _self;
+  final $Res Function(BridgeShareAsking_Fetching) _then;
+
+  /// Create a copy of BridgeShareAsking
+  /// with the given fields replaced by the non-null parameter values.
+  @pragma('vm:prefer-inline')
+  $Res call({
+    Object? done = null,
+    Object? total = null,
+  }) {
+    return _then(BridgeShareAsking_Fetching(
+      done: null == done
+          ? _self.done
+          : done // ignore: cast_nullable_to_non_nullable
+              as BigInt,
+      total: null == total
+          ? _self.total
+          : total // ignore: cast_nullable_to_non_nullable
+              as BigInt,
+    ));
+  }
+}
+
+/// @nodoc
+
+class BridgeShareAsking_Done extends BridgeShareAsking {
+  const BridgeShareAsking_Done({required this.path}) : super._();
+
+  final String path;
+
+  /// Create a copy of BridgeShareAsking
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  @pragma('vm:prefer-inline')
+  $BridgeShareAsking_DoneCopyWith<BridgeShareAsking_Done> get copyWith =>
+      _$BridgeShareAsking_DoneCopyWithImpl<BridgeShareAsking_Done>(
+          this, _$identity);
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is BridgeShareAsking_Done &&
+            (identical(other.path, path) || other.path == path));
+  }
+
+  @override
+  int get hashCode => Object.hash(runtimeType, path);
+
+  @override
+  String toString() {
+    return 'BridgeShareAsking.done(path: $path)';
+  }
+}
+
+/// @nodoc
+abstract mixin class $BridgeShareAsking_DoneCopyWith<$Res>
+    implements $BridgeShareAskingCopyWith<$Res> {
+  factory $BridgeShareAsking_DoneCopyWith(BridgeShareAsking_Done value,
+          $Res Function(BridgeShareAsking_Done) _then) =
+      _$BridgeShareAsking_DoneCopyWithImpl;
+  @useResult
+  $Res call({String path});
+}
+
+/// @nodoc
+class _$BridgeShareAsking_DoneCopyWithImpl<$Res>
+    implements $BridgeShareAsking_DoneCopyWith<$Res> {
+  _$BridgeShareAsking_DoneCopyWithImpl(this._self, this._then);
+
+  final BridgeShareAsking_Done _self;
+  final $Res Function(BridgeShareAsking_Done) _then;
+
+  /// Create a copy of BridgeShareAsking
+  /// with the given fields replaced by the non-null parameter values.
+  @pragma('vm:prefer-inline')
+  $Res call({
+    Object? path = null,
+  }) {
+    return _then(BridgeShareAsking_Done(
+      path: null == path
+          ? _self.path
+          : path // ignore: cast_nullable_to_non_nullable
+              as String,
+    ));
+  }
+}
+
+/// @nodoc
+
+class BridgeShareAsking_Failed extends BridgeShareAsking {
+  const BridgeShareAsking_Failed({required this.why}) : super._();
+
+  final String why;
+
+  /// Create a copy of BridgeShareAsking
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  @pragma('vm:prefer-inline')
+  $BridgeShareAsking_FailedCopyWith<BridgeShareAsking_Failed> get copyWith =>
+      _$BridgeShareAsking_FailedCopyWithImpl<BridgeShareAsking_Failed>(
+          this, _$identity);
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is BridgeShareAsking_Failed &&
+            (identical(other.why, why) || other.why == why));
+  }
+
+  @override
+  int get hashCode => Object.hash(runtimeType, why);
+
+  @override
+  String toString() {
+    return 'BridgeShareAsking.failed(why: $why)';
+  }
+}
+
+/// @nodoc
+abstract mixin class $BridgeShareAsking_FailedCopyWith<$Res>
+    implements $BridgeShareAskingCopyWith<$Res> {
+  factory $BridgeShareAsking_FailedCopyWith(BridgeShareAsking_Failed value,
+          $Res Function(BridgeShareAsking_Failed) _then) =
+      _$BridgeShareAsking_FailedCopyWithImpl;
+  @useResult
+  $Res call({String why});
+}
+
+/// @nodoc
+class _$BridgeShareAsking_FailedCopyWithImpl<$Res>
+    implements $BridgeShareAsking_FailedCopyWith<$Res> {
+  _$BridgeShareAsking_FailedCopyWithImpl(this._self, this._then);
+
+  final BridgeShareAsking_Failed _self;
+  final $Res Function(BridgeShareAsking_Failed) _then;
+
+  /// Create a copy of BridgeShareAsking
+  /// with the given fields replaced by the non-null parameter values.
+  @pragma('vm:prefer-inline')
+  $Res call({
+    Object? why = null,
+  }) {
+    return _then(BridgeShareAsking_Failed(
+      why: null == why
+          ? _self.why
+          : why // ignore: cast_nullable_to_non_nullable
+              as String,
+    ));
   }
 }
 
@@ -971,6 +1595,9 @@ extension BridgeShareEventPatterns on BridgeShareEvent {
     TResult Function(BridgeShareEvent_Elsewhere value)? elsewhere,
     TResult Function(BridgeShareEvent_Ended value)? ended,
     TResult Function(BridgeShareEvent_Reach value)? reach,
+    TResult Function(BridgeShareEvent_Relayed value)? relayed,
+    TResult Function(BridgeShareEvent_Footage value)? footage,
+    TResult Function(BridgeShareEvent_ExportAsked value)? exportAsked,
     required TResult orElse(),
   }) {
     final _that = this;
@@ -987,6 +1614,12 @@ extension BridgeShareEventPatterns on BridgeShareEvent {
         return ended(_that);
       case BridgeShareEvent_Reach() when reach != null:
         return reach(_that);
+      case BridgeShareEvent_Relayed() when relayed != null:
+        return relayed(_that);
+      case BridgeShareEvent_Footage() when footage != null:
+        return footage(_that);
+      case BridgeShareEvent_ExportAsked() when exportAsked != null:
+        return exportAsked(_that);
       case _:
         return orElse();
     }
@@ -1013,6 +1646,9 @@ extension BridgeShareEventPatterns on BridgeShareEvent {
     required TResult Function(BridgeShareEvent_Elsewhere value) elsewhere,
     required TResult Function(BridgeShareEvent_Ended value) ended,
     required TResult Function(BridgeShareEvent_Reach value) reach,
+    required TResult Function(BridgeShareEvent_Relayed value) relayed,
+    required TResult Function(BridgeShareEvent_Footage value) footage,
+    required TResult Function(BridgeShareEvent_ExportAsked value) exportAsked,
   }) {
     final _that = this;
     switch (_that) {
@@ -1028,6 +1664,12 @@ extension BridgeShareEventPatterns on BridgeShareEvent {
         return ended(_that);
       case BridgeShareEvent_Reach():
         return reach(_that);
+      case BridgeShareEvent_Relayed():
+        return relayed(_that);
+      case BridgeShareEvent_Footage():
+        return footage(_that);
+      case BridgeShareEvent_ExportAsked():
+        return exportAsked(_that);
     }
   }
 
@@ -1051,6 +1693,9 @@ extension BridgeShareEventPatterns on BridgeShareEvent {
     TResult? Function(BridgeShareEvent_Elsewhere value)? elsewhere,
     TResult? Function(BridgeShareEvent_Ended value)? ended,
     TResult? Function(BridgeShareEvent_Reach value)? reach,
+    TResult? Function(BridgeShareEvent_Relayed value)? relayed,
+    TResult? Function(BridgeShareEvent_Footage value)? footage,
+    TResult? Function(BridgeShareEvent_ExportAsked value)? exportAsked,
   }) {
     final _that = this;
     switch (_that) {
@@ -1066,6 +1711,12 @@ extension BridgeShareEventPatterns on BridgeShareEvent {
         return ended(_that);
       case BridgeShareEvent_Reach() when reach != null:
         return reach(_that);
+      case BridgeShareEvent_Relayed() when relayed != null:
+        return relayed(_that);
+      case BridgeShareEvent_Footage() when footage != null:
+        return footage(_that);
+      case BridgeShareEvent_ExportAsked() when exportAsked != null:
+        return exportAsked(_that);
       case _:
         return null;
     }
@@ -1091,6 +1742,9 @@ extension BridgeShareEventPatterns on BridgeShareEvent {
     TResult Function()? elsewhere,
     TResult Function(BridgeShareEnding reason)? ended,
     TResult Function(BridgeShareReach reach)? reach,
+    TResult Function(BridgeShareRelayed relayed)? relayed,
+    TResult Function(bool placed)? footage,
+    TResult Function(String job, int from, String comp)? exportAsked,
     required TResult orElse(),
   }) {
     final _that = this;
@@ -1107,6 +1761,12 @@ extension BridgeShareEventPatterns on BridgeShareEvent {
         return ended(_that.reason);
       case BridgeShareEvent_Reach() when reach != null:
         return reach(_that.reach);
+      case BridgeShareEvent_Relayed() when relayed != null:
+        return relayed(_that.relayed);
+      case BridgeShareEvent_Footage() when footage != null:
+        return footage(_that.placed);
+      case BridgeShareEvent_ExportAsked() when exportAsked != null:
+        return exportAsked(_that.job, _that.from, _that.comp);
       case _:
         return orElse();
     }
@@ -1133,6 +1793,9 @@ extension BridgeShareEventPatterns on BridgeShareEvent {
     required TResult Function() elsewhere,
     required TResult Function(BridgeShareEnding reason) ended,
     required TResult Function(BridgeShareReach reach) reach,
+    required TResult Function(BridgeShareRelayed relayed) relayed,
+    required TResult Function(bool placed) footage,
+    required TResult Function(String job, int from, String comp) exportAsked,
   }) {
     final _that = this;
     switch (_that) {
@@ -1148,6 +1811,12 @@ extension BridgeShareEventPatterns on BridgeShareEvent {
         return ended(_that.reason);
       case BridgeShareEvent_Reach():
         return reach(_that.reach);
+      case BridgeShareEvent_Relayed():
+        return relayed(_that.relayed);
+      case BridgeShareEvent_Footage():
+        return footage(_that.placed);
+      case BridgeShareEvent_ExportAsked():
+        return exportAsked(_that.job, _that.from, _that.comp);
     }
   }
 
@@ -1171,6 +1840,9 @@ extension BridgeShareEventPatterns on BridgeShareEvent {
     TResult? Function()? elsewhere,
     TResult? Function(BridgeShareEnding reason)? ended,
     TResult? Function(BridgeShareReach reach)? reach,
+    TResult? Function(BridgeShareRelayed relayed)? relayed,
+    TResult? Function(bool placed)? footage,
+    TResult? Function(String job, int from, String comp)? exportAsked,
   }) {
     final _that = this;
     switch (_that) {
@@ -1186,6 +1858,12 @@ extension BridgeShareEventPatterns on BridgeShareEvent {
         return ended(_that.reason);
       case BridgeShareEvent_Reach() when reach != null:
         return reach(_that.reach);
+      case BridgeShareEvent_Relayed() when relayed != null:
+        return relayed(_that.relayed);
+      case BridgeShareEvent_Footage() when footage != null:
+        return footage(_that.placed);
+      case BridgeShareEvent_ExportAsked() when exportAsked != null:
+        return exportAsked(_that.job, _that.from, _that.comp);
       case _:
         return null;
     }
@@ -1530,6 +2208,629 @@ class _$BridgeShareEvent_ReachCopyWithImpl<$Res>
     return $BridgeShareReachCopyWith<$Res>(_self.reach, (value) {
       return _then(_self.copyWith(reach: value));
     });
+  }
+}
+
+/// @nodoc
+
+class BridgeShareEvent_Relayed extends BridgeShareEvent {
+  const BridgeShareEvent_Relayed({required this.relayed}) : super._();
+
+  final BridgeShareRelayed relayed;
+
+  /// Create a copy of BridgeShareEvent
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  @pragma('vm:prefer-inline')
+  $BridgeShareEvent_RelayedCopyWith<BridgeShareEvent_Relayed> get copyWith =>
+      _$BridgeShareEvent_RelayedCopyWithImpl<BridgeShareEvent_Relayed>(
+          this, _$identity);
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is BridgeShareEvent_Relayed &&
+            (identical(other.relayed, relayed) || other.relayed == relayed));
+  }
+
+  @override
+  int get hashCode => Object.hash(runtimeType, relayed);
+
+  @override
+  String toString() {
+    return 'BridgeShareEvent.relayed(relayed: $relayed)';
+  }
+}
+
+/// @nodoc
+abstract mixin class $BridgeShareEvent_RelayedCopyWith<$Res>
+    implements $BridgeShareEventCopyWith<$Res> {
+  factory $BridgeShareEvent_RelayedCopyWith(BridgeShareEvent_Relayed value,
+          $Res Function(BridgeShareEvent_Relayed) _then) =
+      _$BridgeShareEvent_RelayedCopyWithImpl;
+  @useResult
+  $Res call({BridgeShareRelayed relayed});
+}
+
+/// @nodoc
+class _$BridgeShareEvent_RelayedCopyWithImpl<$Res>
+    implements $BridgeShareEvent_RelayedCopyWith<$Res> {
+  _$BridgeShareEvent_RelayedCopyWithImpl(this._self, this._then);
+
+  final BridgeShareEvent_Relayed _self;
+  final $Res Function(BridgeShareEvent_Relayed) _then;
+
+  /// Create a copy of BridgeShareEvent
+  /// with the given fields replaced by the non-null parameter values.
+  @pragma('vm:prefer-inline')
+  $Res call({
+    Object? relayed = null,
+  }) {
+    return _then(BridgeShareEvent_Relayed(
+      relayed: null == relayed
+          ? _self.relayed
+          : relayed // ignore: cast_nullable_to_non_nullable
+              as BridgeShareRelayed,
+    ));
+  }
+}
+
+/// @nodoc
+
+class BridgeShareEvent_Footage extends BridgeShareEvent {
+  const BridgeShareEvent_Footage({required this.placed}) : super._();
+
+  final bool placed;
+
+  /// Create a copy of BridgeShareEvent
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  @pragma('vm:prefer-inline')
+  $BridgeShareEvent_FootageCopyWith<BridgeShareEvent_Footage> get copyWith =>
+      _$BridgeShareEvent_FootageCopyWithImpl<BridgeShareEvent_Footage>(
+          this, _$identity);
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is BridgeShareEvent_Footage &&
+            (identical(other.placed, placed) || other.placed == placed));
+  }
+
+  @override
+  int get hashCode => Object.hash(runtimeType, placed);
+
+  @override
+  String toString() {
+    return 'BridgeShareEvent.footage(placed: $placed)';
+  }
+}
+
+/// @nodoc
+abstract mixin class $BridgeShareEvent_FootageCopyWith<$Res>
+    implements $BridgeShareEventCopyWith<$Res> {
+  factory $BridgeShareEvent_FootageCopyWith(BridgeShareEvent_Footage value,
+          $Res Function(BridgeShareEvent_Footage) _then) =
+      _$BridgeShareEvent_FootageCopyWithImpl;
+  @useResult
+  $Res call({bool placed});
+}
+
+/// @nodoc
+class _$BridgeShareEvent_FootageCopyWithImpl<$Res>
+    implements $BridgeShareEvent_FootageCopyWith<$Res> {
+  _$BridgeShareEvent_FootageCopyWithImpl(this._self, this._then);
+
+  final BridgeShareEvent_Footage _self;
+  final $Res Function(BridgeShareEvent_Footage) _then;
+
+  /// Create a copy of BridgeShareEvent
+  /// with the given fields replaced by the non-null parameter values.
+  @pragma('vm:prefer-inline')
+  $Res call({
+    Object? placed = null,
+  }) {
+    return _then(BridgeShareEvent_Footage(
+      placed: null == placed
+          ? _self.placed
+          : placed // ignore: cast_nullable_to_non_nullable
+              as bool,
+    ));
+  }
+}
+
+/// @nodoc
+
+class BridgeShareEvent_ExportAsked extends BridgeShareEvent {
+  const BridgeShareEvent_ExportAsked(
+      {required this.job, required this.from, required this.comp})
+      : super._();
+
+  final String job;
+  final int from;
+  final String comp;
+
+  /// Create a copy of BridgeShareEvent
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  @pragma('vm:prefer-inline')
+  $BridgeShareEvent_ExportAskedCopyWith<BridgeShareEvent_ExportAsked>
+      get copyWith => _$BridgeShareEvent_ExportAskedCopyWithImpl<
+          BridgeShareEvent_ExportAsked>(this, _$identity);
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is BridgeShareEvent_ExportAsked &&
+            (identical(other.job, job) || other.job == job) &&
+            (identical(other.from, from) || other.from == from) &&
+            (identical(other.comp, comp) || other.comp == comp));
+  }
+
+  @override
+  int get hashCode => Object.hash(runtimeType, job, from, comp);
+
+  @override
+  String toString() {
+    return 'BridgeShareEvent.exportAsked(job: $job, from: $from, comp: $comp)';
+  }
+}
+
+/// @nodoc
+abstract mixin class $BridgeShareEvent_ExportAskedCopyWith<$Res>
+    implements $BridgeShareEventCopyWith<$Res> {
+  factory $BridgeShareEvent_ExportAskedCopyWith(
+          BridgeShareEvent_ExportAsked value,
+          $Res Function(BridgeShareEvent_ExportAsked) _then) =
+      _$BridgeShareEvent_ExportAskedCopyWithImpl;
+  @useResult
+  $Res call({String job, int from, String comp});
+}
+
+/// @nodoc
+class _$BridgeShareEvent_ExportAskedCopyWithImpl<$Res>
+    implements $BridgeShareEvent_ExportAskedCopyWith<$Res> {
+  _$BridgeShareEvent_ExportAskedCopyWithImpl(this._self, this._then);
+
+  final BridgeShareEvent_ExportAsked _self;
+  final $Res Function(BridgeShareEvent_ExportAsked) _then;
+
+  /// Create a copy of BridgeShareEvent
+  /// with the given fields replaced by the non-null parameter values.
+  @pragma('vm:prefer-inline')
+  $Res call({
+    Object? job = null,
+    Object? from = null,
+    Object? comp = null,
+  }) {
+    return _then(BridgeShareEvent_ExportAsked(
+      job: null == job
+          ? _self.job
+          : job // ignore: cast_nullable_to_non_nullable
+              as String,
+      from: null == from
+          ? _self.from
+          : from // ignore: cast_nullable_to_non_nullable
+              as int,
+      comp: null == comp
+          ? _self.comp
+          : comp // ignore: cast_nullable_to_non_nullable
+              as String,
+    ));
+  }
+}
+
+/// @nodoc
+mixin _$BridgeShareFetching {
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType && other is BridgeShareFetching);
+  }
+
+  @override
+  int get hashCode => runtimeType.hashCode;
+
+  @override
+  String toString() {
+    return 'BridgeShareFetching()';
+  }
+}
+
+/// @nodoc
+class $BridgeShareFetchingCopyWith<$Res> {
+  $BridgeShareFetchingCopyWith(
+      BridgeShareFetching _, $Res Function(BridgeShareFetching) __);
+}
+
+/// Adds pattern-matching-related methods to [BridgeShareFetching].
+extension BridgeShareFetchingPatterns on BridgeShareFetching {
+  /// A variant of `map` that fallback to returning `orElse`.
+  ///
+  /// It is equivalent to doing:
+  /// ```dart
+  /// switch (sealedClass) {
+  ///   case final Subclass value:
+  ///     return ...;
+  ///   case _:
+  ///     return orElse();
+  /// }
+  /// ```
+
+  @optionalTypeArgs
+  TResult maybeMap<TResult extends Object?>({
+    TResult Function(BridgeShareFetching_Idle value)? idle,
+    TResult Function(BridgeShareFetching_Working value)? working,
+    TResult Function(BridgeShareFetching_Queued value)? queued,
+    TResult Function(BridgeShareFetching_Failed value)? failed,
+    required TResult orElse(),
+  }) {
+    final _that = this;
+    switch (_that) {
+      case BridgeShareFetching_Idle() when idle != null:
+        return idle(_that);
+      case BridgeShareFetching_Working() when working != null:
+        return working(_that);
+      case BridgeShareFetching_Queued() when queued != null:
+        return queued(_that);
+      case BridgeShareFetching_Failed() when failed != null:
+        return failed(_that);
+      case _:
+        return orElse();
+    }
+  }
+
+  /// A `switch`-like method, using callbacks.
+  ///
+  /// Callbacks receives the raw object, upcasted.
+  /// It is equivalent to doing:
+  /// ```dart
+  /// switch (sealedClass) {
+  ///   case final Subclass value:
+  ///     return ...;
+  ///   case final Subclass2 value:
+  ///     return ...;
+  /// }
+  /// ```
+
+  @optionalTypeArgs
+  TResult map<TResult extends Object?>({
+    required TResult Function(BridgeShareFetching_Idle value) idle,
+    required TResult Function(BridgeShareFetching_Working value) working,
+    required TResult Function(BridgeShareFetching_Queued value) queued,
+    required TResult Function(BridgeShareFetching_Failed value) failed,
+  }) {
+    final _that = this;
+    switch (_that) {
+      case BridgeShareFetching_Idle():
+        return idle(_that);
+      case BridgeShareFetching_Working():
+        return working(_that);
+      case BridgeShareFetching_Queued():
+        return queued(_that);
+      case BridgeShareFetching_Failed():
+        return failed(_that);
+    }
+  }
+
+  /// A variant of `map` that fallback to returning `null`.
+  ///
+  /// It is equivalent to doing:
+  /// ```dart
+  /// switch (sealedClass) {
+  ///   case final Subclass value:
+  ///     return ...;
+  ///   case _:
+  ///     return null;
+  /// }
+  /// ```
+
+  @optionalTypeArgs
+  TResult? mapOrNull<TResult extends Object?>({
+    TResult? Function(BridgeShareFetching_Idle value)? idle,
+    TResult? Function(BridgeShareFetching_Working value)? working,
+    TResult? Function(BridgeShareFetching_Queued value)? queued,
+    TResult? Function(BridgeShareFetching_Failed value)? failed,
+  }) {
+    final _that = this;
+    switch (_that) {
+      case BridgeShareFetching_Idle() when idle != null:
+        return idle(_that);
+      case BridgeShareFetching_Working() when working != null:
+        return working(_that);
+      case BridgeShareFetching_Queued() when queued != null:
+        return queued(_that);
+      case BridgeShareFetching_Failed() when failed != null:
+        return failed(_that);
+      case _:
+        return null;
+    }
+  }
+
+  /// A variant of `when` that fallback to an `orElse` callback.
+  ///
+  /// It is equivalent to doing:
+  /// ```dart
+  /// switch (sealedClass) {
+  ///   case Subclass(:final field):
+  ///     return ...;
+  ///   case _:
+  ///     return orElse();
+  /// }
+  /// ```
+
+  @optionalTypeArgs
+  TResult maybeWhen<TResult extends Object?>({
+    TResult Function()? idle,
+    TResult Function(BigInt done, BigInt total)? working,
+    TResult Function(int id)? queued,
+    TResult Function()? failed,
+    required TResult orElse(),
+  }) {
+    final _that = this;
+    switch (_that) {
+      case BridgeShareFetching_Idle() when idle != null:
+        return idle();
+      case BridgeShareFetching_Working() when working != null:
+        return working(_that.done, _that.total);
+      case BridgeShareFetching_Queued() when queued != null:
+        return queued(_that.id);
+      case BridgeShareFetching_Failed() when failed != null:
+        return failed();
+      case _:
+        return orElse();
+    }
+  }
+
+  /// A `switch`-like method, using callbacks.
+  ///
+  /// As opposed to `map`, this offers destructuring.
+  /// It is equivalent to doing:
+  /// ```dart
+  /// switch (sealedClass) {
+  ///   case Subclass(:final field):
+  ///     return ...;
+  ///   case Subclass2(:final field2):
+  ///     return ...;
+  /// }
+  /// ```
+
+  @optionalTypeArgs
+  TResult when<TResult extends Object?>({
+    required TResult Function() idle,
+    required TResult Function(BigInt done, BigInt total) working,
+    required TResult Function(int id) queued,
+    required TResult Function() failed,
+  }) {
+    final _that = this;
+    switch (_that) {
+      case BridgeShareFetching_Idle():
+        return idle();
+      case BridgeShareFetching_Working():
+        return working(_that.done, _that.total);
+      case BridgeShareFetching_Queued():
+        return queued(_that.id);
+      case BridgeShareFetching_Failed():
+        return failed();
+    }
+  }
+
+  /// A variant of `when` that fallback to returning `null`
+  ///
+  /// It is equivalent to doing:
+  /// ```dart
+  /// switch (sealedClass) {
+  ///   case Subclass(:final field):
+  ///     return ...;
+  ///   case _:
+  ///     return null;
+  /// }
+  /// ```
+
+  @optionalTypeArgs
+  TResult? whenOrNull<TResult extends Object?>({
+    TResult? Function()? idle,
+    TResult? Function(BigInt done, BigInt total)? working,
+    TResult? Function(int id)? queued,
+    TResult? Function()? failed,
+  }) {
+    final _that = this;
+    switch (_that) {
+      case BridgeShareFetching_Idle() when idle != null:
+        return idle();
+      case BridgeShareFetching_Working() when working != null:
+        return working(_that.done, _that.total);
+      case BridgeShareFetching_Queued() when queued != null:
+        return queued(_that.id);
+      case BridgeShareFetching_Failed() when failed != null:
+        return failed();
+      case _:
+        return null;
+    }
+  }
+}
+
+/// @nodoc
+
+class BridgeShareFetching_Idle extends BridgeShareFetching {
+  const BridgeShareFetching_Idle() : super._();
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType && other is BridgeShareFetching_Idle);
+  }
+
+  @override
+  int get hashCode => runtimeType.hashCode;
+
+  @override
+  String toString() {
+    return 'BridgeShareFetching.idle()';
+  }
+}
+
+/// @nodoc
+
+class BridgeShareFetching_Working extends BridgeShareFetching {
+  const BridgeShareFetching_Working({required this.done, required this.total})
+      : super._();
+
+  final BigInt done;
+  final BigInt total;
+
+  /// Create a copy of BridgeShareFetching
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  @pragma('vm:prefer-inline')
+  $BridgeShareFetching_WorkingCopyWith<BridgeShareFetching_Working>
+      get copyWith => _$BridgeShareFetching_WorkingCopyWithImpl<
+          BridgeShareFetching_Working>(this, _$identity);
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is BridgeShareFetching_Working &&
+            (identical(other.done, done) || other.done == done) &&
+            (identical(other.total, total) || other.total == total));
+  }
+
+  @override
+  int get hashCode => Object.hash(runtimeType, done, total);
+
+  @override
+  String toString() {
+    return 'BridgeShareFetching.working(done: $done, total: $total)';
+  }
+}
+
+/// @nodoc
+abstract mixin class $BridgeShareFetching_WorkingCopyWith<$Res>
+    implements $BridgeShareFetchingCopyWith<$Res> {
+  factory $BridgeShareFetching_WorkingCopyWith(
+          BridgeShareFetching_Working value,
+          $Res Function(BridgeShareFetching_Working) _then) =
+      _$BridgeShareFetching_WorkingCopyWithImpl;
+  @useResult
+  $Res call({BigInt done, BigInt total});
+}
+
+/// @nodoc
+class _$BridgeShareFetching_WorkingCopyWithImpl<$Res>
+    implements $BridgeShareFetching_WorkingCopyWith<$Res> {
+  _$BridgeShareFetching_WorkingCopyWithImpl(this._self, this._then);
+
+  final BridgeShareFetching_Working _self;
+  final $Res Function(BridgeShareFetching_Working) _then;
+
+  /// Create a copy of BridgeShareFetching
+  /// with the given fields replaced by the non-null parameter values.
+  @pragma('vm:prefer-inline')
+  $Res call({
+    Object? done = null,
+    Object? total = null,
+  }) {
+    return _then(BridgeShareFetching_Working(
+      done: null == done
+          ? _self.done
+          : done // ignore: cast_nullable_to_non_nullable
+              as BigInt,
+      total: null == total
+          ? _self.total
+          : total // ignore: cast_nullable_to_non_nullable
+              as BigInt,
+    ));
+  }
+}
+
+/// @nodoc
+
+class BridgeShareFetching_Queued extends BridgeShareFetching {
+  const BridgeShareFetching_Queued({required this.id}) : super._();
+
+  final int id;
+
+  /// Create a copy of BridgeShareFetching
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  @pragma('vm:prefer-inline')
+  $BridgeShareFetching_QueuedCopyWith<BridgeShareFetching_Queued>
+      get copyWith =>
+          _$BridgeShareFetching_QueuedCopyWithImpl<BridgeShareFetching_Queued>(
+              this, _$identity);
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is BridgeShareFetching_Queued &&
+            (identical(other.id, id) || other.id == id));
+  }
+
+  @override
+  int get hashCode => Object.hash(runtimeType, id);
+
+  @override
+  String toString() {
+    return 'BridgeShareFetching.queued(id: $id)';
+  }
+}
+
+/// @nodoc
+abstract mixin class $BridgeShareFetching_QueuedCopyWith<$Res>
+    implements $BridgeShareFetchingCopyWith<$Res> {
+  factory $BridgeShareFetching_QueuedCopyWith(BridgeShareFetching_Queued value,
+          $Res Function(BridgeShareFetching_Queued) _then) =
+      _$BridgeShareFetching_QueuedCopyWithImpl;
+  @useResult
+  $Res call({int id});
+}
+
+/// @nodoc
+class _$BridgeShareFetching_QueuedCopyWithImpl<$Res>
+    implements $BridgeShareFetching_QueuedCopyWith<$Res> {
+  _$BridgeShareFetching_QueuedCopyWithImpl(this._self, this._then);
+
+  final BridgeShareFetching_Queued _self;
+  final $Res Function(BridgeShareFetching_Queued) _then;
+
+  /// Create a copy of BridgeShareFetching
+  /// with the given fields replaced by the non-null parameter values.
+  @pragma('vm:prefer-inline')
+  $Res call({
+    Object? id = null,
+  }) {
+    return _then(BridgeShareFetching_Queued(
+      id: null == id
+          ? _self.id
+          : id // ignore: cast_nullable_to_non_nullable
+              as int,
+    ));
+  }
+}
+
+/// @nodoc
+
+class BridgeShareFetching_Failed extends BridgeShareFetching {
+  const BridgeShareFetching_Failed() : super._();
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is BridgeShareFetching_Failed);
+  }
+
+  @override
+  int get hashCode => runtimeType.hashCode;
+
+  @override
+  String toString() {
+    return 'BridgeShareFetching.failed()';
   }
 }
 

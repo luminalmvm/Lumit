@@ -347,6 +347,12 @@ impl OpenDecoders {
         self.open.is_empty()
     }
 
+    /// Close `item`'s decoder, if one is open: its file has changed, so the
+    /// next decode opens the new one.
+    pub fn close(&mut self, item: Uuid) {
+        self.open.remove(&item);
+    }
+
     /// The decodes that follow are for another frame of the comp. What "used
     /// lately" means is counted in these.
     pub fn next_frame(&mut self) {
@@ -423,6 +429,11 @@ impl OpenDecoders {
 /// up, in [`crate::cache`].
 pub struct DecodePool {
     decoders: OpenDecoders,
+    /// The file each item was last decoded from. An item is read from one
+    /// file for nearly all of its life, but not all: it is relinked, or a
+    /// stand-in for it gives way to the original. One entry an item, and an
+    /// entry is replaced when its item's file is.
+    sources: HashMap<Uuid, std::path::PathBuf>,
     frame_cache: lumit_cache::ByteLru<FrameCacheKey, CachedFrame>,
     /// Flow backend, created on the first Flow-policy frame. Uses [`Self::gpu`]
     /// — the renderer's own device — when the pool was given one, so flow runs
@@ -527,6 +538,7 @@ impl DecodePool {
     pub fn new() -> Self {
         Self {
             decoders: OpenDecoders::default(),
+            sources: HashMap::new(),
             frame_cache: lumit_cache::ByteLru::new(DEFAULT_DECODE_CACHE_BYTES),
             flow_engine: None,
             synthesis: None,
@@ -655,9 +667,43 @@ impl DecodePool {
         self.frame_cache.clear();
     }
 
+    /// Note the file `item` is about to be decoded from. When it is not the
+    /// one it was decoded from before, the decoder open on the old file goes,
+    /// and every decoded frame with it: they are filed by item and frame, so
+    /// the old file's would be handed back as the new one's.
+    fn settle(&mut self, item: Uuid, source: &lumit_media::MediaSource, slate: bool) {
+        if slate {
+            return;
+        }
+        match self.sources.get(&item) {
+            Some(known) if *known == source.path => {}
+            known => {
+                if known.is_some() {
+                    self.decoders.close(item);
+                    self.clear();
+                }
+                self.sources.insert(item, source.path.clone());
+            }
+        }
+    }
+
+    /// [`Self::settle`] for a job and the jobs across its edit points.
+    fn settle_job(&mut self, job: &CompJob) {
+        self.settle(job.item, &job.source, job.slate);
+        for cut in &job.cuts {
+            match cut {
+                Cut::Neighbour(_, clip)
+                | Cut::Moment(_, Some(clip))
+                | Cut::Under(_, Some(clip)) => self.settle_job(clip),
+                Cut::Moment(_, None) | Cut::Under(_, None) => {}
+            }
+        }
+    }
+
     /// Decode one source frame (or synthesise the missing-footage slate).
     pub fn decode_footage(&mut self, req: &Request) -> Result<FramePixels, String> {
         self.decoders.next_frame();
+        self.settle(req.item, &req.source, req.slate.is_some());
         decode(&mut self.decoders, &mut self.frame_cache, req)
     }
 
@@ -697,6 +743,9 @@ impl DecodePool {
     ) -> Result<CompFrame, String> {
         self.comp_decodes += 1;
         self.decoders.next_frame();
+        for job in jobs {
+            self.settle_job(job);
+        }
         // Before a byte is decoded: a machine already at its ceiling gives up
         // the cold half of both stores first, so this frame's rasters land in
         // room that was made for them rather than on top of a cache nobody is

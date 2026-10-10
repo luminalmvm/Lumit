@@ -39,6 +39,7 @@ pub mod connect_points;
 pub mod contrast;
 pub mod corner_pin;
 pub mod curves;
+pub mod custom_controls;
 pub mod custom_shader;
 pub mod datamosh;
 pub mod depth;

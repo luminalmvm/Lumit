@@ -84,6 +84,7 @@ mod beats;
 mod edits;
 mod export;
 mod faults;
+mod footage;
 mod framecache;
 #[cfg(feature = "media")]
 mod layered;

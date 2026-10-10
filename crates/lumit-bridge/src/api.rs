@@ -19,6 +19,7 @@ pub mod cut;
 pub mod effect;
 pub mod export;
 pub mod expressions;
+pub mod extensions;
 pub mod folder;
 pub mod footage;
 pub mod graph;
@@ -41,7 +42,7 @@ pub mod wireframes;
 mod worker_thread;
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 #[derive(Debug)]
 pub enum BridgeError {

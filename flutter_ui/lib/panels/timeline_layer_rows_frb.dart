@@ -394,9 +394,15 @@ class FoldRow extends StatelessWidget {
           // how the outline is navigated; a *modified* click only picks, so
           // Ctrl- and Shift-clicking a run of effects does not flap every one
           // of them open on the way past.
+          //
+          // An effect's own heading only picks, whatever the click. Its name
+          // is the thing being chosen, here and in the effect controls, so
+          // choosing an open effect must not fold it away.
           onTap: () {
             onSelectProperty(path);
-            if (!isModifiedClick) onToggle(path);
+            if (!isModifiedClick && effectIdOfPath(path) == null) {
+              onToggle(path);
+            }
           },
           // An *effect's* heading offers to copy the picked effects. The other
           // headings — Transform, Effects, Masks, Audio — are groupings rather
@@ -713,6 +719,7 @@ class _TimelineParamRowState extends State<_TimelineParamRow> {
       // One lane tall, like every other fold row: the card's own vertical
       // padding on top of that clipped the fields.
       rowPadding: EdgeInsets.zero,
+      sliderTrack: false,
       // The staged value while a drag is in flight, the document's otherwise.
       value: _editor.stagedValue(row.info.id, row.param.id) ?? row.value,
       siblings: {for (final v in row.info.values) v.id: v.value},

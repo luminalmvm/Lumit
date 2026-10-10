@@ -12,61 +12,61 @@ const features = [
     art: "retime",
     span: 3,
     h: "Retime, two ways",
-    p: "One retime, read as a value graph or as a speed graph. With support for both After Effects and Vegas styles of retiming, and switch at any point.",
+    p: "Retime a layer on a value graph or a speed graph. Both After Effects and Vegas styles are supported, and you can switch between them at any point.",
   },
   {
     art: "effects",
     span: 3,
     h: "Over 100 effects, built in",
-    p: "Glow, motion blur, camera shake, RGB split, smooth zoom, colour grading, roto brush and puppet. All GPU-rendered, each with a documentation page for details.",
+    p: "Glow, motion blur, shake, RGB split, colour grading, Roto brush, Puppet, and many more. Every effect renders on the GPU and has its own page in the manual.",
   },
   {
     art: "graph",
     span: 2,
     h: "A graph editor to work in",
-    p: "Value and speed views of the same curves, with support for easing, linear holding, and ways to alter multiple keyframes at once.",
+    p: "See the same curves as values or as speed. Ease, hold, or go linear, and edit several keyframes at once.",
   },
   {
     art: "cuts",
     span: 2,
     h: "Cuts inside a layer",
-    p: "A Sequence layer holds clips cut back-to-back on one row, each with its own retime, inside a layer, just like an NLE.",
+    p: "A Sequence layer holds clips cut back-to-back on one row, just like an NLE. Each clip keeps its own Retime.",
   },
   {
     art: "ofx",
     span: 2,
     h: "OFX plugin support",
-    p: "Any OFX plugin is supported: Sapphire, Twixtor, and the rest are found at start-up and sit beside built-in effects.",
+    p: "Lumit hosts OFX plugins. Sapphire, Twixtor, and the rest are found at start-up and sit beside the built-in effects.",
   },
   {
     art: "import",
     span: 2,
     h: "Bring your After Effects projects",
-    p: "Import After Effects projects directly across into Lumit. Keyframes carry across value for value, with support for all base effects and OFX plugins that Lumit can access.",
+    p: "Open an After Effects project in Lumit. Keyframes carry across value for value, along with the base effects and any OFX plugins Lumit can find.",
   },
   {
     art: "music",
     span: 4,
     h: "Let music guide you",
-    p: "Beat detection marks the audio, cuts and retime features snap to the markers, and any parameter can be driven from a layer's sound.",
+    p: "Beat detection puts markers on the audio, and cuts and retimes snap to them. Any property can be driven by a layer's sound.",
   },
   {
     art: "journal",
     span: 2,
-    h: "Your work survives the crash",
-    p: "Every edit goes through an operation journal, and the project autosaves beside it. Kill Lumit mid-edit and the recovered project is offered on the next launch.",
+    h: "Your work survives a crash",
+    p: "Every edit is written to a journal as you make it, and the project autosaves alongside. If Lumit closes mid-edit, your work is offered back the next time you open it.",
   },
   {
     art: "responsive",
     span: 2,
-    h: "The interface never blocks",
-    p: "Rendering runs on the GPU, cached work is reused, and preview quality drops when a frame is late. The interface answers while an export runs.",
+    h: "The interface stays responsive",
+    p: "Rendering runs on the GPU and finished frames are cached. A late frame lowers the preview quality instead of stalling, and you can keep working while an export runs.",
   },
   {
     art: "open",
     span: 2,
     h: "Open source, GPLv3",
-    p: "The whole engine and interface, in the open. No subscription, no per-seat licence, and no plugin tax on the basics.",
+    p: "The whole engine and interface are open source. No subscription, no licence per seat, and no paying extra for the basics.",
   },
 ];
 
@@ -94,14 +94,24 @@ const wave = Array.from({ length: BARS }, (_, i) => {
 });
 
 const journal = ["Add Glow", "Set keyframe", "Trim layer"];
+
+// The clips in the Sequence layer drawing: how long each is, and its own
+// speed across it. Up is faster, and the middle of the row is full speed.
+const cuts = [
+  { len: 3, speed: "M0 16C40 16 60 6 100 6" },
+  { len: 2, speed: "M0 7C40 7 55 25 100 25" },
+  { len: 4, speed: "M0 25C28 25 32 8 52 8S82 19 100 19" },
+  { len: 2, speed: "M0 16H100" },
+  { len: 3, speed: "M0 11C45 11 60 27 100 27" },
+];
 ---
 
 <section class="wrap flex flex-col gap-12 pb-20 sm:pb-28">
   <SectionHead kicker="Why Lumit exists" title="Editing should not be a chore." no="04 / 06">
     <Fragment slot="lede">
-      Preview lag, interfaces that stop responding, and large external plugin suites
-      that slow down your device. Lumit replaces all of this in a single application,
-      with support for OFX plugins should you still require them.
+      No more preview lag, frozen interfaces, or stacks of plugins slowing your
+      machine down. Lumit has what you need built in, and still runs OFX plugins if
+      you want them.
     </Fragment>
     <a class="go" href="https://docs.lumitlab.com/effects/">Browse the effects</a>
   </SectionHead>
@@ -143,7 +153,6 @@ const journal = ["Add Glow", "Set keyframe", "Trim layer"];
               ))}
             {f.art === "graph" && (
               <svg viewBox="0 0 300 100" fill="none">
-                <path d="M24 58C96 58 170 40 276 72" stroke="var(--color-fg-4)" />
                 <path d="M24 80H112M276 20H168" stroke="var(--color-fg-4)" />
                 <path d="M24 80C112 80 168 20 276 20" stroke="var(--label-violet)" stroke-width="1.5" />
                 <circle cx="112" cy="80" r="2.5" fill="var(--color-fg-3)" />
@@ -154,13 +163,23 @@ const journal = ["Add Glow", "Set keyframe", "Trim layer"];
             )}
             {f.art === "cuts" && (
               <div class="lane">
-                <span class="tag">Sequence layer</span>
-                <div class="clips">
-                  <i style="flex:3" />
-                  <i style="flex:2" />
-                  <i style="flex:4" />
-                  <i style="flex:2" />
-                  <i style="flex:3" />
+                <span class="tag"><i class="twirl" />Sequence layer</span>
+                <div class="rows">
+                  <div class="clips">
+                    {cuts.map((c) => (
+                      <i style={`flex:${c.len}`} />
+                    ))}
+                  </div>
+                  <div class="speeds">
+                    {cuts.map((c) => (
+                      <span style={`flex:${c.len}`}>
+                        <svg viewBox="0 0 100 32" preserveAspectRatio="none" fill="none">
+                          <path d={`${c.speed}V32H0Z`} fill="currentColor" opacity="0.16" />
+                          <path d={c.speed} stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke" />
+                        </svg>
+                      </span>
+                    ))}
+                  </div>
                   <b class="head" />
                 </div>
               </div>
@@ -376,16 +395,53 @@ const journal = ["Add Glow", "Set keyframe", "Trim layer"];
     }
   }
 
-  /* Cuts: one layer's bar, with clips cut back to back inside it. */
+  /* Cuts: one layer's bar, with clips cut back to back inside it, twirled
+     open onto a row under it that draws each clip's speed. */
   .lane {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 9px;
     width: 100%;
     padding: 0 22px;
   }
-  .clips {
+  .lane .tag {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .twirl {
+    border: 3.5px solid transparent;
+    border-top: 5px solid currentColor;
+    border-bottom: 0;
+  }
+  .rows {
     position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  /* The same padding and gaps as the bar above, so a clip's speed sits
+     under the clip. */
+  .speeds {
+    display: flex;
+    gap: 2px;
+    height: 36px;
+    padding: 0 3px;
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-ctl);
+    background:
+      linear-gradient(var(--color-line), var(--color-line)) 0 50% / 100% 1px no-repeat,
+      var(--color-ink-2);
+  }
+  .speeds span {
+    min-width: 0;
+    padding: 3px 0;
+    color: var(--label-mint);
+  }
+  .speeds span:nth-child(even) {
+    color: var(--label-indigo);
+  }
+  .clips {
     display: flex;
     gap: 2px;
     height: 30px;
@@ -659,8 +715,16 @@ const journal = ["Add Glow", "Set keyframe", "Trim layer"];
     .rider {
       animation: ride 4.6s cubic-bezier(0.45, 0, 0.55, 1) infinite;
     }
-    .clips .head {
+    .rows .head {
       animation: cross 5s linear infinite;
+    }
+    /* The speed row drops open under the bar, stays for two passes of the
+       playhead, and folds away again. */
+    .speeds {
+      animation: drop 10s cubic-bezier(0.3, 0, 0.2, 1) infinite;
+    }
+    .twirl {
+      animation: twirl 10s cubic-bezier(0.3, 0, 0.2, 1) infinite;
     }
     /* Each clip lifts as the playhead comes on to it. */
     .clips i {
@@ -722,6 +786,16 @@ const journal = ["Add Glow", "Set keyframe", "Trim layer"];
   @keyframes cross {
     from { left: 0; }
     to { left: 100%; }
+  }
+  @keyframes drop {
+    0%, 3% { clip-path: inset(0 0 100% 0); opacity: 0; }
+    9%, 93% { clip-path: inset(0); opacity: 1; }
+    99%, 100% { clip-path: inset(0 0 100% 0); opacity: 0; }
+  }
+  @keyframes twirl {
+    0%, 3% { rotate: -90deg; }
+    9%, 93% { rotate: 0deg; }
+    99%, 100% { rotate: -90deg; }
   }
   @keyframes lift {
     0%, 3% { filter: brightness(1.7); }

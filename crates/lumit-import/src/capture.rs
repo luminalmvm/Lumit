@@ -322,6 +322,13 @@ pub struct Property {
     /// all (Curves' point list and its `CUSTOM_VALUE` siblings). Recorded so
     /// the import report can name it rather than quietly dropping it.
     pub unreadable: Option<String>,
+    /// What kind of control an effect declared this slot to be: `slider`,
+    /// `angle`, `checkbox`, `popup`. Only the direct parser knows, from the
+    /// effect's own definitions, and it is what tells a pseudo effect's
+    /// checkbox from its slider, both of which hold one number.
+    pub control: Option<String>,
+    /// The ends of a slider's travel, where the file states them.
+    pub range: Option<(f64, f64)>,
 }
 
 /// A mask's own facts, which sit on the mask node rather than among its

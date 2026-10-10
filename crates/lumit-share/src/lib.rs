@@ -6,36 +6,45 @@
 //! copy by fingerprint.
 //!
 //! Nothing here is run by Lumit's makers. The host listens on its own machine
-//! and the guests reach it directly, over a LAN or a VPN.
+//! and the guests reach it directly: on its network, through its router, or
+//! over a VPN. Where none of those lets a guest in, both can meet at a relay
+//! one of them has the address of, which passes on what they say without
+//! being able to read it.
 //!
 //! Threads: sharing runs its own and none is the UI thread. The host has one
-//! that accepts, a reader and a writer per guest, and one that keeps its
-//! router's port open when it was asked to. A guest has a reader and a
-//! writer.
+//! that accepts, a reader and a writer per guest, one that keeps its
+//! router's port open when it was asked to, and one that keeps its room at a
+//! relay when it was given one. A guest has a reader and a writer, and for a
+//! moment one for each address it tries its host at.
 
+mod bulk;
 mod guest;
 mod host;
+mod invite;
 mod kept;
 mod local;
 mod reach;
 mod wire;
 
+pub use bulk::{Footage, Held, Limits, News, Wanted};
 pub use guest::{join, resume, Guest, Joining, Resuming};
 pub use host::{host, Host};
+pub use invite::{key_from, key_text, lock_of, Invite, LINK, LINK_SCHEME, MAX_ADDRESSES};
 pub use kept::forget;
 pub use lumit_core::shared::Conflict;
 
 use lumit_core::CompTime;
 use serde::{Deserialize, Serialize};
-use std::fmt;
-use std::net::UdpSocket;
-use std::str::FromStr;
+use std::net::{IpAddr, UdpSocket};
 use std::sync::Arc;
 use uuid::Uuid;
 
 /// The port a host listens on unless told otherwise. Fixed, so it can be
 /// forwarded once on a router and stay forwarded.
 pub const DEFAULT_PORT: u16 = 47856;
+
+/// The port a relay listens on unless its owner picked another.
+pub const RELAY_PORT: u16 = lumit_relay::DEFAULT_PORT;
 
 /// The most people in one shared project, the host included.
 pub const MAX_PEOPLE: usize = 16;
@@ -121,6 +130,30 @@ pub enum Reach {
     Behind,
 }
 
+/// Whether a host has a room at a relay, for guests no address of its own
+/// lets in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Relayed {
+    /// It was given no relay.
+    #[default]
+    Off,
+    /// The relay is being asked.
+    Asking,
+    /// The room is open, and an invite made now leads to it.
+    Open,
+    /// The relay did not answer, or would not open a room. It is asked again
+    /// every few seconds.
+    Unreachable,
+}
+
+/// The name of the room a host with this invite keeps at a relay. Both ends
+/// work it out from the secret, and the relay cannot work the secret out
+/// from it.
+pub(crate) fn room(key: &[u8; 32]) -> String {
+    let name = blake3::derive_key("lumit-share 2026 relay room", key);
+    hex::encode(&name[..16])
+}
+
 /// Why sharing stopped for a guest.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Ending {
@@ -154,6 +187,12 @@ pub enum Event {
     /// For a host: what came of asking its router to let people outside
     /// the network in.
     Reach(Reach),
+    /// For a host: what came of asking a relay for a room.
+    Relayed(Relayed),
+    /// Another person's Lumit said something to this one that is not an
+    /// edit. `from` is who, and `body` is theirs to have written and this
+    /// end's to judge.
+    Note { from: u32, body: serde_json::Value },
 }
 
 /// Where those events go. Called from the share threads with no lock held.
@@ -169,6 +208,8 @@ pub enum ShareError {
     Json(#[from] serde_json::Error),
     #[error("that is not a Lumit invite")]
     BadInvite,
+    #[error("that invite needs its password")]
+    Locked,
     #[error("the host could not be reached")]
     Unreachable,
     #[error("the host turned this guest away: {0:?}")]
@@ -181,57 +222,6 @@ pub enum ShareError {
     Unsafe,
     #[error("no randomness for the invite: {0}")]
     NoRandomness(String),
-}
-
-/// What a guest needs to reach a host: where it is, and the secret that lets
-/// it in and keys the channel. Written `address:port/key`, with an IPv6
-/// address in square brackets.
-///
-/// The key is 256 random bits, so there is nothing to guess and no need for a
-/// password exchange. Whoever holds an invite can join and edit, until the
-/// host stops sharing or takes someone out, which replaces it for everyone
-/// still there. A host that only closes the project keeps the key, so the
-/// same invite works when it shares that project again.
-#[derive(Clone, PartialEq, Eq)]
-pub struct Invite {
-    /// `host:port`, where host is an address or a name.
-    pub address: String,
-    pub key: [u8; 32],
-}
-
-impl fmt::Display for Invite {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}/{}", self.address, key_text(&self.key))
-    }
-}
-
-/// An invite's secret as it is written, for a host to keep and share the
-/// same project by again.
-#[must_use]
-pub fn key_text(key: &[u8; 32]) -> String {
-    hex::encode(key)
-}
-
-/// The secret [`key_text`] wrote, or `None` for anything else.
-#[must_use]
-pub fn key_from(text: &str) -> Option<[u8; 32]> {
-    let mut key = [0u8; 32];
-    hex::decode_to_slice(text.trim(), &mut key).ok()?;
-    Some(key)
-}
-
-impl FromStr for Invite {
-    type Err = ShareError;
-
-    fn from_str(text: &str) -> Result<Self, ShareError> {
-        let (address, key) = text.trim().rsplit_once('/').ok_or(ShareError::BadInvite)?;
-        let key = key_from(key).ok_or(ShareError::BadInvite)?;
-        if address.is_empty() {
-            return Err(ShareError::BadInvite);
-        }
-        let address = address.to_owned();
-        Ok(Invite { address, key })
-    }
 }
 
 /// This machine's address on its network, for the host to hand out. A guess:
@@ -248,6 +238,21 @@ pub fn local_address() -> String {
             socket.local_addr()
         })
         .map_or_else(|_| "127.0.0.1".to_owned(), |addr| addr.ip().to_string())
+}
+
+/// The address this machine has on the internet over IPv6, if it has one.
+/// Every machine has its own there, with no router's address in front of it,
+/// so it goes in an invite as one more way in. Whether the router lets a
+/// stranger through to it is the router's business. Nothing is sent.
+#[must_use]
+pub fn global_address() -> Option<String> {
+    let socket = UdpSocket::bind("[::]:0").ok()?;
+    socket.connect("[2001:db8::1]:9").ok()?;
+    match socket.local_addr().ok()?.ip() {
+        // 2000::/3 is what is routed between networks.
+        IpAddr::V6(ip) if ip.segments()[0] & 0xe000 == 0x2000 => Some(ip.to_string()),
+        _ => None,
+    }
 }
 
 /// One end of a shared project, whichever it is.
@@ -283,6 +288,52 @@ impl Sharing {
         }
     }
 
+    /// Send and take footage, which is `footage`'s to make and keep, no
+    /// faster than `limits`. Until this is called none crosses.
+    pub fn carry_footage(&self, footage: Arc<dyn Footage>, limits: Arc<Limits>) {
+        match self {
+            Sharing::Host(host) => host.carry_footage(footage, limits),
+            Sharing::Guest(guest) => guest.carry_footage(footage, limits),
+        }
+    }
+
+    /// Say which footage items this machine has the original of. The whole
+    /// list each time it changes.
+    pub fn set_holds(&self, items: Vec<Held>) {
+        match self {
+            Sharing::Host(host) => host.set_holds(items),
+            Sharing::Guest(guest) => guest.set_holds(items),
+        }
+    }
+
+    /// Who has the original of the footage item `item`, by their number,
+    /// and how big it is on their disk.
+    #[must_use]
+    pub fn holders(&self, item: Uuid) -> Vec<(u32, u64)> {
+        match self {
+            Sharing::Host(host) => host.holders(item),
+            Sharing::Guest(guest) => guest.holders(item),
+        }
+    }
+
+    /// Ask whoever has it for `wanted`. What comes of it is told to the
+    /// [`Footage`] this end carries. Asked once however often it is called.
+    pub fn want(&self, wanted: Wanted) {
+        match self {
+            Sharing::Host(host) => host.want(wanted),
+            Sharing::Guest(guest) => guest.want(wanted),
+        }
+    }
+
+    /// Say `body` to the person numbered `to`. It reaches them as an
+    /// [`Event::Note`], or not at all if they have gone.
+    pub fn note(&self, to: u32, body: serde_json::Value) {
+        match self {
+            Sharing::Host(host) => host.note(to, body),
+            Sharing::Guest(guest) => guest.note(to, body),
+        }
+    }
+
     /// Stop sharing for everyone, or leave as a guest. The document stays as
     /// it is. Dropping a host instead leaves its guests waiting for it.
     pub fn stop(&self) {
@@ -302,7 +353,7 @@ mod tests {
     use parking_lot::Mutex;
     use std::io::{Read, Write};
     use std::net::{IpAddr, Ipv4Addr, Shutdown, TcpListener, TcpStream};
-    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     use std::time::{Duration, Instant};
 
     const LOOPBACK: IpAddr = IpAddr::V4(Ipv4Addr::LOCALHOST);
@@ -380,12 +431,24 @@ mod tests {
     fn a_host_and_a_guest_end_on_the_same_document() {
         let hosted = Arc::new(DocumentStore::new(Document::new()));
         let shared = add_solid(&hosted, "before");
-        let host = host(hosted.clone(), "Host", LOOPBACK, 0, None, None, quiet()).unwrap();
+        let host = host(
+            hosted.clone(),
+            "Host",
+            LOOPBACK,
+            0,
+            None,
+            None,
+            None,
+            quiet(),
+        )
+        .unwrap();
         let deaf = Arc::new(AtomicUsize::new(0));
         let through = relay(host.port(), deaf.clone());
         let invite: Invite = host.invite("127.0.0.1").to_string().parse().unwrap();
+        // With an address that leads nowhere in it too, as the host's
+        // address on its own network does for a guest somewhere else.
         let invite = Invite {
-            address: format!("127.0.0.1:{through}"),
+            addresses: vec!["127.0.0.1:1".into(), format!("127.0.0.1:{through}")],
             ..invite
         };
 
@@ -472,6 +535,7 @@ mod tests {
             port,
             Some(key),
             None,
+            None,
             quiet(),
         );
         let host = again.unwrap();
@@ -496,7 +560,17 @@ mod tests {
     fn a_host_and_a_guest_that_both_closed_carry_on_where_they_left_off() {
         let hosted = Arc::new(DocumentStore::new(Document::new()));
         let both = add_solid(&hosted, "saved");
-        let host = host(hosted.clone(), "Host", LOOPBACK, 0, None, None, quiet()).unwrap();
+        let host = host(
+            hosted.clone(),
+            "Host",
+            LOOPBACK,
+            0,
+            None,
+            None,
+            None,
+            quiet(),
+        )
+        .unwrap();
         let invite: Invite = host.invite("127.0.0.1").to_string().parse().unwrap();
         let (document, joining) = join(invite, "Guest", None).unwrap();
         let joined = Arc::new(DocumentStore::new(document));
@@ -549,6 +623,7 @@ mod tests {
             port,
             Some(key),
             None,
+            None,
             quiet(),
         );
         let host = again.unwrap();
@@ -597,8 +672,162 @@ mod tests {
         host.stop();
         drop(guest);
         let afresh = Arc::new(DocumentStore::new(Document::clone(&hosted.snapshot())));
-        let host = crate::host(afresh, "Host", LOOPBACK, 0, Some(key), None, quiet()).unwrap();
+        let host =
+            crate::host(afresh, "Host", LOOPBACK, 0, Some(key), None, None, quiet()).unwrap();
         assert_eq!(host.restored(), 0);
+    }
+
+    /// A guest that no address of the host's lets in meets it at a relay,
+    /// and the two end on the same document. Taking someone out replaces
+    /// the invite, and the room with it: the old invite finds nobody at the
+    /// relay and the new one finds the host.
+    #[test]
+    fn a_guest_reaches_its_host_through_a_relay() {
+        let listener = TcpListener::bind((LOOPBACK, 0)).unwrap();
+        let relay = format!("127.0.0.1:{}", listener.local_addr().unwrap().port());
+        let stop = Arc::new(AtomicBool::new(false));
+        let stopping = stop.clone();
+        let serving = std::thread::spawn(move || {
+            lumit_relay::serve(&[listener], lumit_relay::Limits::default(), &stopping)
+        });
+
+        let hosted = Arc::new(DocumentStore::new(Document::new()));
+        let host = host(
+            hosted.clone(),
+            "Host",
+            LOOPBACK,
+            0,
+            None,
+            None,
+            None,
+            quiet(),
+        )
+        .unwrap();
+        host.relay_through(&relay);
+        until("the host has its room", || host.relayed() == Relayed::Open);
+        // With the relay as the only way: nothing in it leads to the host.
+        let by_relay = || {
+            let invite = Invite {
+                addresses: Vec::new(),
+                ..host.invite_anywhere(None)
+            };
+            invite.to_string().parse::<Invite>().unwrap()
+        };
+        let old = by_relay();
+        assert_eq!(old.relays, [relay]);
+
+        let (document, joining) = join(old.clone(), "Guest", None).unwrap();
+        let joined = Arc::new(DocumentStore::new(document));
+        let guest = joining.start(joined.clone(), quiet()).unwrap();
+        let hosts = add_solid(&hosted, "the host's");
+        let guests = add_solid(&joined, "the guest's");
+        until("both ends hold both new items and agree", || {
+            let (h, g) = (hosted.snapshot(), joined.snapshot());
+            h.item(guests).is_some() && g.item(hosts).is_some() && h.items == g.items
+        });
+
+        host.remove(guest.me());
+        until("the new invite finds the host at the relay", || {
+            join(by_relay(), "Other", None).is_ok()
+        });
+        assert!(join(old, "Guest", None).is_err());
+
+        host.stop();
+        stop.store(true, Ordering::Relaxed);
+        serving.join().unwrap().unwrap();
+    }
+
+    /// A machine's footage for the tests: the originals it was given, and
+    /// a folder of its own that what it is sent lands in.
+    struct Shelf {
+        folder: std::path::PathBuf,
+        originals: Vec<(Uuid, std::path::PathBuf)>,
+    }
+
+    impl Footage for Shelf {
+        fn make(&self, wanted: &Wanted, _: &AtomicBool) -> Option<std::path::PathBuf> {
+            let item = wanted.item()?;
+            let mine = self.originals.iter().find(|(id, _)| *id == item);
+            let sent = self.room(wanted).filter(|path| path.is_file());
+            mine.map(|(_, path)| path.clone()).or(sent)
+        }
+
+        fn room(&self, wanted: &Wanted) -> Option<std::path::PathBuf> {
+            Some(self.folder.join(format!("{}.bin", wanted.item()?)))
+        }
+
+        fn told(&self, _: News) {}
+    }
+
+    /// Footage one guest has reaches a guest that has not, by way of a host
+    /// that has not either and keeps what passes through it. A file part of
+    /// which is here already is carried on with, and one whose part here is
+    /// not how the file starts is begun again.
+    #[test]
+    fn footage_one_guest_has_reaches_another_through_the_host() {
+        let root = std::env::temp_dir().join(format!("lumit-bulk-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let shelf = |name: &str, originals: Vec<(Uuid, std::path::PathBuf)>| {
+            let folder = root.join(name);
+            std::fs::create_dir_all(&folder).unwrap();
+            Arc::new(Shelf { folder, originals })
+        };
+        let bytes = |seed: u8| -> Vec<u8> {
+            (0..300_000u32)
+                .map(|n| (n.wrapping_mul(2_654_435_761) >> 13) as u8 ^ seed)
+                .collect()
+        };
+        std::fs::create_dir_all(&root).unwrap();
+        let (clip, other) = (Uuid::now_v7(), Uuid::now_v7());
+        let (clip_file, other_file) = (root.join("clip.mov"), root.join("other.mov"));
+        std::fs::write(&clip_file, bytes(1)).unwrap();
+        std::fs::write(&other_file, bytes(2)).unwrap();
+
+        let hosted = Arc::new(DocumentStore::new(Document::new()));
+        let host = host(hosted, "Host", LOOPBACK, 0, None, None, None, quiet()).unwrap();
+        let hosts = shelf("host", Vec::new());
+        host.carry_footage(hosts.clone(), Arc::new(Limits::default()));
+        let invite = || host.invite("127.0.0.1");
+        let guest = |name: &str, shelf: Arc<Shelf>| {
+            let (document, joining) = join(invite(), name, None).unwrap();
+            let store = Arc::new(DocumentStore::new(document));
+            let guest = joining.start(store, quiet()).unwrap();
+            guest.carry_footage(shelf, Arc::new(Limits::default()));
+            guest
+        };
+        let has = guest(
+            "Has",
+            shelf("has", vec![(clip, clip_file), (other, other_file)]),
+        );
+        let lacks_shelf = shelf("lacks", Vec::new());
+        let lacks = guest("Lacks", lacks_shelf.clone());
+        let held = |item| Held {
+            item,
+            bytes: 300_000,
+        };
+        has.set_holds(vec![held(clip), held(other)]);
+        until("everyone knows who has the footage", || {
+            let theirs = [(has.me(), 300_000)];
+            lacks.holders(clip) == theirs && host.holders(other) == theirs
+        });
+
+        // Part of one is here already, and part of the other is not it.
+        let part = |name: Uuid| lacks_shelf.folder.join(format!("{name}.bin.part"));
+        std::fs::write(part(clip), &bytes(1)[..100_000]).unwrap();
+        std::fs::write(part(other), &bytes(9)[..100_000]).unwrap();
+        lacks.want(Wanted::StandIn { item: clip });
+        lacks.want(Wanted::StandIn { item: other });
+        let arrived = |shelf: &Shelf, item: Uuid, seed: u8| {
+            let path = shelf.folder.join(format!("{item}.bin"));
+            std::fs::read(path).is_ok_and(|read| read == bytes(seed))
+        };
+        until("both files reach the guest that lacked them", || {
+            arrived(&lacks_shelf, clip, 1) && arrived(&lacks_shelf, other, 2)
+        });
+        assert!(arrived(&hosts, clip, 1) && arrived(&hosts, other, 2));
+
+        host.stop();
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     /// The invite's secret is what lets a guest in. One bit out and the
@@ -606,9 +835,52 @@ mod tests {
     #[test]
     fn a_guest_with_the_wrong_key_is_not_let_in() {
         let hosted = Arc::new(DocumentStore::new(Document::new()));
-        let host = host(hosted, "Host", LOOPBACK, 0, None, None, quiet()).unwrap();
+        let host = host(hosted, "Host", LOOPBACK, 0, None, None, None, quiet()).unwrap();
         let mut invite = host.invite("127.0.0.1");
         invite.key[0] ^= 1;
         assert!(join(invite, "Guest", None).is_err());
+    }
+
+    /// With a password set, the link is not enough: a guest has to give the
+    /// password too, and the wrong one gets no answer. The password outlives
+    /// the invite, so after someone is taken out the new link opens with the
+    /// same one, and the guest still here is sent a key that finds the host.
+    #[test]
+    fn a_password_is_asked_for_as_well_as_the_link() {
+        let hosted = Arc::new(DocumentStore::new(Document::new()));
+        let lock = Some(lock_of("correct horse"));
+        let host = host(hosted, "Host", LOOPBACK, 0, None, lock, None, quiet()).unwrap();
+        let link = || {
+            let written = host.invite("127.0.0.1").to_string();
+            written.parse::<Invite>().unwrap()
+        };
+        assert!(link().locked);
+        assert!(matches!(
+            join(link(), "Guest", None),
+            Err(ShareError::Locked)
+        ));
+        assert!(join(link().unlocked("wrong"), "Guest", None).is_err());
+        // The link's own secret is not the key either.
+        let bare = Invite {
+            locked: false,
+            ..link()
+        };
+        assert!(join(bare, "Guest", None).is_err());
+
+        let (document, joining) = join(link().unlocked("correct horse"), "Guest", None).unwrap();
+        let joined = Arc::new(DocumentStore::new(document));
+        let guest = joining.start(joined, quiet()).unwrap();
+        let (_, other) = join(link().unlocked("correct horse"), "Other", None).unwrap();
+        let theirs = Arc::new(DocumentStore::new(Document::new()));
+        let other = other.start(theirs, quiet()).unwrap();
+        until("the host sees both guests", || host.people().len() == 3);
+        let old = link();
+        host.remove(other.me());
+        assert!(join(old.unlocked("correct horse"), "Other", None).is_err());
+        let new = link().unlocked("correct horse");
+        until("the guest still here has the new key", || {
+            guest.key() == new.key
+        });
+        assert!(join(new, "Other", None).is_ok());
     }
 }

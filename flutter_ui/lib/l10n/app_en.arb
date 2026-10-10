@@ -1576,6 +1576,18 @@
   "@fileTypePreset": {
     "description": "A file type in the system's file dialogues: a saved .lumfx effect stack."
   },
+  "expressionLanguageJavaScript": "JavaScript",
+  "@expressionLanguageJavaScript": {
+    "description": "The name of a programming language an expression can be written in. A proper name; do not translate."
+  },
+  "expressionLanguageRhai": "Rhai",
+  "@expressionLanguageRhai": {
+    "description": "The name of a programming language an expression can be written in. A proper name; do not translate."
+  },
+  "fileTypePresetToOpen": "Effect presets",
+  "@fileTypePresetToOpen": {
+    "description": "A file type in the system's file dialogues when opening a preset: Lumit's own .lumfx files and After Effects' .ffx files together."
+  },
   "fileTypeShader": "WGSL shader",
   "@fileTypeShader": {
     "description": "A file type in the system's file dialogues: a .wgsl shader loaded into a Custom shader effect by its 'Load from file…' button."
@@ -5545,13 +5557,33 @@
   "@marker": {
     "description": "Title of the dialogue that edits one marker."
   },
+  "markerColour": "Colour",
+  "@markerColour": {
+    "description": "Marker dialogue: the label beside the row of colour chips a marker's colour is picked from. Also read out for the same row of chips in a marker's right-click menu."
+  },
+  "markerDuration": "Duration",
+  "@markerDuration": {
+    "description": "Marker dialogue: the label beside the box that sets how long a marker runs for. A marker with a duration is drawn as a region on the Timeline."
+  },
+  "markerDurationFrames": "frames",
+  "@markerDurationFrames": {
+    "description": "Marker dialogue: the unit written after the duration box, as in '24 frames'. Lower case."
+  },
   "markerHint": "What this marker says",
   "@markerHint": {
     "description": "Placeholder in the marker's text field."
   },
+  "markerMakeRegion": "Make region",
+  "@markerMakeRegion": {
+    "description": "Context-menu item on a Timeline marker. It gives the marker a duration, so it marks a stretch of time that is shaded down through the layers instead of a single frame."
+  },
   "markerNoLabel": "(no label)",
   "@markerNoLabel": {
     "description": "Stands in for a marker's text in the marker list when it was given none. Keep the brackets."
+  },
+  "markerRemoveRegion": "Remove region",
+  "@markerRemoveRegion": {
+    "description": "Context-menu item on a Timeline marker that is a region. It takes the duration away again, leaving a marker on a single frame."
   },
   "maskExpansion": "Expansion",
   "@maskExpansion": {
@@ -7392,6 +7424,10 @@
   "settingsQualityTier": "Quality tier",
   "@settingsQualityTier": {
     "description": "Settings window: the name of one setting."
+  },
+  "settingsNewExpressionsLanguage": "New expressions are written in",
+  "@settingsNewExpressionsLanguage": {
+    "description": "Settings window: the name of the setting choosing which programming language a new expression starts in. Followed by a dropdown reading JavaScript or Rhai."
   },
   "settingsRetimeOpensToSpeed": "Retime opens to Speed",
   "@settingsRetimeOpensToSpeed": {
@@ -10331,6 +10367,10 @@
   "@fxColourControl": {
     "description": "Effect name in the Add effect menu — holds one colour for an expression to read."
   },
+  "fxCustomControls": "Custom controls",
+  "@fxCustomControls": {
+    "description": "Effect name in the Add effect menu — a named set of controls for expressions to read, which is what an After Effects pseudo effect imports as."
+  },
   "fxPointControl": "Point control",
   "@fxPointControl": {
     "description": "Effect name in the Add effect menu — holds one place in the frame for an expression to read."
@@ -10746,6 +10786,15 @@
   "aeExpressionNotRunnable": "the expression does not run here and was switched off — its text is kept, and the keyframes underneath drive the property: {source}",
   "@aeExpressionNotRunnable": {
     "description": "Import report row reason, lower case. An expression written in After Effects' language, which Lumit cannot run; the placeholder is the expression's source text.",
+    "placeholders": {
+      "source": {
+        "type": "String"
+      }
+    }
+  },
+  "aeExpressionOverKeys": "the expression sits over keyframes, and only one of the two can drive a property here — the keyframes do, and the expression's text is kept: {source}",
+  "@aeExpressionOverKeys": {
+    "description": "Import report row reason, lower case. An After Effects expression Lumit could run, on a property that also has keyframes; Lumit keeps the keyframes. The placeholder is the expression's source text.",
     "placeholders": {
       "source": {
         "type": "String"
@@ -12409,7 +12458,7 @@
   },
   "makeProxy": "Make proxy",
   "@makeProxy": {
-    "description": "Project panel row menu, on a footage row: transcode a smaller stand-in file for this item and attach it."
+    "description": "Project panel row menu, on a footage row: transcode a smaller copy of this item's file and attach it as its proxy."
   },
   "makeProxies": "Make proxies",
   "@makeProxies": {
@@ -13802,6 +13851,10 @@
   },
   "histSetParent": "Set parent",
   "@histSetParent": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histEditExpression": "Edit expression",
+  "@histEditExpression": {
     "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
   },
   "histEditTransform": "Edit transform",
@@ -15460,18 +15513,6 @@
   "@shareAddress": {
     "description": "Field label in the Shared project window: this computer's network address, which goes into the invite. The person can type another over it."
   },
-  "shareInvite": "Invite",
-  "@shareInvite": {
-    "description": "Label in the Shared project window beside the invite: the line of text a host sends and a guest pastes to join."
-  },
-  "shareCopyInvite": "Copy invite",
-  "@shareCopyInvite": {
-    "description": "Button in the Shared project window. Puts the invite on the clipboard."
-  },
-  "shareInviteCopied": "Invite copied",
-  "@shareInviteCopied": {
-    "description": "Bottom-strip notice after the Copy invite button is pressed."
-  },
   "shareHostHint": "Anyone with the invite can join and edit until you stop sharing.",
   "@shareHostHint": {
     "description": "Quiet line on the Share this project page of the Shared project window, under the fields."
@@ -15796,29 +15837,605 @@
   "@shareOutsideAsk": {
     "description": "Text beside the tick box on the Internet row of the Share this project page. When ticked, Lumit asks the home router to open the sharing port, so friends elsewhere can join without a VPN."
   },
-  "shareReachOff": "People outside your network need a VPN, or this port forwarded to this computer.",
-  "@shareReachOff": {
-    "description": "Quiet line under the invite in the Shared project window, shown to a host who left the Internet box unticked."
+  "shareLink": "Invite link",
+  "@shareLink": {
+    "description": "Row label in the Shared project window, beside the invite link: the link a host sends and a guest pastes to join."
   },
-  "shareReachAsking": "Asking your router to open the port…",
-  "@shareReachAsking": {
-    "description": "Quiet line under the invite in the Shared project window, shown to a host for a second or two after sharing starts, while Lumit asks the home router to let people outside the network in."
+  "shareCopyLink": "Copy link",
+  "@shareCopyLink": {
+    "description": "Button in the Shared project window. Puts the invite link on the clipboard without showing it."
   },
-  "shareReachOpen": "People outside your network can join with this invite. On your own network the address is {address}.",
-  "@shareReachOpen": {
-    "description": "Quiet line under the invite in the Shared project window, shown to a host once the router has opened the port. The invite above now carries the public address. {address} is this computer's address on the local network, for someone in the same house.",
+  "shareLinkCopied": "Invite link copied",
+  "@shareLinkCopied": {
+    "description": "Bottom-strip notice after the Copy link button is pressed."
+  },
+  "shareLinkPaste": "Paste the link you were sent",
+  "@shareLinkPaste": {
+    "description": "Placeholder in the empty Invite link field on the Join a project page of the Shared project window."
+  },
+  "shareShowLink": "Show",
+  "@shareShowLink": {
+    "description": "Small button beside an invite link in the Shared project window. The link is hidden until this is pressed and a warning agreed to."
+  },
+  "shareHideLink": "Hide",
+  "@shareHideLink": {
+    "description": "Small button beside an invite link in the Shared project window, once the link is showing. Hides it again."
+  },
+  "shareShowTitle": "Show the invite link?",
+  "@shareShowTitle": {
+    "description": "Title of the small question that opens when Show is pressed beside a hidden invite link."
+  },
+  "shareShowBody": "Anyone who sees this link can join the project and change it, and the link holds your internet address. Keep it off streams, recordings and screenshots.",
+  "@shareShowBody": {
+    "description": "Body of the question asked before a hidden invite link is shown."
+  },
+  "shareKeepHidden": "Keep hidden",
+  "@shareKeepHidden": {
+    "description": "Default button of the question asked before a hidden invite link is shown. Closes the question and leaves the link hidden."
+  },
+  "shareShowConfirm": "Show link",
+  "@shareShowConfirm": {
+    "description": "Button of the question asked before a hidden invite link is shown. Shows the link."
+  },
+  "shareAdvanced": "Advanced",
+  "@shareAdvanced": {
+    "description": "Label of a fold in the Shared project window. Opening it shows the rows most people never need: the port, the router, a relay, an extra address."
+  },
+  "shareRelay": "Relay",
+  "@shareRelay": {
+    "description": "Row label under Advanced on the Share this project page: the address of a relay, a small server somebody runs that passes edits between people whose routers will not let each other in."
+  },
+  "shareRelayExample": "relay.example.org",
+  "@shareRelayExample": {
+    "description": "Placeholder in the empty Relay field, showing what a relay's address looks like. Keep it as a made-up address."
+  },
+  "shareRelayHint": "A relay is a small server someone you trust runs. It carries your edits to people your router does not let in, and cannot read them. Leave it empty if you have none.",
+  "@shareRelayHint": {
+    "description": "Quiet line under the Relay field in the Shared project window."
+  },
+  "shareAddressHint": "Another address this computer can be reached at, such as a VPN's. It is added to the link. Leave it empty if you are not sure.",
+  "@shareAddressHint": {
+    "description": "Quiet line under the Address field, under Advanced, while a project is being shared."
+  },
+  "shareOpenChecking": "Checking whether people outside your network can join…",
+  "@shareOpenChecking": {
+    "description": "Quiet line under the invite link for a second or two after sharing starts, while Lumit asks the home router, and a relay if one is set, to let people in."
+  },
+  "shareOpenAnywhere": "Anyone you send this link to can join.",
+  "@shareOpenAnywhere": {
+    "description": "Quiet line under the invite link once the home router has agreed to let people outside the network in."
+  },
+  "shareOpenRelay": "Anyone you send this link to can join. People your router does not let in come through the relay.",
+  "@shareOpenRelay": {
+    "description": "Quiet line under the invite link when the home router would not let people in but the relay is ready."
+  },
+  "shareOpenLocal": "Only people on your own network can join with this link, because your router would not let anyone else in. The other person can share the project instead, or you can stop, set a relay under Advanced and share again.",
+  "@shareOpenLocal": {
+    "description": "Warning line under the invite link when the home router refused, or sits behind another router, and no relay is set."
+  },
+  "shareOpenLocalOff": "Only people on your own network can join with this link, because the router was not asked to let anyone else in.",
+  "@shareOpenLocalOff": {
+    "description": "Warning line under the invite link when the person unticked the Internet box before sharing and no relay is set."
+  },
+  "shareRelayDown": "The relay is not answering, so only people on your own network can join just now. Lumit keeps trying it.",
+  "@shareRelayDown": {
+    "description": "Warning line under the invite link when a relay is set but cannot be reached and the home router would not let people in either."
+  },
+  "sharePassword": "Password",
+  "@sharePassword": {
+    "description": "Row label in the Shared project window. On the Share this project page it is an optional password the host sets, which everyone joining has to type as well as having the invite link. On the Join a project page it is where a guest types that password."
+  },
+  "sharePasswordNone": "None",
+  "@sharePasswordNone": {
+    "description": "Placeholder in the empty Password field on the Share this project page, meaning the project is shared with no password."
+  },
+  "sharePasswordKept": "The same as last time",
+  "@sharePasswordKept": {
+    "description": "Placeholder in the empty Password field on the Share this project page when this project was last shared with a password, which is kept unless another is typed."
+  },
+  "sharePasswordTheirs": "The host's password",
+  "@sharePasswordTheirs": {
+    "description": "Placeholder in the empty Password field on the Join a project page, shown when the pasted invite link needs a password."
+  },
+  "sharePasswordHint": "People joining have to type this as well as having the link. Leave it empty for no password.",
+  "@sharePasswordHint": {
+    "description": "Quiet line under the Password field on the Share this project page."
+  },
+  "sharePasswordSet": "People joining need the password as well as this link.",
+  "@sharePasswordSet": {
+    "description": "Quiet line under the invite link while a project is shared with a password."
+  },
+  "sharePasswordNeeded": "That invite needs the host's password",
+  "@sharePasswordNeeded": {
+    "description": "Line in the Shared project window when a guest tries to join by an invite link that needs a password and typed none."
+  },
+  "shareUnreachableOrPassword": "Nobody answered, or the password is wrong. Check both, and that the host is still sharing.",
+  "@shareUnreachableOrPassword": {
+    "description": "Line in the Shared project window when joining with a password failed. Lumit is not told which of the two it was."
+  },
+  "shareFootage": "Footage",
+  "@shareFootage": {
+    "description": "Row label and group heading in the Shared project window, for sending footage files to people in the project who have not got them."
+  },
+  "shareGive": "Send stand-ins of my footage to people who have not got it",
+  "@shareGive": {
+    "description": "Text beside a tick box in the Shared project window. A stand-in is a small copy of a whole clip that another person can cut with."
+  },
+  "shareTake": "Get stand-ins of footage I have not got",
+  "@shareTake": {
+    "description": "Text beside a tick box in the Shared project window. When ticked, Lumit asks the others for a small copy of any clip the project uses that is not on this computer."
+  },
+  "shareUpLimit": "Upload limit",
+  "@shareUpLimit": {
+    "description": "Row label in the Shared project window: the fastest this computer sends footage to the others."
+  },
+  "shareDownLimit": "Download limit",
+  "@shareDownLimit": {
+    "description": "Row label in the Shared project window: the fastest this computer takes footage from the others."
+  },
+  "shareLimitNone": "No limit",
+  "@shareLimitNone": {
+    "description": "Placeholder in an empty Upload limit or Download limit field in the Shared project window."
+  },
+  "shareLimitUnit": "KB/s",
+  "@shareLimitUnit": {
+    "description": "Unit shown after the Upload limit and Download limit fields: kilobytes a second."
+  },
+  "shareLimitHint": "How fast footage is sent and fetched, in kilobytes a second. 0 or empty is no limit. Edits are never held back.",
+  "@shareLimitHint": {
+    "description": "Quiet line under the two limit fields in the Shared project window."
+  },
+  "shareSending": "Sending {name}, {percent}%",
+  "@shareSending": {
+    "description": "One line of the Footage list in the Shared project window: a file this computer is sending to someone. {name} is the footage item's name.",
     "placeholders": {
-      "address": {
+      "name": {
+        "type": "String"
+      },
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "shareTaking": "Fetching {name}, {percent}%",
+  "@shareTaking": {
+    "description": "One line of the Footage list in the Shared project window: a file this computer is getting from someone. {name} is the footage item's name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "shareAnExport": "an export",
+  "@shareAnExport": {
+    "description": "Stands in for a footage item's name in the Sending and Fetching lines of the Shared project window, when the file crossing is a finished export."
+  },
+  "shareGetStandIn": "Get a stand-in",
+  "@shareGetStandIn": {
+    "description": "Project panel menu item on a footage row that is missing, in a shared project where someone else has the file. Asks them for a small copy to cut with."
+  },
+  "shareGetOriginal": "Fetch the original ({megabytes} MB)",
+  "@shareGetOriginal": {
+    "description": "Project panel menu item on a footage row this computer has no original of, in a shared project where someone else has it. Fetches the file itself. {megabytes} is its size.",
+    "placeholders": {
+      "megabytes": {
+        "type": "int"
+      }
+    }
+  },
+  "projectItemStandIn": "stand-in",
+  "@projectItemStandIn": {
+    "description": "Small badge on a footage row in the Project panel: this computer reads the clip from a small copy another person in the shared project sent, the file itself not being here."
+  },
+  "shareExportAskTitle": "Export for {name}?",
+  "@shareExportAskTitle": {
+    "description": "Title of the question shown when another person in a shared project asks this computer to export for them. {name} is that person.",
+    "placeholders": {
+      "name": {
         "type": "String"
       }
     }
   },
-  "shareReachRefused": "Your router would not open the port. People outside your network need a VPN, or the port forwarded to this computer.",
-  "@shareReachRefused": {
-    "description": "Warning line under the invite in the Shared project window, shown to a host when no router answered or the router refused to open the sharing port."
+  "shareExportAskBody": "{name} has not got all the footage and asks this computer to export \"{comp}\" and send them the file. It goes in your export queue and starts now.",
+  "@shareExportAskBody": {
+    "description": "Body of the question shown when another person asks this computer to export for them. {comp} is a composition's name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "comp": {
+        "type": "String"
+      }
+    }
   },
-  "shareReachBehind": "Your router has no address of its own on the internet, so people outside your network need a VPN.",
-  "@shareReachBehind": {
-    "description": "Warning line under the invite in the Shared project window, shown to a host whose router sits behind another router or behind an address the internet provider shares between customers, so opening its port would reach nobody."
+  "shareExportAskNo": "Not now",
+  "@shareExportAskNo": {
+    "description": "Default button of the question about exporting for another person. Refuses."
+  },
+  "shareExportAskYes": "Export",
+  "@shareExportAskYes": {
+    "description": "Button of the question about exporting for another person. Starts the export and sends them the file."
+  },
+  "exportFootageGroup": "Shared footage",
+  "@exportFootageGroup": {
+    "description": "Group heading in the export dialogue, shown when the composition uses footage this computer has only a stand-in of, or nothing of."
+  },
+  "exportFootage": "Missing footage",
+  "@exportFootage": {
+    "description": "Row label in the export dialogue: what the export does about footage this computer has no original of."
+  },
+  "exportFootageFrames": "Fetch the frames this export uses",
+  "@exportFootageFrames": {
+    "description": "Option in the export dialogue's Missing footage list. Before exporting, Lumit fetches only the frames the export reads, at delivery quality, from whoever has the footage."
+  },
+  "exportFootageOriginals": "Fetch the originals ({megabytes} MB)",
+  "@exportFootageOriginals": {
+    "description": "Option in the export dialogue's Missing footage list. Before exporting, Lumit fetches the whole original files. {megabytes} is their total size.",
+    "placeholders": {
+      "megabytes": {
+        "type": "int"
+      }
+    }
+  },
+  "exportFootageOn": "Export on {name}'s computer",
+  "@exportFootageOn": {
+    "description": "Option in the export dialogue's Missing footage list. Another person, who has the footage, does the export and sends the file back. {name} is that person.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "exportFootageStandIns": "Export from stand-ins",
+  "@exportFootageStandIns": {
+    "description": "Option in the export dialogue's Missing footage list. Exports from the small copies as they are, which is draft quality."
+  },
+  "exportFootageCount": "{count, plural, =1{1 clip in this composition is not on this computer.} other{{count} clips in this composition are not on this computer.}}",
+  "@exportFootageCount": {
+    "description": "Line under the Missing footage row in the export dialogue.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "exportFootageStarting": "Asking for the footage…",
+  "@exportFootageStarting": {
+    "description": "Footer line of the export dialogue for the moment after Export is pressed with footage to fetch."
+  },
+  "exportFootageMaking": "The others' computers are getting the footage ready…",
+  "@exportFootageMaking": {
+    "description": "Footer line of the export dialogue while another person's computer is making the files this export asked for and nothing has been sent yet."
+  },
+  "exportFootageFetching": "Fetching footage, {percent}%",
+  "@exportFootageFetching": {
+    "description": "Footer line of the export dialogue while footage this export needs is being fetched.",
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "exportFootageFailed": "Some of the footage could not be fetched. Whoever has it may have left, or switched sending off.",
+  "@exportFootageFailed": {
+    "description": "Footer line of the export dialogue when footage this export needs could not be got."
+  },
+  "exportRemoteWaiting": "Waiting for {name} to agree…",
+  "@exportRemoteWaiting": {
+    "description": "Footer line of the export dialogue after another person was asked to do the export.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "exportRemoteRunning": "{name}'s computer is exporting, frame {frame} of {total}",
+  "@exportRemoteRunning": {
+    "description": "Footer line of the export dialogue while another person's computer does the export.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "frame": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "exportRemoteFetching": "Fetching the finished file, {percent}%",
+  "@exportRemoteFetching": {
+    "description": "Footer line of the export dialogue while the file another person's computer exported is being sent back.",
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "exportRemoteDone": "Exported {file} on another computer",
+  "@exportRemoteDone": {
+    "description": "Bottom-strip notice when an export done by another person's computer has arrived. {file} is the file's name.",
+    "placeholders": {
+      "file": {
+        "type": "String"
+      }
+    }
+  },
+  "exportRemoteRefused": "{name} did not take the export",
+  "@exportRemoteRefused": {
+    "description": "Footer line of the export dialogue when the other person said no to doing the export.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "exportRemoteLacking": "{name}'s computer has not got all the footage either",
+  "@exportRemoteLacking": {
+    "description": "Footer line of the export dialogue when the person asked to export turns out not to have every file.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "exportRemoteStopped": "The export on {name}'s computer stopped",
+  "@exportRemoteStopped": {
+    "description": "Footer line of the export dialogue when the export another person's computer was doing failed or was cancelled there.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsGroupSharing": "Shared projects",
+  "@settingsGroupSharing": {
+    "description": "Section heading on the General page of Settings."
+  },
+  "settingsShareUpLimit": "Footage upload limit",
+  "@settingsShareUpLimit": {
+    "description": "Row title in Settings: the fastest this computer sends footage to others in a shared project."
+  },
+  "settingsShareDownLimit": "Footage download limit",
+  "@settingsShareDownLimit": {
+    "description": "Row title in Settings: the fastest this computer takes footage from others in a shared project."
+  },
+  "settingsShareLimitHint": "How fast footage is sent and fetched in a shared project. Edits are never held back.",
+  "@settingsShareLimitHint": {
+    "description": "Description under the Footage upload limit row in Settings."
+  },
+  "settingsShareNoLimit": "No limit",
+  "@settingsShareNoLimit": {
+    "description": "Option in the footage upload and download limit lists in Settings."
+  },
+  "settingsShareLimitValue": "{kilobytes} KB/s",
+  "@settingsShareLimitValue": {
+    "description": "Option in the footage upload and download limit lists in Settings: a speed in kilobytes a second.",
+    "placeholders": {
+      "kilobytes": {
+        "type": "int"
+      }
+    }
+  },
+  "panelExtension": "Extension",
+  "@panelExtension": {
+    "description": "Title of a dock panel that shows an installed extension's page, used only when the extension it showed is no longer installed. Otherwise the panel is titled with the extension's own name."
+  },
+  "menuExtensions": "Extensions",
+  "@menuExtensions": {
+    "description": "Window menu: a submenu listing every installed extension, each ticked when its panel is showing."
+  },
+  "menuManageExtensions": "Manage extensions…",
+  "@menuManageExtensions": {
+    "description": "Window menu, at the foot of the Extensions submenu. Opens Settings on the Addons page, where extensions are installed and removed."
+  },
+  "settingsGroupExtensions": "Extensions",
+  "@settingsGroupExtensions": {
+    "description": "Section heading on the Addons page of Settings: panels made by other people, installed from a folder."
+  },
+  "settingsExtensionName": "{name} {version}",
+  "@settingsExtensionName": {
+    "description": "Title of one installed extension's row on the Addons page of Settings: its name and its version number.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsExtensionsNone": "No extensions are installed.",
+  "@settingsExtensionsNone": {
+    "description": "Quiet line in the Extensions section of the Addons page when nothing is installed."
+  },
+  "settingsExtensionShow": "Show panel",
+  "@settingsExtensionShow": {
+    "description": "Button on an installed extension's row in Settings. Puts the extension's panel into the window."
+  },
+  "settingsExtensionHide": "Hide panel",
+  "@settingsExtensionHide": {
+    "description": "Button on an installed extension's row in Settings, while its panel is in the window. Takes the panel out."
+  },
+  "settingsExtensionsInstall": "Install from a folder",
+  "@settingsExtensionsInstall": {
+    "description": "Row title in the Extensions section of the Addons page, beside a Choose button that opens a folder picker."
+  },
+  "settingsExtensionsInstallHint": "Pick the folder that holds the extension's extension.json. Lumit shows what it asks to be allowed before anything is installed.",
+  "@settingsExtensionsInstallHint": {
+    "description": "Description under the Install from a folder row in the Extensions section of Settings. extension.json is a file name and is not translated."
+  },
+  "settingsExtensionsFolder": "Extensions folder",
+  "@settingsExtensionsFolder": {
+    "description": "Row title in the Extensions section of the Addons page, beside a Show button that opens the folder installed extensions are kept in."
+  },
+  "extensionInstallTitle": "Install {name}?",
+  "@extensionInstallTitle": {
+    "description": "Title of the window that asks before an extension is installed. {name} is the extension's own name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "extensionVersion": "Version {version}",
+  "@extensionVersion": {
+    "description": "Line under the title of the install question for an extension that names no author.",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "extensionVersionBy": "Version {version}, by {author}",
+  "@extensionVersionBy": {
+    "description": "Line under the title of the install question for an extension. {author} is who the extension says made it, which Lumit does not check.",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      },
+      "author": {
+        "type": "String"
+      }
+    }
+  },
+  "extensionCan": "It can",
+  "@extensionCan": {
+    "description": "Heading of the list of things an extension will be allowed to do, in the install question."
+  },
+  "extensionCannot": "It cannot",
+  "@extensionCannot": {
+    "description": "Heading of the list of things an extension is never able to do, in the install question."
+  },
+  "extensionCanProject": "See what the open project's file is called, and when a project opens, saves or closes",
+  "@extensionCanProject": {
+    "description": "One line of the It can list in the extension install question."
+  },
+  "extensionCanActivity": "See when you edit and what each step is called, and when Lumit is the window in front",
+  "@extensionCanActivity": {
+    "description": "One line of the It can list in the extension install question."
+  },
+  "extensionCanExport": "See when an export starts and finishes, and fingerprint the file it made",
+  "@extensionCanExport": {
+    "description": "One line of the It can list in the extension install question. A fingerprint is a short number worked out from a file that changes if the file does."
+  },
+  "extensionCanImport": "Bring files into the project, and watch a folder you pick for new ones",
+  "@extensionCanImport": {
+    "description": "One line of the It can list in the extension install question."
+  },
+  "extensionCanShare": "Open the Shared project window for you to share or join, see who is in a shared project, and read its invite link while you share",
+  "@extensionCanShare": {
+    "description": "One line of the It can list in the extension install question."
+  },
+  "extensionCanHosts": "Send to and fetch from {hosts} through Lumit",
+  "@extensionCanHosts": {
+    "description": "One line of the It can list in the extension install question. {hosts} is one or more site names separated by commas, such as example.org.",
+    "placeholders": {
+      "hosts": {
+        "type": "String"
+      }
+    }
+  },
+  "extensionCanPanel": "Show its own panel, and a line in the strip at the bottom of the window",
+  "@extensionCanPanel": {
+    "description": "Last line of the It can list in the extension install question, shown for every extension."
+  },
+  "extensionCannotFootage": "See your footage, your pictures or your screen",
+  "@extensionCannotFootage": {
+    "description": "One line of the It cannot list in the extension install question."
+  },
+  "extensionCannotFiles": "Read or change files on this computer",
+  "@extensionCannotFiles": {
+    "description": "One line of the It cannot list in the extension install question."
+  },
+  "extensionCannotEdit": "Change what is in your project, beyond bringing files into it when it is allowed to",
+  "@extensionCannotEdit": {
+    "description": "One line of the It cannot list in the extension install question."
+  },
+  "extensionWebNote": "Its panel is a web page, and like any web page it can load things from the internet. Install an extension only from someone you trust.",
+  "@extensionWebNote": {
+    "description": "Quiet note at the foot of the extension install question."
+  },
+  "extensionInstall": "Install",
+  "@extensionInstall": {
+    "description": "Default button of the extension install question."
+  },
+  "extensionInstalled": "{name} is installed. Its panel is under Window, Extensions.",
+  "@extensionInstalled": {
+    "description": "Bottom-strip notice after an extension is installed. Window and Extensions are menu names.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "extensionNotOne": "That folder has no extension.json in it",
+  "@extensionNotOne": {
+    "description": "Bottom-strip notice when the folder picked to install an extension from is not an extension. extension.json is a file name and is not translated."
+  },
+  "extensionNewer": "That extension needs Lumit {version} or newer",
+  "@extensionNewer": {
+    "description": "Bottom-strip notice when an extension asks for a newer Lumit than this one.",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "extensionTooLarge": "That extension's folder holds more than an extension may",
+  "@extensionTooLarge": {
+    "description": "Bottom-strip notice when an extension's folder has too many files or is too large to install."
+  },
+  "extensionBusy": "Another extension is being installed",
+  "@extensionBusy": {
+    "description": "Bottom-strip notice when an install is asked for while another is running."
+  },
+  "extensionFailed": "The extension could not be installed",
+  "@extensionFailed": {
+    "description": "Bottom-strip notice when an extension's files could not be read or copied."
+  },
+  "extensionMissingTitle": "Extension not installed",
+  "@extensionMissingTitle": {
+    "description": "Title shown in a dock panel whose extension has been removed."
+  },
+  "extensionMissingHint": "The extension this panel showed has been removed. Close the panel, or install it again in Settings.",
+  "@extensionMissingHint": {
+    "description": "Hint under the title in a dock panel whose extension has been removed."
+  },
+  "extensionUnsupportedTitle": "Extensions need Windows for now",
+  "@extensionUnsupportedTitle": {
+    "description": "Title shown in an extension's dock panel on macOS and Linux, where Lumit cannot show an extension's page yet."
+  },
+  "extensionUnsupportedHint": "An extension's panel is a web page, and Lumit can only show one on Windows so far.",
+  "@extensionUnsupportedHint": {
+    "description": "Hint under the title in an extension's dock panel on macOS and Linux."
+  },
+  "extensionFailedTitle": "The extension could not be shown",
+  "@extensionFailedTitle": {
+    "description": "Title shown in an extension's dock panel when its page could not be put up."
+  },
+  "extensionFailedHint": "Its page would not load. Closing the panel and showing it again tries once more.",
+  "@extensionFailedHint": {
+    "description": "Hint in an extension's dock panel when its page failed to load."
+  },
+  "extensionBrokenHint": "The page its extension.json names is missing. Install the extension again.",
+  "@extensionBrokenHint": {
+    "description": "Hint in an extension's dock panel when the installed folder has lost its page. extension.json is a file name and is not translated."
+  },
+  "extensionNoRuntime": "Lumit shows extensions with Microsoft's WebView2, which is not installed on this computer.",
+  "@extensionNoRuntime": {
+    "description": "Hint in an extension's dock panel on a Windows machine without the WebView2 runtime. WebView2 is a product name."
+  },
+  "extensionStrayed": "This panel has left the extension's own pages, so nothing it asks of Lumit is answered.",
+  "@extensionStrayed": {
+    "description": "Warning strip at the top of an extension's dock panel when the page inside has gone to some other website."
+  },
+  "extensionBack": "Go back",
+  "@extensionBack": {
+    "description": "Button on the warning strip of an extension's dock panel. Loads the extension's own page again."
   }
 }

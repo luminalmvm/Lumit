@@ -61,8 +61,80 @@ class ShareState extends ChangeNotifier {
   /// For a host: whether people outside its network can get in.
   BridgeShareReach reach = const BridgeShareReach.off();
 
+  /// For a host: whether it has a room at a relay.
+  BridgeShareRelayed relayed = BridgeShareRelayed.off;
+
   /// How many conflicts a merge has left waiting to be chosen between.
   int held = 0;
+
+  /// Moves on whenever anything about the project's footage changes: who has
+  /// which file, a transfer, or an export being fetched for or done by
+  /// someone else. Whoever draws any of that reads it again.
+  final ValueNotifier<int> footage = ValueNotifier(0);
+
+  /// Exports other people have asked this computer to do and that the
+  /// person has not answered: the job, who asked, and the composition.
+  final List<({String job, int from, String comp})> exportAsks = [];
+
+  void footageChanged() => footage.value++;
+
+  void exportAsked(String job, int from, String comp) {
+    exportAsks.add((job: job, from: from, comp: comp));
+    notifyListeners();
+  }
+
+  /// What the person numbered [id] is called, or null when they have gone.
+  String? nameOf(int id) {
+    for (final person in people) {
+      if (person.id == id) return person.name;
+    }
+    return null;
+  }
+
+  /// Every footage transfer in flight, to and from this computer.
+  List<BridgeShareTransfer> transfers() {
+    try {
+      return _project?.shareTransfers() ?? const [];
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// How fetching what an export lacks is getting on.
+  BridgeShareFetching fetching() {
+    try {
+      return _project?.shareFetching() ?? const BridgeShareFetching.idle();
+    } catch (_) {
+      return const BridgeShareFetching.idle();
+    }
+  }
+
+  void cancelFetch() {
+    try {
+      _project?.shareFetchCancel();
+    } catch (_) {
+      // The project closed, which gave it up too.
+    }
+  }
+
+  /// How the export asked of someone else's computer is getting on.
+  BridgeShareAsking asking() {
+    try {
+      return _project?.shareAsking() ?? const BridgeShareAsking.idle();
+    } catch (_) {
+      return const BridgeShareAsking.idle();
+    }
+  }
+
+  /// Answer an export someone asked this computer to do.
+  void answerExport(String job, {required bool yes}) {
+    exportAsks.removeWhere((ask) => ask.job == job);
+    try {
+      _project?.shareAnswerExport(job: job, yes: yes);
+    } catch (_) {
+      // The project closed between the question and the answer.
+    }
+  }
 
   ProjectReference? _project;
 
@@ -123,6 +195,9 @@ class ShareState extends ChangeNotifier {
     reach = as == ShareRole.host
         ? project.shareReach()
         : const BridgeShareReach.off();
+    relayed = as == ShareRole.host
+        ? project.shareRelayed()
+        : BridgeShareRelayed.off;
     _sent = null;
     _noteRoster();
     // A guest's copy opened again brings the conflicts it was closed with.
@@ -141,6 +216,9 @@ class ShareState extends ChangeNotifier {
     away = false;
     held = 0;
     reach = const BridgeShareReach.off();
+    relayed = BridgeShareRelayed.off;
+    exportAsks.clear();
+    footage.value++;
     _noteRoster();
     notifyListeners();
   }
@@ -149,6 +227,34 @@ class ShareState extends ChangeNotifier {
     reach = now;
     roster.value++;
     notifyListeners();
+  }
+
+  void setRelayed(BridgeShareRelayed now) {
+    relayed = now;
+    roster.value++;
+    notifyListeners();
+  }
+
+  /// The link to send to whoever is joining, while this machine hosts.
+  /// [address] is one more way in that only the person knows, such as a
+  /// VPN's. It holds every way the engine knows of just now, so it is read
+  /// again whenever [roster] moves.
+  String? link({String? address}) {
+    try {
+      return _project?.shareLink(address: address);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// The secret of the invite as it stands, kept to share this project by
+  /// the same invite next time.
+  String? key() {
+    try {
+      return _project?.shareKey();
+    } catch (_) {
+      return null;
+    }
   }
 
   void setPeople(List<BridgeSharePerson> now) {
@@ -174,10 +280,13 @@ class ShareState extends ChangeNotifier {
     }
   }
 
-  /// Look for a lost host by a new invite. False when [invite] is not one.
-  bool reinvite(String invite) {
+  /// Look for a lost host by a new invite, with the host's [password] when
+  /// it set one. False when [invite] is not one, or needs a password and has
+  /// none.
+  bool reinvite(String invite, {String? password}) {
     try {
-      return _project?.shareReinvite(invite: invite) ?? false;
+      return _project?.shareReinvite(invite: invite, password: password) ??
+          false;
     } catch (_) {
       return false;
     }

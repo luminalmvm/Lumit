@@ -13,7 +13,8 @@ its entry here first. AE and Vegas names are noted only to help people arriving 
 | **Source layer** | One layer of a layered image file such as a PSD or an Illustrator document, which a footage item can read on its own |
 | **Audio item** | An asset pointing at an audio file |
 | **Packed project** | A `.lum` that also carries its footage files inside it. The verbs are **pack** and **unpack** |
-| **Shared project** | A project several people edit at once. The **host** shares it and owns the file, the **guests** join with an **invite** |
+| **Shared project** | A project several people edit at once. The **host** shares it and owns the file, the **guests** join with an **invite**, which is written as an **invite link** |
+| **Relay** | Somebody's own server that passes a shared project's edits between a host and guests who cannot reach each other. It cannot read them |
 | **Folder** | A group in the Project panel. Not *bin* |
 | **Composition (comp)** | Resolution, frame rate, duration, background, and a layer stack or a node graph |
 | **Node graph** | A comp whose picture is made by nodes and wires instead of layers |
@@ -59,7 +60,8 @@ composites over it.
 | **Property** | A named animatable value. Properties nest in **property groups** |
 | **Keyframe** | A time and value, with hold, linear or bezier (**speed** and **influence**, AE's maths) |
 | **Graph editor** | Edits curves as a **value graph** or a **speed graph**. Two views of the same data |
-| **Expression** | A per-property script that computes the value each frame |
+| **Expression** | A per-property script that computes the value each frame. Written in **JavaScript** or **Rhai**, which the expression's own language choice says |
+| **Custom controls** | An effect holding a named set of controls for expressions to read. What an After Effects pseudo effect imports as |
 | **Marker** | A labelled point or span. **Beat markers** come from audio onset detection |
 | **Motion blur** | Three things: the layer switch, the **Motion blur** effect (optical flow), and **Accumulation motion blur** (re-renders and averages) |
 
@@ -91,7 +93,8 @@ Not interchangeable.
 | **Export** | Writing a media file. May **bake**, which never changes the project |
 | **Evaluation graph** | What the layer stack compiles into. Users never see the term |
 | **Cache** | Frames stored in VRAM, RAM and disk tiers, keyed by content hash |
-| **Proxy** | A smaller stand-in for footage |
+| **Proxy** | A smaller copy of a footage file, kept beside the original and read in its place while working |
+| **Stand-in** | In a shared project, a small copy of a whole clip sent to someone who has not got the file, and read as if it were the file. Not a *proxy*, which needs its original beside it |
 | **Preview resolution** | Full, Half, Third, Quarter, Auto |
 | **Adaptive degradation** | Lowering preview quality under load. Never touches export |
 
@@ -144,6 +147,7 @@ Not interchangeable.
 | **CLAP**, **VST3** | Audio plugin standards Lumit hosts. No VST2 |
 | **Addon** | An optional download from Settings: the model runtime and model packs. Analysis only, never generation |
 | **Model pack** | One addon holding one model |
+| **Extension** | A panel somebody else made: a folder with a web page and an `extension.json`, shown in the dock. It reaches Lumit only through what its manifest asked to be allowed. Not *plugin*, which is an effect |
 | **Preset** | Saved effects, properties or animation |
 
 ## 9. Words we don't use

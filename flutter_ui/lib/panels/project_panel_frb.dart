@@ -54,6 +54,7 @@ import 'package:lumit_flutter/src/rust/api/keymap.dart';
 import 'package:lumit_flutter/state/dock.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
+import 'package:lumit_flutter/src/rust/api/share.dart' show BridgeFootageHere;
 import 'package:lumit_flutter/src/rust/api/state.dart';
 import 'package:provider/provider.dart';
 
@@ -895,6 +896,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
             id,
             () =>
                 item is ItemReference_Footage ? item.field0.getProxy() : null),
+        standIn: _standIns.putIfAbsent(id, () => _isStandIn(item)),
         people: [
           if (item case ItemReference_Composition(:final field0))
             for (final p in share.inComp(field0)) (p.colour, p.name),
@@ -1382,10 +1384,26 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
 
   /// An edit landed: re-probe and re-decode. Bumping the epoch is what makes a
   /// relink show the new picture rather than the cached one.
+  /// Which footage items are read from a stand-in someone sent, by id. Read
+  /// once a row and again when the document changes, which a stand-in
+  /// arriving counts as.
+  final Map<String, bool> _standIns = {};
+
+  bool _isStandIn(ItemReference item) {
+    if (item is! ItemReference_Footage) return false;
+    if (!context.read<LumitState>().share.active) return false;
+    try {
+      return item.field0.shareState().here == BridgeFootageHere.standIn;
+    } catch (_) {
+      return false;
+    }
+  }
+
   void _documentChanged() {
     setState(() {
       _epoch++;
       _missing.clear();
+      _standIns.clear();
       _undecodable.clear();
       _mediaInfo.clear();
       _compCells.clear();

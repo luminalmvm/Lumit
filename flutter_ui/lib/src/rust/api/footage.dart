@@ -9,6 +9,7 @@ import 'effect.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 import 'package:uuid/uuid.dart';
+import 'share.dart';
 import 'state.dart';
 part 'footage.freezed.dart';
 
@@ -418,6 +419,21 @@ class FootageReference {
   /// row that has nothing to tick.
   void setUseProxy({required bool on_}) => BridgeLib.instance.api
       .crateApiFootageFootageReferenceSetUseProxy(that: this, on_: on_);
+
+  /// Ask the others for this footage item: a stand-in of it, or with
+  /// `original` the file itself. Does nothing when the project is not
+  /// shared. What comes of it arrives as [`BridgeShareEvent::Footage`].
+  void shareFetch({required bool original}) =>
+      BridgeLib.instance.api.crateApiFootageFootageReferenceShareFetch(
+          that: this, original: original);
+
+  /// Where this footage item is on this machine and who has the original,
+  /// while its project is shared. An item of a project that is not shared
+  /// reads as the original or missing, with nobody holding it.
+  BridgeFootageShare shareState() =>
+      BridgeLib.instance.api.crateApiFootageFootageReferenceShareState(
+        that: this,
+      );
 
   Future<BridgeRenderedFrame?> thumbnail(
           {required int maxEdge, required PlatformInt64 frame}) =>

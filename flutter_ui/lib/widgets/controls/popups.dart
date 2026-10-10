@@ -258,6 +258,7 @@ class _PopupEntrance extends StatelessWidget {
       // Grown from the corner it is anchored at, which is the control that
       // opened it.
       alignment: Alignment.topLeft,
+      leads: true,
       child: child,
     );
   }

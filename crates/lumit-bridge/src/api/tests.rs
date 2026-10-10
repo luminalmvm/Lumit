@@ -2767,7 +2767,7 @@ fn restoring_replaces_the_document_and_keeps_the_change_observer() {
 static EXPORT_QUEUE_TESTS: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 /// Hold the process-wide export queue for the length of a test.
-fn export_queue_test() -> std::sync::MutexGuard<'static, ()> {
+pub(crate) fn export_queue_test() -> std::sync::MutexGuard<'static, ()> {
     EXPORT_QUEUE_TESTS
         .lock()
         .unwrap_or_else(|poison| poison.into_inner())
@@ -5095,6 +5095,7 @@ fn clearing_beats_keeps_the_markers_a_person_made() {
 
     comp.set_markers(vec![BridgeMarker {
         duration_frames: None,
+        colour: None,
         is_beat: false,
         id: Uuid::now_v7(),
         time: BridgeRational { num: 1, den: 2 },
@@ -5248,6 +5249,7 @@ fn dropping_a_comp_in_copies_its_markers_onto_the_layer() {
     source
         .set_markers(vec![BridgeMarker {
             duration_frames: None,
+            colour: None,
             is_beat: false,
             id: seeded,
             time: BridgeRational { num: 1, den: 2 },
@@ -5283,6 +5285,7 @@ fn precompose_carries_markers_in_and_leaves_the_layer_bare() {
     let comp = CompositionReference::new(project.id, layer.comp_id());
     comp.set_markers(vec![BridgeMarker {
         duration_frames: None,
+        colour: None,
         is_beat: false,
         id: Uuid::now_v7(),
         time: BridgeRational { num: 1, den: 2 },
@@ -5349,6 +5352,33 @@ fn the_preset_library_lists_presets_and_skips_strays() {
             .all(|p| p.path.ends_with("lumfx") || p.path.ends_with("LUMFX")),
         "each entry points at its file"
     );
+}
+
+/// A preset file reads as preset text whichever kind it is: Lumit's own as it
+/// was written, and an After Effects one converted, under its file's name.
+#[test]
+fn a_preset_file_reads_as_text_whichever_kind_it_is() {
+    use crate::api::effect::read_effect_preset;
+
+    let dir = tempfile::tempdir().expect("tempdir");
+    let at = |file: &str| dir.path().join(file).to_string_lossy().into_owned();
+
+    let text = r#"{"format":1,"name":"Look","effects":[]}"#;
+    std::fs::write(at("look.lumfx"), text).expect("write");
+    assert_eq!(
+        read_effect_preset(at("look.lumfx")).ok().as_deref(),
+        Some(text)
+    );
+
+    // The smallest After Effects preset there is: the container, and a
+    // description with nothing saved in it.
+    std::fs::write(at("Shake.ffx"), b"RIFX\0\0\0\x10FaFXLIST\0\0\0\x04besc").expect("write");
+    let converted = read_effect_preset(at("Shake.ffx")).expect("an .ffx converts");
+    let preset = lumit_core::preset::from_json(&converted).expect("to a preset");
+    assert_eq!(preset.name, "Shake");
+    assert!(preset.effects.is_empty());
+
+    assert!(read_effect_preset(at("gone.lumfx")).is_err());
 }
 
 // ---------------------------------------------------------------------------
@@ -6599,6 +6629,7 @@ fn a_markers_span_crosses_as_frames_and_survives_a_rename() {
             time: BridgeRational { num: 0, den: 1 },
             label: "moment".into(),
             duration_frames: None,
+            colour: None,
             is_beat: false,
         },
         BridgeMarker {
@@ -6606,6 +6637,7 @@ fn a_markers_span_crosses_as_frames_and_survives_a_rename() {
             time: BridgeRational { num: 1, den: 1 },
             label: "span".into(),
             duration_frames: Some(12),
+            colour: Some(3),
             is_beat: false,
         },
     ])
@@ -6628,6 +6660,8 @@ fn a_markers_span_crosses_as_frames_and_survives_a_rename() {
     let read = comp.get_markers().expect("markers");
     assert_eq!(read[1].duration_frames, Some(12));
     assert_eq!(read[1].label, "span renamed");
+    assert_eq!(read[1].colour, Some(3), "and the colour it was given");
+    assert_eq!(read[0].colour, None, "a marker nobody coloured stays plain");
 
     // Nought frames is a moment, which is what "no span" means everywhere.
     let mut back = comp.get_markers().expect("markers");
@@ -8443,7 +8477,10 @@ fn sync_adopts_the_offered_rows_and_remove_takes_the_unused_ones() {
     stack[0]
         .set_value(
             "wobble".into(),
-            BridgeEffectValue::Float(BridgeScalar::Expression("time".into())),
+            BridgeEffectValue::Float(BridgeScalar::Expression(
+                "time".into(),
+                crate::api::effect::BridgeExpressionLanguage::Rhai,
+            )),
         )
         .expect("driven");
     layer.set_effects(stack, None).expect("committed");
@@ -9592,4 +9629,54 @@ fn an_illustrator_document_imports_as_a_comp_of_its_layers() {
     let probe = crate::probe::ensure_probed(flat.as_path()).expect("the document probes");
     let video = probe.video.as_ref().expect("a picture");
     assert_eq!((video.width, video.height), (48, 32));
+}
+
+/// A transform row's expression keeps its language, and the value it had
+/// underneath, through the op that writes it. Undo puts back exactly what was
+/// there and redo writes the same note again, seed and all.
+#[test]
+fn a_transform_expression_keeps_its_language_through_undo() {
+    use crate::api::effect::{
+        sample_scalar_with_context, BridgeExpressionLanguage, BridgeRational, BridgeScalar,
+    };
+    use crate::api::layer::BridgeTransformProp;
+
+    let (project, layer) = project_with_layer();
+    let rotation = BridgeTransformProp::Rotation;
+    let read = || layer.get_transform().expect("transform").rotation;
+    let shown = || sample_scalar_with_context(read(), BridgeRational { num: 0, den: 1 }, layer);
+    layer
+        .set_transform(rotation, BridgeScalar::Static(30.0))
+        .expect("a number");
+
+    let typed = BridgeScalar::Expression(
+        "value + Math.round(7 / 2)".into(),
+        BridgeExpressionLanguage::JavaScript,
+    );
+    layer
+        .set_transform(rotation, typed.clone())
+        .expect("an expression");
+    assert_eq!(read(), typed);
+    assert_eq!(shown(), 34.0, "30 underneath, and 3.5 rounded up");
+
+    // The same text as Rhai is a different expression, and says so.
+    layer
+        .set_transforms(
+            vec![rotation],
+            vec![BridgeScalar::Expression(
+                "7 / 2".into(),
+                BridgeExpressionLanguage::Rhai,
+            )],
+        )
+        .expect("the same row in Rhai");
+    assert_eq!(shown(), 3.0);
+    project.undo().expect("undone");
+    assert_eq!(read(), typed);
+    assert_eq!(shown(), 34.0);
+
+    project.undo().expect("undone");
+    assert_eq!(read(), BridgeScalar::Static(30.0));
+    project.redo().expect("redone");
+    assert_eq!(read(), typed);
+    assert_eq!(shown(), 34.0);
 }

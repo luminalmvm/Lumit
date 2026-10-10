@@ -10,6 +10,8 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/colour.dart' show BridgeColourItem;
 import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
+import 'package:lumit_flutter/src/rust/api/share.dart'
+    show BridgeFootageHere, BridgeFootageShare;
 import 'package:provider/provider.dart';
 
 import '../l10n/engine_labels.dart';
@@ -31,6 +33,8 @@ enum _ProjectMenuAction {
   addAudioOnly,
   setProxy,
   makeProxy,
+  shareStandIn,
+  shareOriginal,
   useProxy,
   clearProxy,
   moveToRoot,
@@ -97,6 +101,18 @@ Future<void> showProjectMenuFrb({
   List<ItemReference>? targets,
 }) async {
   final isFootage = item is ItemReference_Footage;
+  // Where this footage is in a shared project, and who has it. Read once,
+  // as the menu opens, and null when the project is not shared.
+  BridgeFootageShare? shared;
+  if (item case ItemReference_Footage(:final field0)) {
+    final sharing =
+        Provider.of<LumitState>(context, listen: false).share.active;
+    try {
+      if (sharing) shared = field0.shareState();
+    } catch (_) {
+      // The project closed as the menu opened.
+    }
+  }
   final isComp = item is ItemReference_Composition;
   // The comp the sound would land in. Read once, here, rather than in
   // the row's build: the menu is a gesture, not a rebuild path.
@@ -209,6 +225,24 @@ Future<void> showProjectMenuFrb({
               onPressed: () => close(_ProjectMenuAction.findMissing),
               child: Text(l10n.findMissingFootage),
             ),
+          // Footage this computer has not got, in a shared project where
+          // someone has: ask them for a stand-in to cut with, or the file.
+          if (shared != null &&
+              shared.holders.isNotEmpty &&
+              shared.here != BridgeFootageHere.original) ...[
+            if (shared.here == BridgeFootageHere.missing)
+              MenuRow(
+                key: const ValueKey('project-menu-share-stand-in'),
+                onPressed: () => close(_ProjectMenuAction.shareStandIn),
+                child: Text(l10n.shareGetStandIn),
+              ),
+            MenuRow(
+              key: const ValueKey('project-menu-share-original'),
+              onPressed: () => close(_ProjectMenuAction.shareOriginal),
+              child: Text(l10n.shareGetOriginal(
+                  (shared.bytes.toInt() / (1 << 20)).ceil())),
+            ),
+          ],
           // The sound of this clip, on its own row. Offered only with a
           // comp open to put it in — placing a layer nowhere is not an action.
           if (isFootage && openComp != null)
@@ -483,6 +517,15 @@ Future<void> showProjectMenuFrb({
         if (path == null) return;
         field0.setProxy(path: path);
         onLocalEdit();
+      }
+    case _ProjectMenuAction.shareStandIn || _ProjectMenuAction.shareOriginal:
+      if (item case ItemReference_Footage(:final field0)) {
+        try {
+          field0.shareFetch(
+              original: action == _ProjectMenuAction.shareOriginal);
+        } catch (_) {
+          // The project closed between the menu and the click.
+        }
       }
     case _ProjectMenuAction.makeProxy:
       // Every picked footage item, and everything inside a picked folder. The

@@ -11,6 +11,12 @@ publish = false
 lumit-core = { path = "../lumit-core" }
 # Finding this machine's own copy of footage a peer names.
 lumit-project = { path = "../lumit-project" }
+# What a host and a guest say to a relay, and the relay itself for the tests.
+lumit-relay = { path = "../lumit-relay" }
+# The name of a host's room at a relay, worked out from the invite's secret
+# so that the relay cannot work the secret out from it. Already in the lock,
+# and what lumit-peer keys its own proofs with.
+blake3 = "1"
 # The secret an invite carries, from the operating system's own source, as
 # lumit-peer takes its own. Already in the lock.
 getrandom = "0.4"

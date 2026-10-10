@@ -678,7 +678,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
             final field = (value as BridgeEffectValue_Float).field0;
 
             if (field is BridgeScalar_Expression) {
-              _commitExpression(axis.prop, field.field0);
+              _commitExpression(axis.prop, field);
             }
 
             if (field is BridgeScalar_Static) {
@@ -687,10 +687,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
           },
           setLive: (value) {
             _liveExpression(
-                axis.prop,
-                ((value as BridgeEffectValue_Float).field0
-                        as BridgeScalar_Expression)
-                    .field0);
+                axis.prop, (value as BridgeEffectValue_Float).field0);
           },
           comp: widget.comp,
           frame: frame,
@@ -733,7 +730,10 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
             setState(() => _staged = null);
           },
           setExpression: () {
-            _commitExpression(axis.prop, static_.toString());
+            _commitExpression(
+                axis.prop,
+                BridgeScalar.expression(
+                    static_.toString(), newExpressionLanguage(context)));
           },
         ),
       );
@@ -875,8 +875,8 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
         ));
   }
 
-  void _liveExpression(BridgeTransformProp prop, String value) {
-    final staged = writeExpression(_staged ?? widget.transform, prop, value);
+  void _liveExpression(BridgeTransformProp prop, BridgeScalar value) {
+    final staged = writeScalar(_staged ?? widget.transform, prop, value);
     setState(() => _staged = staged);
     _publishLive(staged);
 
@@ -962,13 +962,12 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
     );
   }
 
-  void _commitExpression(BridgeTransformProp prop, String value) {
+  void _commitExpression(BridgeTransformProp prop, BridgeScalar value) {
     // The commit is the last word on this gesture: a held preview tick after it
     // would put the provisional picture back.
     _throttle.cancel();
     _clearLive();
-    widget.layer
-        .setTransform(prop: prop, value: BridgeScalar.expression(value));
+    widget.layer.setTransform(prop: prop, value: value);
     setState(() => _staged = null);
     widget.onChanged();
   }
@@ -1048,6 +1047,3 @@ BridgeTransform writeScalar(
   );
 }
 
-BridgeTransform writeExpression(
-        BridgeTransform tf, BridgeTransformProp prop, String expression) =>
-    writeScalar(tf, prop, BridgeScalar.expression(expression));

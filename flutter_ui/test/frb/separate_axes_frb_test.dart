@@ -141,5 +141,76 @@ void main() {
       expect(
           graphChannels(layers: [entryOf(p)], selected: [scalePath]).length, 2);
     });
+
+    /// The same pair on a Transform effect, whose Scale is two rows with a
+    /// chain between them. Chained, either row is the one curve, and an ease
+    /// on it reaches the half the graph does not draw.
+    testWidgets(
+        'a chained effect Scale is one curve, and an ease on it reaches both rows',
+        (tester) async {
+      final p = withComp();
+      final layer = solid(p);
+      final id = layer.internallayerId.toString();
+      BridgeKeyframe key(int seconds, double value) => BridgeKeyframe(
+            time: BridgeRational(num: seconds, den: 1),
+            value: value,
+            interpIn: const BridgeSideInterp.linear(),
+            interpOut: const BridgeSideInterp.linear(),
+          );
+      layer.addEffect(name: 'transform');
+      final staged = layer.getEffects();
+      final fxId = staged.single.id();
+      staged.single.setPairLinked(stem: 'scale', linked: true);
+      staged.single.setValue(
+          id: 'scale_x',
+          value: BridgeEffectValue.float(
+              BridgeScalar.keyframed([key(0, 100), key(1, 200)])));
+      staged.single.setValue(
+          id: 'scale_y',
+          value: BridgeEffectValue.float(
+              BridgeScalar.keyframed([key(0, 50), key(1, 100)])));
+      layer.setEffects(effects: staged);
+
+      final x = '$id/effects/$fxId/scale_x';
+      final y = '$id/effects/$fxId/scale_y';
+      final channels = graphChannels(layers: [entryOf(p)], selected: [x, y]);
+      expect(channels.length, 1, reason: 'both rows are the one curve');
+      expect(channels.single.param?.id, 'scale_x');
+      expect(channels.single.linkedParam?.id, 'scale_y');
+      expect(
+          graphChannels(layers: [entryOf(p)], selected: [y]).single.param?.id,
+          'scale_x',
+          reason: 'the y row alone still opens the pair');
+
+      const eased =
+          BridgeSideInterp.bezier(BridgeBezierSide(speed: 0, influence: 0.5));
+      applyInterpToSelection(
+        channels: channels,
+        selectedKeys: {'${channels.single.id}#0', '${channels.single.id}#1'},
+        side: eased,
+      );
+
+      List<BridgeKeyframe> keysOfRow(String row) {
+        for (final v in entryOf(p).info.effects.single.values) {
+          if (v.id == row) {
+            final scalar = (v.value as BridgeEffectValue_Float).field0;
+            return (scalar as BridgeScalar_Keyframed).field0;
+          }
+        }
+        return const [];
+      }
+
+      expect(keysOfRow('scale_x').first.interpOut, eased);
+      expect(keysOfRow('scale_y').first.interpOut, eased,
+          reason: 'the ease reached the row the graph does not draw');
+      expect([for (final k in keysOfRow('scale_y')) k.value], [50.0, 100.0],
+          reason: 'the ratio held');
+
+      // Unchained, the pair is two curves again.
+      final again = layer.getEffects();
+      again.single.setPairLinked(stem: 'scale', linked: false);
+      layer.setEffects(effects: again);
+      expect(graphChannels(layers: [entryOf(p)], selected: [x, y]).length, 2);
+    });
   });
 }

@@ -153,7 +153,11 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// graph's own outline — both views that opened every layer by default, and
   /// neither of which exists now. Both remaining views are the Layers outline,
   /// where shut-by-default is the right answer.
-  bool _isOpen(String id) => _open.contains(id);
+  bool _isOpen(String id) =>
+      _underReveal(id) ? !_revealShut.contains(id) : _open.contains(id);
+
+  /// Whether [path] is a heading inside a layer a reveal is still filtering.
+  bool _underReveal(String path) => _revealed.containsKey(layerIdOfPath(path));
 
   /// Open or shut one twirl. The paths reach below the layer
   /// (`<layer>/transform` and the rest).
@@ -161,9 +165,17 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// Exactly this path: shutting a group leaves what was open *inside* it
   /// remembered, so twirling it back down finds it as it was.
   void _setOpen(String path, bool open) {
-    // Whatever this path belongs to is being twirled by hand or by another
-    // reveal, so it stops answering the last single `U`.
-    _revealed.remove(path.split('/').first);
+    // A heading inside a revealed layer folds without ending the reveal:
+    // shutting the one keyed effect must not bring back Transform and every
+    // other effect. The filter lasts until the layer's own twirl turns.
+    if (_underReveal(path)) {
+      open ? _revealShut.remove(path) : _revealShut.add(path);
+      return;
+    }
+    // The layer's own twirl, by hand or by another reveal, so it stops
+    // answering the last single `U`.
+    _revealed.remove(path);
+    _revealShut.removeWhere((p) => isUnderPath(path, p));
     if (open) {
       _open.add(path);
     } else {
@@ -176,6 +188,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// than adding to whatever the last one left open.
   void _shutLayerDeep(String id) {
     _revealed.remove(id);
+    _revealShut.removeWhere((p) => isUnderPath(id, p));
     _open.removeWhere((p) => p == id || isUnderPath(id, p));
   }
 
@@ -577,6 +590,11 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// the staged span rather than jumping back.
   final ValueNotifier<({int start, int end, bool whole})?> _workPreview =
       ValueNotifier(null);
+
+  /// The marker a drag on the ruler has staged, for the same reason: a
+  /// region's band in the lanes and the graph follows its flag by listening,
+  /// not by this panel rebuilding on every pointer move.
+  final ValueNotifier<MarkerPreview?> _markerPreview = ValueNotifier(null);
   BigInt? _workRevision;
   CompositionReference? _workComp;
 
@@ -630,19 +648,22 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// selection too".
   void _toggle(String path) => setState(() {
         final opening = !_isOpen(path);
-        for (final row in rowsTwirledWith(path, _twirlSelection())) {
+        for (final row in rowsTwirledWith(path, _twirlSelection(path))) {
           _setOpen(row, opening);
           if (!opening) _dropSelectionUnder(row);
         }
       });
 
-  /// Every row a twirl could act on: the selected layers and the selected
-  /// properties, as the paths [_open] is keyed by.
-  Set<String> _twirlSelection() => {
-        for (final id in _ui?.selectedLayerIds ?? const <UuidValue>{})
-          id.toString(),
-        ..._selectedProperties,
-      };
+  /// Every row [path]'s twirl could carry with it, as the paths [_open] is
+  /// keyed by: the selected layers for a layer's twirl, the selected
+  /// properties for a heading's. Never both, or shutting a picked heading
+  /// would shut the selected layer round it.
+  Set<String> _twirlSelection(String path) => layerIdOfPath(path) == null
+      ? {
+          for (final id in _ui?.selectedLayerIds ?? const <UuidValue>{})
+            id.toString(),
+        }
+      : {..._selectedProperties};
 
   /// Forget any selected property at or below [path], and any keyframes of
   /// theirs the marquee had caught.
@@ -1742,6 +1763,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// they need to repaint while a handle is being dragged.
   final ValueNotifier<KeyStretch?> _keyStretch = ValueNotifier(null);
 
+  /// The lane marquee's box while it is being dragged.
+  final ValueNotifier<Rect?> _laneMarquee = ValueNotifier(null);
+
   /// The lane view's selected keyframes, as `rowId#index` (docs/07 §4.3) —
   /// what the marquee gathered. Session state, like the twirl set.
   final Set<String> _laneKeySelection = {};
@@ -1883,11 +1907,14 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// three Reveal rows are the same machinery under a wider rule each, which is
   /// why the filter is stored per layer rather than the layer merely marked.
   ///
-  /// Dropped per layer by [_setOpen] and [_shutLayerDeep], which is every twirl
-  /// a hand or another reveal key can turn: a layer someone has started opening
-  /// by hand is no longer showing the answer to a `U`, and going on filtering it
-  /// would make the caret look broken.
+  /// Dropped per layer by [_setOpen] and [_shutLayerDeep] when the layer's own
+  /// twirl turns, by hand or by another reveal key. The headings inside it
+  /// fold without ending it ([_revealShut]).
   final Map<String, RevealFilter> _revealed = {};
+
+  /// The headings twirled shut by hand inside a revealed layer. A reveal
+  /// draws every heading it keeps as open, so these are the exceptions.
+  final Set<String> _revealShut = {};
 
   /// The comp's size when the last **modified** reveal was run, kept for the
   /// builds after it: that reveal asks whether a layer has been moved, and
@@ -1945,6 +1972,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     _ui!.deleteClaim = _claimDelete;
     _ui!.copyClaim = _claimCopy;
     _ui!.pasteClaim = _claimPaste;
+    _ui!.noteTimelineView = _rememberShownView;
     _publishEasingClaim();
     // An effect can be picked in the Effect controls panel too, and one
     // selection means the row here lights up when it is.
@@ -3162,6 +3190,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     if (_ui?.deleteClaim == _claimDelete) _ui!.deleteClaim = _priorDeleteClaim;
     if (_ui?.copyClaim == _claimCopy) _ui!.copyClaim = _priorCopyClaim;
     if (_ui?.pasteClaim == _claimPaste) _ui!.pasteClaim = _priorPasteClaim;
+    if (_ui?.noteTimelineView == _rememberShownView) {
+      _ui!.noteTimelineView = null;
+    }
     if (_ui?.easingApply.value == _applyEasing) _ui!.easingApply.value = null;
     if (_ui?.easingKey.value?.apply == _applyKeyEase) {
       _ui!.easingKey.value = null;
@@ -3393,6 +3424,34 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// of front can be told from an ordinary rebuild.
   UuidValue? _shownComp;
 
+  /// Write down the zoom and scroll on screen as [comp]'s. Called when a comp
+  /// is left, and whenever the session is about to be saved.
+  void _rememberView(UuidValue? comp) {
+    final position = positionOf(_hLane);
+    // Nothing is laid out, so there is no view to write down.
+    if (comp == null || position == null) return;
+    final extent = position.maxScrollExtent;
+    _ui?.rememberCompView(
+      comp.toString(),
+      zoom: _zoomMotion.target,
+      // A fraction of the scrollable range rather than a pixel offset: the
+      // panel may be a different width when the user comes back, and it is
+      // the stretch of time they were looking at that they want back.
+      scroll: extent > 0 ? (position.pixels / extent).clamp(0.0, 1.0) : 0.0,
+      scrollY: positionOf(_vOutline)?.pixels,
+    );
+  }
+
+  void _rememberShownView() => _rememberView(_shownComp);
+
+  /// The panel is on its way out, and its scroll positions are still attached
+  /// here, which they are not by `dispose`.
+  @override
+  void deactivate() {
+    _rememberShownView();
+    super.deactivate();
+  }
+
   /// This panel's half of "a composition remembers where you were":
   /// the magnification and how far the lanes are scrolled. The shell holds the
   /// other half, the playhead, because that is not the Timeline's alone.
@@ -3417,23 +3476,15 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         if (mounted) _publishRowSelection();
       });
     }
-    if (was != null) {
-      final position = positionOf(_hLane);
-      final extent = position?.maxScrollExtent ?? 0;
-      ui.rememberCompView(
-        was.toString(),
-        zoom: _zoomMotion.target,
-        // A fraction of the scrollable range rather than a pixel offset: the
-        // panel may be a different width when the user comes back, and it is
-        // the stretch of time they were looking at that they want back.
-        scroll: extent > 0 ? (position!.pixels / extent).clamp(0.0, 1.0) : 0.0,
-      );
-    }
+    _rememberView(was);
     if (now == null) return;
     final view = ui.compViews[now.toString()];
     if (view == null) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _shownComp != now) return;
+      // The rows are laid out by now. The lanes follow the outline.
+      final rows = positionOf(_vOutline);
+      rows?.jumpTo(view.scrollY.clamp(0.0, rows.maxScrollExtent));
       // Not "the zoom before a fit": that belonged to the comp just left.
       _zoomBeforeFit = null;
       _setZoom(view.zoom.clamp(1.0, _maxZoom), fly: false);
@@ -3690,6 +3741,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         // The strip filters the whole comp; a reveal filters only the layers
         // it opened, by the rule it opened them with.
         reveal: _animatedOnly ? everyLayerKeyframed : _revealed,
+        revealShut: _revealShut,
         groupHeaders: folds.headers,
         compWidth: _revealCompWidth,
         compHeight: _revealCompHeight);
@@ -4132,6 +4184,26 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                 key: const ValueKey('tl-outline-ground'),
                                 behavior: HitTestBehavior.translucent,
                                 onTap: () => _deselectAll(ui),
+                                // A right-click on the ground opens the same
+                                // menu as the lane ground. A fold row with
+                                // no menu of its own lets the click through
+                                // to here, so anything above the foot of the
+                                // last row is ignored.
+                                onSecondaryTapUp: (d) {
+                                  final foot = blockHeights.fold<double>(
+                                          0, (sum, height) => sum + height) -
+                                      (_vOutline.hasClients
+                                          ? _vOutline.offset
+                                          : 0);
+                                  if (d.localPosition.dy < foot) return;
+                                  showTimelineMoreMenu(
+                                    context,
+                                    comp: comp,
+                                    playhead: ui.playheadFrame,
+                                    position: d.globalPosition,
+                                    onChanged: ui.model.refresh,
+                                  );
+                                },
                                 // The viewport's own height, which is what
                                 // the row list windows itself against.
                                 child: LayoutBuilder(
@@ -4421,7 +4493,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     final snap = timelineSnapTargets(
       rows: rows,
       comp: comp,
-      playheadFrame: ui.playheadFrame.value,
+      playhead: ui.playheadFrame,
       work: work,
       fps: ui.model.fps,
     );
@@ -4468,6 +4540,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                               onWorkPreview: (span) =>
                                   _workPreview.value = span,
                               onMarkersChanged: () => setState(() {}),
+                              onMarkerPreview: (staged) =>
+                                  _markerPreview.value = staged,
                               // The graph shares the ruler, so it shares the
                               // ruler's snapping (docs/07 §4.5).
                               snapTargets: snap,
@@ -4508,6 +4582,15 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                         t.surface1),
                                     outside: t.timelineOutOfRange,
                                     edge: workAreaEdgeColour(t),
+                                  ),
+                                  // The markers' regions run down through
+                                  // the curves as they do through the lanes.
+                                  MarkerRegionsGround(
+                                    key: const ValueKey<String>(
+                                        'tl-graph-regions'),
+                                    comp: comp,
+                                    axis: axis,
+                                    preview: _markerPreview,
                                   ),
                                   GraphEditorFrb(
                                     key: _graphPane,
@@ -4680,6 +4763,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                           _razorCutAt(ui, entry, frame, ui.model.refresh),
                       vScroll: _vLane,
                       selectedKeys: _laneKeys,
+                      marquee: _laneMarquee,
                       sharing: _sharing,
                       stretch: _keyStretch,
                       project: Provider.of<LumitState>(context, listen: false)
@@ -4689,6 +4773,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                       work: work,
                       onWorkPreview: (span) => _workPreview.value = span,
                       workPreview: _workPreview,
+                      markerPreview: _markerPreview,
                       onKeysSelected: _onLaneKeysSelected,
                       onKeyMenu: _laneKeyMenu,
                       onWheel: (e, x) => _wheel(e, x, axis),

@@ -223,6 +223,7 @@ Curl noise
 Curve
 Curves
 Custom
+Custom controls
 Custom shader
 Cut
 Cyan

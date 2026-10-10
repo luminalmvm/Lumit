@@ -22,6 +22,8 @@
 // All of it is pure, so all of it is tested against hand-computed cases rather
 // than by dragging in a widget tree.
 
+import 'dart:collection';
+
 import 'package:flutter/foundation.dart';
 
 import '../src/rust/api/composition.dart';
@@ -190,6 +192,12 @@ typedef SnapKeyRow = ({String rowId, Iterable<double> frames});
 /// itself — which would pin it where it started and look like a broken drag.
 ///
 /// Everything is in comp frames, which is what the lanes are drawn in.
+///
+/// [playhead] is the playhead itself rather than the frame it was on. A panel
+/// gathers this list when it builds, and a panel does not build again because
+/// the playhead moved, so a list holding [playheadFrame] alone goes on offering
+/// the frame the playhead has since left. Given the listenable, the list reads
+/// it each time a drag asks.
 List<SnapTarget> snapTargetsOf({
   required List<BridgeLayerEntry> layers,
   required List<BridgeMarker> compMarkers,
@@ -198,6 +206,7 @@ List<SnapTarget> snapTargetsOf({
   required ({int start, int end, bool whole}) work,
   required double fps,
   String? exceptRow,
+  ValueListenable<int>? playhead,
 }) {
   final out = <SnapTarget>[
     SnapTarget(playheadFrame.toDouble(), SnapKind.playhead),
@@ -242,5 +251,31 @@ List<SnapTarget> snapTargetsOf({
       if (seen.add(frame)) out.add(SnapTarget(frame, SnapKind.keyframe));
     }
   }
-  return out;
+  return playhead == null ? out : _LivePlayheadTargets(out, playhead);
+}
+
+/// A gathered target list whose playhead entry is read when it is asked for.
+///
+/// The playhead is always the list's first entry (see [snapTargetsOf]), so
+/// that is the one answered from [_playhead]. The rest is the list as built.
+class _LivePlayheadTargets extends ListBase<SnapTarget> {
+  _LivePlayheadTargets(this._built, this._playhead);
+
+  final List<SnapTarget> _built;
+  final ValueListenable<int> _playhead;
+
+  @override
+  int get length => _built.length;
+
+  @override
+  set length(int _) => throw UnsupportedError('snap targets are read-only');
+
+  @override
+  SnapTarget operator [](int index) => index == 0
+      ? SnapTarget(_playhead.value.toDouble(), SnapKind.playhead)
+      : _built[index];
+
+  @override
+  void operator []=(int index, SnapTarget value) =>
+      throw UnsupportedError('snap targets are read-only');
 }

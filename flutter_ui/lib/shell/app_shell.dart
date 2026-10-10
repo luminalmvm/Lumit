@@ -321,9 +321,17 @@ class _LumitAppViewState extends State<LumitAppView> {
         ui.maybeCheckForUpdates();
         // And the tour follows them too, in the look just chosen. Like the
         // questions it opens by itself once.
-        if (mounted) {
-          maybeShowTourFrb(context, context.read<LumitState>(), ui);
+        if (!mounted) return;
+        // Somebody who clicked an invite link came to join, and the tour
+        // waits for a launch that is about nothing else.
+        final app = context.read<LumitState>();
+        final invite = app.launchInvite;
+        if (invite != null) {
+          app.launchInvite = null;
+          showShareFrb(context, app, invite: invite);
+          return;
         }
+        maybeShowTourFrb(context, app, ui);
       });
     });
     _share = context.read<LumitState>().share..addListener(_offerConflicts);
@@ -344,7 +352,21 @@ class _LumitAppViewState extends State<LumitAppView> {
     if (fresh && mounted && !lumitModalOpen) {
       showShareConflictsFrb(context, context.read<LumitState>());
     }
+    // Someone has asked this computer to export for them. Asked one at a
+    // time, and each only once: answering takes it off the list.
+    if (_share.exportAsks.isNotEmpty && mounted && !_asking) {
+      _asking = true;
+      showExportAskFrb(
+              context, context.read<LumitState>(), _share.exportAsks.first)
+          .whenComplete(() {
+        _asking = false;
+        if (mounted) _offerConflicts();
+      });
+    }
   }
+
+  /// The question about someone's export is on screen.
+  bool _asking = false;
 
   @override
   void dispose() {

@@ -66,7 +66,12 @@ enum Panel {
 
   /// The user's saved expressions, and the editor that puts one on the
   /// selected properties.
-  expressions;
+  expressions,
+
+  /// An installed extension's own page. One pane for each extension, told
+  /// apart by the pane's instance number, which `ExtensionService` gives
+  /// each extension once and keeps.
+  extension;
 
   String get title => switch (this) {
         Panel.project => l10n.panelProject,
@@ -86,9 +91,21 @@ enum Panel {
         Panel.text => l10n.panelText,
         Panel.paragraph => l10n.panelParagraph,
         Panel.expressions => l10n.panelExpressions,
-        Panel.debug => l10n.panelDebug
+        Panel.debug => l10n.panelDebug,
+        Panel.extension => l10n.panelExtension,
       };
 }
+
+/// What the extension shown in the pane numbered `slot` is called, or null
+/// when none is installed there. Set by `ExtensionService`, which is the one
+/// thing that knows: an arrangement holds only the number.
+String? Function(int slot)? extensionPaneTitle;
+
+/// What a pane's tab says. The panel's own name, and for an extension's
+/// pane the extension's.
+String paneTitle(PaneId pane) => pane.panel == Panel.extension
+    ? extensionPaneTitle?.call(pane.instance) ?? pane.panel.title
+    : pane.panel.title;
 
 /// Which pane, when a panel can be in the arrangement more than once.
 ///
@@ -667,6 +684,28 @@ DockTabs? groupOf(DockNode node, PaneId pane) {
       }
       return null;
   }
+}
+
+/// Put `pane` into the arrangement if it is not there: into a stack when
+/// there is one, and otherwise into the first tab group, fronted. What
+/// showing an extension's panel does, where [setPanelVisible] would only
+/// know the panel and not which extension.
+void showPane(DockSplit root, PaneId pane) {
+  if (panesIn(root).contains(pane)) return;
+  final made = DockPane(pane.panel, instance: pane.instance);
+  final tabs = _firstTabs(root, stacked: true) ?? _firstTabs(root);
+  if (tabs != null) {
+    tabs.children.add(made);
+    tabs.front(tabs.children.length - 1);
+    return;
+  }
+  final first = root.children.first;
+  if (first is DockPane) {
+    root.children[0] = DockTabs([first, made], active: 1);
+    return;
+  }
+  root.children.insert(0, made);
+  root.shares.insert(0, 0.2);
 }
 
 /// Close one pane, whichever tab group or split holds it, and simplify. The

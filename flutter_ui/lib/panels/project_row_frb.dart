@@ -163,6 +163,9 @@ class ProjectRowFrb extends StatefulWidget {
   /// but footage — nothing else has a media reference to stand in for.
   final BridgeProxy? proxy;
 
+  /// This footage is read from a stand-in another person sent.
+  final bool standIn;
+
   /// The other people in a shared project who have this composition open,
   /// each as their colour and their name. Empty on every other kind of row.
   final List<(int, String)> people;
@@ -260,6 +263,7 @@ class ProjectRowFrb extends StatefulWidget {
     this.nodeGraph = false,
     required this.inUse,
     required this.proxy,
+    this.standIn = false,
     this.people = const [],
     this.holders = const [],
     required this.selected,
@@ -558,7 +562,7 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
                     colour: t.success,
                   ),
                 ],
-                // Reading from a stand-in. **Quiet on purpose**: the
+                // Reading from its proxy. **Quiet on purpose**: the
                 // other two badges wear a state colour because they report
                 // something that wants acting on — placed, or lost. A proxy is
                 // neither; it is a fact about which file the item is being
@@ -573,6 +577,17 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
                   ProjectBadge(
                     key: ValueKey<String>('proxy-${projectItemId(item)}'),
                     label: l10n.projectItemProxy,
+                    colour: t.textMuted,
+                  ),
+                ],
+                // Read from a stand-in someone in the shared project sent,
+                // the file itself not being on this computer. Quiet like the
+                // proxy's, and for its reason.
+                if (widget.standIn) ...[
+                  const SizedBox(width: projectRowGap),
+                  ProjectBadge(
+                    key: ValueKey<String>('stand-in-${projectItemId(item)}'),
+                    label: l10n.projectItemStandIn,
                     colour: t.textMuted,
                   ),
                 ],

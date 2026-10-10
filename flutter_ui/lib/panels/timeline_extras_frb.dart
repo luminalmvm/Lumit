@@ -481,6 +481,12 @@ Future<int?> showLabelPicker(
 /// edit made while the label dialog was up is not silently overwritten.
 /// [write] commits a replacement list wherever the list lives; [keyPrefix]
 /// keeps each surface's long-standing widget keys.
+///
+/// [regionRoom] is how many frames lie between the marker and the end of what
+/// it sits on, which is as long as its region may be made. Giving it is what
+/// puts the region row on the menu: the ruler gives it, and a layer's bar
+/// draws no spans, so it leaves it out. A new region starts [regionFrames]
+/// long, or as long as there is room for.
 Future<void> showMarkerMenuFrb({
   required BuildContext context,
   required Offset position,
@@ -488,8 +494,17 @@ Future<void> showMarkerMenuFrb({
   required List<BridgeMarker> Function() markers,
   required void Function(List<BridgeMarker>) write,
   bool deleteAll = false,
+  int? regionRoom,
+  int regionFrames = 1,
   String keyPrefix = 'marker-menu',
 }) async {
+  final isRegion = (marker.durationFrames ?? 0) > 0;
+  // A region as long as was asked for, or as long as there is room for.
+  int? fitted(int? frames) => frames == null || regionRoom == null
+      ? frames
+      : min(frames, max(1, regionRoom));
+  // A beat is a gold tick whatever it is told, so it is offered neither.
+  final dressable = !marker.isBeat;
   final picked = await showMenuAt<String>(
     context: context,
     position: position,
@@ -499,6 +514,22 @@ Future<void> showMarkerMenuFrb({
         onPressed: () => close('edit'),
         child: Text(l10n.editMarkerEllipsis),
       ),
+      if (regionRoom != null && dressable)
+        MenuRow(
+          key: ValueKey<String>('$keyPrefix-region'),
+          onPressed: () => close('region'),
+          child: Text(
+              isRegion ? l10n.markerRemoveRegion : l10n.markerMakeRegion),
+        ),
+      if (dressable)
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: MarkerColourChips(
+            keyPrefix: '$keyPrefix-colour',
+            selected: marker.colour,
+            onPicked: (colour) => close('colour:${colour ?? ''}'),
+          ),
+        ),
       MenuRow(
         key: ValueKey<String>('$keyPrefix-delete'),
         onPressed: () => close('delete'),
@@ -513,26 +544,24 @@ Future<void> showMarkerMenuFrb({
     ],
   );
   if (picked == null || !context.mounted) return;
+  // One marker changed and the rest of the list as it stands now.
+  void change(BridgeMarker Function(BridgeMarker) edit) => write([
+        for (final m in markers())
+          if (m.id == marker.id) edit(m) else m,
+      ]);
   switch (picked) {
     case 'edit':
-      final label = await showMarkerLabelDialogFrb(
-          context: context, initial: marker.label);
-      if (label == null) return;
-      write([
-        for (final m in markers())
-          if (m.id == marker.id)
-            // The span rides along: the seam carries it now, so a marker
-            // rebuilt without it would be the panel saying "make this a
-            // moment" — the same shape of loss already fixed for a beat's kind.
-            BridgeMarker(
-                id: m.id,
-                time: m.time,
-                label: label,
-                durationFrames: m.durationFrames,
-                isBeat: m.isBeat)
-          else
-            m,
-      ]);
+      final edited = await showMarkerSettingsFrb(
+          context: context, marker: marker, spans: regionRoom != null);
+      if (edited == null) return;
+      change((m) => m
+          .withLabel(edited.label)
+          .withSpan(regionRoom == null
+              ? m.durationFrames
+              : fitted(edited.durationFrames))
+          .withColour(edited.colour));
+    case 'region':
+      change((m) => m.withSpan(isRegion ? null : fitted(regionFrames)));
     case 'delete':
       write([
         for (final m in markers())
@@ -540,6 +569,75 @@ Future<void> showMarkerMenuFrb({
       ]);
     case 'delete-all':
       write(const []);
+    case _:
+      // A colour chip: the palette index after the colon, or nothing for the
+      // plain marker grey.
+      final colour = int.tryParse(picked.substring(picked.indexOf(':') + 1));
+      change((m) => m.withColour(colour));
+  }
+}
+
+/// A marker's colour: its own pick from the label palette, or the theme's
+/// marker grey when it was given none.
+Color markerColour(LumitTheme t, BridgeMarker marker) {
+  final colour = marker.colour;
+  return colour == null ? t.marker : t.labelColour(colour);
+}
+
+/// The row of chips a marker's colour is picked from: the plain marker grey
+/// first, then the label palette a layer's own label uses.
+///
+/// The palette's first chip is left out. It is the neutral slate, which beside
+/// the marker grey is the same answer offered twice.
+class MarkerColourChips extends StatelessWidget {
+  const MarkerColourChips({
+    super.key,
+    required this.selected,
+    required this.onPicked,
+    required this.keyPrefix,
+  });
+
+  /// The palette index in force, or null for the plain grey.
+  final int? selected;
+  final ValueChanged<int?> onPicked;
+  final String keyPrefix;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    Widget chip(int? colour) {
+      final on = colour == selected;
+      return MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          key: ValueKey<String>('$keyPrefix-${colour ?? 'none'}'),
+          onTap: () => onPicked(colour),
+          child: Container(
+            width: 14,
+            height: 14,
+            margin: const EdgeInsets.all(2),
+            decoration: BoxDecoration(
+              color: colour == null ? t.marker : t.labelColour(colour),
+              borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+              // The chip in force wears a ring in the text colour, which reads
+              // against every colour in the palette.
+              border: on ? Border.all(color: t.textPrimary, width: 1.5) : null,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Semantics(
+      label: l10n.markerColour,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          chip(null),
+          for (var i = 1; i < LumitTheme.labelCount; i++) chip(i),
+        ],
+      ),
+    );
   }
 }
 
@@ -877,7 +975,12 @@ class ParentPickerFrb extends StatelessWidget {
           // A cycle is refused engine-side; the picker reports nothing and the
           // row keeps the parent it had.
           try {
-            layer.setParent(parent: id);
+            // The layer holds its place on the frame it is parented at.
+            layer.setParent(
+                parent: id,
+                frame: Provider.of<LumitUiState>(context, listen: false)
+                    .playheadFrame
+                    .value);
           } catch (_) {
             return;
           }
@@ -1567,6 +1670,12 @@ class TimelineRuler extends StatefulWidget {
   /// so the rest of it redraws. Null in a ruler with no markers to edit.
   final VoidCallback? onMarkersChanged;
 
+  /// Where a marker being dragged, or a region being resized, has got to, and
+  /// null once the drag is over. The document hears nothing until the pointer
+  /// lifts, so this is what lets a region's band in the lanes move with its
+  /// flag on the ruler, the way [onWorkPreview] does for the work area.
+  final ValueChanged<MarkerPreview?>? onMarkerPreview;
+
   /// The cache bar, laid on the ruler's floor over the work-area band
   /// (§12A.1): the band paints behind it because the band is part of the same
   /// row. Null for a ruler with no cache to show.
@@ -1583,6 +1692,7 @@ class TimelineRuler extends StatefulWidget {
     this.onWorkArea,
     this.onWorkPreview,
     this.onMarkersChanged,
+    this.onMarkerPreview,
     this.cache,
     this.snapTargets = const [],
     this.magnet = true,
@@ -1635,8 +1745,26 @@ class _TimelineRulerState extends State<TimelineRuler> {
   ///
   /// A [press] always sounds, even on the frame the last drag ended on,
   /// because pressing there again is asking to hear it again.
+  ///
+  /// With `Shift` held the playhead lands on whatever the pointer comes near:
+  /// a marker, a layer's end, a keyframe, a work-area edge. Held rather than
+  /// left to the magnet, because a scrub is mostly looking, and a playhead
+  /// that stuck to every beat marker it passed would be a worse scrub. It is
+  /// the key After Effects uses for the same thing.
   void _seek(double x, {bool press = false}) {
-    final frame = widget.axis.frameAt(x);
+    var frame = widget.axis.frameAt(x);
+    SnapTarget? caught;
+    if (HardwareKeyboard.instance.isShiftPressed) {
+      caught = snapFrame(
+        frame: widget.axis.frameAtExact(x),
+        // Everything but the playhead, which is the thing being moved.
+        targets: widget.snapTargets.where((s) => s.kind != SnapKind.playhead),
+        perFrame: widget.axis.perFrame,
+        magnet: true,
+      ).caught;
+      if (caught != null) frame = caught.frame.round();
+    }
+    if (caught != _caught) setState(() => _caught = caught);
     widget.onSeek(frame);
     final keys = HardwareKeyboard.instance;
     if (!keys.isControlPressed && !keys.isMetaPressed) return;
@@ -1678,21 +1806,59 @@ class _TimelineRulerState extends State<TimelineRuler> {
     final made =
         markers.where((m) => frameAtTime(widget.comp, m.time) == frame);
     if (made.isEmpty) return;
-    final id = made.first.id;
-    final label = await showMarkerLabelDialogFrb(context: context, initial: '');
-    if (label == null || label.isEmpty || !mounted) return;
+    await _editMarker(made.first);
+  }
+
+  /// Open the marker dialogue on [marker] and write what comes back. Nothing
+  /// is written when it comes back as it went in, so a look and a `Done` is
+  /// not a step for undo to walk through.
+  Future<void> _editMarker(BridgeMarker marker) async {
+    final edited =
+        await showMarkerSettingsFrb(context: context, marker: marker);
+    if (edited == null || !mounted) return;
+    // A region stops at the comp's end, however long was typed.
+    final span = edited.durationFrames == null
+        ? null
+        : min(edited.durationFrames!, max(1, _roomAfter(marker)));
+    if (edited.label == marker.label &&
+        span == marker.durationFrames &&
+        edited.colour == marker.colour) {
+      return;
+    }
     _writeMarkers([
       for (final m in markersOf(widget.comp))
-        if (m.id == id)
-          BridgeMarker(
-              id: m.id,
-              time: m.time,
-              label: label,
-              durationFrames: m.durationFrames,
-              isBeat: m.isBeat)
+        if (m.id == marker.id)
+          m.withLabel(edited.label).withSpan(span).withColour(edited.colour)
         else
           m,
     ]);
+  }
+
+  /// How many frames lie between [marker] and the end of the comp, which is
+  /// as long as its region can be.
+  int _roomAfter(BridgeMarker marker) =>
+      widget.axis.frames - frameAtTime(widget.comp, marker.time);
+
+  /// The press now on the ruler, and the last press that landed on a flag or a
+  /// region's handle, by pointer number. A flag is opaque, but that only hides
+  /// it from what is *behind* it: the ruler it sits inside still joins the
+  /// arena for the same press, and its tap fires on the press deadline whether
+  /// it goes on to win or not. The two numbers being the same is how the ruler
+  /// knows the press was not its own, and leaves the playhead alone.
+  int? _press;
+  int? _flagPress;
+
+  /// The marker that press landed on, or null for a region's handle.
+  UuidValue? _flagPressed;
+
+  /// What the last counted tap was on, so the second click of a pair only
+  /// counts when it lands on the same thing as the first.
+  Object? _lastTapOn;
+
+  /// A flag or a region handle took this press, so the scrub stands down.
+  void _claimPress(PointerDownEvent event, UuidValue? marker) {
+    _flagPress = event.pointer;
+    _flagPressed = marker;
   }
 
   /// The marker being dragged, and the frame it has reached — the same
@@ -1732,15 +1898,28 @@ class _TimelineRulerState extends State<TimelineRuler> {
   /// every frame of travel, which is what made the drag feel heavy. A
   /// work-area edge can afford it because the Viewer preview range changes as
   /// it moves; a marker has nothing to show until it lands.
-  void _dragMarkerTo(double frame) {
+  void _dragMarkerTo(BridgeMarker marker, double frame) {
     setState(() {
       // Snapped like every other drag on the timeline (docs/07 §4.5), and not
-      // to the flag's own frame — which would pin it where it started.
+      // to the flag's own frame — which would pin it where it started. Within
+      // half a frame rather than equal: the target's frame is worked out in
+      // seconds and back, and at a rate like 59.94 that is not always the
+      // whole number the flag's own frame is.
       final at = _snapped(frame,
           except: (s) =>
-              s.kind == SnapKind.marker && s.frame == _dragMarkerFrom);
-      _dragMarkerFrame = at.clamp(0, _dragMarkerLast < 0 ? 0 : _dragMarkerLast);
+              s.kind == SnapKind.marker &&
+              (s.frame - _dragMarkerFrom).abs() < 0.5);
+      // A region is carried whole, so its flag stops where its end meets the
+      // end of the comp.
+      final int span = marker.durationFrames ?? 0;
+      final int last = _dragMarkerLast - (span > 1 ? span - 1 : 0);
+      _dragMarkerFrame = at.clamp(0, last < 0 ? 0 : last);
     });
+    widget.onMarkerPreview?.call((
+      id: marker.id,
+      frame: _dragMarkerFrame!,
+      span: marker.durationFrames ?? 0,
+    ));
   }
 
   /// Where the flag being dragged sits in the document, so it can be kept out
@@ -1755,6 +1934,68 @@ class _TimelineRulerState extends State<TimelineRuler> {
       _dragMarkerFrame = null;
       _caught = null;
     });
+    widget.onMarkerPreview?.call(null);
+  }
+
+  /// The region whose end is being dragged, and how long that has made it.
+  /// Staged here and written once on release, as a marker's move is.
+  UuidValue? _dragSpan;
+  int? _dragSpanFrames;
+
+  /// How long a marker's region draws right now: the document's length, or the
+  /// one its end has been dragged to. Nought for a marker that is a moment.
+  int _markerSpan(BridgeMarker marker) =>
+      marker.id == _dragSpan && _dragSpanFrames != null
+          ? _dragSpanFrames!
+          : max(0, marker.durationFrames ?? 0);
+
+  /// Follow the pointer with a region's end. Never shorter than a frame: a
+  /// region dragged shut would be a moment with nothing left to drag open
+  /// again, and taking a region away is the menu's job.
+  void _dragSpanTo(BridgeMarker marker, double frame) {
+    final from = frameAtTime(widget.comp, marker.time);
+    setState(() {
+      final at = _snapped(frame, except: (_) => false);
+      _dragSpanFrames =
+          (at - from).clamp(1, max(1, _dragMarkerLast + 1 - from));
+    });
+    widget.onMarkerPreview
+        ?.call((id: marker.id, frame: from, span: _dragSpanFrames!));
+  }
+
+  /// Put a region's end back where the drag found it, writing nothing.
+  void _abandonSpanDrag() {
+    if (!mounted) return;
+    setState(() {
+      _dragSpan = null;
+      _dragSpanFrames = null;
+      _caught = null;
+    });
+    widget.onMarkerPreview?.call(null);
+  }
+
+  /// The drag ended: write the length the region has been drawn at, once.
+  void _dropSpan(BridgeMarker marker) {
+    final frames = _dragSpanFrames;
+    setState(() {
+      _dragSpan = null;
+      _dragSpanFrames = null;
+      _caught = null;
+    });
+    if (frames != null && frames != marker.durationFrames) {
+      _writeMarkers([
+        for (final m in markersOf(widget.comp))
+          if (m.id == marker.id) m.withSpan(frames) else m,
+      ]);
+    }
+    widget.onMarkerPreview?.call(null);
+  }
+
+  /// A scrub is over, so whatever `Shift` had the playhead holding lets go.
+  void _scrubEnded() {
+    if (_caught == null || _dragMarker != null || _dragSpan != null) return;
+    if (_dragFrame != null) return;
+    setState(() => _caught = null);
   }
 
   /// The same for a work-area edge.
@@ -1775,14 +2016,18 @@ class _TimelineRulerState extends State<TimelineRuler> {
       _dragMarkerFrame = null;
       _caught = null;
     });
-    if (to == null) return;
-    // The same placement rule adding a marker follows, so a flag dropped onto
-    // another behaves exactly as `Ctrl`+digit aimed at an occupied frame does.
-    _writeMarkers(markersWithFrb(widget.comp,
-        frame: to, label: marker.label, id: marker.id));
+    if (to != null) {
+      // The same placement rule adding a marker follows, so a flag dropped
+      // onto another behaves exactly as `Ctrl`+digit aimed at an occupied
+      // frame does.
+      _writeMarkers(markersWithFrb(widget.comp,
+          frame: to, label: marker.label, id: marker.id));
+    }
+    widget.onMarkerPreview?.call(null);
   }
 
-  /// The right-click menu on a flag: change what it says, or take it away.
+  /// The right-click menu on a flag: change what it says, its colour, whether
+  /// it is a region, or take it away.
   void _markerMenu(BuildContext context, BridgeMarker marker, Offset at) {
     showMarkerMenuFrb(
       context: context,
@@ -1790,6 +2035,10 @@ class _TimelineRulerState extends State<TimelineRuler> {
       marker: marker,
       markers: () => markersOf(widget.comp),
       write: _writeMarkers,
+      regionRoom: _roomAfter(marker),
+      // A new region starts a second long, which is long enough to see and to
+      // take hold of at any zoom the whole comp fits in.
+      regionFrames: max(1, widget.fps.round()),
     );
   }
 
@@ -1877,7 +2126,11 @@ class _TimelineRulerState extends State<TimelineRuler> {
     final markers = markersOf(comp);
     final style = RulerStyle.of(t);
 
-    return GestureDetector(
+    return Listener(
+      // Heard after a flag's own listener, which is nearer the pointer, so by
+      // the time the tap below fires both numbers are in (see [_flagPress]).
+      onPointerDown: (event) => _press = event.pointer,
+      child: GestureDetector(
       key: const ValueKey('tl-ruler'),
       behavior: HitTestBehavior.opaque,
       // **The scrub begins where the button went down**, not where the
@@ -1900,12 +2153,29 @@ class _TimelineRulerState extends State<TimelineRuler> {
         // the *scrub* stands down: the pair of clicks that gives the whole
         // comp back is still counted, so a band too narrow to have a middle is
         // not a band that cannot be cleared.
-        if (!_onWorkHandle(d.localPosition.dx, work)) {
+        //
+        // **And a press on a marker is that marker's**, for the same reason
+        // and by the same route. Without this the playhead comes to a flag
+        // that is only being picked up, whenever the press is held long
+        // enough for this tap to fire before the drag takes over.
+        final onFlag = _press != null && _press == _flagPress;
+        if (!onFlag && !_onWorkHandle(d.localPosition.dx, work)) {
           _seek(d.localPosition.dx, press: true);
         }
-        if (!_rulerTaps.tap()) return;
-        // The second click of a pair, on ground nothing else claimed — a flag
-        // and a work-area handle are opaque, so neither reaches here.
+        // What this click is on: one flag, a region's handle, or the ground.
+        final Object on = !onFlag ? #ground : _flagPressed ?? #handle;
+        final sameAsLast = on == _lastTapOn;
+        _lastTapOn = on;
+        if (!_rulerTaps.tap() || !sameAsLast) return;
+        // The second click of a pair. **On a flag**: its settings open, which
+        // is what a double-click on a marker does in After Effects.
+        if (onFlag) {
+          final id = _flagPressed;
+          final hit = markers.where((m) => m.id == id).firstOrNull;
+          if (hit != null && widget.onMarkersChanged != null) _editMarker(hit);
+          return;
+        }
+        // On ground nothing else claimed.
         // **On the band**: the work area goes back to the whole comp
         // (docs/07 §4.1). Anywhere else: a marker is made at that frame.
         //
@@ -1926,7 +2196,11 @@ class _TimelineRulerState extends State<TimelineRuler> {
           _createMarkerAt(axis.frameAt(x));
         }
       },
+      onTapUp: (_) => _scrubEnded(),
+      onTapCancel: _scrubEnded,
       onHorizontalDragUpdate: (d) => _seek(d.localPosition.dx),
+      onHorizontalDragEnd: (_) => _scrubEnded(),
+      onHorizontalDragCancel: _scrubEnded,
       onSecondaryTapUp: (d) =>
           _groundMenu(d.globalPosition, axis.frameAt(d.localPosition.dx)),
       child: Container(
@@ -2157,17 +2431,17 @@ class _TimelineRulerState extends State<TimelineRuler> {
             // the marker's own frame for that long. Drawn **before** the flags
             // so a flag parked inside another marker's span is still the thing
             // the pointer finds; the bar is scenery, not a target, so it takes
-            // no gestures of its own — resizing a span has no control yet, and
-            // a bar that could be grabbed but not moved would promise one.
+            // no gestures of its own. The flag moves the region and the handle
+            // at its far end, below, is what resizes it.
             for (final marker in markers)
-              if ((marker.durationFrames ?? 0) > 0)
+              if (_markerSpan(marker) > 0)
                 Positioned(
                   // From the marker's frame, not from the flag's left edge:
                   // the point is what says *where*, so the span starts under
                   // the point rather than under the shape around it.
                   left: axis.xOf(_markerFrame(marker)),
                   width:
-                      axis.xOf(_markerFrame(marker) + marker.durationFrames!) -
+                      axis.xOf(_markerFrame(marker) + _markerSpan(marker)) -
                           axis.xOf(_markerFrame(marker)),
                   bottom: t.density.cacheBar,
                   height: MarkerFlag.spanHeight,
@@ -2177,10 +2451,78 @@ class _TimelineRulerState extends State<TimelineRuler> {
                       // The marker's own colour, hushed: the flag is what is
                       // read and aimed at, and a span at full strength read as
                       // a second work area rather than as one marker's reach.
-                      color: t.marker.withValues(alpha: 0.35),
+                      color: markerColour(t, marker).withValues(alpha: 0.5),
                     ),
                   ),
                 ),
+            // The far end of a region, to drag: how long a marker runs is set
+            // by pulling this, the way After Effects sizes a marker by its out
+            // handle. Before the flags in the stack, so a flag parked on
+            // another region's end is still the thing the pointer finds.
+            if (widget.onMarkersChanged != null)
+              for (final marker in markers)
+                if (_markerSpan(marker) > 0 && !marker.isBeat)
+                  Positioned(
+                    left:
+                        axis.xOf(_markerFrame(marker) + _markerSpan(marker)) -
+                            _regionHandleWidth / 2,
+                    width: _regionHandleWidth,
+                    bottom: t.density.cacheBar,
+                    height: MarkerFlag.height,
+                    child: MouseRegion(
+                      cursor: SystemMouseCursors.resizeLeftRight,
+                      child: Listener(
+                        onPointerDown: (event) => _claimPress(event, null),
+                        child: GestureDetector(
+                          key: ValueKey<String>('tl-marker-out-${marker.id}'),
+                          behavior: HitTestBehavior.opaque,
+                          supportedDevices: dragDevices,
+                          onHorizontalDragStart: (_) {
+                            setState(() {
+                              _dragSpan = marker.id;
+                              _dragSpanFrames = null;
+                              _dragMarkerLast = comp.durationFrames() - 1;
+                            });
+                            _escape.begin(_abandonSpanDrag);
+                          },
+                          onHorizontalDragUpdate: (d) {
+                            if (!_escape.running) return;
+                            _dragSpanTo(
+                                marker,
+                                axis.frameAtExact(
+                                    _rulerX(context, d.globalPosition)));
+                          },
+                          onHorizontalDragEnd: (_) {
+                            if (_escape.end()) {
+                              _dropSpan(marker);
+                            } else {
+                              _abandonSpanDrag();
+                            }
+                          },
+                          onHorizontalDragCancel: () {
+                            _escape.end();
+                            _abandonSpanDrag();
+                          },
+                          // A short post in the marker's colour, standing on
+                          // the bar it ends.
+                          child: Align(
+                            alignment: Alignment.bottomCenter,
+                            child: SizedBox(
+                              width: 3,
+                              height: MarkerFlag.height - 2,
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  color: markerColour(t, marker),
+                                  borderRadius: const BorderRadius.vertical(
+                                      top: Radius.circular(1)),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
             // Comp markers (docs/07 §4.1): After Effects' bookmark flags, in
             // the ruler's lower row where the work-area band lives. The clock
             // above stays legible, and a flag never sits on a tick.
@@ -2202,6 +2544,8 @@ class _TimelineRulerState extends State<TimelineRuler> {
                 bottom: t.density.cacheBar,
                 child: MouseRegion(
                   cursor: SystemMouseCursors.click,
+                  child: Listener(
+                  onPointerDown: (event) => _claimPress(event, marker.id),
                   child: GestureDetector(
                     key: ValueKey<String>('tl-marker-${marker.id}'),
                     behavior: HitTestBehavior.opaque,
@@ -2224,9 +2568,11 @@ class _TimelineRulerState extends State<TimelineRuler> {
                     },
                     onHorizontalDragUpdate: (d) {
                       if (!_escape.running) return;
-                      _dragMarkerTo(axis.frameAtExact(
-                          _rulerX(context, d.globalPosition) -
-                              _dragMarkerGrab));
+                      _dragMarkerTo(
+                          marker,
+                          axis.frameAtExact(
+                              _rulerX(context, d.globalPosition) -
+                                  _dragMarkerGrab));
                     },
                     onHorizontalDragEnd: (_) {
                       if (_escape.end()) {
@@ -2248,10 +2594,11 @@ class _TimelineRulerState extends State<TimelineRuler> {
                         ? BeatTick(fill: t.animated)
                         : MarkerFlag(
                             label: marker.label,
-                            fill: t.marker,
+                            fill: markerColour(t, marker),
                             pill: t.surface4,
                             text: markerLabelStyle(t),
                           ),
+                  ),
                   ),
                 ),
               ),
@@ -2281,6 +2628,7 @@ class _TimelineRulerState extends State<TimelineRuler> {
           ],
         ),
       ),
+      ),
     );
   }
 }
@@ -2288,6 +2636,122 @@ class _TimelineRulerState extends State<TimelineRuler> {
 /// How wide a work-area edge is to grab. Wider than the 2 px it draws, so the
 /// handle is catchable without the mark being heavy.
 const double _workHandleWidth = 10;
+
+/// How wide the end of a marker's region is to grab, for the same reason.
+const double _regionHandleWidth = 8;
+
+/// A marker in the middle of a drag on the ruler: which one, the frame it has
+/// reached and how many frames its region runs for (nought for a moment).
+typedef MarkerPreview = ({UuidValue id, int frame, int span});
+
+/// The regions of a comp's markers, shaded down through the lanes.
+///
+/// A region is a stretch of time to line layers and keys up against, which a
+/// thin bar up on the ruler does not let you do. So each one is washed in its
+/// marker's colour for the whole height of the view under the ruler, the way
+/// After Effects shades a marker's protected region.
+///
+/// On its own layer and listening to [preview] for itself, as the work area's
+/// ground does, so dragging a region repaints this and rebuilds nothing.
+class MarkerRegionsGround extends StatelessWidget {
+  const MarkerRegionsGround({
+    super.key,
+    required this.comp,
+    required this.axis,
+    required this.preview,
+  });
+
+  final CompositionReference comp;
+  final TimelineAxis axis;
+
+  /// The marker a drag on the ruler has staged, or null when none is on.
+  final ValueListenable<MarkerPreview?> preview;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    final regions = [
+      for (final m in markersOf(comp))
+        if ((m.durationFrames ?? 0) > 0 && !m.isBeat)
+          (
+            id: m.id,
+            frame: frameAtTime(comp, m.time),
+            span: m.durationFrames!,
+            colour: markerColour(t, m),
+          ),
+    ];
+    return Positioned.fill(
+      child: RepaintBoundary(
+        child: IgnorePointer(
+          child: ValueListenableBuilder<MarkerPreview?>(
+            valueListenable: preview,
+            builder: (context, staged, _) => CustomPaint(
+              painter: _MarkerRegionsPainter(
+                spans: [
+                  for (final r in regions)
+                    if (staged != null && staged.id == r.id)
+                      (
+                        axis.xOf(staged.frame),
+                        axis.xOf(staged.frame + staged.span),
+                        r.colour,
+                      )
+                    else
+                      (
+                        axis.xOf(r.frame),
+                        axis.xOf(r.frame + r.span),
+                        r.colour,
+                      ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MarkerRegionsPainter extends CustomPainter {
+  /// Each region's two edges in the view's own pixels, and its colour.
+  final List<(double, double, Color)> spans;
+
+  const _MarkerRegionsPainter({required this.spans});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    for (final (from, to, colour) in spans) {
+      final left = from.clamp(0.0, size.width);
+      final right = to.clamp(0.0, size.width);
+      if (right <= left) continue;
+      // Light enough to read bars and keys through, with an edge at each end
+      // so where the region starts and stops is a line and not a guess.
+      canvas.drawRect(
+        Rect.fromLTRB(left, 0, right, size.height),
+        Paint()..color = colour.withValues(alpha: markerRegionFillAlpha),
+      );
+      final edge = Paint()
+        ..color = colour.withValues(alpha: markerRegionEdgeAlpha)
+        ..strokeWidth = 1;
+      for (final x in [from, to]) {
+        if (x < 0 || x > size.width) continue;
+        canvas.drawLine(Offset(x, 0), Offset(x, size.height), edge);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_MarkerRegionsPainter old) =>
+      !listEquals(old.spans, spans);
+
+  /// Never takes the pointer, it is the ground and not a control.
+  @override
+  bool? hitTest(Offset position) => false;
+}
+
+/// How strongly a marker's region washes the lanes, and how strongly its two
+/// edges are drawn.
+const double markerRegionFillAlpha = 0.14;
+const double markerRegionEdgeAlpha = 0.45;
 
 /// A comp marker on the time ruler: an **upward triangle sitting on the cache
 /// bar**, half inside the backdrop pill that carries what it says
@@ -2568,42 +3032,86 @@ class BeatBandPainter extends CustomPainter {
       old.label != label;
 }
 
-/// Ask for what a marker says. Returns the new label, or null when the user
-/// cancelled — an empty string is a real answer, being a marker with nothing
-/// written on it.
-Future<String?> showMarkerLabelDialogFrb({
+/// What the marker dialogue hands back: what the marker says, how long it
+/// runs for, and which colour it wears.
+///
+/// [durationFrames] is null for a moment, and [colour] is null for the plain
+/// marker grey, the same two meanings the marker itself gives them.
+typedef MarkerSettings = ({String label, int? durationFrames, int? colour});
+
+/// Ask what [marker] says, how long it runs and what colour it is. Returns the
+/// answers, or null when the user cancelled. An empty label is a real answer,
+/// being a marker with nothing written on it.
+///
+/// [spans] is whether the marker's owner draws a duration. The ruler does and
+/// a layer's bar does not, so a layer marker is not asked for one.
+Future<MarkerSettings?> showMarkerSettingsFrb({
   required BuildContext context,
-  required String initial,
+  required BridgeMarker marker,
+  bool spans = true,
 }) =>
-    showLumitModal<String>(
+    showLumitModal<MarkerSettings>(
       context: context,
-      initialSize: const Size(320, 150),
-      minSize: const Size(260, 140),
-      builder: (close) => _MarkerLabelDialog(initial: initial, onDone: close),
+      initialSize: Size(320, spans ? 184 : 150),
+      minSize: Size(280, spans ? 176 : 142),
+      builder: (close) =>
+          _MarkerSettingsDialog(marker: marker, spans: spans, onDone: close),
     );
 
-class _MarkerLabelDialog extends StatefulWidget {
-  final String initial;
-  final ValueChanged<String?> onDone;
-  const _MarkerLabelDialog({required this.initial, required this.onDone});
+class _MarkerSettingsDialog extends StatefulWidget {
+  final BridgeMarker marker;
+  final bool spans;
+  final ValueChanged<MarkerSettings?> onDone;
+  const _MarkerSettingsDialog({
+    required this.marker,
+    required this.spans,
+    required this.onDone,
+  });
 
   @override
-  State<_MarkerLabelDialog> createState() => _MarkerLabelDialogState();
+  State<_MarkerSettingsDialog> createState() => _MarkerSettingsDialogState();
 }
 
-class _MarkerLabelDialogState extends State<_MarkerLabelDialog> {
+class _MarkerSettingsDialogState extends State<_MarkerSettingsDialog> {
   late final TextEditingController _label =
-      TextEditingController(text: widget.initial);
+      TextEditingController(text: widget.marker.label);
+  late final TextEditingController _duration = TextEditingController(
+      text: '${max(0, widget.marker.durationFrames ?? 0)}');
+  late int? _colour = widget.marker.colour;
 
   @override
   void dispose() {
     _label.dispose();
+    _duration.dispose();
     super.dispose();
   }
+
+  /// Everything the dialogue holds, as the marker would take it. A duration
+  /// that is not a number, or is nought or less, is a moment.
+  void _done() {
+    final frames = int.tryParse(_duration.text.trim()) ?? 0;
+    widget.onDone((
+      label: _label.text,
+      durationFrames: frames > 0 ? frames : null,
+      colour: _colour,
+    ));
+  }
+
+  /// One labelled line of the form: what it is on the left, the control after.
+  Widget _line(LumitTheme t, String name, Widget control) => Padding(
+        padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
+        child: Row(
+          children: [
+            SizedBox(width: 72, child: Text(name, style: t.small)),
+            control,
+          ],
+        ),
+      );
 
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
+    final beat = widget.marker.isBeat;
     return FloatSurface(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -2620,9 +3128,38 @@ class _MarkerLabelDialogState extends State<_MarkerLabelDialog> {
               controller: _label,
               autofocus: true,
               hint: l10n.markerHint,
-              onSubmitted: widget.onDone,
+              onSubmitted: (_) => _done(),
             ),
           ),
+          if (widget.spans && !beat)
+            _line(
+              t,
+              l10n.markerDuration,
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  HouseTextField(
+                    key: const ValueKey('marker-edit-duration'),
+                    controller: _duration,
+                    width: 64,
+                    textAlign: TextAlign.right,
+                    onSubmitted: (_) => _done(),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(l10n.markerDurationFrames, style: t.small),
+                ],
+              ),
+            ),
+          if (!beat)
+            _line(
+              t,
+              l10n.markerColour,
+              MarkerColourChips(
+                keyPrefix: 'marker-edit-colour',
+                selected: _colour,
+                onPicked: (colour) => setState(() => _colour = colour),
+              ),
+            ),
           Padding(
             padding: const EdgeInsets.all(10),
             child: Row(
@@ -2642,7 +3179,7 @@ class _MarkerLabelDialogState extends State<_MarkerLabelDialog> {
                   // The default action. The label field holds focus,
                   // so Enter lands there and submits the same commit.
                   primary: true,
-                  onPressed: () => widget.onDone(_label.text),
+                  onPressed: _done,
                   child: Text(l10n.done, style: t.small),
                 ),
               ],
@@ -2652,6 +3189,39 @@ class _MarkerLabelDialogState extends State<_MarkerLabelDialog> {
       ),
     );
   }
+}
+
+/// A marker with part of what it holds changed and the rest carried along.
+///
+/// Every write hands the engine whole markers, so one rebuilt field by field
+/// at the call site drops whatever that site forgot to copy. These keep the
+/// copying in one place.
+extension MarkerEdit on BridgeMarker {
+  BridgeMarker withLabel(String label) => BridgeMarker(
+      id: id,
+      time: time,
+      label: label,
+      durationFrames: durationFrames,
+      colour: colour,
+      isBeat: isBeat);
+
+  /// [frames] of null, or nought, is a moment.
+  BridgeMarker withSpan(int? frames) => BridgeMarker(
+      id: id,
+      time: time,
+      label: label,
+      durationFrames: frames != null && frames > 0 ? frames : null,
+      colour: colour,
+      isBeat: isBeat);
+
+  /// [colour] of null is the plain marker grey.
+  BridgeMarker withColour(int? colour) => BridgeMarker(
+      id: id,
+      time: time,
+      label: label,
+      durationFrames: durationFrames,
+      colour: colour,
+      isBeat: isBeat);
 }
 
 /// Put a marker labelled [label] at [frame], replacing anything already on that
@@ -2691,31 +3261,41 @@ List<BridgeMarker> markersWithFrb(
   required int frame,
   required String label,
   UuidValue? id,
-}) =>
-    [
-      for (final m in markersOf(comp))
-        if (m.id != id &&
-            frameAtTime(comp, m.time) != frame &&
-            (label.isEmpty || m.label != label))
-          m,
-      BridgeMarker(
-        id: id ?? UuidValue.fromString(const Uuid().v4()),
-        time: timeOfFrame(comp, frame),
-        label: label,
-        // A marker being **moved** keeps the span it was carrying; a marker
-        // being made is a moment, which is what every new cue is.
-        durationFrames: id == null ? null : _spanOf(comp, id),
-        // Read-only across the seam: the engine's merge decides what stays a
-        // beat, so what is written here is never read back.
-        isBeat: false,
-      ),
-    ];
+}) {
+  // What the newcomer inherits. A marker being moved is itself, and a
+  // numbered marker set again is the one that already carried that number.
+  final moved = id != null
+      ? _markerOf(comp, id)
+      : label.isEmpty
+          ? null
+          : markersOf(comp).where((m) => m.label == label).firstOrNull;
+  return [
+    for (final m in markersOf(comp))
+      if (m.id != id &&
+          frameAtTime(comp, m.time) != frame &&
+          (label.isEmpty || m.label != label))
+        m,
+    BridgeMarker(
+      id: id ?? UuidValue.fromString(const Uuid().v4()),
+      time: timeOfFrame(comp, frame),
+      label: label,
+      // A marker being **moved** keeps the span and the colour it was
+      // carrying; a marker being made is a plain moment, which is what every
+      // new cue is.
+      durationFrames: moved?.durationFrames,
+      colour: moved?.colour,
+      // Read-only across the seam: the engine's merge decides what stays a
+      // beat, so what is written here is never read back.
+      isBeat: false,
+    ),
+  ];
+}
 
-/// The span the marker already on the ruler under [id] is carrying, so a drag
-/// moves the whole thing rather than flattening it to a moment.
-int? _spanOf(CompositionReference comp, UuidValue id) {
+/// The marker already on the ruler under [id], so a drag moves the whole
+/// thing rather than flattening it to a plain moment.
+BridgeMarker? _markerOf(CompositionReference comp, UuidValue id) {
   for (final m in markersOf(comp)) {
-    if (m.id == id) return m.durationFrames;
+    if (m.id == id) return m;
   }
   return null;
 }

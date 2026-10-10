@@ -695,7 +695,19 @@ class LumitMenuBarFrb extends StatelessWidget {
     }
     // Every panel: Enter shows it if it was closed, fronts it in its group
     // and points the keyboard at it, which is what cycling to it does.
+    for (final extension in ui.extensions.installed) {
+      commands.add(PaletteCommand(
+        label: extension.name,
+        category: l10n.palettePanels,
+        run: () {
+          if (!ui.extensionShown(extension.id)) {
+            ui.toggleExtension(extension.id);
+          }
+        },
+      ));
+    }
     for (final panel in Panel.values) {
+      if (panel == Panel.extension) continue;
       commands.add(PaletteCommand(
         label: panel.title,
         category: l10n.palettePanels,
@@ -758,7 +770,7 @@ class LumitMenuBarFrb extends StatelessWidget {
       final layer = ui.selectedLayer.value;
       if (layer == null) return;
       try {
-        layer.loadPreset(text: File(preset.path).readAsStringSync());
+        layer.loadPreset(text: readEffectPreset(path: preset.path));
       } catch (_) {
         return;
       }
@@ -1595,12 +1607,27 @@ List<MenuSection> lumitMenus(
             // because turning three panels on is three ticks, not three trips to
             // the Window menu.
             for (final panel in Panel.values)
-              MenuEntry.toggle(
-                panel.title,
-                () => togglePanel(ui, panel),
-                action: panelToggleAction(panel),
-                checked: () => panelVisible(ui.split, panel),
-              ),
+              // An extension's panel is listed by the extension, below.
+              if (panel != Panel.extension)
+                MenuEntry.toggle(
+                  panel.title,
+                  () => togglePanel(ui, panel),
+                  action: panelToggleAction(panel),
+                  checked: () => panelVisible(ui.split, panel),
+                ),
+            MenuEntry.submenu(l10n.menuExtensions, [
+              for (final extension in ui.extensions.installed)
+                MenuEntry.toggle(
+                  extension.name,
+                  () => ui.toggleExtension(extension.id),
+                  checked: () => ui.extensionShown(extension.id),
+                ),
+              if (ui.extensions.installed.isNotEmpty) MenuEntry.divider(),
+              MenuEntry(
+                  l10n.menuManageExtensions,
+                  () => showSettingsWindowFrb(context,
+                      initialPage: SettingsPage.addons)),
+            ]),
             MenuEntry.divider(),
             // Another Viewer panel, beside the one being worked in. The Viewer is
             // the one panel that can be in the arrangement more than once

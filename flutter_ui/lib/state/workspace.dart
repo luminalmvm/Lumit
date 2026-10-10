@@ -12,12 +12,15 @@ import 'dart:ui';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
+import 'package:lumit_flutter/src/rust/api/effect.dart'
+    show BridgeExpressionLanguage;
 
 import '../l10n/strings.dart';
 import '../theme/custom_theme.dart';
 import '../icons/icon_style.dart';
 import '../theme/theme.dart';
 import 'dock.dart';
+import 'expression_language.dart';
 import 'settings.dart';
 
 /// How the Viewer is looking at one composition: exposure in stops and whether
@@ -33,14 +36,15 @@ const ViewerLook neutralLook = (stops: 0.0, toneMap: false);
 /// frame, the Timeline's magnification, and how far through its scrollable
 /// range the lanes were scrolled (0 at the left, 1 at the right — a fraction
 /// rather than a pixel offset so the view comes back to the same stretch of
-/// time whatever width the panel has since been dragged to).
+/// time whatever width the panel has since been dragged to). [scrollY] is how
+/// far down the layers were scrolled, in pixels, since rows keep their height.
 ///
-/// A record for the same reason [ViewerLook] is: three numbers with no
+/// A record for the same reason [ViewerLook] is: a few numbers with no
 /// behaviour, compared by value.
-typedef CompView = ({int frame, double zoom, double scroll});
+typedef CompView = ({int frame, double zoom, double scroll, double scrollY});
 
-/// A comp nobody has been in yet: frame one, fitted, at the left.
-const CompView newCompView = (frame: 0, zoom: 1.0, scroll: 0.0);
+/// A comp nobody has been in yet: frame one, fitted, at the top left.
+const CompView newCompView = (frame: 0, zoom: 1.0, scroll: 0.0, scrollY: 0.0);
 
 /// Which of the Viewer's marks are drawn over one composition: the proportional
 /// grid, the title/action safe rectangles, and the rulers along the picture's
@@ -197,6 +201,7 @@ class SavedSession {
               'frame': e.value.frame,
               'zoom': e.value.zoom,
               'scroll': e.value.scroll,
+              'scroll_y': e.value.scrollY,
             },
         },
       };
@@ -347,11 +352,14 @@ Map<String, CompView> _compViewsFromJson(Object? raw) {
     if (k is! String || v is! Map || v['frame'] is! num) continue;
     final zoom = v['zoom'] is num ? (v['zoom'] as num).toDouble() : 1.0;
     final scroll = v['scroll'] is num ? (v['scroll'] as num).toDouble() : 0.0;
-    if (!zoom.isFinite || !scroll.isFinite) continue;
+    final scrollY =
+        v['scroll_y'] is num ? (v['scroll_y'] as num).toDouble() : 0.0;
+    if (!zoom.isFinite || !scroll.isFinite || !scrollY.isFinite) continue;
     out[k] = (
       frame: max(0, (v['frame'] as num).toInt()),
       zoom: zoom < 1.0 ? 1.0 : zoom,
       scroll: scroll.clamp(0.0, 1.0),
+      scrollY: max(0.0, scrollY),
     );
   }
   return out;
@@ -576,9 +584,38 @@ class Workspace extends ChangeNotifier {
   /// writes.
   final Map<String, String> savedExpressions = <String, String>{};
 
+  /// The language each saved expression is written in. A name with no entry
+  /// is Rhai, which is every expression saved before there was a choice.
+  final Map<String, BridgeExpressionLanguage> savedExpressionLanguages =
+      <String, BridgeExpressionLanguage>{};
+
+  BridgeExpressionLanguage savedExpressionLanguage(String name) =>
+      savedExpressionLanguages[name] ?? BridgeExpressionLanguage.rhai;
+
+  /// The language a new expression starts in, wherever one is made: a row's
+  /// Set expression, Animation ▸ Add expression, the Expressions panel's New.
+  BridgeExpressionLanguage defaultExpressionLanguage =
+      BridgeExpressionLanguage.rhai;
+
+  void setDefaultExpressionLanguage(BridgeExpressionLanguage language) {
+    defaultExpressionLanguage = language;
+    settingsChanged();
+  }
+
+  /// The saved languages as the settings file and the exchange file keep
+  /// them: only the names that are not Rhai.
+  Map<String, String> _encodedExpressionLanguages() => {
+        for (final MapEntry(:key, :value) in savedExpressionLanguages.entries)
+          if (savedExpressions.containsKey(key) &&
+              value != BridgeExpressionLanguage.rhai)
+            key: expressionLanguageId(value),
+      };
+
   /// Every saved expression as the text of a file to hand to someone.
-  String encodeExpressions() =>
-      jsonEncode({'lumit_expressions': savedExpressions});
+  String encodeExpressions() => jsonEncode({
+        'lumit_expressions': savedExpressions,
+        'languages': _encodedExpressionLanguages(),
+      });
 
   /// Take in a file [encodeExpressions] wrote and say how many it held, or
   /// null when [text] isn't one. A name already taken by a different script
@@ -591,17 +628,21 @@ class Workspace extends ChangeNotifier {
       return null;
     }
     if (read case {'lumit_expressions': final Map<dynamic, dynamic> saved}) {
+      final languages = (read as Map<dynamic, dynamic>)['languages'];
       var count = 0;
       for (final MapEntry(:key, :value) in saved.entries) {
         if (key is! String || value is! String) continue;
+        final language = expressionLanguageOfId(
+            languages is Map<dynamic, dynamic> ? languages[key] : null);
         var name = key;
         for (var n = 2;
             savedExpressions.containsKey(name) &&
-                savedExpressions[name] != value;
+                (savedExpressions[name] != value ||
+                    savedExpressionLanguage(name) != language);
             n++) {
           name = '$key $n';
         }
-        savedExpressions[name] = value;
+        _storeExpression(name, value, language);
         count++;
       }
       settingsChanged();
@@ -610,13 +651,25 @@ class Workspace extends ChangeNotifier {
     return null;
   }
 
-  /// Save [text] under [name], over whatever that name held.
-  void saveExpression(String name, String text) {
+  void _storeExpression(
+      String name, String text, BridgeExpressionLanguage language) {
     savedExpressions[name] = text;
+    if (language == BridgeExpressionLanguage.rhai) {
+      savedExpressionLanguages.remove(name);
+    } else {
+      savedExpressionLanguages[name] = language;
+    }
+  }
+
+  /// Save [text] under [name], over whatever that name held.
+  void saveExpression(String name, String text,
+      [BridgeExpressionLanguage language = BridgeExpressionLanguage.rhai]) {
+    _storeExpression(name, text, language);
     settingsChanged();
   }
 
   void deleteExpression(String name) {
+    savedExpressionLanguages.remove(name);
     if (savedExpressions.remove(name) != null) settingsChanged();
   }
 
@@ -820,11 +873,71 @@ class Workspace extends ChangeNotifier {
   }
 
   /// Whether sharing a project asks the router to open its port, so people
-  /// outside this network can join.
-  bool shareOutside = false;
+  /// outside this network can join. On until the person says otherwise: it
+  /// is what lets a link work for someone far away with nothing to set up.
+  bool shareOutside = true;
 
   void setShareOutside(bool on) {
     shareOutside = on;
+    save();
+  }
+
+  /// The relay a shared project keeps a room at, as `host` or `host:port`,
+  /// or null for none. Somebody's own server, which Lumit only uses once it
+  /// has been typed here.
+  String? shareRelay;
+
+  void setShareRelay(String? relay) {
+    shareRelay = relay;
+    save();
+  }
+
+  /// How fast this computer sends and takes footage in a shared project, in
+  /// kilobytes a second. Nought is as fast as the line goes.
+  int shareUpLimit = 0;
+  int shareDownLimit = 0;
+
+  /// Whether this computer makes stand-ins of its footage for the others in
+  /// a shared project, and whether it asks for stand-ins of what it lacks
+  /// without being told to.
+  bool shareGive = true;
+  bool shareTake = true;
+
+  /// Called whenever any of the four above changes, and once they are read
+  /// from disk: what hands them to the engine.
+  VoidCallback? onShareFootage;
+
+  void setShareLimits({int? up, int? down}) {
+    shareUpLimit = (up ?? shareUpLimit).clamp(0, 10000000);
+    shareDownLimit = (down ?? shareDownLimit).clamp(0, 10000000);
+    onShareFootage?.call();
+    save();
+  }
+
+  void setShareFootage({bool? give, bool? take}) {
+    shareGive = give ?? shareGive;
+    shareTake = take ?? shareTake;
+    onShareFootage?.call();
+    save();
+  }
+
+  /// For each extension that has been shown, by its id: the number of the
+  /// dock pane it is shown in. Kept after the extension is removed, so one
+  /// installed again comes back where it was.
+  final Map<String, int> extensionSlots = {};
+
+  void setExtensionSlot(String id, int slot) {
+    extensionSlots[id] = slot;
+    save();
+  }
+
+  /// For each extension, by its id: the folders the person picked for it to
+  /// watch. An extension can ask to watch one of these again without the
+  /// picker, and no other.
+  final Map<String, List<String>> extensionFolders = {};
+
+  void setExtensionFolders(String id, List<String> folders) {
+    extensionFolders[id] = folders;
     save();
   }
 
@@ -1610,7 +1723,14 @@ class Workspace extends ChangeNotifier {
         'keymap': keymapJson,
         'audio_device': audioDevice,
         'share_name': shareName,
-        'share_outside': shareOutside,
+        'share_router': shareOutside,
+        'share_relay': shareRelay,
+        'share_up_limit': shareUpLimit,
+        'share_down_limit': shareDownLimit,
+        'share_give': shareGive,
+        'share_take': shareTake,
+        'extension_slots': extensionSlots,
+        'extension_folders': extensionFolders,
         'share_hosted': shareHosted,
         'autosave_minutes': autosaveMinutes,
         'autosave_keep': autosaveKeep,
@@ -1619,6 +1739,9 @@ class Workspace extends ChangeNotifier {
         'themed_scopes': themedScopes,
         'favourite_effects': favouriteEffects.toList()..sort(),
         'saved_expressions': savedExpressions,
+        'saved_expression_languages': _encodedExpressionLanguages(),
+        'default_expression_language':
+            expressionLanguageId(defaultExpressionLanguage),
         'recent_colours': [...recentColours],
         'themed_effect_graphs': themedEffectGraphs,
         'curve_plot_size': curvePlotSize,
@@ -1699,7 +1822,34 @@ class Workspace extends ChangeNotifier {
     audioDevice = device is String && device.isNotEmpty ? device : null;
     final sharedAs = j['share_name'];
     shareName = sharedAs is String && sharedAs.isNotEmpty ? sharedAs : null;
-    shareOutside = j['share_outside'] is bool && j['share_outside'] as bool;
+    // Under a new name: the old one was written as off for everybody, back
+    // when off was what a person who had never touched it got.
+    final outside = j['share_router'];
+    shareOutside = outside is bool ? outside : true;
+    final relay = j['share_relay'];
+    shareRelay = relay is String && relay.isNotEmpty ? relay : null;
+    final (up, down) = (j['share_up_limit'], j['share_down_limit']);
+    shareUpLimit = up is int ? up.clamp(0, 10000000) : 0;
+    shareDownLimit = down is int ? down.clamp(0, 10000000) : 0;
+    shareGive = j['share_give'] is! bool || j['share_give'] as bool;
+    shareTake = j['share_take'] is! bool || j['share_take'] as bool;
+    onShareFootage?.call();
+    extensionSlots.clear();
+    final slots = j['extension_slots'];
+    if (slots is Map) {
+      for (final MapEntry(:key, :value) in slots.entries) {
+        if (key is String && value is int) extensionSlots[key] = value;
+      }
+    }
+    extensionFolders.clear();
+    final watched = j['extension_folders'];
+    if (watched is Map) {
+      for (final MapEntry(:key, :value) in watched.entries) {
+        if (key is String && value is List) {
+          extensionFolders[key] = value.whereType<String>().toList();
+        }
+      }
+    }
     shareHosted.clear();
     final hosted = j['share_hosted'];
     if (hosted is Map) {
@@ -1740,6 +1890,17 @@ class Workspace extends ChangeNotifier {
           for (final MapEntry(:key, :value) in saved.entries)
             if (key is String && value is String) key: value,
       });
+    savedExpressionLanguages
+      ..clear()
+      ..addAll({
+        if (j['saved_expression_languages']
+            case final Map<dynamic, dynamic> languages)
+          for (final MapEntry(:key, :value) in languages.entries)
+            if (key is String && value == 'javascript')
+              key: BridgeExpressionLanguage.javaScript,
+      });
+    defaultExpressionLanguage =
+        expressionLanguageOfId(j['default_expression_language']);
     recentColours
       ..clear()
       ..addAll([

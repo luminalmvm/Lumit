@@ -13,8 +13,9 @@
 // **What the three levels keep.** Full plays everything. Minimal keeps the
 // motion that says something, where a row went or that a menu opened, as a
 // 50ms fade or slide, and drops the motion that is only manner: nothing rises,
-// grows, overshoots or trails. None plays nothing, and a widget given a still
-// spec does not mount a controller at all.
+// grows, overshoots or trails. The one thing it keeps whole is what is on a
+// menu or a dialogue following it in. None plays nothing, and a widget given a
+// still spec does not mount a controller at all.
 //
 // **What the three shapes change.** Studio is quick and quiet. Desk is an
 // instrument, so its movements are shorter, stop dead and never bounce, and a
@@ -48,7 +49,9 @@ const Duration _ms120 = Duration(milliseconds: 120);
 const Duration _ms130 = Duration(milliseconds: 130);
 const Duration _ms140 = Duration(milliseconds: 140);
 const Duration _ms150 = Duration(milliseconds: 150);
+const Duration _ms180 = Duration(milliseconds: 180);
 const Duration _ms200 = Duration(milliseconds: 200);
+const Duration _ms220 = Duration(milliseconds: 220);
 const Duration _ms280 = Duration(milliseconds: 280);
 const Duration _ms320 = Duration(milliseconds: 320);
 
@@ -98,6 +101,15 @@ class Motion {
   final double popupRise;
   final double popupScale;
 
+  /// What is on a menu or a dialogue, following its surface in: the surface
+  /// is there first and its rows come up a beat behind, clearing from a blur
+  /// as they settle. The rise is as a popup's, the blur is the sigma it starts
+  /// at. Runs a little past 150ms, because it starts late and the surface it
+  /// is on has landed and takes the pointer long before it is done.
+  final MotionSpec content;
+  final double contentRise;
+  final double contentBlur;
+
   /// A submenu flying out beside its row. Opacity only at every level, since
   /// the menu's hover guard measures the flyout where it stands.
   final MotionSpec flyout;
@@ -132,7 +144,7 @@ class Motion {
   final MotionSpec swap;
 
   /// The guided tour going from one step to the next: the hole crossing the
-  /// window and the card going with it. The one movement longer than 150ms,
+  /// window and the card going with it. Much the longest movement,
   /// because it carries the eye from one panel to another and a cut that far
   /// loses it. Full only: at Minimal and None the next step is simply there.
   final MotionSpec tour;
@@ -150,6 +162,9 @@ class Motion {
     required this.popup,
     required this.popupRise,
     required this.popupScale,
+    required this.content,
+    required this.contentRise,
+    required this.contentBlur,
     required this.flyout,
     required this.tooltip,
     required this.tooltipRise,
@@ -205,6 +220,9 @@ class Motion {
         popup: MotionSpec.still,
         popupRise: 0,
         popupScale: 1,
+        content: MotionSpec.still,
+        contentRise: 0,
+        contentBlur: 0,
         flyout: MotionSpec.still,
         tooltip: MotionSpec.still,
         tooltipRise: 0,
@@ -224,9 +242,11 @@ class Motion {
 
   /// Minimal is the same under every shape: what is left is too short to
   /// carry a manner. A 50ms fade or slide where the motion says something,
-  /// and nothing where it only decorates.
+  /// and nothing where it only decorates. Only the content of a menu or a
+  /// dialogue moves as its shape does at Full.
   static Motion _minimal(ThemeShape shape) {
     const snap = MotionSpec(_ms50, Curves.easeOut);
+    final full = of(shape, AnimationLevel.all);
     return Motion._(
       shape: shape,
       level: AnimationLevel.minimal,
@@ -240,6 +260,9 @@ class Motion {
       popup: snap,
       popupRise: 0,
       popupScale: 1,
+      content: full.content,
+      contentRise: full.contentRise,
+      contentBlur: full.contentBlur,
       flyout: MotionSpec.still,
       tooltip: MotionSpec.still,
       tooltipRise: 0,
@@ -273,6 +296,9 @@ class Motion {
     popup: MotionSpec(_ms110, _out),
     popupRise: -4,
     popupScale: 1,
+    content: MotionSpec(_ms180, _out),
+    contentRise: 3,
+    contentBlur: 3,
     flyout: MotionSpec(_ms80, Curves.easeOut),
     tooltip: MotionSpec(_ms90, Curves.easeOut),
     tooltipRise: -2,
@@ -305,6 +331,10 @@ class Motion {
     popup: MotionSpec(_ms80, _detent),
     popupRise: 0,
     popupScale: 1,
+    // What is on an instrument's menu is there when the menu is.
+    content: MotionSpec.still,
+    contentRise: 0,
+    contentBlur: 0,
     flyout: MotionSpec(_ms60, Curves.easeOut),
     tooltip: MotionSpec(_ms60, Curves.easeOut),
     tooltipRise: 0,
@@ -335,6 +365,9 @@ class Motion {
     popup: MotionSpec(_ms140, _out),
     popupRise: -2,
     popupScale: 0.96,
+    content: MotionSpec(_ms220, _out),
+    contentRise: 4,
+    contentBlur: 5,
     flyout: MotionSpec(_ms100, Curves.easeOut),
     tooltip: MotionSpec(_ms110, Curves.easeOut),
     tooltipRise: -3,

@@ -24432,6 +24432,17 @@
       "matte_role": "none"
     },
     {
+      "slug": "custom-controls",
+      "match_name": "custom_controls",
+      "label": "Custom controls",
+      "version": 1,
+      "category": "Controls",
+      "category_slug": "controls",
+      "params": [],
+      "groups": [],
+      "matte_role": "none"
+    },
+    {
       "slug": "wiggle",
       "match_name": "wiggle",
       "label": "Wiggle",

@@ -2135,6 +2135,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "lumit-extensions"
+version = "0.6.0"
+dependencies = [
+ "getrandom 0.4.3",
+ "lumit-project",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "lumit-flow"
 version = "0.6.0"
 dependencies = [
@@ -2306,6 +2317,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "lumit-relay"
+version = "0.6.0"
+
+[[package]]
 name = "lumit-render"
 version = "0.6.0"
 dependencies = [
@@ -2351,10 +2366,12 @@ dependencies = [
 name = "lumit-share"
 version = "0.6.0"
 dependencies = [
+ "blake3",
  "getrandom 0.4.3",
  "hex",
  "lumit-core",
  "lumit-project",
+ "lumit-relay",
  "parking_lot",
  "roxmltree",
  "serde",
@@ -2397,6 +2414,7 @@ dependencies = [
  "lumit-budget",
  "lumit-core",
  "lumit-eval",
+ "lumit-extensions",
  "lumit-import",
  "lumit-keymap",
  "lumit-media",
