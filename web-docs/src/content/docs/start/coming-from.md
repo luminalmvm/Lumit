@@ -1,13 +1,16 @@
 ---
-title: Coming from After Effects or Vegas
-description: Coming from After Effects and Vegas to Lumit.
+title: Coming from After Effects, Vegas, Premiere Pro or Resolve
+description: Coming from After Effects, Vegas, Premiere Pro and Resolve to Lumit.
 sidebar:
   order: 3
 ---
 
 Lumit is layer-based, in the manner of After Effects, with a few additions to help those 
-coming from Vegas, such as the Sequence layer, which is where Vegas-style cutting and 
-speed ramping can happen. Most of what you already know can be transferred.
+coming from Vegas, Premiere Pro or Resolve, such as the Sequence layer, which is where 
+cutting and speed ramping happen. Most of what you already know can be transferred.
+
+On its first run Lumit asks which of the three you are coming from. Each answer sets a
+few preferences, all of them ordinary rows in **Settings** afterwards.
 
 ## After Effects to Lumit
 
@@ -41,6 +44,25 @@ a project which uses these.
 | Velocity envelope | **Retime**, edited through the Speed lens of the graph editor, or within a Sequence layer |
 | Cursor | **Playhead** |
 | Split | The **razor** tool, on the [toolbar](/panels/toolbar/) |
+
+Choosing **Vegas** on the first run makes video arrive as a Sequence layer and opens the
+Retime graph to speed.
+
+## Premiere Pro or Resolve to Lumit
+
+| Premiere Pro, Resolve | Lumit |
+| --- | --- |
+| Sequence, timeline | **Composition** |
+| Track | **Sequence layer**; picture on one, sound on another |
+| Clip | **Clip**, inside a [Sequence layer](/use/sequence-layers/) |
+| Bin | **Folder**, in the [Project panel](/panels/project/) |
+| Source monitor | The Viewer's **source view**, with **In** and **Out** marks |
+| Linked audio and video | **Linked clips**: a picture clip and its sound clip move as one |
+| Ripple, roll, slip, slide | The same four edits, on the Cut timeline |
+
+Choosing **Premiere Pro or Resolve** on the first run makes footage arrive on Sequence
+layers and opens Lumit in the **Cut** workspace: the Project panel, the Viewer with its
+source view, and the Cut timeline. See [Cutting](/use/cutting/).
 
 The next step is your [first composition](/start/first-composition/).
 

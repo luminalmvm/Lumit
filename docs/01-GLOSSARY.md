@@ -34,15 +34,19 @@ composites over it.
 | **Audio layer** | An audio item, or footage's audio |
 | **Camera**, **Light** layers | 3D viewpoint and light. Only affect 3D layers |
 
-- **Clip**: an entry inside a Sequence layer, and only there. Clips on a picture layer
-  never overlap. On an audio-only Sequence layer they may, and the overlap is a crossfade.
-  A cut between clips is an **edit point**.
+- **Clip**: an entry inside a Sequence layer, and only there. Two clips may overlap, never
+  three. On a picture layer the overlap is a **dissolve**: the later clip comes in as the
+  earlier goes out, through the later clip's fade-in shape, for as long as they overlap. On
+  an audio-only layer it is a crossfade. A fade at an end nothing overlaps runs to
+  transparent, or to silence. A cut between clips is an **edit point**.
 - **Linked clips**: a picture clip and its sound clip, on two Sequence layers, that move,
   trim and cut together while Linked is on.
 - **Ripple**: an edit that moves everything after it by the same amount. **Insert** places
   a clip and ripples, **overwrite** places it over what is there. **Roll** moves one edit
   point, **slip** changes which source a clip shows, **slide** moves a clip between its
   neighbours.
+- **Lift** removes a span and leaves the gap, **extract** removes it and closes the gap.
+  **Match frame** loads a clip's footage into the source view on the frame the comp shows.
 - **Anchor point**: the point the transform pivots around. Position places it.
 - **Parenting**: a layer can follow another layer's transform. No cycles.
 - **Switches**: per-layer toggles. Visible, audible, solo, lock, shy, quality, motion blur,
