@@ -38,6 +38,7 @@ import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../state/comp_time.dart';
 import '../state/dropper.dart';
+import '../state/expression_language.dart';
 import '../state/file_dialogs.dart';
 import '../state/preview_throttle.dart';
 import '../state/timeline_columns.dart';
@@ -616,8 +617,8 @@ class EffectParamRowFrb extends StatelessWidget {
                         scalar: field0,
                         time: timeOfFrame(comp, frame),
                         layer: currentLayer!);
-                    _set(BridgeEffectValue.float(
-                        BridgeScalar.expression(sampled.toString())));
+                    _set(BridgeEffectValue.float(BridgeScalar.expression(
+                        sampled.toString(), newExpressionLanguage(context))));
                   },
             frame: frame,
             sliderMin: sliderMin,
@@ -1209,8 +1210,8 @@ class EffectParamRowFrb extends StatelessWidget {
                   scalar: scalar,
                   time: timeOfFrame(comp, frame),
                   layer: currentLayer!);
-              _set(BridgeEffectValue.float(
-                  BridgeScalar.expression(sampled.toString())));
+              _set(BridgeEffectValue.float(BridgeScalar.expression(
+                  sampled.toString(), newExpressionLanguage(context))));
             },
     );
 
@@ -2758,6 +2759,12 @@ class _EffectTextFieldState extends State<_EffectTextField> {
       );
 }
 
+/// The language a new expression starts in: Settings ▸ Interface ▸ Editing.
+BridgeExpressionLanguage newExpressionLanguage(BuildContext context) =>
+    Provider.of<LumitUiState>(context, listen: false)
+        .workspace
+        .defaultExpressionLanguage;
+
 class EffectParamRowExpression extends StatefulWidget {
   const EffectParamRowExpression(
       {required this.value,
@@ -2794,13 +2801,18 @@ class ExpressionTextEditingController extends TextEditingController {
   static HighlighterTheme? darkTheme;
   static HighlighterTheme? lightTheme;
 
+  /// The grammar the text is coloured with: `rhai` or `javascript` for an
+  /// expression ([expressionGrammar]), `wgsl` for a shader. An editor that
+  /// lets its language change sets this as it rebuilds.
   String language;
 
   static Future<void> initSyntaxHighlighting() async {
-    await Highlighter.initialize(["dart"]);
+    await Highlighter.initialize(["javascript"]);
 
     /// YOINK: https://github.com/PolyMeilex/vscode-wgsl/blob/master/syntaxes/wgsl.tmLanguage.json
     Highlighter.addLanguage("wgsl", await rootBundle.loadString("assets/data/grammar/wgsl.json"));
+    // The highlighter ships no Rhai grammar, so Lumit carries a small one.
+    Highlighter.addLanguage("rhai", await rootBundle.loadString("assets/data/grammar/rhai.json"));
 
     darkTheme = await HighlighterTheme.loadFromAssets(
         _defaultDarkThemeFiles, LumitTheme.dark().mono);
@@ -2809,7 +2821,7 @@ class ExpressionTextEditingController extends TextEditingController {
         _defaultLightThemeFiles, LumitTheme.light().mono);
   }
 
-  ExpressionTextEditingController({super.text, this.language = "dart"});
+  ExpressionTextEditingController({super.text, this.language = "rhai"});
 
   @override
   TextSpan buildTextSpan(
@@ -2841,7 +2853,7 @@ class ExpressionTextEditingController extends TextEditingController {
 }
 
 class _EffectParamRowExpressionState extends State<EffectParamRowExpression> {
-  late TextEditingController controller;
+  late ExpressionTextEditingController controller;
 
   double value = 0.0;
   late ValueNotifier<int> playhead;
@@ -2858,7 +2870,9 @@ class _EffectParamRowExpressionState extends State<EffectParamRowExpression> {
 
     playhead.addListener(onFrameChanged);
 
-    controller = ExpressionTextEditingController(text: widget.value.field0);
+    controller = ExpressionTextEditingController(
+        text: widget.value.field0,
+        language: expressionGrammar(widget.value.field1));
     controller.addListener(onTextChanged);
     lastText = controller.text;
 
@@ -2888,6 +2902,8 @@ class _EffectParamRowExpressionState extends State<EffectParamRowExpression> {
 
   @override
   void didUpdateWidget(covariant EffectParamRowExpression oldWidget) {
+    // The row is rebuilding, so the field redraws in the new colours.
+    controller.language = expressionGrammar(widget.value.field1);
     if (widget.value.field0 != controller.text) {
       // we dont want to trigger the update when setting text manually, so remove it then add it back
       controller.removeListener(onTextChanged);
@@ -2904,7 +2920,7 @@ class _EffectParamRowExpressionState extends State<EffectParamRowExpression> {
 
     setState(() {
       value = sampleScalarWithContext(
-          scalar: BridgeScalar_Expression(expr),
+          scalar: BridgeScalar_Expression(expr, _language),
           time: timeOfFrame(widget.comp, playhead.value),
           layer: widget.layer);
     });
@@ -2913,11 +2929,12 @@ class _EffectParamRowExpressionState extends State<EffectParamRowExpression> {
   void onTextChanged() {
     final expr = controller.text;
     if (expr != lastText) {
-      widget.setLive(BridgeEffectValue.float(BridgeScalar.expression(expr)));
+      widget.setLive(
+          BridgeEffectValue.float(BridgeScalar.expression(expr, _language)));
 
       setState(() {
         value = sampleScalarWithContext(
-            scalar: BridgeScalar_Expression(expr),
+            scalar: BridgeScalar_Expression(expr, _language),
             time: timeOfFrame(widget.comp, playhead.value),
             layer: widget.layer);
       });
@@ -2926,11 +2943,21 @@ class _EffectParamRowExpressionState extends State<EffectParamRowExpression> {
     lastText = expr;
   }
 
+  /// The language the row's expression is written in. The text field edits
+  /// the text and leaves this alone; the row's menu changes it.
+  BridgeExpressionLanguage get _language => widget.value.field1;
+
+  void _setLanguage(BridgeExpressionLanguage language) {
+    if (language == _language) return;
+    widget.set(BridgeEffectValue.float(
+        BridgeScalar.expression(controller.text, language)));
+  }
+
   void removeExpression() {
     final expr = controller.text;
 
     var v = sampleScalarWithContext(
-        scalar: BridgeScalar_Expression(expr),
+        scalar: BridgeScalar_Expression(expr, _language),
         time: timeOfFrame(widget.comp, playhead.value),
         layer: widget.layer);
 
@@ -2959,7 +2986,18 @@ class _EffectParamRowExpressionState extends State<EffectParamRowExpression> {
                   close();
                 },
                 child: Text(l10n.removeExpression),
-              )
+              ),
+              // A row has no room for a dropdown, so the language is two
+              // lines of its menu with the current one marked.
+              for (final language in expressionLanguages)
+                MenuRow(
+                  selected: language == _language,
+                  onPressed: () {
+                    _setLanguage(language);
+                    close();
+                  },
+                  child: Text(expressionLanguageLabel(language)),
+                ),
             ];
           },
           child: HouseTextField(
@@ -2969,8 +3007,8 @@ class _EffectParamRowExpressionState extends State<EffectParamRowExpression> {
             submitOnLostFocus: true,
             autofill: ExpressionAutofillGenerator(),
             onSubmitted: (value) {
-              widget
-                  .set(BridgeEffectValue.float(BridgeScalar_Expression(value)));
+              widget.set(BridgeEffectValue.float(
+                  BridgeScalar_Expression(value, _language)));
               onTextChanged();
             },
           ),

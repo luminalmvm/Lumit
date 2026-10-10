@@ -15,6 +15,7 @@ import 'package:provider/provider.dart';
 import '../l10n/strings.dart';
 import '../shell/menu_animation_frb.dart' show selectedChannels;
 import '../state/dock.dart' show Panel;
+import '../state/expression_language.dart';
 import '../state/file_dialogs.dart';
 import '../widgets/autofill.dart';
 import '../widgets/controls.dart';
@@ -34,10 +35,15 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
   final FocusNode _searchFocus = FocusNode();
   LumitUiState? _boundUi;
   final TextEditingController _name = TextEditingController();
-  final TextEditingController _code = ExpressionTextEditingController();
+  final ExpressionTextEditingController _code =
+      ExpressionTextEditingController();
 
   /// The saved expression the editor was loaded from, by name.
   String? _picked;
+
+  /// The language the text in the editor is written in. It is saved with the
+  /// text and applied with it.
+  BridgeExpressionLanguage _language = BridgeExpressionLanguage.rhai;
 
   @override
   void initState() {
@@ -49,6 +55,7 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
     // Ctrl+F asks the focused panel for its search box.
     _boundUi = Provider.of<LumitUiState>(context, listen: false);
     _boundUi!.panelSearchRequest.addListener(_onSearchRequested);
+    _language = _boundUi!.workspace.defaultExpressionLanguage;
   }
 
   void _onSearchRequested() {
@@ -80,7 +87,10 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
   void _pick(LumitUiState ui, String name) {
     _name.text = name;
     _code.text = ui.workspace.savedExpressions[name] ?? '';
-    setState(() => _picked = name);
+    setState(() {
+      _picked = name;
+      _language = ui.workspace.savedExpressionLanguage(name);
+    });
   }
 
   /// Clear the editor, starting from the selected property's expression when
@@ -89,12 +99,17 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
     final from = _targets(ui).firstOrNull?.scalar;
     _name.clear();
     _code.text = from is BridgeScalar_Expression ? from.field0 : '';
-    setState(() => _picked = null);
+    setState(() {
+      _picked = null;
+      _language = from is BridgeScalar_Expression
+          ? from.field1
+          : ui.workspace.defaultExpressionLanguage;
+    });
   }
 
   void _save(LumitUiState ui) {
     final name = _name.text.trim();
-    ui.workspace.saveExpression(name, _code.text);
+    ui.workspace.saveExpression(name, _code.text, _language);
     setState(() => _picked = name);
   }
 
@@ -133,7 +148,7 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
     if (targets.isEmpty || _code.text.trim().isEmpty) return;
     commitChannelEdits({
       for (final channel in targets)
-        channel: BridgeScalar.expression(_code.text),
+        channel: BridgeScalar.expression(_code.text, _language),
     });
     app.notifyDocumentChanged();
   }
@@ -144,6 +159,8 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
     final app = Provider.of<LumitState>(context, listen: false);
     final ui = Provider.of<LumitUiState>(context);
     final saved = ui.workspace.savedExpressions;
+    // The editor is coloured in the language the dropdown shows.
+    _code.language = expressionGrammar(_language);
     final needle = _search.text.trim().toLowerCase();
     // A search reads the script as well as the name, so "noise" finds every
     // expression that uses it.
@@ -239,11 +256,14 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
               height: 26,
               color: t.surface1,
               padding: const EdgeInsets.symmetric(horizontal: 6),
-              // Scrolls sideways when docked narrow, as the preset bar does.
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
+              // The buttons scroll sideways when docked narrow, as the preset
+              // bar does. The language keeps the bar's right-hand end.
+              child: Row(children: [
+                Expanded(
+                    child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
                     button('expr-new', l10n.newExpression, () => _new(ui)),
                     button(
                       'expr-save',
@@ -282,8 +302,20 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
                           style: t.small.copyWith(color: t.textMuted)),
                     ],
                   ],
+                  ),
+                )),
+                const SizedBox(width: 6),
+                SizedBox(
+                  width: 92,
+                  child: ExpressionLanguagePicker(
+                    key: const ValueKey('expr-language'),
+                    dense: true,
+                    value: _language,
+                    onChanged: (language) =>
+                        setState(() => _language = language),
+                  ),
                 ),
-              ),
+              ]),
             );
           },
         ),

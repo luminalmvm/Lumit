@@ -161,23 +161,38 @@ pub(crate) fn from_node(
     // An enabled expression drives the property in After Effects too, so it
     // drives it here; the keys underneath are the bundle's to keep.
     if let Some(source) = node.expression.as_deref().filter(|s| !s.trim().is_empty()) {
+        let keyed = node.keyframes.as_deref().is_some_and(|k| !k.is_empty());
+        // An After Effects expression is JavaScript, and is brought across as
+        // JavaScript wherever Lumit has every name it uses.
+        let javascript = lumit_core::expression::is_javascript(source);
         let reason = if node.expression_enabled != Some(true) {
             Reason::ExpressionDisabledCarried
-        } else if lumit_core::expression::is_runnable(source) {
+        } else if keyed && javascript {
+            // After Effects keeps the keys under the expression for it to
+            // read, and a property here holds one or the other. A tracked
+            // camera is written exactly this way, and its keys are the shot.
+            Reason::ExpressionOverKeys {
+                source: source.to_string(),
+            }
+        } else if javascript || lumit_core::expression::is_runnable(source) {
             conv.report.row(
                 path.property(name),
                 Outcome::Adjusted,
                 Reason::ExpressionCarried,
             );
+            let mut extra = ae_extra("expression", serde_json::json!(source));
+            if javascript {
+                slot_of(path, node, axis).write(&mut extra);
+            }
             return LumProperty {
                 animation: Animation::Expression(source.to_string()),
-                extra: ae_extra("expression", serde_json::json!(source)),
+                extra,
             };
         } else {
-            // After Effects' own language. Installing it would answer -1 on
-            // every frame and throw away the keys underneath, which on a
-            // tracked camera is the whole shot; switching it off keeps the
-            // motion and leaves the text to re-author.
+            // Something neither language here can run. Installing it would
+            // answer -1 on every frame and throw away the keys underneath;
+            // switching it off keeps the motion and leaves the text to
+            // re-author.
             Reason::ExpressionNotRunnable {
                 source: source.to_string(),
             }
@@ -226,6 +241,35 @@ pub(crate) fn from_node(
         animation: Animation::Static(value),
         extra: expression_extra,
     }
+}
+
+/// What an After Effects expression is told about the property it is on: the
+/// value underneath it, which of that value's numbers this axis is, and a seed
+/// of its own.
+///
+/// `value` in an expression is the property before the expression, and
+/// `wiggle` wanders around it, so the number has to come across with the text.
+/// A point is one property there and two here, so both halves get the whole
+/// pair and their own place in it. The seed is made from where the property
+/// sits, which keeps two properties with the same text from wandering in step
+/// and keeps an import the same every time it is run.
+fn slot_of(path: &ItemPath, node: &Property, axis: usize) -> lumit_core::expression::Slot {
+    let numbers = |value: &serde_json::Value| -> Vec<f64> {
+        match value {
+            serde_json::Value::Array(items) => {
+                items.iter().filter_map(serde_json::Value::as_f64).collect()
+            }
+            one => one.as_f64().into_iter().collect(),
+        }
+    };
+    let value = node.value.as_ref().map(numbers).unwrap_or_default();
+    // FNV-1a over the path and the match name.
+    let text = format!("{path:?}{}", match_name_of(node));
+    let seed = text.bytes().fold(0x811c_9dc5_u32, |hash, byte| {
+        (hash ^ u32::from(byte)).wrapping_mul(0x0100_0193)
+    });
+    lumit_core::expression::Slot::new(&value, axis, seed.max(1))
+        .in_language(lumit_core::expression::Language::JavaScript)
 }
 
 /// One capture key, one axis, in the layer's own timebase.

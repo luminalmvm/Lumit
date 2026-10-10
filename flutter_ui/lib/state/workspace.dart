@@ -12,12 +12,15 @@ import 'dart:ui';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
+import 'package:lumit_flutter/src/rust/api/effect.dart'
+    show BridgeExpressionLanguage;
 
 import '../l10n/strings.dart';
 import '../theme/custom_theme.dart';
 import '../icons/icon_style.dart';
 import '../theme/theme.dart';
 import 'dock.dart';
+import 'expression_language.dart';
 import 'settings.dart';
 
 /// How the Viewer is looking at one composition: exposure in stops and whether
@@ -576,9 +579,38 @@ class Workspace extends ChangeNotifier {
   /// writes.
   final Map<String, String> savedExpressions = <String, String>{};
 
+  /// The language each saved expression is written in. A name with no entry
+  /// is Rhai, which is every expression saved before there was a choice.
+  final Map<String, BridgeExpressionLanguage> savedExpressionLanguages =
+      <String, BridgeExpressionLanguage>{};
+
+  BridgeExpressionLanguage savedExpressionLanguage(String name) =>
+      savedExpressionLanguages[name] ?? BridgeExpressionLanguage.rhai;
+
+  /// The language a new expression starts in, wherever one is made: a row's
+  /// Set expression, Animation ▸ Add expression, the Expressions panel's New.
+  BridgeExpressionLanguage defaultExpressionLanguage =
+      BridgeExpressionLanguage.rhai;
+
+  void setDefaultExpressionLanguage(BridgeExpressionLanguage language) {
+    defaultExpressionLanguage = language;
+    settingsChanged();
+  }
+
+  /// The saved languages as the settings file and the exchange file keep
+  /// them: only the names that are not Rhai.
+  Map<String, String> _encodedExpressionLanguages() => {
+        for (final MapEntry(:key, :value) in savedExpressionLanguages.entries)
+          if (savedExpressions.containsKey(key) &&
+              value != BridgeExpressionLanguage.rhai)
+            key: expressionLanguageId(value),
+      };
+
   /// Every saved expression as the text of a file to hand to someone.
-  String encodeExpressions() =>
-      jsonEncode({'lumit_expressions': savedExpressions});
+  String encodeExpressions() => jsonEncode({
+        'lumit_expressions': savedExpressions,
+        'languages': _encodedExpressionLanguages(),
+      });
 
   /// Take in a file [encodeExpressions] wrote and say how many it held, or
   /// null when [text] isn't one. A name already taken by a different script
@@ -591,17 +623,21 @@ class Workspace extends ChangeNotifier {
       return null;
     }
     if (read case {'lumit_expressions': final Map<dynamic, dynamic> saved}) {
+      final languages = (read as Map<dynamic, dynamic>)['languages'];
       var count = 0;
       for (final MapEntry(:key, :value) in saved.entries) {
         if (key is! String || value is! String) continue;
+        final language = expressionLanguageOfId(
+            languages is Map<dynamic, dynamic> ? languages[key] : null);
         var name = key;
         for (var n = 2;
             savedExpressions.containsKey(name) &&
-                savedExpressions[name] != value;
+                (savedExpressions[name] != value ||
+                    savedExpressionLanguage(name) != language);
             n++) {
           name = '$key $n';
         }
-        savedExpressions[name] = value;
+        _storeExpression(name, value, language);
         count++;
       }
       settingsChanged();
@@ -610,13 +646,25 @@ class Workspace extends ChangeNotifier {
     return null;
   }
 
-  /// Save [text] under [name], over whatever that name held.
-  void saveExpression(String name, String text) {
+  void _storeExpression(
+      String name, String text, BridgeExpressionLanguage language) {
     savedExpressions[name] = text;
+    if (language == BridgeExpressionLanguage.rhai) {
+      savedExpressionLanguages.remove(name);
+    } else {
+      savedExpressionLanguages[name] = language;
+    }
+  }
+
+  /// Save [text] under [name], over whatever that name held.
+  void saveExpression(String name, String text,
+      [BridgeExpressionLanguage language = BridgeExpressionLanguage.rhai]) {
+    _storeExpression(name, text, language);
     settingsChanged();
   }
 
   void deleteExpression(String name) {
+    savedExpressionLanguages.remove(name);
     if (savedExpressions.remove(name) != null) settingsChanged();
   }
 
@@ -1630,6 +1678,9 @@ class Workspace extends ChangeNotifier {
         'themed_scopes': themedScopes,
         'favourite_effects': favouriteEffects.toList()..sort(),
         'saved_expressions': savedExpressions,
+        'saved_expression_languages': _encodedExpressionLanguages(),
+        'default_expression_language':
+            expressionLanguageId(defaultExpressionLanguage),
         'recent_colours': [...recentColours],
         'themed_effect_graphs': themedEffectGraphs,
         'curve_plot_size': curvePlotSize,
@@ -1756,6 +1807,17 @@ class Workspace extends ChangeNotifier {
           for (final MapEntry(:key, :value) in saved.entries)
             if (key is String && value is String) key: value,
       });
+    savedExpressionLanguages
+      ..clear()
+      ..addAll({
+        if (j['saved_expression_languages']
+            case final Map<dynamic, dynamic> languages)
+          for (final MapEntry(:key, :value) in languages.entries)
+            if (key is String && value == 'javascript')
+              key: BridgeExpressionLanguage.javaScript,
+      });
+    defaultExpressionLanguage =
+        expressionLanguageOfId(j['default_expression_language']);
     recentColours
       ..clear()
       ..addAll([

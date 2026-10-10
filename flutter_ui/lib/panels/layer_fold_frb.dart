@@ -1544,7 +1544,10 @@ List<LayerFoldRow> groupHeaderFoldRows({
         named: fx.customName != null));
     if (fxOpen) {
       final values = {for (final v in fx.values) v.id: v.value};
-      for (final param in cachedListParameters(fx.name)) {
+      for (final param in [
+        ...cachedListParameters(fx.name),
+        ...fx.derivedParams,
+      ]) {
         rows.add(FoldEffectParamRow(fx, param, values[param.id],
             depth: 2, group: group.id));
       }
@@ -1593,7 +1596,10 @@ List<LayerFoldRow> clipFoldRows({
     ));
     if (fxOpen) {
       final values = {for (final v in fx.values) v.id: v.value};
-      for (final param in cachedListParameters(fx.name)) {
+      for (final param in [
+        ...cachedListParameters(fx.name),
+        ...fx.derivedParams,
+      ]) {
         rows.add(FoldEffectParamRow(fx, param, values[param.id],
             depth: 3, clip: clip.id));
       }
@@ -1974,7 +1980,10 @@ List<LayerFoldRow> layerFoldRows({
         ));
         if (effectOpen) {
           final values = {for (final v in fx.values) v.id: v.value};
-          for (final param in cachedListParameters(fx.name)) {
+          for (final param in [
+            ...cachedListParameters(fx.name),
+            ...fx.derivedParams,
+          ]) {
             rows.add(FoldEffectParamRow(fx, param, values[param.id],
                 depth: 3, driven: driven['${fx.id}/${param.id}']));
           }

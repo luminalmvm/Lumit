@@ -91,6 +91,12 @@ const PARAM_TOPIC: &[u8] = &[13, 14, 15];
 /// histogram, Hue/Saturation's channel ranges. The DOM cannot read these at
 /// all; the file can, and does, so the bytes come through.
 const PARAM_ARBITRARY: u8 = 11;
+/// The SDK's control types a set of custom controls is made from.
+const PARAM_SLIDER: u8 = 2;
+const PARAM_ANGLE: u8 = 3;
+const PARAM_CHECKBOX: u8 = 4;
+const PARAM_POPUP: u8 = 7;
+const PARAM_FLOAT_SLIDER: u8 = 10;
 
 /// One effect's parameter definitions, by match name — the `pard` records in
 /// the effect's own `parT` list. Each holds the SDK parameter type and the
@@ -375,7 +381,7 @@ fn read_subgroup(
 
 /// An effect instance: its parameters are an ordinary group, its display name
 /// is the `fnam` chunk, and its on/off switch is the group's own `tdsb`.
-fn read_effect(
+pub(super) fn read_effect(
     match_name: &str,
     sspc: &Chunk<'_>,
     ctx: Ctx<'_>,
@@ -386,7 +392,8 @@ fn read_effect(
         .iter()
         .find(|chunk| chunk.id == *b"fnam")
         .and_then(|chunk| chunk.children().ok().find(|c| c.id == *b"Utf8"))
-        .map(|chunk| chunk.text());
+        .map(|chunk| chunk.text())
+        .filter(|name| !name.trim().is_empty());
 
     // The effect's own parameter definitions say which of its slots are real
     // parameters and which are topic headings or arbitrary-data blocks. When
@@ -405,15 +412,18 @@ fn read_effect(
         ..ctx
     };
 
-    let (children, enabled) = match inside.iter().find(|chunk| chunk.is_list(b"tdgp")) {
+    let (children, enabled, own_name) = match inside.iter().find(|chunk| chunk.is_list(b"tdgp")) {
         Some(group) => {
             let params: Vec<Chunk<'_>> = group.children().ok().collect();
             let mut read = read_group(group, inner);
             skipped.append(&mut read.skipped);
-            (read.properties, enabled_of(&params))
+            (read.properties, enabled_of(&params), display_name(&params))
         }
-        None => (Vec::new(), true),
+        None => (Vec::new(), true, None),
     };
+    // A pseudo effect leaves `fnam` empty and keeps the name its maker gave
+    // it on the parameter group, which is the name expressions ask for.
+    let name = name.or(own_name.filter(|name| !name.trim().is_empty()));
 
     Property {
         match_name: Some(match_name.to_string()),
@@ -684,6 +694,25 @@ fn read_leaf(
         node.name = Some(label.clone());
     }
     let declared = declared.map(|(kind, _)| *kind);
+    node.control = declared.and_then(|kind| {
+        Some(
+            match kind {
+                PARAM_SLIDER | PARAM_FLOAT_SLIDER => "slider",
+                PARAM_ANGLE => "angle",
+                PARAM_CHECKBOX => "checkbox",
+                PARAM_POPUP => "popup",
+                _ => return None,
+            }
+            .to_string(),
+        )
+    });
+    let end = |id: &[u8; 4]| {
+        inside
+            .iter()
+            .find(|chunk| chunk.id == *id)
+            .and_then(|chunk| doubles(chunk.body).first().copied())
+    };
+    node.range = end(b"tdum").zip(end(b"tduM"));
     if declared.is_some_and(|kind| PARAM_TOPIC.contains(&kind)) {
         node.value_type = Some("group".to_string());
         node.unreadable =

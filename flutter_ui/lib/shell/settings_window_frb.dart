@@ -40,6 +40,8 @@ import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/audio.dart';
 import 'package:lumit_flutter/src/rust/api/cache.dart';
+import 'package:lumit_flutter/src/rust/api/effect.dart'
+    show BridgeExpressionLanguage;
 import 'package:lumit_flutter/src/rust/api/export.dart';
 import 'package:lumit_flutter/src/rust/api/keymap.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
@@ -52,6 +54,7 @@ import '../icons/lumit_icons.dart';
 import '../l10n/engine_labels.dart' show addonTask;
 import '../l10n/strings.dart';
 import '../state/addons.dart';
+import '../state/expression_language.dart';
 import '../state/external_links.dart';
 import '../state/file_dialogs.dart';
 import '../state/keymap.dart';
@@ -1729,6 +1732,20 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             settings.playheadStaysOnStop = on;
             changed();
           }),
+          // Which language a new expression starts in. Each expression keeps
+          // its own afterwards, and its editor can change it.
+          _row(
+            t,
+            l10n.settingsNewExpressionsLanguage,
+            _dropdown<BridgeExpressionLanguage>(
+              key: 'settings-new-expressions-language',
+              value: ui.workspace.defaultExpressionLanguage,
+              options: expressionLanguages,
+              label: expressionLanguageLabel,
+              onChanged: (language) => setState(
+                  () => ui.workspace.setDefaultExpressionLanguage(language)),
+            ),
+          ),
         ],
       ),
       (

@@ -23,7 +23,9 @@ import 'dart:io' show File;
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
+import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/panels/effect_param_row_frb.dart';
+import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
 import 'package:lumit_flutter/src/rust/api/comp_graph.dart';
@@ -263,15 +265,25 @@ bool editExpressionOn({
 /// Open the expression dialogue on the box's text and stage what comes back.
 Future<void> _editExpressionText(BuildContext context, InstanceHome home,
     UuidValue effect, VoidCallback onApplied) async {
-  final held =
-      home.read().where((i) => i.id() == effect).firstOrNull?.expressionSource();
-  if (held == null) return;
-  final text = await showExpressionDialogFrb(context: context, initial: held);
-  if (text == null || !context.mounted) return;
+  final box = home.read().where((i) => i.id() == effect).firstOrNull;
+  if (box == null) return;
+  final held = box.expressionSource();
+  final asked = await showExpressionDialogFrb(
+    context: context,
+    initial: held,
+    // A box with no text yet starts in the language new expressions do.
+    language: held.trim().isEmpty
+        ? Provider.of<LumitUiState>(context, listen: false)
+            .workspace
+            .defaultExpressionLanguage
+        : box.expressionLanguage(),
+  );
+  if (asked == null || !context.mounted) return;
   final staged = home.read();
   final instance = staged.where((i) => i.id() == effect).firstOrNull;
   if (instance == null) return;
-  instance.setExpressionSource(source: text);
+  instance.setExpressionSource(source: asked.text);
+  instance.setExpressionLanguage(language: asked.language);
   try {
     home.commit(staged);
   } catch (_) {

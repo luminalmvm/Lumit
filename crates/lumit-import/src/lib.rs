@@ -47,7 +47,7 @@ pub mod report;
 
 pub use aep::open_aep;
 pub use capture::{Capture, Manifest, Report};
-pub use map::map_capture;
+pub use map::{map_capture, map_preset};
 pub use report::{ImportReport, ItemPath, Outcome, Reason, ReportRow, Summary};
 
 use std::fs::{self, File};
@@ -108,6 +108,44 @@ pub enum ImportError {
         "this bundle was written by a newer Lumit (bundle schema {version}) — please update Lumit"
     )]
     TooNew { version: String },
+}
+
+/// Whether the file at `path` is an After Effects animation preset, by its
+/// first bytes rather than its name.
+pub fn is_ffx(path: &Path) -> bool {
+    let mut head = [0u8; 12];
+    File::open(path)
+        .and_then(|mut file| file.read_exact(&mut head))
+        .is_ok_and(|()| aep::ffx::is_preset(&head))
+}
+
+/// Read an After Effects animation preset (`.ffx`) as the effects it holds,
+/// ready to go on a layer, with a report of what changed on the way.
+///
+/// The effects come out exactly as [`map_capture`] would have made them
+/// inside a project: Lumit's own effect where the table knows one, a set of
+/// Custom controls for a pseudo effect, and expressions carried as written.
+/// Anything in the preset that is not an effect is a skipped row.
+pub fn open_ffx(
+    path: &Path,
+) -> Result<(Vec<lumit_core::model::EffectInstance>, ImportReport), ImportError> {
+    let bytes = fs::read(path)?;
+    let preset = aep::ffx::parse_preset(&bytes)?;
+    let name = path
+        .file_stem()
+        .map(|stem| stem.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let (effects, mut report) = map_preset(&name, &preset.effects, preset.size);
+    for skipped in &preset.skipped {
+        report.row(
+            ItemPath::item(&name).property(skipped.path.as_deref().unwrap_or_default()),
+            Outcome::Skipped,
+            Reason::PropertyUnreadable {
+                match_name: skipped.match_name.clone().unwrap_or_default(),
+            },
+        );
+    }
+    Ok((effects, report))
 }
 
 /// Open whatever the user picked: an After Effects project file, a
@@ -324,6 +362,97 @@ mod tests {
     /// read with the wrong assumptions, and a wrong import is worse than a
     /// refused one. The check is on the *major* alone — an unreadable minor
     /// bump must still open, which the next test's extra key covers.
+    /// The first composition of the fixture that has a layer, with `effects`
+    /// on its top layer, and the context an expression there runs under.
+    fn on_a_layer(
+        effects: Vec<lumit_core::model::EffectInstance>,
+        time: f64,
+    ) -> std::sync::Arc<lumit_core::expression::ExpressionContext> {
+        use lumit_core::model::ProjectItem;
+
+        let (mut doc, _) = map_capture(&opened().capture);
+        let comp = doc
+            .items
+            .iter()
+            .find_map(|item| match item {
+                ProjectItem::Composition(c) if !c.layers.is_empty() => Some(c.id),
+                _ => None,
+            })
+            .expect("a composition with a layer");
+        let layer = {
+            let layer = &mut doc.comp_mut(comp).unwrap().layers[0];
+            layer.effects = effects;
+            layer.id
+        };
+        std::sync::Arc::new(lumit_core::expression::ExpressionContext {
+            document: std::sync::Arc::new(doc),
+            comp: Some(comp),
+            layer: Some(layer),
+            comp_time: time,
+            current_depth: 0,
+            inputs: None,
+        })
+    }
+
+    /// **A preset's expressions find its controls once both are on a layer.**
+    ///
+    /// This is what bringing a rig across means: the pseudo effect arrives as
+    /// a set of controls under the name the expressions ask for, each control
+    /// under its own, and the expression beside it runs as it was written.
+    #[test]
+    fn a_presets_expressions_read_its_controls() {
+        use crate::aep::ffx::tests::{preset_bytes, Slider};
+
+        let bytes = preset_bytes(&[
+            (
+                "Pseudo/1",
+                "Shake",
+                &[Slider {
+                    label: "Amount",
+                    value: 12.5,
+                    expression: None,
+                }],
+            ),
+            (
+                "ADBE Slider Control",
+                "Driven",
+                &[Slider {
+                    label: "Slider",
+                    value: 3.0,
+                    expression: Some("value + effect(\"Shake\")(\"Amount\") * 2"),
+                }],
+            ),
+        ]);
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("Shake.ffx");
+        fs::write(&path, &bytes).unwrap();
+        let (effects, report) = open_ffx(&path).unwrap();
+
+        let controls = &effects[0];
+        assert_eq!(controls.effect.match_name, "custom_controls");
+        assert_eq!(controls.custom_name.as_deref(), Some("Shake"));
+        let rows = lumit_core::fx::def("custom_controls")
+            .unwrap()
+            .derived(controls);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].label, "Amount");
+        assert_eq!(controls.float_at(rows[0].id, 0.0), Some(12.5));
+
+        assert_eq!(effects[1].effect.match_name, "slider_control");
+        assert!(report
+            .rows
+            .iter()
+            .any(|row| row.reason == Reason::ExpressionCarried));
+
+        // 3 under the expression, plus twice the control's 12.5.
+        let context = on_a_layer(effects, 0.0);
+        let layer = &context.document.comp(context.comp.unwrap()).unwrap().layers[0];
+        assert_eq!(
+            layer.effects[1].float_at_with_context("slider", 0.0, context.clone()),
+            Some(28.0)
+        );
+    }
+
     #[test]
     fn a_newer_major_schema_is_refused_with_a_please_update_message() {
         let temp = tempfile::tempdir().unwrap();

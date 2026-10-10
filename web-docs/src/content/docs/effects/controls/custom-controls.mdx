@@ -1,0 +1,43 @@
+---
+title: Custom controls
+description: "A named set of controls for expressions to read."
+---
+
+Custom controls is a **Controls** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Holds a set of named sliders, angles, checkboxes and colours, and draws nothing. An
+expression reads one by the effect's name and the control's:
+`effect("Shake")("Amplitude")`.
+
+It is what an After Effects pseudo effect arrives as when a preset or a project is
+imported. The effect keeps the pseudo effect's name, and each control keeps its name,
+its range, its value and its keyframes. A point arrives as two sliders, **x** and **y**.
+
+:::note[Not yet built]
+A set cannot be made or edited in Lumit. Menus arrive as a number, counted from one, and
+the headings a pseudo effect groups its controls under are not shown.
+:::
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+
+{/* END GENERATED */}
+
+## Related
+
+- [Expressions](/use/expressions/)
+- [Slider control](/effects/controls/slider-control/)
+- [Controls](/effects/#controls)
+- [Effects](/use/effects/)

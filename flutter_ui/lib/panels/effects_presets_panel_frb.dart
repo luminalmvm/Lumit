@@ -436,7 +436,7 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
     }
     final String text;
     try {
-      text = file.readAsStringSync();
+      text = readEffectPreset(path: preset.path);
     } catch (_) {
       return;
     }
@@ -776,7 +776,7 @@ class _PresetBar extends StatelessWidget {
     if (!file.existsSync()) return;
     final String text;
     try {
-      text = file.readAsStringSync();
+      text = readEffectPreset(path: path);
     } catch (_) {
       return;
     }

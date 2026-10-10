@@ -219,6 +219,12 @@ impl<'a> Iterator for Chunks<'a> {
 /// After Effects writes an XMP metadata packet *after* the root chunk and a
 /// re-saved file can legitimately carry trailing bytes.
 pub fn open_egg(bytes: &[u8]) -> Result<Chunks<'_>, RifxError> {
+    open_form(bytes, b"Egg!")
+}
+
+/// The root of any After Effects `RIFX` file: a project is the form `Egg!`,
+/// and an animation preset is `FaFX`.
+pub fn open_form<'a>(bytes: &'a [u8], wanted: &FourCc) -> Result<Chunks<'a>, RifxError> {
     let Some(header) = bytes.get(..8) else {
         return Err(RifxError::Truncated {
             what: "the RIFX header",
@@ -244,7 +250,7 @@ pub fn open_egg(bytes: &[u8]) -> Result<Chunks<'_>, RifxError> {
             available: root.len() as u64,
         });
     };
-    if form != b"Egg!" {
+    if form != wanted {
         return Err(RifxError::WrongForm {
             found: text_of(form),
         });

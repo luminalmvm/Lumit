@@ -105,5 +105,14 @@ pool. Proxy level is part of the cache key.
 - A plugin node declares its region, its temporal needs and whether it's thread-safe. A
   plugin that isn't serialises on its own broker only.
 - Expressions run in-process with no IO, no clock and seeded randomness. Results match per
-  machine, not bit for bit across platforms. There's no time limit yet, so a runaway
-  expression can stall a render thread.
+  machine, not bit for bit across platforms.
+- There are two expression languages, Rhai and JavaScript. Whoever writes an expression
+  picks one, the choice is stored beside the text, and nothing guesses it from the text.
+  With nothing stored it is Rhai. JavaScript runs in Lumit's own interpreter
+  (`lumit-core/src/expression/script`) with what After Effects adds to it, so an imported
+  expression runs as written.
+- Both stop a runaway expression: a ceiling on operations, on call depth, and on the size of
+  anything built.
+- A property holds keyframes or an expression, not both. What it held before the expression
+  is kept beside it (`extra["expr"]`, with the language) as the `value` a JavaScript
+  expression reads.

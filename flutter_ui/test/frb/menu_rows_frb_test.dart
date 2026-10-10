@@ -277,6 +277,79 @@ void main() {
       final after = layer.getTransform().positionX;
       expect(after, isA<BridgeScalar_Expression>());
       expect((after as BridgeScalar_Expression).field0, 'time * 2');
+      expect(after.field1, BridgeExpressionLanguage.rhai,
+          reason: 'a new expression starts in Rhai until Settings says not');
+    });
+
+    /// The language is the dropdown's to say, never the text's: the same
+    /// line is written once as JavaScript and runs as JavaScript. The
+    /// default a new expression opens in is the setting's.
+    testWidgets('Add expression writes the language its dropdown names',
+        (tester) async {
+      final p = withComp();
+      final layer = p.comp.addSolidLayer();
+      p.uiState.setSelection([layer]);
+      p.uiState.selectedProperties.value = [
+        '${layer.internallayerId}/transform/positionX',
+      ];
+      p.uiState.model.refresh();
+      await mount(tester, p);
+      final picker = find.byKey(const ValueKey('expression-language'));
+
+      await choose(tester, 'Animation', 'Add expression');
+      await tester.pumpAndSettle();
+      expect(find.descendant(of: picker, matching: find.text('Rhai')),
+          findsOneWidget);
+      await tester.enterText(
+          find.byKey(const ValueKey('expression-text')), 'Math.round(7 / 2)');
+      await tester.tap(picker);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('JavaScript').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('expression-confirm')));
+      await tester.pumpAndSettle();
+
+      final after = layer.getTransform().positionX as BridgeScalar_Expression;
+      expect(after.field0, 'Math.round(7 / 2)');
+      expect(after.field1, BridgeExpressionLanguage.javaScript);
+      expect(
+          sampleScalarWithContext(
+              scalar: after,
+              time: const BridgeRational(num: 0, den: 1),
+              layer: layer),
+          4,
+          reason: 'JavaScript halves 7 to 3.5; Rhai has no Math at all');
+
+      // Reopened on a row that has one, the dialogue shows that row's own.
+      p.uiState.model.refresh();
+      await tester.pumpAndSettle();
+      await choose(tester, 'Animation', 'Add expression');
+      await tester.pumpAndSettle();
+      expect(find.descendant(of: picker, matching: find.text('JavaScript')),
+          findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('expression-cancel')));
+      await tester.pumpAndSettle();
+
+      // A saved expression keeps its language, through a file and back.
+      final ws = p.uiState.workspace;
+      ws.saveExpression(
+          'Wobble', 'wiggle(2, 30)', BridgeExpressionLanguage.javaScript);
+      ws.saveExpression('Spin', 'time * 90');
+      final file = ws.encodeExpressions();
+      ws.deleteExpression('Wobble');
+      expect(ws.importExpressions(file), 2);
+      expect(ws.savedExpressionLanguage('Wobble'),
+          BridgeExpressionLanguage.javaScript);
+      expect(ws.savedExpressionLanguage('Spin'), BridgeExpressionLanguage.rhai);
+      // The same name and text in another language is another expression.
+      ws.saveExpression('Wobble', 'wiggle(2, 30)');
+      ws.importExpressions(file);
+      expect(ws.savedExpressionLanguage('Wobble'), BridgeExpressionLanguage.rhai);
+      expect(ws.savedExpressionLanguage('Wobble 2'),
+          BridgeExpressionLanguage.javaScript);
+      for (final name in ['Wobble', 'Wobble 2', 'Spin']) {
+        ws.deleteExpression(name);
+      }
     });
 
     testWidgets('File ▸ Close project leaves an empty one in its place',

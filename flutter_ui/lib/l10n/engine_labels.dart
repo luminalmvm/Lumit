@@ -343,6 +343,7 @@ Map<String, String> get _table => {
       "Point 2 x": l10n.fxPoint2X,
       "Point 2 y": l10n.fxPoint2Y,
       "Point control": l10n.fxPointControl,
+      "Custom controls": l10n.fxCustomControls,
       "Point x": l10n.fxPointX,
       "Point y": l10n.fxPointY,
       "Points": l10n.fxPoints,
@@ -1381,6 +1382,7 @@ Map<String, String> get _table => {
       "Set blend mode": l10n.histSetBlendMode,
       "Set parent": l10n.histSetParent,
       "Edit transform": l10n.histEditTransform,
+      "Edit expression": l10n.histEditExpression,
       "Set axis mode": l10n.histSetAxisMode,
       "Set camera zoom": l10n.histSetCameraZoom,
       "Set camera settings": l10n.histSetCameraSettings,
@@ -1513,6 +1515,8 @@ String? importReason(String key, Map<String, String> args) {
       return l10n.aeExpressionDisabledCarried;
     case 'expression_not_runnable':
       return l10n.aeExpressionNotRunnable(a('source'));
+    case 'expression_over_keys':
+      return l10n.aeExpressionOverKeys(a('source'));
     case 'property_unreadable':
       return l10n.aePropertyUnreadable(a('match_name'));
     case 'chunk_unreadable':
