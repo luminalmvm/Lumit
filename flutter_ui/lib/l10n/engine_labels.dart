@@ -1280,6 +1280,52 @@ Map<String, String> get _table => {
       "Copy the selection": l10n.keyCopyTheSelection,
       "Cut the selection": l10n.keyCutTheSelection,
       "Paste": l10n.keyPaste,
+      "Add or remove a keyframe at the playhead":
+          l10n.keyAddOrRemoveAKeyframeAtThePlayhead,
+      "Add or remove a Position keyframe": l10n.keyAddOrRemoveAPositionKeyframe,
+      "Add or remove a Scale keyframe": l10n.keyAddOrRemoveAScaleKeyframe,
+      "Add or remove a Rotation keyframe": l10n.keyAddOrRemoveARotationKeyframe,
+      "Add or remove an Opacity keyframe": l10n.keyAddOrRemoveAnOpacityKeyframe,
+      "Add or remove an Anchor point keyframe":
+          l10n.keyAddOrRemoveAnAnchorPointKeyframe,
+      "Hold or release the keyframe": l10n.keyHoldOrReleaseTheKeyframe,
+      "Set the keyframe's interpolation": l10n.keySetTheKeyframeSInterpolation,
+      "Set the keyframe's speed": l10n.keySetTheKeyframeSSpeed,
+      "Add an expression": l10n.keyAddAnExpression,
+      "Trim the composition to the work area":
+          l10n.keyTrimTheCompositionToTheWorkArea,
+      "Open the export queue": l10n.keyOpenTheExportQueue,
+      "Open Lumit help": l10n.keyOpenLumitHelp,
+      "Layer settings": l10n.keyLayerSettings,
+      "Next blend mode": l10n.keyNextBlendMode,
+      "Previous blend mode": l10n.keyPreviousBlendMode,
+      "Lock or unlock the layer": l10n.keyLockOrUnlockTheLayer,
+      "Unlock every layer": l10n.keyUnlockEveryLayer,
+      "Select the layer below": l10n.keySelectTheLayerBelow,
+      "Select the layer above": l10n.keySelectTheLayerAbove,
+      "Move the layer up the stack": l10n.keyMoveTheLayerUpTheStack,
+      "Move the layer down the stack": l10n.keyMoveTheLayerDownTheStack,
+      "Move the layer to the top of the stack":
+          l10n.keyMoveTheLayerToTheTopOfTheStack,
+      "Move the layer to the bottom of the stack":
+          l10n.keyMoveTheLayerToTheBottomOfTheStack,
+      "Move the layer a frame earlier": l10n.keyMoveTheLayerAFrameEarlier,
+      "Move the layer a frame later": l10n.keyMoveTheLayerAFrameLater,
+      "Move the layer ten frames earlier": l10n.keyMoveTheLayerTenFramesEarlier,
+      "Move the layer ten frames later": l10n.keyMoveTheLayerTenFramesLater,
+      "Centre the layer in the composition":
+          l10n.keyCentreTheLayerInTheComposition,
+      "Set the mask's feather": l10n.keySetTheMaskSFeather,
+      "Invert the mask": l10n.keyInvertTheMask,
+      "Show or hide the layer controls": l10n.keyShowOrHideTheLayerControls,
+      "Turn snapping to the grid on or off":
+          l10n.keyTurnSnappingToTheGridOnOrOff,
+      "Show or hide the Project panel": l10n.keyShowOrHideTheProjectPanel,
+      "Show or hide Effect controls": l10n.keyShowOrHideEffectControls,
+      "Show or hide Effects & presets": l10n.keyShowOrHideEffectsPresets,
+      "Show or hide the Audio panel": l10n.keyShowOrHideTheAudioPanel,
+      "Show or hide the Text panel": l10n.keyShowOrHideTheTextPanel,
+      "Show or hide the Paragraph panel": l10n.keyShowOrHideTheParagraphPanel,
       // Edit > History: what each edit calls itself
       // (crates/lumit-core/src/ops.rs `Op::name`). One phrase per operation
       // the engine has, in the voice of the menu row that makes it.

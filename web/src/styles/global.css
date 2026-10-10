@@ -27,6 +27,20 @@
   --font-mono: "Paper Mono", ui-monospace, monospace;
 }
 
+:root {
+  /* Film grain as a tile, for the lit grounds outside the hero's own shader. */
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 0 0 0 0 1'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23n)'/%3E%3C/svg%3E");
+  /* The application's label colours (flutter_ui/lib/theme/theme.dart, `_labelSet`). */
+  --label-azure: #4aa3e0;
+  --label-amber: #e0a33c;
+  --label-violet: #a06ce0;
+  --label-mint: #46c98e;
+  --label-teal: #3cc9c0;
+  --label-indigo: #6673e6;
+  --label-magenta: #d45cb8;
+  --label-coral: #e0704a;
+}
+
 @layer base {
   html {
     scroll-behavior: smooth;
@@ -83,22 +97,197 @@
   .card {
     @apply rounded-card border border-line bg-ink-2 p-7;
   }
-  /* The hero's three lights, faint, at the head of every page. The home page's
-     own field is drawn over it. */
+  /* The hero's three lights at the head of every page, with its grain over
+     them. The home page's own field is drawn over it. */
   .page-glow {
     position: absolute;
     inset: 0 0 auto 0;
     z-index: -1;
-    height: 520px;
+    height: 620px;
     pointer-events: none;
     background:
-      radial-gradient(60% 100% at 20% -30%, rgb(56 81 156 / 0.32), transparent 70%),
-      radial-gradient(50% 90% at 82% -35%, rgb(45 123 137 / 0.28), transparent 70%),
-      radial-gradient(40% 70% at 55% -22%, rgb(68 154 120 / 0.2), transparent 70%);
+      radial-gradient(60% 100% at 18% -30%, rgb(56 81 156 / 0.5), transparent 70%),
+      radial-gradient(50% 90% at 84% -35%, rgb(45 123 137 / 0.42), transparent 70%),
+      radial-gradient(40% 70% at 55% -22%, rgb(68 154 120 / 0.3), transparent 70%),
+      var(--color-ink);
+  }
+  .page-glow::after,
+  .grain::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: var(--grain);
+    background-size: 220px 220px;
+    opacity: 0.4;
+    mix-blend-mode: overlay;
+    pointer-events: none;
+  }
+  .page-glow::after {
+    -webkit-mask-image: linear-gradient(to bottom, #000 30%, transparent 100%);
+    mask-image: linear-gradient(to bottom, #000 30%, transparent 100%);
   }
   .link {
     @apply text-fg underline decoration-line-2 underline-offset-4
            transition-colors hover:text-accent-2 hover:decoration-accent;
+  }
+
+  /* A section opens on a ruled line, the way the hero's timeline does: ticks
+     along the top, a marker hanging from it, the section's name and its
+     place in the page. */
+  .sec-rule {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-top: 18px;
+    border-top: 1px solid var(--color-line);
+  }
+  .sec-rule::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 5px;
+    background: repeating-linear-gradient(to right, var(--color-line-2) 0 1px, transparent 1px 60px);
+    -webkit-mask-image: linear-gradient(to right, #000, transparent 70%);
+    mask-image: linear-gradient(to right, #000, transparent 70%);
+  }
+  .sec-rule::after {
+    content: "";
+    position: absolute;
+    top: -1px;
+    left: 0;
+    margin-left: -5px;
+    border: 5px solid transparent;
+    border-top: 7px solid var(--color-accent-2);
+  }
+  .sec-no {
+    @apply ml-auto font-mono text-[11px] leading-none text-fg-4;
+    font-feature-settings: "zero";
+  }
+  .sec-title {
+    @apply text-[clamp(30px,3.9vw,46px)] leading-[1.05];
+  }
+  .lede {
+    @apply max-w-[620px] text-[16px] leading-[1.5] text-fg-3;
+  }
+  /* Small mono caps, for a tag on a card or a note beside a number. */
+  .tag {
+    @apply inline-flex items-center gap-1.5 font-mono text-[10px] leading-none
+           tracking-[0.1em] uppercase text-fg-3;
+  }
+  /* A keyframe. Filled for a value that is set, hollow for one that is not. */
+  .key {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    flex: none;
+    border: 1px solid var(--k, var(--color-key));
+    background: var(--k, var(--color-key));
+    transform: rotate(45deg);
+  }
+  .key-hollow {
+    background: transparent;
+  }
+  /* A link that reads as the next step: mono, with an arrow that moves. */
+  .go {
+    @apply inline-flex items-center gap-2 font-mono text-[13px] text-fg-2
+           no-underline transition-colors hover:text-fg;
+  }
+  .go::after {
+    content: "\2192";
+    transition: transform 0.2s;
+  }
+  .go:hover::after {
+    transform: translateX(3px);
+  }
+
+  /* A card that lights under the pointer: its label colour runs along the top
+     edge and lights the corner. */
+  .lit {
+    position: relative;
+    overflow: hidden;
+  }
+  .lit::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    z-index: 1;
+    height: 2px;
+    background: var(--c, var(--color-accent-2));
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.3s ease-out;
+  }
+  .lit::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(70% 90% at 0% 0%, color-mix(in srgb, var(--c, var(--color-accent-2)) 12%, transparent), transparent 70%);
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+  }
+  .lit:hover::before {
+    transform: scaleX(1);
+  }
+  .lit:hover::after {
+    opacity: 1;
+  }
+
+  /* A screenshot is a button: a click brings it forward. Under the pointer it
+     grows a touch, frame and all, with a little spring in it. `scale` and not
+     `transform`, which the reveal is already using on some of them. */
+  .zoom {
+    display: block;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: pointer;
+  }
+  .shot {
+    transition: scale 350ms cubic-bezier(0.2, 0.8, 0.2, 1.3);
+  }
+  .shot:has(.zoom:hover),
+  .zoom.shot:hover {
+    scale: 1.015;
+  }
+  /* A screenshot's clip lies over it and is not seen until it is playing, so
+     the picture is what stands there while the clip loads. The button it is
+     in has to be `relative`. */
+  .clip {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    opacity: 0;
+    transition: opacity 0.4s;
+    pointer-events: none;
+  }
+  .clip.playing {
+    opacity: 1;
+  }
+  /* The strip a screenshot wears: what it is, and that it opens. */
+  .shot-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 30px;
+    padding: 0 12px;
+    border-bottom: 1px solid var(--color-line);
+    background: var(--color-ink-3);
+    color: var(--color-fg-3);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    line-height: 1;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .shot-bar > span:last-child {
+    color: var(--color-fg-4);
   }
 
   /* The Markdown body of a release note. The notes are plain Markdown, so every
@@ -159,5 +348,34 @@
   }
   .release-prose hr {
     @apply my-8 border-line;
+  }
+}
+
+/* Nothing marked for reveal is drawn until a script releases it - the wordmark
+   coming home for the hero, scrolling into view for the rest. --i staggers the
+   pieces of one group against each other, 70ms apart. Only a page that sets
+   `anim` on <html> hides anything, so without script the page is simply there. */
+html.anim [data-reveal] {
+  opacity: 0;
+  filter: blur(10px);
+  transform: translateY(12px);
+}
+html.anim [data-reveal].shown {
+  opacity: 1;
+  /* `none`, not a blur of nothing: a blur of nothing is still a filter, and
+     everything that had arrived went on being drawn through one. */
+  filter: none;
+  transform: none;
+  transition:
+    opacity 500ms ease-out calc(var(--i, 0) * 70ms),
+    filter 500ms ease-out calc(var(--i, 0) * 70ms),
+    transform 500ms ease-out calc(var(--i, 0) * 70ms),
+    scale 350ms cubic-bezier(0.2, 0.8, 0.2, 1.3);
+}
+@media (prefers-reduced-motion: reduce) {
+  html.anim [data-reveal] {
+    opacity: 1;
+    filter: none;
+    transform: none;
   }
 }

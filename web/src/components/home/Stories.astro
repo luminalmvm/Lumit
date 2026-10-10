@@ -1,0 +1,142 @@
+---
+import { Image, getImage } from "astro:assets";
+import SectionHead from "../SectionHead.astro";
+import sharedShot from "../../assets/shots/story-shared.png";
+import setupShot from "../../assets/shots/story-setup.png";
+import textShot from "../../assets/shots/story-text.png";
+import shortcutsShot from "../../assets/shots/story-shortcuts.png";
+// A card's clip: the same box as its picture, recorded from the application,
+// and the picture is the clip's first frame. A card with no clip is its
+// picture and nothing else.
+import sharedClip from "../../assets/clips/story-shared.mp4";
+import setupClip from "../../assets/clips/story-setup.mp4";
+import textClip from "../../assets/clips/story-text.mp4";
+import shortcutsClip from "../../assets/clips/story-shortcuts.mp4";
+
+const fullSize = async (src: ImageMetadata) => ({
+  url: (await getImage({ src, width: src.width, quality: 90 })).src,
+  w: src.width,
+  h: src.height,
+});
+
+// Four parts of the application, each cut out of a whole-window capture so
+// the interface in it can be read at the size it is shown. A wide card and a
+// narrow one share a row, and the pictures are cut to the shapes that makes.
+const stories = [
+  {
+    src: sharedShot,
+    clip: sharedClip,
+    full: await fullSize(sharedShot),
+    alt: "A shared project: two other people's pointers named in the Viewer, and their playheads in their own colours on the Timeline",
+    tag: "Shared projects",
+    h: "Edit one project together.",
+    p: "One person hosts and sends an invite, and up to 16 people can join. Edits appear for everyone as they're made, and each person has a colour for their pointer, playhead, and selection.",
+    c: "var(--label-violet)",
+    wide: true,
+  },
+  {
+    src: setupShot,
+    clip: setupClip,
+    full: await fullSize(setupShot),
+    alt: "The setup screen: After Effects or Vegas editing style, three interface styles, colour scheme, toolbar position and motion",
+    tag: "Setup",
+    h: "After Effects or Vegas, you choose.",
+    p: "The setup screen asks how you like to edit, and each choice applies as you pick. All of them can be changed later in Settings.",
+    c: "var(--label-mint)",
+    wide: false,
+  },
+  {
+    src: shortcutsShot,
+    clip: shortcutsClip,
+    full: await fullSize(shortcutsShot),
+    alt: "The Shortcuts page of Settings: keymap presets, an After Effects shortcut import, and a keyboard picture with the taken keys outlined",
+    tag: "Shortcuts",
+    h: "Keep your shortcuts.",
+    p: "Load the After Effects keymap, or read in the shortcut file After Effects saves so custom binds carry over. A keyboard picture shows which keys are taken.",
+    c: "var(--label-amber)",
+    wide: false,
+  },
+  {
+    src: textShot,
+    clip: textClip,
+    full: await fullSize(textShot),
+    alt: "A title selected in the Viewer, with the Text and Paragraph panels beside it showing font, size, leading, tracking and alignment",
+    tag: "Text",
+    h: "Text and Paragraph panels.",
+    p: "Text layers use any installed font, with leading, kerning, tracking, a stroke, alignment, and indents. Double-click a text layer in the Viewer to edit it.",
+    c: "var(--label-coral)",
+    wide: true,
+  },
+];
+---
+
+<section class="wrap flex flex-col gap-12 pb-20 sm:pb-28">
+  <SectionHead kicker="Inside Lumit" title="Make it yours. Share the work." no="03 / 06" />
+
+  <div class="grid gap-5 lg:grid-cols-12">
+    {
+      stories.map((s, i) => (
+        <figure
+          class:list={["lit m-0 flex flex-col rounded-card border border-line bg-ink-2", s.wide ? "lg:col-span-7" : "lg:col-span-5"]}
+          data-reveal
+          style={`--i:${i % 2};--c:${s.c}`}
+        >
+          <button type="button" class="zoom shot relative border-b border-line bg-ink" data-zoom={s.full.url} data-w={s.full.w} data-h={s.full.h} aria-label="Enlarge this screenshot">
+            <Image
+              class="block w-full"
+              src={s.src}
+              alt={s.alt}
+              widths={[720, 1000, 1400]}
+              sizes={s.wide ? "(min-width: 1360px) 690px, (min-width: 1024px) 56vw, 100vw" : "(min-width: 1360px) 490px, (min-width: 1024px) 40vw, 100vw"}
+              loading="lazy"
+              quality={90}
+            />
+            {s.clip && (
+              <video class="clip" data-clip src={s.clip} muted loop playsinline preload="none" tabindex="-1" aria-hidden="true" />
+            )}
+          </button>
+          <figcaption class="flex flex-col gap-3 p-7">
+            <span class="tag"><i class="dot" />{s.tag}</span>
+            <span class="text-[22px] leading-[1.15] tracking-[-0.02em] text-fg">{s.h}</span>
+            <span class="max-w-[560px] text-[15px] leading-[1.45] text-fg-3">{s.p}</span>
+          </figcaption>
+        </figure>
+      ))
+    }
+  </div>
+</section>
+
+<style>
+  .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--c);
+  }
+</style>
+
+<script>
+  // A clip plays while its card is on screen and stops when it is not, so a
+  // page of them costs what the ones in view cost. Nothing is fetched until a
+  // card first comes into view. A visitor who has asked for less motion gets
+  // the pictures. A workspace behind the front one in Meet the interface
+  // keeps still, and its clip starts when it is brought forward.
+  const clips = document.querySelectorAll<HTMLVideoElement>("[data-clip]");
+  if (clips.length && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    const seen = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          const clip = entry.target as HTMLVideoElement;
+          const behind = clip.closest("[data-layer]:not([aria-current])");
+          if (entry.isIntersecting && !behind) clip.play().catch(() => {});
+          else clip.pause();
+        }
+      },
+      { threshold: 0.35 },
+    );
+    for (const clip of clips) {
+      clip.addEventListener("playing", () => clip.classList.add("playing"), { once: true });
+      seen.observe(clip);
+    }
+  }
+</script>

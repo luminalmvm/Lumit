@@ -1,0 +1,425 @@
+---
+import { statSync } from "node:fs";
+import { resolve } from "node:path";
+import Base from "../layouts/Base.astro";
+import SectionHead from "../components/SectionHead.astro";
+import Wordmark from "../components/Wordmark.astro";
+
+// The wordmark standing still, the wordmark opening, and the mark. Each comes
+// on three grounds - none, black and white - and a ground is a layer: the three
+// are stacked with the edges of the back two showing, and they slide out
+// sideways under the pointer. The files themselves are in public/media.
+//
+// A file's size is read off the file, from web/, which is where both
+// `astro dev` and `astro build` are run.
+const file = (name: string, label: string) => {
+  const kb = statSync(resolve(process.cwd(), "public/media", name)).size / 1024;
+  return {
+    href: `/media/${name}`,
+    label,
+    size: kb < 1000 ? `${Math.round(kb)} KB` : `${(kb / 1024).toFixed(1)} MB`,
+  };
+};
+
+const grounds = [
+  { key: "none", name: "Transparent" },
+  { key: "black", name: "Black" },
+  { key: "white", name: "White" },
+];
+
+const assets = [
+  {
+    id: "wordmark",
+    h: "Wordmark",
+    p: "The name, for a title card, a thumbnail, or the end of a video.",
+    spec: "SVG, or PNG at 2400 by 891.",
+    c: "mint",
+    // White letters vanish on white, so that ground's file has dark ones.
+    art: { none: "lumit-wordmark.svg", black: "lumit-wordmark.svg", white: "lumit-wordmark-dark.svg" },
+    files: {
+      none: [file("lumit-wordmark.svg", "SVG"), file("lumit-wordmark.png", "PNG")],
+      black: [file("lumit-wordmark-black.svg", "SVG"), file("lumit-wordmark-black.png", "PNG")],
+      white: [file("lumit-wordmark-white.svg", "SVG"), file("lumit-wordmark-white.png", "PNG")],
+    },
+    extra: [file("lumit-wordmark-dark.svg", "SVG"), file("lumit-wordmark-dark.png", "PNG")],
+  },
+  {
+    id: "animated",
+    h: "Wordmark, animated",
+    p: "The mark opening into the name, as it does at the top of this site.",
+    spec: "1920 by 1080, 60 frames a second, 3.5 seconds. No sound. The MOV is ProRes 4444, for editing.",
+    c: "azure",
+    files: {
+      none: [file("lumit-wordmark-animated.webm", "WebM"), file("lumit-wordmark-animated.mov", "MOV")],
+      black: [file("lumit-wordmark-animated-black.mp4", "MP4")],
+      white: [file("lumit-wordmark-animated-white.mp4", "MP4")],
+    },
+  },
+  {
+    id: "mark",
+    h: "Logo",
+    p: "The mark by itself: two keyframes meeting at a bright core.",
+    spec: "SVG, or PNG at 1280 by 1280.",
+    c: "amber",
+    art: { none: "lumit-mark.svg", black: "lumit-mark.svg", white: "lumit-mark.svg" },
+    files: {
+      none: [file("lumit-mark.svg", "SVG"), file("lumit-mark.png", "PNG")],
+      black: [file("lumit-mark-black.svg", "SVG"), file("lumit-mark-black.png", "PNG")],
+      white: [file("lumit-mark-white.svg", "SVG"), file("lumit-mark-white.png", "PNG")],
+    },
+  },
+];
+---
+
+<Base
+  title="Media - Lumit"
+  description="The Lumit wordmark and logo, still and animated, on transparent, black and white backgrounds."
+>
+  <section class="pt-14 pb-24 sm:pt-20 sm:pb-32">
+    <div class="wrap flex flex-col gap-14">
+      <SectionHead page kicker="Media" title="Wordmark and logo.">
+        <Fragment slot="lede">
+          For videos, thumbnails, and articles about Lumit. Each one comes on a transparent,
+          black, or white background.
+        </Fragment>
+      </SectionHead>
+
+      {
+        assets.map((a, n) => (
+          <article class="asset" data-asset style={`--c:var(--label-${a.c})`}>
+            <div class="stack" data-stack>
+              {grounds.map((g, i) => (
+                <button
+                  type="button"
+                  class:list={["ground", `ground-${g.key}`]}
+                  data-ground={g.key}
+                  aria-pressed={i === 0 ? "true" : "false"}
+                  aria-label={`${a.h} on a ${g.name.toLowerCase()} background`}
+                  style={`--o:${i}`}
+                >
+                  <span class="ground-name">{g.name}</span>
+                  {a.art ? (
+                    <img
+                      class:list={["art", `art-${a.id}`]}
+                      src={`/media/${a.art[g.key as keyof typeof a.art]}`}
+                      alt=""
+                      draggable="false"
+                    />
+                  ) : (
+                    <span class="art art-animated">
+                      <Wordmark controlled />
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            <div class="info">
+              <p class="num"><i />{String(n + 1).padStart(2, "0")}</p>
+              <h2 class="mt-4 text-[28px] leading-[1.1] tracking-[-0.03em]">{a.h}</h2>
+              <p class="mt-3 max-w-[420px] text-[15px] leading-[1.45] text-fg-3">{a.p}</p>
+
+              <div class="pick" role="group" aria-label="Background">
+                {grounds.map((g, i) => (
+                  <button type="button" data-pick={g.key} aria-pressed={i === 0 ? "true" : "false"}>
+                    <i class:list={["chip", `chip-${g.key}`]} />
+                    {g.name}
+                  </button>
+                ))}
+              </div>
+
+              {grounds.map((g, i) => (
+                <div class="files" data-files={g.key} hidden={i !== 0}>
+                  {a.files[g.key as keyof typeof a.files].map((f) => (
+                    <a class="btn" href={f.href} download>
+                      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                        <path d="M8 2v9M4 7l4 4 4-4M2 13h12" />
+                      </svg>
+                      {f.label}
+                      <span class="size">{f.size}</span>
+                    </a>
+                  ))}
+                </div>
+              ))}
+
+              <p class="mt-5 font-mono text-[11px] leading-[1.6] text-fg-4">{a.spec}</p>
+              {a.extra && (
+                <p class="mt-1 font-mono text-[11px] leading-[1.6] text-fg-4">
+                  Transparent with dark letters:
+                  {a.extra.map((f) => (
+                    <>
+                      {" "}
+                      <a class="text-fg-3 underline underline-offset-2 hover:text-fg" href={f.href} download>
+                        {f.label}
+                      </a>
+                    </>
+                  ))}
+                </p>
+              )}
+            </div>
+          </article>
+        ))
+      }
+    </div>
+  </section>
+</Base>
+
+<style>
+  .asset {
+    display: grid;
+    gap: 28px;
+    padding-top: 14px;
+  }
+  .asset + .asset {
+    padding-top: 56px;
+    border-top: 1px solid var(--color-line);
+  }
+  @media (min-width: 1024px) {
+    .asset {
+      grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+      gap: 56px;
+      align-items: center;
+    }
+  }
+
+  /* Three grounds as three layers. The one picked is in front, and the other
+     two stand behind it with an edge showing at the right. Under the pointer
+     the front one gives way to the left and the back two slide out. --o is a
+     layer's place in the stack, 0 the front. */
+  .stack {
+    --peek: 16px;
+    --room: 32px;
+    --shift: 0px;
+    position: relative;
+    aspect-ratio: 16 / 9;
+  }
+  .ground {
+    position: absolute;
+    inset: 0 var(--room) 0 0;
+    z-index: calc(3 - var(--o));
+    display: grid;
+    place-items: center;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid var(--color-line-2);
+    border-radius: var(--radius-card);
+    cursor: pointer;
+    transform: translateX(calc(var(--shift) + var(--o) * var(--peek))) scale(calc(1 - var(--o) * 0.07));
+    transform-origin: right center;
+    transition:
+      transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1.12),
+      border-color 0.2s,
+      filter 0.3s;
+  }
+  .ground[aria-pressed="true"] {
+    cursor: default;
+  }
+  .ground[aria-pressed="false"] {
+    filter: brightness(0.82);
+  }
+  .ground[aria-pressed="false"]:hover {
+    border-color: var(--color-accent-2);
+    filter: none;
+  }
+  .ground-none {
+    background:
+      conic-gradient(#16191c 25%, #0f1113 0 50%, #16191c 0 75%, #0f1113 0) 0 0 / 28px 28px;
+  }
+  .ground-black {
+    background: #000;
+  }
+  .ground-white {
+    /* The live wordmark takes its letters from this, as the file for a white
+       ground takes dark ones. */
+    --color-fg: #0b0c0e;
+    border-color: #fff;
+    background: #fff;
+  }
+  /* A ground's name, read off the edge that slides out. */
+  .ground-name {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    color: var(--color-fg-3);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    line-height: 1;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    opacity: 0;
+    transition: opacity 0.25s;
+  }
+  .ground-white .ground-name {
+    color: #5e666b;
+  }
+  .art {
+    display: block;
+    pointer-events: none;
+    user-select: none;
+  }
+  .art-wordmark {
+    width: 62%;
+  }
+  .art-mark {
+    width: 34%;
+  }
+  .art-animated {
+    width: 56%;
+  }
+  @media (min-width: 640px) {
+    .stack {
+      --peek: 22px;
+      --room: 148px;
+      --shift: 52px;
+    }
+  }
+  @media (hover: hover) and (min-width: 640px) {
+    .stack:hover,
+    .stack:focus-within {
+      --peek: 74px;
+      --shift: 0px;
+    }
+    .stack:hover .ground-name,
+    .stack:focus-within .ground-name {
+      opacity: 1;
+    }
+  }
+
+  .num {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--color-fg-4);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1;
+    font-feature-settings: "zero";
+  }
+  .num i {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--c);
+  }
+
+  /* The same choice as the stack, as three names. */
+  .pick {
+    display: inline-flex;
+    margin-top: 26px;
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-card);
+    background: var(--color-ink-2);
+  }
+  .pick button {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 13px;
+    border: 0;
+    border-right: 1px solid var(--color-line);
+    background: none;
+    color: var(--color-fg-3);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition:
+      color 0.15s,
+      background-color 0.15s;
+  }
+  .pick button:last-child {
+    border-right: 0;
+  }
+  .pick button:hover {
+    color: var(--color-fg-2);
+  }
+  .pick button[aria-pressed="true"] {
+    background: var(--color-ink-3);
+    color: var(--color-fg);
+  }
+  .chip {
+    width: 10px;
+    height: 10px;
+    border: 1px solid var(--color-line-2);
+    border-radius: 1px;
+  }
+  .chip-none {
+    background: conic-gradient(#3c4145 25%, #131517 0 50%, #3c4145 0 75%, #131517 0) 0 0 / 6px 6px;
+  }
+  .chip-black {
+    background: #000;
+  }
+  .chip-white {
+    border-color: #fff;
+    background: #fff;
+  }
+
+  .files {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 16px;
+  }
+  .files[hidden] {
+    display: none;
+  }
+  .size {
+    color: var(--color-fg-4);
+    font-family: var(--font-mono);
+    font-size: 11px;
+  }
+</style>
+
+<script>
+  // Picking a ground, from the stack or from its name: that layer comes to
+  // the front, the other two keep their order behind it, and the files under
+  // the names become that ground's.
+  for (const asset of document.querySelectorAll<HTMLElement>("[data-asset]")) {
+    const layers = [...asset.querySelectorAll<HTMLButtonElement>("[data-ground]")];
+    const names = [...asset.querySelectorAll<HTMLButtonElement>("[data-pick]")];
+    const files = [...asset.querySelectorAll<HTMLElement>("[data-files]")];
+
+    const pick = (key: string) => {
+      let behind = 1;
+      for (const layer of layers) {
+        const on = layer.dataset.ground === key;
+        layer.setAttribute("aria-pressed", on ? "true" : "false");
+        layer.style.setProperty("--o", String(on ? 0 : behind++));
+      }
+      for (const name of names) name.setAttribute("aria-pressed", name.dataset.pick === key ? "true" : "false");
+      for (const set of files) set.hidden = set.dataset.files !== key;
+    };
+    for (const layer of layers) layer.addEventListener("click", () => pick(layer.dataset.ground!));
+    for (const name of names) name.addEventListener("click", () => pick(name.dataset.pick!));
+  }
+
+  // The animated wordmark, looping: a beat on the mark, the move, and the
+  // word standing, which is what the files hold. Then it starts again from
+  // the mark. The component hands over its own pose and pacing when it is
+  // `controlled` (Wordmark.astro), and its three copies here keep the one
+  // clock. Still, and on the word, for a visitor who has asked for less
+  // motion.
+  type Posed = SVGSVGElement & { wmPose?: (t: number) => void; wmTiming?: (x: number) => number };
+  const marks = [...document.querySelectorAll<Posed>(".art-animated .wm")].filter((m) => m.wmPose && m.wmTiming);
+  if (marks.length) {
+    const pose = (t: number) => marks.forEach((m) => m.wmPose!(t));
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      pose(1);
+    } else {
+      const LEAD = 700;
+      const MOVE = 1258;
+      const STAND = 2400;
+      const LOOP = LEAD + MOVE + STAND;
+      const frame = (now: number) => {
+        const at = now % LOOP;
+        if (at < LEAD) pose(0);
+        else if (at < LEAD + MOVE) pose(marks[0].wmTiming!((at - LEAD) / MOVE));
+        else pose(1);
+        requestAnimationFrame(frame);
+      };
+      requestAnimationFrame(frame);
+    }
+  }
+</script>

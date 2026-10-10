@@ -42,7 +42,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1054533152;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -839286400;
 
 // Section: executor
 
@@ -15555,6 +15555,7 @@ fn wire__crate__api__project__project_reference_share_impl(
             let api_name = <String>::sse_decode(&mut deserializer);
             let api_port = <u16>::sse_decode(&mut deserializer);
             let api_key = <Option<String>>::sse_decode(&mut deserializer);
+            let api_outside = <bool>::sse_decode(&mut deserializer);
             let api_events = <Option<
                 StreamSink<
                     crate::api::share::BridgeShareEvent,
@@ -15564,7 +15565,12 @@ fn wire__crate__api__project__project_reference_share_impl(
             deserializer.end();
             transform_result_sse::<_, BridgeError>((move || {
                 let output_ok = crate::api::project::ProjectReference::share(
-                    &api_that, api_name, api_port, api_key, api_events,
+                    &api_that,
+                    api_name,
+                    api_port,
+                    api_key,
+                    api_outside,
+                    api_events,
                 )?;
                 Ok(output_ok)
             })())
@@ -15753,6 +15759,8 @@ fn wire__crate__api__project__project_reference_share_presence_impl(
             let api_playhead = <Option<i64>>::sse_decode(&mut deserializer);
             let api_cursor_x = <Option<f64>>::sse_decode(&mut deserializer);
             let api_cursor_y = <Option<f64>>::sse_decode(&mut deserializer);
+            let api_properties = <Vec<String>>::sse_decode(&mut deserializer);
+            let api_keys = <Vec<String>>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, BridgeError>((move || {
                 let output_ok = crate::api::project::ProjectReference::share_presence(
@@ -15762,7 +15770,39 @@ fn wire__crate__api__project__project_reference_share_presence_impl(
                     api_playhead,
                     api_cursor_x,
                     api_cursor_y,
+                    api_properties,
+                    api_keys,
                 )?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__project__project_reference_share_reach_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "project_reference_share_reach",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <crate::api::project::ProjectReference>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, BridgeError>((move || {
+                let output_ok = crate::api::project::ProjectReference::share_reach(&api_that)?;
                 Ok(output_ok)
             })())
         },
@@ -21109,6 +21149,10 @@ impl SseDecode for crate::api::share::BridgeShareEvent {
                     <crate::api::share::BridgeShareEnding>::sse_decode(deserializer);
                 return crate::api::share::BridgeShareEvent::Ended { reason: var_reason };
             }
+            5 => {
+                let mut var_reach = <crate::api::share::BridgeShareReach>::sse_decode(deserializer);
+                return crate::api::share::BridgeShareEvent::Reach { reach: var_reach };
+            }
             _ => {
                 unimplemented!("");
             }
@@ -21129,6 +21173,8 @@ impl SseDecode for crate::api::share::BridgeSharePerson {
         let mut var_playhead = <Option<i64>>::sse_decode(deserializer);
         let mut var_cursorX = <Option<f64>>::sse_decode(deserializer);
         let mut var_cursorY = <Option<f64>>::sse_decode(deserializer);
+        let mut var_properties = <Vec<String>>::sse_decode(deserializer);
+        let mut var_keys = <Vec<String>>::sse_decode(deserializer);
         return crate::api::share::BridgeSharePerson {
             id: var_id,
             name: var_name,
@@ -21139,7 +21185,39 @@ impl SseDecode for crate::api::share::BridgeSharePerson {
             playhead: var_playhead,
             cursor_x: var_cursorX,
             cursor_y: var_cursorY,
+            properties: var_properties,
+            keys: var_keys,
         };
+    }
+}
+
+impl SseDecode for crate::api::share::BridgeShareReach {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut tag_ = <i32>::sse_decode(deserializer);
+        match tag_ {
+            0 => {
+                return crate::api::share::BridgeShareReach::Off;
+            }
+            1 => {
+                return crate::api::share::BridgeShareReach::Asking;
+            }
+            2 => {
+                let mut var_address = <String>::sse_decode(deserializer);
+                return crate::api::share::BridgeShareReach::Open {
+                    address: var_address,
+                };
+            }
+            3 => {
+                return crate::api::share::BridgeShareReach::Refused;
+            }
+            4 => {
+                return crate::api::share::BridgeShareReach::Behind;
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
     }
 }
 
@@ -24254,15 +24332,15 @@ fn pde_ffi_dispatcher_primary_impl(
             rust_vec_len,
             data_len,
         ),
-        464 => wire__crate__api__project__project_reference_unpack_impl(
+        465 => wire__crate__api__project__project_reference_unpack_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        468 => wire__crate__api__effect__rescan_plugins_impl(port, ptr, rust_vec_len, data_len),
-        498 => wire__crate__api__assets__text_font_faces_impl(port, ptr, rust_vec_len, data_len),
-        499 => wire__crate__api__assets__text_font_families_impl(port, ptr, rust_vec_len, data_len),
+        469 => wire__crate__api__effect__rescan_plugins_impl(port, ptr, rust_vec_len, data_len),
+        499 => wire__crate__api__assets__text_font_faces_impl(port, ptr, rust_vec_len, data_len),
+        500 => wire__crate__api__assets__text_font_families_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -24691,51 +24769,52 @@ fn pde_ffi_dispatcher_sync_impl(
 454 => wire__crate__api__project__project_reference_share_invite_impl(ptr, rust_vec_len, data_len),
 455 => wire__crate__api__project__project_reference_share_people_impl(ptr, rust_vec_len, data_len),
 456 => wire__crate__api__project__project_reference_share_presence_impl(ptr, rust_vec_len, data_len),
-457 => wire__crate__api__project__project_reference_share_reinvite_impl(ptr, rust_vec_len, data_len),
-458 => wire__crate__api__project__project_reference_share_remove_impl(ptr, rust_vec_len, data_len),
-459 => wire__crate__api__project__project_reference_share_resolve_impl(ptr, rust_vec_len, data_len),
-460 => wire__crate__api__project__project_reference_start_worker_impl(ptr, rust_vec_len, data_len),
-461 => wire__crate__api__project__project_reference_stop_sharing_impl(ptr, rust_vec_len, data_len),
-462 => wire__crate__api__project__project_reference_ui_state_impl(ptr, rust_vec_len, data_len),
-463 => wire__crate__api__project__project_reference_undo_impl(ptr, rust_vec_len, data_len),
-465 => wire__crate__api__project__project_reference_use_proxies_impl(ptr, rust_vec_len, data_len),
-466 => wire__crate__api__footage__proxy_cancel_impl(ptr, rust_vec_len, data_len),
-467 => wire__crate__api__footage__proxy_poll_impl(ptr, rust_vec_len, data_len),
-469 => wire__crate__api__audio__reset_audio_clip_impl(ptr, rust_vec_len, data_len),
-470 => wire__crate__api__shell__reset_realtime_impl(ptr, rust_vec_len, data_len),
-471 => wire__crate__api__system__resident_memory_bytes_impl(ptr, rust_vec_len, data_len),
-472 => wire__crate__api__system__restore_frozen_cursor_impl(ptr, rust_vec_len, data_len),
-473 => wire__crate__api__shell__reveal_in_folder_impl(ptr, rust_vec_len, data_len),
-474 => wire__crate__api__roto__roto_boundary_impl(ptr, rust_vec_len, data_len),
-475 => wire__crate__api__roto__roto_solve_frame_impl(ptr, rust_vec_len, data_len),
-476 => wire__crate__api__roto__roto_source_frame_impl(ptr, rust_vec_len, data_len),
-477 => wire__crate__api__roto__roto_status_impl(ptr, rust_vec_len, data_len),
-478 => wire__crate__api__effect__sample_scalar_impl(ptr, rust_vec_len, data_len),
-479 => wire__crate__api__effect__sample_scalar_range_with_context_impl(ptr, rust_vec_len, data_len),
-480 => wire__crate__api__effect__sample_scalar_with_context_impl(ptr, rust_vec_len, data_len),
-481 => wire__crate__api__effect__sample_scalars_impl(ptr, rust_vec_len, data_len),
-482 => wire__crate__api__audio__set_audio_device_impl(ptr, rust_vec_len, data_len),
-483 => wire__crate__api__shell__set_autosave_impl(ptr, rust_vec_len, data_len),
-484 => wire__crate__api__cache__set_cache_budget_impl(ptr, rust_vec_len, data_len),
-485 => wire__crate__api__track__set_camera_solve_link_impl(ptr, rust_vec_len, data_len),
-486 => wire__crate__api__cache__set_disk_cache_budget_impl(ptr, rust_vec_len, data_len),
-487 => wire__crate__api__cache__set_disk_cache_location_impl(ptr, rust_vec_len, data_len),
-488 => wire__crate__api__shell__set_full_res_drag_previews_impl(ptr, rust_vec_len, data_len),
-489 => wire__crate__api__effect__set_plugin_enabled_impl(ptr, rust_vec_len, data_len),
-490 => wire__crate__api__cache__set_render_profiling_impl(ptr, rust_vec_len, data_len),
-491 => wire__crate__api__cache__set_vram_cache_budget_impl(ptr, rust_vec_len, data_len),
-492 => wire__crate__api__effect__shader_graph_view_impl(ptr, rust_vec_len, data_len),
-493 => wire__crate__api__share__share_default_port_impl(ptr, rust_vec_len, data_len),
-494 => wire__crate__api__share__share_local_address_impl(ptr, rust_vec_len, data_len),
-495 => wire__crate__api__solid__solid_reference_get_definition_impl(ptr, rust_vec_len, data_len),
-496 => wire__crate__api__solid__solid_reference_set_definition_impl(ptr, rust_vec_len, data_len),
-497 => wire__crate__api__system__system_memory_bytes_impl(ptr, rust_vec_len, data_len),
-500 => wire__crate__api__system__thaw_cursor_impl(ptr, rust_vec_len, data_len),
-501 => wire__crate__api__track__track_status_impl(ptr, rust_vec_len, data_len),
-502 => wire__crate__api__track__tracked_points_impl(ptr, rust_vec_len, data_len),
-503 => wire__crate__api__system__video_memory_bytes_impl(ptr, rust_vec_len, data_len),
-504 => wire__crate__api__cache__viewer_transport_impl(ptr, rust_vec_len, data_len),
-505 => wire__crate__api__cache__vram_cache_stats_impl(ptr, rust_vec_len, data_len),
+457 => wire__crate__api__project__project_reference_share_reach_impl(ptr, rust_vec_len, data_len),
+458 => wire__crate__api__project__project_reference_share_reinvite_impl(ptr, rust_vec_len, data_len),
+459 => wire__crate__api__project__project_reference_share_remove_impl(ptr, rust_vec_len, data_len),
+460 => wire__crate__api__project__project_reference_share_resolve_impl(ptr, rust_vec_len, data_len),
+461 => wire__crate__api__project__project_reference_start_worker_impl(ptr, rust_vec_len, data_len),
+462 => wire__crate__api__project__project_reference_stop_sharing_impl(ptr, rust_vec_len, data_len),
+463 => wire__crate__api__project__project_reference_ui_state_impl(ptr, rust_vec_len, data_len),
+464 => wire__crate__api__project__project_reference_undo_impl(ptr, rust_vec_len, data_len),
+466 => wire__crate__api__project__project_reference_use_proxies_impl(ptr, rust_vec_len, data_len),
+467 => wire__crate__api__footage__proxy_cancel_impl(ptr, rust_vec_len, data_len),
+468 => wire__crate__api__footage__proxy_poll_impl(ptr, rust_vec_len, data_len),
+470 => wire__crate__api__audio__reset_audio_clip_impl(ptr, rust_vec_len, data_len),
+471 => wire__crate__api__shell__reset_realtime_impl(ptr, rust_vec_len, data_len),
+472 => wire__crate__api__system__resident_memory_bytes_impl(ptr, rust_vec_len, data_len),
+473 => wire__crate__api__system__restore_frozen_cursor_impl(ptr, rust_vec_len, data_len),
+474 => wire__crate__api__shell__reveal_in_folder_impl(ptr, rust_vec_len, data_len),
+475 => wire__crate__api__roto__roto_boundary_impl(ptr, rust_vec_len, data_len),
+476 => wire__crate__api__roto__roto_solve_frame_impl(ptr, rust_vec_len, data_len),
+477 => wire__crate__api__roto__roto_source_frame_impl(ptr, rust_vec_len, data_len),
+478 => wire__crate__api__roto__roto_status_impl(ptr, rust_vec_len, data_len),
+479 => wire__crate__api__effect__sample_scalar_impl(ptr, rust_vec_len, data_len),
+480 => wire__crate__api__effect__sample_scalar_range_with_context_impl(ptr, rust_vec_len, data_len),
+481 => wire__crate__api__effect__sample_scalar_with_context_impl(ptr, rust_vec_len, data_len),
+482 => wire__crate__api__effect__sample_scalars_impl(ptr, rust_vec_len, data_len),
+483 => wire__crate__api__audio__set_audio_device_impl(ptr, rust_vec_len, data_len),
+484 => wire__crate__api__shell__set_autosave_impl(ptr, rust_vec_len, data_len),
+485 => wire__crate__api__cache__set_cache_budget_impl(ptr, rust_vec_len, data_len),
+486 => wire__crate__api__track__set_camera_solve_link_impl(ptr, rust_vec_len, data_len),
+487 => wire__crate__api__cache__set_disk_cache_budget_impl(ptr, rust_vec_len, data_len),
+488 => wire__crate__api__cache__set_disk_cache_location_impl(ptr, rust_vec_len, data_len),
+489 => wire__crate__api__shell__set_full_res_drag_previews_impl(ptr, rust_vec_len, data_len),
+490 => wire__crate__api__effect__set_plugin_enabled_impl(ptr, rust_vec_len, data_len),
+491 => wire__crate__api__cache__set_render_profiling_impl(ptr, rust_vec_len, data_len),
+492 => wire__crate__api__cache__set_vram_cache_budget_impl(ptr, rust_vec_len, data_len),
+493 => wire__crate__api__effect__shader_graph_view_impl(ptr, rust_vec_len, data_len),
+494 => wire__crate__api__share__share_default_port_impl(ptr, rust_vec_len, data_len),
+495 => wire__crate__api__share__share_local_address_impl(ptr, rust_vec_len, data_len),
+496 => wire__crate__api__solid__solid_reference_get_definition_impl(ptr, rust_vec_len, data_len),
+497 => wire__crate__api__solid__solid_reference_set_definition_impl(ptr, rust_vec_len, data_len),
+498 => wire__crate__api__system__system_memory_bytes_impl(ptr, rust_vec_len, data_len),
+501 => wire__crate__api__system__thaw_cursor_impl(ptr, rust_vec_len, data_len),
+502 => wire__crate__api__track__track_status_impl(ptr, rust_vec_len, data_len),
+503 => wire__crate__api__track__tracked_points_impl(ptr, rust_vec_len, data_len),
+504 => wire__crate__api__system__video_memory_bytes_impl(ptr, rust_vec_len, data_len),
+505 => wire__crate__api__cache__viewer_transport_impl(ptr, rust_vec_len, data_len),
+506 => wire__crate__api__cache__vram_cache_stats_impl(ptr, rust_vec_len, data_len),
                         _ => unreachable!(),
                     }
 }
@@ -29499,6 +29578,9 @@ impl flutter_rust_bridge::IntoDart for crate::api::share::BridgeShareEvent {
             crate::api::share::BridgeShareEvent::Ended { reason } => {
                 [4.into_dart(), reason.into_into_dart().into_dart()].into_dart()
             }
+            crate::api::share::BridgeShareEvent::Reach { reach } => {
+                [5.into_dart(), reach.into_into_dart().into_dart()].into_dart()
+            }
             _ => {
                 unimplemented!("");
             }
@@ -29529,6 +29611,8 @@ impl flutter_rust_bridge::IntoDart for crate::api::share::BridgeSharePerson {
             self.playhead.into_into_dart().into_dart(),
             self.cursor_x.into_into_dart().into_dart(),
             self.cursor_y.into_into_dart().into_dart(),
+            self.properties.into_into_dart().into_dart(),
+            self.keys.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -29541,6 +29625,34 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::share::BridgeSharePerson>
     for crate::api::share::BridgeSharePerson
 {
     fn into_into_dart(self) -> crate::api::share::BridgeSharePerson {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::share::BridgeShareReach {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            crate::api::share::BridgeShareReach::Off => [0.into_dart()].into_dart(),
+            crate::api::share::BridgeShareReach::Asking => [1.into_dart()].into_dart(),
+            crate::api::share::BridgeShareReach::Open { address } => {
+                [2.into_dart(), address.into_into_dart().into_dart()].into_dart()
+            }
+            crate::api::share::BridgeShareReach::Refused => [3.into_dart()].into_dart(),
+            crate::api::share::BridgeShareReach::Behind => [4.into_dart()].into_dart(),
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::share::BridgeShareReach
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::share::BridgeShareReach>
+    for crate::api::share::BridgeShareReach
+{
+    fn into_into_dart(self) -> crate::api::share::BridgeShareReach {
         self
     }
 }
@@ -33679,6 +33791,10 @@ impl SseEncode for crate::api::share::BridgeShareEvent {
                 <i32>::sse_encode(4, serializer);
                 <crate::api::share::BridgeShareEnding>::sse_encode(reason, serializer);
             }
+            crate::api::share::BridgeShareEvent::Reach { reach } => {
+                <i32>::sse_encode(5, serializer);
+                <crate::api::share::BridgeShareReach>::sse_encode(reach, serializer);
+            }
             _ => {
                 unimplemented!("");
             }
@@ -33698,6 +33814,35 @@ impl SseEncode for crate::api::share::BridgeSharePerson {
         <Option<i64>>::sse_encode(self.playhead, serializer);
         <Option<f64>>::sse_encode(self.cursor_x, serializer);
         <Option<f64>>::sse_encode(self.cursor_y, serializer);
+        <Vec<String>>::sse_encode(self.properties, serializer);
+        <Vec<String>>::sse_encode(self.keys, serializer);
+    }
+}
+
+impl SseEncode for crate::api::share::BridgeShareReach {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        match self {
+            crate::api::share::BridgeShareReach::Off => {
+                <i32>::sse_encode(0, serializer);
+            }
+            crate::api::share::BridgeShareReach::Asking => {
+                <i32>::sse_encode(1, serializer);
+            }
+            crate::api::share::BridgeShareReach::Open { address } => {
+                <i32>::sse_encode(2, serializer);
+                <String>::sse_encode(address, serializer);
+            }
+            crate::api::share::BridgeShareReach::Refused => {
+                <i32>::sse_encode(3, serializer);
+            }
+            crate::api::share::BridgeShareReach::Behind => {
+                <i32>::sse_encode(4, serializer);
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
     }
 }
 

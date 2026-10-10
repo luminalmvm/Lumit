@@ -240,6 +240,10 @@ class LayerArea extends StatelessWidget {
   final ValueListenable<Set<String>> selectedKeys;
   final ValueChanged<Set<String>> onKeysSelected;
 
+  /// Whether the project is shared. The marks for what other people are
+  /// doing are only in the tree while it is.
+  final bool sharing;
+
   /// A right-click on a lane key, by id and at the pointer in global
   /// coordinates — the panel opens the menu, because the rows it acts on
   /// reach past this lane.
@@ -338,6 +342,7 @@ class LayerArea extends StatelessWidget {
     required this.groupActions,
     required this.vScroll,
     required this.selectedKeys,
+    this.sharing = false,
     required this.onKeysSelected,
     required this.onKeyMenu,
     required this.stretch,
@@ -492,15 +497,19 @@ class LayerArea extends StatelessWidget {
   /// box that no longer fits what it holds.
   ///
   /// Ordered top to bottom, which is the order Stagger's *top down* means.
-  List<SelectedKey> _selectedKeyPlaces() {
-    final held = selectedKeys.value;
+  List<SelectedKey> _selectedKeyPlaces() =>
+      _keyPlaces(selectedKeys.value.contains);
+
+  /// Every key [held] answers for, with where it sits. The selection's walk,
+  /// and the one the keyframes someone else has selected are found by.
+  List<SelectedKey> _keyPlaces(bool Function(String id) held) {
     final out = <SelectedKey>[];
     var y = 0.0;
     void placesOf(LayerRow layer, LayerFoldRow row, double step, double top) {
       final rowId = foldRowPath(layer.id, row);
       final keys = laneKeysOf(row);
       for (var i = 0; i < keys.length; i++) {
-        if (!held.contains('$rowId#$i')) continue;
+        if (!held('$rowId#$i')) continue;
         out.add(SelectedKey(
           entry: layer.entry,
           row: row,
@@ -1068,6 +1077,25 @@ class LayerArea extends StatelessWidget {
                             // thing here that cannot be gated per layer, for
                             // the same reason — so it listens whole, being a
                             // single overlay.
+                            // The keyframes the others in a shared project
+                            // have selected, each ringed in its person's
+                            // colour, under this person's own block.
+                            if (sharing)
+                              Positioned.fill(
+                              child: ShareKeys(
+                                comp: comp,
+                                places: (held) => [
+                                  for (final key
+                                      in _keyPlaces(held.containsKey))
+                                    (
+                                      Offset(axis.xOf(key.frame),
+                                          key.top + key.height / 2),
+                                      held['${key.rowId}#${key.index}'] ??
+                                          const <int>[],
+                                    ),
+                                ],
+                              ),
+                            ),
                             Positioned.fill(
                                 child: ValueListenableBuilder<Set<String>>(
                                     valueListenable: selectedKeys,
@@ -1097,7 +1125,7 @@ class LayerArea extends StatelessWidget {
             ),
             // Where the others in a shared project have their playheads,
             // under this person's own.
-            SharePlayheads(comp: comp, xOf: axis.xOf),
+            if (sharing) SharePlayheads(comp: comp, xOf: axis.xOf),
             // The playhead rides above every bar so it is never hidden behind
             // one, and it is the only thing here that redraws when it moves —
             // on its own layer, so that is true of the *painting* and not only

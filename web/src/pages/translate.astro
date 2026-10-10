@@ -1,6 +1,7 @@
 ---
 import { readFileSync } from "node:fs";
 import Base from "../layouts/Base.astro";
+import SectionHead from "../components/SectionHead.astro";
 
 // The translation page. Crowdin hosted a box a translator typed into; this is
 // that box, built from the application's own string file at build time. Nothing here
@@ -104,45 +105,73 @@ const AUTH = {
   title="Translate Lumit"
   description="Translate Lumit into your language. Sign in with Discord, fill in as many phrases as you like, and the page hands you a file to send back."
 >
-  <section class="pt-16 sm:pt-20">
-    <div class="wrap">
-      <p class="kicker">Translate</p>
-      <h2 class="mt-4 text-[clamp(28px,3.4vw,36px)] leading-[1.1]">Lumit in your language.</h2>
-      <p class="mt-4 max-w-[620px]">
-        Translations for Lumit are completely community-sourced. All help to make Lumit 
-        more accessible is greatly appreciated. When you are done, the Download button 
-        hands you a file to attach to a GitHub issue.
-      </p>
-      <p class="mt-3 max-w-[620px] text-fg-3 text-[14px]">
-        Placeholders like <code class="font-mono text-fg-2">{"{count}"}</code> stand for a
-        variable the application fills in, DO NOT translate them, keep them exactly as 
-        they are, but you can adjust their position in the sentence to make sense in your 
-        language.
-      </p>
+  <section class="pt-14 sm:pt-20">
+    <div class="wrap flex flex-col gap-12">
+      <SectionHead page kicker="Translate" title="Lumit in your language.">
+        <Fragment slot="lede">
+          Translations for Lumit are completely community-sourced. All help to make Lumit
+          more accessible is greatly appreciated. When you are done, the Download button
+          hands you a file to attach to a GitHub issue.
+        </Fragment>
+      </SectionHead>
 
-      <div id="gate" class="card mt-8 max-w-[620px]">
-        <p id="gate-line" class="text-fg-2">
-          Sign in with Discord to fill these in. You must have the translator role in the 
-          Lumit server to allow typing.
-        </p>
-        <div class="mt-4 flex flex-wrap gap-2.5">
-          <button id="signin" class="btn" type="button">Sign in with Discord</button>
-          <a id="join" class="btn btn-ghost hidden" href={DISCORD}>Open the Lumit Discord</a>
+      {/* Every language and how far along it is. A card picks its language,
+          the same as the list in the bar below. */}
+      <div class="langs" role="group" aria-label="Language">
+        {
+          LANGUAGES.map((l) => {
+            const done = totals[l.code];
+            const pct = Math.floor((done / keys.length) * 100);
+            return (
+              <button type="button" class="lang lit" data-lang={l.code} aria-pressed="false">
+                <span class="endonym" lang={l.code.replace("_", "-")}>{l.endonym}</span>
+                <span class="name">{l.name}</span>
+                <span class="meter"><i style={`width:${pct}%`} /></span>
+                <span class="nums">
+                  {done.toLocaleString("en-GB")} of {keys.length.toLocaleString("en-GB")}
+                  <b>{pct}%</b>
+                </span>
+              </button>
+            );
+          })
+        }
+      </div>
+
+      <div class="grid gap-5 lg:grid-cols-2">
+        <div id="gate" class="card">
+          <p class="tag">Sign in</p>
+          <p id="gate-line" class="mt-5 text-fg-2">
+            Sign in with Discord to fill these in. You must have the translator role in the
+            Lumit server to allow typing.
+          </p>
+          <div class="mt-5 flex flex-wrap gap-2.5">
+            <button id="signin" class="btn border-white" type="button">Sign in with Discord</button>
+            <a id="join" class="btn btn-ghost hidden" href={DISCORD}>Open the Lumit Discord</a>
+          </div>
+          <p class="mt-5 text-[13.5px] leading-[1.55] text-fg-3">
+            This is only a way to help make translating easier, and submissions are reviewed before they ship.
+          </p>
         </div>
-        <p class="mt-4 text-[13.5px] leading-[1.55] text-fg-3">
-          This is only a way to help make translating easier, and submissions are reviewed before they ship.
-        </p>
+        <div class="card">
+          <p class="tag">Placeholders</p>
+          <p class="mt-5 text-[15px] leading-[1.55] text-fg-3">
+            Placeholders like <code class="rounded-ctl border border-line bg-ink px-1.5 py-0.5 font-mono text-[13px] text-fg">{"{count}"}</code> stand for a
+            variable the application fills in, DO NOT translate them, keep them exactly as
+            they are, but you can adjust their position in the sentence to make sense in your
+            language.
+          </p>
+        </div>
       </div>
     </div>
   </section>
 
-  <div class="sticky top-16 z-10 mt-10 border-y border-line bg-ink/95 backdrop-blur">
+  <div id="bar" class="sticky top-16 z-10 mt-12 border-y border-line bg-ink/95 backdrop-blur">
     <div class="wrap flex flex-wrap items-center gap-x-5 gap-y-3 py-3.5">
-      <label class="flex items-center gap-2.5 text-[14px] text-fg-3">
+      <label class="flex max-w-full items-center gap-2.5 text-[14px] text-fg-3">
         Language
         <select
           id="lang"
-          class="h-9 rounded-ctl border border-line-2 bg-ink-2 px-2.5 text-[15px] text-fg"
+          class="h-9 min-w-0 rounded-ctl border border-line-2 bg-ink-2 px-2.5 text-[15px] text-fg"
         >
           {
             LANGUAGES.map((l) => (
@@ -185,7 +214,7 @@ const AUTH = {
       <p class="mt-6 max-w-[620px] text-[14px] text-fg-3">
         Your language is not in the list? Ask on <a class="link" href={DISCORD}>Discord</a> -
         a new language is one line in the repository and a file to start filling, and the
-        five here started the same way.
+        ones here started the same way.
       </p>
     </div>
   </section>
@@ -221,6 +250,8 @@ const AUTH = {
     const joinLink = document.getElementById("join")!;
     const downloadBtn = document.getElementById("download") as HTMLButtonElement;
     const issueBtn = document.getElementById("issue") as HTMLButtonElement;
+    const bar = document.getElementById("bar")!;
+    const langCards = [...document.querySelectorAll<HTMLButtonElement>("[data-lang]")];
 
     const esc = (s: string) =>
       s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -315,6 +346,9 @@ const AUTH = {
       load();
       cursor = 0;
       rows.innerHTML = "";
+      for (const card of langCards) {
+        card.setAttribute("aria-pressed", card.dataset.lang === code ? "true" : "false");
+      }
       totalEl.textContent = String(need.length);
       alreadyEl.textContent = String(meta.totals[code]);
       downloadBtn.disabled = issueBtn.disabled = translator === "";
@@ -483,8 +517,96 @@ const AUTH = {
     }
 
     picker.addEventListener("change", () => show(picker.value));
+    // A card is the same choice as the list, and it brings the phrases up to
+    // the bar, since they start a long way under the cards.
+    for (const card of langCards) {
+      card.addEventListener("click", () => {
+        picker.value = card.dataset.lang!;
+        show(picker.value);
+        scrollTo({ top: bar.getBoundingClientRect().top + scrollY - 64, behavior: "smooth" });
+      });
+    }
     addEventListener("scroll", () => near() && more(), { passive: true });
     show(picker.value);
     gate();
   </script>
 </Base>
+
+<style>
+  .langs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  @media (min-width: 768px) {
+    .langs {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+  @media (min-width: 1100px) {
+    .langs {
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+    }
+  }
+  .lang {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 18px 18px 16px;
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-card);
+    background: var(--color-ink-2);
+    color: var(--color-fg-3);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .lang:hover {
+    border-color: var(--color-line-2);
+  }
+  .lang[aria-pressed="true"] {
+    border-color: var(--color-accent-2);
+    background:
+      radial-gradient(90% 80% at 0% 0%, color-mix(in srgb, var(--color-accent) 22%, transparent), transparent 70%),
+      var(--color-ink-2);
+  }
+  .endonym {
+    color: var(--color-fg);
+    font-size: 19px;
+    line-height: 1.2;
+    letter-spacing: -0.02em;
+  }
+  .name {
+    margin-top: 3px;
+    font-size: 13px;
+  }
+  /* How much of the application is translated, as a bar and as a count. */
+  .meter {
+    width: 100%;
+    height: 4px;
+    margin-top: 22px;
+    overflow: hidden;
+    border-radius: 1px;
+    background: var(--color-ink-3);
+  }
+  .meter i {
+    display: block;
+    height: 100%;
+    background: var(--color-accent-2);
+  }
+  .nums {
+    display: flex;
+    width: 100%;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 9px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-feature-settings: "zero";
+  }
+  .nums b {
+    color: var(--color-fg);
+    font-weight: 400;
+  }
+</style>

@@ -1047,16 +1047,73 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     return out;
   }
 
+  /// Tell the others in a shared project which keyframes this person has
+  /// selected, in whichever view is showing. Always as the lanes name them,
+  /// `path#index`, so the other end can mark them in either view. Nothing is
+  /// gathered when the project is not shared.
+  void _shareKeys() {
+    if (!_share.active) return;
+    if (!_graph) {
+      _share.keys(Set<String>.of(_laneKeySelection));
+      return;
+    }
+    final pathOf = {for (final c in _channelsNow()) c.id: c.path};
+    _share.keys({
+      for (final id in _graphKeySelection)
+        if (id.lastIndexOf('#') case final hash when hash > 0)
+          if (pathOf[id.substring(0, hash)] case final path?)
+            '$path${id.substring(hash)}',
+    });
+  }
+
+  /// The keyframes the others have selected, as the graph names its own:
+  /// `channelId#index`, with the colour of whoever holds each. A key on a
+  /// lane stands for every axis of its row, so it rings each of them. Empty,
+  /// and nothing walked, when the project is not shared.
+  Map<String, List<int>> _otherGraphKeys(List<GraphChannel> channels) {
+    if (!_share.active) return const {};
+    final out = <String, List<int>>{};
+    for (final person in _share.inComp(_ui?.selectedComp)) {
+      for (final id in person.keys) {
+        final hash = id.lastIndexOf('#');
+        if (hash <= 0) continue;
+        final path = id.substring(0, hash);
+        for (final channel in channels) {
+          if (channel.path == path) {
+            (out['${channel.id}${id.substring(hash)}'] ??= [])
+                .add(person.colour);
+          }
+        }
+      }
+    }
+    return out;
+  }
+
+  /// Someone in the shared project came, went or selected something else.
+  /// The rows follow by themselves. The graph is drawn by the panel, so with
+  /// it showing the panel is what redraws.
+  void _onRoster() {
+    _publishRowSelection();
+    if (!mounted) return;
+    if (_graph || _sharing != _share.active) {
+      setState(() => _sharing = _share.active);
+    }
+  }
+
+  /// Whether the project was shared the last time anyone was heard from,
+  /// which is what puts the others' marks in the lanes and takes them out.
+  bool _sharing = false;
+
   /// Hand the rows the selection as it now stands. Silent when nothing they
   /// draw has changed, so a publish that says the same thing costs no repaint.
   void _publishRowSelection([Map<String, List<Color>>? colours]) {
+    // Whatever changed the rows may have emptied the graph's key selection
+    // with them. Not when a build is what asks, which hands its colours in:
+    // nothing is sent to anyone from a build.
+    if (colours == null) _shareKeys();
     // What the other people in a shared project have selected in this comp.
-    final others = <String, List<int>>{};
-    for (final person in _share.inComp(_ui?.selectedComp)) {
-      for (final layer in person.layers) {
-        (others[layer.internallayerId.toString()] ??= []).add(person.colour);
-      }
-    }
+    // Layers, property rows, and the layer of anything on it they hold.
+    final others = _share.inHand(_ui?.selectedComp);
     final next = TimelineSelection(
       // The shell's list as the rows read it: strings, because that is
       // what a block is keyed by on both sides of the table.
@@ -1425,6 +1482,11 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// Switch views. The easing claim follows, because which panel owns the
   /// selected keys' easing depends on which view is up.
   void _setMode(TimelineMode mode) {
+    // The other view has a key selection of its own, which is now the one
+    // the others in a shared project should see.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _shareKeys();
+    });
     if (mode == _mode) return;
     setState(() => _mode = mode);
     _publishEasingClaim();
@@ -1710,6 +1772,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     if (setEquals(_laneKeysPublished, _laneKeySelection)) return;
     _laneKeysPublished = Set<String>.of(_laneKeySelection);
     _laneKeys.value = UnmodifiableSetView(_laneKeySelection);
+    _shareKeys();
   }
 
   /// The layer drag in flight, read by both halves of the table. A
@@ -1873,7 +1936,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // Someone else selecting a layer marks its row. The roster, not the whole
     // notifier, which also fires for every playhead and pointer move.
     _share = Provider.of<LumitState>(context, listen: false).share
-      ..roster.addListener(_publishRowSelection);
+      ..roster.addListener(_onRoster);
+    _sharing = _share.active;
     // Chained, not overwritten: Effect controls may hold the claim already.
     _priorDeleteClaim = _ui!.deleteClaim;
     _priorCopyClaim = _ui!.copyClaim;
@@ -3083,7 +3147,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   void dispose() {
     _mixRetry?.cancel();
     _itemChanges?.cancel();
-    _share.roster.removeListener(_publishRowSelection);
+    _share.roster.removeListener(_onRoster);
+    // With the panel gone nothing in it is selected, for the others either.
+    _share.keys(const {});
     laneModes.removeListener(_onLaneMode);
     HardwareKeyboard.instance.removeHandler(_onKey);
     _ui?.workspace.presetApplied.removeListener(_onPresetApplied);
@@ -4462,7 +4528,11 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                         ui.tools.tool.group == ToolGroup.pen,
                                     breakHandles: _graphBreakHandles,
                                     selectedKeys: _graphKeySelection,
-                                    onSelectionChanged: () => setState(() {}),
+                                    otherKeys: _otherGraphKeys(channels),
+                                    onSelectionChanged: () {
+                                      _shareKeys();
+                                      setState(() {});
+                                    },
                                     onChanged: ui.model.refresh,
                                     onWheelTime: (e, x) => _wheel(e, x, axis),
                                   ),
@@ -4610,6 +4680,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                           _razorCutAt(ui, entry, frame, ui.model.refresh),
                       vScroll: _vLane,
                       selectedKeys: _laneKeys,
+                      sharing: _sharing,
                       stretch: _keyStretch,
                       project: Provider.of<LumitState>(context, listen: false)
                           .project,

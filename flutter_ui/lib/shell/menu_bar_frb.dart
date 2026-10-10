@@ -344,6 +344,25 @@ class MenuEntry {
   /// Whether pressing this row does anything. A submenu is never "pressed" but
   /// is still live, so it counts as enabled when it has children.
   bool get enabled => onPressed != null || (children?.isNotEmpty ?? false);
+
+  /// Press this row from the keyboard, the way its menu would. False when it
+  /// is greyed out, so the key is left for whatever else wants it.
+  bool press() {
+    final run = current.onPressed;
+    if (run == null) return false;
+    run();
+    return true;
+  }
+
+  /// Press the row among [rows], or under one of them, that carries [action].
+  static bool pressAction(List<MenuEntry> rows, String action) {
+    for (final row in rows) {
+      if (row.action == action) return row.press();
+      final children = row.children;
+      if (children != null && pressAction(children, action)) return true;
+    }
+    return false;
+  }
 }
 
 /// One top-level menu: its heading, and its rows **built when it opens**.
@@ -1097,7 +1116,8 @@ List<MenuSection> lumitMenus(
             // rectangle you swept. Each is greyed until there is one: a comp with
             // no work area is already its own work area, and with no region there
             // is no rectangle to crop to.
-            MenuEntry(l10n.menuTrimCompToWorkArea, _trimAction(app, comp)),
+            MenuEntry(l10n.menuTrimCompToWorkArea, trimCompAction(app, comp),
+                action: 'comp.trim.workarea'),
             MenuEntry(
                 l10n.menuCropCompToRegion,
                 comp == null || ui.regionOfInterest == null
@@ -1182,7 +1202,7 @@ List<MenuSection> lumitMenus(
               if (await showLayerSettingsFrb(context: context, layer: l)) {
                 app.notifyDocumentChanged();
               }
-            })),
+            }), action: 'layer.settings'),
             MenuEntry.divider(),
             MenuEntry.submenu(l10n.menuMask, maskRows(context, app, ui)),
             MenuEntry.submenu(
@@ -1248,6 +1268,9 @@ List<MenuSection> lumitMenus(
                 action: 'layer.sequence.convert'),
             flowRow(app, ui),
             threeDRow(app, ui),
+            lockRow(app, ui),
+            unlockAllRow(app, ui),
+            MenuEntry.submenu(l10n.menuArrange, arrangeRows(app, ui)),
             MenuEntry.submenu(l10n.menuMarkers, markerRows(app, ui)),
             MenuEntry.divider(),
             MenuEntry.todo(l10n.menuPreserveTransparency),
@@ -1447,6 +1470,7 @@ List<MenuSection> lumitMenus(
             MenuEntry.toggle(
               l10n.menuShowWireframe,
               () => ui.setViewerLayerControls(!ui.viewerLayerControls),
+              action: 'viewer.controls.toggle',
               checked: () => ui.viewerLayerControls,
             ),
             // Whether the grid's own lines are things a dragged layer lands on,
@@ -1455,6 +1479,7 @@ List<MenuSection> lumitMenus(
             MenuEntry.toggle(
               l10n.menuSnapToGrid,
               () => ui.tools.snapToGrid = !ui.tools.snapToGrid,
+              action: 'viewer.snap.grid.toggle',
               checked: () => ui.tools.snapToGrid,
             ),
             MenuEntry.divider(),
@@ -1572,11 +1597,8 @@ List<MenuSection> lumitMenus(
             for (final panel in Panel.values)
               MenuEntry.toggle(
                 panel.title,
-                () {
-                  setPanelVisible(
-                      ui.split, panel, !panelVisible(ui.split, panel));
-                  ui.workspace.touch();
-                },
+                () => togglePanel(ui, panel),
+                action: panelToggleAction(panel),
                 checked: () => panelVisible(ui.split, panel),
               ),
             MenuEntry.divider(),
@@ -1587,7 +1609,8 @@ List<MenuSection> lumitMenus(
                 action: 'viewer.new'),
             MenuEntry.divider(),
             MenuEntry(l10n.menuExportQueue,
-                () => showExportQueueFrb(context: context)),
+                () => showExportQueueFrb(context: context),
+                action: 'export.queue.open'),
             MenuEntry(l10n.menuCommandPalette, palette, action: 'palette.open'),
           ]
     ),
@@ -1604,7 +1627,8 @@ List<MenuSection> lumitMenus(
             // pages on docs.lumitlab.com rather than one of them being the
             // marketing site: "online guides" is where you are taught, and that is
             // the walkthrough, not the download page.
-            MenuEntry(l10n.menuLumitHelp, () => _openLink(app, lumitDocsUrl)),
+            MenuEntry(l10n.menuLumitHelp, () => openLumitHelp(app),
+                action: 'help.open'),
             MenuEntry(l10n.menuLumitOnlineGuides,
                 () => _openLink(app, lumitGuidesUrl)),
             MenuEntry(l10n.menuShowTour, () => showTourFrb(context, app, ui)),
@@ -1778,6 +1802,27 @@ String _retimeLabel(LayerReference? layer) {
 Future<void> _openLink(LumitState app, String url) async {
   if (await openExternalLink(url)) return;
   app.postNotice(l10n.couldNotOpenLink(url), error: true);
+}
+
+/// Help ▸ Lumit help, which the keyboard opens too.
+Future<void> openLumitHelp(LumitState app) => _openLink(app, lumitDocsUrl);
+
+/// The keymap action that puts [panel] up and takes it down, for the panels
+/// that have one. They are the ones After Effects has a key for.
+String? panelToggleAction(Panel panel) => switch (panel) {
+      Panel.project => 'panel.toggle.project',
+      Panel.effectControls => 'panel.toggle.effects',
+      Panel.effectsAndPresets => 'panel.toggle.presets',
+      Panel.audio => 'panel.toggle.audio',
+      Panel.text => 'panel.toggle.text',
+      Panel.paragraph => 'panel.toggle.paragraph',
+      _ => null,
+    };
+
+/// Add [panel]'s pane to the arrangement, or drop it, and keep the layout.
+void togglePanel(LumitUiState ui, Panel panel) {
+  setPanelVisible(ui.split, panel, !panelVisible(ui.split, panel));
+  ui.workspace.touch();
 }
 
 Future<void> openProjectFrb(LumitState app,
@@ -1996,7 +2041,7 @@ VoidCallback? _pasteAction(
 /// a deliberate press rather than one per rebuild of the bar — and it is
 /// guarded, like the bar's other engine reads, so a reference that has just
 /// gone dead greys the row instead of taking the menu down with it.
-VoidCallback? _trimAction(LumitState app, CompositionReference? comp) {
+VoidCallback? trimCompAction(LumitState app, CompositionReference? comp) {
   if (comp == null) return null;
   try {
     if (comp.getWorkArea() == null) return null;

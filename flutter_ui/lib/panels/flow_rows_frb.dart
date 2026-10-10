@@ -24,6 +24,7 @@ import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'fx_section.dart';
 import 'keyframe_controls_frb.dart';
+import 'layer_fold_frb.dart' show flowPath;
 
 /// The Flow section for [layer], or nothing when its flow switch is off.
 class FlowRowsFrb extends StatelessWidget {
@@ -71,6 +72,7 @@ class FlowRowsFrb extends StatelessWidget {
 
     return FxSection(
       title: l10n.flowSection,
+      scope: flowPath(layer.internallayerId.toString()),
       open: open,
       onToggle: onToggle,
       rows: [

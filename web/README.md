@@ -131,6 +131,10 @@ frame around it:
 | `graph-workspace.png` | Meet the interface, Graph |
 | `nodes-workspace.png` | Meet the interface, Nodes |
 | `audio-workspace.png` | Meet the interface, Audio |
+| `story-shared.png` | Inside Lumit, Shared projects |
+| `story-setup.png` | Inside Lumit, Setup |
+| `story-shortcuts.png` | Inside Lumit, Shortcuts |
+| `story-text.png` | Inside Lumit, Text |
 
 They sit in `src/assets/` rather than `public/` so Astro's `<Image>` resizes
 each one, re-encodes it as WebP and writes the `srcset` the page serves. Source
@@ -142,6 +146,45 @@ panels shown at their own aspect.
 The tab pictures are whole windows, one per workspace. `timeline.png` is two
 captures cut together on the diagonal, and `node-graph.png` is cut out of
 `nodes-workspace.png` - so replacing that one means recutting this one.
+
+The four `story-` pictures are cut out of whole-window captures, so the interface
+in them can be read. A wide card and a narrow one share a row, and the two
+pictures in a row are cut to come out the same height: 1424 by 864 beside
+1000 by 860, and 1636 by 700 beside 876 by 530.
+
+The small drawings above the ten reasons are diagrams and not captures. They are
+drawn in `src/components/home/Features.astro`.
+
+## Clips
+
+The wide picture and the four `story-` cards each play a clip over the picture. The
+clips are in `src/assets/clips/`, one MP4 a picture under the picture's own name, with
+no sound: `hero.mp4` is the edit playing at its own 24 frames a second, and the rest
+are 30. A clip is the same box as its picture and the picture is the clip's first
+frame, so replacing one means replacing both. A clip is fetched when it first comes on
+screen, plays while it is in view, and is left out for a visitor who has asked for
+less motion.
+
+They are recordings of the application, made a frame at a time: a script puts Lumit in
+the state a frame wants, waits for it to draw, and saves the picture, and ffmpeg makes
+the clip from the frames. The pointer in them is drawn by the script, since the capture
+reads Lumit's own picture and the system's pointer is not in it. The script is not
+checked in.
+
+## Media
+
+`/media` hands out the wordmark, the wordmark opening, and the mark, each on a
+transparent, black, or white background. The files are in `public/media/`. The stills
+are the lockup out of `Wordmark.astro` and the mark out of `assets/brand/`, and the
+animated ones are `Wordmark.astro` posed a frame at a time and handed to ffmpeg, so they
+are the same move the home page plays. The script that makes them is not checked in.
+White letters do not show on white, so the white files have dark letters.
+
+## Sections
+
+Every section opens with `SectionHead.astro`: the ruled line with its name on it,
+the heading, and a line under it. The home page below the hero is one component a
+section, in `src/components/home/`, and each keeps its own words and styles.
 
 ## The front page arrives
 

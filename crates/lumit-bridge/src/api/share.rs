@@ -13,7 +13,7 @@ use std::{
 use flutter_rust_bridge::frb;
 use lumit_core::{Document, DocumentStore};
 use lumit_share::{
-    Conflict, Ending, Event, Invite, Person, Presence, Refusal, ShareError, Sharing,
+    Conflict, Ending, Event, Invite, Person, Presence, Reach, Refusal, ShareError, Sharing,
 };
 use uuid::Uuid;
 
@@ -64,6 +64,10 @@ pub struct BridgeSharePerson {
     /// Their pointer over the Viewer, in composition pixels.
     pub cursor_x: Option<f64>,
     pub cursor_y: Option<f64>,
+    /// The property rows they have selected in the Timeline and the
+    /// keyframes, as the frontend named them in [`ProjectReference::share_presence`].
+    pub properties: Vec<String>,
+    pub keys: Vec<String>,
 }
 
 /// Why sharing stopped for a guest.
@@ -80,6 +84,36 @@ pub enum BridgeShareEnding {
     Unsafe,
     /// The host took this person out of the project.
     Removed,
+}
+
+/// Whether people outside the host's network can reach it.
+#[frb(non_opaque)]
+#[derive(Debug, Clone)]
+pub enum BridgeShareReach {
+    /// The router was not asked. People outside need a VPN, or the port
+    /// forwarded by hand.
+    Off,
+    /// The router is being asked to open the port.
+    Asking,
+    /// The router sends the port to this machine. `address` is the one it
+    /// has on the internet, for the invite of someone outside.
+    Open { address: String },
+    /// No router answered, or it would not open the port.
+    Refused,
+    /// The router is behind another, or behind an address its provider
+    /// shares, so its port opens onto nobody.
+    Behind,
+}
+
+#[frb(ignore)]
+fn reach(reach: Reach) -> BridgeShareReach {
+    match reach {
+        Reach::Off => BridgeShareReach::Off,
+        Reach::Asking => BridgeShareReach::Asking,
+        Reach::Open { address } => BridgeShareReach::Open { address },
+        Reach::Refused => BridgeShareReach::Refused,
+        Reach::Behind => BridgeShareReach::Behind,
+    }
 }
 
 /// What a shared project tells the frontend as it goes.
@@ -100,6 +134,9 @@ pub enum BridgeShareEvent {
     Elsewhere,
     /// Sharing is over for this guest. The project stays open as it is.
     Ended { reason: BridgeShareEnding },
+    /// For a host: what came of asking the router to let people outside
+    /// this network in.
+    Reach { reach: BridgeShareReach },
 }
 
 pub type ShareEventStream = StreamSink<BridgeShareEvent>;
@@ -192,8 +229,16 @@ fn person(project: Uuid, doc: &Document, me: u32, person: Person) -> BridgeShare
         layers,
         playhead,
         cursor,
+        properties,
+        keys,
     } = person.presence;
     let comp = comp.and_then(|id| doc.comp(id));
+    // They name rows of that composition, so they go when it does.
+    let (properties, keys) = if comp.is_some() {
+        (properties, keys)
+    } else {
+        (Vec::new(), Vec::new())
+    };
     BridgeSharePerson {
         id: person.id,
         name: person.name,
@@ -210,6 +255,8 @@ fn person(project: Uuid, doc: &Document, me: u32, person: Person) -> BridgeShare
         playhead: comp.zip(playhead).map(|(c, t)| c.frame_rate.frame_at(t)),
         cursor_x: cursor.map(|(x, _)| x),
         cursor_y: cursor.map(|(_, y)| y),
+        properties,
+        keys,
     }
 }
 
@@ -239,6 +286,7 @@ fn events_for(
             Event::Ended(reason) => BridgeShareEvent::Ended {
                 reason: ending(reason),
             },
+            Event::Reach(now) => BridgeShareEvent::Reach { reach: reach(now) },
         };
         if let Some(sink) = &sink {
             _ = sink.add(event);
@@ -370,15 +418,19 @@ impl ProjectReference {
     ///
     /// `name` is what the others see this person called. Port 0 takes any
     /// free one. `key` is what the last [`BridgeShareStarted::Sharing`] for
-    /// this project gave, or `None` for a new invite. `events` is optional
-    /// the way a project's change stream is, and for the same reason: nothing
-    /// about sharing depends on someone watching.
+    /// this project gave, or `None` for a new invite. `outside` asks this
+    /// network's router to send the port here, so people outside the network
+    /// can join without a VPN. It answers later, as a
+    /// [`BridgeShareEvent::Reach`]. `events` is optional the way a project's
+    /// change stream is, and for the same reason: nothing about sharing
+    /// depends on someone watching.
     #[frb(sync)]
     pub fn share(
         &self,
         name: String,
         port: u16,
         key: Option<String>,
+        outside: bool,
         events: Option<ShareEventStream>,
     ) -> Result<BridgeShareStarted, BridgeError> {
         let (store, root) = {
@@ -399,6 +451,10 @@ impl ProjectReference {
                 Ok(host) => {
                     let (port, key) = (host.port(), lumit_share::key_text(&host.key()));
                     let restored = host.restored() as u32;
+                    // A test never asks the machine's real router anything.
+                    if outside && !cfg!(test) {
+                        host.reach_out();
+                    }
                     shared.insert(self.id, Sharing::Host(host));
                     BridgeShareStarted::Sharing {
                         port,
@@ -412,6 +468,17 @@ impl ProjectReference {
                 Err(_) => BridgeShareStarted::Failed,
             },
         )
+    }
+
+    /// Whether people outside this network can get in, while this machine
+    /// hosts the project. The events carry it as it changes.
+    #[frb(sync)]
+    pub fn share_reach(&self) -> Result<BridgeShareReach, BridgeError> {
+        let shared = SHARED.lock().map_err(|_| BridgeError::ReadFailed)?;
+        Ok(match shared.get(&self.id) {
+            Some(Sharing::Host(host)) => reach(host.reach()),
+            _ => BridgeShareReach::Off,
+        })
     }
 
     /// The invite for a host reached at `address`, to send to whoever is
@@ -501,9 +568,13 @@ impl ProjectReference {
 
     /// Tell the others what this person is looking at: the composition open,
     /// the layers selected in it, the playhead's frame, and the pointer over
-    /// the Viewer in composition pixels. Does nothing when the project is not
-    /// shared. Latest wins, so call it as often as any of them changes.
+    /// the Viewer in composition pixels. `properties` and `keys` are the
+    /// property rows and the keyframes selected in the Timeline, by whatever
+    /// names the frontend matches its own rows with, which the engine passes
+    /// on unread. Does nothing when the project is not shared. Latest wins,
+    /// so call it as often as any of them changes.
     #[frb(sync)]
+    #[allow(clippy::too_many_arguments)]
     pub fn share_presence(
         &self,
         comp: Option<CompositionReference>,
@@ -511,6 +582,8 @@ impl ProjectReference {
         playhead: Option<i64>,
         cursor_x: Option<f64>,
         cursor_y: Option<f64>,
+        properties: Vec<String>,
+        keys: Vec<String>,
     ) -> Result<(), BridgeError> {
         let shared = SHARED.lock().map_err(|_| BridgeError::ReadFailed)?;
         let Some(sharing) = shared.get(&self.id) else {
@@ -529,6 +602,8 @@ impl ProjectReference {
                 .zip(playhead)
                 .and_then(|(c, frame)| c.frame_rate.time_of_frame(frame).ok()),
             cursor: cursor_x.zip(cursor_y),
+            properties,
+            keys,
         });
         Ok(())
     }

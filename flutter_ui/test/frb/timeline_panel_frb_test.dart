@@ -1985,6 +1985,33 @@ void main() {
           reason: 'the stretch is the map, not a hidden multiplier');
     });
 
+    /// Pre-compose is on the row's own menu as well as the Layer menu, and it
+    /// is the same dialogue either way (docs/07 §13.4).
+    testWidgets('Pre-compose on the row menu packs the layer', (tester) async {
+      final p = withComp();
+      final layer = p.comp.addSolidLayer();
+      await mount(tester, p);
+      final id = layer.internallayerId;
+
+      await tester.tapAt(
+        tester.getCenter(find.byKey(ValueKey<String>('tl-row-$id'))),
+        buttons: kSecondaryButton,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('tl-row-precompose')));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+          find.byKey(const ValueKey('precompose-name')), 'Packed');
+      await tester.tap(find.byKey(const ValueKey('precompose-confirm')));
+      await tester.pumpAndSettle();
+
+      final after = p.comp.getLayers();
+      expect(after.single.getName(), 'Packed');
+      expect(after.single.internallayerId, isNot(id),
+          reason: 'the solid is inside the new comp now');
+    });
+
     /// Dragging a layer by its name moves it up or down the stack — layers
     /// used to be stuck in the order they were added, reorderable only from
     /// the row menu one place at a time (docs/07 §4.7).

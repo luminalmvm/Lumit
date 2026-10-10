@@ -39,7 +39,8 @@
 
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show mapEquals;
+import 'package:flutter/foundation.dart' show listEquals, mapEquals;
+import 'package:lumit_flutter/state/share.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
@@ -68,6 +69,14 @@ import 'levels_display_frb.dart';
 import 'roto_display_frb.dart';
 import 'shader_editor.dart';
 import 'fx_section.dart';
+import 'layer_fold_frb.dart'
+    show
+        effectPath,
+        groupFoldPrefix,
+        stylePath,
+        transformGroupPath,
+        transformPath;
+import '../widgets/share_marks.dart';
 import 'timeline_extras_frb.dart' show DoubleTap;
 import 'timeline_metrics_frb.dart' show dimmedIf;
 import 'transform_rows_frb.dart';
@@ -263,9 +272,53 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     HardwareKeyboard.instance.addHandler(_onKey);
   }
 
+  /// The shared project's people, whose rows are marked here as well. Its
+  /// roster is all that is listened to, and it only moves while a project
+  /// is shared.
+  ShareState? _share;
+
+  /// What the others in the shared project have in hand in the comp on
+  /// show: by row name, the colour of each person who has it. Gathered at
+  /// the top of each build from what is already held, and kept as the same
+  /// map while it says the same thing, which is what the rows under
+  /// [ShareRows] go by to know whether to redraw. Empty outside a shared
+  /// project, and then nothing here is built any other way.
+  Map<String, List<int>> _theirs = const {};
+
+  Map<String, List<int>> _gatherTheirs(CompositionReference comp) {
+    final share = _share;
+    if (share == null || !share.active) return const {};
+    final out = <String, List<int>>{};
+    for (final person in share.inComp(comp)) {
+      for (final path in person.properties) {
+        final held = out[path] ??= [];
+        if (!held.contains(person.colour)) held.add(person.colour);
+      }
+    }
+    if (out.length == _theirs.length &&
+        out.entries.every((e) => listEquals(e.value, _theirs[e.key]))) {
+      return _theirs;
+    }
+    return out.isEmpty ? const {} : out;
+  }
+
+  /// Someone came, went or took something else in hand. The rows whose
+  /// marks changed are the ones that redraw.
+  void _onRoster() {
+    if (!mounted) return;
+    if ((_share?.active ?? false) || _theirs.isNotEmpty) setState(() {});
+  }
+
+  /// This person has pressed on the row called [name], which is how the
+  /// others in a shared project see what they are on in a panel with no
+  /// selection of its own.
+  void _onRowTouched(String name) => _boundUi?.touchProperty(name);
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _share ??= Provider.of<LumitState>(context, listen: false).share
+      ..roster.addListener(_onRoster);
     final ui = Provider.of<LumitUiState>(context, listen: false);
     if (identical(ui, _boundUi)) return;
     _unbindDriven();
@@ -425,6 +478,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
 
   @override
   void dispose() {
+    _share?.roster.removeListener(_onRoster);
     _unbindDriven();
     HardwareKeyboard.instance.removeHandler(_onKey);
     super.dispose();
@@ -539,7 +593,20 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     }
     // A node graph has no layers, so the picked box's rows go here instead.
     if (ui.model.isNodeGraph) return const NodePanelFrb();
+    _theirs = _gatherTheirs(comp);
 
+    // The one thing here that is in the tree whether or not the project is
+    // shared. While it is not, it tells the rows to be built as they always
+    // were.
+    return ShareRows(
+      marks: _theirs,
+      onTouch: (_share?.active ?? false) ? _onRowTouched : null,
+      child: _sections(context, ui, comp),
+    );
+  }
+
+  Widget _sections(
+      BuildContext context, LumitUiState ui, CompositionReference comp) {
     return ValueListenableBuilder<UuidValue?>(
       valueListenable: ui.selectedGroupHeader,
       builder: (context, groupId, _) => ValueListenableBuilder<LayerReference?>(
@@ -1898,6 +1965,19 @@ class _EffectSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final id = info.id;
     final values = {for (final v in info.values) v.id: v.value};
+    // What this effect and its rows are called in a shared project: the path
+    // the Timeline gives them, so a row taken in hand in either panel is
+    // marked in both. Null while the project is not shared.
+    final share = ShareRows.maybeOf(context);
+    final named = share != null && share.active ? share : null;
+    final owner = layer.internallayerId.toString();
+    final base = named == null
+        ? ''
+        : style
+            ? stylePath(owner, '$id')
+            : group != null
+                ? effectPath(groupFoldPrefix(group!), '$id')
+                : effectPath(owner, '$id');
 
     // The effect's own display, read at `at` — the Levels histogram traces the
     // frame under the playhead, so this one *is* rebuilt on a scrub, alone.
@@ -1927,6 +2007,7 @@ class _EffectSection extends StatelessWidget {
       open: open,
       onToggle: onToggle,
       pick: pick,
+      theirs: named == null ? const [] : named.under(base),
       onSelect: onSelect,
       renaming: renaming,
       onRenamed: onRenamed,
@@ -2037,7 +2118,7 @@ class _EffectSection extends StatelessWidget {
           if (input.key.startsWith('$id/'))
             _pointsRow(
                 context, input.key.substring('$id/'.length), input.value),
-        ..._paramRows(id, values),
+        ..._paramRows(named, base, id, values),
       ],
     );
   }
@@ -2115,7 +2196,15 @@ class _EffectSection extends StatelessWidget {
   ///   while the named sibling Choice holds a different value;
   /// - two adjacent Float params `foo_x`, `foo_y` fold into one point row
   ///   (with the position dropper for the declared %-of-frame pairs).
-  List<Widget> _paramRows(UuidValue id, Map<String, BridgeEffectValue> values) {
+  List<Widget> _paramRows(ShareRows? named, String base, UuidValue id,
+      Map<String, BridgeEffectValue> values) {
+    // In a shared project each row goes by its Timeline path. Outside one
+    // the rows come back exactly as they are made.
+    Widget marked(String param, String? other, Widget row) => named == null
+        ? row
+        : named.row('$base/$param', row,
+            also: other == null ? null : '$base/$other');
+
     // A plugin hides and shows its own rows, and the instance says which
     // are hidden right now. A group with nothing left to show is not drawn.
     final hidden = info.hiddenRows.toSet();
@@ -2177,7 +2266,10 @@ class _EffectSection extends StatelessWidget {
     };
 
     Widget rowFor(BridgeParamInfo param) {
-      return EffectParamRowFrb(
+      return marked(
+          param.id,
+          null,
+          EffectParamRowFrb(
         key: ValueKey<String>('fx-row-$id-${param.id}'),
         effectId: id,
         param: param,
@@ -2201,7 +2293,7 @@ class _EffectSection extends StatelessWidget {
         ],
         onAction: onAction,
         driven: driven['$id/${param.id}'],
-      );
+      ));
     }
 
     // **The curve fold** (docs/08 §3.30). A run of neighbouring Curve
@@ -2270,7 +2362,10 @@ class _EffectSection extends StatelessWidget {
             next.kind is BridgeParamKind_Float;
         if (isPair) {
           final stem = pairStemOf(info.name, param.id);
-          out.add(EffectPointRowFrb(
+          out.add(marked(
+              param.id,
+              next.id,
+              EffectPointRowFrb(
             key: ValueKey<String>('fx-row-$id-${param.id}-pair'),
             effectId: id,
             xParam: param,
@@ -2294,7 +2389,7 @@ class _EffectSection extends StatelessWidget {
             // data the card already holds — no call rides this rebuild.
             linked: stem != null && info.linkedPairs.contains(stem),
             onToggleLink: stem == null ? null : () => _togglePairLink(stem),
-          ));
+          )));
           i += 2;
         } else {
           out.add(rowFor(param));
@@ -2697,7 +2792,24 @@ class _TransformSection extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => FxSection(
+  Widget build(BuildContext context) {
+    final share = ShareRows.maybeOf(context);
+    final named = share != null && share.active ? share : null;
+    final owner = layer.internallayerId.toString();
+    final rows = TransformRowsFrb(
+      comp: comp,
+      layer: layer,
+      transform: transform,
+      threeD: threeD,
+      kind: kind,
+      twoNode: twoNode,
+      axisModes: axisModes,
+      playheadFrame: playheadFrame,
+      onSeek: onSeek,
+      onChanged: onChanged,
+      twoColumn: true,
+    ).rows(context);
+    return FxSection(
         title: engineLabel('Transform'),
         open: open,
         onToggle: onToggle,
@@ -2727,20 +2839,16 @@ class _TransformSection extends StatelessWidget {
               ),
             ),
         ],
-        rows: TransformRowsFrb(
-          comp: comp,
-          layer: layer,
-          transform: transform,
-          threeD: threeD,
-          kind: kind,
-          twoNode: twoNode,
-          axisModes: axisModes,
-          playheadFrame: playheadFrame,
-          onSeek: onSeek,
-          onChanged: onChanged,
-          twoColumn: true,
-        ).rows(context),
+        theirs: named == null ? const [] : named.under(transformPath(owner)),
+        rows: [
+          for (final row in rows)
+            // Each row by the path its twin in the Timeline has.
+            named != null && row is TransformRowFrb
+                ? named.row(transformGroupPath(owner, row.group), row)
+                : row,
+        ],
       );
+  }
 }
 
 /// The colour a curve channel is drawn in, or null for the ones that take the
