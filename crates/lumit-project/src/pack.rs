@@ -863,6 +863,99 @@ fn unpack_place(
     (media_dir.to_path_buf(), name.to_owned())
 }
 
+/// The file a read-out folder holds, locked, for as long as a project is
+/// reading from it.
+const IN_USE: &str = ".in-use";
+
+/// How long a folder has to sit unopened before it counts as unused. Sooner,
+/// and someone working on two packed projects would read each one out of its
+/// file again on every open.
+const IDLE: Duration = Duration::from_secs(7 * 24 * 60 * 60);
+
+/// Take the folder `doc_id`'s packed files are read out to under `root`, and
+/// remove the other documents' folders there that nobody has used for a week.
+///
+/// A folder is taken by a lock on a marker file in it, which lasts until the
+/// answer is dropped or the process ends, however it ends. Taking it also
+/// stamps the marker with the time. A folder goes only when nobody holds its
+/// marker and the stamp is a week old. A folder with no marker was written by
+/// a Lumit from before there were any, and goes once nothing in it has
+/// changed for a week.
+///
+/// One Lumit at a time is in here, by a lock on a file of `root`'s own, so no
+/// folder is taken while another Lumit is deciding it is free.
+///
+/// `wanted` makes the folder if it is not there. `None` when there is no
+/// folder to take or the lock was refused. Nothing outside `root` is removed,
+/// and no link is followed out of it.
+pub fn hold_read_out(root: &Path, doc_id: Uuid, wanted: bool) -> Option<File> {
+    if wanted {
+        fs::create_dir_all(root).ok()?;
+    }
+    if !fs::symlink_metadata(root).is_ok_and(|meta| meta.is_dir()) {
+        return None;
+    }
+    let gate = lock_file(&root.join(".lock"))?;
+    gate.lock().ok()?;
+
+    let mine = doc_id.to_string();
+    if wanted {
+        let _ = fs::create_dir_all(root.join(&mine));
+    }
+    let held = lock_file(&root.join(&mine).join(IN_USE)).filter(|m| m.lock_shared().is_ok());
+    if let Some(marker) = &held {
+        let _ = marker.set_modified(SystemTime::now());
+    }
+
+    for entry in fs::read_dir(root).into_iter().flatten().flatten() {
+        // Only the folders this module makes, each named for a document. A
+        // link to a folder is not one.
+        let name = entry.file_name();
+        let theirs = name
+            .to_str()
+            .is_some_and(|name| name != mine && Uuid::parse_str(name).is_ok());
+        if !theirs || !entry.file_type().is_ok_and(|kind| kind.is_dir()) {
+            continue;
+        }
+        let dir = entry.path();
+        let marker = dir.join(IN_USE);
+        let unused = match fs::symlink_metadata(&marker) {
+            Ok(meta) if meta.is_file() => {
+                idle(&marker) && lock_file(&marker).is_some_and(|m| m.try_lock().is_ok())
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                idle(&dir)
+                    && fs::read_dir(&dir)
+                        .is_ok_and(|mut inside| inside.all(|e| e.is_ok_and(|e| idle(&e.path()))))
+            }
+            _ => false,
+        };
+        if unused {
+            let _ = fs::remove_dir_all(&dir);
+        }
+    }
+    held
+}
+
+/// Open the file at `path` to lock it, making it if it is not there. A link
+/// is refused, because it could point anywhere.
+fn lock_file(path: &Path) -> Option<File> {
+    if fs::symlink_metadata(path).is_ok_and(|meta| !meta.is_file()) {
+        return None;
+    }
+    let mut open = OpenOptions::new();
+    open.read(true).write(true).create(true).truncate(false);
+    open.open(path).ok()
+}
+
+/// Whether `path` was last changed more than a week ago. Anything that will
+/// not say counts as fresh.
+fn idle(path: &Path) -> bool {
+    fs::symlink_metadata(path)
+        .and_then(|meta| meta.modified())
+        .is_ok_and(|at| at.elapsed().is_ok_and(|age| age >= IDLE))
+}
+
 /// The project an autosave was written beside:
 /// `<dir>/autosaves/<stem>.autosave-<n>.lum` answers `<dir>/<stem>.lum`.
 /// `None` for a path that is not an autosave's.
@@ -1057,6 +1150,26 @@ mod tests {
             fs::read(media.join("config/luts/grade.cube")).unwrap(),
             b"a table"
         );
+
+        // A folder of copies goes once nobody holds it and nobody has opened
+        // it for a week. Held, it stays however old. Let go, it stays for the
+        // week, and so does one written lately with no marker.
+        let root = dir.path().join("packed");
+        let [held, old, unmarked, other] = [(); 4].map(|()| Uuid::now_v7());
+        let folder = |id: Uuid| root.join(id.to_string());
+        let holding = hold_read_out(&root, held, true).unwrap();
+        drop(hold_read_out(&root, old, true));
+        fs::create_dir_all(folder(unmarked)).unwrap();
+        let long_ago = SystemTime::now() - IDLE - Duration::from_secs(60);
+        let marker = File::options().write(true).open(folder(old).join(IN_USE));
+        marker.unwrap().set_modified(long_ago).unwrap();
+        holding.set_modified(long_ago).unwrap();
+        drop(hold_read_out(&root, other, true));
+        assert!(folder(held).is_dir() && !folder(old).exists());
+        drop(holding);
+        drop(hold_read_out(&root, old, false));
+        assert!(!folder(held).exists());
+        assert!(folder(unmarked).is_dir() && folder(other).is_dir());
     }
 
     /// A pack that is cancelled leaves the project file exactly as it was.
