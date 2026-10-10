@@ -5183,14 +5183,52 @@ impl LayerReference {
     /// A self-parent, an unknown layer, or one that would close a cycle is
     /// refused by the op — a parent loop has no defined transform, so unlike a
     /// dangling matte it cannot be allowed to exist and be ignored later.
+    ///
+    /// **The layer does not move.** Its transform is rewritten in the same
+    /// undo step so it sits where it sat at `frame`, the playhead. Only what
+    /// the parent does afterwards carries it.
     #[frb(sync)]
-    pub fn set_parent(&self, parent: Option<Uuid>) -> Result<(), BridgeError> {
+    pub fn set_parent(&self, parent: Option<Uuid>, frame: i64) -> Result<(), BridgeError> {
         let (comp, layer) = (self.comp_id, self.layer_id);
-        self.commit(lumit_core::Op::SetLayerParent {
+        let doc = self.document()?;
+        let c = doc.comp(comp).ok_or(BridgeError::InvalidItem)?;
+        let l = c
+            .layers
+            .iter()
+            .find(|l| l.id == layer)
+            .ok_or(BridgeError::InvalidLayer)?;
+        let t = c
+            .frame_rate
+            .time_of_frame(frame)
+            .map_err(|_| BridgeError::InvalidTime)?
+            .0
+            .to_f64();
+        let context = std::sync::Arc::new(lumit_core::expression::ExpressionContext {
+            document: doc.clone(),
+            comp: Some(comp),
+            layer: Some(layer),
+            comp_time: t,
+            current_depth: 0,
+            inputs: None,
+        });
+        // The parent goes first: it names the undo step, and a refused one
+        // takes the transform edits down with it.
+        let mut ops = vec![lumit_core::Op::SetLayerParent {
             comp,
             layer,
             parent,
-        })
+        }];
+        ops.extend(
+            lumit_render::build::reparented(c, l, parent, t, context)
+                .into_iter()
+                .map(|(prop, animation)| lumit_core::Op::SetTransformProperty {
+                    comp,
+                    layer,
+                    prop,
+                    animation,
+                }),
+        );
+        self.commit(lumit_core::Op::Batch { ops })
     }
 
     /// Move this layer to `new_index` in the stack (0 = top).

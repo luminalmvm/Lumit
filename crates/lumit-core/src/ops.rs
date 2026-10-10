@@ -2572,12 +2572,39 @@ fn shifted(animation: &Animation, delta: f64) -> Option<Animation> {
     if delta == 0.0 {
         return None;
     }
+    remapped(animation, 1.0, delta)
+}
+
+/// `animation` with every value `v` made `gain * v + offset`, or `None` for
+/// an expression, which has no values to move. A key's speed is a slope, so
+/// it takes the gain and not the offset.
+#[must_use]
+pub fn remapped(animation: &Animation, gain: f64, offset: f64) -> Option<Animation> {
+    use crate::anim::SideInterp as S;
+    let side = |s: S| match s {
+        S::Bezier { speed, influence } => S::Bezier {
+            speed: speed * gain,
+            influence,
+        },
+        S::Auto {
+            clamped,
+            speed,
+            influence,
+        } => S::Auto {
+            clamped,
+            speed: speed * gain,
+            influence,
+        },
+        other => other,
+    };
     match animation {
-        Animation::Static(v) => Some(Animation::Static(v + delta)),
+        Animation::Static(v) => Some(Animation::Static(gain * v + offset)),
         Animation::Keyframed(keys) => Some(Animation::Keyframed(
             keys.iter()
                 .map(|k| crate::anim::Keyframe {
-                    value: k.value + delta,
+                    value: gain * k.value + offset,
+                    interp_in: side(k.interp_in),
+                    interp_out: side(k.interp_out),
                     ..*k
                 })
                 .collect(),

@@ -975,7 +975,12 @@ class ParentPickerFrb extends StatelessWidget {
           // A cycle is refused engine-side; the picker reports nothing and the
           // row keeps the parent it had.
           try {
-            layer.setParent(parent: id);
+            // The layer holds its place on the frame it is parented at.
+            layer.setParent(
+                parent: id,
+                frame: Provider.of<LumitUiState>(context, listen: false)
+                    .playheadFrame
+                    .value);
           } catch (_) {
             return;
           }

@@ -1473,7 +1473,9 @@ abstract class BridgeLibApi extends BaseApi {
       {required LayerReference that, required BridgeScalar value});
 
   void crateApiLayerLayerReferenceSetParent(
-      {required LayerReference that, UuidValue? parent});
+      {required LayerReference that,
+      UuidValue? parent,
+      required PlatformInt64 frame});
 
   void crateApiLayerLayerReferenceSetPuppet(
       {required LayerReference that, BridgePuppet? puppet});
@@ -12592,12 +12594,15 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
 
   @override
   void crateApiLayerLayerReferenceSetParent(
-      {required LayerReference that, UuidValue? parent}) {
+      {required LayerReference that,
+      UuidValue? parent,
+      required PlatformInt64 frame}) {
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
         sse_encode_opt_Uuid(parent, serializer);
+        sse_encode_i_64(frame, serializer);
         return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 378)!;
       },
       codec: SseCodec(
@@ -12606,7 +12611,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
             sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBridgeError,
       ),
       constMeta: kCrateApiLayerLayerReferenceSetParentConstMeta,
-      argValues: [that, parent],
+      argValues: [that, parent, frame],
       apiImpl: this,
     ));
   }
@@ -12614,7 +12619,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   TaskConstMeta get kCrateApiLayerLayerReferenceSetParentConstMeta =>
       const TaskConstMeta(
         debugName: "layer_reference_set_parent",
-        argNames: ["that", "parent"],
+        argNames: ["that", "parent", "frame"],
       );
 
   @override

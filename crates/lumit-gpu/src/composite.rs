@@ -198,6 +198,34 @@ pub fn concat_place(outer: [[f32; 4]; 4], inner: [[f32; 4]; 4]) -> [[f32; 4]; 4]
     (Mat4::from_cols_array_2d(&outer) * Mat4::from_cols_array_2d(&inner)).to_cols_array_2d()
 }
 
+/// The placement that undoes `m`, for carrying a layer back out of a parent's
+/// space. `None` when there is none, as under a parent scaled to nought.
+pub fn invert_place(m: [[f32; 4]; 4]) -> Option<[[f32; 4]; 4]> {
+    let m = Mat4::from_cols_array_2d(&m);
+    (m.determinant() != 0.0).then(|| m.inverse().to_cols_array_2d())
+}
+
+/// [`place_matrix`] read backwards: the position, scale and rotations that
+/// place a layer with this `anchor` as `m` does. Exact for anything
+/// `place_matrix` can make. A sheared `m` (a turned layer under an unevenly
+/// scaled parent) has no such answer and gets the nearest one.
+pub fn unplace_matrix(m: [[f32; 4]; 4], anchor: (f32, f32)) -> MbSample {
+    let m = Mat4::from_cols_array_2d(&m);
+    let (scale, rotation, _) = m.to_scale_rotation_translation();
+    // The order `place_matrix` multiplies them in: Ry · Rx · Rz.
+    let (ry, rx, rz) = rotation.to_euler(glam::EulerRot::YXZ);
+    let at = m.transform_point3(glam::vec3(anchor.0, anchor.1, 0.0));
+    MbSample {
+        position: (at.x, at.y),
+        anchor,
+        scale: (scale.x * 100.0, scale.y * 100.0),
+        rotation_deg: rz.to_degrees(),
+        z: at.z,
+        rotation_x_deg: rx.to_degrees(),
+        rotation_y_deg: ry.to_degrees(),
+    }
+}
+
 /// A **region of interest**: the sub-rectangle of a composition the
 /// preview is asked to composite, in logical comp pixels. Never reaches the
 /// export renderer, exactly as the preview scale never does.
