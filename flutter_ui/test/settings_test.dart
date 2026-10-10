@@ -130,7 +130,7 @@ void main() {
 
     final first = Workspace()..load();
     expect(first.firstRunDone, isFalse);
-    first.setEditingStyle(vegas: true);
+    first.setEditingStyle(speedGraph: true, sequenceLayers: true);
 
     final second = Workspace()..load();
     expect(second.firstRunDone, isTrue);

@@ -1620,9 +1620,17 @@
   "@firstRunAutoUpdate": {
     "description": "First run: the sentence beside the automatic-updates checkbox."
   },
+  "firstRunCut": "Footage arrives on Sequence layers, and Lumit opens in the Cut workspace.",
+  "@firstRunCut": {
+    "description": "First run: what choosing Premiere Pro or Resolve habits does. Sequence layer and Cut (the workspace) are Lumit product terms."
+  },
+  "firstRunCutName": "Premiere Pro or Resolve",
+  "@firstRunCutName": {
+    "description": "First run: the name of the third card, the two editors it is for. Product names, so leave them as they are."
+  },
   "firstRunTitle": "Editing style",
   "@firstRunTitle": {
-    "description": "First-run screen: heading over its first question, whose two answers are After Effects and Vegas."
+    "description": "First-run screen: heading over its first question, whose three answers are After Effects, Vegas, and Premiere Pro or Resolve."
   },
   "firstRunVegas": "Video arrives as a Sequence layer to cut into clips, and the Retime graph shows speed as a percentage.",
   "@firstRunVegas": {
