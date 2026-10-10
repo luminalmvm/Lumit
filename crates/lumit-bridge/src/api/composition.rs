@@ -2388,6 +2388,10 @@ impl CompositionReference {
     /// the loop modes are the frontend's, and a ping-pong asks for every
     /// other leg reversed. The frame given is shown first in both directions,
     /// so a ping-pong turns at the end minus one.
+    ///
+    /// `speed` is how many times the comp's rate the leg runs at, 1 for
+    /// ordinary playback and 2, 4 or 8 for the J and L shuttle. A faster leg
+    /// keeps time by skipping frames, in either direction, and is silent.
     #[frb(sync)]
     pub fn play(
         &self,
@@ -2396,8 +2400,12 @@ impl CompositionReference {
         mode: BridgePlaybackMode,
         view: u32,
         reverse: bool,
+        speed: u32,
     ) -> Result<(), BridgeError> {
-        let audio = if reverse {
+        // ponytail: sound plays forwards at the comp's rate only. Pitch-shifted
+        // or reversed sound is out of scope: it needs a resampling mix, and
+        // the audio clock scaled to match before it could be master.
+        let audio = if reverse || speed != 1 {
             // The forward leg's mix is still running: stop it, and give the
             // worker nothing to start.
             crate::api::audio::audio_pause();
@@ -2431,6 +2439,7 @@ impl CompositionReference {
                 mode,
                 scale,
                 reverse,
+                speed,
                 audio,
                 view,
             },

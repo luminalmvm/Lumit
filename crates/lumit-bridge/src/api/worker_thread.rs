@@ -1754,6 +1754,9 @@ pub struct PlayRequest {
     /// are the frontend's: it restarts a leg at the far end, and a ping-pong
     /// asks for every other leg reversed.
     pub reverse: bool,
+    /// How many times the comp's rate the leg runs at: the J and L shuttle.
+    /// Above 1 the leg keeps time by skipping frames, whatever `mode` says.
+    pub speed: u32,
     /// The document the mix is to be built from, snapshotted where play was
     /// asked for rather than read on this thread — the mix must be of the comp
     /// as it was when the button was pressed. The sound itself is started here,
@@ -1797,6 +1800,9 @@ struct Playback {
     last: u64,
     /// Counting down rather than up. A reverse leg ends after frame zero.
     reverse: bool,
+    /// How many frames each step of the leg covers: 1, or a shuttle's 2, 4 or
+    /// 8. Above 1 the leg has no sound and runs on the wall clock.
+    speed: u64,
     /// True once the leg has given out its final frame, because `next` cannot
     /// step below zero to say so.
     ended: bool,
@@ -1899,13 +1905,24 @@ impl Playback {
         }
     }
 
+    /// Whether the leg has no sound to follow, so the wall clock times it: a
+    /// reverse leg, or a shuttle faster than the comp's rate.
+    fn silent(&self) -> bool {
+        self.reverse || self.speed > 1
+    }
+
     /// The frame the clock has reached. Counting up from `from` on the audio
-    /// clock, or down from it on the wall clock on a reverse leg, which has
-    /// no sound to follow.
+    /// clock, or away from it on the wall clock on a silent leg, at the
+    /// shuttle's speed.
     fn clock_frame(&self) -> u64 {
-        if self.reverse {
-            let passed = (self.started.elapsed().as_secs_f64() * self.fps).floor() as u64;
-            self.from.saturating_sub(passed)
+        if self.silent() {
+            let rate = self.fps * self.speed as f64;
+            let passed = (self.started.elapsed().as_secs_f64() * rate).floor() as u64;
+            if self.reverse {
+                self.from.saturating_sub(passed)
+            } else {
+                self.from.saturating_add(passed)
+            }
         } else {
             (self.elapsed_seconds() * self.fps).floor().max(0.0) as u64
         }
@@ -1997,10 +2014,11 @@ impl Playback {
                 (due > now).then(|| due - now)
             }
             BridgePlaybackMode::Adaptive => {
-                // A reverse leg is due `from - front` periods after it started.
-                let (due, clock) = if self.reverse {
+                // A silent leg is due however far `front` is from `from`, at
+                // the shuttle's speed, after it started.
+                let (due, clock) = if self.silent() {
                     (
-                        self.from.saturating_sub(front) as f64 / self.fps,
+                        self.from.abs_diff(front) as f64 / (self.fps * self.speed as f64),
                         self.started.elapsed().as_secs_f64(),
                     )
                 } else {
@@ -2040,19 +2058,33 @@ impl Playback {
                 }
             }
         };
-        self.skipped = frame.abs_diff(self.next);
+        // Counted in steps of the leg, so a shuttle's own stride is not
+        // mistaken for falling behind.
+        self.skipped = frame.abs_diff(self.next) / self.speed;
         if self.reverse {
             // Counting down never leaves the composition: the leg ends after
             // frame zero, which `next` cannot step below to say.
             self.ended = frame == 0;
-            self.next = frame.saturating_sub(1);
+            self.next = frame.saturating_sub(self.speed);
             return Some(frame);
         }
+        // A shuttle strides over frames, and one that cleared the last frame
+        // would end the leg without showing it. The frontend's loop turns on
+        // seeing the end, so a shuttle is held to it.
+        let frame = if self.speed > 1 {
+            frame.min(self.last)
+        } else {
+            frame
+        };
         if frame > self.last {
             self.next = frame;
             return None;
         }
-        self.next = frame + 1;
+        self.next = if frame < self.last {
+            (frame + self.speed).min(self.last)
+        } else {
+            frame + 1
+        };
         Some(frame)
     }
 
@@ -3072,22 +3104,28 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
                 // thread before this frame's render occupies the loop, so those
                 // decodes and this composite run at the same time. The watermark
                 // posts each frame once per run; an adaptive skip jumps it
-                // along with the playhead. A reverse leg walks down instead.
+                // along with the playhead. A reverse leg walks down instead,
+                // and a shuttle asks only for the frames its stride lands on.
+                let speed = playback.speed;
+                let reach = crate::playback::PREFETCH_AHEAD * speed;
                 let coming: Vec<u64> = if playback.reverse {
-                    let stop = frame.saturating_sub(crate::playback::PREFETCH_AHEAD);
+                    let stop = frame.saturating_sub(reach);
                     let start = playback
                         .prefetched_to
                         .map_or(frame, |posted| posted.min(frame));
-                    (stop..start).rev().collect()
+                    (stop..start)
+                        .rev()
+                        .filter(|ahead| (frame - ahead).is_multiple_of(speed))
+                        .collect()
                 } else {
-                    let ahead_to = frame
-                        .saturating_add(crate::playback::PREFETCH_AHEAD)
-                        .min(playback.last);
+                    let ahead_to = frame.saturating_add(reach).min(playback.last);
                     let from = playback
                         .prefetched_to
                         .map_or(frame + 1, |posted| posted + 1)
                         .max(frame + 1);
-                    (from..=ahead_to).collect()
+                    (from..=ahead_to)
+                        .filter(|ahead| (ahead - frame).is_multiple_of(speed))
+                        .collect()
                 };
                 for &future in &coming {
                     let wants = state
@@ -3341,11 +3379,18 @@ fn start_playback(req: PlayRequest, state: &mut WorkerState) -> Result<(), Bridg
     // retires the frames it made.
     state.renderer.sync_colour(&document);
     state.renderer.presync_items(&document, comp_id);
+    // The engine clamps the shuttle: a speed of zero would never leave `from`.
+    let speed = req.speed.clamp(1, 8) as usize;
     // The stretch the leg is about to play, nearest first.
     let asks: Vec<u64> = if req.reverse {
-        (from.saturating_sub(DISK_PRE_ASK)..=from).rev().collect()
+        (from.saturating_sub(DISK_PRE_ASK)..=from)
+            .rev()
+            .step_by(speed)
+            .collect()
     } else {
-        (from..=from.saturating_add(DISK_PRE_ASK).min(last)).collect()
+        (from..=from.saturating_add(DISK_PRE_ASK).min(last))
+            .step_by(speed)
+            .collect()
     };
     let view = state.view_id();
     for frame in asks {
@@ -3390,9 +3435,16 @@ fn start_playback(req: PlayRequest, state: &mut WorkerState) -> Result<(), Bridg
         next: from,
         last,
         reverse: req.reverse,
+        speed: speed as u64,
         ended: false,
         pre_rolled: false,
-        mode: req.mode,
+        // A shuttle follows its clock and skips what it cannot make in time,
+        // which is adaptive's rule whatever the setting says.
+        mode: if speed > 1 {
+            BridgePlaybackMode::Adaptive
+        } else {
+            req.mode
+        },
         scale: req.scale,
         fps: if fps > 0.0 { fps } else { 60.0 },
         from,
@@ -5680,6 +5732,7 @@ mod tests {
             next: 0,
             last,
             reverse: false,
+            speed: 1,
             ended: false,
             pre_rolled: false,
             mode,
@@ -5750,6 +5803,17 @@ mod tests {
         }
         assert_eq!(p.advance(), None, "after frame zero, the leg is over");
         assert!(!p.has_more(), "and it stays over");
+
+        // A shuttle strides over frames and still shows the end of its leg,
+        // backwards and forwards.
+        p = playback(BridgePlaybackMode::EveryFrame, 10);
+        (p.reverse, p.speed, p.from, p.next) = (true, 4, 9, 9);
+        let back: Vec<_> = std::iter::from_fn(|| p.advance()).collect();
+        assert_eq!(back, [9, 5, 1, 0]);
+        p = playback(BridgePlaybackMode::EveryFrame, 10);
+        p.speed = 4;
+        let forward: Vec<_> = std::iter::from_fn(|| p.advance()).collect();
+        assert_eq!(forward, [0, 4, 8, 10]);
     }
 
     /// **The cached-playback regression, on the present side.** Every-frame is
