@@ -412,6 +412,17 @@ class KeymapState extends ChangeNotifier {
     }
   }
 
+  /// Hand the engine the workspace's shortcuts again, after a profile or a
+  /// sync put different ones there. None stored is the shipped defaults.
+  Future<void> restore() async {
+    final stored = _workspace?.keymapJson;
+    if (stored == null || stored.isEmpty) {
+      await loadPreset(BridgeKeymapPreset.lumit);
+    } else {
+      await fromJson(stored);
+    }
+  }
+
   /// Hand the engine whatever the workspace stored, if anything. A blob that
   /// no longer parses is ignored rather than fatal: the session starts on the
   /// shipped defaults, which is a working keyboard, and the next edit rewrites
