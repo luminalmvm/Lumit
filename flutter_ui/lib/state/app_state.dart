@@ -293,6 +293,17 @@ class LumitState extends ChangeNotifier {
         share.setReach(reach);
       case BridgeShareEvent_Relayed(:final relayed):
         share.setRelayed(relayed);
+      case BridgeShareEvent_Footage(:final placed):
+        // A footage item is being read from a file that has just arrived,
+        // so every panel reads again and the Viewer draws again, the way
+        // they do when an item is relinked.
+        final open = project;
+        if (placed && open != null) {
+          handleChange(ScopedChange(project: open, items: true));
+        }
+        share.footageChanged();
+      case BridgeShareEvent_ExportAsked(:final job, :final from, :final comp):
+        share.exportAsked(job, from, comp);
       case BridgeShareEvent_Ended(:final reason):
         stopSharing();
         postNotice(shareEndingText(reason),

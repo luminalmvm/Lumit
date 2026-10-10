@@ -907,6 +907,22 @@ class _SettingsWindowState extends State<_SettingsWindow> {
 
   // ---- the pages -----------------------------------------------------------
 
+  /// A speed limit for footage in a shared project, in kilobytes a second,
+  /// from a short list. Whatever was typed in the Shared project window is
+  /// in the list too, so this never shows a number that is not the one set.
+  Widget _shareLimit(String key, int now, ValueChanged<int> set) =>
+      _dropdown<int>(
+        key: key,
+        value: now,
+        options: {0, 128, 256, 512, 1024, 2048, 5120, 10240, 25600, now}.toList()
+          ..sort(),
+        width: _ddWide,
+        label: (limit) => limit == 0
+            ? l10n.settingsShareNoLimit
+            : l10n.settingsShareLimitValue(limit),
+        onChanged: (limit) => setState(() => set(limit)),
+      );
+
   List<Widget> _general(LumitTheme t, LumitUiState ui) => _sections(t, [
         (
           l10n.settingsGroupDisplay,
@@ -929,6 +945,26 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                     : languageNames[tag]!,
                 onChanged: (tag) => setState(() => ui.setLanguage(tag)),
               ),
+            ),
+          ],
+        ),
+        (
+          l10n.settingsGroupSharing,
+          [
+            _row(
+              t,
+              l10n.settingsShareUpLimit,
+              _shareLimit('settings-share-up-limit', ui.workspace.shareUpLimit,
+                  (limit) => ui.workspace.setShareLimits(up: limit)),
+              description: l10n.settingsShareLimitHint,
+            ),
+            _row(
+              t,
+              l10n.settingsShareDownLimit,
+              _shareLimit(
+                  'settings-share-down-limit',
+                  ui.workspace.shareDownLimit,
+                  (limit) => ui.workspace.setShareLimits(down: limit)),
             ),
           ],
         ),

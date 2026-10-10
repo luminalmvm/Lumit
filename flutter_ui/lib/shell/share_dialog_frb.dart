@@ -132,6 +132,10 @@ class _ShareDialogState extends State<_ShareDialog> {
   /// The password a host sets, or a guest gives with a link that needs one.
   final TextEditingController _password = TextEditingController();
 
+  /// How fast this computer sends and takes footage, in kilobytes a second.
+  late final TextEditingController _upLimit;
+  late final TextEditingController _downLimit;
+
   /// The link in the field wants a password with it.
   bool _needsPassword = false;
 
@@ -199,6 +203,11 @@ class _ShareDialogState extends State<_ShareDialog> {
     _password.addListener(_redraw);
     _readInvite();
     _outside = _prefs.shareOutside;
+    String limit(int kilobytes) => kilobytes == 0 ? '' : '$kilobytes';
+    _upLimit = TextEditingController(text: limit(_prefs.shareUpLimit))
+      ..addListener(_readLimits);
+    _downLimit = TextEditingController(text: limit(_prefs.shareDownLimit))
+      ..addListener(_readLimits);
     _address.addListener(_readLink);
     widget.app.share.roster.addListener(_readLink);
     _link = _linkNow();
@@ -214,6 +223,8 @@ class _ShareDialogState extends State<_ShareDialog> {
     _joinInvite.dispose();
     _newInvite.dispose();
     _password.dispose();
+    _upLimit.dispose();
+    _downLimit.dispose();
     super.dispose();
   }
 
@@ -233,6 +244,15 @@ class _ShareDialogState extends State<_ShareDialog> {
     }
     _needsPassword = locked;
     _redraw();
+  }
+
+  /// The limits as typed. Anything that is not a number is no limit.
+  void _readLimits() {
+    final up = int.tryParse(_upLimit.text.trim()) ?? 0;
+    final down = int.tryParse(_downLimit.text.trim()) ?? 0;
+    if (up != _prefs.shareUpLimit || down != _prefs.shareDownLimit) {
+      _prefs.setShareLimits(up: up, down: down);
+    }
   }
 
   /// The password typed, or null for none.
@@ -409,7 +429,7 @@ class _ShareDialogState extends State<_ShareDialog> {
     // Who is here changing is also how this hears sharing start and stop, and
     // the host being lost and found.
     return ListenableBuilder(
-      listenable: share.roster,
+      listenable: Listenable.merge([share.roster, share.footage]),
       builder: (context, _) => DialogFrame(
         width: shareDialogWidth,
         children: [
@@ -436,8 +456,18 @@ class _ShareDialogState extends State<_ShareDialog> {
           _body(switch ((share.role, _page)) {
             (ShareRole.none, _Page.share) => _startRows(t),
             (ShareRole.none, _Page.join) => _joinRows(t),
-            (ShareRole.host, _) => [..._inviteRows(t, share), _people(t, share)],
-            (ShareRole.guest, _) => [..._guestRows(t, share), _people(t, share)],
+            (ShareRole.host, _) => [
+                ..._inviteRows(t, share),
+                _people(t, share),
+                ..._transfers(t, share),
+              ],
+            (ShareRole.guest, _) => [
+                ..._guestRows(t, share),
+                _people(t, share),
+                ..._transfers(t, share),
+                _advancedFold(t),
+                if (_advanced) ..._footageRows(t),
+              ],
           }),
           dialogFooter(
             t,
@@ -602,6 +632,93 @@ class _ShareDialogState extends State<_ShareDialog> {
             style: t.small),
       );
 
+  /// A tick box with what it means beside it.
+  Widget _tick(LumitTheme t, String id, String text, bool on,
+          ValueChanged<bool> onChanged) =>
+      Padding(
+        padding: const EdgeInsets.only(bottom: 4),
+        child: Row(
+          children: [
+            HouseCheckbox(
+                key: ValueKey<String>(id), value: on, onChanged: onChanged),
+            const SizedBox(width: 6),
+            Expanded(child: Text(text, style: t.small)),
+          ],
+        ),
+      );
+
+  /// A speed limit: a number, and the unit it is in.
+  Widget _limitRow(LumitTheme t, String label, String id,
+          TextEditingController controller) =>
+      dialogRow(
+        t,
+        label,
+        Row(
+          children: [
+            Expanded(
+                child: _field(t, id, controller, hint: l10n.shareLimitNone)),
+            const SizedBox(width: 8),
+            Text(l10n.shareLimitUnit,
+                style: t.small.copyWith(color: t.textMuted)),
+          ],
+        ),
+        labelColumn: _labelColumn,
+      );
+
+  /// Footage for whoever has not got it: whether this computer sends any
+  /// and asks for any, and how fast. The computer's, not the project's, so
+  /// it is the same rows on every page and takes effect as it is changed.
+  List<Widget> _footageRows(LumitTheme t) => [
+        const SizedBox(height: 6),
+        dialogRow(
+          t,
+          l10n.shareFootage,
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _tick(t, 'share-give', l10n.shareGive, _prefs.shareGive, (on) {
+                _prefs.setShareFootage(give: on);
+                setState(() {});
+              }),
+              _tick(t, 'share-take', l10n.shareTake, _prefs.shareTake, (on) {
+                _prefs.setShareFootage(take: on);
+                setState(() {});
+              }),
+            ],
+          ),
+          labelColumn: _labelColumn,
+        ),
+        _limitRow(t, l10n.shareUpLimit, 'share-up-limit', _upLimit),
+        _limitRow(t, l10n.shareDownLimit, 'share-down-limit', _downLimit),
+        _line(t, l10n.shareLimitHint),
+      ];
+
+  /// The footage crossing just now, each way, and how far along it is.
+  List<Widget> _transfers(LumitTheme t, ShareState share) {
+    final moving = share.transfers();
+    if (moving.isEmpty) return const [];
+    String line(BridgeShareTransfer transfer) {
+      final total = transfer.total.toInt();
+      final percent =
+          total == 0 ? 0 : (transfer.done.toInt() * 100 / total).round();
+      final name = transfer.name.isEmpty ? l10n.shareAnExport : transfer.name;
+      return transfer.sending
+          ? l10n.shareSending(name, percent)
+          : l10n.shareTaking(name, percent);
+    }
+
+    return [
+      dialogGroup(t, l10n.shareFootage, [
+        for (final transfer in moving)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: Text(line(transfer),
+                style: t.small, overflow: TextOverflow.ellipsis),
+          ),
+      ]),
+    ];
+  }
+
   /// Sharing the open project: who this person is, and under the fold where
   /// to listen and how people far away get in.
   List<Widget> _startRows(LumitTheme t) => [
@@ -648,6 +765,7 @@ class _ShareDialogState extends State<_ShareDialog> {
             labelColumn: _labelColumn,
           ),
           _line(t, l10n.shareRelayHint),
+          ..._footageRows(t),
         ],
         if (_error case final error?) _line(t, error, warning: true),
       ];
@@ -696,6 +814,8 @@ class _ShareDialogState extends State<_ShareDialog> {
           labelColumn: _labelColumn,
         ),
         _line(t, l10n.shareFootageHint),
+        _advancedFold(t),
+        if (_advanced) ..._footageRows(t),
         if (_error case final error?) _line(t, error, warning: true),
       ];
 
@@ -758,6 +878,7 @@ class _ShareDialogState extends State<_ShareDialog> {
             labelColumn: _labelColumn,
           ),
           _line(t, l10n.shareAddressHint),
+          ..._footageRows(t),
         ],
         const SizedBox(height: dialogGroupGap),
       ];
@@ -853,6 +974,93 @@ class _ShareDialogState extends State<_ShareDialog> {
             ),
           ),
       ]);
+}
+
+// --- Exporting for someone ------------------------------------------------
+
+/// Ask whether this computer should do the export someone else asked of it.
+/// Yes puts it in the queue here and sends them the file when it is done.
+Future<void> showExportAskFrb(BuildContext context, LumitState app,
+    ({String job, int from, String comp}) ask) async {
+  final who = app.share.nameOf(ask.from) ?? l10n.shareDefaultName;
+  final yes = await showLumitModal<bool>(
+    context: context,
+    id: 'share-export-ask',
+    builder: (close) => _Question(
+      title: l10n.shareExportAskTitle(who),
+      body: l10n.shareExportAskBody(who, ask.comp),
+      no: l10n.shareExportAskNo,
+      yes: l10n.shareExportAskYes,
+      keyPrefix: 'share-export-ask',
+      onChoose: close,
+    ),
+  );
+  app.share.answerExport(ask.job, yes: yes == true);
+}
+
+/// A small question with two answers, the careful one the default.
+class _Question extends StatelessWidget {
+  final String title;
+  final String body;
+  final String no;
+  final String yes;
+  final String keyPrefix;
+  final ValueChanged<bool?> onChoose;
+
+  const _Question({
+    required this.title,
+    required this.body,
+    required this.no,
+    required this.yes,
+    required this.keyPrefix,
+    required this.onChoose,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    return FloatSurface(
+      width: 380,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(10),
+            child: Text(title, style: t.bodyPrimary),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Text(body, style: t.small.copyWith(color: t.textMuted)),
+          ),
+          const SizedBox(height: 14),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                HouseButton(
+                  key: ValueKey<String>('$keyPrefix-no'),
+                  small: true,
+                  primary: true,
+                  autofocus: true,
+                  onPressed: () => onChoose(false),
+                  child: Text(no),
+                ),
+                const SizedBox(width: 8),
+                HouseButton(
+                  key: ValueKey<String>('$keyPrefix-yes'),
+                  small: true,
+                  onPressed: () => onChoose(true),
+                  child: Text(yes, style: t.small),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 // --- Showing a link -------------------------------------------------------

@@ -369,7 +369,9 @@ pub(crate) fn to_export_spec(
 }
 
 #[cfg(not(feature = "media"))]
-fn from_export_spec(_spec: &lumit_render::export::ExportSpec) -> Option<BridgeExportSpec> {
+pub(crate) fn from_export_spec(
+    _spec: &lumit_render::export::ExportSpec,
+) -> Option<BridgeExportSpec> {
     None
 }
 
@@ -515,7 +517,9 @@ pub(crate) fn to_export_spec(
 /// [`to_export_spec`], so a preset saved from the dialogue comes back as the
 /// settings that saved it.
 #[cfg(feature = "media")]
-fn from_export_spec(spec: &lumit_render::export::ExportSpec) -> Option<BridgeExportSpec> {
+pub(crate) fn from_export_spec(
+    spec: &lumit_render::export::ExportSpec,
+) -> Option<BridgeExportSpec> {
     use lumit_media::encode::BitDepth;
     use lumit_render::export::{
         AlphaMode, Bitrate, Channels, DiskCachePolicy, MotionBlurOverride, RetimeBlendOverride,

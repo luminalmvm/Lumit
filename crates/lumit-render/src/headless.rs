@@ -3563,6 +3563,77 @@ fn footage_source(f: &FootageItem) -> lumit_media::MediaSource {
 
 /// Probe one footage path into a [`Probe`]. A path that is not a file, an
 /// unreadable file, or one whose frame index will not build falls to
+/// Which source frames of each footage item an export of `comp_id` by `spec`
+/// reads: the frame under each one it writes, with whatever a frame blend,
+/// a temporal effect, motion blur or an edit point beside it reads as well.
+/// What tells a machine without the originals which parts of them to ask
+/// for.
+///
+/// It runs the plan the export itself runs, once for every frame it writes,
+/// so the two cannot want different frames. Gives up, with what it has, once
+/// `stop` is set. Any thread but the UI's: a long comp is a long walk.
+#[must_use]
+pub fn source_frames_used(
+    doc: &Arc<Document>,
+    comp_id: Uuid,
+    spec: &crate::export::ExportSpec,
+    stop: &std::sync::atomic::AtomicBool,
+) -> HashMap<Uuid, std::collections::BTreeSet<usize>> {
+    let mut used: HashMap<Uuid, std::collections::BTreeSet<usize>> = HashMap::new();
+    let overridden = crate::export::apply_render_overrides(doc, &spec.render_options());
+    let doc = overridden.as_ref().unwrap_or(doc);
+    let Some(comp) = doc.comp(comp_id) else {
+        return used;
+    };
+    let mut probes: HashMap<Uuid, (lumit_media::MediaSource, Probe)> = HashMap::new();
+    for id in lumit_core::model::comp_footage_items(doc, comp) {
+        if let Some(ProjectItem::Footage(f)) = doc.item(id) {
+            let src = footage_source(f);
+            let probe = probe_item(&src);
+            probes.insert(id, (src, probe));
+        }
+    }
+    let proxies = HashMap::new();
+    fn note(job: &CompJob, used: &mut HashMap<Uuid, std::collections::BTreeSet<usize>>) {
+        for cut in &job.cuts {
+            match cut {
+                crate::decode::Cut::Neighbour(_, clip)
+                | crate::decode::Cut::Moment(_, Some(clip)) => note(clip, used),
+                crate::decode::Cut::Moment(_, None) => {}
+            }
+        }
+        if job.slate {
+            return;
+        }
+        let frames = used.entry(job.item).or_default();
+        frames.insert(job.source_frame);
+        frames.extend(job.blend.map(|(ceil, _)| ceil));
+        frames.extend(job.temporal.iter().map(|(_, frame)| *frame));
+        for sample in &job.shutter {
+            frames.insert(sample.source_frame);
+            frames.extend(sample.blend.map(|(ceil, _)| ceil));
+        }
+    }
+    let fps = comp.frame_rate.fps().max(1.0);
+    let (first, end) = crate::export::frame_span(comp, spec);
+    for frame in first..end {
+        if stop.load(std::sync::atomic::Ordering::Relaxed) {
+            break;
+        }
+        let jobs = plan_comp_frame(
+            doc,
+            comp,
+            frame as f64 / fps,
+            spec.render.quality,
+            &ProbeView(&probes, &proxies),
+        );
+        for job in &jobs {
+            note(job, &mut used);
+        }
+    }
+    used
+}
+
 /// [`Probe::Slate`] — none of them is an error, they are the states the slate
 /// exists for. A readable file with no video stream (audio-only) is
 /// [`Probe::NoVideo`] instead: also not an error, but the opposite treatment —
@@ -4362,6 +4433,38 @@ mod tests {
 
     /// Relinking a missing clip should drop its slate in the Viewer, without
     /// reopening the project.
+    /// An export of part of a composition names the source frames under that
+    /// part and no others, which is what lets a machine without the clip ask
+    /// for those frames alone.
+    #[test]
+    fn an_export_names_the_source_frames_it_reads() {
+        let Some((_fixture_dir, clip)) = footage_fixture() else {
+            eprintln!("skipping: no ffmpeg CLI to write the footage fixture");
+            return;
+        };
+        let mut doc = Document::new();
+        let comp_id = push_comp(&mut doc, "comp", 32, 32);
+        let item = push_footage_item(&mut doc, "clip.mp4");
+        if let Some(ProjectItem::Footage(f)) = doc.item_mut(item) {
+            f.media.absolute_path = clip.to_string_lossy().into_owned();
+        }
+        push_layer(&mut doc, comp_id, LayerKind::Footage { item });
+        let fps = doc.comp(comp_id).expect("comp").frame_rate.fps();
+        // The second half-second of the composition, of a clip two seconds
+        // long at sixty frames a second.
+        let (first, end) = ((fps * 0.5).round() as usize, fps.round() as usize);
+        let spec = crate::export::ExportSpec {
+            range: Some((first, end)),
+            ..Default::default()
+        };
+        let stop = std::sync::atomic::AtomicBool::new(false);
+        let used = source_frames_used(&Arc::new(doc), comp_id, &spec, &stop);
+        let frames = used.get(&item).expect("the clip is read");
+        let (low, high) = (*frames.first().unwrap(), *frames.last().unwrap());
+        assert!((28..=32).contains(&low), "from half a second in: {low}");
+        assert!((56..=62).contains(&high), "to a second in: {high}");
+    }
+
     #[test]
     fn a_relinked_clip_loses_its_slate() {
         let mut r = match HeadlessRenderer::shared() {

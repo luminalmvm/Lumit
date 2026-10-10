@@ -104,7 +104,9 @@ how much was sent.
 Lumit has no relay of its own and uses one only when its address is in **Relay**. A relay
 is the `lumit-relay` program from Lumit's source, run on a server its owner controls:
 `cargo run --release -p lumit-relay`, with a port number after it to listen on a port other
-than 47857. A guest is sent through the relay only when no address of the host answers.
+than 47857. A second number is a speed in kilobytes a second that each connection is held
+to after its first 16 MB, which lets edits through and slows footage. A guest is sent
+through the relay only when no address of the host answers.
 
 An edit made by one person appears for everyone. Two people can work on the same layer at
 once: a change to one effect, mask or property leaves the others as they are. Where two
@@ -126,9 +128,52 @@ Each person has a colour, and what they have in hand is marked in it.
 A row out of sight in a layer that is twirled shut is marked on the layer. Two people on the
 same row or keyframe both show.
 
-Footage is not sent. A guest chooses a **Footage folder** when joining, and each footage
-item is matched to a file in it by name and then by content. An item with no match shows as
-missing and can be relinked.
+A guest chooses a **Footage folder** when joining, and each footage item is matched to a
+file in it by name and then by content. An item with no match can be relinked, or fetched
+from someone who has it.
+
+### Footage someone has not got
+
+A footage item used in a composition that is not on a computer is sent to it as a
+**stand-in**: the whole clip at its own size and length, with its sound, compressed hard.
+The computer reads the stand-in as if it were the file. The row wears a **stand-in** badge
+in the Project panel. A still or a sound file is sent as it is.
+
+Whoever has the original makes the stand-in when it is first asked for, and the host
+passes it on to a guest who asks. A stand-in is kept and is not sent twice. A transfer
+that is cut off carries on from where it stopped.
+
+On a footage row nobody here has, the menu has **Get a stand-in** and **Fetch the
+original**, which fetches the file itself. A fetched original is checked against the
+project's record of the file.
+
+**Advanced** in the Shared project window holds the rest. The two limits are also in
+**Settings ▸ General ▸ Shared projects**.
+
+- **Send stand-ins of my footage to people who have not got it**: when unticked, this
+  computer sends none of its own footage.
+- **Get stand-ins of footage I have not got**: when unticked, nothing is fetched until it
+  is asked for from the menu.
+- **Upload limit** and **Download limit**: the fastest footage is sent and fetched, in
+  kilobytes a second. 0 or empty is no limit. Edits are not limited.
+
+While footage is crossing, the Shared project window lists each transfer and how far
+along it is.
+
+### Exporting without the originals
+
+The export dialogue shows **Missing footage** when the composition uses footage the
+computer has no original of.
+
+| Choice | What happens |
+| --- | --- |
+| **Fetch the frames this export uses** | Whoever has each clip sends the run of frames the export reads, at delivery quality, and the export starts when they have arrived. The sound comes with them. |
+| **Fetch the originals** | The files themselves are fetched first. The size shown is their total. |
+| **Export on someone's computer** | A person who has every clip is asked to export. Their Lumit asks them first, exports, and sends the file back to the path chosen here. |
+| **Export from stand-ins** | The export reads the stand-ins as they are. |
+
+The frames are a re-encode of the original, as H.264 at 4:2:0 and eight bits, not a copy
+of its bytes.
 
 ### When the host goes away
 
@@ -157,8 +202,8 @@ and the guests still connected carry on. A guest that had lost the host at that 
 needs the new invite.
 
 :::note
-Everyone needs the same version of Lumit. Proxies, files an effect reads such as a LUT, and
-the results of tracking, roto and depth analysis are not sent. A proxy is looked for in the
+Everyone needs the same version of Lumit. Image sequences, proxies, files an effect reads
+such as a LUT, and the results of tracking, roto and depth analysis are not sent. A proxy is looked for in the
 footage folder as footage is, and a file an effect reads by its name at the top of that
 folder. A shared project takes up to 16 people.
 :::

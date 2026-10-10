@@ -76,6 +76,7 @@ pub mod realise;
 pub mod roto;
 mod sidecar;
 pub mod source;
+pub mod standin;
 pub mod track;
 
 pub use build::{

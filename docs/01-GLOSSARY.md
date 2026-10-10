@@ -83,7 +83,8 @@ Not interchangeable.
 | **Export** | Writing a media file. May **bake**, which never changes the project |
 | **Evaluation graph** | What the layer stack compiles into. Users never see the term |
 | **Cache** | Frames stored in VRAM, RAM and disk tiers, keyed by content hash |
-| **Proxy** | A smaller stand-in for footage |
+| **Proxy** | A smaller copy of a footage file, kept beside the original and read in its place while working |
+| **Stand-in** | In a shared project, a small copy of a whole clip sent to someone who has not got the file, and read as if it were the file. Not a *proxy*, which needs its original beside it |
 | **Preview resolution** | Full, Half, Third, Quarter, Auto |
 | **Adaptive degradation** | Lowering preview quality under load. Never touches export |
 

@@ -12144,7 +12144,7 @@
   },
   "makeProxy": "Make proxy",
   "@makeProxy": {
-    "description": "Project panel row menu, on a footage row: transcode a smaller stand-in file for this item and attach it."
+    "description": "Project panel row menu, on a footage row: transcode a smaller copy of this item's file and attach it as its proxy."
   },
   "useProxy": "Use proxy",
   "@useProxy": {
@@ -15630,5 +15630,273 @@
   "shareUnreachableOrPassword": "Nobody answered, or the password is wrong. Check both, and that the host is still sharing.",
   "@shareUnreachableOrPassword": {
     "description": "Line in the Shared project window when joining with a password failed. Lumit is not told which of the two it was."
+  },
+  "shareFootage": "Footage",
+  "@shareFootage": {
+    "description": "Row label and group heading in the Shared project window, for sending footage files to people in the project who have not got them."
+  },
+  "shareGive": "Send stand-ins of my footage to people who have not got it",
+  "@shareGive": {
+    "description": "Text beside a tick box in the Shared project window. A stand-in is a small copy of a whole clip that another person can cut with."
+  },
+  "shareTake": "Get stand-ins of footage I have not got",
+  "@shareTake": {
+    "description": "Text beside a tick box in the Shared project window. When ticked, Lumit asks the others for a small copy of any clip the project uses that is not on this computer."
+  },
+  "shareUpLimit": "Upload limit",
+  "@shareUpLimit": {
+    "description": "Row label in the Shared project window: the fastest this computer sends footage to the others."
+  },
+  "shareDownLimit": "Download limit",
+  "@shareDownLimit": {
+    "description": "Row label in the Shared project window: the fastest this computer takes footage from the others."
+  },
+  "shareLimitNone": "No limit",
+  "@shareLimitNone": {
+    "description": "Placeholder in an empty Upload limit or Download limit field in the Shared project window."
+  },
+  "shareLimitUnit": "KB/s",
+  "@shareLimitUnit": {
+    "description": "Unit shown after the Upload limit and Download limit fields: kilobytes a second."
+  },
+  "shareLimitHint": "How fast footage is sent and fetched, in kilobytes a second. 0 or empty is no limit. Edits are never held back.",
+  "@shareLimitHint": {
+    "description": "Quiet line under the two limit fields in the Shared project window."
+  },
+  "shareSending": "Sending {name}, {percent}%",
+  "@shareSending": {
+    "description": "One line of the Footage list in the Shared project window: a file this computer is sending to someone. {name} is the footage item's name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "shareTaking": "Fetching {name}, {percent}%",
+  "@shareTaking": {
+    "description": "One line of the Footage list in the Shared project window: a file this computer is getting from someone. {name} is the footage item's name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "shareAnExport": "an export",
+  "@shareAnExport": {
+    "description": "Stands in for a footage item's name in the Sending and Fetching lines of the Shared project window, when the file crossing is a finished export."
+  },
+  "shareGetStandIn": "Get a stand-in",
+  "@shareGetStandIn": {
+    "description": "Project panel menu item on a footage row that is missing, in a shared project where someone else has the file. Asks them for a small copy to cut with."
+  },
+  "shareGetOriginal": "Fetch the original ({megabytes} MB)",
+  "@shareGetOriginal": {
+    "description": "Project panel menu item on a footage row this computer has no original of, in a shared project where someone else has it. Fetches the file itself. {megabytes} is its size.",
+    "placeholders": {
+      "megabytes": {
+        "type": "int"
+      }
+    }
+  },
+  "projectItemStandIn": "stand-in",
+  "@projectItemStandIn": {
+    "description": "Small badge on a footage row in the Project panel: this computer reads the clip from a small copy another person in the shared project sent, the file itself not being here."
+  },
+  "shareExportAskTitle": "Export for {name}?",
+  "@shareExportAskTitle": {
+    "description": "Title of the question shown when another person in a shared project asks this computer to export for them. {name} is that person.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "shareExportAskBody": "{name} has not got all the footage and asks this computer to export \"{comp}\" and send them the file. It goes in your export queue and starts now.",
+  "@shareExportAskBody": {
+    "description": "Body of the question shown when another person asks this computer to export for them. {comp} is a composition's name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "comp": {
+        "type": "String"
+      }
+    }
+  },
+  "shareExportAskNo": "Not now",
+  "@shareExportAskNo": {
+    "description": "Default button of the question about exporting for another person. Refuses."
+  },
+  "shareExportAskYes": "Export",
+  "@shareExportAskYes": {
+    "description": "Button of the question about exporting for another person. Starts the export and sends them the file."
+  },
+  "exportFootageGroup": "Shared footage",
+  "@exportFootageGroup": {
+    "description": "Group heading in the export dialogue, shown when the composition uses footage this computer has only a stand-in of, or nothing of."
+  },
+  "exportFootage": "Missing footage",
+  "@exportFootage": {
+    "description": "Row label in the export dialogue: what the export does about footage this computer has no original of."
+  },
+  "exportFootageFrames": "Fetch the frames this export uses",
+  "@exportFootageFrames": {
+    "description": "Option in the export dialogue's Missing footage list. Before exporting, Lumit fetches only the frames the export reads, at delivery quality, from whoever has the footage."
+  },
+  "exportFootageOriginals": "Fetch the originals ({megabytes} MB)",
+  "@exportFootageOriginals": {
+    "description": "Option in the export dialogue's Missing footage list. Before exporting, Lumit fetches the whole original files. {megabytes} is their total size.",
+    "placeholders": {
+      "megabytes": {
+        "type": "int"
+      }
+    }
+  },
+  "exportFootageOn": "Export on {name}'s computer",
+  "@exportFootageOn": {
+    "description": "Option in the export dialogue's Missing footage list. Another person, who has the footage, does the export and sends the file back. {name} is that person.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "exportFootageStandIns": "Export from stand-ins",
+  "@exportFootageStandIns": {
+    "description": "Option in the export dialogue's Missing footage list. Exports from the small copies as they are, which is draft quality."
+  },
+  "exportFootageCount": "{count, plural, =1{1 clip in this composition is not on this computer.} other{{count} clips in this composition are not on this computer.}}",
+  "@exportFootageCount": {
+    "description": "Line under the Missing footage row in the export dialogue.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "exportFootageStarting": "Asking for the footage…",
+  "@exportFootageStarting": {
+    "description": "Footer line of the export dialogue for the moment after Export is pressed with footage to fetch."
+  },
+  "exportFootageMaking": "The others' computers are getting the footage ready…",
+  "@exportFootageMaking": {
+    "description": "Footer line of the export dialogue while another person's computer is making the files this export asked for and nothing has been sent yet."
+  },
+  "exportFootageFetching": "Fetching footage, {percent}%",
+  "@exportFootageFetching": {
+    "description": "Footer line of the export dialogue while footage this export needs is being fetched.",
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "exportFootageFailed": "Some of the footage could not be fetched. Whoever has it may have left, or switched sending off.",
+  "@exportFootageFailed": {
+    "description": "Footer line of the export dialogue when footage this export needs could not be got."
+  },
+  "exportRemoteWaiting": "Waiting for {name} to agree…",
+  "@exportRemoteWaiting": {
+    "description": "Footer line of the export dialogue after another person was asked to do the export.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "exportRemoteRunning": "{name}'s computer is exporting, frame {frame} of {total}",
+  "@exportRemoteRunning": {
+    "description": "Footer line of the export dialogue while another person's computer does the export.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "frame": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "exportRemoteFetching": "Fetching the finished file, {percent}%",
+  "@exportRemoteFetching": {
+    "description": "Footer line of the export dialogue while the file another person's computer exported is being sent back.",
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "exportRemoteDone": "Exported {file} on another computer",
+  "@exportRemoteDone": {
+    "description": "Bottom-strip notice when an export done by another person's computer has arrived. {file} is the file's name.",
+    "placeholders": {
+      "file": {
+        "type": "String"
+      }
+    }
+  },
+  "exportRemoteRefused": "{name} did not take the export",
+  "@exportRemoteRefused": {
+    "description": "Footer line of the export dialogue when the other person said no to doing the export.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "exportRemoteLacking": "{name}'s computer has not got all the footage either",
+  "@exportRemoteLacking": {
+    "description": "Footer line of the export dialogue when the person asked to export turns out not to have every file.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "exportRemoteStopped": "The export on {name}'s computer stopped",
+  "@exportRemoteStopped": {
+    "description": "Footer line of the export dialogue when the export another person's computer was doing failed or was cancelled there.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsGroupSharing": "Shared projects",
+  "@settingsGroupSharing": {
+    "description": "Section heading on the General page of Settings."
+  },
+  "settingsShareUpLimit": "Footage upload limit",
+  "@settingsShareUpLimit": {
+    "description": "Row title in Settings: the fastest this computer sends footage to others in a shared project."
+  },
+  "settingsShareDownLimit": "Footage download limit",
+  "@settingsShareDownLimit": {
+    "description": "Row title in Settings: the fastest this computer takes footage from others in a shared project."
+  },
+  "settingsShareLimitHint": "How fast footage is sent and fetched in a shared project. Edits are never held back.",
+  "@settingsShareLimitHint": {
+    "description": "Description under the Footage upload limit row in Settings."
+  },
+  "settingsShareNoLimit": "No limit",
+  "@settingsShareNoLimit": {
+    "description": "Option in the footage upload and download limit lists in Settings."
+  },
+  "settingsShareLimitValue": "{kilobytes} KB/s",
+  "@settingsShareLimitValue": {
+    "description": "Option in the footage upload and download limit lists in Settings: a speed in kilobytes a second.",
+    "placeholders": {
+      "kilobytes": {
+        "type": "int"
+      }
+    }
   }
 }

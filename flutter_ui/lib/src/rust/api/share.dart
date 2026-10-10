@@ -18,8 +18,8 @@ import 'solid.dart';
 import 'state.dart';
 part 'share.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `at_relay`, `describe`, `ending`, `events_for`, `kept_text`, `let_go`, `person`, `reach`, `relayed`, `resume`, `saved`, `saving`, `stop_all`, `stop`, `unlocked`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `asking`, `at_relay`, `carry`, `describe`, `ending`, `events_for`, `holders_of`, `kept_text`, `let_go`, `person`, `reach`, `relayed`, `resume`, `saved`, `saving`, `stop_all`, `stop`, `unlocked`, `with_sharing`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// The port a host listens on unless the person picks another.
 int shareDefaultPort() =>
@@ -30,6 +30,19 @@ int shareDefaultPort() =>
 /// what tidies whatever a person pasted.
 String? shareLinkIn({required String text}) =>
     BridgeLib.instance.api.crateApiShareShareLinkIn(text: text);
+
+/// How fast this machine sends and takes footage in a shared project, in
+/// kilobytes a second. Nought is as fast as the line goes. For the machine,
+/// not one project, and takes effect on transfers already running.
+void shareSetLimits({required int upKilobytes, required int downKilobytes}) =>
+    BridgeLib.instance.api.crateApiShareShareSetLimits(
+        upKilobytes: upKilobytes, downKilobytes: downKilobytes);
+
+/// Whether this machine makes stand-ins of its own footage for the others
+/// (`give`), and whether it asks for a stand-in of what it lacks without
+/// being told to (`take`).
+void shareSetFootage({required bool give, required bool take}) =>
+    BridgeLib.instance.api.crateApiShareShareSetFootage(give: give, take: take);
 
 /// Whether the invite in `text` needs a password given with it. False for
 /// anything that is not an invite.
@@ -64,6 +77,87 @@ Future<BridgeJoinOutcome> joinSharedProject(
         onChangeStream: onChangeStream,
         events: events);
 
+/// Where one footage item is on this machine, in a shared project.
+enum BridgeFootageHere {
+  /// The file itself: this person's own, or one fetched from someone.
+  original,
+
+  /// A stand-in someone sent: the whole clip, small, to cut with.
+  standIn,
+
+  /// Neither.
+  missing,
+  ;
+}
+
+/// A footage item a composition uses that this machine has no original of.
+class BridgeFootageLack {
+  final String name;
+
+  /// There is a stand-in of it here, and otherwise nothing at all.
+  final bool standIn;
+  final Uint32List holders;
+  final BigInt bytes;
+
+  const BridgeFootageLack({
+    required this.name,
+    required this.standIn,
+    required this.holders,
+    required this.bytes,
+  });
+
+  @override
+  int get hashCode =>
+      name.hashCode ^ standIn.hashCode ^ holders.hashCode ^ bytes.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeFootageLack &&
+          runtimeType == other.runtimeType &&
+          name == other.name &&
+          standIn == other.standIn &&
+          holders == other.holders &&
+          bytes == other.bytes;
+}
+
+/// One footage item as a shared project knows it from this machine.
+class BridgeFootageShare {
+  final BridgeFootageHere here;
+
+  /// The people who have the original, by the number the people list
+  /// gives them. Empty when nobody here has it.
+  final Uint32List holders;
+
+  /// How big the original is on a holder's disk, which is what fetching
+  /// it costs. 0 when nobody has it.
+  final BigInt bytes;
+
+  /// Nobody could send it when it was last asked for.
+  final bool refused;
+
+  const BridgeFootageShare({
+    required this.here,
+    required this.holders,
+    required this.bytes,
+    required this.refused,
+  });
+
+  @override
+  int get hashCode =>
+      here.hashCode ^ holders.hashCode ^ bytes.hashCode ^ refused.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeFootageShare &&
+          runtimeType == other.runtimeType &&
+          here == other.here &&
+          holders == other.holders &&
+          bytes == other.bytes &&
+          refused == other.refused;
+}
+
 @freezed
 sealed class BridgeJoinOutcome with _$BridgeJoinOutcome {
   const BridgeJoinOutcome._();
@@ -88,6 +182,35 @@ sealed class BridgeJoinOutcome with _$BridgeJoinOutcome {
   const factory BridgeJoinOutcome.full() = BridgeJoinOutcome_Full;
   const factory BridgeJoinOutcome.unsafe() = BridgeJoinOutcome_Unsafe;
   const factory BridgeJoinOutcome.failed() = BridgeJoinOutcome_Failed;
+}
+
+@freezed
+sealed class BridgeShareAsking with _$BridgeShareAsking {
+  const BridgeShareAsking._();
+
+  const factory BridgeShareAsking.idle() = BridgeShareAsking_Idle;
+
+  /// Sent, and the other person has not answered.
+  const factory BridgeShareAsking.waiting() = BridgeShareAsking_Waiting;
+  const factory BridgeShareAsking.running({
+    required BigInt frame,
+    required BigInt total,
+  }) = BridgeShareAsking_Running;
+
+  /// Their export finished and the file is on its way here.
+  const factory BridgeShareAsking.fetching({
+    required BigInt done,
+    required BigInt total,
+  }) = BridgeShareAsking_Fetching;
+  const factory BridgeShareAsking.done({
+    required String path,
+  }) = BridgeShareAsking_Done;
+
+  /// `why` is `refused` when they said no, `lacking` when their machine
+  /// has not all the footage either, and anything else when it stopped.
+  const factory BridgeShareAsking.failed({
+    required String why,
+  }) = BridgeShareAsking_Failed;
 }
 
 /// Edits this guest made while its host was away that touch something the
@@ -188,6 +311,45 @@ sealed class BridgeShareEvent with _$BridgeShareEvent {
   const factory BridgeShareEvent.relayed({
     required BridgeShareRelayed relayed,
   }) = BridgeShareEvent_Relayed;
+
+  /// Something about the project's footage changed: who has what, a
+  /// transfer, or an export being fetched for or done by someone else.
+  /// Whoever shows any of it reads it again. `placed` is a footage item
+  /// now being read from a file that has just arrived, so every picture
+  /// of it on screen is stale.
+  const factory BridgeShareEvent.footage({
+    required bool placed,
+  }) = BridgeShareEvent_Footage;
+
+  /// The person numbered `from` asks this machine to export `comp` and
+  /// send them the file. Answered with [`ProjectReference::share_answer_export`].
+  const factory BridgeShareEvent.exportAsked({
+    required String job,
+    required int from,
+    required String comp,
+  }) = BridgeShareEvent_ExportAsked;
+}
+
+@freezed
+sealed class BridgeShareFetching with _$BridgeShareFetching {
+  const BridgeShareFetching._();
+
+  const factory BridgeShareFetching.idle() = BridgeShareFetching_Idle;
+
+  /// `done` of `total` bytes are here. Both 0 while the others' machines
+  /// are still making the files.
+  const factory BridgeShareFetching.working({
+    required BigInt done,
+    required BigInt total,
+  }) = BridgeShareFetching_Working;
+
+  /// Everything arrived and the export is in the queue under `id`.
+  const factory BridgeShareFetching.queued({
+    required int id,
+  }) = BridgeShareFetching_Queued;
+
+  /// Nobody could send something, or the export would not queue.
+  const factory BridgeShareFetching.failed() = BridgeShareFetching_Failed;
 }
 
 /// One person in a shared project, and what they are looking at.
@@ -330,4 +492,45 @@ sealed class BridgeShareStarted with _$BridgeShareStarted {
 
   /// The project is already shared, or the system would not listen.
   const factory BridgeShareStarted.failed() = BridgeShareStarted_Failed;
+}
+
+/// One transfer in flight.
+class BridgeShareTransfer {
+  /// The footage item's name, or empty for an export's file.
+  final String name;
+
+  /// The original, and otherwise a stand-in or the frames of one.
+  final bool original;
+
+  /// This machine is sending it, and otherwise taking it.
+  final bool sending;
+  final BigInt done;
+  final BigInt total;
+
+  const BridgeShareTransfer({
+    required this.name,
+    required this.original,
+    required this.sending,
+    required this.done,
+    required this.total,
+  });
+
+  @override
+  int get hashCode =>
+      name.hashCode ^
+      original.hashCode ^
+      sending.hashCode ^
+      done.hashCode ^
+      total.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeShareTransfer &&
+          runtimeType == other.runtimeType &&
+          name == other.name &&
+          original == other.original &&
+          sending == other.sending &&
+          done == other.done &&
+          total == other.total;
 }
