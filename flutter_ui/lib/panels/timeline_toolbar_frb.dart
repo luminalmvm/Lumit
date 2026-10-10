@@ -669,6 +669,22 @@ class KeyCommandStrip extends StatelessWidget {
               // interpolations are the whole of the bar.
             ],
             if (lens != null) ...[
+              // Which graph is drawn comes first, so it is in reach however
+              // narrow the outline is. The rest scrolls.
+              _button(t,
+                  keyName: 'graph-lens-value',
+                  label: l10n.clipboardValueColumn,
+                  tip: l10n.tipValueGraph,
+                  on: lens == GraphLens.value,
+                  onPressed: () => onLens?.call(GraphLens.value)),
+              const SizedBox(width: 2),
+              _button(t,
+                  keyName: 'graph-lens-speed',
+                  label: l10n.graphSpeed,
+                  tip: l10n.tipSpeedGraph,
+                  on: lens == GraphLens.speed,
+                  onPressed: () => onLens?.call(GraphLens.speed)),
+              const SizedBox(width: 12),
               // The selected keys' easing, one click each — the F9 family's
               // buttons (docs/07 §5.3).
               _button(t,
@@ -716,8 +732,8 @@ class KeyCommandStrip extends StatelessWidget {
                 ),
               ],
               const SizedBox(width: 12),
-              // Tangents — Auto / Clamp / Free (§6.3), between the ease
-              // presets and the lens pair. A run of three like the eases
+              // Tangents — Auto / Clamp / Free (§6.3), after the ease
+              // presets. A run of three like the eases
               // beside them, and unlit for the same reason: these are things
               // to *do* to the selection, and a selection spanning two modes
               // has no one answer to light. Which mode a side is in is legible
@@ -743,20 +759,6 @@ class KeyCommandStrip extends StatelessWidget {
                   tip: l10n.tipTangentFree,
                   on: false,
                   onPressed: () => onTangentMode?.call(TangentMode.free)),
-              const SizedBox(width: 12),
-              _button(t,
-                  keyName: 'graph-lens-value',
-                  label: l10n.clipboardValueColumn,
-                  tip: l10n.tipValueGraph,
-                  on: lens == GraphLens.value,
-                  onPressed: () => onLens?.call(GraphLens.value)),
-              const SizedBox(width: 2),
-              _button(t,
-                  keyName: 'graph-lens-speed',
-                  label: l10n.graphSpeed,
-                  tip: l10n.tipSpeedGraph,
-                  on: lens == GraphLens.speed,
-                  onPressed: () => onLens?.call(GraphLens.speed)),
               const SizedBox(width: 12),
               _button(t,
                   keyName: 'graph-autofit',
