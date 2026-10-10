@@ -719,6 +719,7 @@ class _TimelineParamRowState extends State<_TimelineParamRow> {
       // One lane tall, like every other fold row: the card's own vertical
       // padding on top of that clipped the fields.
       rowPadding: EdgeInsets.zero,
+      sliderTrack: false,
       // The staged value while a drag is in flight, the document's otherwise.
       value: _editor.stagedValue(row.info.id, row.param.id) ?? row.value,
       siblings: {for (final v in row.info.values) v.id: v.value},

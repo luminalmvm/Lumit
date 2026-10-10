@@ -247,6 +247,11 @@ class EffectParamRowFrb extends StatelessWidget {
   /// asks for a driven number, which is what keeps this off the rebuild path.
   final ({String driver, BridgePortType type, bool noStream})? driven;
 
+  /// Whether a closed range draws its track beside the number. The Timeline's
+  /// fold-out passes false: its value column is one well wide, and the track
+  /// ran on past it under the columns to its right.
+  final bool sliderTrack;
+
   const EffectParamRowFrb({
     super.key,
     required this.effectId,
@@ -270,6 +275,7 @@ class EffectParamRowFrb extends StatelessWidget {
     this.onAction,
     this.driven,
     this.nameGroup,
+    this.sliderTrack = true,
   });
 
   @override
@@ -1223,7 +1229,7 @@ class EffectParamRowFrb extends StatelessWidget {
         .workspace
         .interface
         .rangeSliders;
-    if (!rangeSliders) return field;
+    if (!rangeSliders || !sliderTrack) return field;
 
     return Row(
       mainAxisSize: MainAxisSize.min,
