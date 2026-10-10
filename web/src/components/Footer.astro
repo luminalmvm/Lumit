@@ -1,12 +1,15 @@
 ---
 // The foot of every page: the mark and the line it stands for on the left,
-// every destination on the site in three short columns beside it.
+// every destination on the site in three groups beside it. On a wide window a
+// group is its name with its links in two columns to the right of it, so the
+// whole foot is as deep as half the longest group.
 const columns = [
   {
     h: "Lumit",
     links: [
       { href: "/download", label: "Download" },
       { href: "/releases", label: "Releases" },
+      { href: "/releases/rss.xml", label: "Release feed" },
       { href: "/#roadmap", label: "Roadmap" },
       { href: "/media", label: "Media" },
     ],
@@ -17,6 +20,7 @@ const columns = [
       { href: "https://docs.lumitlab.com", label: "Docs" },
       { href: "https://docs.lumitlab.com/start/first-composition/", label: "First composition" },
       { href: "https://docs.lumitlab.com/effects/", label: "Effects" },
+      { href: "/projects", label: "Projects" },
     ],
   },
   {
@@ -32,7 +36,7 @@ const columns = [
 ---
 
 <footer class="border-t border-line text-fg-3">
-  <div class="wrap grid gap-x-10 gap-y-12 py-14 md:grid-cols-[minmax(0,1fr)_auto]">
+  <div class="wrap grid gap-x-10 gap-y-12 py-12 md:grid-cols-[minmax(0,1fr)_auto]">
     <div class="flex flex-col items-start gap-5">
       {/* The wordmark's file has room at its left for the mark to open into,
           so it is pulled back to stand on the column's edge. */}
@@ -43,34 +47,64 @@ const columns = [
         Let your creativity flow. Free and open-source, forever.
       </p>
     </div>
-    <nav class="grid grid-cols-2 gap-x-14 gap-y-10 sm:grid-cols-3" aria-label="Site">
+    <nav class="groups" aria-label="Site">
       {
         columns.map((c) => (
-          <div class="flex flex-col gap-3.5">
+          <div class="group">
             <p class="kicker text-fg-4">{c.h}</p>
-            {c.links.map((l) => (
-              <a href={l.href} class="text-[15px] text-fg-2 no-underline transition-colors hover:text-fg">
-                {l.label}
-              </a>
-            ))}
+            <div class="links" style={`--rows:${Math.ceil(c.links.length / 2)}`}>
+              {c.links.map((l) => (
+                <a href={l.href} class="text-[15px] text-fg-2 no-underline transition-colors hover:text-fg">
+                  {l.label}
+                </a>
+              ))}
+            </div>
           </div>
         ))
       }
     </nav>
   </div>
-  <div class="border-t border-line">
-    <div class="wrap flex flex-wrap items-center justify-between gap-x-8 gap-y-3 py-5 font-mono text-[11px] text-fg-4">
-      <span class="flex items-center gap-2.5">
-        <img src="/lumit-mark.svg" alt="" width="16" height="16" class="block" />
-        Open source under
-        <a
-          href="https://github.com/luminalmvm/Lumit/blob/main/LICENSE"
-          class="text-fg-3 no-underline transition-colors hover:text-fg"
-        >
-          GPLv3
-        </a>
-      </span>
-      <a href="/releases/rss.xml" class="text-fg-4 no-underline transition-colors hover:text-fg">Release feed</a>
-    </div>
-  </div>
 </footer>
+
+<style>
+  .groups {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, auto));
+    align-content: start;
+    align-items: start;
+    gap: 40px 56px;
+  }
+  .group,
+  .links {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  @media (min-width: 640px) {
+    .groups {
+      grid-template-columns: repeat(3, auto);
+    }
+  }
+  /* Wide enough for it: a group's name stands to the left of its links, and
+     the links fill two columns downwards. The name is a line shorter than a
+     link, so it is given a link's line to sit level with the first one. */
+  @media (min-width: 1280px) {
+    .groups {
+      column-gap: 52px;
+    }
+    .group {
+      flex-direction: row;
+      gap: 20px;
+    }
+    .group .kicker {
+      height: 22.5px;
+    }
+    .links {
+      display: grid;
+      grid-auto-flow: column;
+      grid-template-rows: repeat(var(--rows), auto);
+      align-content: start;
+      gap: 12px 26px;
+    }
+  }
+</style>

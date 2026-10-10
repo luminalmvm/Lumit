@@ -16,15 +16,22 @@ const roadmap = [
       "Beat detection and markers",
       "Over 100 GPU effects",
       "Presets, saved and shared",
-      "2.5D camera and 3D layers",
+      "3D layers, camera and depth of field",
       "Roto brush and Puppet",
       "Camera and planar tracking",
-      "Text layers with animators",
+      "Text layers, animators and panels",
       "Shape layers and paint",
-      "Expressions",
-      "The node graph",
-      "OFX plugin hosting",
-      "After Effects import, bundle and .aep",
+      "Expressions and the Expressions panel",
+      "Node graph effects and compositions",
+      "The Audio timeline and audio effects",
+      "OFX, CLAP and VST3 plugin hosting",
+      "After Effects and PSD import",
+      "Shared projects",
+      "Multiple Viewers, with compare",
+      "Interface styles and colour themes",
+      "Addons with local models",
+      "Packed project files",
+      "Setup screen and guided tour",
       "Export queue with hardware encoding",
       "Proxies and background caching",
       "Autosave and crash recovery",
@@ -36,6 +43,7 @@ const roadmap = [
     state: "now",
     count: "under way",
     items: [
+      "The points family of effects",
       "The Audio workspace",
       "Custom shader nodes",
       "Colour management",
@@ -49,7 +57,7 @@ const roadmap = [
     count: "planned",
     items: [
       "Lumit's own effect format",
-      "Lights and camera depth of field",
+      "3D lights",
       "Particle simulator",
       "Scripting",
       "Blender scene import",
@@ -139,29 +147,39 @@ const roadmap = [
     gap: 10px;
   }
   .seg i {
+    position: relative;
     height: 14px;
+    overflow: hidden;
     border: 1px solid var(--k);
     border-radius: var(--radius-ctl);
     background: color-mix(in srgb, var(--k) 55%, var(--color-ink));
   }
   .seg-now i {
+    box-shadow: 0 0 18px color-mix(in srgb, var(--k) 35%, transparent);
+  }
+  /* The work in hand is the part that moves. The stripes are a layer of their
+     own, one stripe pair wider than the bar, and it is the layer that slides:
+     a transform is moved by the compositor, where a background's position is
+     painted again on every frame. 16.97 is one stripe pair along the bar, 12
+     across the stripes at 45 degrees. */
+  .seg-now i::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 0 -16.97px;
     background: repeating-linear-gradient(
       -45deg,
       color-mix(in srgb, var(--k) 70%, var(--color-ink)) 0 6px,
       color-mix(in srgb, var(--k) 35%, var(--color-ink)) 6px 12px
     );
-    background-size: 16.97px 100%;
-    box-shadow: 0 0 18px color-mix(in srgb, var(--k) 35%, transparent);
+    will-change: transform;
   }
-  /* The work in hand is the part that moves. 16.97 is one stripe pair along
-     the bar: 12 across the stripes, at 45 degrees. */
   @media (prefers-reduced-motion: no-preference) {
-    .seg-now i {
+    .seg-now i::before {
       animation: stripes 1.4s linear infinite;
     }
   }
   @keyframes stripes {
-    to { background-position: 16.97px 0; }
+    to { transform: translateX(16.97px); }
   }
   .seg-next i {
     border-style: dashed;
