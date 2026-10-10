@@ -247,9 +247,11 @@ class _KeyBlockOverlayState extends State<KeyBlockOverlay> {
             // that cannot be picked up again.
             Positioned(
               key: const ValueKey('tl-block-box'),
-              left: left,
+              // Half a pixel out at each end: the border is drawn inside the
+              // box, so this puts each end line's middle on its key's middle.
+              left: left - 0.5,
               top: boxTop,
-              width: right - left,
+              width: right - left + 1,
               height: boxBottom - boxTop,
               child: IgnorePointer(
                 child: DecoratedBox(
