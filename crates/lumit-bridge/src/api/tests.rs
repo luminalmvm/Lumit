@@ -2889,12 +2889,12 @@ fn every_commit_is_journalled_and_a_save_clears_it() {
         "the journal is cleared by a save"
     );
 
-    // …and an edit after the save is not journalled against the stale handle:
-    // the project disarmed it, so recovery from here is the saved file itself.
+    // An edit after the save is journalled again, or a crash from here would
+    // lose everything since the save.
     project
         .new_composition("After".into(), None)
         .expect("an edit");
-    assert!(journal.read().expect("journal read").is_empty());
+    assert_eq!(journal.read().expect("journal read").len(), 1);
 
     std::fs::remove_dir_all(&dir).ok();
 }
@@ -2929,7 +2929,7 @@ fn closing_a_saved_project_keeps_its_journal() {
     let project = LumitBridgeState::new_project(None).expect("a new project");
     project.new_composition("Saved".into(), None).expect("comp");
     project.save(target.clone()).expect("saved");
-    // A save switches the journal off, and recovery is what arms it again.
+    // Recovery reopens the file, so the edit below lands on what was saved.
     project.restore_journal(target).expect("restored");
     project
         .new_composition("Unsaved".into(), None)

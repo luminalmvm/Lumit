@@ -701,8 +701,8 @@ impl ProjectReference {
     ///
     /// Media paths are rebased against the destination directory before writing,
     /// so a project saved somewhere new keeps relative links that work.
-    /// A successful save clears the crash journal: the journal covers work
-    /// *between* saves, so once the document is on disk it is redundant.
+    /// A successful save drops the edits it wrote from the crash journal, and
+    /// the journal carries on for the edits made after it.
     ///
     /// A packed project is saved with its footage still inside
     /// ([`Self::save_packed`] is the same save with a progress stream).
@@ -874,8 +874,16 @@ impl ProjectReference {
         // it. Asked before this project's own lock, which is the order the
         // share registry is always taken in.
         let hosted = crate::api::share::saving(self.id);
-        let (document, target, revision, previous) = {
+        let (document, target, revision, previous, journalled) = {
             let state = project.read().map_err(|_| BridgeError::ReadFailed)?;
+            // How much of the journal the file is about to hold. An edit takes
+            // this project's lock, so none lands between this and the document.
+            let journalled = state
+                .journal
+                .lock()
+                .ok()
+                .and_then(|journal| journal.as_ref().map(lumit_project::JournalFile::size))
+                .unwrap_or(0);
             let target = if path.trim().is_empty() {
                 // Never saved and no path given: the caller has to pick one.
                 state.path.clone().ok_or(BridgeError::NoProjectPath)?
@@ -900,7 +908,7 @@ impl ProjectReference {
                     .store
                     .frozen(|document| (document, state.store.revision())),
             };
-            (document, target, revision, state.path.clone())
+            (document, target, revision, state.path.clone(), journalled)
         };
 
         // Everything from here is outside the lock.
@@ -977,14 +985,14 @@ impl ProjectReference {
             }
         }
 
-        // The journal covers work *between* saves, so once the document is on
-        // disk it is redundant — and keeping it would mean a later recovery
-        // replaying edits the saved file already contains.
-        if let Ok(mut journal) = state.journal.lock() {
+        // The journal covers work between saves. What the file now holds is
+        // dropped from it, or a recovery would replay those edits twice. An
+        // edit made while the disk was busy stays, and the journal carries on
+        // for the edits after this save.
+        if let Ok(journal) = state.journal.lock() {
             if let Some(file) = journal.as_ref() {
-                let _ = file.clear();
+                let _ = file.forget(journalled);
             }
-            *journal = None;
         }
         state.path = Some(target);
         // The revision the file *contains*, read before the write — not

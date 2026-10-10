@@ -1471,6 +1471,35 @@ impl JournalFile {
         Ok(ops)
     }
 
+    /// How many bytes are journalled so far.
+    #[must_use]
+    pub fn size(&self) -> u64 {
+        fs::metadata(&self.path).map_or(0, |m| m.len())
+    }
+
+    /// Drop the first `bytes` of the journal, which a save has just written
+    /// into the project file, and keep the edits made after them.
+    pub fn forget(&self, bytes: u64) -> Result<(), ProjectError> {
+        let all = match fs::read(&self.path) {
+            Ok(all) => all,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(e) => return Err(e.into()),
+        };
+        let kept = usize::try_from(bytes)
+            .ok()
+            .and_then(|from| all.get(from..))
+            .unwrap_or_default();
+        if kept.is_empty() {
+            return self.clear();
+        }
+        // Written beside the journal and moved over it, so a crash part way
+        // leaves the old journal and not half of the new one.
+        let beside = self.path.with_extension("tmp");
+        fs::write(&beside, kept)?;
+        fs::rename(&beside, &self.path)?;
+        Ok(())
+    }
+
     pub fn clear(&self) -> Result<(), ProjectError> {
         match fs::remove_file(&self.path) {
             Ok(()) => {}
