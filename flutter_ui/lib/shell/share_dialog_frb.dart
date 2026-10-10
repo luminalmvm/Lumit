@@ -10,10 +10,11 @@
 //
 // The frame is the dialog pattern's: title strip, body, footer.
 
-import 'dart:ui' show ImageFilter;
+import 'dart:math' as math;
+import 'dart:typed_data' show Float32List;
+import 'dart:ui' show PointMode;
 
 import 'package:flutter/material.dart' show SelectableText;
-import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
@@ -51,6 +52,7 @@ Widget _field(
   TextEditingController controller, {
   String? hint,
   VoidCallback? onSubmitted,
+  TextStyle? style,
 }) =>
     SizedBox(
       height: dialogControlHeight,
@@ -60,6 +62,7 @@ Widget _field(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 8),
         fill: t.surface0,
+        style: style,
         hint: hint,
         onSubmitted: onSubmitted == null ? null : (_) => onSubmitted(),
       ),
@@ -158,8 +161,8 @@ class _ShareDialogState extends State<_ShareDialog> {
   String? _link;
 
   /// The person asked to see the links this window holds. Until then they
-  /// are drawn blurred: a link is all it takes to join, and windows end up
-  /// on streams and in screenshots.
+  /// are not drawn: a link is all it takes to join, and windows end up on
+  /// streams and in screenshots.
   bool _shown = false;
 
   /// Where this machine keeps the footage of a project it is joining.
@@ -515,8 +518,9 @@ class _ShareDialogState extends State<_ShareDialog> {
         ),
       );
 
-  /// A link, veiled until the person asks to see it. Nothing of it can be
-  /// selected while it is.
+  /// A link, hidden until the person asks to see it. While it is hidden it
+  /// is not drawn, read out or selectable: the well holds only ink, and the
+  /// room the link takes up.
   Widget _linkWell(LumitTheme t, String id, String link) => Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
@@ -525,33 +529,49 @@ class _ShareDialogState extends State<_ShareDialog> {
         ),
         child: _Veil(
           shown: _shown,
-          grain: true,
-          builder: (settled) => settled
+          lineHeight: (t.mono.fontSize ?? 11) * (t.mono.height ?? 1.3),
+          builder: (hidden) => hidden == 0
               ? SelectableText(
                   link,
                   key: ValueKey<String>(id),
                   style: t.mono,
                   selectionColor: t.accent.withValues(alpha: 0.5),
                 )
-              : Text(link, key: ValueKey<String>(id), style: t.mono),
+              : ExcludeSemantics(
+                  child: IgnorePointer(
+                    child: Opacity(
+                      opacity: 1 - hidden,
+                      child: Text(link,
+                          key: ValueKey<String>(id), style: t.mono),
+                    ),
+                  ),
+                ),
         ),
       );
 
-  /// A field whose text is veiled. Its edge is drawn again over the top,
-  /// so it is still plainly a field with something in it.
-  Widget _veiledField(LumitTheme t,
-          {required bool shown, required Widget field}) =>
-      Container(
-        foregroundDecoration: shown
-            ? null
-            : BoxDecoration(
-                borderRadius: wellCorners(t),
-                border: wellBorder(t, t.hairline),
-              ),
-        child: _Veil(shown: shown, builder: (_) => field),
+  /// A field whose text is hidden: typed and pasted into as usual, with the
+  /// letters not drawn and ink where they would be.
+  Widget _veiledField(
+    LumitTheme t,
+    String id,
+    TextEditingController controller, {
+    required bool shown,
+    String? hint,
+    VoidCallback? onSubmitted,
+  }) =>
+      _Veil(
+        shown: shown,
+        inset: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        builder: (hidden) => _field(t, id, controller,
+            hint: hint,
+            onSubmitted: onSubmitted,
+            style: hidden == 0
+                ? null
+                : t.bodyPrimary.copyWith(
+                    color: t.textPrimary.withValues(alpha: 1 - hidden))),
       );
 
-  /// The password row: the field, veiled like a link once something is in
+  /// The password row: the field, hidden like a link once something is in
   /// it, and a button that shows it. A password is the person's own to
   /// look at, so this one does not ask first.
   Widget _passwordRow(LumitTheme t, String hint, VoidCallback onSubmitted) =>
@@ -561,12 +581,10 @@ class _ShareDialogState extends State<_ShareDialog> {
         Row(
           children: [
             Expanded(
-              child: _veiledField(
-                t,
-                shown: _passwordShown || _password.text.isEmpty,
-                field: _field(t, 'share-password', _password,
-                    hint: hint, onSubmitted: onSubmitted),
-              ),
+              child: _veiledField(t, 'share-password', _password,
+                  shown: _passwordShown || _password.text.isEmpty,
+                  hint: hint,
+                  onSubmitted: onSubmitted),
             ),
             const SizedBox(width: 8),
             HouseButton(
@@ -649,14 +667,12 @@ class _ShareDialogState extends State<_ShareDialog> {
           Row(
             children: [
               Expanded(
-                // What was pasted is blurred like any other link, and still
+                // What was pasted is hidden like any other link, and still
                 // takes a paste over it.
-                child: _veiledField(
-                  t,
-                  shown: _shown || _joinInvite.text.isEmpty,
-                  field: _field(t, 'share-join-invite', _joinInvite,
-                      hint: l10n.shareLinkPaste, onSubmitted: _join),
-                ),
+                child: _veiledField(t, 'share-join-invite', _joinInvite,
+                    shown: _shown || _joinInvite.text.isEmpty,
+                    hint: l10n.shareLinkPaste,
+                    onSubmitted: _join),
               ),
               const SizedBox(width: 8),
               _showButton(t),
@@ -847,117 +863,186 @@ class _ShareDialogState extends State<_ShareDialog> {
 
 // --- Showing a link -------------------------------------------------------
 
-/// How far a veiled thing is blurred, and how much of it is taken away in
-/// grains, once it is fully hidden.
-const double _veilBlur = 4;
-const double _veilGrain = 0.55;
+/// How much room one speck of ink has to itself, in square logical pixels,
+/// and how far it wanders from where it sits.
+const double _inkRoom = 7;
+const double _inkDrift = 1.6;
 
-/// The side of one grain, in logical pixels.
-const double _grainSize = 2;
+/// How long the ink takes to come back round to where it started.
+const Duration _inkLoop = Duration(seconds: 7);
 
-/// Something shown only when the person asks: a link, a password. Hidden,
-/// it is blurred, and with [grain] broken up into grains as well. It comes
-/// and goes by dissolving, so nothing snaps.
+/// Something shown only when the person asks: a link, a password. While it
+/// is hidden it is not drawn at all, so there is nothing of it in a
+/// screenshot to work back from. Ink is drawn where it would be: specks
+/// that drift, laid out by the size of the box and never by what is in it.
+/// Showing it lets the ink lift away as the thing itself comes up.
 ///
-/// [builder] is told when the thing is fully shown and nothing is moving,
-/// which is the one time it may be something that can be selected. Grain
-/// needs a child that paints straight to the canvas, as plain text does.
+/// [builder] is told how hidden the thing is, from 0 for shown to 1, and
+/// has to draw nothing of it at 1. [lineHeight] lays the ink in lines that
+/// tall, for something that wraps. [inset] keeps the ink off a field's edge.
 class _Veil extends StatelessWidget {
   final bool shown;
-  final bool grain;
-  final Widget Function(bool settled) builder;
+  final double? lineHeight;
+  final EdgeInsets inset;
+  final Widget Function(double hidden) builder;
 
-  const _Veil({required this.shown, this.grain = false, required this.builder});
+  const _Veil({
+    required this.shown,
+    this.lineHeight,
+    this.inset = EdgeInsets.zero,
+    required this.builder,
+  });
 
   @override
   Widget build(BuildContext context) {
-    // Twice as long as one surface takes to give way to another: grains
-    // need the time to be seen going. Still when the theme's motion is.
-    final spec = ThemeScope.of(context).motion.swap;
+    final theme = ThemeScope.of(context);
+    // Twice as long as one surface takes to give way to another: the ink
+    // needs the time to be seen going. Still when the theme's motion is.
+    final spec = theme.motion.swap;
     return TweenAnimationBuilder<double>(
       tween: Tween<double>(end: shown ? 0 : 1),
       duration: spec.duration * 2,
       curve: Curves.easeInOut,
-      builder: (context, hidden, _) {
-        final child = builder(hidden == 0);
-        return ExcludeSemantics(
-          excluding: !shown,
-          child: IgnorePointer(
-            // A field still takes typing and a paste while it is veiled.
-            ignoring: grain && hidden > 0,
-            child: ClipRect(
-              child: ImageFiltered(
-                enabled: hidden > 0,
-                imageFilter: ImageFilter.blur(
-                    sigmaX: _veilBlur * hidden, sigmaY: _veilBlur * hidden),
-                child: grain ? _Grain(amount: hidden, child: child) : child,
+      builder: (context, hidden, _) => Stack(
+        children: [
+          builder(hidden),
+          if (hidden > 0)
+            Positioned.fill(
+              child: Padding(
+                padding: inset,
+                child: _Ink(
+                  amount: hidden,
+                  lineHeight: lineHeight,
+                  colour: theme.theme.textSecondary,
+                  still: spec.isStill,
+                ),
               ),
             ),
-          ),
-        );
-      },
+        ],
+      ),
     );
   }
 }
 
-/// Takes its child away a grain at a time: at [amount] 0 it is whole, and at
-/// 1 [_veilGrain] of it is gone. Which grains go first never changes, so a
-/// rising amount reads as the child dissolving.
-class _Grain extends SingleChildRenderObjectWidget {
+/// The ink over something hidden. It takes no pointer, so a field under it
+/// still takes a click and a paste.
+class _Ink extends StatefulWidget {
   final double amount;
+  final double? lineHeight;
+  final Color colour;
+  final bool still;
 
-  const _Grain({required this.amount, super.child});
+  const _Ink({
+    required this.amount,
+    required this.lineHeight,
+    required this.colour,
+    required this.still,
+  });
 
   @override
-  RenderObject createRenderObject(BuildContext context) =>
-      _RenderGrain(amount);
-
-  @override
-  void updateRenderObject(BuildContext context, _RenderGrain render) =>
-      render.amount = amount;
+  State<_Ink> createState() => _InkState();
 }
 
-class _RenderGrain extends RenderProxyBox {
-  _RenderGrain(this._amount);
+class _InkState extends State<_Ink> with SingleTickerProviderStateMixin {
+  late final AnimationController _loop =
+      AnimationController(vsync: this, duration: _inkLoop);
 
-  double _amount;
-
-  set amount(double amount) {
-    if (amount == _amount) return;
-    _amount = amount;
-    markNeedsPaint();
-  }
-
-  /// Where the grain at ([x], [y]) falls in the order they go in, from 0 for
-  /// the first to 1 for the last. A hash, so it has no pattern to it.
-  static double _order(int x, int y) {
-    var h = (x * 374761393 + y * 668265263) & 0x7fffffff;
-    h = ((h ^ (h >> 13)) * 1274126177) & 0x7fffffff;
-    return ((h ^ (h >> 16)) & 0xffff) / 0xffff;
+  @override
+  void initState() {
+    super.initState();
+    if (!widget.still) _loop.repeat();
   }
 
   @override
-  void paint(PaintingContext context, Offset offset) {
-    if (child == null || _amount <= 0) return super.paint(context, offset);
-    final canvas = context.canvas;
-    canvas.saveLayer(offset & size, Paint());
-    super.paint(context, offset);
-    final gone = Path();
-    final threshold = _amount * _veilGrain;
-    for (var y = 0; y * _grainSize < size.height; y++) {
-      for (var x = 0; x * _grainSize < size.width; x++) {
-        if (_order(x, y) < threshold) {
-          gone.addRect(Rect.fromLTWH(offset.dx + x * _grainSize,
-              offset.dy + y * _grainSize, _grainSize, _grainSize));
-        }
+  void dispose() {
+    _loop.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => IgnorePointer(
+        child: RepaintBoundary(
+          child: CustomPaint(
+            painter: _InkPainter(
+              loop: _loop,
+              amount: widget.amount,
+              lineHeight: widget.lineHeight,
+              colour: widget.colour,
+            ),
+          ),
+        ),
+      );
+}
+
+class _InkPainter extends CustomPainter {
+  final Animation<double> loop;
+  final double amount;
+  final double? lineHeight;
+  final Color colour;
+
+  _InkPainter({
+    required this.loop,
+    required this.amount,
+    required this.lineHeight,
+    required this.colour,
+  }) : super(repaint: loop);
+
+  /// A number from 0 to 1 that is always the same for the same speck and
+  /// [salt], with no pattern from one speck to the next.
+  static double _unit(int speck, int salt) {
+    var h = (speck * 374761393 + salt * 668265263) & 0x7fffffff;
+    h = ((h ^ (h >> 13)) * 1274126177) & 0x7fffffff;
+    return ((h ^ (h >> 16)) & 0xffff) / 0x10000;
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.isEmpty) return;
+    final lines = lineHeight == null
+        ? 1
+        : math.max(1, (size.height / lineHeight!).round());
+    final line = size.height / lines;
+    // The ink sits where the letters would, not edge to edge of the line.
+    final band = math.min(line * 0.6, 11.0);
+    final each = (size.width * band / _inkRoom).round().clamp(8, 1500);
+    final phase = loop.value;
+    // Three weights of speck, each brightening and dimming in its own time.
+    final specks = List.generate(3, (_) => <double>[]);
+    for (var row = 0; row < lines; row++) {
+      final middle = line * (row + 0.5);
+      for (var i = 0; i < each; i++) {
+        final speck = row * 7919 + i;
+        final turn = 2 * math.pi * (phase * (1 + speck % 2) + _unit(speck, 3));
+        // Going, each speck lifts by its own amount and spreads.
+        final going = (1 - amount) * (2 + 6 * _unit(speck, 4));
+        specks[speck % 3]
+          ..add(_unit(speck, 1) * size.width +
+              math.cos(turn) * (_inkDrift + going * 0.5))
+          ..add(middle +
+              (_unit(speck, 2) - 0.5) * band +
+              math.sin(turn) * _inkDrift * 0.6 -
+              going);
       }
     }
-    canvas.drawPath(gone, Paint()..blendMode = BlendMode.dstOut);
-    canvas.restore();
+    for (final (weight, points) in specks.indexed) {
+      final glow = 0.5 + 0.5 * math.sin(2 * math.pi * (phase + weight / 3));
+      final paint = Paint()
+        ..color = colour.withValues(alpha: amount * (0.3 + 0.35 * glow))
+        ..strokeWidth = 1.1 + 0.3 * weight
+        ..strokeCap = StrokeCap.round;
+      canvas.drawRawPoints(
+          PointMode.points, Float32List.fromList(points), paint);
+    }
   }
+
+  @override
+  bool shouldRepaint(_InkPainter old) =>
+      old.amount != amount ||
+      old.lineHeight != lineHeight ||
+      old.colour != colour;
 }
 
-/// Asked before a blurred link is shown: what it gives away, and to whom.
+/// Asked before a hidden link is shown: what it gives away, and to whom.
 class _ShowLinkQuestion extends StatelessWidget {
   final ValueChanged<bool?> onChoose;
 
