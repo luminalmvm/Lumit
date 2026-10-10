@@ -4996,6 +4996,30 @@
   "@keyPreviousEditPoint": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
+  "keyMarkIn": "Mark in",
+  "@keyMarkIn": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. An editing term: set the start of the span to take from a source, or of a span on the Cut timeline."
+  },
+  "keyMarkOut": "Mark out",
+  "@keyMarkOut": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. An editing term: set the end of the span to take from a source, or of a span on the Cut timeline."
+  },
+  "keyInsertAtThePlayhead": "Insert at the playhead",
+  "@keyInsertAtThePlayhead": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. An editing term: put the marked span of the source down at the playhead and move everything after it later to make room."
+  },
+  "keyOverwriteAtThePlayhead": "Overwrite at the playhead",
+  "@keyOverwriteAtThePlayhead": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. An editing term: put the marked span of the source down at the playhead, replacing what is there."
+  },
+  "keyRippleDelete": "Ripple delete",
+  "@keyRippleDelete": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. An editing term: delete the selected clips and close the gap they leave."
+  },
+  "keyCutTimeline": "Cut timeline",
+  "@keyCutTimeline": {
+    "description": "Settings → Keymap: a heading saying where these shortcuts are live. The Cut timeline is the panel for editing clips end to end."
+  },
   "keyPreviousFrame": "Previous frame",
   "@keyPreviousFrame": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."

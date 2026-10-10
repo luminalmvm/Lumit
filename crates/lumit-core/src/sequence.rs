@@ -197,6 +197,13 @@ pub struct Clip {
     /// clip's placed gain, so it rides ahead of nothing and after nothing.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub gain_db: f64,
+    /// Clips sharing a link belong together: a picture clip and the clip that
+    /// carries its sound move, trim and cut as one while linking is on. An id
+    /// is shared only by clips that should move together, so a cut through a
+    /// linked pair gives the later halves an id of their own. Left out of the
+    /// file while unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub link: Option<Uuid>,
     /// Unknown fields from newer Lumit versions (docs/10-FILE-FORMAT.md §1.1).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
@@ -226,6 +233,7 @@ impl Clip {
             effects: Vec::new(),
             fx: true,
             gain_db: 0.0,
+            link: None,
             extra: serde_json::Map::new(),
         }
     }
@@ -578,6 +586,7 @@ impl Clip {
             effects: respawn(&self.effects),
             fx: self.fx,
             gain_db: self.gain_db,
+            link: self.link,
             extra: self.extra.clone(),
         };
         let right = Clip {
@@ -594,6 +603,7 @@ impl Clip {
             effects: respawn(&self.effects),
             fx: self.fx,
             gain_db: self.gain_db,
+            link: self.link,
             extra: self.extra.clone(),
         };
         Some((left, right))
@@ -610,6 +620,47 @@ impl Clip {
         }
         Some(Clip {
             place_start,
+            ..self.clone()
+        })
+    }
+
+    /// Slip the clip by `delta` of source time: its place and its length on
+    /// the row stay as they are, and what it shows moves, later in the source
+    /// for a positive `delta`. A keyframed map moves whole, so a ramp keeps
+    /// its shape and only starts from a different frame.
+    ///
+    /// None if the clip would start before the top of its source, on
+    /// overflow, or when the map is expression-driven, for the reason
+    /// [`Self::map_split`] gives.
+    pub fn slip(&self, delta: Rational) -> Option<Clip> {
+        let source_in = self.source_in.checked_add(delta).ok()?;
+        if source_in.is_negative() {
+            return None;
+        }
+        let source_out = self.source_out.checked_add(delta).ok()?;
+        let by = delta.to_f64();
+        let retime = match &self.retime {
+            None => None,
+            Some(map) => Some(Property {
+                animation: match &map.animation {
+                    Animation::Static(v) => Animation::Static(v + by),
+                    Animation::Keyframed(keys) => Animation::Keyframed(
+                        keys.iter()
+                            .map(|k| Keyframe {
+                                value: k.value + by,
+                                ..*k
+                            })
+                            .collect(),
+                    ),
+                    Animation::Expression(_) => return None,
+                },
+                extra: map.extra.clone(),
+            }),
+        };
+        Some(Clip {
+            source_in,
+            source_out,
+            retime,
             ..self.clone()
         })
     }
@@ -993,6 +1044,117 @@ pub fn overwrite_with(clips: &[Clip], dropped: Uuid) -> Vec<Clip> {
     out
 }
 
+/// Ripple: move every clip that starts at or after `at` by `delta`, and leave
+/// the rest where they are. A clip that only straddles `at` started before
+/// it, so it stays.
+///
+/// None if a moved clip would start before the row's zero, or would land on a
+/// clip that stayed. Only a move earlier can do the second: a move later
+/// opens room and never closes it.
+pub fn shift_from(clips: &[Clip], at: Rational, delta: Rational) -> Option<Vec<Clip>> {
+    let mut out = Vec::with_capacity(clips.len());
+    for c in clips {
+        out.push(if c.place_start >= at {
+            c.slide(delta)?
+        } else {
+            c.clone()
+        });
+    }
+    if delta.is_negative() {
+        let mut stayed = clips.iter().filter(|c| c.place_start < at);
+        let moved = || {
+            clips
+                .iter()
+                .zip(&out)
+                .filter(|(was, _)| was.place_start >= at)
+        };
+        if stayed.any(|s| moved().any(|(_, now)| overlaps(now, s.place_start, s.place_end()))) {
+            return None;
+        }
+    }
+    Some(out)
+}
+
+/// Roll the edit point between two abutting clips to layer time `to`: `left`
+/// trims as `right` extends, or the other way round, and nothing else on the
+/// row moves. Each keeps playing the frames it played wherever it still is.
+///
+/// None when the two do not meet end to start, when `to` leaves either of
+/// them with no length, or when a map cannot be trimmed or carried on.
+pub fn roll(clips: &[Clip], left: Uuid, right: Uuid, to: Rational) -> Option<Vec<Clip>> {
+    let l = clips.iter().find(|c| c.id == left)?;
+    let r = clips.iter().find(|c| c.id == right)?;
+    let edit = l.place_end();
+    if r.place_start != edit {
+        return None;
+    }
+    let (l, r) = match to.cmp(&edit) {
+        std::cmp::Ordering::Less => (l.trim_end(to)?, r.extend_start(to)?),
+        std::cmp::Ordering::Greater => (l.extend_end(to)?, r.trim_start(to)?),
+        std::cmp::Ordering::Equal => return Some(clips.to_vec()),
+    };
+    Some(with(clips, &[l, r]))
+}
+
+/// Slide a clip between its neighbours by `delta`, the editor's slide: the
+/// clip keeps its length and its frames, the clip that ends where it starts
+/// follows its head and the clip that starts where it ends follows its tail,
+/// so the three stay abutting and the rest of the row never moves.
+/// [`Clip::slide`] is the plain move along the row.
+///
+/// A side with no neighbour is open row, and the clip may move into it. None
+/// when a neighbour has no length left to give, when the clip would land on
+/// anything else, or when it would start before the row's zero.
+pub fn slide_between(clips: &[Clip], clip: Uuid, delta: Rational) -> Option<Vec<Clip>> {
+    let c = clips.iter().find(|c| c.id == clip)?;
+    if delta == Rational::ZERO {
+        return Some(clips.to_vec());
+    }
+    let moved = c.slide(delta)?;
+    let (start, end) = (moved.place_start, moved.place_end());
+    let later = !delta.is_negative();
+    let mut changed = Vec::with_capacity(3);
+    if let Some(before) = clips
+        .iter()
+        .find(|n| n.id != clip && n.place_end() == c.place_start)
+    {
+        changed.push(if later {
+            before.extend_end(start)?
+        } else {
+            before.trim_end(start)?
+        });
+    }
+    if let Some(after) = clips
+        .iter()
+        .find(|n| n.id != clip && n.place_start == c.place_end())
+    {
+        changed.push(if later {
+            after.trim_start(end)?
+        } else {
+            after.extend_start(end)?
+        });
+    }
+    changed.push(moved);
+    let out = with(clips, &changed);
+    if out.iter().any(|o| o.id != clip && overlaps(o, start, end)) {
+        return None;
+    }
+    Some(out)
+}
+
+/// Whether `clip` shares any of the row with the span `start..end`.
+fn overlaps(clip: &Clip, start: Rational, end: Rational) -> bool {
+    clip.place_start < end && start < clip.place_end()
+}
+
+/// `clips` with each of `changed` standing in for the clip of the same id.
+fn with(clips: &[Clip], changed: &[Clip]) -> Vec<Clip> {
+    clips
+        .iter()
+        .map(|c| changed.iter().find(|n| n.id == c.id).unwrap_or(c).clone())
+        .collect()
+}
+
 /// The layer-local span the clips occupy: the first clip's start to the last
 /// clip's end. None for a Sequence layer with no clips at all, which
 /// has no length of its own to take.
@@ -1212,6 +1374,142 @@ mod tests {
         clear.id = Uuid::now_v7();
         let all = vec![a.clone(), b.clone(), c.clone(), clear.clone()];
         assert_eq!(overwrite_with(&all, clear.id).len(), 4);
+    }
+
+    /// A ripple moves what starts at or after the point and nothing else, and
+    /// refuses rather than land a moved clip on one that stayed.
+    #[test]
+    fn a_ripple_shifts_what_follows_and_refuses_to_overlap() {
+        let src = Uuid::now_v7();
+        // [0,4) [4,8), a gap, then [10,12).
+        let clips = vec![clip(src, 0, 4), clip(src, 4, 4), clip(src, 10, 2)];
+        let starts = |c: &[Clip]| c.iter().map(|c| c.place_start).collect::<Vec<_>>();
+
+        let later = shift_from(&clips, rat(4, 1), rat(2, 1)).unwrap();
+        assert_eq!(starts(&later), vec![rat(0, 1), rat(6, 1), rat(12, 1)]);
+        assert_eq!(later[1].source_in, clips[1].source_in, "the same frames");
+        // A clip that straddles the point started before it, so it stays.
+        let straddled = shift_from(&clips, rat(5, 1), rat(2, 1)).unwrap();
+        assert_eq!(starts(&straddled), vec![rat(0, 1), rat(4, 1), rat(12, 1)]);
+
+        // Closing the gap exactly is fine. Any further lands on the clip that
+        // stayed, and nothing moves before the row's zero.
+        let closed = shift_from(&clips, rat(10, 1), rat(-2, 1)).unwrap();
+        assert_eq!(starts(&closed), vec![rat(0, 1), rat(4, 1), rat(8, 1)]);
+        assert!(shift_from(&clips, rat(10, 1), rat(-3, 1)).is_none());
+        assert!(shift_from(&clips, rat(0, 1), rat(-1, 1)).is_none());
+    }
+
+    /// A roll moves the join and nothing else, and both clips go on playing
+    /// the frames they played.
+    #[test]
+    fn rolling_an_edit_point_moves_only_the_join() {
+        let src = Uuid::now_v7();
+        // [0,4), then [4,8) entered two seconds into its source, then [8,10).
+        let left = clip(src, 0, 4);
+        let right = Clip::new(
+            ClipSource::Footage(src),
+            rat(2, 1),
+            rat(6, 1),
+            rat(4, 1),
+            rat(4, 1),
+        );
+        let clips = vec![left.clone(), right.clone(), clip(src, 8, 2)];
+
+        for to in [rat(3, 1), rat(5, 1)] {
+            let out = roll(&clips, left.id, right.id, to).unwrap();
+            assert_eq!(out[0].place_start, rat(0, 1));
+            assert_eq!(out[0].place_end(), to);
+            assert_eq!(out[1].place_start, to);
+            assert_eq!(out[1].place_end(), rat(8, 1));
+            assert_eq!(out[2], clips[2], "the rest of the row is untouched");
+            assert!((out[0].source_time(2.0) - left.source_time(2.0)).abs() < 1e-9);
+            assert!((out[1].source_time(6.0) - right.source_time(6.0)).abs() < 1e-9);
+        }
+        assert_eq!(
+            roll(&clips, left.id, right.id, rat(3, 1)).unwrap()[1].source_in,
+            rat(1, 1),
+            "the right clip opens a second earlier in its source"
+        );
+
+        // Past either clip's far end, or across a pair that does not meet.
+        assert!(roll(&clips, left.id, right.id, rat(8, 1)).is_none());
+        assert!(roll(&clips, left.id, right.id, rat(0, 1)).is_none());
+        assert!(roll(&clips, left.id, clips[2].id, rat(5, 1)).is_none());
+    }
+
+    /// A slip changes the frames and never the place, a ramp slips whole, and
+    /// a clip cannot be slipped off the top of its source.
+    #[test]
+    fn slipping_changes_the_frames_and_not_the_place() {
+        let c = Clip::new(
+            ClipSource::Footage(Uuid::now_v7()),
+            rat(2, 1),
+            rat(6, 1),
+            rat(10, 1),
+            rat(4, 1),
+        );
+        let s = c.slip(rat(1, 1)).unwrap();
+        assert_eq!((s.place_start, s.place_duration), (rat(10, 1), rat(4, 1)));
+        assert_eq!((s.source_in, s.source_out), (rat(3, 1), rat(7, 1)));
+        assert!((s.source_time(10.0) - 3.0).abs() < 1e-9);
+
+        let ramp = c.with_ramp(rat(1, 1), rat(3, 1));
+        let slipped = ramp.slip(rat(-1, 1)).unwrap();
+        for lt in [10.0, 11.5, 13.9] {
+            let moved = slipped.source_time(lt) - ramp.source_time(lt);
+            assert!((moved + 1.0).abs() < 1e-9, "the whole map moved at {lt}");
+        }
+        assert_eq!(slipped.ramp_view(), ramp.ramp_view(), "at the same speeds");
+
+        assert!(c.slip(rat(-3, 1)).is_none());
+        let mut typed = c.clone();
+        typed.retime = Some(Property {
+            animation: Animation::Expression("time".into()),
+            extra: serde_json::Map::new(),
+        });
+        assert!(
+            typed.slip(rat(1, 1)).is_none(),
+            "an expression is not rewritten"
+        );
+    }
+
+    /// The editor's slide: the clip moves with its frames, and its neighbours
+    /// give and take the difference so the three stay abutting.
+    #[test]
+    fn sliding_between_neighbours_trims_one_and_extends_the_other() {
+        let src = Uuid::now_v7();
+        let clips = vec![clip(src, 0, 4), clip(src, 4, 4), clip(src, 8, 4)];
+        let spans = |c: &[Clip]| {
+            c.iter()
+                .map(|c| (c.place_start, c.place_end()))
+                .collect::<Vec<_>>()
+        };
+
+        let out = slide_between(&clips, clips[1].id, rat(1, 1)).unwrap();
+        assert_eq!(
+            spans(&out),
+            vec![
+                (rat(0, 1), rat(5, 1)),
+                (rat(5, 1), rat(9, 1)),
+                (rat(9, 1), rat(12, 1))
+            ]
+        );
+        assert_eq!(out[1].source_in, clips[1].source_in, "the same frames");
+        assert!((out[2].source_time(10.0) - clips[2].source_time(10.0)).abs() < 1e-9);
+
+        // A neighbour has only its own length to give.
+        assert!(slide_between(&clips, clips[1].id, rat(4, 1)).is_none());
+        // The last clip has open row after it, and may move into it.
+        let out = slide_between(&clips, clips[2].id, rat(2, 1)).unwrap();
+        assert_eq!(
+            spans(&out),
+            vec![
+                (rat(0, 1), rat(4, 1)),
+                (rat(4, 1), rat(10, 1)),
+                (rat(10, 1), rat(14, 1))
+            ]
+        );
     }
 
     #[test]
@@ -1480,7 +1778,7 @@ mod tests {
     fn the_new_fields_are_absent_until_set_and_round_trip_when_they_are() {
         let bare = clip(Uuid::now_v7(), 1, 4);
         let before = serde_json::to_string(&bare).unwrap();
-        for key in ["fade_in", "fade_out", "effects", "fx", "gain_db"] {
+        for key in ["fade_in", "fade_out", "effects", "fx", "gain_db", "link"] {
             assert!(!before.contains(key), "an untouched clip writes no {key}");
         }
         let reopened: Clip = serde_json::from_str(&before).unwrap();
@@ -1503,6 +1801,7 @@ mod tests {
         set.effects = vec![instance()];
         set.fx = false;
         set.gain_db = -6.0;
+        set.link = Some(Uuid::now_v7());
         let text = serde_json::to_string(&set).unwrap();
         assert_eq!(serde_json::from_str::<Clip>(&text).unwrap(), set);
     }

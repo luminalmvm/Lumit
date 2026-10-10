@@ -15,6 +15,7 @@ pub mod cache;
 pub mod colour;
 pub mod comp_graph;
 pub mod composition;
+pub mod cut;
 pub mod effect;
 pub mod export;
 pub mod expressions;

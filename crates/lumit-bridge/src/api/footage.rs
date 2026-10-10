@@ -526,6 +526,7 @@ impl FootageReference {
     /// Play this file's own sound from the top — the Project panel's preview
     /// (docs/07 §3.1). `false` when the file cannot be found on this machine,
     /// so the panel can hush the button rather than offer a play that is silent.
+    /// [`Self::preview_audio_from`] starts part way in.
     ///
     /// There is no composition behind it and no layer made: the file is decoded
     /// and heard as it is. Stopping is [`crate::api::audio::audio_stop`] and
@@ -538,15 +539,28 @@ impl FootageReference {
     ///
     /// A build with no decoder can open nothing, so it says so and the button
     /// never appears.
-    #[cfg(not(feature = "media"))]
     #[frb(sync)]
     pub fn preview_audio(&self) -> Result<bool, BridgeError> {
+        self.preview_audio_from(0.0)
+    }
+
+    /// [`Self::preview_audio`] from `start_seconds` into the file, which is
+    /// what the Source viewer plays from its own playhead.
+    ///
+    /// `audio_clock` then reads **the file's own time**: seconds from the top
+    /// of the file, so it starts at `start_seconds` and not at zero. A start
+    /// past the end of the file is held to the end, and a negative one is
+    /// the top.
+    #[cfg(not(feature = "media"))]
+    #[frb(sync)]
+    pub fn preview_audio_from(&self, start_seconds: f64) -> Result<bool, BridgeError> {
+        let _ = start_seconds;
         Ok(false)
     }
 
     #[cfg(feature = "media")]
     #[frb(sync)]
-    pub fn preview_audio(&self) -> Result<bool, BridgeError> {
+    pub fn preview_audio_from(&self, start_seconds: f64) -> Result<bool, BridgeError> {
         let project = self.project()?;
         let proj = project.read().map_err(|_| BridgeError::ReadFailed)?;
         let doc = proj.store.snapshot();
@@ -559,7 +573,7 @@ impl FootageReference {
         // The lock goes before the decode does: `preview` spawns and returns,
         // so nothing slow happens under the project guard (docs/14 §1).
         drop(proj);
-        crate::audio::preview(self.id, src.path);
+        crate::audio::preview(self.id, src.path, start_seconds);
         Ok(true)
     }
 

@@ -224,6 +224,9 @@ void main() {
         fx: true,
         gainDb: 0,
         sourceName: 'Take.wav',
+        sourceIn: const BridgeRational(num: 0, den: 1),
+        sourceOut: const BridgeRational(num: 1, den: 1),
+        sourceIsComp: false,
       );
 
   group('Which clip a press takes hold of', () {
@@ -278,6 +281,9 @@ void main() {
       fx: true,
       gainDb: 0,
       sourceName: 'Take 3.wav',
+      sourceIn: const BridgeRational(num: 0, den: 1),
+      sourceOut: const BridgeRational(num: 1, den: 1),
+      sourceIsComp: false,
     );
 
     test('opens on to the clip name, then a heading per effect', () {

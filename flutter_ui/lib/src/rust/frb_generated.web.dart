@@ -15,6 +15,7 @@ import 'api/cache.dart';
 import 'api/colour.dart';
 import 'api/comp_graph.dart';
 import 'api/composition.dart';
+import 'api/cut.dart';
 import 'api/effect.dart';
 import 'api/export.dart';
 import 'api/expressions.dart';
@@ -529,6 +530,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeCrop dco_decode_bridge_crop(dynamic raw);
+
+  @protected
+  BridgeCutResult dco_decode_bridge_cut_result(dynamic raw);
 
   @protected
   BridgeDiskCacheStats dco_decode_bridge_disk_cache_stats(dynamic raw);
@@ -2130,6 +2134,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeCrop sse_decode_bridge_crop(SseDeserializer deserializer);
+
+  @protected
+  BridgeCutResult sse_decode_bridge_cut_result(SseDeserializer deserializer);
 
   @protected
   BridgeDiskCacheStats sse_decode_bridge_disk_cache_stats(
@@ -3940,6 +3947,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   void sse_encode_bridge_crop(BridgeCrop self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_cut_result(
+      BridgeCutResult self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_disk_cache_stats(

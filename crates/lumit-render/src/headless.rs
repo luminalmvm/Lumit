@@ -4598,6 +4598,7 @@ mod tests {
             effects: Vec::new(),
             fx: true,
             gain_db: 0.0,
+            link: None,
             extra: serde_json::Map::new(),
         };
         push_layer(

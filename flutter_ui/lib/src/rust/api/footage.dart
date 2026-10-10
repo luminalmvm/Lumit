@@ -269,10 +269,30 @@ class FootageReference {
         that: this,
       );
 
+  /// Play this file's own sound from the top — the Project panel's preview
+  /// (docs/07 §3.1). `false` when the file cannot be found on this machine,
+  /// so the panel can hush the button rather than offer a play that is silent.
+  /// [`Self::preview_audio_from`] starts part way in.
+  ///
+  /// There is no composition behind it and no layer made: the file is decoded
+  /// and heard as it is. Stopping is [`crate::api::audio::audio_stop`] and
+  /// where it has got to is [`crate::api::audio::audio_clock`] — one pair of
+  /// speakers, so one transport, and playing a comp silences a preview.
+  ///
+  /// Whether this file *has* any sound is [`Self::media_info`]'s
+  /// `audio_codec`, which the panel already holds; asking again here would be
+  /// a second probe for an answer that is on the screen.
+  ///
+  /// A build with no decoder can open nothing, so it says so and the button
+  /// never appears.
   bool previewAudio() =>
       BridgeLib.instance.api.crateApiFootageFootageReferencePreviewAudio(
         that: this,
       );
+
+  bool previewAudioFrom({required double startSeconds}) =>
+      BridgeLib.instance.api.crateApiFootageFootageReferencePreviewAudioFrom(
+          that: this, startSeconds: startSeconds);
 
   /// Where MAKE-PROXY would write this item's proxy: beside the original,
   /// with `_proxy` before a `.mov` extension.

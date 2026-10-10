@@ -95,6 +95,11 @@ impl ActionId {
             "keyframe.interpolation" => "Set the keyframe's interpolation",
             "keyframe.speed" => "Set the keyframe's speed",
             "expression.add" => "Add an expression",
+            "cut.mark.in" => "Mark in",
+            "cut.mark.out" => "Mark out",
+            "cut.insert" => "Insert at the playhead",
+            "cut.overwrite" => "Overwrite at the playhead",
+            "cut.delete.ripple" => "Ripple delete",
             "workarea.set.start" => "Set work-area start to the playhead",
             "workarea.set.end" => "Set work-area end to the playhead",
             "marker.add" => "Add a marker at the playhead",
@@ -248,12 +253,15 @@ pub enum KeyContext {
     /// Panel focus/search shortcuts (docs/07 §15 "Panels").
     Panels,
     Effects,
+    /// The Cut workspace's timeline, where the editor's own letters shadow
+    /// the app-wide ones.
+    Cut,
 }
 
 impl KeyContext {
     /// Every context, in the order Settings → Keymap lists them: the ones live
     /// everywhere first, then the panels roughly as the workspace reads.
-    pub const ALL: [KeyContext; 8] = [
+    pub const ALL: [KeyContext; 9] = [
         KeyContext::Global,
         KeyContext::Tools,
         KeyContext::Project,
@@ -262,6 +270,7 @@ impl KeyContext {
         KeyContext::Graph,
         KeyContext::Panels,
         KeyContext::Effects,
+        KeyContext::Cut,
     ];
 
     /// The heading Settings → Keymap puts above this context's table. Sentence
@@ -279,6 +288,7 @@ impl KeyContext {
             KeyContext::Graph => "Graph editor",
             KeyContext::Panels => "Panels",
             KeyContext::Effects => "Effect controls",
+            KeyContext::Cut => "Cut timeline",
         }
     }
 }
@@ -780,7 +790,7 @@ fn row(context: KeyContext, chord: &str, action: &str) -> Option<Binding> {
 /// it to Cmd on macOS. Ships conflict-free (proven in tests).
 #[must_use]
 pub fn default_keymap() -> Keymap {
-    use KeyContext::{Effects, Global, Graph, Panels, Project, Timeline, Tools, Viewer};
+    use KeyContext::{Cut, Effects, Global, Graph, Panels, Project, Timeline, Tools, Viewer};
     let rows = [
         // --- Global: transport, navigation, app-wide commands ---
         row(Global, "Space", "playback.toggle"),
@@ -1021,6 +1031,17 @@ pub fn default_keymap() -> Keymap {
         row(Panels, "Mod+4", "panel.toggle.audio"),
         row(Panels, "Mod+6", "panel.toggle.text"),
         row(Panels, "Mod+7", "panel.toggle.paragraph"),
+        // --- Cut timeline ---
+        // An editor's own keys, the ones Premiere uses. I, O and the two
+        // punctuation keys are spoken for app-wide, by the layer's in and out
+        // points and the keyframe steps, so they are bound here and shadow
+        // those inside the Cut timeline and nowhere else, the way `L` does
+        // in the Timeline.
+        row(Cut, "I", "cut.mark.in"),
+        row(Cut, "O", "cut.mark.out"),
+        row(Cut, ",", "cut.insert"),
+        row(Cut, ".", "cut.overwrite"),
+        row(Cut, "Shift+Delete", "cut.delete.ripple"),
     ];
     let mut bindings: Vec<Binding> = rows.into_iter().flatten().collect();
     // Alt+Shift+1…9 switch workspace.
@@ -1237,8 +1258,8 @@ mod tests {
     }
 
     /// `L` reveals a layer's Audio in the Timeline and shuttles forward
-    /// everywhere else — the one shadow the default ships with, and it
-    /// is deliberate.
+    /// everywhere else. That and the Cut timeline's four editing keys are the
+    /// shadows the default ships with, and they are deliberate.
     #[test]
     fn the_default_gives_the_timeline_l_and_leaves_the_shuttle_elsewhere() {
         let km = default_keymap();
@@ -1261,8 +1282,8 @@ mod tests {
                 .iter()
                 .map(|s| s.chord.to_string())
                 .collect::<Vec<_>>(),
-            vec!["L".to_string()],
-            "one deliberate shadow, and it is named in the docs"
+            ["L", "I", "O", ",", "."],
+            "the deliberate shadows, and no others"
         );
     }
 

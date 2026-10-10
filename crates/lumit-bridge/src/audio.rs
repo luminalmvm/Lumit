@@ -784,8 +784,13 @@ pub(crate) fn play(comp: Uuid, start: f64, doc: Arc<lumit_core::Document>) {
     kick_prepare(&mut st, comp, doc);
 }
 
-/// Play one footage file's own sound from the top, with no composition behind
-/// it — the Project panel's preview button (docs/07 §3.1).
+/// Play one footage file's own sound from `start_s` seconds into it, with no
+/// composition behind it: the Project panel's preview button (docs/07 §3.1)
+/// from the top, and the Source viewer from wherever its playhead is.
+///
+/// [`clock`] then reads **the file's own time**, seconds from the top of the
+/// file, and so starts at `start_s` and not at zero. A start past the end of
+/// the file is held to the end, and one that is not a number is the top.
 ///
 /// The mix is a single clip at unity, loaded under the **item's** id. A footage
 /// id is never a comp id, so a preview and a comp's mix cannot be taken for one
@@ -795,7 +800,9 @@ pub(crate) fn play(comp: Uuid, start: f64, doc: Arc<lumit_core::Document>) {
 ///
 /// Returns at once: the decode runs on its own thread, so a long file does not
 /// hold the press.
-pub(crate) fn preview(item: Uuid, path: std::path::PathBuf) {
+pub(crate) fn preview(item: Uuid, path: std::path::PathBuf, start_s: f64) {
+    // `max` answers zero for a start that is not a number.
+    let start_s = start_s.max(0.0);
     {
         let mut st = lock();
         if matches!(st.device, Device::Unavailable) {
@@ -803,10 +810,14 @@ pub(crate) fn preview(item: Uuid, path: std::path::PathBuf) {
         }
         st.wanted_preview = Some(item);
         // This file's preview is already in the engine: a second press is a
-        // rewind, not a re-decode.
+        // seek, not a re-decode.
         if st.loaded_comp == Some(item) {
             st.playing = true;
-            send(&st, Cmd::Seek(0.0));
+            let length = st
+                .decoded
+                .get(&item)
+                .map(|b| (b.samples.len() / 2) as f64 / f64::from(b.rate));
+            send(&st, Cmd::Seek(length.map_or(start_s, |l| start_s.min(l))));
             send(&st, Cmd::Play);
             return;
         }
@@ -875,7 +886,7 @@ pub(crate) fn preview(item: Uuid, path: std::path::PathBuf) {
         }
         let _ = tx.send(Cmd::Load {
             plan,
-            start: Some(0.0),
+            start: Some(start_s.min(duration_s)),
             play: true,
         });
         st.loaded_comp = Some(item);

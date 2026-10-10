@@ -4252,6 +4252,75 @@ fn a_clip_moves_between_rows_in_one_step() {
     let _ = footage;
 }
 
+/// A linked ripple delete takes a picture clip and the clip linked to it off
+/// two layers and closes both behind them, and one undo puts all of it back.
+#[test]
+fn a_linked_ripple_delete_closes_both_layers_in_one_step() {
+    use crate::api::cut::BridgeCutResult;
+    let project = LumitBridgeState::new_project(None).expect("a new project");
+    let comp = project.new_composition("Scene".into(), None).expect("comp");
+    let footage = project
+        .import_footage("C:/clips/shot.mov".into())
+        .expect("imported");
+    let span = |n: i64| BridgeRational { num: n, den: 1 };
+    let place = |target: Option<LayerReference>, at: i64| {
+        let done = comp.cut_place(target, &footage, span(0), span(2), at, false, true);
+        assert_eq!(done.expect("placed"), BridgeCutResult::Done);
+    };
+
+    // Two rows, each holding two clips end to end.
+    place(None, 0);
+    let top = comp.get_layers().expect("layers").remove(0);
+    assert!(
+        !top.get_switches().expect("switches").audible,
+        "a picture row made here is silent, so its sound is heard once"
+    );
+    let below = comp.add_sequence_layer(Some(1)).expect("a second row");
+    place(Some(below), 0);
+    let join = top.get_clips().expect("clips")[0].end_frame;
+    place(Some(top), join);
+    place(Some(below), join);
+
+    // Link the first clip on each row, as a picture clip and its sound are.
+    let link = Uuid::now_v7();
+    for row in [top, below] {
+        let lumit_core::model::LayerKind::Sequence { mut clips } = row.item().expect("row").kind
+        else {
+            panic!("a Sequence layer");
+        };
+        clips[0].link = Some(link);
+        row.commit(Op::SetSequenceClips {
+            comp: comp.id(),
+            layer: row.id(),
+            clips,
+        })
+        .expect("linked");
+    }
+
+    let first = top.get_clips().expect("clips").remove(0);
+    let done = comp.cut_delete(vec![first.id], true, true);
+    assert_eq!(done.expect("deleted"), BridgeCutResult::Done);
+    for row in [top, below] {
+        let left = row.get_clips().expect("clips");
+        assert_eq!(left.len(), 1, "the linked clip went with it");
+        assert_eq!(left[0].start_frame, 0, "and the row closed behind it");
+    }
+
+    project.undo().expect("undo");
+    for row in [top, below] {
+        assert_eq!(row.get_clips().expect("clips").len(), 2, "one step back");
+    }
+
+    // A clip put down across the composition's end takes the end with it.
+    let length = comp.duration_frames().expect("length");
+    place(Some(top), length - 1);
+    assert_eq!(
+        comp.duration_frames().expect("length"),
+        length - 1 + join,
+        "the composition grew to the clip's end"
+    );
+}
+
 /// A clip's own effect stack is reached by every effect command the layer's
 /// stack already has, through the one instance lookup
 /// (docs/impl/audio-timeline.md §2).
