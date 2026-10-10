@@ -577,6 +577,11 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// the staged span rather than jumping back.
   final ValueNotifier<({int start, int end, bool whole})?> _workPreview =
       ValueNotifier(null);
+
+  /// The marker a drag on the ruler has staged, for the same reason: a
+  /// region's band in the lanes and the graph follows its flag by listening,
+  /// not by this panel rebuilding on every pointer move.
+  final ValueNotifier<MarkerPreview?> _markerPreview = ValueNotifier(null);
   BigInt? _workRevision;
   CompositionReference? _workComp;
 
@@ -4441,7 +4446,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     final snap = timelineSnapTargets(
       rows: rows,
       comp: comp,
-      playheadFrame: ui.playheadFrame.value,
+      playhead: ui.playheadFrame,
       work: work,
       fps: ui.model.fps,
     );
@@ -4488,6 +4493,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                               onWorkPreview: (span) =>
                                   _workPreview.value = span,
                               onMarkersChanged: () => setState(() {}),
+                              onMarkerPreview: (staged) =>
+                                  _markerPreview.value = staged,
                               // The graph shares the ruler, so it shares the
                               // ruler's snapping (docs/07 §4.5).
                               snapTargets: snap,
@@ -4528,6 +4535,15 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                         t.surface1),
                                     outside: t.timelineOutOfRange,
                                     edge: workAreaEdgeColour(t),
+                                  ),
+                                  // The markers' regions run down through
+                                  // the curves as they do through the lanes.
+                                  MarkerRegionsGround(
+                                    key: const ValueKey<String>(
+                                        'tl-graph-regions'),
+                                    comp: comp,
+                                    axis: axis,
+                                    preview: _markerPreview,
                                   ),
                                   GraphEditorFrb(
                                     key: _graphPane,
@@ -4709,6 +4725,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                       work: work,
                       onWorkPreview: (span) => _workPreview.value = span,
                       workPreview: _workPreview,
+                      markerPreview: _markerPreview,
                       onKeysSelected: _onLaneKeysSelected,
                       onKeyMenu: _laneKeyMenu,
                       onWheel: (e, x) => _wheel(e, x, axis),

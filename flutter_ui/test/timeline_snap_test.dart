@@ -4,6 +4,7 @@
 // a widget tree — the same reasoning timeline_drag_test.dart follows for the
 // row-height maths.
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/panels/timeline_snap.dart';
@@ -105,6 +106,28 @@ void main() {
         ),
       );
     }
+
+    test('the playhead target follows the playhead after the list is built',
+        () {
+      final playhead = ValueNotifier<int>(10);
+      final targets = snapTargetsOf(
+        layers: const [],
+        compMarkers: const [],
+        keyRows: const [],
+        playheadFrame: playhead.value,
+        playhead: playhead,
+        work: (start: 0, end: 180, whole: true),
+        fps: 60,
+      );
+      expect(targets.where((t) => t.kind == SnapKind.playhead).single.frame,
+          10.0);
+
+      // A scrub rebuilds no panel, so the list a drag holds is this same one.
+      playhead.value = 75;
+      expect(targets.where((t) => t.kind == SnapKind.playhead).single.frame,
+          75.0,
+          reason: 'a drag lands on where the playhead is, not where it was');
+    });
 
     test('are the frames the clips are drawn at, offset and all', () {
       final targets = snapTargetsOf(

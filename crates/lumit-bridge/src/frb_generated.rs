@@ -20176,12 +20176,14 @@ impl SseDecode for crate::api::composition::BridgeMarker {
         let mut var_time = <crate::api::effect::BridgeRational>::sse_decode(deserializer);
         let mut var_label = <String>::sse_decode(deserializer);
         let mut var_durationFrames = <Option<i64>>::sse_decode(deserializer);
+        let mut var_colour = <Option<u8>>::sse_decode(deserializer);
         let mut var_isBeat = <bool>::sse_decode(deserializer);
         return crate::api::composition::BridgeMarker {
             id: var_id,
             time: var_time,
             label: var_label,
             duration_frames: var_durationFrames,
+            colour: var_colour,
             is_beat: var_isBeat,
         };
     }
@@ -24509,6 +24511,17 @@ impl SseDecode for Option<u64> {
     }
 }
 
+impl SseDecode for Option<u8> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<u8>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
 impl SseDecode for Option<[f64; 2]> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -28201,6 +28214,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::composition::BridgeMarker {
             self.time.into_into_dart().into_dart(),
             self.label.into_into_dart().into_dart(),
             self.duration_frames.into_into_dart().into_dart(),
+            self.colour.into_into_dart().into_dart(),
             self.is_beat.into_into_dart().into_dart(),
         ]
         .into_dart()
@@ -33257,6 +33271,7 @@ impl SseEncode for crate::api::composition::BridgeMarker {
         <crate::api::effect::BridgeRational>::sse_encode(self.time, serializer);
         <String>::sse_encode(self.label, serializer);
         <Option<i64>>::sse_encode(self.duration_frames, serializer);
+        <Option<u8>>::sse_encode(self.colour, serializer);
         <bool>::sse_encode(self.is_beat, serializer);
     }
 }
@@ -36608,6 +36623,16 @@ impl SseEncode for Option<u64> {
         <bool>::sse_encode(self.is_some(), serializer);
         if let Some(value) = self {
             <u64>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<u8> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <u8>::sse_encode(value, serializer);
         }
     }
 }

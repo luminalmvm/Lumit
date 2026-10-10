@@ -4801,6 +4801,7 @@ fn clearing_beats_keeps_the_markers_a_person_made() {
 
     comp.set_markers(vec![BridgeMarker {
         duration_frames: None,
+        colour: None,
         is_beat: false,
         id: Uuid::now_v7(),
         time: BridgeRational { num: 1, den: 2 },
@@ -4954,6 +4955,7 @@ fn dropping_a_comp_in_copies_its_markers_onto_the_layer() {
     source
         .set_markers(vec![BridgeMarker {
             duration_frames: None,
+            colour: None,
             is_beat: false,
             id: seeded,
             time: BridgeRational { num: 1, den: 2 },
@@ -4989,6 +4991,7 @@ fn precompose_carries_markers_in_and_leaves_the_layer_bare() {
     let comp = CompositionReference::new(project.id, layer.comp_id());
     comp.set_markers(vec![BridgeMarker {
         duration_frames: None,
+        colour: None,
         is_beat: false,
         id: Uuid::now_v7(),
         time: BridgeRational { num: 1, den: 2 },
@@ -6305,6 +6308,7 @@ fn a_markers_span_crosses_as_frames_and_survives_a_rename() {
             time: BridgeRational { num: 0, den: 1 },
             label: "moment".into(),
             duration_frames: None,
+            colour: None,
             is_beat: false,
         },
         BridgeMarker {
@@ -6312,6 +6316,7 @@ fn a_markers_span_crosses_as_frames_and_survives_a_rename() {
             time: BridgeRational { num: 1, den: 1 },
             label: "span".into(),
             duration_frames: Some(12),
+            colour: Some(3),
             is_beat: false,
         },
     ])
@@ -6334,6 +6339,8 @@ fn a_markers_span_crosses_as_frames_and_survives_a_rename() {
     let read = comp.get_markers().expect("markers");
     assert_eq!(read[1].duration_frames, Some(12));
     assert_eq!(read[1].label, "span renamed");
+    assert_eq!(read[1].colour, Some(3), "and the colour it was given");
+    assert_eq!(read[0].colour, None, "a marker nobody coloured stays plain");
 
     // Nought frames is a moment, which is what "no span" means everywhere.
     let mut back = comp.get_markers().expect("markers");

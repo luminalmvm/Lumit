@@ -16934,6 +16934,12 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  int dco_decode_box_autoadd_u_8(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as int;
+  }
+
+  @protected
   BridgeAddon dco_decode_bridge_addon(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -18531,14 +18537,15 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeMarker dco_decode_bridge_marker(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 5)
-      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    if (arr.length != 6)
+      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
     return BridgeMarker(
       id: dco_decode_Uuid(arr[0]),
       time: dco_decode_bridge_rational(arr[1]),
       label: dco_decode_String(arr[2]),
       durationFrames: dco_decode_opt_box_autoadd_i_64(arr[3]),
-      isBeat: dco_decode_bool(arr[4]),
+      colour: dco_decode_opt_box_autoadd_u_8(arr[4]),
+      isBeat: dco_decode_bool(arr[5]),
     );
   }
 
@@ -21322,6 +21329,12 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  int? dco_decode_opt_box_autoadd_u_8(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_u_8(raw);
+  }
+
+  @protected
   F64Array2? dco_decode_opt_f_64_array_2(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_f_64_array_2(raw);
@@ -22096,6 +22109,12 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BigInt sse_decode_box_autoadd_u_64(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_u_64(deserializer));
+  }
+
+  @protected
+  int sse_decode_box_autoadd_u_8(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_u_8(deserializer));
   }
 
   @protected
@@ -23786,12 +23805,14 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_time = sse_decode_bridge_rational(deserializer);
     var var_label = sse_decode_String(deserializer);
     var var_durationFrames = sse_decode_opt_box_autoadd_i_64(deserializer);
+    var var_colour = sse_decode_opt_box_autoadd_u_8(deserializer);
     var var_isBeat = sse_decode_bool(deserializer);
     return BridgeMarker(
         id: var_id,
         time: var_time,
         label: var_label,
         durationFrames: var_durationFrames,
+        colour: var_colour,
         isBeat: var_isBeat);
   }
 
@@ -27445,6 +27466,17 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  int? sse_decode_opt_box_autoadd_u_8(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_u_8(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
   F64Array2? sse_decode_opt_f_64_array_2(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
@@ -28264,6 +28296,12 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   void sse_encode_box_autoadd_u_64(BigInt self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_u_64(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_u_8(int self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_8(self, serializer);
   }
 
   @protected
@@ -29534,6 +29572,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_bridge_rational(self.time, serializer);
     sse_encode_String(self.label, serializer);
     sse_encode_opt_box_autoadd_i_64(self.durationFrames, serializer);
+    sse_encode_opt_box_autoadd_u_8(self.colour, serializer);
     sse_encode_bool(self.isBeat, serializer);
   }
 
@@ -32456,6 +32495,16 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_bool(self != null, serializer);
     if (self != null) {
       sse_encode_box_autoadd_u_64(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_u_8(int? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_u_8(self, serializer);
     }
   }
 

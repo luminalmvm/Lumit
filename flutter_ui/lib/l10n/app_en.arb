@@ -5405,13 +5405,33 @@
   "@marker": {
     "description": "Title of the dialogue that edits one marker."
   },
+  "markerColour": "Colour",
+  "@markerColour": {
+    "description": "Marker dialogue: the label beside the row of colour chips a marker's colour is picked from. Also read out for the same row of chips in a marker's right-click menu."
+  },
+  "markerDuration": "Duration",
+  "@markerDuration": {
+    "description": "Marker dialogue: the label beside the box that sets how long a marker runs for. A marker with a duration is drawn as a region on the Timeline."
+  },
+  "markerDurationFrames": "frames",
+  "@markerDurationFrames": {
+    "description": "Marker dialogue: the unit written after the duration box, as in '24 frames'. Lower case."
+  },
   "markerHint": "What this marker says",
   "@markerHint": {
     "description": "Placeholder in the marker's text field."
   },
+  "markerMakeRegion": "Make region",
+  "@markerMakeRegion": {
+    "description": "Context-menu item on a Timeline marker. It gives the marker a duration, so it marks a stretch of time that is shaded down through the layers instead of a single frame."
+  },
   "markerNoLabel": "(no label)",
   "@markerNoLabel": {
     "description": "Stands in for a marker's text in the marker list when it was given none. Keep the brackets."
+  },
+  "markerRemoveRegion": "Remove region",
+  "@markerRemoveRegion": {
+    "description": "Context-menu item on a Timeline marker that is a region. It takes the duration away again, leaving a marker on a single frame."
   },
   "maskExpansion": "Expansion",
   "@maskExpansion": {
