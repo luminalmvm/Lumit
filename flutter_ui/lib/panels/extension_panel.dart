@@ -2,20 +2,15 @@
 //
 // One pane per installed extension, told apart by the pane's number. The
 // page is a web page from the extension's own folder, drawn by the system's
-// web view, and everything it asks of Lumit goes through an [ExtensionHost].
-// On Windows that view is WebView2. Elsewhere there is none yet, and the
-// panel says so.
+// web view (extension_page.dart has one for each platform), and everything
+// it asks of Lumit goes through an [ExtensionHost].
 
 import 'dart:async';
-import 'dart:convert';
-import 'dart:io' show Platform;
 
-import 'package:flutter/services.dart' show PlatformException;
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/extensions.dart';
 import 'package:provider/provider.dart';
-import 'package:webview_windows/webview_windows.dart';
 
 import '../icons/icons.dart';
 import '../l10n/strings.dart';
@@ -23,6 +18,7 @@ import '../shell/share_dialog_frb.dart';
 import '../state/extension_host.dart';
 import '../state/file_dialogs.dart';
 import '../widgets/controls.dart';
+import 'extension_page.dart';
 import 'placeholder.dart';
 
 class ExtensionPanel extends StatelessWidget {
@@ -52,14 +48,7 @@ class ExtensionPanel extends StatelessWidget {
             hint: l10n.extensionBrokenHint,
           );
         }
-        if (!Platform.isWindows) {
-          return PlaceholderPanel(
-            icon: LumitIcon.link,
-            title: l10n.extensionUnsupportedTitle,
-            hint: l10n.extensionUnsupportedHint,
-          );
-        }
-        return _ExtensionView(
+        return ExtensionView(
           // A new page for an extension installed over itself.
           key: ValueKey<String>('${extension.id}:${service.generation}'),
           extension: extension,
@@ -69,39 +58,22 @@ class ExtensionPanel extends StatelessWidget {
   }
 }
 
-/// The one web view environment every extension's page shares, made the
-/// first time a panel needs it. Each page still keeps its own storage: they
-/// are served under different names.
-Future<void>? _environment;
-
-Future<void> _ensureEnvironment() => _environment ??= () async {
-      try {
-        await WebviewController.initializeEnvironment(
-            userDataPath: extensionDataDir(id: 'webview'));
-      } on PlatformException {
-        // Made already, by a panel before a hot restart.
-      }
-    }();
-
-class _ExtensionView extends StatefulWidget {
+/// One extension's page, and the [ExtensionHost] that answers it.
+class ExtensionView extends StatefulWidget {
   final BridgeExtension extension;
 
-  const _ExtensionView({super.key, required this.extension});
+  const ExtensionView({super.key, required this.extension});
 
   @override
-  State<_ExtensionView> createState() => _ExtensionViewState();
+  State<ExtensionView> createState() => _ExtensionViewState();
 }
 
-class _ExtensionViewState extends State<_ExtensionView>
+class _ExtensionViewState extends State<ExtensionView>
     implements ExtensionSurface {
-  final WebviewController _view = WebviewController();
   late final ExtensionHost _host;
-  final List<StreamSubscription<Object?>> _listening = [];
+  late final ExtensionPageLink _link;
 
   late final String _origin = extensionOrigin(widget.extension.id);
-
-  /// The page is up and can be drawn.
-  bool _ready = false;
 
   /// Why it is not, when it could not be put up.
   String? _failure;
@@ -123,53 +95,30 @@ class _ExtensionViewState extends State<_ExtensionView>
       approvedFolders: folders,
       onFoldersChanged: () => ui.extensions.setFolders(id, folders),
     );
-    unawaited(_open());
-  }
-
-  Future<void> _open() async {
-    try {
-      if (await WebviewController.getWebViewVersion() == null) {
-        return _fail(l10n.extensionNoRuntime);
-      }
-      await _ensureEnvironment();
-      await _view.initialize();
-      if (!mounted) return;
-      // No window of its own, and its files are its own: a page from
-      // anywhere else cannot load them.
-      await _view.setPopupWindowPolicy(WebviewPopupWindowPolicy.deny);
-      await _view.addVirtualHostNameMapping(_origin.substring(8),
-          widget.extension.folder, WebviewHostResourceAccessKind.deny);
-      await _view.addScriptToExecuteOnDocumentCreated(extensionBootstrapScript);
-      _listening.add(_view.url.listen((url) {
+    _link = ExtensionPageLink(
+      onMessage: (message) {
+        if (!_strayed) unawaited(_host.handle(message));
+      },
+      onUrl: (url) {
         final strayed = !url.startsWith('$_origin/');
         if (strayed != _strayed && mounted) setState(() => _strayed = strayed);
-      }));
-      _listening.add(_view.webMessage.listen((message) {
-        if (!_strayed) unawaited(_host.handle(message));
-      }, onError: (_) {}));
-      _host.post = (message) {
-        if (!_strayed) unawaited(_view.postWebMessage(jsonEncode(message)));
-      };
-      await _view.loadUrl('$_origin/${widget.extension.entry}');
-      if (!mounted) return;
-      _host.start();
-      setState(() => _ready = true);
-    } catch (_) {
-      _fail(l10n.extensionFailedHint);
-    }
-  }
-
-  void _fail(String why) {
-    if (mounted) setState(() => _failure = why);
+      },
+      onReady: () {
+        if (!mounted) return;
+        _host.post = (message) {
+          if (!_strayed) _link.post?.call(message);
+        };
+        _host.start();
+      },
+      onFailed: (why) {
+        if (mounted) setState(() => _failure = why);
+      },
+    );
   }
 
   @override
   void dispose() {
-    for (final subscription in _listening) {
-      subscription.cancel();
-    }
     _host.dispose();
-    _view.dispose();
     super.dispose();
   }
 
@@ -193,7 +142,6 @@ class _ExtensionViewState extends State<_ExtensionView>
         hint: why,
       );
     }
-    if (!_ready) return ColoredBox(color: t.surface1);
     return Column(
       children: [
         if (_strayed)
@@ -209,14 +157,16 @@ class _ExtensionViewState extends State<_ExtensionView>
                 HouseButton(
                   key: const ValueKey('extension-back'),
                   small: true,
-                  onPressed: () => unawaited(
-                      _view.loadUrl('$_origin/${widget.extension.entry}')),
+                  onPressed: () => _link.load
+                      ?.call('$_origin/${widget.extension.entry}'),
                   child: Text(l10n.extensionBack, style: t.small),
                 ),
               ],
             ),
           ),
-        Expanded(child: Webview(_view)),
+        Expanded(
+          child: ExtensionPage(extension: widget.extension, link: _link),
+        ),
       ],
     );
   }
