@@ -1468,7 +1468,7 @@ pub struct BridgeClip {
 /// `None` — a source this document no longer has, or a file that will not probe
 /// — is the honest "no reach", and that is exactly how the reach is drawn.
 #[frb(ignore)]
-fn clip_source_duration(
+pub(crate) fn clip_source_duration(
     state: &LumitBridgeState,
     doc: &lumit_core::Document,
     source: lumit_core::sequence::ClipSource,
@@ -1488,7 +1488,10 @@ fn clip_source_duration(
             }
             #[cfg(feature = "media")]
             {
-                let probed = crate::probe::ensure_probed(&_path)?;
+                // The answer already held, not a fresh look at the disk: this
+                // runs for every clip of the comp each time the read model is
+                // built.
+                let probed = crate::probe::held_or_probed(&_path)?;
                 // The only sanctioned route back from the container's
                 // floating-point duration is an explicit grid
                 // (docs/impl/rational-time.md §4) — the same millisecond grid
@@ -2719,12 +2722,17 @@ impl LayerReference {
         Ok(proj.store.snapshot())
     }
 
+    /// This layer, cloned out of the current snapshot. Only the layer: nearly
+    /// every edit starts here, and copying the whole composition to pick one
+    /// layer out of it was most of what a clip edit cost on a long cut.
     #[frb(ignore)]
     pub(crate) fn item(&self) -> Result<Layer, BridgeError> {
-        self.composition()?
-            .layers
-            .into_iter()
+        let doc = self.document()?;
+        let comp = doc.comp(self.comp_id).ok_or(BridgeError::InvalidItem)?;
+        comp.layers
+            .iter()
             .find(|l| l.id == self.layer_id)
+            .cloned()
             .ok_or(BridgeError::InvalidLayer)
     }
 
@@ -4830,15 +4838,23 @@ impl LayerReference {
         clips: Vec<lumit_core::sequence::Clip>,
         start_offset: lumit_core::time::CompTime,
     ) -> Result<Vec<lumit_core::Op>, BridgeError> {
-        let layer = self.item()?;
+        // The bar as it stands, read where it is: the layer is not copied
+        // out, and the clips go into the op without being copied either.
+        let doc = self.document()?;
+        let comp = doc.comp(self.comp_id).ok_or(BridgeError::InvalidItem)?;
+        let layer = comp.layers.iter().find(|l| l.id == self.layer_id);
+        let was = layer
+            .map(|l| (l.in_point.0, l.out_point.0))
+            .ok_or(BridgeError::InvalidLayer)?;
+        // Clip places are in layer time; a span is in comp time, and the two
+        // differ by the layer's own zero.
+        let span = lumit_core::sequence::clips_span(&clips);
         let set_clips = lumit_core::Op::SetSequenceClips {
             comp: self.comp_id,
             layer: self.layer_id,
-            clips: clips.clone(),
+            clips,
         };
-        // Clip places are in layer time; a span is in comp time, and the two
-        // differ by the layer's own zero.
-        let Some((start, end)) = lumit_core::sequence::clips_span(&clips) else {
+        let Some((start, end)) = span else {
             return Ok(vec![set_clips]);
         };
         let offset = start_offset.0;
@@ -4846,7 +4862,7 @@ impl LayerReference {
         else {
             return Ok(vec![set_clips]);
         };
-        if in_point == layer.in_point.0 && out_point == layer.out_point.0 {
+        if (in_point, out_point) == was {
             return Ok(vec![set_clips]);
         }
         Ok(vec![

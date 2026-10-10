@@ -92,7 +92,6 @@ mod names;
 mod packing;
 mod peaks;
 mod playback;
-mod prefetch;
 mod probe;
 mod profiling;
 mod proxy;

@@ -69,6 +69,7 @@ pub mod plan;
 /// The planes tier: a model's depth or coverage, baked once and read per frame
 /// (docs/impl/addons.md §6.1).
 pub mod planes;
+pub mod prefetch;
 pub mod profile;
 pub mod proxy;
 pub mod puppet;
@@ -84,7 +85,8 @@ pub use build::{
 };
 pub use cache::{CacheTier, CachedCompFrame, NestedKeyer, NestedKeys};
 pub use decode::{
-    addon_needs, synthesis_refusal, CompFrame, CompJob, CompLayerPixels, Need, SynthesisRefusal,
+    addon_needs, synthesis_refusal, CompFrame, CompJob, CompLayerPixels, Need, OpenDecoders,
+    SynthesisRefusal,
 };
 pub use draw::{
     AccumulationBelow, CompLayerDraw, DrawSource, GraphDraw, GraphStep, LayerInputDraw, MatteDraw,
@@ -95,6 +97,7 @@ pub use headless::{
     Promotion, DEFAULT_VRAM_CACHE_BYTES,
 };
 pub use plan::{plan_comp_frame, Quality};
+pub use prefetch::{Prefetched, Prefetcher};
 pub use profile::{
     EffectTiming, FrameProfile, FrameProgress, LayerTiming, ProfileSink, ProgressSink, RenderStage,
 };

@@ -26,7 +26,7 @@
 //! matrix in this file's tests.
 
 use crate::decode::{CompFrame, CompJob, DecodePool};
-use crate::export::{AudioJob, ItemInfo};
+use crate::export::AudioJob;
 use crate::plan::{plan_comp_frame, Quality};
 use crate::source::{SourceProbe, SourceProbes};
 use lumit_core::model::{Composition, Document, FootageItem, LayerKind, ProjectItem};
@@ -35,6 +35,7 @@ use lumit_core::model::{Composition, Document, FootageItem, LayerKind, ProjectIt
 // "half size" is (it moved into lumit-gpu when the composite itself started
 // running at the preview scale; the rounding is unchanged).
 use lumit_gpu::scaled_size;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, Mutex};
@@ -137,17 +138,14 @@ pub struct HeadlessRenderer {
     /// composite, so it is never lent to the `Renderer` — it borrows `&self.gpu`
     /// on its own. Compiled once with the other engines.
     scope: lumit_gpu::scope::ScopeEngine,
-    /// The `ItemInfo` map the renderer reads, rebuilt each call (cheap — it only
-    /// reads `probe_cache`) so a missing item's slate matches the current comp.
-    items: HashMap<Uuid, ItemInfo>,
-    /// Probe results by footage id, kept beside the source they were read
-    /// from, so a relink or a run of stills read at a new rate probes again.
-    probe_cache: HashMap<Uuid, (lumit_media::MediaSource, Probe)>,
-    /// The same, for each item's **proxy** file — kept beside its path
-    /// rather than under the id alone, so attaching a different proxy (or the
-    /// one MAKE-PROXY has just written) re-probes instead of answering from a
-    /// stale entry about a file that is no longer the one referenced.
-    proxy_probes: HashMap<Uuid, (PathBuf, Probe)>,
+    /// What has been learnt about footage files so far, filled as frames
+    /// first ask ([`ProbeView`]). Behind a `RefCell` because naming a frame
+    /// takes `&self` and may still be the first to ask about a file. Nothing
+    /// borrows it for longer than one question.
+    probes: RefCell<Probes>,
+    /// The thread that probes the files of clips about to come into view
+    /// during playback, started the first time playback looks ahead.
+    probe_ahead: Option<ProbeAhead>,
     /// The audio-jobs walk with its has-audio probe cache, so building the
     /// export audio jobs probes each file at most once (export path only).
     audio_jobs: AudioJobsBuilder,
@@ -722,9 +720,8 @@ impl HeadlessRenderer {
             gpu,
             parts: Some(parts),
             scope,
-            items: HashMap::new(),
-            probe_cache: HashMap::new(),
-            proxy_probes: HashMap::new(),
+            probes: RefCell::default(),
+            probe_ahead: None,
             audio_jobs: AudioJobsBuilder::new(),
             pool,
             retained: None,
@@ -857,9 +854,7 @@ impl HeadlessRenderer {
     }
 
     /// Build the inputs one export of `comp_id` needs (the bridge's v0.4 export
-    /// path): the footage [`ItemInfo`] map (probed exactly as a render
-    /// probes, sharing this renderer's cache), the comp's audio jobs, and a GPU
-    /// context sharing this renderer's device. `None` when `comp_id` is unknown.
+    /// path): the comp's audio jobs. `None` when `comp_id` is unknown.
     /// The exporter (`crate::export::start`) takes these and spawns its own
     /// encode thread, so this call is cheap and holds no GPU work.
     pub fn export_inputs(&mut self, doc: &Arc<Document>, comp_id: Uuid) -> Option<ExportInputs> {
@@ -1170,13 +1165,13 @@ impl HeadlessRenderer {
 
     /// The content-hash name of this comp frame ([`crate::cache::frame_key`]),
     /// computed from **this renderer's own** probe results so the name and the
-    /// pixels can never disagree about what a source file is. `None` while some
-    /// footage is unprobed — the frame renders live and is not cached. The
-    /// Viewer's own way of looking is folded in ([`Self::named_under_view`]),
-    /// so an exposed frame is named as one rather than left nameless.
+    /// pixels can never disagree about what a source file is. The Viewer's own
+    /// way of looking is folded in ([`Self::named_under_view`]), so an exposed
+    /// frame is named as one rather than left nameless.
     ///
-    /// Takes `&mut self` because it probes anything new, exactly as a render
-    /// would; a caller that then renders pays for the probe only once.
+    /// A file this frame shows is probed here if nothing has asked about it
+    /// yet, exactly as a render would; a caller that then renders pays for the
+    /// probe only once.
     pub fn frame_key(
         &mut self,
         doc: &Arc<Document>,
@@ -1192,37 +1187,14 @@ impl HeadlessRenderer {
         // [`Self::flare_substitutions`], which counts the frames that
         // actually drew other optics than they name, and those alone are the
         // frames nobody banks.
-        let comp = doc.comp(comp_id)?;
-        self.sync_items(doc, comp);
-        crate::cache::frame_key(
-            doc,
-            comp,
-            frame as usize,
-            quality,
-            &ProbeView(&self.probe_cache, &self.proxy_probes),
-        )
-        .map(|k| self.named_under_view(k))
+        self.frame_key_presynced(doc, comp_id, frame, quality)
     }
 
-    /// Probe what comp `comp_id` can show, so a batch of
-    /// [`Self::frame_key_presynced`] calls can run against a settled probe
-    /// cache. [`Self::frame_key`] does this itself, per call — which rebuilds
-    /// the footage map every time, and a consumer naming hundreds of frames of
-    /// the SAME document (the cache bar, the playback look-ahead) was paying
-    /// that rebuild per frame. Call this once per document, then name as many
-    /// frames as needed. An unknown comp probes nothing, calmly.
-    pub fn presync_items(&mut self, doc: &Document, comp_id: Uuid) {
-        if let Some(comp) = doc.comp(comp_id) {
-            self.sync_items(doc, comp);
-        }
-    }
-
-    /// [`Self::frame_key`] against the probes already gathered — no probing, no
-    /// footage-map rebuild, and thus `&self`. Only correct after
-    /// [`Self::presync_items`] was called for this document and this comp; an
-    /// unprobed source simply makes the frame unnameable (`None`), never
-    /// wrongly named, so a caller that forgets the presync renders live rather
-    /// than mis-caching.
+    /// [`Self::frame_key`] through `&self`, for a caller that holds the
+    /// renderer shared while it names a run of frames. The name is from when
+    /// every file a comp could show was probed ahead of such a run. Files are
+    /// now probed as frames first need them, so there is nothing to do ahead
+    /// and the two calls answer alike.
     #[must_use]
     pub fn frame_key_presynced(
         &self,
@@ -1237,7 +1209,10 @@ impl HeadlessRenderer {
             comp,
             frame as usize,
             quality,
-            &ProbeView(&self.probe_cache, &self.proxy_probes),
+            &ProbeView {
+                doc,
+                probes: &self.probes,
+            },
         )
         .map(|k| self.named_under_view(k))
     }
@@ -1285,9 +1260,6 @@ impl HeadlessRenderer {
             .comp(comp_id)
             .ok_or_else(|| "headless preview: unknown composition".to_string())?;
         let (cw, ch) = (comp.width, comp.height);
-        // Fills `probe_cache` for anything new this comp can show, which
-        // `ProbeView` then reads.
-        self.sync_items(doc, comp);
         let fps = comp.frame_rate.fps().max(1.0);
         let t = frame as f64 / fps;
 
@@ -1300,7 +1272,10 @@ impl HeadlessRenderer {
         // realiser asks for. A measured frame realises every Precomp so its
         // inner rows get numbers (see `Realiser::realise_nested`), so it must
         // not skip their decodes either.
-        let probes = ProbeView(&self.probe_cache, &self.proxy_probes);
+        let probes = ProbeView {
+            doc,
+            probes: &self.probes,
+        };
         let keys = crate::cache::NestedKeys {
             doc,
             probes: &probes,
@@ -1673,7 +1648,6 @@ impl HeadlessRenderer {
         let Some(comp) = doc.comp(comp_id) else {
             return Vec::new();
         };
-        self.sync_items(doc, comp);
         let fps = comp.frame_rate.fps().max(1.0);
         let t = frame as f64 / fps;
         let jobs = plan_comp_frame(
@@ -1681,10 +1655,26 @@ impl HeadlessRenderer {
             comp,
             t,
             quality,
-            &ProbeView(&self.probe_cache, &self.proxy_probes),
+            &ProbeView {
+                doc,
+                probes: &self.probes,
+            },
         );
         let mut wants = Vec::new();
-        for job in &jobs {
+        // A dissolve reads two files for one layer, so the clip under a job
+        // is wanted beside it. That is also what keeps the outgoing clip's
+        // stream open across the overlap, and what opens the incoming one
+        // ahead of it ([`Self::cut_wants`]).
+        fn under(job: &CompJob) -> Option<&CompJob> {
+            job.cuts.iter().find_map(|cut| match cut {
+                crate::decode::Cut::Under(_, under) => under.as_ref(),
+                _ => None,
+            })
+        }
+        for job in jobs
+            .iter()
+            .flat_map(|job| std::iter::once(job).chain(under(job)))
+        {
             if job.slate {
                 continue;
             }
@@ -1702,6 +1692,102 @@ impl HeadlessRenderer {
             }
             for &(_, neighbour) in &job.temporal {
                 want(neighbour);
+            }
+        }
+        wants
+    }
+
+    /// The decodes that make the read-ahead thread ready for the clips that
+    /// start after frame `after` and no later than `through`.
+    ///
+    /// # In plain terms
+    ///
+    /// The ordinary read-ahead posts a frame's decodes a few frames before it
+    /// is shown. That is plenty for the next frame of a file already playing
+    /// and far too late for the first frame of a file that is not: opening it
+    /// and seeking into it takes many frames' time, so every cut to a new
+    /// file played late. Playback asks this about a second ahead instead, and
+    /// the thread opens the file then.
+    ///
+    /// Each want is the source frame just **before** the one the clip opens
+    /// on. Decoding it leaves the decoder standing on the opening frame, so
+    /// when the ordinary read-ahead reaches the edit point it carries straight
+    /// on. A clip that opens on its file's first frame asks for that frame.
+    ///
+    /// A file that is already playing the frame before the edit point is left
+    /// alone: its decoder is busy where it is, and sending it ahead and back
+    /// would cost two seeks to save none.
+    ///
+    /// The files of the clips that start in the second after `through` are
+    /// probed on a thread of their own meanwhile ([`ProbeAhead`]), so that by
+    /// the time this is asked about them the answer is waiting. A probe is
+    /// several milliseconds a file, and here it would come out of a frame.
+    ///
+    /// ponytail: only this comp's own Sequence layers are looked at. An edit
+    /// point inside a nested comp still opens when the ordinary read-ahead
+    /// reaches it, as every edit point did before. The upgrade is to walk
+    /// nested comps here the way the plan does.
+    pub fn cut_wants(
+        &mut self,
+        doc: &Document,
+        comp_id: Uuid,
+        after: u64,
+        through: u64,
+        quality: Quality,
+    ) -> Vec<PrefetchWant> {
+        let Some(comp) = doc.comp(comp_id) else {
+            return Vec::new();
+        };
+        let fps = comp.frame_rate.fps().max(1.0);
+        let further = through as f64 + fps.round();
+        let mut starts: Vec<u64> = Vec::new();
+        let mut coming: Vec<&FootageItem> = Vec::new();
+        for layer in comp.layers.iter().filter(|l| !l.audio_only) {
+            let LayerKind::Sequence { clips } = &layer.kind else {
+                continue;
+            };
+            let offset = layer.start_offset.0.to_f64();
+            for clip in clips {
+                // The first comp frame at or after the clip's start. A leaf
+                // float, as every frame the plan is asked about is.
+                let first = ((clip.place_start.to_f64() + offset) * fps - 1e-6).ceil();
+                if first > after as f64 && first <= through as f64 {
+                    starts.push(first as u64);
+                } else if first > through as f64 && first <= further {
+                    // The clip's file, or every file in the composition it
+                    // plays.
+                    let items = match clip.source {
+                        lumit_core::sequence::ClipSource::Footage(item) => vec![item],
+                        lumit_core::sequence::ClipSource::Comp(nested) => {
+                            doc.comp(nested).map_or_else(Vec::new, |c| {
+                                lumit_core::model::comp_footage_items(doc, c)
+                            })
+                        }
+                    };
+                    for item in items {
+                        if let Some(ProjectItem::Footage(f)) = doc.item(item) {
+                            coming.push(f);
+                        }
+                    }
+                }
+            }
+        }
+        if let Ok(mut probes) = self.probes.try_borrow_mut() {
+            self.probe_ahead
+                .get_or_insert_with(ProbeAhead::start)
+                .turn(&mut probes, &coming);
+        }
+        starts.sort_unstable();
+        starts.dedup();
+        let mut wants = Vec::new();
+        for start in starts {
+            let playing = self.prefetch_wants(doc, comp_id, start - 1, quality);
+            for mut want in self.prefetch_wants(doc, comp_id, start, quality) {
+                if playing.iter().any(|p| p.item == want.item) {
+                    continue;
+                }
+                want.frame = want.frame.saturating_sub(1);
+                wants.push(want);
             }
         }
         wants
@@ -2717,101 +2803,6 @@ impl HeadlessRenderer {
         #[cfg(all(target_os = "macos", feature = "shared-texture-macos"))]
         self.shared_iosurface.retain(|(v, _)| *v != view);
     }
-
-    /// Rebuild the `ItemInfo` map for what comp `comp` can show, probing any of
-    /// those items not already in `probe_cache`. Slate items are sized to the
-    /// comp's own dimensions, matching export's `item_infos`.
-    ///
-    /// **Only the comp's own footage is probed** — the items its layers name,
-    /// and transitively everything its Precomp layers and comp-sourced clips
-    /// reach ([`lumit_core::model::comp_footage_items`]). A probe opens a file
-    /// and loads or builds its frame index, so probing the whole Project panel
-    /// here made the first frame of *any* comp wait for every file in the
-    /// project, and a freshly made empty comp wait for all of them to show
-    /// nothing. The cache is keyed by item, never emptied between comps, so an
-    /// item probed for one comp is already probed when the next one needs it:
-    /// the cost is paid once per file per session, and only for files something
-    /// on screen can actually want.
-    ///
-    /// The frame-key interlock is unaffected: an item this comp shows is probed
-    /// here before [`crate::cache::frame_key`] reads the probe cache, and an
-    /// item this comp cannot show contributes nothing to its key.
-    fn sync_items(&mut self, doc: &Document, comp: &Composition) {
-        let slate = (comp.width, comp.height);
-        self.items.clear();
-        for id in lumit_core::model::comp_footage_items(doc, comp) {
-            let Some(ProjectItem::Footage(f)) = doc.item(id) else {
-                continue;
-            };
-            // The proxy, if this item has one and the project is using it. It is
-            // probed here beside the original because both answers are needed at
-            // once to decide which file is read (`source::effective_media`), and
-            // re-probed when the reference has moved on from what was cached.
-            if let Some(proxy) = doc.proxy_in_use(f.id) {
-                let path = media_path(proxy);
-                match self.proxy_probes.get(&f.id) {
-                    Some((cached, _)) if *cached == path => {}
-                    _ => {
-                        // A proxy is one file, never a numbered run: it stands
-                        // in for the whole of the original, however many files
-                        // that was.
-                        let probe = probe_item(&lumit_media::MediaSource::file(path.clone()));
-                        self.proxy_probes.insert(f.id, (path, probe));
-                    }
-                }
-            } else {
-                self.proxy_probes.remove(&f.id);
-            }
-            // Checked against the source too, path and rate, so a relinked item
-            // or a run of stills read at a new rate probes again rather than
-            // keeping an answer about the old one.
-            let src = footage_source(f);
-            match self.probe_cache.get(&f.id) {
-                Some((cached, _)) if *cached == src => {}
-                _ => {
-                    let probe = probe_item(&src);
-                    self.probe_cache.insert(f.id, (src, probe));
-                }
-            }
-            let Some((_, probe)) = self.probe_cache.get(&f.id) else {
-                continue;
-            };
-            match probe {
-                Probe::Ok { fps, frames, .. } => {
-                    self.items.insert(
-                        f.id,
-                        ItemInfo {
-                            source: footage_source(f),
-                            fps: *fps,
-                            frames: *frames,
-                            missing: None,
-                        },
-                    );
-                }
-                // A slate item carries the comp's size so its geometry matches a
-                // real layer's (the same reasoning export's `ItemInfo::missing`
-                // documents). A `Failed` file in export is simply absent from the
-                // map; here it slates instead, so an unreadable source is visibly
-                // flagged in the Viewer rather than silently dropped.
-                Probe::Slate => {
-                    self.items.insert(
-                        f.id,
-                        ItemInfo {
-                            source: footage_source(f),
-                            fps: 1.0,
-                            frames: 1,
-                            missing: Some(slate),
-                        },
-                    );
-                }
-                // Audio-only media has no picture to composite: leave it out of
-                // the map entirely, exactly as export's `item_infos` does, so
-                // `footage_rgba` answers `Ok(None)` for it and the layer draws
-                // nothing rather than the missing-footage slate.
-                Probe::NoVideo => {}
-            }
-        }
-    }
 }
 
 /// The comp audio-jobs walk WITHOUT the GPU renderer — the seam audio playback
@@ -3590,22 +3581,147 @@ fn probe_item(src: &lumit_media::MediaSource) -> Probe {
     }
 }
 
+/// What a renderer has learnt about footage files.
+#[derive(Default)]
+struct Probes {
+    /// Probe results by footage id, kept beside the source they were read
+    /// from, so a relink or a run of stills read at a new rate probes again.
+    originals: HashMap<Uuid, (lumit_media::MediaSource, Probe)>,
+    /// The same, for each item's **proxy** file, kept beside its path rather
+    /// than under the id alone, so attaching a different proxy (or the one
+    /// MAKE-PROXY has just written) probes again instead of answering about a
+    /// file that is no longer the one referenced.
+    proxies: HashMap<Uuid, (PathBuf, Probe)>,
+}
+
+/// A thread that probes files a little before playback reaches them
+/// ([`HeadlessRenderer::cut_wants`]).
+///
+/// Nothing waits on it. An answer that is not back when a frame asks is
+/// simply made on the spot ([`ProbeView`]), and the two are the same answer.
+struct ProbeAhead {
+    tx: std::sync::mpsc::SyncSender<(Uuid, lumit_media::MediaSource)>,
+    rx: std::sync::mpsc::Receiver<(Uuid, lumit_media::MediaSource, Probe)>,
+    /// What has been sent and not yet answered, so a file is sent once.
+    /// Emptied when it grows: an item deleted while its answer was pending
+    /// never comes off it, and the worst a second probe does is cost time.
+    asked: std::collections::HashSet<Uuid>,
+}
+
+impl ProbeAhead {
+    /// How many files may wait either side of the thread. A second of even
+    /// the fastest cutting is a handful. Past it a file is left for the
+    /// frame that first needs it.
+    const WAITING: usize = 32;
+
+    fn start() -> Self {
+        let (tx, jobs) =
+            std::sync::mpsc::sync_channel::<(Uuid, lumit_media::MediaSource)>(Self::WAITING);
+        let (done, rx) = std::sync::mpsc::sync_channel(Self::WAITING);
+        // A thread that will not start leaves every job unanswered, and
+        // every file is then probed when its frame asks, as before.
+        let _ = std::thread::Builder::new()
+            .name("lumit-probe-ahead".into())
+            .spawn(move || {
+                while let Ok((item, src)) = jobs.recv() {
+                    let probe = probe_item(&src);
+                    let _ = done.try_send((item, src, probe));
+                }
+            });
+        Self {
+            tx,
+            rx,
+            asked: std::collections::HashSet::new(),
+        }
+    }
+
+    /// File what has come back, and send what `coming` still needs.
+    fn turn(&mut self, probes: &mut Probes, coming: &[&FootageItem]) {
+        while let Ok((item, src, probe)) = self.rx.try_recv() {
+            self.asked.remove(&item);
+            probes.originals.insert(item, (src, probe));
+        }
+        if self.asked.len() > 1024 {
+            self.asked.clear();
+        }
+        for f in coming {
+            let src = footage_source(f);
+            let known = probes
+                .originals
+                .get(&f.id)
+                .is_some_and(|(cached, _)| *cached == src);
+            if !known && self.asked.insert(f.id) && self.tx.try_send((f.id, src)).is_err() {
+                self.asked.remove(&f.id);
+            }
+        }
+    }
+}
+
 /// The renderer's own probe cache, seen through the pipeline's one media
 /// question ([`SourceProbes`]), so the decode planner and the frame-key stamper
-/// read exactly what `sync_items` already resolved — no second probe, and no
-/// chance of the two disagreeing about what a file is.
-pub(crate) struct ProbeView<'a>(
-    &'a HashMap<Uuid, (lumit_media::MediaSource, Probe)>,
-    &'a HashMap<Uuid, (PathBuf, Probe)>,
-);
+/// read one answer about a file and cannot disagree about what it is.
+///
+/// **A file is probed the first time a frame asks about it.** A probe opens
+/// the file and loads or builds its frame index. Probing everything a comp
+/// could show before its first frame made that frame wait for every file of a
+/// long cut, when it shows three of them. An answer is kept for as long as
+/// the renderer lives, so each file is still probed once.
+///
+/// Only what the planner and the stamper ask about is probed, and neither
+/// asks about a layer placed for its sound alone, so a video on an audio-only
+/// layer is never opened for its picture.
+pub(crate) struct ProbeView<'a> {
+    doc: &'a Document,
+    probes: &'a RefCell<Probes>,
+}
 
 impl SourceProbes for ProbeView<'_> {
     fn probe(&self, item: Uuid) -> SourceProbe {
-        seen(self.0.get(&item).map(|(_, p)| p))
+        let Some(ProjectItem::Footage(f)) = self.doc.item(item) else {
+            return SourceProbe::Unprobed;
+        };
+        let Ok(mut probes) = self.probes.try_borrow_mut() else {
+            return SourceProbe::Unprobed;
+        };
+        // A proxy that is no longer in use is forgotten, so one attached
+        // again later is probed again and not believed from last time.
+        if self.doc.proxy_in_use(item).is_none() {
+            probes.proxies.remove(&item);
+        }
+        // Checked against the source too, path and rate, so a relinked item
+        // or a run of stills read at a new rate probes again rather than
+        // keeping an answer about the old one.
+        let src = footage_source(f);
+        match probes.originals.get(&item) {
+            Some((cached, probe)) if *cached == src => seen(Some(probe)),
+            _ => {
+                let probe = probe_item(&src);
+                let answer = seen(Some(&probe));
+                probes.originals.insert(item, (src, probe));
+                answer
+            }
+        }
     }
 
     fn proxy_probe(&self, item: Uuid) -> SourceProbe {
-        seen(self.1.get(&item).map(|(_, p)| p))
+        let Some(proxy) = self.doc.proxy_in_use(item) else {
+            return SourceProbe::Unprobed;
+        };
+        let Ok(mut probes) = self.probes.try_borrow_mut() else {
+            return SourceProbe::Unprobed;
+        };
+        let path = media_path(proxy);
+        match probes.proxies.get(&item) {
+            Some((cached, probe)) if *cached == path => seen(Some(probe)),
+            _ => {
+                // A proxy is one file, never a numbered run: it stands in for
+                // the whole of the original, however many files that was.
+                let probe = probe_item(&lumit_media::MediaSource::file(path.clone()));
+                let answer = seen(Some(&probe));
+                probes.proxies.insert(item, (path, probe));
+                answer
+            }
+        }
     }
 }
 
@@ -4154,7 +4270,6 @@ mod tests {
 
         let neutral = r.frame_key(&doc, comp_id, 0, q);
         assert!(neutral.is_some(), "a neutral view names its frames");
-        r.presync_items(&doc, comp_id);
         assert_eq!(
             r.frame_key_presynced(&doc, comp_id, 0, q),
             neutral,
@@ -4279,8 +4394,8 @@ mod tests {
     /// the missing-footage slate: it is a valid source, not a broken one. Bugs
     /// here previously conflated the two (`Probe::Slate`), which painted the
     /// colour bars over a perfectly good audio-only layer in the Flutter
-    /// Viewer. Bypasses real FFmpeg probing by seeding `probe_cache` directly
-    /// with the outcome `probe_item` would give each file, so the test needs
+    /// Viewer. Bypasses real FFmpeg probing by seeding the probe cache directly
+    /// with the outcome `probe_item` would give the file, so the test needs
     /// no media fixture. A genuinely missing file is asserted to still slate,
     /// so a regression collapsing `NoVideo` back onto `Slate` fails this test.
     #[test]
@@ -4294,44 +4409,17 @@ mod tests {
         };
         let (store, _comp_id) = doc_with_solid(LinearColour([1.0, 1.0, 1.0, 1.0]), 4, 4);
         let mut doc = (*store.snapshot()).clone();
-        // The comp is asked about at 64×64 below, so the slate it makes is that
-        // size; a layer per item, since only what the comp can show is probed.
         let sized = push_comp(&mut doc, "sized", 64, 64);
 
         let audio_id = push_footage_item(&mut doc, "audio.wav");
         push_layer(&mut doc, sized, LayerKind::Footage { item: audio_id });
-        r.probe_cache.insert(
+        r.probes.borrow_mut().originals.insert(
             audio_id,
             (lumit_media::MediaSource::file("audio.wav"), Probe::NoVideo),
         );
-        let comp = doc.comp(sized).expect("sized comp").clone();
-        r.sync_items(&doc, &comp);
-        assert!(
-            !r.items.contains_key(&audio_id),
-            "audio-only media must contribute no picture, not a missing slate"
-        );
-
-        // Contrast: a genuinely missing/unreadable file DOES slate.
         let missing_id = push_footage_item(&mut doc, "gone.mp4");
         push_layer(&mut doc, sized, LayerKind::Footage { item: missing_id });
-        r.probe_cache.insert(
-            missing_id,
-            (lumit_media::MediaSource::file("gone.mp4"), Probe::Slate),
-        );
-        let comp = doc.comp(sized).expect("sized comp").clone();
-        r.sync_items(&doc, &comp);
-        assert_eq!(
-            r.items.get(&missing_id).map(|i| i.missing),
-            Some(Some((64, 64))),
-            "a missing/unreadable file still slates at the comp's size"
-        );
-        // The audio-only item stays omitted across the second sync_items call.
-        assert!(!r.items.contains_key(&audio_id));
-
-        // A file that HAS a picture, placed as an Audio layer, is not
-        // probed or indexed for the picture either. Without the `audio_only`
-        // skip in `comp_footage_items` the renderer would open and frame-index
-        // a video the user placed for its sound alone.
+        // A file that HAS a picture, placed as an Audio layer.
         let video_id = push_footage_item(&mut doc, "music-video.mp4");
         push_layer(&mut doc, sized, LayerKind::Footage { item: video_id });
         if let Some(ProjectItem::Composition(c)) = doc.item_mut(sized) {
@@ -4340,22 +4428,30 @@ mod tests {
                 .expect("the layer just pushed")
                 .audio_only = true;
         }
-        r.probe_cache.insert(
-            video_id,
-            (
-                lumit_media::MediaSource::file("music-video.mp4"),
-                Probe::Ok {
-                    fps: 25.0,
-                    frames: 125,
-                    width: 64,
-                    height: 64,
-                },
-            ),
-        );
-        let comp = doc.comp(sized).expect("sized comp").clone();
-        r.sync_items(&doc, &comp);
+        let doc = Arc::new(doc);
+
+        let view = ProbeView {
+            doc: &doc,
+            probes: &r.probes,
+        };
         assert!(
-            !r.items.contains_key(&video_id),
+            view.probe(audio_id) == SourceProbe::AudioOnly,
+            "audio-only media must contribute no picture, not a missing slate"
+        );
+        // Contrast: a genuinely missing/unreadable file DOES slate.
+        assert!(
+            view.probe(missing_id) == SourceProbe::Missing,
+            "a missing/unreadable file still slates"
+        );
+
+        // Naming a frame asks about every file the frame shows, and a layer
+        // placed for its sound alone shows none: the video behind it is never
+        // opened or frame-indexed for a picture nobody will see.
+        assert!(r
+            .frame_key(&doc, sized, 0, crate::plan::Quality::default())
+            .is_some());
+        assert!(
+            !r.probes.borrow().originals.contains_key(&video_id),
             "a video placed for its sound alone contributes no picture"
         );
     }
@@ -4364,7 +4460,7 @@ mod tests {
     /// reopening the project.
     #[test]
     fn a_relinked_clip_loses_its_slate() {
-        let mut r = match HeadlessRenderer::shared() {
+        let r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();
@@ -4380,16 +4476,20 @@ mod tests {
         let item = push_footage_item(&mut doc, "gone.mp4");
         push_layer(&mut doc, comp_id, LayerKind::Footage { item });
 
-        let comp = doc.comp(comp_id).expect("comp").clone();
-        r.sync_items(&doc, &comp);
-        assert!(r.items.get(&item).is_some_and(|i| i.missing.is_some()));
+        let asked = |doc: &Document| {
+            ProbeView {
+                doc,
+                probes: &r.probes,
+            }
+            .probe(item)
+        };
+        assert!(asked(&doc) == SourceProbe::Missing);
 
         if let Some(ProjectItem::Footage(f)) = doc.item_mut(item) {
             f.media.absolute_path = clip.to_string_lossy().into_owned();
         }
-        r.sync_items(&doc, &comp);
         assert!(
-            r.items.get(&item).is_some_and(|i| i.missing.is_none()),
+            matches!(asked(&doc), SourceProbe::Video { .. }),
             "the relinked file was never probed"
         );
     }

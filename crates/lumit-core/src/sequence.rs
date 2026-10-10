@@ -1061,15 +1061,34 @@ pub fn shift_from(clips: &[Clip], at: Rational, delta: Rational) -> Option<Vec<C
         });
     }
     if delta.is_negative() {
-        let mut stayed = clips.iter().filter(|c| c.place_start < at);
-        let moved = || {
-            clips
-                .iter()
-                .zip(&out)
-                .filter(|(was, _)| was.place_start >= at)
-        };
-        if stayed.any(|s| moved().any(|(_, now)| overlaps(now, s.place_start, s.place_end()))) {
-            return None;
+        // The clips that stayed, in order of start, each beside the latest
+        // end of any up to and including it. A moved clip lands on one of
+        // them exactly when some clip starting before the moved one ends also
+        // ends after it starts, and that is one search and one comparison.
+        // Trying every moved clip against every one that stayed took
+        // milliseconds a row on a long cut.
+        let mut stayed: Vec<(Rational, Rational)> = clips
+            .iter()
+            .filter(|c| c.place_start < at)
+            .map(|c| (c.place_start, c.place_end()))
+            .collect();
+        stayed.sort_by_key(|(start, _)| *start);
+        let mut latest: Option<Rational> = None;
+        for (_, end) in &mut stayed {
+            let so_far = latest.map_or(*end, |l| l.max(*end));
+            *end = so_far;
+            latest = Some(so_far);
+        }
+        let moved = clips
+            .iter()
+            .zip(&out)
+            .filter(|(was, _)| was.place_start >= at);
+        for (_, now) in moved {
+            let before = stayed.partition_point(|(start, _)| *start < now.place_end());
+            let reaches = before.checked_sub(1).and_then(|last| stayed.get(last));
+            if reaches.is_some_and(|(_, end)| *end > now.place_start) {
+                return None;
+            }
         }
     }
     Some(out)
@@ -1398,6 +1417,65 @@ mod tests {
         assert_eq!(starts(&closed), vec![rat(0, 1), rat(4, 1), rat(8, 1)]);
         assert!(shift_from(&clips, rat(10, 1), rat(-3, 1)).is_none());
         assert!(shift_from(&clips, rat(0, 1), rat(-1, 1)).is_none());
+    }
+
+    /// The ripple's refusal is the same answer as trying every moved clip
+    /// against every clip that stayed, on rows in any order, with gaps and
+    /// with overlaps. A ripple wrongly allowed leaves two clips on one frame.
+    #[test]
+    fn a_ripple_refuses_exactly_when_a_moved_clip_lands_on_one_that_stayed() {
+        let src = Uuid::now_v7();
+        // A small generator with a fixed seed: the same rows every run.
+        let mut state = 0x2545_f491_4f6c_dd1d_u64;
+        let mut next = |below: u64| {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            (state % below) as i64
+        };
+        let (mut refused, mut allowed) = (0, 0);
+        for _ in 0..300 {
+            let mut clips: Vec<Clip> = Vec::new();
+            let mut cursor = 0;
+            for _ in 0..(2 + next(12)) {
+                // Mostly after the last clip, sometimes back over it.
+                cursor = (cursor + next(6) - 1).max(0);
+                let len = 1 + next(5);
+                clips.push(clip(src, cursor, len));
+                cursor += len;
+            }
+            // Out of order: the list is stored however it was last written.
+            for i in (1..clips.len()).rev() {
+                clips.swap(i, next(i as u64 + 1) as usize);
+            }
+            let at = rat(next(cursor as u64 + 2), 1);
+            let delta = rat(-1 - next(4), 1);
+
+            let lands = clips
+                .iter()
+                .filter(|m| m.place_start >= at)
+                .filter_map(|m| m.slide(delta))
+                .any(|m| {
+                    clips
+                        .iter()
+                        .filter(|s| s.place_start < at)
+                        .any(|s| overlaps(&m, s.place_start, s.place_end()))
+                });
+            let before_zero = clips
+                .iter()
+                .any(|m| m.place_start >= at && m.slide(delta).is_none());
+            let moved = shift_from(&clips, at, delta);
+            assert_eq!(moved.is_none(), lands || before_zero, "{clips:?} {at:?}");
+            if moved.is_none() {
+                refused += 1;
+            } else {
+                allowed += 1;
+            }
+        }
+        assert!(
+            refused > 30 && allowed > 30,
+            "{refused} refused, {allowed} allowed"
+        );
     }
 
     /// A roll moves the join and nothing else, and both clips go on playing
