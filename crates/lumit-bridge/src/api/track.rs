@@ -1096,6 +1096,14 @@ pub fn planar_status(layer: LayerReference, effect: Uuid) -> BridgePlanarStatus 
         status.frames = u32::try_from(baked.frames.len()).unwrap_or(u32::MAX);
         status.clip_frames = baked.span;
     }
+    // Done with nothing to read: the rows have changed since, and the effect
+    // is drawing without that answer. A Planar track always has its own.
+    if status.stage == BridgeTrackStage::Done
+        && status.clip_frames == 0
+        && inst.effect.match_name != lumit_core::track::PLANAR_TRACK
+    {
+        status.stage = BridgeTrackStage::Idle;
+    }
     status
 }
 

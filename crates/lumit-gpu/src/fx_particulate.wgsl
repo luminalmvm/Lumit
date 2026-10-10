@@ -877,6 +877,16 @@ fn pt_fs(v: VsOut) -> @location(0) vec4<f32> {
         let oval = (radius - length(local)) * min(v.stretch.x, v.stretch.y) / v.geom.y;
         return v.colour * clamp(oval, 0.0, 1.0);
     }
-    let cov = clamp((radius - pt_seg_distance(q, v.tail, v.head)) / v.geom.y, 0.0, 1.0);
+    let far = pt_seg_distance(q, v.tail, v.head);
+    var cov = clamp((radius - far) / v.geom.y, 0.0, 1.0);
+    // == lumit_core::fx::points::capsule_cover. A capsule under 2 px wide is
+    // measured as the share of the pixel its width fills, so a 1 px line lying
+    // between two pixel rows puts half its light in each and does not vanish.
+    // A dot, and anything 2 px wide or more, keeps the soft edge above.
+    if (radius < 1.0 && (v.tail.x != v.head.x || v.tail.y != v.head.y)) {
+        let boxed = min(clamp(radius + 0.5 - far, 0.0, 1.0), 2.0 * radius);
+        let blend = clamp(2.0 * radius - 1.0, 0.0, 1.0);
+        cov = boxed + (cov - boxed) * blend;
+    }
     return v.colour * cov;
 }

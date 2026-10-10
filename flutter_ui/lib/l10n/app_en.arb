@@ -2920,6 +2920,14 @@
   "@fxToGroup": {
     "description": "Effect controls — a text box on Connect points: the name of the group of points that lines run to, when Between joins one set of points to another."
   },
+  "fxStore": "Store",
+  "@fxStore": {
+    "description": "Effect controls — a dropdown on Vary points, under Set number: what is saved for each point under the Name, a number, an offset or a colour. A verb."
+  },
+  "fxColourName": "Colour name",
+  "@fxColourName": {
+    "description": "Effect controls — a text box on Points field: the name of the per-point colour that the Colour output draws. Left empty, it is each point's own colour."
+  },
   "fxClockwise": "Clockwise",
   "@fxClockwise": {
     "description": "Effect controls — a Wipe option on Radial wipe."

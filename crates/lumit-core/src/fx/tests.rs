@@ -8025,7 +8025,7 @@ fn a_curve_is_sanitised_on_read() {
     let repeated = CurvePoints::sanitised(&[[0.0, 0.0], [0.5, 0.9], [0.5, 0.1], [1.0, 1.0]]);
     assert_eq!(repeated.points(), [[0.0, 0.0], [0.5, 0.9], [1.0, 1.0]]);
 
-    // Past sixteen, the tail is dropped rather than the list refused.
+    // Past the cap, the tail is dropped rather than the list refused.
     let many: Vec<[f32; 2]> = (0..40).map(|i| [i as f32 / 39.0, 0.5]).collect();
     assert_eq!(
         CurvePoints::sanitised(&many).points().len(),
@@ -9059,8 +9059,9 @@ fn two_points() -> PointsStream {
 }
 
 /// A named column stays on the point it was written for through every helper
-/// that reorders, drops or joins points, and the reader answers an empty
-/// name, a built-in one and an unknown one as it says it does.
+/// that reorders, drops or joins points, whether it holds a number, an
+/// offset or a colour. The reader answers an empty name, a built-in one and
+/// an unknown one as it says it does, and makes one number of the wider two.
 #[test]
 fn a_named_column_stays_with_its_points() {
     // Four points out of id order, each 10 px further across than the last.
@@ -9076,8 +9077,34 @@ fn a_named_column_stays_with_its_points() {
         ..PointsStream::default()
     };
     // Ten times its id, so a weight on the wrong point shows.
-    let weights = s.named_mut("weight").expect("room for a name");
-    weights.copy_from_slice(&[30.0, 10.0, 20.0, 0.0]);
+    let weights = s.named_mut("weight", 1).expect("room for a name");
+    for (weight, v) in weights.iter_mut().zip([30.0, 10.0, 20.0, 0.0]) {
+        weight[0] = v;
+    }
+    // An offset and a colour ride with it, each made from the point's id.
+    let offset = |id: u64| [3.0 * id as f32, 4.0 * id as f32, 0.0, 0.0];
+    let colour = |id: u64| [id as f32, 0.5, 0.25, 1.0];
+    let ids = s.id.clone();
+    for (name, width) in [("push", 2), ("tint", 4)] {
+        let column = s.named_mut(name, width).expect("room for a name");
+        for (value, id) in column.iter_mut().zip(&ids) {
+            *value = if width == 2 { offset(*id) } else { colour(*id) };
+        }
+    }
+    // Whether every point still carries its own two, and reads each as one
+    // number by the rule: an offset its length, a colour how bright it is.
+    let wide = |s: &PointsStream| {
+        let (push, tint) = (s.column("push"), s.column("tint"));
+        (0..s.len()).all(|i| {
+            let id = s.id[i];
+            let luma = 0.2126 * id as f32 + 0.7152 * 0.5 + 0.0722 * 0.25;
+            s.whole(push, i) == Some((offset(id), 2))
+                && s.whole(tint, i) == Some((colour(id), 4))
+                && (s.value_of("push", i) - 5.0 * id as f32).abs() < 1e-4
+                && (s.value_of("tint", i) - luma).abs() < 1e-5
+        })
+    };
+    assert!(wide(&s), "written");
     let weight_of = |s: &PointsStream| -> Vec<(u64, f32)> {
         (0..s.len())
             .map(|i| (s.id[i], s.value_of("weight", i)))
@@ -9092,11 +9119,15 @@ fn a_named_column_stays_with_its_points() {
     assert_eq!(s.value_of("wieght", 1), 0.0, "a slip reads nought");
     assert_eq!(s.value("wieght", 1), None);
     assert_eq!(s.value("@bogus", 1), None);
-    assert!(s.named_mut("@x").is_none(), "a built-in is never written");
+    assert!(
+        s.named_mut("@x", 1).is_none(),
+        "a built-in is never written"
+    );
     // At half size a place still reads in px@comp.
     let half = s.rescaled(0.5);
     assert_eq!(half.value_of("@x", 2), 20.0);
     assert_eq!(weight_of(&half), weight_of(&s));
+    assert!(wide(&half), "rescaled");
 
     s.sort_by_id();
     assert_eq!(
@@ -9104,14 +9135,20 @@ fn a_named_column_stays_with_its_points() {
         [(0, 0.0), (1, 10.0), (2, 20.0), (3, 30.0)],
         "sorted"
     );
+    assert!(wide(&s), "sorted");
     s.retain(|i| i != 1);
     assert_eq!(weight_of(&s), [(0, 0.0), (2, 20.0), (3, 30.0)], "retained");
+    assert!(wide(&s), "retained");
     s.keep_newest(2);
     assert_eq!(weight_of(&s), [(2, 20.0), (3, 30.0)], "newest kept");
+    assert!(wide(&s), "newest kept");
 
     // Each side carries a name the other lacks, and the lack reads nought.
+    // A name the two hold at different widths reads nothing afterwards.
     let mut other = two_points();
-    other.named_mut("tag").expect("room for a name").fill(1.0);
+    let tag = other.named_mut("tag", 1).expect("room for a name");
+    tag.fill([1.0, 0.0, 0.0, 0.0]);
+    other.named_mut("push", 1);
     s.append(&other);
     assert_eq!(
         weight_of(&s),
@@ -9120,10 +9157,18 @@ fn a_named_column_stays_with_its_points() {
     );
     let tags: Vec<f32> = (0..s.len()).map(|i| s.value_of("tag", i)).collect();
     assert_eq!(tags, [0.0, 0.0, 1.0, 1.0]);
+    let tint = s.column("tint");
+    let tints: Vec<Option<([f32; 4], u8)>> = (0..s.len()).map(|i| s.whole(tint, i)).collect();
+    let none = Some(([0.0; 4], 4));
+    assert_eq!(
+        tints,
+        [Some((colour(2), 4)), Some((colour(3), 4)), none, none]
+    );
+    assert_eq!(s.value("push", 0), None, "two widths under one name");
 
     // A name past the cap is not written.
     for k in 0..=points::NAMED_MAX {
-        s.named_mut(&format!("n{k}"));
+        s.named_mut(&format!("n{k}"), 1);
     }
     assert_eq!(s.named.len(), points::NAMED_MAX);
 }

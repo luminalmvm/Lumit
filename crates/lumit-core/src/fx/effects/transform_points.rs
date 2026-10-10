@@ -321,10 +321,8 @@ impl TransformPoints {
         // A point is round, so an uneven scale grows it by the middle of the
         // two.
         let grow = (sx * sy).abs().sqrt();
-        let moved = |i: usize| {
-            let group = self.apply_group.as_str();
-            in_stream.applies(self.apply_to, group, self.apply_threshold, i)
-        };
+        let group = in_stream.group(self.apply_group.as_str());
+        let moved = |i: usize| in_stream.applies(self.apply_to, group, self.apply_threshold, i);
         let share = |of: f32, per_cent: f32| of * per_cent / 100.0;
         let mut anchor = if self.anchor_in == 1 {
             [

@@ -433,8 +433,8 @@ impl TrackPoints {
             // The same under a name: how sure the tracker is of a feature,
             // or a blob's area in its own px.
             let name = if blobs { "area" } else { "confidence" };
-            if let Some(last) = out.named_mut(name).and_then(|c| c.last_mut()) {
-                *last = extra;
+            if let Some(last) = out.named_mut(name, 1).and_then(|c| c.last_mut()) {
+                last[0] = extra;
             }
         }
         out

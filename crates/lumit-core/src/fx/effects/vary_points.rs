@@ -11,7 +11,7 @@
 
 use crate::fx::cpu;
 use crate::fx::noise::value3;
-use crate::fx::points::{self, PointsStream};
+use crate::fx::points::{self, Column, PointsStream};
 use crate::fx::{
     CurvePoints, EffectDef, EffectMetadata, EffectSchema, EnabledCond, EnabledWhen, ParamGroup,
     ParamId, Params, Port, PortType, ResolveCx, ShortText, Signature, Value,
@@ -127,9 +127,9 @@ pub struct Pattern {
     pub radius: f32,
     /// The number that reads as 1 under the Number pattern.
     pub number_range: f32,
-    /// Which of a point's numbers the Number pattern reads, by name. Empty
-    /// is the number it carries.
-    pub name: ShortText,
+    /// Which of a point's numbers the Number pattern reads, found on the
+    /// stream [`value`](Self::value) is then asked about.
+    pub number: Column,
     /// How far it is from one stripe, square or wave to the next, in the
     /// stream's own units.
     pub spacing: f32,
@@ -216,7 +216,9 @@ impl Pattern {
                     0.0
                 }
             }
-            PatternKind::Number => s.value_of(self.name.as_str(), i) / self.number_range.max(1e-3),
+            PatternKind::Number => {
+                s.read(self.number, i).unwrap_or(0.0) / self.number_range.max(1e-3)
+            }
             // At no Angle the stripes lie across, one below another.
             PatternKind::Stripes => on(turned()[1].rem_euclid(1.0) < self.width),
             PatternKind::Checker => {
@@ -310,7 +312,13 @@ pub const VARY_GROUPS: &[ParamGroup] = &[
     group("Colour ramp", &["use_ramp", "red", "green", "blue"], None),
     group(
         "Number",
-        &["set_number", "number_name", "number_from", "number_to"],
+        &[
+            "set_number",
+            "number_name",
+            "number_store",
+            "number_from",
+            "number_to",
+        ],
         None,
     ),
     group("Point", &["feather"], None),
@@ -332,6 +340,11 @@ pub const VARY_ENABLED_WHEN: &[EnabledWhen] = &[
     APPLY_THRESHOLD_WHEN,
     EnabledWhen {
         param: "number_name",
+        on: "set_number",
+        cond: EnabledCond::BoolIs(true),
+    },
+    EnabledWhen {
+        param: "number_store",
         on: "set_number",
         cond: EnabledCond::BoolIs(true),
     },
@@ -657,6 +670,13 @@ pub struct VaryPoints {
     #[text(label = "Name", default = "")]
     pub number_name: ShortText,
 
+    /// What is written under the Name. Number is the number the two rows
+    /// below give. Offset is how far this effect moved the point across and
+    /// down, px@comp. Colour is the point's colour as this effect leaves
+    /// it. With no Name it is always the number.
+    #[choice(label = "Store", options = ["Number", "Offset", "Colour"], default = 0)]
+    pub number_store: u32,
+
     /// The number a point gets where the pattern reads 0.
     #[slider(label = "Number from", min = 0.0, max = 100.0, default = 0.0, unit = Raw)]
     pub number_from: f32,
@@ -693,9 +713,9 @@ impl VaryPoints {
     /// The raster factor, since a stream off a wire arrives in px@comp.
     pub const DERIVED_PX_SCALE: ParamId = ParamId::new("derived.px_scale");
 
-    /// The pattern's own rows.
+    /// The pattern's own rows, for reading `s`.
     #[must_use]
-    pub fn pattern(self) -> Pattern {
+    pub fn pattern(self, s: &PointsStream) -> Pattern {
         Pattern {
             kind: PatternKind::from_code(self.pattern),
             seed: self.seed,
@@ -704,7 +724,7 @@ impl VaryPoints {
             centre: [self.centre_x, self.centre_y],
             radius: self.radius,
             number_range: self.number_range,
-            name: self.pattern_name,
+            number: s.column(self.pattern_name.as_str()),
             spacing: self.spacing,
             angle: self.angle,
             width: self.band_width / 100.0,
@@ -731,7 +751,8 @@ impl VaryPoints {
         sampled: Option<&[[f32; 4]]>,
     ) -> PointsStream {
         let mut out = in_stream.clone();
-        let pattern = self.pattern();
+        let pattern = self.pattern(in_stream);
+        let group = in_stream.group(self.apply_group.as_str());
         let table = cpu::curve_table(&self.curve);
         let size = (self.size / 100.0).max(0.0);
         let opacity = (self.opacity / 100.0).clamp(0.0, 1.0);
@@ -753,19 +774,20 @@ impl VaryPoints {
         if stretch != [1.0; 2] {
             out.stretch_mut();
         }
-        // The column Set number writes, taken out for the walk and put back
-        // after it. Nothing reads it off `out` in between.
+        // What Set number writes, kept beside the walk and written after it.
+        // With no name it is the number each point carries, whatever Store
+        // says.
         let number_name = self.number_name.as_str();
-        let mut numbers = if self.set_number {
-            out.named_mut(number_name).map(std::mem::take)
-        } else {
-            None
+        let store = match number_name {
+            "" => 0,
+            _ => self.number_store,
         };
+        let units = in_stream.units();
+        let mut stored: Vec<(usize, [f32; 4])> = Vec::new();
         // Under Both ways a Random or Noise pattern rolls again for each axis.
         let own_rolls =
             self.both_ways && matches!(pattern.kind, PatternKind::Random | PatternKind::Noise);
         for i in 0..out.len() {
-            let group = self.apply_group.as_str();
             if !in_stream.applies(self.apply_to, group, self.apply_threshold, i) {
                 continue;
             }
@@ -824,10 +846,8 @@ impl VaryPoints {
                     }
                 }
             }
-            if let Some(n) = numbers.as_mut().and_then(|n| n.get_mut(i)) {
-                *n = self.number_from + (self.number_to - self.number_from) * v;
-            }
             let facing = out.rotation.get(i).copied().unwrap_or(0.0);
+            let was = out.position.get(i).copied().unwrap_or([0.0; 3]);
             if let Some(p) = out.position.get_mut(i) {
                 p[0] += signed(self.offset_x, 0);
                 p[1] += signed(self.offset_y, 1);
@@ -840,9 +860,46 @@ impl VaryPoints {
                     p[1] += forward * sin + side * cos;
                 }
             }
+            if self.set_number {
+                let now = out.position.get(i).copied().unwrap_or(was);
+                stored.push((
+                    i,
+                    match store {
+                        // In px@comp, so it reads the same at any preview
+                        // size.
+                        1 => [
+                            (now[0] - was[0]) / units,
+                            (now[1] - was[1]) / units,
+                            0.0,
+                            0.0,
+                        ],
+                        2 => out.colour.get(i).copied().unwrap_or([0.0; 4]),
+                        _ => [
+                            self.number_from + (self.number_to - self.number_from) * v,
+                            0.0,
+                            0.0,
+                            0.0,
+                        ],
+                    },
+                ));
+            }
         }
-        if let (Some(numbers), Some(column)) = (numbers, out.named_mut(number_name)) {
-            *column = numbers;
+        if self.set_number && number_name.is_empty() {
+            let numbers = out.index_mut();
+            for (i, value) in stored {
+                if let Some(n) = numbers.get_mut(i) {
+                    *n = value[0];
+                }
+            }
+        } else if self.set_number {
+            let width = [1, 2, 4].get(store as usize).copied().unwrap_or(1);
+            if let Some(column) = out.named_mut(number_name, width) {
+                for (i, value) in stored {
+                    if let Some(v) = column.get_mut(i) {
+                        *v = value;
+                    }
+                }
+            }
         }
         out
     }

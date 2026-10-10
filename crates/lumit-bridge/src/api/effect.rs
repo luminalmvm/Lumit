@@ -1571,7 +1571,7 @@ pub enum BridgeEffectValue {
     /// or `None` for "First mask". The *geometry* never crosses — the render
     /// flattens it engine-side, beside the op.
     MaskPath(Option<Uuid>),
-    /// A tone curve as its own control points: 2..=16 `[x, y]` pairs
+    /// A tone curve as its own control points: 2..=32 `[x, y]` pairs
     /// in the unit square, in x order. Crosses as written — the engine
     /// straightens what it reads (`CurvePoints::sanitised`), so a panel
     /// mid-drag need not, and a curve is never refused for being momentarily

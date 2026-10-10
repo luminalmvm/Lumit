@@ -699,8 +699,11 @@ bool _alwaysDrawn(BridgePortType type) =>
 bool graphNoStream(BridgeGraphNode node) => graphNoStreamPorts(node.inputs);
 
 /// The same question asked of a card's sockets, which is what the canvas holds.
-bool graphNoStreamPorts(List<BridgePort> inputs) =>
-    inputs.any((p) => p.portType == BridgePortType.points && !p.wired);
+/// One wire is enough: Merge points has four sockets and reads any of them.
+bool graphNoStreamPorts(List<BridgePort> inputs) {
+  final points = inputs.where((p) => p.portType == BridgePortType.points);
+  return points.isNotEmpty && !points.any((p) => p.wired);
+}
 
 /// Where one stored wire starts and ends in canvas units, and the type it
 /// carries — the *source* port's, which is the type the wire is. Null when

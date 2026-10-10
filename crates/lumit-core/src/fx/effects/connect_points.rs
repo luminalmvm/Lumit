@@ -378,7 +378,8 @@ impl ConnectPoints {
         let mut points = in_stream.clone();
         let between = Between::from_code(self.between);
         // Picked alone is the same web drawn over the picked points only.
-        let (from, to) = (self.between_from.as_str(), self.between_to.as_str());
+        let from = in_stream.group(self.between_from.as_str());
+        let to = self.between_to.as_str();
         if between == Between::Picked {
             points.retain(|i| in_stream.in_group(from, 0.5, i));
         }
@@ -404,9 +405,10 @@ impl ConnectPoints {
         // One end in the first group and the other in the second, either
         // way round. With no names those are the picked points and the rest.
         let first = |i: usize| points.in_group(from, 0.5, i);
+        let rest = points.column(to);
         let second = |i: usize| match to {
             "" => !points.picked(i),
-            _ => points.in_group(to, 0.5, i),
+            _ => points.in_group(rest, 0.5, i),
         };
         let allowed =
             |i: usize, j: usize| !across || (first(i) && second(j)) || (first(j) && second(i));
@@ -478,7 +480,8 @@ impl ConnectPoints {
                     // By the number each point carries. The sort keeps the
                     // stream's own order where two carry the same.
                     let mut order: Vec<usize> = (0..n).collect();
-                    let by = |i: usize| points.value_of(self.order_name.as_str(), i);
+                    let order_by = points.column(self.order_name.as_str());
+                    let by = |i: usize| points.read(order_by, i).unwrap_or(0.0);
                     order.sort_by(|a, b| by(*a).total_cmp(&by(*b)));
                     let mut pairs: Vec<(usize, usize)> =
                         order.windows(2).map(|w| (w[0], w[1])).collect();

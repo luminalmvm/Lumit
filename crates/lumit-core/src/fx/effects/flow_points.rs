@@ -465,11 +465,9 @@ impl FlowPoints {
     /// answer is the same to the bit either way.
     fn walked(self, in_stream: &PointsStream, t: f64, use_kept: bool) -> PointsStream {
         let mut out = in_stream.clone();
+        let group = in_stream.group(self.apply_group.as_str());
         let moved: Vec<usize> = (0..out.len())
-            .filter(|i| {
-                let group = self.apply_group.as_str();
-                in_stream.applies(self.apply_to, group, self.apply_threshold, *i)
-            })
+            .filter(|i| in_stream.applies(self.apply_to, group, self.apply_threshold, *i))
             .collect();
         if moved.is_empty() || self.speed == 0.0 {
             return out;

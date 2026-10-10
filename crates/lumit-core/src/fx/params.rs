@@ -174,7 +174,7 @@ pub enum Value {
     ///
     /// The one value that carries a *shape* rather than a scalar, and it is
     /// here rather than beside the op — the way a mask path is — for the
-    /// opposite reason to the mask path's: a curve is at most sixteen pairs
+    /// opposite reason to the mask path's: a curve is at most thirty-two pairs
     /// of numbers the user typed, small enough to stay `Copy`, to be hashed
     /// field by field into the frame key, and to borrow nothing from the
     /// document. What it costs is the width of every arena slot, since an
@@ -192,7 +192,8 @@ pub enum Value {
 
 /// The most bytes of UTF-8 a [`ParamKind::Text`](crate::fx::ParamKind::Text)
 /// row holds. A text this long is no wider than a curve, so adding the kind
-/// left every arena slot the size it was.
+/// left every arena slot the size it was. A curve has since grown to twice
+/// this, and the cap stayed: a name or a label has no use for more.
 pub const TEXT_MAX_BYTES: usize = 128;
 
 /// `text` cut to [`TEXT_MAX_BYTES`], never through the middle of a character.
@@ -257,9 +258,10 @@ impl Default for ShortText {
 }
 
 /// The most control points a [`ParamKind::Curve`](crate::fx::ParamKind::Curve)
-/// carries. Sixteen is well past what a grade needs and keeps the
-/// inline form small.
-pub const CURVE_MAX_POINTS: usize = 16;
+/// carries. Thirty-two is well past what a grade needs, and is what a colour
+/// ramp of thirty-two stops asks for. It sets the width of every arena slot,
+/// 272 bytes with the id, so raise it again only with that in mind.
+pub const CURVE_MAX_POINTS: usize = 32;
 
 /// The identity diagonal: the default curve, and what a malformed one falls
 /// back to.

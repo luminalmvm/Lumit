@@ -40,6 +40,11 @@ pub const FIELD_ENABLED_WHEN: &[EnabledWhen] = &[
         on: "output",
         cond: EnabledCond::ChoiceIs(3),
     },
+    EnabledWhen {
+        param: "colour_name",
+        on: "output",
+        cond: EnabledCond::ChoiceIs(2),
+    },
 ];
 
 /// What each pixel draws from its nearest point.
@@ -142,6 +147,12 @@ pub struct PointsField {
     #[text(label = "Name", default = "")]
     pub number_name: ShortText,
 
+    /// The name Colour draws, where the points carry a colour under one.
+    /// A number or an offset under the name draws as a grey. Empty is the
+    /// point's own colour.
+    #[text(label = "Colour name", default = "")]
+    pub colour_name: ShortText,
+
     /// The family's budget row: the most points the field is made from. A
     /// longer stream is trimmed to its newest.
     #[counter(
@@ -185,13 +196,21 @@ impl PointsField {
     pub fn seeds(self, stream: &PointsStream) -> Vec<Seed> {
         let mut s = stream.clone();
         s.keep_newest(self.max_points.clamp(0, points::CAP_HARD as i32) as usize);
+        let number = s.column(self.number_name.as_str());
+        let named = s.column(self.colour_name.as_str());
         (0..s.len())
             .filter_map(|i| {
                 let at = s.projected(i);
+                let colour = match (self.colour_name.is_empty(), s.whole(named, i)) {
+                    (true, _) => s.colour.get(i).copied().unwrap_or([0.0; 4]),
+                    (false, Some((colour, 4))) => colour,
+                    // Anything narrower is one number, drawn as a grey.
+                    (false, _) => s.read(named, i).map_or([0.0; 4], |v| [v, v, v, 1.0]),
+                };
                 (at[0].is_finite() && at[1].is_finite()).then(|| Seed {
                     at,
-                    colour: s.colour.get(i).copied().unwrap_or([0.0; 4]),
-                    number: s.value_of(self.number_name.as_str(), i),
+                    colour,
+                    number: s.read(number, i).unwrap_or(0.0),
                 })
             })
             .collect()

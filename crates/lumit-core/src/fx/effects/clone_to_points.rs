@@ -51,7 +51,7 @@
 
 use crate::fx::drivers::clone_index;
 use crate::fx::effects::vary_points::{APPLY_GROUP_WHEN, APPLY_THRESHOLD_WHEN};
-use crate::fx::points::{self, PointsStream, SpriteFit};
+use crate::fx::points::{self, Column, PointsStream, SpriteFit};
 use crate::fx::{
     EffectDef, EffectMetadata, EffectSchema, EnabledCond, EnabledWhen, ParamGroup, ParamId, Params,
     Port, PortType, ResolveCx, ShortText, Signature, Value,
@@ -539,14 +539,15 @@ impl CloneToPoints {
         let mut out = in_stream.clone();
         // Chosen before anything is dropped or reordered, so a point keeps
         // its picture when the camera moves or a neighbour is left out.
+        let numbers = self.numbers(in_stream);
         out.index = (0..in_stream.len())
-            .map(|i| self.picture_of(in_stream, i, pictures).first as f32)
+            .map(|i| self.picture_at(in_stream, i, pictures, numbers).first as f32)
             .collect();
         // How many pictures deep every point is stamped, and how far apart
         // they sit in the list. The same for every point.
         let Stamped { step, count, .. } = self.picture_of(in_stream, 0, pictures);
         if self.apply_to != 0 {
-            let group = self.apply_group.as_str();
+            let group = in_stream.group(self.apply_group.as_str());
             out.retain(|i| in_stream.applies(self.apply_to, group, self.apply_threshold, i));
         }
         // The newest by birth index, which is the cap rule the whole family
@@ -609,6 +610,21 @@ impl CloneToPoints {
     /// first, each at the point's own moment.
     #[must_use]
     pub fn picture_of(self, s: &PointsStream, i: usize, of: Pictures) -> Stamped {
+        self.picture_at(s, i, of, self.numbers(s))
+    }
+
+    /// The numbers Choose by and Time offset read under Number, found on
+    /// `s` once for a walk over its points.
+    fn numbers(self, s: &PointsStream) -> [Column; 2] {
+        [
+            s.column(self.choose_name.as_str()),
+            s.column(self.time_name.as_str()),
+        ]
+    }
+
+    /// [`picture_of`](Self::picture_of), with the two numbers found already.
+    fn picture_at(self, s: &PointsStream, i: usize, of: Pictures, numbers: [Column; 2]) -> Stamped {
+        let [choose, time] = numbers;
         let one = |first: usize| Stamped {
             first,
             step: 1,
@@ -629,7 +645,7 @@ impl CloneToPoints {
                 }
                 // The number it carries, wrapped round the list. A NaN reads 0.
                 2 => {
-                    let number = s.value_of(self.choose_name.as_str(), i);
+                    let number = s.read(choose, i).unwrap_or(0.0);
                     (number.floor() as i64).rem_euclid(n as i64) as usize
                 }
                 _ => i % n,
@@ -649,7 +665,7 @@ impl CloneToPoints {
             return one(chosen(of.renders));
         }
         let age = s.age.get(i).copied().unwrap_or(0.0);
-        let number = s.value_of(self.time_name.as_str(), i);
+        let number = s.read(time, i).unwrap_or(0.0);
         let moment = self.moment_of(i, id, number, age, of.moments);
         if every {
             return Stamped {

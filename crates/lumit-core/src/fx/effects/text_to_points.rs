@@ -240,8 +240,8 @@ impl TextToPoints {
                 ("width", width),
             ];
             for (name, v) in named {
-                if let Some(last) = out.named_mut(name).and_then(|c| c.last_mut()) {
-                    *last = v;
+                if let Some(last) = out.named_mut(name, 1).and_then(|c| c.last_mut()) {
+                    last[0] = v;
                 }
             }
         }

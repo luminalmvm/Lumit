@@ -15,7 +15,7 @@
 //! Nothing wired, or no Text layer named, draws nothing.
 
 use crate::fx::effects::vary_points::{APPLY_GROUP_WHEN, APPLY_THRESHOLD_WHEN};
-use crate::fx::points::PointsStream;
+use crate::fx::points::{Column, PointsStream};
 use crate::fx::{
     EffectDef, EffectMetadata, EffectSchema, EnabledWhen, ParamId, Params, Port, PortType,
     ResolveCx, ShortText, Signature, Value,
@@ -132,41 +132,33 @@ fn number(v: f32, decimals: usize) -> String {
     format!("{:.decimals$}", (v * unit).round() / unit + 0.0)
 }
 
-/// `text` with each `{attr:NAME}` and `{@NAME}` in it written as what that
-/// name reads at point `i`. A name that reads nothing is left as it was
-/// typed, so a slip shows in the picture.
-fn named(text: &str, stream: &PointsStream, i: usize, decimals: usize) -> String {
-    let mut out = String::with_capacity(text.len());
-    let mut rest = text;
-    while let Some((head, after)) = rest.split_once('}') {
-        rest = after;
+/// `template` cut at each `{attr:NAME}` and `{@NAME}` in it: the text
+/// before each one with what its name reads on `stream`, then the text after
+/// the last. A name that reads nothing is left in the text as it was typed,
+/// so a slip shows in the picture.
+fn named<'a>(template: &'a str, stream: &PointsStream) -> (Vec<(&'a str, Column)>, &'a str) {
+    let mut cuts = Vec::new();
+    // Where the text not yet handed out starts, and where the search is.
+    let (mut from, mut at) = (0, 0);
+    while let Some(close) = template.get(at..).and_then(|s| s.find('}')) {
+        let close = at + close;
         // The token starts at the last brace opened before this one closes.
-        let Some((before, inner)) = head.rsplit_once('{') else {
-            out.push_str(head);
-            out.push('}');
-            continue;
-        };
-        out.push_str(before);
-        let name = inner
-            .strip_prefix("attr:")
-            .or(inner.starts_with('@').then_some(inner));
-        match name.and_then(|name| Some((name, stream.value(name, i)?))) {
-            Some((name, v)) => {
-                // A place, an id and a count are whole numbers.
-                let whole = ["@index", "@id", "@n"]
-                    .iter()
-                    .any(|w| name.eq_ignore_ascii_case(w));
-                out.push_str(&number(v, if whole { 0 } else { decimals }));
-            }
-            None => {
-                out.push('{');
-                out.push_str(inner);
-                out.push('}');
-            }
+        let open = template.get(at..close).and_then(|s| s.rfind('{'));
+        let open = open.map(|open| at + open);
+        at = close + 1;
+        let inner = open.and_then(|open| template.get(open + 1..close));
+        let name = inner.and_then(|inner| {
+            inner
+                .strip_prefix("attr:")
+                .or(inner.starts_with('@').then_some(inner))
+        });
+        let column = name.map_or(Column::Nothing, |name| stream.column(name));
+        if let (Some(open), false) = (open, column == Column::Nothing) {
+            cuts.push((template.get(from..open).unwrap_or(""), column));
+            from = at;
         }
     }
-    out.push_str(rest);
-    out
+    (cuts, template.get(from..).unwrap_or(""))
 }
 
 impl LabelPoints {
@@ -210,9 +202,10 @@ impl LabelPoints {
         px_scale: f32,
     ) -> Vec<(String, [f32; 2])> {
         // A point behind the camera is not seen, so it has no label.
+        let group = stream.group(self.apply_group.as_str());
+        let (cuts, tail) = named(template, stream);
         let chosen: Vec<usize> = (0..stream.len())
             .filter(|i| {
-                let group = self.apply_group.as_str();
                 stream.applies(self.apply_to, group, self.apply_threshold, *i)
                     && stream.depth_scale(*i) > 0.0
             })
@@ -225,19 +218,27 @@ impl LabelPoints {
             .skip(chosen.len().saturating_sub(most))
             .map(|&i| {
                 let seen = stream.projected(i);
-                let text = if template.contains('{') {
-                    template
-                        .replace("{index}", &i.to_string())
+                let plain = |text: &str| {
+                    if !text.contains('{') {
+                        return text.to_owned();
+                    }
+                    text.replace("{index}", &i.to_string())
                         .replace("{id}", &stream.id.get(i).copied().unwrap_or(0).to_string())
                         .replace("{number}", &number(stream.index_of(i), decimals))
                         .replace("{x}", &number(seen[0], decimals))
                         .replace("{y}", &number(seen[1], decimals))
                         .replace("{size}", &number(get(&stream.size, i), decimals))
                         .replace("{age}", &number(get(&stream.age, i), decimals))
-                } else {
-                    template.to_owned()
                 };
-                let text = named(&text, stream, i, decimals);
+                let mut text = String::new();
+                for (before, column) in &cuts {
+                    // A place, an id and a count are whole numbers.
+                    let whole = matches!(column, Column::Index | Column::Id | Column::Count);
+                    let v = stream.read(*column, i).unwrap_or(0.0);
+                    text += &plain(before);
+                    text += &number(v, if whole { 0 } else { decimals });
+                }
+                text += &plain(tail);
                 let at = [
                     seen[0] * px_scale + self.offset_x,
                     seen[1] * px_scale + self.offset_y,

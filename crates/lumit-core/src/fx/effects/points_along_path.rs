@@ -293,8 +293,8 @@ impl PointsAlongPath {
                 .push(if length > 0.0 { far / length } else { 0.0 });
             // The same under a name, for the effects below to read by it.
             let along = out.index.last().copied().unwrap_or(0.0);
-            if let Some(last) = out.named_mut("progress").and_then(|c| c.last_mut()) {
-                *last = along;
+            if let Some(last) = out.named_mut("progress", 1).and_then(|c| c.last_mut()) {
+                last[0] = along;
             }
         };
         if placement == Placement::Corners {

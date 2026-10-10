@@ -300,9 +300,9 @@ impl PickPoints {
     /// The raster factor, since a stream off a wire arrives in px@comp.
     pub const DERIVED_PX_SCALE: ParamId = ParamId::new("derived.px_scale");
 
-    /// The pattern's own rows.
+    /// The pattern's own rows, for reading `s`.
     #[must_use]
-    pub fn pattern(self) -> Pattern {
+    pub fn pattern(self, s: &PointsStream) -> Pattern {
         Pattern {
             kind: PatternKind::from_code(self.pattern),
             seed: self.seed,
@@ -311,7 +311,7 @@ impl PickPoints {
             centre: [self.centre_x, self.centre_y],
             radius: self.radius,
             number_range: self.number_range,
-            name: self.pattern_name,
+            number: s.column(self.pattern_name.as_str()),
             spacing: self.spacing,
             angle: self.angle,
             width: self.band_width / 100.0,
@@ -336,7 +336,7 @@ impl PickPoints {
         t: f64,
         sampled: Option<&[[f32; 4]]>,
     ) -> PointsStream {
-        let pattern = self.pattern();
+        let pattern = self.pattern(in_stream);
         let (from, to) = (self.from / 100.0, self.to / 100.0);
         let nth = u64::from(self.every_nth.max(1).unsigned_abs());
         let offset = u64::from(self.nth_offset.max(0).unsigned_abs());
@@ -352,20 +352,27 @@ impl PickPoints {
             return out;
         }
         let name = self.group_name.as_str();
-        let marks = if name.is_empty() {
-            Some(out.pick_mut())
-        } else {
-            out.named_mut(name)
-        };
-        for (i, pick) in marks.into_iter().flatten().enumerate() {
-            let (was, pass) = (in_stream.in_group(name, 0.5, i), passes(i));
+        let group = in_stream.group(name);
+        let marks = (0..in_stream.len()).map(|i| {
+            let (was, pass) = (in_stream.in_group(group, 0.5, i), passes(i));
             let picked = match self.result {
                 1 => pass,
                 2 => was || pass,
                 3 => was && !pass,
                 _ => was && pass,
             };
-            *pick = if picked { 1.0 } else { 0.0 };
+            if picked {
+                1.0
+            } else {
+                0.0
+            }
+        });
+        if name.is_empty() {
+            *out.pick_mut() = marks.collect();
+        } else if let Some(column) = out.named_mut(name, 1) {
+            for (value, mark) in column.iter_mut().zip(marks) {
+                *value = [mark, 0.0, 0.0, 0.0];
+            }
         }
         out
     }

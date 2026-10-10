@@ -6415,6 +6415,7 @@ mod tests {
             invert: false,
             number_range: 100.0,
             number_name: Default::default(),
+            colour_name: Default::default(),
             max_points: 20_000,
             mix: 100.0,
         };
@@ -6496,12 +6497,43 @@ mod tests {
             max_trails: 400,
             mix: 100.0,
         };
-        let (stream, tails) = trail.tail(&samples);
+        let (mut stream, mut tails) = trail.tail(&samples);
         assert!(stream.len() > 20, "the fixture drew {} dabs", stream.len());
         let style = trail.draw_style();
 
+        // What the trail alone draws, to measure the line below against.
+        let mut bare = vec![0.0f32; (w * h * 4) as usize];
+        lumit_core::fx::points::draw_stream(&mut bare, w, h, &stream, &tails, &style, None);
+        // One more capsule, 1 px wide, lying along the join between pixel
+        // rows 89 and 90. It is half a pixel from both, and used to draw
+        // nothing at all.
+        assert_eq!(tails.len(), stream.len(), "a tail for every dab");
+        stream.append(&lumit_core::fx::points::PointsStream {
+            position: vec![[100.0, 90.0, 0.0]],
+            speed: vec![[0.0; 3]],
+            age: vec![0.0],
+            life: vec![1.0],
+            size: vec![1.0],
+            rotation: vec![0.0],
+            colour: vec![[1.0; 4]],
+            id: vec![u64::MAX],
+            ..Default::default()
+        });
+        tails.push([28.0, 90.0, 0.0]);
+
         let mut cpu = vec![0.0f32; (w * h * 4) as usize];
         lumit_core::fx::points::draw_stream(&mut cpu, w, h, &stream, &tails, &style, None);
+        // Half its light in each of the two rows, over whatever was there.
+        for y in [89u32, 90] {
+            let at = ((y * w + 64) * 4 + 3) as usize;
+            let added = cpu[at] - bare[at];
+            let wanted = 0.5 * (1.0 - bare[at]);
+            assert!(bare[at] < 0.5, "the fixture covers the thin line's place");
+            assert!(
+                (added - wanted).abs() < 1e-3,
+                "the thin line put {added} in row {y}, not {wanted}"
+            );
+        }
 
         let points = draw_points_tailed(&stream, &tails);
         let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &vec![0.0; (w * h * 4) as usize], w, h);

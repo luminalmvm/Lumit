@@ -134,18 +134,23 @@ impl MergePoints {
             // whatever the two switches say. An input that carries the name
             // already, as a Merge points above hands it on, keeps its
             // sources apart, and each input's count on from the one before.
-            let mut seen: Vec<f32> = (0..part.len())
-                .map(|i| part.value_of("source", i))
+            let came = part.column("source");
+            let came: Vec<f32> = (0..part.len())
+                .map(|i| part.read(came, i).unwrap_or(0.0))
                 .collect();
+            let mut seen = came.clone();
             seen.sort_by(f32::total_cmp);
             seen.dedup_by(|a, b| a.total_cmp(b).is_eq());
-            for n in part.named_mut("source").into_iter().flatten() {
-                let place = seen.binary_search_by(|s| s.total_cmp(n)).unwrap_or(0);
-                *n = source + place as f32;
+            let column = part.named_mut("source", 1).into_iter().flatten();
+            for (n, came) in column.zip(came) {
+                let place = seen.binary_search_by(|s| s.total_cmp(&came)).unwrap_or(0);
+                *n = [source + place as f32, 0.0, 0.0, 0.0];
             }
             source += seen.len().max(1) as f32;
             out.append(&part);
         }
+        // A name the inputs held at different widths is in none of them.
+        out.named.retain(|column| column.width > 0);
         out.sort_by_id();
         // Four full streams are more than one may hold, so the newest stay.
         out.keep_newest(points::CAP_HARD as usize);

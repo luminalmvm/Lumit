@@ -31,7 +31,7 @@ import 'controls.dart';
 
 /// The most control points a curve may carry (docs/08 §1.2). The engine drops
 /// the tail past this on read; the editor simply stops adding.
-const int curveMaxPoints = 16;
+const int curveMaxPoints = 32;
 
 /// The identity diagonal — a fresh curve, and what Reset restores.
 const List<List<double>> curveIdentity = [
@@ -63,7 +63,7 @@ double curveSample(List<List<double>> points, double x) {
   final n = points.length;
   if (n < 2) return x;
   final m = _slopes(points);
-  // Which segment x falls in, walking forward: sixteen points at most.
+  // Which segment x falls in, walking forward: thirty-two points at most.
   var i = 0;
   while (i < n - 2 && x > points[i + 1][0]) {
     i++;

@@ -921,7 +921,7 @@ sealed class BridgeEffectValue with _$BridgeEffectValue {
     UuidValue? field0,
   ]) = BridgeEffectValue_MaskPath;
 
-  /// A tone curve as its own control points: 2..=16 `[x, y]` pairs
+  /// A tone curve as its own control points: 2..=32 `[x, y]` pairs
   /// in the unit square, in x order. Crosses as written — the engine
   /// straightens what it reads (`CurvePoints::sanitised`), so a panel
   /// mid-drag need not, and a curve is never refused for being momentarily

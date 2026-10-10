@@ -612,6 +612,8 @@ Map<String, String> get _table => {
       "Order by": l10n.fxOrderBy,
       "From group": l10n.fxFromGroup,
       "To group": l10n.fxToGroup,
+      "Store": l10n.fxStore,
+      "Colour name": l10n.fxColourName,
       "Clockwise": l10n.fxClockwise,
       "Colour": l10n.fxColour,
       "Colour 1": l10n.fxColour1,

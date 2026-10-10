@@ -216,11 +216,9 @@ impl RelaxPoints {
         if n < 2 || strength <= 0.0 || reach <= 0.0 {
             return out;
         }
+        let group = out.group(self.apply_group.as_str());
         let moves: Vec<bool> = (0..n)
-            .map(|i| {
-                let group = self.apply_group.as_str();
-                out.applies(self.apply_to, group, self.apply_threshold, i)
-            })
+            .map(|i| out.applies(self.apply_to, group, self.apply_threshold, i))
             .collect();
         let mut at: Vec<[f32; 2]> = (0..n)
             .map(|i| out.position.get(i).map_or([0.0; 2], |p| [p[0], p[1]]))

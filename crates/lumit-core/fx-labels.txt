@@ -184,6 +184,7 @@ Colour cycle
 Colour dodge
 Colour edge
 Colour from image
+Colour name
 Colour noise
 Colour overlay
 Colour ramp
@@ -934,6 +935,7 @@ Steps per second
 Stereo phase
 Stereo width
 Stops
+Store
 Streak
 Streak angle
 Streak intensity

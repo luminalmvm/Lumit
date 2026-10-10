@@ -12596,6 +12596,13 @@
           "default": ""
         },
         {
+          "id": "colour_name",
+          "label": "Colour name",
+          "kind": "text",
+          "unit": "raw",
+          "default": ""
+        },
+        {
           "id": "max_points",
           "label": "Max points",
           "kind": "int",
@@ -12702,6 +12709,12 @@
           "on": "output",
           "cond": "choice_is",
           "value": 3
+        },
+        {
+          "param": "colour_name",
+          "on": "output",
+          "cond": "choice_is",
+          "value": 2
         }
       ],
       "matte_role": "strength"
@@ -13336,6 +13349,19 @@
           "default": ""
         },
         {
+          "id": "number_store",
+          "label": "Store",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Number",
+            "Offset",
+            "Colour"
+          ],
+          "dividers_after": []
+        },
+        {
           "id": "number_from",
           "label": "Number from",
           "kind": "float",
@@ -13626,6 +13652,7 @@
           "params": [
             "set_number",
             "number_name",
+            "number_store",
             "number_from",
             "number_to"
           ],
@@ -13654,6 +13681,12 @@
         },
         {
           "param": "number_name",
+          "on": "set_number",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "number_store",
           "on": "set_number",
           "cond": "bool_is",
           "value": true

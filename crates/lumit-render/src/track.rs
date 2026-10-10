@@ -393,9 +393,9 @@ impl AnalysisKey {
     #[must_use]
     pub fn bake(effect: Uuid) -> Self {
         let mut h = blake3::Hasher::new();
-        // The 2 is the layout of the file. A file in an older layout has
+        // The 3 is the layout of the file. A file in an older layout has
         // another name, so it is never asked for.
-        h.update(b"lumit-track/bake/2/");
+        h.update(b"lumit-track/bake/3/");
         h.update(&FORMAT_VERSION.to_le_bytes());
         h.update(effect.as_bytes());
         AnalysisKey(*h.finalize().as_bytes())
@@ -3877,20 +3877,29 @@ mod tests {
         set(&mut pick, "group_name", EffectValue::Text("kept".into()));
         set(&mut pick, "to", number(50.0));
         set(&mut pick, "mix", number(0.0));
+        // And a Vary points stores each point's colour under another, so it
+        // carries a column four numbers wide as well.
+        let mut vary = lumit_core::fx::instantiate("vary_points").unwrap();
+        set(&mut vary, "opacity", number(40.0));
+        set(&mut vary, "set_number", EffectValue::Bool(true));
+        set(&mut vary, "number_name", EffectValue::Text("tint".into()));
+        set(&mut vary, "number_store", EffectValue::Choice(2));
+        set(&mut vary, "mix", number(0.0));
         let mut bake = lumit_core::fx::instantiate(bake_points::MATCH_NAME).unwrap();
         set(&mut bake, "mix", number(0.0));
         let mut connect = lumit_core::fx::instantiate("connect_points").unwrap();
         set(&mut connect, "max_distance", number(8.0));
         let (scatter_id, bake_id, connect_id) = (scatter.id, bake.id, connect.id);
-        let pick_id = pick.id;
+        let (pick_id, vary_id) = (pick.id, vary.id);
 
         let (cw, ch) = (64u32, 36u32);
         let def = Uuid::now_v7();
         let mut board = layer("board", LayerKind::Solid { def }, secs(4, 24));
-        board.effects = vec![scatter, pick, bake, connect];
+        board.effects = vec![scatter, pick, vary, bake, connect];
         board.graph.edges = vec![
             wire(stream_of(scatter_id), NodeRef::Effect(pick_id), "points"),
-            wire(stream_of(pick_id), NodeRef::Effect(bake_id), "points"),
+            wire(stream_of(pick_id), NodeRef::Effect(vary_id), "points"),
+            wire(stream_of(vary_id), NodeRef::Effect(bake_id), "points"),
             wire(stream_of(bake_id), NodeRef::Effect(connect_id), "points"),
         ];
         let board_id = board.id;
@@ -3928,7 +3937,7 @@ mod tests {
         let with_mode = |mode: u32| {
             let mut doc = doc.clone();
             let board = &mut doc.comp_mut(comp_id).unwrap().layers[0];
-            set(&mut board.effects[2], "mode", EffectValue::Choice(mode));
+            set(&mut board.effects[3], "mode", EffectValue::Choice(mode));
             Arc::new(doc)
         };
         let (auto, bypass) = (with_mode(0), with_mode(bake_points::MODE_BYPASS));
@@ -4022,18 +4031,28 @@ mod tests {
         frame_of(&bypass);
         let handed = crate::fxops::take_watched_points().expect("the walk reached the effect");
         crate::fxops::watch_points(None);
-        let kept = handed.named.iter().find(|(name, _)| name == "kept");
-        let kept = &kept.expect("the live stream carries the named column").1;
+        let column = |name: &str| {
+            let found = handed.named.iter().find(|c| c.name == name);
+            found.expect("the live stream carries the named column")
+        };
+        let kept = &column("kept").values;
+        let (yes, no) = ([1.0, 0.0, 0.0, 0.0], [0.0; 4]);
         assert!(
-            kept.contains(&1.0) && kept.contains(&0.0),
+            kept.contains(&yes) && kept.contains(&no),
             "some kept, some not"
+        );
+        let tint = column("tint");
+        assert_eq!(tint.width, 4, "a colour is four numbers");
+        assert!(
+            tint.values.iter().all(|c| c[3] > 0.0) && tint.values.iter().any(|c| c[3] < 0.9),
+            "and each point has its own"
         );
         let board = &auto.comp(comp_id).unwrap().layers[0];
         let read = bake_points::reading(
             &auto,
             auto.comp(comp_id).unwrap(),
             board,
-            &board.effects[2],
+            &board.effects[3],
             2.0 / 24.0,
         )
         .stream(handed.projection)
@@ -4048,7 +4067,7 @@ mod tests {
                 run(job, &AtomicBool::new(false));
             }
             let board = &auto.comp(comp_id).unwrap().layers[0];
-            let inst = &board.effects[2];
+            let inst = &board.effects[3];
             bake_points::reading(&auto, auto.comp(comp_id).unwrap(), board, inst, 2.0 / 24.0)
                 .stream(handed.projection)
         };

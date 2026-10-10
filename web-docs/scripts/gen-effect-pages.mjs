@@ -135,7 +135,7 @@ function rangeCell(p) {
     case "mask_path":
       return "This layer's masks";
     case "curve":
-      return "2 to 16 points in the unit square";
+      return "2 to 32 points in the unit square";
     default:
       return "-";
   }

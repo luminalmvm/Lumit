@@ -517,20 +517,57 @@ pub struct PointsStream {
     /// several layers to stamp, how far to offset it in time, where it comes
     /// in an order. **Empty means its place in the stream.**
     pub index: Vec<f32>,
-    /// The named columns: a number for each point under a name an effect
+    /// The named columns: a value for each point under a name an effect
     /// gave it, for the effects below to read by that name. Never more than
     /// [`NAMED_MAX`] of them. Written through [`named_mut`](Self::named_mut)
-    /// and read with [`value_of`](Self::value_of).
-    pub named: Vec<(String, Vec<f32>)>,
+    /// and read through [`column`](Self::column) and [`read`](Self::read).
+    pub named: Vec<Named>,
     /// How many of this stream's pixels make one px@comp, which is what the
     /// `@x`, `@y`, `@z` and `@size` names are read in at any preview size.
     /// **Nought means 1**, which is what a stream made in px@comp carries.
     pub px_scale: f32,
 }
 
-/// The most named columns one stream carries. A new name past it is not
-/// written.
-pub const NAMED_MAX: usize = 16;
+/// One named column: a name, and one, two or four numbers for each point.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Named {
+    pub name: String,
+    /// How many of a point's four numbers are its value: 1 for a number, 2
+    /// for an offset across and down, 4 for a colour. The rest are 0. Nought
+    /// is a name two joined streams held at different widths, which reads
+    /// nothing.
+    pub width: u8,
+    pub values: Vec<[f32; 4]>,
+}
+
+/// The most named columns one stream carries, which is far more than a
+/// stack of effects writes. A new name past it is not written.
+pub const NAMED_MAX: usize = 64;
+
+/// What a name reads, found once so a walk over the points does not look
+/// the name up again. It holds for the stream it came from, and for a copy
+/// of that stream with points dropped or reordered.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Column {
+    /// The number each point carries, which is what an empty name means.
+    Number,
+    /// A named column, by its place in the stream's list.
+    Named(usize),
+    /// The names starting with `@`, worked out from the point itself.
+    Index,
+    Id,
+    X,
+    Y,
+    Z,
+    Count,
+    IndexNorm,
+    Rand01,
+    Size,
+    Age,
+    Picked,
+    /// A name nothing wrote.
+    Nothing,
+}
 
 /// The dice `@rand01` rolls, kept off the numbers every effect uses for its
 /// own.
@@ -538,88 +575,157 @@ const RAND01_ATTR: u32 = 96;
 
 impl PointsStream {
     /// The named column `name`, filled in for every point so it can be
-    /// written. A new one starts at 0. An empty name is the number each
-    /// point carries. `None` for a name starting with `@`, which is only
-    /// ever read, and for a new name on a stream that carries
+    /// written, holding `width` numbers a point: 1, 2 or 4. A new one starts
+    /// at 0, and one that was wider keeps nothing in the numbers it gives
+    /// up. `None` for an empty name, for one starting with `@`, which is
+    /// only ever read, and for a new name on a stream that carries
     /// [`NAMED_MAX`] already.
-    pub fn named_mut(&mut self, name: &str) -> Option<&mut Vec<f32>> {
-        if name.is_empty() {
-            return Some(self.index_mut());
-        }
-        if name.starts_with('@') {
+    pub fn named_mut(&mut self, name: &str, width: u8) -> Option<&mut Vec<[f32; 4]>> {
+        if name.is_empty() || name.starts_with('@') {
             return None;
         }
         let n = self.len();
-        let at = match self.named.iter().position(|(k, _)| k == name) {
+        let width = match width {
+            0 | 1 => 1,
+            2 => 2,
+            _ => 4,
+        };
+        let at = match self.named.iter().position(|c| c.name == name) {
             Some(at) => at,
             None if self.named.len() < NAMED_MAX => {
-                self.named.push((name.to_owned(), Vec::new()));
+                self.named.push(Named {
+                    name: name.to_owned(),
+                    ..Named::default()
+                });
                 self.named.len() - 1
             }
             None => return None,
         };
-        let column = &mut self.named.get_mut(at)?.1;
-        column.resize(n, 0.0);
-        Some(column)
+        let column = self.named.get_mut(at)?;
+        column.values.resize(n, [0.0; 4]);
+        if width < column.width {
+            for value in &mut column.values {
+                value
+                    .iter_mut()
+                    .skip(usize::from(width))
+                    .for_each(|v| *v = 0.0);
+            }
+        }
+        column.width = width;
+        Some(&mut column.values)
     }
 
-    /// What `name` reads at point `i`, or `None` for a name that is neither
-    /// carried nor built in. The one reader every effect goes through.
+    /// What `name` reads, found once for a walk over the points.
     ///
-    /// An empty name is the number the point carries. A name starting with
-    /// `@` is worked out here and never stored, in any mix of capitals:
-    /// `@index` its place in the stream, `@id`, `@x`, `@y` and `@z` where it
-    /// is, `@n` how many points there are, `@indexnorm` its place from 0 at
-    /// the first to 1 at the last, `@rand01` a roll of its own dice that is
-    /// the same every frame, `@size`, `@age` and `@picked`. Anything else is
-    /// a named column.
+    /// An empty name is the number each point carries. A name starting with
+    /// `@` is worked out from the point and never stored, in any mix of
+    /// capitals: `@index` its place in the stream, `@id`, `@x`, `@y` and
+    /// `@z` where it is, `@n` how many points there are, `@indexnorm` its
+    /// place from 0 at the first to 1 at the last, `@rand01` a roll of its
+    /// own dice that is the same every frame, `@size`, `@age` and `@picked`.
+    /// Anything else is a named column.
     #[must_use]
-    pub fn value(&self, name: &str, i: usize) -> Option<f32> {
+    pub fn column(&self, name: &str) -> Column {
         if name.is_empty() {
-            return Some(self.index_of(i));
+            return Column::Number;
         }
         let Some(built_in) = name.strip_prefix('@') else {
-            // ponytail: the name is found again for every point. Find the
-            // column once for a whole loop if a profile shows this on a
-            // stream with many names.
-            let column = &self.named.iter().find(|(k, _)| k == name)?.1;
-            return Some(column.get(i).copied().unwrap_or(0.0));
+            let carried = |c: &Named| c.name == name && c.width > 0;
+            let at = self.named.iter().position(carried);
+            return at.map_or(Column::Nothing, Column::Named);
         };
-        let is = |want: &str| built_in.eq_ignore_ascii_case(want);
-        let units = if self.px_scale > 0.0 {
+        [
+            ("index", Column::Index),
+            ("id", Column::Id),
+            ("x", Column::X),
+            ("y", Column::Y),
+            ("z", Column::Z),
+            ("n", Column::Count),
+            ("indexnorm", Column::IndexNorm),
+            ("rand01", Column::Rand01),
+            ("size", Column::Size),
+            ("age", Column::Age),
+            ("picked", Column::Picked),
+        ]
+        .into_iter()
+        .find(|(want, _)| built_in.eq_ignore_ascii_case(want))
+        .map_or(Column::Nothing, |(_, column)| column)
+    }
+
+    /// The group a name means: the picked points for an empty name, and
+    /// [`column`](Self::column) for any other.
+    #[must_use]
+    pub fn group(&self, name: &str) -> Column {
+        if name.is_empty() {
+            Column::Picked
+        } else {
+            self.column(name)
+        }
+    }
+
+    /// How many of this stream's pixels make one px@comp.
+    #[must_use]
+    pub fn units(&self) -> f32 {
+        if self.px_scale > 0.0 {
             self.px_scale
         } else {
             1.0
-        };
-        let place = |axis: usize| self.position.get(i).map_or(0.0, |p| p[axis]) / units;
+        }
+    }
+
+    /// What `column` reads at point `i` as one number, or `None` for a name
+    /// nothing wrote. The one reader every effect goes through. An offset
+    /// reads as its length, and a colour as how bright its first three
+    /// numbers are.
+    #[must_use]
+    pub fn read(&self, column: Column, i: usize) -> Option<f32> {
+        let place = |axis: usize| self.position.get(i).map_or(0.0, |p| p[axis]) / self.units();
         let of = |column: &[f32]| column.get(i).copied().unwrap_or(0.0);
         let id = self.id.get(i).copied().unwrap_or(0);
-        Some(if is("index") {
-            i as f32
-        } else if is("id") {
-            id as f32
-        } else if is("x") {
-            place(0)
-        } else if is("y") {
-            place(1)
-        } else if is("z") {
-            place(2)
-        } else if is("n") {
-            self.len() as f32
-        } else if is("indexnorm") {
+        Some(match column {
+            Column::Number => self.index_of(i),
+            Column::Named(at) => {
+                let ([a, b, c, _], width) = self.whole(Column::Named(at), i)?;
+                let luma = crate::fx::cpu::LUMA;
+                match width {
+                    2 => a.hypot(b),
+                    4 => a * luma[0] + b * luma[1] + c * luma[2],
+                    _ => a,
+                }
+            }
+            Column::Index => i as f32,
+            Column::Id => id as f32,
+            Column::X => place(0),
+            Column::Y => place(1),
+            Column::Z => place(2),
+            Column::Count => self.len() as f32,
             // A single point reads as the first.
-            i as f32 / self.len().saturating_sub(1).max(1) as f32
-        } else if is("rand01") {
-            draw(0, id, RAND01_ATTR)
-        } else if is("size") {
-            of(&self.size) / units
-        } else if is("age") {
-            of(&self.age)
-        } else if is("picked") {
-            f32::from(u8::from(self.picked(i)))
-        } else {
-            return None;
+            Column::IndexNorm => i as f32 / self.len().saturating_sub(1).max(1) as f32,
+            Column::Rand01 => draw(0, id, RAND01_ATTR),
+            Column::Size => of(&self.size) / self.units(),
+            Column::Age => of(&self.age),
+            Column::Picked => f32::from(u8::from(self.picked(i))),
+            Column::Nothing => return None,
         })
+    }
+
+    /// Every number `column` holds at point `i`, and how many of the four
+    /// are its value. Anything but a named column is one number.
+    #[must_use]
+    pub fn whole(&self, column: Column, i: usize) -> Option<([f32; 4], u8)> {
+        let Column::Named(at) = column else {
+            return Some(([self.read(column, i)?, 0.0, 0.0, 0.0], 1));
+        };
+        let named = self.named.get(at)?;
+        let value = named.values.get(i).copied().unwrap_or([0.0; 4]);
+        Some((value, named.width))
+    }
+
+    /// [`read`](Self::read) for one point by name. A walk over the points
+    /// finds the [`column`](Self::column) once instead.
+    #[must_use]
+    pub fn value(&self, name: &str, i: usize) -> Option<f32> {
+        self.read(self.column(name), i)
     }
 
     /// [`value`](Self::value), with 0 for a name that reads nothing. So a
@@ -629,22 +735,21 @@ impl PointsStream {
         self.value(name, i).unwrap_or(0.0)
     }
 
-    /// Whether point `i` is in the group `name`: picked for an empty name,
-    /// and for any other a value above `threshold`.
+    /// Whether point `i` is in `group`: picked or not for the picked points,
+    /// and for any other column a value above `threshold`.
     #[must_use]
-    pub fn in_group(&self, name: &str, threshold: f32, i: usize) -> bool {
-        if name.is_empty() {
-            self.picked(i)
-        } else {
-            self.value_of(name, i) > threshold
+    pub fn in_group(&self, group: Column, threshold: f32, i: usize) -> bool {
+        match group {
+            Column::Picked => self.picked(i),
+            _ => self.read(group, i).unwrap_or(0.0) > threshold,
         }
     }
 
     /// Whether an effect acts on point `i`, by its Apply to, Group and
     /// Threshold rows: every point, the ones in the group, or the ones
-    /// not in it.
+    /// not in it. `group` is what [`group`](Self::group) made of the row.
     #[must_use]
-    pub fn applies(&self, apply_to: u32, group: &str, threshold: f32, i: usize) -> bool {
+    pub fn applies(&self, apply_to: u32, group: Column, threshold: f32, i: usize) -> bool {
         match apply_to {
             1 => self.in_group(group, threshold, i),
             2 => !self.in_group(group, threshold, i),
@@ -656,8 +761,8 @@ impl PointsStream {
     /// drop or reorder points can treat it like any other.
     fn fill_named(&mut self) {
         let n = self.len();
-        for (_, column) in &mut self.named {
-            column.resize(n, 0.0);
+        for column in &mut self.named {
+            column.values.resize(n, [0.0; 4]);
         }
     }
 
@@ -734,13 +839,31 @@ impl PointsStream {
             }
         }
         // A named column either side carries goes across, and the side
-        // without it reads 0.
+        // without it reads 0. A name the two hold at different widths reads
+        // nothing from here on, since one value cannot be made of both.
         self.fill_named();
-        for (name, _) in &other.named {
-            self.named_mut(name);
+        let n = self.len();
+        for theirs in &other.named {
+            if let Some(ours) = self.named.iter_mut().find(|c| c.name == theirs.name) {
+                if ours.width != theirs.width {
+                    ours.width = 0;
+                }
+            } else if self.named.len() < NAMED_MAX {
+                self.named.push(Named {
+                    name: theirs.name.clone(),
+                    width: theirs.width,
+                    values: vec![[0.0; 4]; n],
+                });
+            }
         }
-        for (name, column) in &mut self.named {
-            column.extend((0..other.len()).map(|i| other.value_of(name, i)));
+        for ours in &mut self.named {
+            let theirs = other.named.iter().find(|c| c.name == ours.name);
+            let value = |i: usize| theirs.and_then(|c| c.values.get(i)).copied();
+            ours.values
+                .extend((0..other.len()).map(|i| value(i).unwrap_or([0.0; 4])));
+            if ours.width == 0 {
+                ours.values.fill([0.0; 4]);
+            }
         }
         self.position.extend_from_slice(&other.position);
         self.speed.extend_from_slice(&other.speed);
@@ -825,11 +948,7 @@ impl PointsStream {
             pick: self.pick.clone(),
             index: self.index.clone(),
             named: self.named.clone(),
-            px_scale: s * if self.px_scale > 0.0 {
-                self.px_scale
-            } else {
-                1.0
-            },
+            px_scale: s * self.units(),
         }
     }
 
@@ -889,8 +1008,8 @@ impl PointsStream {
         pick(&mut self.stretch, order);
         pick(&mut self.pick, order);
         pick(&mut self.index, order);
-        for (_, column) in &mut self.named {
-            pick(column, order);
+        for column in &mut self.named {
+            pick(&mut column.values, order);
         }
     }
 
@@ -922,8 +1041,8 @@ impl PointsStream {
         if !self.index.is_empty() {
             sift(&mut self.index, &flags);
         }
-        for (_, column) in &mut self.named {
-            sift(column, &flags);
+        for column in &mut self.named {
+            sift(&mut column.values, &flags);
         }
     }
 
@@ -941,8 +1060,8 @@ impl PointsStream {
         }
         let cut = len - n;
         self.fill_named();
-        for (_, column) in &mut self.named {
-            column.drain(..cut);
+        for column in &mut self.named {
+            column.values.drain(..cut);
         }
         self.position.drain(..cut);
         self.speed.drain(..cut);
@@ -1802,6 +1921,27 @@ fn seg_distance(p: [f32; 2], a: [f32; 2], b: [f32; 2]) -> f32 {
     (p[0] - a[0] - ex * t).hypot(p[1] - a[1] - ey * t)
 }
 
+/// How much of a pixel a capsule covers, `far` from its spine, before the
+/// clamp to 0..=1.
+///
+/// From a radius of 1 px up this is the soft edge every dab has. Under that
+/// the edge's half pixel of ramp eats the line: one 1 px wide lying between
+/// two pixel rows is half a pixel from both, and drew nothing. So a thin
+/// capsule is measured as the share of the pixel its width fills. That puts
+/// half its light in each row there and all of it in one row when it lies on
+/// a pixel centre, and a line thinner than a pixel carries its share. The two
+/// are mixed between 1 px and 2 px wide, so a width can animate across
+/// without a jump.
+fn capsule_cover(radius: f32, edge: f32, far: f32) -> f32 {
+    let soft = (radius - far) / edge;
+    if radius >= 1.0 {
+        return soft;
+    }
+    let boxed = (radius + 0.5 - far).clamp(0.0, 1.0).min(2.0 * radius);
+    let blend = (2.0 * radius - 1.0).clamp(0.0, 1.0);
+    boxed + (soft.clamp(0.0, 1.0) - boxed) * blend
+}
+
 /// Whether an entry produces a points stream, and so wants the birth schedule
 /// threaded beside its op (points-stream.md §3.3).
 ///
@@ -2066,7 +2206,9 @@ pub fn draw_stream_fit(
                                 let ly = (-dx * rot_s + dy * rot_c) / st[1];
                                 (radius - lx.hypot(ly)) * st[0].min(st[1]) / edge
                             }
-                            None => (radius - seg_distance(p, tail, head)) / edge,
+                            // A dot keeps its soft edge whatever its size.
+                            None if tail == head => (radius - seg_distance(p, tail, head)) / edge,
+                            None => capsule_cover(radius, edge, seg_distance(p, tail, head)),
                         }
                         .clamp(0.0, 1.0);
                         if cov <= 0.0 {

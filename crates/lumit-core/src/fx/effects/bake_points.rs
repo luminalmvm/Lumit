@@ -49,8 +49,9 @@ pub const MAX_POINTS: usize = 100_000;
 /// The most one bake holds over all its frames, in bytes: 160 MB. It is
 /// counted as the frames are packed, so it is also the size of the file
 /// before it is compressed, give or take the few bytes that say what the
-/// bake is. About two million points of a plain stream, and about one
-/// million of one that carries every named column. See [`MAX_FRAMES`].
+/// bake is. About two million points of a plain stream, and fewer of one
+/// that carries named columns, each of which may hold four numbers a point.
+/// See [`MAX_FRAMES`].
 pub const MAX_BYTES: usize = 160 << 20;
 
 /// What a frame is counted as costing before any of its points: the lengths
@@ -159,7 +160,7 @@ enum Ids {
 
 /// How many columns every frame has: position, speed, age, life, size,
 /// rotation and colour, then the three a stream may leave out, stretch, pick
-/// and index. A stream's named columns follow them, one each.
+/// and index. A stream's named columns follow them, four each.
 const COLUMNS: usize = 18;
 /// Where the columns a stream may leave out begin.
 const STRETCH: usize = 14;
@@ -176,9 +177,10 @@ pub struct Frame {
     count: u32,
     columns: Vec<Column>,
     ids: Ids,
-    /// The names of the named columns, in the stream's own order. Their
-    /// numbers are the columns after the first [`COLUMNS`].
-    names: Vec<String>,
+    /// The name and width of each named column, in the stream's own order.
+    /// Their numbers are the columns after the first [`COLUMNS`], four a
+    /// name.
+    names: Vec<(String, u8)>,
     /// The stream's own raster factor, kept as it came.
     px_scale: f32,
 }
@@ -230,9 +232,9 @@ impl Frame {
         one(&s.pick, &mut columns);
         one(&s.index, &mut columns);
         let named = s.named.iter().take(points::NAMED_MAX);
-        let names = named.clone().map(|(name, _)| name.clone()).collect();
-        for (_, values) in named {
-            one(values, &mut columns);
+        let names = (named.clone().map(|c| (c.name.clone(), c.width))).collect();
+        for column in named {
+            split(&column.values, n, &mut columns);
         }
         let first = s.id.first().copied().unwrap_or(0);
         let run = (s.id.iter().zip(0u64..)).all(|(id, step)| first.checked_add(step) == Some(*id));
@@ -261,7 +263,7 @@ impl Frame {
             Ids::Each(ids) => ids.len() * 8,
             Ids::Run(_) => 0,
         };
-        let names: usize = self.names.iter().map(String::len).sum();
+        let names: usize = self.names.iter().map(|(name, _)| name.len()).sum();
         FRAME_BYTES + numbers + ids + names
     }
 
@@ -306,14 +308,17 @@ impl Frame {
             } else {
                 Vec::new()
             },
-            named: (self.names.iter().zip(COLUMNS..))
-                .map(|(name, column)| {
-                    let values = if carried(column) {
-                        each(column)
+            named: (self.names.iter().zip((COLUMNS..).step_by(4)))
+                .map(|((name, width), first)| points::Named {
+                    name: name.clone(),
+                    width: *width,
+                    values: if carried(first) {
+                        (0..n)
+                            .map(|i| std::array::from_fn(|k| at(first + k, i)))
+                            .collect()
                     } else {
                         Vec::new()
-                    };
-                    (name.clone(), values)
+                    },
                 })
                 .collect(),
             px_scale: self.px_scale,
@@ -385,7 +390,8 @@ impl Baked {
             h.update(&frame.count.to_le_bytes());
             h.update(&frame.px_scale.to_le_bytes());
             h.update(&(frame.names.len() as u64).to_le_bytes());
-            for name in &frame.names {
+            for (name, width) in &frame.names {
+                h.update(&[*width]);
                 h.update(&(name.len() as u64).to_le_bytes());
                 h.update(name.as_bytes());
             }
@@ -456,7 +462,7 @@ struct StoredFrame {
     run: Option<u64>,
     /// Each id less the one before it, regrouped as the columns are.
     ids: Vec<u8>,
-    names: Vec<String>,
+    names: Vec<(String, u8)>,
     px_scale: f32,
 }
 
@@ -563,7 +569,7 @@ impl Frame {
         // The shape a frame is always written in. Anything else is not one.
         let columns = stored.columns.len();
         if stored.names.len() > points::NAMED_MAX
-            || columns != COLUMNS + stored.names.len()
+            || columns != COLUMNS + 4 * stored.names.len()
             || columns != stored.same.len()
         {
             return None;
