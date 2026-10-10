@@ -1072,6 +1072,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
             ),
       ],
       playheadFrame: ui.playheadFrame.value,
+      playhead: ui.playheadFrame,
       work: work,
       fps: fps,
     );
