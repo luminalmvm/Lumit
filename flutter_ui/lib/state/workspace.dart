@@ -920,6 +920,26 @@ class Workspace extends ChangeNotifier {
     save();
   }
 
+  /// For each extension that has been shown, by its id: the number of the
+  /// dock pane it is shown in. Kept after the extension is removed, so one
+  /// installed again comes back where it was.
+  final Map<String, int> extensionSlots = {};
+
+  void setExtensionSlot(String id, int slot) {
+    extensionSlots[id] = slot;
+    save();
+  }
+
+  /// For each extension, by its id: the folders the person picked for it to
+  /// watch. An extension can ask to watch one of these again without the
+  /// picker, and no other.
+  final Map<String, List<String>> extensionFolders = {};
+
+  void setExtensionFolders(String id, List<String> folders) {
+    extensionFolders[id] = folders;
+    save();
+  }
+
   /// The most projects [shareHosted] remembers.
   static const int maxShareHosted = 16;
 
@@ -1708,6 +1728,8 @@ class Workspace extends ChangeNotifier {
         'share_down_limit': shareDownLimit,
         'share_give': shareGive,
         'share_take': shareTake,
+        'extension_slots': extensionSlots,
+        'extension_folders': extensionFolders,
         'share_hosted': shareHosted,
         'autosave_minutes': autosaveMinutes,
         'autosave_keep': autosaveKeep,
@@ -1811,6 +1833,22 @@ class Workspace extends ChangeNotifier {
     shareGive = j['share_give'] is! bool || j['share_give'] as bool;
     shareTake = j['share_take'] is! bool || j['share_take'] as bool;
     onShareFootage?.call();
+    extensionSlots.clear();
+    final slots = j['extension_slots'];
+    if (slots is Map) {
+      for (final MapEntry(:key, :value) in slots.entries) {
+        if (key is String && value is int) extensionSlots[key] = value;
+      }
+    }
+    extensionFolders.clear();
+    final watched = j['extension_folders'];
+    if (watched is Map) {
+      for (final MapEntry(:key, :value) in watched.entries) {
+        if (key is String && value is List) {
+          extensionFolders[key] = value.whereType<String>().toList();
+        }
+      }
+    }
     shareHosted.clear();
     final hosted = j['share_hosted'];
     if (hosted is Map) {

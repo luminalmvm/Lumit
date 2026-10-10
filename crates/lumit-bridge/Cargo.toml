@@ -70,6 +70,8 @@ lumit-ml = { path = "../lumit-ml" }
 lumit-project = { path = "../lumit-project" }
 # Shared projects: the host and guest ends behind `api::share`.
 lumit-share = { path = "../lumit-share" }
+# Installed extensions: reading a manifest, and the folder they live in.
+lumit-extensions = { path = "../lumit-extensions" }
 # The realtime preview-tier controller lives here as a pure,
 # tested decision core; the bridge feeds it measured render costs and reads the
 # tier back (see src/realtime.rs). An engine crate, so the docs/05 layering

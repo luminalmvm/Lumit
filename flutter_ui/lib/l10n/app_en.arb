@@ -15898,5 +15898,222 @@
         "type": "int"
       }
     }
+  },
+  "panelExtension": "Extension",
+  "@panelExtension": {
+    "description": "Title of a dock panel that shows an installed extension's page, used only when the extension it showed is no longer installed. Otherwise the panel is titled with the extension's own name."
+  },
+  "menuExtensions": "Extensions",
+  "@menuExtensions": {
+    "description": "Window menu: a submenu listing every installed extension, each ticked when its panel is showing."
+  },
+  "menuManageExtensions": "Manage extensions…",
+  "@menuManageExtensions": {
+    "description": "Window menu, at the foot of the Extensions submenu. Opens Settings on the Addons page, where extensions are installed and removed."
+  },
+  "settingsGroupExtensions": "Extensions",
+  "@settingsGroupExtensions": {
+    "description": "Section heading on the Addons page of Settings: panels made by other people, installed from a folder."
+  },
+  "settingsExtensionName": "{name} {version}",
+  "@settingsExtensionName": {
+    "description": "Title of one installed extension's row on the Addons page of Settings: its name and its version number.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsExtensionsNone": "No extensions are installed.",
+  "@settingsExtensionsNone": {
+    "description": "Quiet line in the Extensions section of the Addons page when nothing is installed."
+  },
+  "settingsExtensionShow": "Show panel",
+  "@settingsExtensionShow": {
+    "description": "Button on an installed extension's row in Settings. Puts the extension's panel into the window."
+  },
+  "settingsExtensionHide": "Hide panel",
+  "@settingsExtensionHide": {
+    "description": "Button on an installed extension's row in Settings, while its panel is in the window. Takes the panel out."
+  },
+  "settingsExtensionsInstall": "Install from a folder",
+  "@settingsExtensionsInstall": {
+    "description": "Row title in the Extensions section of the Addons page, beside a Choose button that opens a folder picker."
+  },
+  "settingsExtensionsInstallHint": "Pick the folder that holds the extension's extension.json. Lumit shows what it asks to be allowed before anything is installed.",
+  "@settingsExtensionsInstallHint": {
+    "description": "Description under the Install from a folder row in the Extensions section of Settings. extension.json is a file name and is not translated."
+  },
+  "settingsExtensionsFolder": "Extensions folder",
+  "@settingsExtensionsFolder": {
+    "description": "Row title in the Extensions section of the Addons page, beside a Show button that opens the folder installed extensions are kept in."
+  },
+  "extensionInstallTitle": "Install {name}?",
+  "@extensionInstallTitle": {
+    "description": "Title of the window that asks before an extension is installed. {name} is the extension's own name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "extensionVersion": "Version {version}",
+  "@extensionVersion": {
+    "description": "Line under the title of the install question for an extension that names no author.",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "extensionVersionBy": "Version {version}, by {author}",
+  "@extensionVersionBy": {
+    "description": "Line under the title of the install question for an extension. {author} is who the extension says made it, which Lumit does not check.",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      },
+      "author": {
+        "type": "String"
+      }
+    }
+  },
+  "extensionCan": "It can",
+  "@extensionCan": {
+    "description": "Heading of the list of things an extension will be allowed to do, in the install question."
+  },
+  "extensionCannot": "It cannot",
+  "@extensionCannot": {
+    "description": "Heading of the list of things an extension is never able to do, in the install question."
+  },
+  "extensionCanProject": "See what the open project's file is called, and when a project opens, saves or closes",
+  "@extensionCanProject": {
+    "description": "One line of the It can list in the extension install question."
+  },
+  "extensionCanActivity": "See when you edit and what each step is called, and when Lumit is the window in front",
+  "@extensionCanActivity": {
+    "description": "One line of the It can list in the extension install question."
+  },
+  "extensionCanExport": "See when an export starts and finishes, and fingerprint the file it made",
+  "@extensionCanExport": {
+    "description": "One line of the It can list in the extension install question. A fingerprint is a short number worked out from a file that changes if the file does."
+  },
+  "extensionCanImport": "Bring files into the project, and watch a folder you pick for new ones",
+  "@extensionCanImport": {
+    "description": "One line of the It can list in the extension install question."
+  },
+  "extensionCanShare": "Open the Shared project window for you to share or join, see who is in a shared project, and read its invite link while you share",
+  "@extensionCanShare": {
+    "description": "One line of the It can list in the extension install question."
+  },
+  "extensionCanHosts": "Send to and fetch from {hosts} through Lumit",
+  "@extensionCanHosts": {
+    "description": "One line of the It can list in the extension install question. {hosts} is one or more site names separated by commas, such as example.org.",
+    "placeholders": {
+      "hosts": {
+        "type": "String"
+      }
+    }
+  },
+  "extensionCanPanel": "Show its own panel, and a line in the strip at the bottom of the window",
+  "@extensionCanPanel": {
+    "description": "Last line of the It can list in the extension install question, shown for every extension."
+  },
+  "extensionCannotFootage": "See your footage, your pictures or your screen",
+  "@extensionCannotFootage": {
+    "description": "One line of the It cannot list in the extension install question."
+  },
+  "extensionCannotFiles": "Read or change files on this computer",
+  "@extensionCannotFiles": {
+    "description": "One line of the It cannot list in the extension install question."
+  },
+  "extensionCannotEdit": "Change what is in your project, beyond bringing files into it when it is allowed to",
+  "@extensionCannotEdit": {
+    "description": "One line of the It cannot list in the extension install question."
+  },
+  "extensionWebNote": "Its panel is a web page, and like any web page it can load things from the internet. Install an extension only from someone you trust.",
+  "@extensionWebNote": {
+    "description": "Quiet note at the foot of the extension install question."
+  },
+  "extensionInstall": "Install",
+  "@extensionInstall": {
+    "description": "Default button of the extension install question."
+  },
+  "extensionInstalled": "{name} is installed. Its panel is under Window, Extensions.",
+  "@extensionInstalled": {
+    "description": "Bottom-strip notice after an extension is installed. Window and Extensions are menu names.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "extensionNotOne": "That folder has no extension.json in it",
+  "@extensionNotOne": {
+    "description": "Bottom-strip notice when the folder picked to install an extension from is not an extension. extension.json is a file name and is not translated."
+  },
+  "extensionNewer": "That extension needs Lumit {version} or newer",
+  "@extensionNewer": {
+    "description": "Bottom-strip notice when an extension asks for a newer Lumit than this one.",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "extensionTooLarge": "That extension's folder holds more than an extension may",
+  "@extensionTooLarge": {
+    "description": "Bottom-strip notice when an extension's folder has too many files or is too large to install."
+  },
+  "extensionBusy": "Another extension is being installed",
+  "@extensionBusy": {
+    "description": "Bottom-strip notice when an install is asked for while another is running."
+  },
+  "extensionFailed": "The extension could not be installed",
+  "@extensionFailed": {
+    "description": "Bottom-strip notice when an extension's files could not be read or copied."
+  },
+  "extensionMissingTitle": "Extension not installed",
+  "@extensionMissingTitle": {
+    "description": "Title shown in a dock panel whose extension has been removed."
+  },
+  "extensionMissingHint": "The extension this panel showed has been removed. Close the panel, or install it again in Settings.",
+  "@extensionMissingHint": {
+    "description": "Hint under the title in a dock panel whose extension has been removed."
+  },
+  "extensionUnsupportedTitle": "Extensions need Windows for now",
+  "@extensionUnsupportedTitle": {
+    "description": "Title shown in an extension's dock panel on macOS and Linux, where Lumit cannot show an extension's page yet."
+  },
+  "extensionUnsupportedHint": "An extension's panel is a web page, and Lumit can only show one on Windows so far.",
+  "@extensionUnsupportedHint": {
+    "description": "Hint under the title in an extension's dock panel on macOS and Linux."
+  },
+  "extensionFailedTitle": "The extension could not be shown",
+  "@extensionFailedTitle": {
+    "description": "Title shown in an extension's dock panel when its page could not be put up."
+  },
+  "extensionFailedHint": "Its page would not load. Closing the panel and showing it again tries once more.",
+  "@extensionFailedHint": {
+    "description": "Hint in an extension's dock panel when its page failed to load."
+  },
+  "extensionBrokenHint": "The page its extension.json names is missing. Install the extension again.",
+  "@extensionBrokenHint": {
+    "description": "Hint in an extension's dock panel when the installed folder has lost its page. extension.json is a file name and is not translated."
+  },
+  "extensionNoRuntime": "Lumit shows extensions with Microsoft's WebView2, which is not installed on this computer.",
+  "@extensionNoRuntime": {
+    "description": "Hint in an extension's dock panel on a Windows machine without the WebView2 runtime. WebView2 is a product name."
+  },
+  "extensionStrayed": "This panel has left the extension's own pages, so nothing it asks of Lumit is answered.",
+  "@extensionStrayed": {
+    "description": "Warning strip at the top of an extension's dock panel when the page inside has gone to some other website."
+  },
+  "extensionBack": "Go back",
+  "@extensionBack": {
+    "description": "Button on the warning strip of an extension's dock panel. Loads the extension's own page again."
   }
 }

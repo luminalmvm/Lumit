@@ -160,6 +160,7 @@ r.addEventListener("input",set);set()})})`,
                         "use/fx-console",
                         "use/presets",
                         "use/plugins",
+                        "use/extensions",
                       ],
                     },
                     {

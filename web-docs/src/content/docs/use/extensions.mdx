@@ -1,0 +1,122 @@
+---
+title: Extensions
+description: Panels made by other people, how one is installed, and what its page can ask of Lumit.
+sidebar:
+  order: 9.8
+---
+
+An **extension** is a panel somebody else made. It is a folder holding a web page and an
+`extension.json`, and Lumit shows the page in a panel of its own.
+
+:::note
+Extension panels are shown on Windows. On macOS and Linux the panel says so. Extensions are
+installed from a folder: the addon catalogue does not list them. An extension is not
+signed, and Lumit does not limit what its page loads from the internet.
+:::
+
+## Installing one
+
+**Settings ▸ Addons ▸ Extensions ▸ Install from a folder** takes the folder that holds the
+`extension.json`. Lumit lists what the extension asks to be allowed, and copies it only
+after **Install**. Installing over an extension of the same id replaces it.
+
+**Window ▸ Extensions** lists every installed extension, ticked while its panel is in the
+arrangement. The panel docks, tabs and saves with a workspace like any other.
+
+**Remove** deletes the extension's folder. What its page stored is kept.
+
+## The folder
+
+```
+my-extension/
+  extension.json
+  index.html
+  ...
+```
+
+```json
+{
+  "format": 1,
+  "id": "my-extension",
+  "name": "My extension",
+  "version": "1.0.0",
+  "summary": "One line saying what it does.",
+  "author": "Who made it",
+  "homepage": "https://example.org",
+  "requires": "0.7.0",
+  "entry": "index.html",
+  "permissions": ["project", "activity", "export", "import", "share"],
+  "hosts": ["example.org"]
+}
+```
+
+| Field | What it is |
+| --- | --- |
+| `format` | `1`. |
+| `id` | Lower-case letters, digits and hyphens, at most 64. The installed folder's name. |
+| `name`, `version` | Shown in Settings, the Window menu and the panel's tab. |
+| `summary`, `author`, `homepage` | Optional. Shown before installing. |
+| `requires` | Optional. The oldest Lumit it works with. An older Lumit refuses to install it. |
+| `entry` | The page the panel shows, as a path inside the folder. |
+| `permissions` | What the page may ask. See below. |
+| `hosts` | The sites `net.fetch` and `app.openExternal` may reach, as bare names. A name covers the sites under it. |
+
+A manifest with a permission Lumit does not know, an `entry` outside the folder, or a host
+that is not a bare name is refused. A folder holds at most 4,096 files and 512 MB.
+
+## The page
+
+The page is served from `https://<id>.lumit.example/`, so relative paths to its own
+scripts, styles and pictures work. Lumit gives it `window.lumit` before its own scripts
+run.
+
+```js
+const info = await lumit.call("app.info");
+const stop = lumit.on("activity.edit", (edit) => console.log(edit.step));
+```
+
+- `lumit.call(method, params)` returns a promise. A refused call rejects with an `Error`
+  whose `code` is `not-allowed`, `unknown-method`, `bad-params` or `failed`.
+- `lumit.on(event, listener)` returns a function that stops listening.
+
+A page that has gone to another site is answered nothing until **Go back** is pressed.
+The page cannot open a window.
+
+## Permissions and calls
+
+| Permission | Call | What it does |
+| --- | --- | --- |
+| none | `app.info` | The API version, Lumit's version, and the extension's id, version, permissions and hosts. |
+| none | `app.notice {text}` | A line on the bottom strip, after the extension's name. |
+| none | `app.openExternal {url}` | Opens an `https` address on one of `hosts` in the browser. |
+| none | `net.fetch {url, method, headers, body}` | Fetches an `https` address on one of `hosts`. Answers `{status, headers, body}`. A redirect is returned, not followed. The answer is at most 8 MB of text. |
+| `project` | `project.info` | `{open, name, saved, dirty}`. `name` is the file's name without its folder. |
+| `export` | `export.state` | `{state}` as `idle`, `running` with `frame` and `total`, `done` with `path`, or `failed` with `error`. |
+| `export` | `export.fingerprint` | `{path, bytes, sha256}` of the file the last export made. |
+| `import` | `import.files {paths}` | Imports the files into the open project. |
+| `import` | `import.watch {folder}` | Watches a folder and imports each new file once it has stopped growing. With no `folder` the person picks one. A `folder` is accepted only if the person picked it for this extension before. Answers `{folder}`. |
+| `import` | `import.unwatch` | Stops watching. |
+| `share` | `share.state` | `{role, away, open, people}`. `role` is `none`, `host` or `guest`. |
+| `share` | `share.link` | The invite link while this computer hosts, otherwise `null`. |
+| `share` | `share.start {relay}` | Opens the **Shared project** window on **Share this project**, with `relay` offered if given. |
+| `share` | `share.join {link}` | Opens the **Shared project** window on **Join a project** with the link in it. |
+| `share` | `share.stop` | Stops sharing, or leaves. |
+
+An extension never shares or joins by itself: the person presses the button in the window.
+
+## Events
+
+| Permission | Event | When |
+| --- | --- | --- |
+| `project` | `project.changed` | A project opens, saves or closes. Carries `project.info`. |
+| `activity` | `activity.edit` | An edit is made. `{step, at}`: the step's name in the History list and the time in milliseconds. Edits within 0.4 s arrive as one. |
+| `activity` | `activity.focus` | Lumit becomes the front window or stops being it. `{focused}`. |
+| `export` | `export.started`, `export.progress`, `export.finished`, `export.failed` | Carry `export.state`. |
+| `import` | `import.added` | A watched file was imported. `{path}`. |
+| `share` | `share.changed` | Sharing starts or stops, someone joins or leaves, or the host is lost or found. Carries `share.state`. |
+
+## Related
+
+- [Projects](/use/projects/#shared-projects)
+- [Plugins](/use/plugins/)
+- [Settings](/use/settings/)
