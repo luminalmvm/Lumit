@@ -350,7 +350,21 @@ class _LumitAppViewState extends State<LumitAppView> {
     if (fresh && mounted && !lumitModalOpen) {
       showShareConflictsFrb(context, context.read<LumitState>());
     }
+    // Someone has asked this computer to export for them. Asked one at a
+    // time, and each only once: answering takes it off the list.
+    if (_share.exportAsks.isNotEmpty && mounted && !_asking) {
+      _asking = true;
+      showExportAskFrb(
+              context, context.read<LumitState>(), _share.exportAsks.first)
+          .whenComplete(() {
+        _asking = false;
+        if (mounted) _offerConflicts();
+      });
+    }
   }
+
+  /// The question about someone's export is on screen.
+  bool _asking = false;
 
   @override
   void dispose() {

@@ -355,6 +355,25 @@ impl DocumentStore {
         self.current.store(Arc::new(doc));
     }
 
+    /// Point footage items at the files this machine reads them from: each
+    /// item's id and the path. For a file that has just arrived from someone
+    /// else in a shared project, where the item was missing or a stand-in.
+    ///
+    /// **Not an op**, for [`Self::set_ui_state`]'s reasons and one of its own.
+    /// Where a file is on this machine is never saved and never sent, so it
+    /// is nobody's edit: nothing to undo, nothing for a guest to be told, and
+    /// no reason for the project to read as changed.
+    pub fn place_media(&self, placed: &[(uuid::Uuid, String)]) {
+        let _journal = self.journal.lock();
+        let mut doc = Document::clone(&self.snapshot());
+        for (id, path) in placed {
+            if let Some(crate::model::ProjectItem::Footage(footage)) = doc.item_mut(*id) {
+                footage.media.absolute_path.clone_from(path);
+            }
+        }
+        self.current.store(Arc::new(doc));
+    }
+
     /// Record what a save packed into the `.lum`, or what an unpack wrote back
     /// out: the new packed map, and the references of the items an unpack
     /// moved to the files it wrote.

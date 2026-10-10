@@ -20,6 +20,7 @@ import 'package:uuid/uuid.dart';
 import 'planes.dart';
 import 'project_item.dart';
 import 'roto.dart';
+import 'share.dart';
 import 'solid.dart';
 import 'state.dart';
 import 'wireframes.dart';
@@ -1891,6 +1892,39 @@ class CompositionReference {
   void setWorkArea({BridgeSpan? span}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceSetWorkArea(
           that: this, span: span);
+
+  /// Ask the person numbered `to` to export this composition on their
+  /// machine and send the file back, to be written at `path`. They are
+  /// asked first. [`ProjectReference::share_asking`] says how it is going.
+  void shareAskExport(
+          {required int to,
+          required BridgeExportSpec spec,
+          required String path}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceShareAskExport(
+              that: this, to: to, spec: spec, path: path);
+
+  /// Fetch what an export of this composition lacks and then queue it, as
+  /// [`Self::queue_export`] would: the originals whole, or with `parts`
+  /// only the frames the export reads, at a quality fit to deliver from.
+  /// Answers at once. [`ProjectReference::share_fetching`] says how it is
+  /// going, and a [`BridgeShareEvent::Footage`] when that has changed.
+  void shareFetchExport(
+          {required BridgeExportSpec spec,
+          required String path,
+          required bool parts,
+          required bool start}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceShareFetchExport(
+              that: this, spec: spec, path: path, parts: parts, start: start);
+
+  /// The footage this composition uses, through every composition inside
+  /// it, that this machine has no original of. Empty when the project is
+  /// not shared: there is then nobody to get any of it from.
+  List<BridgeFootageLack> shareLacking() => BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceShareLacking(
+        that: this,
+      );
 
   /// Slide every member of a group along the timeline by `delta` frames, as
   /// one undo step — what dragging the group's combined bar commits.

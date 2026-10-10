@@ -743,6 +743,18 @@ pub fn packed_media_dir(doc_id: Uuid) -> Option<PathBuf> {
     Some(dirs.cache_dir().join("packed").join(doc_id.to_string()))
 }
 
+/// Where footage sent by someone else in a shared project is kept: the
+/// stand-ins this machine cuts with for files it has not got, and any
+/// originals it fetched. One folder for each file, named by `key`, which is
+/// worked out from the file's fingerprint so every project that uses the
+/// file finds the same one.
+///
+/// The cache, because all of it can be sent again by whoever has the file.
+pub fn shared_footage_dir() -> Option<PathBuf> {
+    let dirs = project_dirs()?;
+    Some(dirs.cache_dir().join("shared-footage"))
+}
+
 /// The application's own cache directory, the parent of every folder below,
 /// which unlike `/tmp` belongs to one user on every platform.
 pub fn cache_dir() -> Option<PathBuf> {
@@ -1107,6 +1119,11 @@ fn rebase_one(media: &mut lumit_core::model::MediaRef, project_dir: &Path) {
     // path the file keeps is still the original's, which is where an unpacked
     // copy of the project would look for it.
     if cache_dir().is_some_and(|cache| located.starts_with(cache.join("packed"))) {
+        return;
+    }
+    // A file sent by someone else in a shared project is in the cache too,
+    // and the path the file keeps is likewise the original's.
+    if shared_footage_dir().is_some_and(|sent| located.starts_with(sent)) {
         return;
     }
     // Footage on another drive has no relative path, so it keeps the whole

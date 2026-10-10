@@ -1,7 +1,7 @@
 //! What crosses between a host and a guest, and the encrypted channel it
 //! crosses in. Used from the reader and writer threads.
 
-use crate::{Person, Presence, Refusal, ShareError};
+use crate::{Held, Person, Presence, Refusal, ShareError};
 use lumit_core::{Document, Op};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
@@ -16,7 +16,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 /// Raised whenever a message changes shape.
-pub(crate) const PROTOCOL: u32 = 3;
+pub(crate) const PROTOCOL: u32 = 4;
 
 /// Noise with no long-term keys, both ends proving they hold the invite's
 /// secret before anything else is said.
@@ -58,6 +58,13 @@ pub(crate) enum Message {
         /// A number this guest made up, the same each time it comes back,
         /// which is how the host knows its edits from before. 0 for none.
         #[serde(default)]
+        token: u64,
+    },
+    /// A guest's first words on its second connection, the one footage
+    /// crosses on. `token` is the one it said hello with, which is how the
+    /// host knows whose it is.
+    Bulk {
+        protocol: u32,
         token: u64,
     },
     Refused(Refusal),
@@ -107,6 +114,20 @@ pub(crate) enum Message {
     /// finds its host by this secret from now on.
     Invite {
         key: [u8; 32],
+    },
+    /// Which footage `peer` has the original of. A guest says its own and
+    /// the host tells everyone each person's.
+    Holds {
+        peer: u32,
+        items: Vec<Held>,
+    },
+    /// Something one person's Lumit says to another's that is not an edit,
+    /// such as asking it to export. A guest names who it is `to` and the
+    /// host passes it on saying who it is `from`. Nothing here reads `body`.
+    Note {
+        to: u32,
+        from: u32,
+        body: Value,
     },
 }
 

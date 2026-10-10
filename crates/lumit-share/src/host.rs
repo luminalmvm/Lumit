@@ -4,6 +4,7 @@
 //! One thread accepts. Each guest has a reader, which is the thread that
 //! greeted it, and a writer.
 
+use crate::bulk::{self, Footage, Held, Limits, Wanted};
 use crate::invite::locked_key;
 use crate::kept::{HostLog, Pair};
 use crate::local::{place, sane};
@@ -23,6 +24,7 @@ use std::sync::mpsc::{sync_channel, Receiver as Done, SyncSender};
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
+use uuid::Uuid;
 
 /// Both ends have to run this, edits being the wire format.
 pub(crate) const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -95,6 +97,9 @@ struct Hub {
     /// The relay this host keeps a room at, if it was given one, and how
     /// that is going.
     relay: Mutex<Option<(String, Relayed)>>,
+    /// The footage this host sends, takes and passes on, once it has been
+    /// given some to carry.
+    bulk: Mutex<Option<Arc<bulk::Hub>>>,
 }
 
 /// A project being shared from this machine.
@@ -211,6 +216,7 @@ pub fn host(
         log: Mutex::new(log),
         reach: Mutex::new(Reach::Off),
         relay: Mutex::new(None),
+        bulk: Mutex::new(None),
     });
     // Weak, or the store would hold the hub that holds the store.
     let tapped = Arc::downgrade(&hub);
@@ -409,6 +415,39 @@ impl Host {
         relay.as_ref().map_or(Relayed::Off, |(_, relayed)| *relayed)
     }
 
+    /// Send and take footage. See [`crate::Sharing::carry_footage`].
+    pub fn carry_footage(&self, footage: Arc<dyn Footage>, limits: Arc<Limits>) {
+        let mut bulk = self.hub.bulk.lock();
+        if bulk.is_none() && !self.hub.stop.load(Ordering::Relaxed) {
+            *bulk = Some(bulk::Hub::new(footage, limits, true));
+        }
+    }
+
+    /// Which footage this machine has the original of, told to everyone.
+    pub fn set_holds(&self, items: Vec<Held>) {
+        self.hub.hold(0, items);
+    }
+
+    /// Who has the original of `item`.
+    #[must_use]
+    pub fn holders(&self, item: Uuid) -> Vec<(u32, u64)> {
+        let bulk = self.hub.bulk.lock().clone();
+        bulk.map_or_else(Vec::new, |bulk| bulk.holders(item))
+    }
+
+    /// Ask whichever guest has it for `wanted`.
+    pub fn want(&self, wanted: Wanted) {
+        let bulk = self.hub.bulk.lock().clone();
+        if let Some(bulk) = bulk {
+            bulk.want(wanted);
+        }
+    }
+
+    /// Say `body` to the guest numbered `to`.
+    pub fn note(&self, to: u32, body: serde_json::Value) {
+        self.hub.pass(0, to, body);
+    }
+
     /// Latest wins: the accepting thread sends it on its next beat, so a
     /// playhead that moves every frame is not a message every frame.
     pub fn set_presence(&self, presence: Presence) {
@@ -456,6 +495,9 @@ impl Host {
     fn end(&self, last: Option<&Message>) {
         if self.hub.stop.swap(true, Ordering::Relaxed) {
             return;
+        }
+        if let Some(bulk) = self.hub.bulk.lock().take() {
+            bulk.stop();
         }
         self.hub.store.unshare();
         {
@@ -586,6 +628,45 @@ impl Hub {
         }
     }
 
+    /// Note which footage `peer` has the original of, and tell everyone.
+    fn hold(&self, peer: u32, items: Vec<Held>) {
+        let Some(bulk) = self.bulk.lock().clone() else {
+            return;
+        };
+        bulk.holds(peer, items.clone());
+        if let Ok(bytes) = encode(&Message::Holds { peer, items }, &self.names) {
+            Self::send_each(&mut self.seats.lock(), |_| bytes.clone());
+        }
+    }
+
+    /// Pass a note from `from` on to `to`, which is this machine for 0.
+    fn pass(&self, from: u32, to: u32, body: serde_json::Value) {
+        if to == 0 {
+            return (self.events)(Event::Note { from, body });
+        }
+        let Ok(bytes) = encode(&Message::Note { to, from, body }, &self.names) else {
+            return;
+        };
+        let seats = self.seats.lock();
+        if let Some(link) = seats.links.iter().find(|link| link.id == to) {
+            let _ = link.out.try_send(Out::Bytes(bytes));
+        }
+    }
+
+    /// A guest's second connection, for footage: run it until it drops. Only
+    /// for a guest that is seated, which `token` is how it is known by.
+    fn carry(&self, token: u64, socket: TcpStream, sender: Sender, receiver: Receiver) {
+        let peer = {
+            let seats = self.seats.lock();
+            let seated = seats.links.iter().find(|link| link.token == token);
+            seated.filter(|_| token != 0).map(|link| link.id)
+        };
+        let bulk = self.bulk.lock().clone();
+        if let (Some(peer), Some(bulk)) = (peer, bulk) {
+            bulk.link(peer, socket, sender, receiver);
+        }
+    }
+
     /// Say one last thing to a guest and close its connection behind it.
     fn dismiss(&self, link: &Link, last: &Message) {
         if let Ok(bytes) = encode(last, &self.names) {
@@ -694,15 +775,19 @@ impl Hub {
         })();
         self.greeting.fetch_sub(1, Ordering::Relaxed);
         let (mut sender, mut receiver, hello) = greeted?;
-        let Message::Hello {
-            protocol,
-            version,
-            schema,
-            name,
-            token,
-        } = hello
-        else {
-            return Err(ShareError::OutOfTurn);
+        let (protocol, version, schema, name, token) = match hello {
+            Message::Hello {
+                protocol,
+                version,
+                schema,
+                name,
+                token,
+            } => (protocol, version, schema, name, token),
+            Message::Bulk { protocol, token } if protocol == wire::PROTOCOL => {
+                self.carry(token, socket, sender, receiver);
+                return Ok(());
+            }
+            _ => return Err(ShareError::OutOfTurn),
         };
         if protocol != wire::PROTOCOL
             || version != VERSION
@@ -846,6 +931,8 @@ impl Hub {
                     }
                 }
                 Ok(Message::Presence { presence, .. }) => self.presence(peer, presence),
+                Ok(Message::Holds { items, .. }) => self.hold(peer, items),
+                Ok(Message::Note { to, body, .. }) => self.pass(peer, to, body),
                 Ok(Message::Ping) => {}
                 _ => break,
             }
@@ -883,6 +970,10 @@ impl Hub {
         });
         seats.people.retain(|p| p.id != id);
         seats.changed = true;
+        drop(seats);
+        if let Some(bulk) = self.bulk.lock().clone() {
+            bulk.forget(id);
+        }
     }
 
     /// Tell everyone who is here, if that has changed. From the accepting
@@ -897,6 +988,16 @@ impl Hub {
             let people = seats.people.clone();
             if let Ok(bytes) = encode(&Message::People(people.clone()), &self.names) {
                 Self::send_each(&mut seats, |_| bytes.clone());
+            }
+            // And who has which footage, whole, so whoever has just come
+            // knows it and nobody still counts on someone who has gone.
+            let bulk = self.bulk.lock().clone();
+            for (peer, items) in bulk.map_or_else(Vec::new, |bulk| bulk.all_holds()) {
+                let here = people.iter().any(|p| p.id == peer);
+                let items = if here { items } else { Vec::new() };
+                if let Ok(bytes) = encode(&Message::Holds { peer, items }, &self.names) {
+                    Self::send_each(&mut seats, |_| bytes.clone());
+                }
             }
             people
         };

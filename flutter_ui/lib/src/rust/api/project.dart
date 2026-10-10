@@ -759,6 +759,19 @@ class ProjectReference {
           relay: relay,
           events: events);
 
+  /// Answer an export another person asked this machine to do, by the job
+  /// a [`BridgeShareEvent::ExportAsked`] named. Yes puts it in this
+  /// machine's export queue and starts it.
+  void shareAnswerExport({required String job, required bool yes}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceShareAnswerExport(
+          that: this, job: job, yes: yes);
+
+  /// How the export asked of someone else's machine is getting on.
+  BridgeShareAsking shareAsking() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceShareAsking(
+        that: this,
+      );
+
   /// The conflicts a merge left for this guest to choose between, in the
   /// order [`Self::share_resolve`] indexes them.
   List<BridgeShareConflict> shareConflicts() =>
@@ -772,6 +785,18 @@ class ProjectReference {
   /// else.
   void shareDiscardAway() =>
       BridgeLib.instance.api.crateApiProjectProjectReferenceShareDiscardAway(
+        that: this,
+      );
+
+  /// Give up fetching what an export lacks. What has arrived is kept.
+  void shareFetchCancel() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceShareFetchCancel(
+        that: this,
+      );
+
+  /// How fetching what an export lacks is getting on.
+  BridgeShareFetching shareFetching() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceShareFetching(
         that: this,
       );
 
@@ -877,6 +902,12 @@ class ProjectReference {
   int shareResolve({required int index, required bool mine}) =>
       BridgeLib.instance.api.crateApiProjectProjectReferenceShareResolve(
           that: this, index: index, mine: mine);
+
+  /// Every footage transfer in flight, to and from this machine.
+  List<BridgeShareTransfer> shareTransfers() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceShareTransfers(
+        that: this,
+      );
 
   Stream<WorkerResponse> startWorker() =>
       BridgeLib.instance.api.crateApiProjectProjectReferenceStartWorker(

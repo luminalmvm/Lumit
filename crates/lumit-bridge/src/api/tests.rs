@@ -2767,7 +2767,7 @@ fn restoring_replaces_the_document_and_keeps_the_change_observer() {
 static EXPORT_QUEUE_TESTS: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 /// Hold the process-wide export queue for the length of a test.
-fn export_queue_test() -> std::sync::MutexGuard<'static, ()> {
+pub(crate) fn export_queue_test() -> std::sync::MutexGuard<'static, ()> {
     EXPORT_QUEUE_TESTS
         .lock()
         .unwrap_or_else(|poison| poison.into_inner())

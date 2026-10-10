@@ -822,6 +822,10 @@ impl LumitBridgeState {
         }
 
         let (comp, layer, items) = op_scope(&document_change.op);
+        // What this machine has and wants of a shared project's footage is
+        // looked at again, on that project's own thread: a clip placed in
+        // a composition is one it now wants a stand-in of.
+        crate::footage::Carrier::changed(project_id);
 
         // **Nothing is invalidated here, and that is the point.** This
         // used to drop every held frame of every composition on every committed
@@ -959,6 +963,8 @@ pub(crate) fn adopt(
     }
     report_phase(on_progress, OpenPhase::ResolvingMedia);
     let (_relinked, missing) = lumit_project::resolve_all_media(&mut doc, media_root, &[]);
+    // What is still missing may be something another person sent before.
+    crate::footage::restore(&mut doc);
     report_phase(on_progress, OpenPhase::PreparingProject);
 
     // Every footage file this project holds, handed to the probe worker

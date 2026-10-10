@@ -179,6 +179,11 @@ pub struct Limits {
     pub waiting: usize,
     /// The most connections being greeted or passed on at once.
     pub connections: usize,
+    /// How many bytes a second a host and a guest may pass each way once
+    /// they have used up [`BURST`], or 0 for as many as the line carries.
+    /// Edits are far under any limit worth setting. Footage is not, which
+    /// is what this is for: a relay that should carry one and not the other.
+    pub rate: u64,
 }
 
 impl Default for Limits {
@@ -187,6 +192,7 @@ impl Default for Limits {
             rooms: 256,
             waiting: 8,
             connections: 1024,
+            rate: 0,
         }
     }
 }
@@ -333,22 +339,40 @@ impl Relay {
         host.set_read_timeout(Some(IDLE))?;
         guest.set_read_timeout(Some(IDLE))?;
         let (from_guest, to_host) = (guest.try_clone()?, host.try_clone()?);
+        let rate = self.limits.rate;
         let back = thread::Builder::new()
             .name("lumit-relay-pass".into())
-            .spawn(move || copy(&from_guest, &to_host))?;
-        copy(&host, &guest);
+            .spawn(move || copy(&from_guest, &to_host, rate))?;
+        copy(&host, &guest, rate);
         let _ = back.join();
         Ok(())
     }
 }
 
+/// How much passes each way at full speed before a [`Limits::rate`] holds:
+/// room for a whole project to be sent to someone joining.
+pub const BURST: u64 = 16 << 20;
+
 /// Copy what `from` says to `to` until either goes, then close both, which
-/// is what ends the copy going the other way.
-fn copy(mut from: &TcpStream, mut to: &TcpStream) {
+/// is what ends the copy going the other way. No faster than `rate` bytes a
+/// second once [`BURST`] has gone, with nought for no limit.
+fn copy(mut from: &TcpStream, mut to: &TcpStream, rate: u64) {
     let mut bytes = [0u8; 16 << 10];
+    // What may still pass at once, topped up at the rate as time goes by.
+    let (mut allowance, mut topped) = (BURST as f64, Instant::now());
     while let Ok(n @ 1..) = from.read(&mut bytes) {
         if to.write_all(&bytes[..n]).is_err() {
             break;
+        }
+        if rate == 0 {
+            continue;
+        }
+        let now = Instant::now();
+        let earned = now.duration_since(topped).as_secs_f64() * rate as f64;
+        allowance = (allowance + earned).min(BURST as f64) - n as f64;
+        topped = now;
+        if allowance < 0.0 {
+            thread::sleep(Duration::from_secs_f64(-allowance / rate as f64));
         }
     }
     let _ = from.shutdown(Shutdown::Both);

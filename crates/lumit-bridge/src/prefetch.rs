@@ -78,6 +78,10 @@ impl Prefetcher {
 #[cfg(feature = "media")]
 fn run(jobs: Receiver<PrefetchWant>, done: Sender<Done>) {
     let mut decoders: HashMap<Uuid, lumit_media::VideoDecoder> = HashMap::new();
+    // The file each decoder is open on. An item whose file has changed, as
+    // one relinked or one whose stand-in gave way to the original has, is
+    // opened again rather than read on from the old file.
+    let mut sources: HashMap<Uuid, std::path::PathBuf> = HashMap::new();
     // The pictures already read by a file's own reader. One is a still, and
     // every coming frame asks for it again. Emptied when it grows, since the
     // worst a second read does is cost time.
@@ -106,6 +110,10 @@ fn run(jobs: Receiver<PrefetchWant>, done: Sender<Done>) {
                 return;
             }
             continue;
+        }
+        if sources.get(&want.item) != Some(&want.source.path) {
+            decoders.remove(&want.item);
+            sources.insert(want.item, want.source.path.clone());
         }
         let dec = match decoders.entry(want.item) {
             std::collections::hash_map::Entry::Occupied(e) => e.into_mut(),

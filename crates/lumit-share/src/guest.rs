@@ -4,6 +4,7 @@
 //!
 //! One thread reads and reconnects. Each connection has a writer.
 
+use crate::bulk::{self, Footage, Held, Limits, Wanted};
 use crate::host::VERSION;
 use crate::kept::{Finding, Kept, Pair};
 use crate::local::{carry, place, sane, sane_document, settle};
@@ -292,6 +293,12 @@ struct Inner {
     left: AtomicBool,
     /// The person is closing the copy without saving it.
     discard: AtomicBool,
+    /// The footage this guest sends and takes, once it has been given some
+    /// to carry.
+    bulk: Mutex<Option<Arc<bulk::Hub>>>,
+    /// Which footage this machine has the original of, as last said, to
+    /// say again to a host that has been found again.
+    holds: Mutex<Option<Vec<Held>>>,
 }
 
 /// A project shared from someone else's machine. Leaving it is [`Self::stop`]
@@ -317,6 +324,8 @@ impl Inner {
             kept: Mutex::new(None),
             left: AtomicBool::new(false),
             discard: AtomicBool::new(false),
+            bulk: Mutex::new(None),
+            holds: Mutex::new(None),
         })
     }
 
@@ -385,6 +394,49 @@ impl Guest {
 
     pub fn set_presence(&self, presence: Presence) {
         *self.inner.presence.lock() = Some(presence.tidied());
+    }
+
+    /// Send and take footage. See [`crate::Sharing::carry_footage`].
+    pub fn carry_footage(&self, footage: Arc<dyn Footage>, limits: Arc<Limits>) {
+        let mut bulk = self.inner.bulk.lock();
+        if bulk.is_some() || self.inner.stop.load(Ordering::Relaxed) {
+            return;
+        }
+        let hub = bulk::Hub::new(footage, limits, false);
+        let (inner, carried) = (self.inner.clone(), hub.clone());
+        let spawned = thread::Builder::new()
+            .name("lumit-share-bulk".into())
+            .spawn(move || inner.carry(&carried));
+        if spawned.is_ok() {
+            *bulk = Some(hub);
+        }
+    }
+
+    /// Which footage this machine has the original of, told to the host.
+    pub fn set_holds(&self, items: Vec<Held>) {
+        *self.inner.holds.lock() = Some(items);
+        self.inner.say_holds();
+    }
+
+    /// Who has the original of `item`, as the host last said.
+    #[must_use]
+    pub fn holders(&self, item: Uuid) -> Vec<(u32, u64)> {
+        let bulk = self.inner.bulk.lock().clone();
+        bulk.map_or_else(Vec::new, |bulk| bulk.holders(item))
+    }
+
+    /// Ask the host for `wanted`.
+    pub fn want(&self, wanted: Wanted) {
+        let bulk = self.inner.bulk.lock().clone();
+        if let Some(bulk) = bulk {
+            bulk.want(wanted);
+        }
+    }
+
+    /// Say `body` to the person numbered `to`, by way of the host.
+    pub fn note(&self, to: u32, body: serde_json::Value) {
+        let from = self.me();
+        self.inner.say(&Message::Note { to, from, body });
     }
 
     /// The edits a merge held back, each waiting on [`Self::resolve`].
@@ -533,6 +585,52 @@ impl Inner {
         }
     }
 
+    /// Say something to the host that is not an edit, if it is there. What
+    /// cannot be queued is let go: none of it is anything the document
+    /// depends on.
+    fn say(&self, message: &Message) {
+        let Ok(bytes) = encode(message, &self.seat.names) else {
+            return;
+        };
+        if let Some((out, _)) = self.link.lock().as_ref() {
+            let _ = out.try_send(Out::Bytes(bytes));
+        }
+    }
+
+    fn say_holds(&self) {
+        let items = self.holds.lock().clone();
+        if let Some(items) = items {
+            self.say(&Message::Holds { peer: 0, items });
+        }
+    }
+
+    /// The footage thread: keep a second connection to the host for as long
+    /// as there is a host, and run it.
+    fn carry(&self, hub: &Arc<bulk::Hub>) {
+        while !self.stop.load(Ordering::Relaxed) && !hub.stopped() {
+            if self.link.lock().is_some() {
+                let invite = self.seat.invite.lock().clone();
+                if let Ok((socket, mut sender, receiver)) = reach(&invite) {
+                    let hello = Message::Bulk {
+                        protocol: wire::PROTOCOL,
+                        token: self.seat.token,
+                    };
+                    let said = encode(&hello, &self.seat.names)
+                        .is_ok_and(|bytes| sender.send(&bytes).is_ok());
+                    if said {
+                        hub.link(0, socket, sender, receiver);
+                    }
+                }
+            }
+            for _ in 0..20 {
+                if self.stop.load(Ordering::Relaxed) || hub.stopped() {
+                    break;
+                }
+                thread::sleep(Duration::from_millis(100));
+            }
+        }
+    }
+
     fn tell_people(&self, people: Vec<Person>) {
         let me = self.me.load(Ordering::Relaxed);
         (self.events)(Event::People { me, people });
@@ -571,6 +669,9 @@ impl Inner {
     /// shared again, as a host's or another guest's.
     fn end(&self) {
         self.stop.store(true, Ordering::Relaxed);
+        if let Some(bulk) = self.bulk.lock().take() {
+            bulk.stop();
+        }
         self.hang_up();
         self.store.unshare();
     }
@@ -664,6 +765,7 @@ impl Inner {
     fn run(self: Arc<Self>, mut live: Option<Live>) {
         loop {
             if let Some(mut live) = live.take() {
+                self.say_holds();
                 self.tell_people(live.people);
                 let ended = self.listen(&mut live.receiver);
                 self.hang_up();
@@ -827,6 +929,12 @@ impl Inner {
                     self.tell_people(people);
                 }
                 Ok(Message::Ping) => {}
+                Ok(Message::Holds { peer, items }) => {
+                    if let Some(bulk) = self.bulk.lock().clone() {
+                        bulk.holds(peer, items);
+                    }
+                }
+                Ok(Message::Note { from, body, .. }) => (self.events)(Event::Note { from, body }),
                 Ok(Message::Invite { key }) => self.seat.invite.lock().key = key,
                 Ok(Message::Closed) => return Some(Ending::Closed),
                 Ok(Message::Removed) => return Some(Ending::Removed),

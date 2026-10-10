@@ -17,6 +17,7 @@
 //! relay when it was given one. A guest has a reader and a writer, and for a
 //! moment one for each address it tries its host at.
 
+mod bulk;
 mod guest;
 mod host;
 mod invite;
@@ -25,6 +26,7 @@ mod local;
 mod reach;
 mod wire;
 
+pub use bulk::{Footage, Held, Limits, News, Wanted};
 pub use guest::{join, resume, Guest, Joining, Resuming};
 pub use host::{host, Host};
 pub use invite::{key_from, key_text, lock_of, Invite, LINK, LINK_SCHEME, MAX_ADDRESSES};
@@ -187,6 +189,10 @@ pub enum Event {
     Reach(Reach),
     /// For a host: what came of asking a relay for a room.
     Relayed(Relayed),
+    /// Another person's Lumit said something to this one that is not an
+    /// edit. `from` is who, and `body` is theirs to have written and this
+    /// end's to judge.
+    Note { from: u32, body: serde_json::Value },
 }
 
 /// Where those events go. Called from the share threads with no lock held.
@@ -279,6 +285,52 @@ impl Sharing {
         match self {
             Sharing::Host(host) => host.set_presence(presence),
             Sharing::Guest(guest) => guest.set_presence(presence),
+        }
+    }
+
+    /// Send and take footage, which is `footage`'s to make and keep, no
+    /// faster than `limits`. Until this is called none crosses.
+    pub fn carry_footage(&self, footage: Arc<dyn Footage>, limits: Arc<Limits>) {
+        match self {
+            Sharing::Host(host) => host.carry_footage(footage, limits),
+            Sharing::Guest(guest) => guest.carry_footage(footage, limits),
+        }
+    }
+
+    /// Say which footage items this machine has the original of. The whole
+    /// list each time it changes.
+    pub fn set_holds(&self, items: Vec<Held>) {
+        match self {
+            Sharing::Host(host) => host.set_holds(items),
+            Sharing::Guest(guest) => guest.set_holds(items),
+        }
+    }
+
+    /// Who has the original of the footage item `item`, by their number,
+    /// and how big it is on their disk.
+    #[must_use]
+    pub fn holders(&self, item: Uuid) -> Vec<(u32, u64)> {
+        match self {
+            Sharing::Host(host) => host.holders(item),
+            Sharing::Guest(guest) => guest.holders(item),
+        }
+    }
+
+    /// Ask whoever has it for `wanted`. What comes of it is told to the
+    /// [`Footage`] this end carries. Asked once however often it is called.
+    pub fn want(&self, wanted: Wanted) {
+        match self {
+            Sharing::Host(host) => host.want(wanted),
+            Sharing::Guest(guest) => guest.want(wanted),
+        }
+    }
+
+    /// Say `body` to the person numbered `to`. It reaches them as an
+    /// [`Event::Note`], or not at all if they have gone.
+    pub fn note(&self, to: u32, body: serde_json::Value) {
+        match self {
+            Sharing::Host(host) => host.note(to, body),
+            Sharing::Guest(guest) => guest.note(to, body),
         }
     }
 
@@ -683,6 +735,99 @@ mod tests {
         host.stop();
         stop.store(true, Ordering::Relaxed);
         serving.join().unwrap().unwrap();
+    }
+
+    /// A machine's footage for the tests: the originals it was given, and
+    /// a folder of its own that what it is sent lands in.
+    struct Shelf {
+        folder: std::path::PathBuf,
+        originals: Vec<(Uuid, std::path::PathBuf)>,
+    }
+
+    impl Footage for Shelf {
+        fn make(&self, wanted: &Wanted, _: &AtomicBool) -> Option<std::path::PathBuf> {
+            let item = wanted.item()?;
+            let mine = self.originals.iter().find(|(id, _)| *id == item);
+            let sent = self.room(wanted).filter(|path| path.is_file());
+            mine.map(|(_, path)| path.clone()).or(sent)
+        }
+
+        fn room(&self, wanted: &Wanted) -> Option<std::path::PathBuf> {
+            Some(self.folder.join(format!("{}.bin", wanted.item()?)))
+        }
+
+        fn told(&self, _: News) {}
+    }
+
+    /// Footage one guest has reaches a guest that has not, by way of a host
+    /// that has not either and keeps what passes through it. A file part of
+    /// which is here already is carried on with, and one whose part here is
+    /// not how the file starts is begun again.
+    #[test]
+    fn footage_one_guest_has_reaches_another_through_the_host() {
+        let root = std::env::temp_dir().join(format!("lumit-bulk-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let shelf = |name: &str, originals: Vec<(Uuid, std::path::PathBuf)>| {
+            let folder = root.join(name);
+            std::fs::create_dir_all(&folder).unwrap();
+            Arc::new(Shelf { folder, originals })
+        };
+        let bytes = |seed: u8| -> Vec<u8> {
+            (0..300_000u32)
+                .map(|n| (n.wrapping_mul(2_654_435_761) >> 13) as u8 ^ seed)
+                .collect()
+        };
+        std::fs::create_dir_all(&root).unwrap();
+        let (clip, other) = (Uuid::now_v7(), Uuid::now_v7());
+        let (clip_file, other_file) = (root.join("clip.mov"), root.join("other.mov"));
+        std::fs::write(&clip_file, bytes(1)).unwrap();
+        std::fs::write(&other_file, bytes(2)).unwrap();
+
+        let hosted = Arc::new(DocumentStore::new(Document::new()));
+        let host = host(hosted, "Host", LOOPBACK, 0, None, None, None, quiet()).unwrap();
+        let hosts = shelf("host", Vec::new());
+        host.carry_footage(hosts.clone(), Arc::new(Limits::default()));
+        let invite = || host.invite("127.0.0.1");
+        let guest = |name: &str, shelf: Arc<Shelf>| {
+            let (document, joining) = join(invite(), name, None).unwrap();
+            let store = Arc::new(DocumentStore::new(document));
+            let guest = joining.start(store, quiet()).unwrap();
+            guest.carry_footage(shelf, Arc::new(Limits::default()));
+            guest
+        };
+        let has = guest(
+            "Has",
+            shelf("has", vec![(clip, clip_file), (other, other_file)]),
+        );
+        let lacks_shelf = shelf("lacks", Vec::new());
+        let lacks = guest("Lacks", lacks_shelf.clone());
+        let held = |item| Held {
+            item,
+            bytes: 300_000,
+        };
+        has.set_holds(vec![held(clip), held(other)]);
+        until("everyone knows who has the footage", || {
+            let theirs = [(has.me(), 300_000)];
+            lacks.holders(clip) == theirs && host.holders(other) == theirs
+        });
+
+        // Part of one is here already, and part of the other is not it.
+        let part = |name: Uuid| lacks_shelf.folder.join(format!("{name}.bin.part"));
+        std::fs::write(part(clip), &bytes(1)[..100_000]).unwrap();
+        std::fs::write(part(other), &bytes(9)[..100_000]).unwrap();
+        lacks.want(Wanted::StandIn { item: clip });
+        lacks.want(Wanted::StandIn { item: other });
+        let arrived = |shelf: &Shelf, item: Uuid, seed: u8| {
+            let path = shelf.folder.join(format!("{item}.bin"));
+            std::fs::read(path).is_ok_and(|read| read == bytes(seed))
+        };
+        until("both files reach the guest that lacked them", || {
+            arrived(&lacks_shelf, clip, 1) && arrived(&lacks_shelf, other, 2)
+        });
+        assert!(arrived(&hosts, clip, 1) && arrived(&hosts, other, 2));
+
+        host.stop();
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     /// The invite's secret is what lets a guest in. One bit out and the

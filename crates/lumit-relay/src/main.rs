@@ -1,5 +1,8 @@
-//! `lumit-relay [port]`: be a relay for shared projects on this machine, on
-//! the usual port unless another is given, until it is stopped.
+//! `lumit-relay [port] [kilobytes a second]`: be a relay for shared projects
+//! on this machine, on the usual port unless another is given, until it is
+//! stopped. The second number holds each host and guest to that speed once
+//! a project's worth has passed, which lets edits through and makes footage
+//! not worth sending this way.
 
 use lumit_relay::{serve, Limits, DEFAULT_PORT};
 use std::io::Write;
@@ -19,9 +22,21 @@ fn main() -> ExitCode {
         None => DEFAULT_PORT,
         Some(Ok(port)) => port,
         Some(Err(_)) => {
-            say("usage: lumit-relay [port]");
+            say("usage: lumit-relay [port] [kilobytes a second]");
             return ExitCode::FAILURE;
         }
+    };
+    let rate = match std::env::args().nth(2).map(|rate| rate.parse::<u64>()) {
+        None => 0,
+        Some(Ok(kilobytes)) => kilobytes.saturating_mul(1024),
+        Some(Err(_)) => {
+            say("usage: lumit-relay [port] [kilobytes a second]");
+            return ExitCode::FAILURE;
+        }
+    };
+    let limits = Limits {
+        rate,
+        ..Limits::default()
     };
     // Every address. Where one listener takes IPv4 and IPv6 both, the
     // second is refused and not needed.
@@ -37,7 +52,7 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     }
     say(&format!("listening on port {port}"));
-    match serve(&listeners, Limits::default(), &AtomicBool::new(false)) {
+    match serve(&listeners, limits, &AtomicBool::new(false)) {
         Ok(()) => ExitCode::SUCCESS,
         Err(why) => {
             say(&why.to_string());

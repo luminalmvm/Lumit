@@ -42,6 +42,8 @@ import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:lumit_flutter/src/rust/api/shell.dart'
     show setAutosave, setFullResDragPreviews, setHardwareDecode;
 import 'package:lumit_flutter/src/rust/api/state.dart';
+import 'package:lumit_flutter/src/rust/api/share.dart' as bridge_share
+    show shareSetLimits, shareSetFootage;
 import 'package:lumit_flutter/state/addons.dart';
 import 'package:lumit_flutter/state/addons_engine.dart';
 import 'package:lumit_flutter/state/comp_model.dart';
@@ -1930,6 +1932,18 @@ class LumitUiState extends ChangeNotifier {
   /// is what says which comps still exist.
   final LumitState _app;
 
+  void _applyShareFootage() {
+    try {
+      bridge_share.shareSetLimits(
+          upKilobytes: workspace.shareUpLimit,
+          downKilobytes: workspace.shareDownLimit);
+      bridge_share.shareSetFootage(
+          give: workspace.shareGive, take: workspace.shareTake);
+    } catch (_) {
+      // No engine to tell, as in a widget test.
+    }
+  }
+
   LumitUiState(LumitState state, {Workspace? workspace})
       : _app = state,
         workspace = workspace ?? (Workspace()..load()) {
@@ -1943,6 +1957,11 @@ class LumitUiState extends ChangeNotifier {
     // Appearance and layout live in the workspace, so a change there is a
     // change here as far as any listening widget is concerned.
     this.workspace.addListener(notifyListeners);
+    // How fast footage crosses in a shared project, and whether this
+    // computer sends and asks for any, are the person's settings and the
+    // engine's to keep to.
+    this.workspace.onShareFootage = _applyShareFootage;
+    _applyShareFootage();
     // Floating windows read and write where they were left through this;
     // the controls file has no other way to reach the store.
     modalPlacementStore = this.workspace;

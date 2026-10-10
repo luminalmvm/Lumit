@@ -838,6 +838,35 @@ class Workspace extends ChangeNotifier {
     save();
   }
 
+  /// How fast this computer sends and takes footage in a shared project, in
+  /// kilobytes a second. Nought is as fast as the line goes.
+  int shareUpLimit = 0;
+  int shareDownLimit = 0;
+
+  /// Whether this computer makes stand-ins of its footage for the others in
+  /// a shared project, and whether it asks for stand-ins of what it lacks
+  /// without being told to.
+  bool shareGive = true;
+  bool shareTake = true;
+
+  /// Called whenever any of the four above changes, and once they are read
+  /// from disk: what hands them to the engine.
+  VoidCallback? onShareFootage;
+
+  void setShareLimits({int? up, int? down}) {
+    shareUpLimit = (up ?? shareUpLimit).clamp(0, 10000000);
+    shareDownLimit = (down ?? shareDownLimit).clamp(0, 10000000);
+    onShareFootage?.call();
+    save();
+  }
+
+  void setShareFootage({bool? give, bool? take}) {
+    shareGive = give ?? shareGive;
+    shareTake = take ?? shareTake;
+    onShareFootage?.call();
+    save();
+  }
+
   /// The most projects [shareHosted] remembers.
   static const int maxShareHosted = 16;
 
@@ -1622,6 +1651,10 @@ class Workspace extends ChangeNotifier {
         'share_name': shareName,
         'share_router': shareOutside,
         'share_relay': shareRelay,
+        'share_up_limit': shareUpLimit,
+        'share_down_limit': shareDownLimit,
+        'share_give': shareGive,
+        'share_take': shareTake,
         'share_hosted': shareHosted,
         'autosave_minutes': autosaveMinutes,
         'autosave_keep': autosaveKeep,
@@ -1716,6 +1749,12 @@ class Workspace extends ChangeNotifier {
     shareOutside = outside is bool ? outside : true;
     final relay = j['share_relay'];
     shareRelay = relay is String && relay.isNotEmpty ? relay : null;
+    final (up, down) = (j['share_up_limit'], j['share_down_limit']);
+    shareUpLimit = up is int ? up.clamp(0, 10000000) : 0;
+    shareDownLimit = down is int ? down.clamp(0, 10000000) : 0;
+    shareGive = j['share_give'] is! bool || j['share_give'] as bool;
+    shareTake = j['share_take'] is! bool || j['share_take'] as bool;
+    onShareFootage?.call();
     shareHosted.clear();
     final hosted = j['share_hosted'];
     if (hosted is Map) {

@@ -1867,6 +1867,34 @@ fn has_guide_layer(doc: &Document) -> bool {
 /// nothing. The copy is thrown away when the export finishes and never
 /// reaches the project (docs/06 §7.2: baking is invisible).
 pub fn apply_render_overrides(doc: &Arc<Document>, opts: &RenderOptions) -> Option<Arc<Document>> {
+    apply_overrides(doc, opts)
+}
+
+/// The composition frames an export of `comp` by `spec` writes, first and
+/// one past the last: the dialogue's own range when it set one, else the
+/// work area, else the whole comp (docs/01-GLOSSARY.md).
+#[must_use]
+pub fn frame_span(comp: &lumit_core::model::Composition, spec: &ExportSpec) -> (usize, usize) {
+    let fps = comp.frame_rate.fps().max(1.0);
+    let comp_frames = (comp.duration.0.to_f64() * fps).round().max(1.0) as usize;
+    match spec.range {
+        Some((a, b)) => {
+            let s = a.min(comp_frames.saturating_sub(1));
+            let e = b.clamp(s + 1, comp_frames);
+            (s, e)
+        }
+        None => match comp.work_area {
+            Some((a, b)) => {
+                let s = ((a.0.to_f64() * fps).round() as usize).min(comp_frames.saturating_sub(1));
+                let e = ((b.0.to_f64() * fps).round() as usize).clamp(s + 1, comp_frames);
+                (s, e)
+            }
+            None => (0, comp_frames),
+        },
+    }
+}
+
+fn apply_overrides(doc: &Arc<Document>, opts: &RenderOptions) -> Option<Arc<Document>> {
     // Guide layers leave the delivery the same way: not by a second
     // flag threaded through every walk, but by leaving this snapshot — so the
     // draw builder, the decode planner, the occlusion cull and the frame key
@@ -2620,24 +2648,7 @@ fn run(
     let doc = overridden.as_ref().unwrap_or(doc);
     let comp = doc.comp(comp_id).ok_or("composition missing")?;
     let fps = comp.frame_rate.fps().max(1.0);
-    let comp_frames = (comp.duration.0.to_f64() * fps).round().max(1.0) as usize;
-    // The range: the dialogue's own when it set one, else the work area, else
-    // the whole comp (docs/01-GLOSSARY.md).
-    let (first, end) = match spec.range {
-        Some((a, b)) => {
-            let s = a.min(comp_frames.saturating_sub(1));
-            let e = b.clamp(s + 1, comp_frames);
-            (s, e)
-        }
-        None => match comp.work_area {
-            Some((a, b)) => {
-                let s = ((a.0.to_f64() * fps).round() as usize).min(comp_frames.saturating_sub(1));
-                let e = ((b.0.to_f64() * fps).round() as usize).clamp(s + 1, comp_frames);
-                (s, e)
-            }
-            None => (0, comp_frames),
-        },
-    };
+    let (first, end) = frame_span(comp, spec);
     // The output rate. A rate other than the comp's resamples by nearest comp
     // frame over the same wall-clock span, so a 60 fps comp exported at 30
     // shows every other frame and lasts exactly as long.
