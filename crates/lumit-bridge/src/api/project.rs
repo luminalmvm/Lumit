@@ -205,14 +205,15 @@ impl ProjectReference {
             // are not this one's to drop. The `planes/` sidecar is untouched,
             // so reopening reads them back.
             lumit_render::planes::forget(&lumit_render::planes::owned_ids(&doc));
+            // And so do the puppet wireframes the render left for the overlay,
+            // by layer for the same reason: another project's are still on
+            // screen.
+            lumit_render::puppet::forget_document(&doc);
             crate::api::state::discard_unsaved_journal(&state);
         }
         // The roto mattes go the same way and for the same reason: the
         // `roto/` sidecar is untouched, so reopening reads them back.
         lumit_render::roto::clear();
-        // And so do the puppet wireframes the render left for the overlay:
-        // they name layers this project owned.
-        lumit_render::puppet::clear();
         drop(removed);
         Ok(())
     }
