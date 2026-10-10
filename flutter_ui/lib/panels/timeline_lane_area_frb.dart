@@ -760,6 +760,20 @@ class LayerArea extends StatelessWidget {
                                 ),
                               ),
                             ),
+                            // The ground inside the block box moves the block.
+                            // Behind the bars and keys, like the marquee.
+                            Positioned.fill(
+                              child: ValueListenableBuilder<Set<String>>(
+                                valueListenable: selectedKeys,
+                                builder: (context, _, __) => KeyBlockMoveGrab(
+                                  places: _selectedKeyPlaces(),
+                                  axis: axis,
+                                  stretch: stretch,
+                                  magnet: magnet,
+                                  onMove: _moveHeldKeys,
+                                ),
+                              ),
+                            ),
                             // Only the blocks in view are built, the rest
                             // held open by two blanks — so the stack keeps
                             // the height every overlay around it is drawn
