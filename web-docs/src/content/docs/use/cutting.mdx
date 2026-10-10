@@ -1,0 +1,88 @@
+---
+title: Cutting
+description: Cut footage on tracks of clips in the Cut workspace.
+sidebar:
+  order: 8.5
+---
+
+The **Cut** workspace arranges Lumit for cutting footage: a **source view** beside the
+composition in the Viewer, and the **Cut timeline** across the bottom.
+
+The Cut timeline shows the open composition. Each track is a layer of that composition, and
+the same composition opens in the [Timeline](/panels/timeline/) and the Audio timeline.
+
+## Tracks
+
+- A picture track is a [Sequence layer](/use/sequence-layers/). Picture tracks stand above
+  the dividing line, and the top one wins the picture.
+- A sound track is an audio-only Sequence layer. Sound tracks stand below the line.
+- Any other layer draws as one plain bar on a track of its own.
+
+## The source view
+
+Double-click footage in the [Project panel](/panels/project/) to load it into the source
+view. Drag along the strip under the picture to move through it.
+
+| Control | What it does |
+| --- | --- |
+| **Play** | Plays the footage from the frame shown, with its sound. |
+| **In**, `I` | Marks the frame shown as the start of the stretch to place. |
+| **Out**, `O` | Marks the frame shown as its end. |
+| **Insert**, `,` | Places the marked stretch at the playhead and moves everything after it later. |
+| **Overwrite**, `.` | Places the marked stretch at the playhead, over what is there. |
+
+With no marks set, the whole item is placed. The clip lands on the selected picture track,
+or the lowest one, or a new track when the composition has none. The playhead moves to the
+end of the placed clip.
+
+Footage dragged from the Project panel onto a track makes a clip where it is dropped.
+Dropped on empty ground it makes a new track. Several files dropped together land one after
+another. A still takes five seconds.
+
+A clip placed past the end of the composition lengthens the composition to fit.
+
+## Linked clips
+
+Footage with picture and sound is placed as two **linked clips**: the picture on a picture
+track, its sound on a sound track. While **Linked** is on they select, move, trim and cut
+together. `Alt`+click selects one alone.
+
+A picture track made in the Cut workspace has its audible switch off, and its sound is
+heard from the linked clips. Footage placed on a picture track whose audible switch is on
+makes a picture clip only.
+
+## Tools
+
+| Tool | What a drag does |
+| --- | --- |
+| **Select** | Moves clips in time and between tracks. An edge trims. A drag over empty ground selects every clip it crosses. |
+| **Razor** | A click cuts the clip under the pointer. `Shift`+click cuts every track. |
+| **Ripple** | An edge trims, and everything after the clip follows. |
+| **Roll** | An edit point moves: one clip trims as the next extends. |
+| **Slip** | The clip shows earlier or later source, keeping its place and length. |
+| **Slide** | The clip moves between its neighbours, which trim and extend to meet it. |
+
+`Delete` removes the selected clips and leaves a gap. `Shift`+`Delete` removes them and
+closes it. Right-click a gap for **Close gap**.
+
+**Snap** holds a dragged edge to edit points, the playhead and markers. `Ctrl` suspends it.
+`Esc` abandons a drag.
+
+## What a ripple moves
+
+A ripple moves the clips after the edit on every unlocked Sequence layer, and the other
+layers that start after it. A clip that straddles the point stays where it is.
+
+A ripple that would move a clip onto one that stays is **refused**, and the status line says
+so. Lock the track holding that clip, or clear the space.
+
+:::note[Not built yet]
+Picture dissolves, multicam, captions, and EDL, XML or AAF interchange. A clip whose source
+is a composition, or whose Retime is set, is silent.
+:::
+
+## Related
+
+- [Sequence layers](/use/sequence-layers/)
+- [Workspaces and panels](/use/workspaces/)
+- [Proxies](/use/proxies/)
