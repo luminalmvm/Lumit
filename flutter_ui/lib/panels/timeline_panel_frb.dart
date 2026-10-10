@@ -153,7 +153,11 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// graph's own outline — both views that opened every layer by default, and
   /// neither of which exists now. Both remaining views are the Layers outline,
   /// where shut-by-default is the right answer.
-  bool _isOpen(String id) => _open.contains(id);
+  bool _isOpen(String id) =>
+      _underReveal(id) ? !_revealShut.contains(id) : _open.contains(id);
+
+  /// Whether [path] is a heading inside a layer a reveal is still filtering.
+  bool _underReveal(String path) => _revealed.containsKey(layerIdOfPath(path));
 
   /// Open or shut one twirl. The paths reach below the layer
   /// (`<layer>/transform` and the rest).
@@ -161,9 +165,17 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// Exactly this path: shutting a group leaves what was open *inside* it
   /// remembered, so twirling it back down finds it as it was.
   void _setOpen(String path, bool open) {
-    // Whatever this path belongs to is being twirled by hand or by another
-    // reveal, so it stops answering the last single `U`.
-    _revealed.remove(path.split('/').first);
+    // A heading inside a revealed layer folds without ending the reveal:
+    // shutting the one keyed effect must not bring back Transform and every
+    // other effect. The filter lasts until the layer's own twirl turns.
+    if (_underReveal(path)) {
+      open ? _revealShut.remove(path) : _revealShut.add(path);
+      return;
+    }
+    // The layer's own twirl, by hand or by another reveal, so it stops
+    // answering the last single `U`.
+    _revealed.remove(path);
+    _revealShut.removeWhere((p) => isUnderPath(path, p));
     if (open) {
       _open.add(path);
     } else {
@@ -176,6 +188,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// than adding to whatever the last one left open.
   void _shutLayerDeep(String id) {
     _revealed.remove(id);
+    _revealShut.removeWhere((p) => isUnderPath(id, p));
     _open.removeWhere((p) => p == id || isUnderPath(id, p));
   }
 
@@ -635,19 +648,22 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// selection too".
   void _toggle(String path) => setState(() {
         final opening = !_isOpen(path);
-        for (final row in rowsTwirledWith(path, _twirlSelection())) {
+        for (final row in rowsTwirledWith(path, _twirlSelection(path))) {
           _setOpen(row, opening);
           if (!opening) _dropSelectionUnder(row);
         }
       });
 
-  /// Every row a twirl could act on: the selected layers and the selected
-  /// properties, as the paths [_open] is keyed by.
-  Set<String> _twirlSelection() => {
-        for (final id in _ui?.selectedLayerIds ?? const <UuidValue>{})
-          id.toString(),
-        ..._selectedProperties,
-      };
+  /// Every row [path]'s twirl could carry with it, as the paths [_open] is
+  /// keyed by: the selected layers for a layer's twirl, the selected
+  /// properties for a heading's. Never both, or shutting a picked heading
+  /// would shut the selected layer round it.
+  Set<String> _twirlSelection(String path) => layerIdOfPath(path) == null
+      ? {
+          for (final id in _ui?.selectedLayerIds ?? const <UuidValue>{})
+            id.toString(),
+        }
+      : {..._selectedProperties};
 
   /// Forget any selected property at or below [path], and any keyframes of
   /// theirs the marquee had caught.
@@ -1747,6 +1763,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// they need to repaint while a handle is being dragged.
   final ValueNotifier<KeyStretch?> _keyStretch = ValueNotifier(null);
 
+  /// The lane marquee's box while it is being dragged.
+  final ValueNotifier<Rect?> _laneMarquee = ValueNotifier(null);
+
   /// The lane view's selected keyframes, as `rowId#index` (docs/07 §4.3) —
   /// what the marquee gathered. Session state, like the twirl set.
   final Set<String> _laneKeySelection = {};
@@ -1888,11 +1907,14 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// three Reveal rows are the same machinery under a wider rule each, which is
   /// why the filter is stored per layer rather than the layer merely marked.
   ///
-  /// Dropped per layer by [_setOpen] and [_shutLayerDeep], which is every twirl
-  /// a hand or another reveal key can turn: a layer someone has started opening
-  /// by hand is no longer showing the answer to a `U`, and going on filtering it
-  /// would make the caret look broken.
+  /// Dropped per layer by [_setOpen] and [_shutLayerDeep] when the layer's own
+  /// twirl turns, by hand or by another reveal key. The headings inside it
+  /// fold without ending it ([_revealShut]).
   final Map<String, RevealFilter> _revealed = {};
+
+  /// The headings twirled shut by hand inside a revealed layer. A reveal
+  /// draws every heading it keeps as open, so these are the exceptions.
+  final Set<String> _revealShut = {};
 
   /// The comp's size when the last **modified** reveal was run, kept for the
   /// builds after it: that reveal asks whether a layer has been moved, and
@@ -3719,6 +3741,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         // The strip filters the whole comp; a reveal filters only the layers
         // it opened, by the rule it opened them with.
         reveal: _animatedOnly ? everyLayerKeyframed : _revealed,
+        revealShut: _revealShut,
         groupHeaders: folds.headers,
         compWidth: _revealCompWidth,
         compHeight: _revealCompHeight);
@@ -4740,6 +4763,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                           _razorCutAt(ui, entry, frame, ui.model.refresh),
                       vScroll: _vLane,
                       selectedKeys: _laneKeys,
+                      marquee: _laneMarquee,
                       sharing: _sharing,
                       stretch: _keyStretch,
                       project: Provider.of<LumitState>(context, listen: false)

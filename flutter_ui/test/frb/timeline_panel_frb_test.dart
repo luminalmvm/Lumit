@@ -1388,7 +1388,8 @@ void main() {
       final id = layer.internallayerId;
 
       await openFold(tester, id, group: 'Effects');
-      await tester.tap(find.text('Gaussian blur'));
+      await tester.tap(find.byKey(ValueKey<String>(
+          'tl-twirl-$id/effects/${layer.getEffects().single.id()}')));
       await tester.pump();
 
       final t = LumitTheme.dark();
@@ -2388,11 +2389,16 @@ void main() {
       expect(find.text('Radius'), findsNothing,
           reason: 'and its parameters wait until it is opened');
 
+      final id = layer.getEffects().single.id();
+      // The name picks the effect and leaves it shut, the twirl opens it.
       await tester.tap(find.text('Gaussian blur'));
+      await tester.pump();
+      expect(find.text('Radius'), findsNothing);
+      await tester.tap(find.byKey(ValueKey<String>(
+          'tl-twirl-${layer.internallayerId}/effects/$id')));
       await tester.pump();
       expect(find.text('Radius'), findsOneWidget);
 
-      final id = layer.getEffects().single.id();
       double radius() => ((layer.getEffects().single.getValue(id: 'radius')
                   as BridgeEffectValue_Float)
               .field0 as BridgeScalar_Static)
