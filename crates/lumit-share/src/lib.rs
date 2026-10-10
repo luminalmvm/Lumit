@@ -50,13 +50,31 @@ pub struct Presence {
     pub playhead: Option<CompTime>,
     /// Their pointer over the Viewer, in composition pixels.
     pub cursor: Option<(f64, f64)>,
+    /// The property rows they have selected in the Timeline, and the
+    /// keyframes, each by the name the interface knows it by. Nothing here
+    /// reads them: they are only handed to the other interfaces to match
+    /// against their own rows.
+    #[serde(default)]
+    pub properties: Vec<String>,
+    #[serde(default)]
+    pub keys: Vec<String>,
 }
+
+/// The most property rows and keyframes one person's selection is relayed
+/// with, and the longest name any of them goes by.
+const MARKED_PROPERTIES: usize = 256;
+const MARKED_KEYS: usize = 2048;
+const MARK_LENGTH: usize = 256;
 
 impl Presence {
     /// Cut down to what is worth relaying, whoever sent it.
     fn tidied(mut self) -> Self {
         self.layers.truncate(256);
         self.cursor = self.cursor.filter(|(x, y)| x.is_finite() && y.is_finite());
+        self.properties.retain(|name| name.len() <= MARK_LENGTH);
+        self.properties.truncate(MARKED_PROPERTIES);
+        self.keys.retain(|name| name.len() <= MARK_LENGTH);
+        self.keys.truncate(MARKED_KEYS);
         self
     }
 }

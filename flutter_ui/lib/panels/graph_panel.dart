@@ -62,6 +62,8 @@ import '../widgets/controls.dart';
 import '../widgets/marquee.dart';
 import 'comp_graph_panel.dart' show CompGraphPanel;
 import 'fx_section.dart' show fxEnableMark, fxEnableMarkScale;
+import 'layer_fold_frb.dart' show effectPath;
+import '../state/share.dart';
 import 'placeholder.dart';
 import 'shader_editor.dart' show InstanceHome;
 import 'shader_graph.dart' show ShaderGraphPanel, ShaderGraphThumb;
@@ -901,10 +903,47 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     _publishPick();
   }
 
+  /// The shared project's people, whose picked boxes are ringed here. Its
+  /// roster only moves while a project is shared.
+  ShareState? _share;
+
+  /// Someone came, went or picked something else. Nothing happens here
+  /// while the project is not shared.
+  void _onRoster() {
+    if (!mounted) return;
+    final now = _share?.active ?? false;
+    if (now || _sharing) setState(() => _sharing = now);
+  }
+
+  bool _sharing = false;
+
+  /// What a box is called in a shared project: an effect by the path the
+  /// Timeline and the Effect controls panel know it by, so one picked in any
+  /// of the three is marked in all of them, and a driver by a name of its
+  /// own. Null for the two ends of the graph.
+  String? _boxName(LayerReference layer, String key) {
+    final owner = layer.internallayerId.toString();
+    final colon = key.indexOf(':');
+    if (colon < 0) return null;
+    final id = key.substring(colon + 1);
+    return key.startsWith('effect:')
+        ? effectPath(owner, id)
+        : '$owner/drivers/$id';
+  }
+
   void _publishPick() {
     _ui?.graphNode.value = _selected;
     final layer = _layer;
     if (layer == null) return;
+    // A driver is not an effect, so it is not in the selection below. In a
+    // shared project the others are told of it the way a panel with no
+    // selection tells them of a row.
+    if (_sharing) {
+      for (final key in _selection.keys) {
+        if (!key.startsWith('driver:')) continue;
+        if (_boxName(layer, key) case final name?) _ui?.touchProperty(name);
+      }
+    }
     // In stack order, which is the order `selectedEffects` is documented to
     // hold and the order the graph's own node list is already in. A pick of
     // drivers alone carries no effects, and an empty list clears — which is
@@ -998,6 +1037,9 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     if (identical(ui, _ui)) return;
     _unbind();
     _ui = ui;
+    _share ??= Provider.of<LumitState>(context, listen: false).share
+      ..roster.addListener(_onRoster);
+    _sharing = _share!.active;
     ui.selectedLayer.addListener(_reload);
     ui.model.addListener(_reload);
     // Entering (or leaving) a Custom shader's inner graph swaps this panel's
@@ -1077,6 +1119,8 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
   }
 
   void _unbind() {
+    _share?.roster.removeListener(_onRoster);
+    _share = null;
     _ui?.nodeSearchExhibit.removeListener(_onSearchExhibit);
     _exhibitDown?.call();
     _exhibitDown = null;
@@ -2695,6 +2739,35 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
                               ])
                                   case final rect?)
                                 _groupWash(t, group, rect),
+                            // A ring round each box someone else in the
+                            // shared project has picked, in their colour.
+                            // Only walked while the project is shared.
+                            if (_sharing && _layer != null)
+                              for (final box in layout.boxes)
+                                if (_boxName(_layer!, box.key) case final name?)
+                                  for (final (held, colour) in (_share!
+                                              .inHand(_ui?.selectedComp)[name] ??
+                                          const <int>[])
+                                      .indexed)
+                                    Positioned(
+                                      key: ValueKey<String>(
+                                          'graph-share-box-${box.key}-$held'),
+                                      left: box.rect.left - 3 - 3.0 * held,
+                                      top: box.rect.top - 3 - 3.0 * held,
+                                      width: box.rect.width + 6 + 6.0 * held,
+                                      height: box.rect.height + 6 + 6.0 * held,
+                                      child: IgnorePointer(
+                                        child: DecoratedBox(
+                                          decoration: BoxDecoration(
+                                            borderRadius: BorderRadius.circular(
+                                                t.tokens.cardRadius + 3),
+                                            border: Border.all(
+                                                color: t.personColour(colour),
+                                                width: 1.5),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
                             for (final box in layout.boxes)
                               Positioned(
                                 left: box.rect.left,

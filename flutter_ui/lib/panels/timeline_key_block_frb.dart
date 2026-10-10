@@ -507,6 +507,11 @@ class LaneKeysPainter extends CustomPainter {
   /// is set. Null everywhere else, and everything is as it was.
   final ValueListenable<int?>? hoverOf;
 
+  /// The keys other people in a shared project have selected: which key,
+  /// whose colour, and how many rings are already inside this one. Each is
+  /// drawn as a ring round the key's mark. Empty outside a shared project.
+  final List<(int, Color, int)> rings;
+
   const LaneKeysPainter({
     required this.frames,
     required this.selected,
@@ -517,6 +522,7 @@ class LaneKeysPainter extends CustomPainter {
     this.shapes,
     this.hovered,
     this.hoverOf,
+    this.rings = const [],
   }) : super(repaint: hoverOf);
 
   @override
@@ -566,6 +572,26 @@ class LaneKeysPainter extends CustomPainter {
       // left a seam down the middle of every mark (§5).
       canvas.drawPath(keyMarkPath((into, out), x, mid, half), state);
     }
+    if (rings.isEmpty) return;
+    final ring = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+    for (final (index, colour, inside) in rings) {
+      if (index < 0 || index >= frames.length) continue;
+      final x = axis.xOf(frames[index]);
+      final far = half + 3 + 3.0 * inside;
+      if (x < clip.left - far || x > clip.right + far) continue;
+      ring.color = colour;
+      canvas.drawPath(
+        Path()
+          ..moveTo(x, mid - far)
+          ..lineTo(x + far, mid)
+          ..lineTo(x, mid + far)
+          ..lineTo(x - far, mid)
+          ..close(),
+        ring,
+      );
+    }
   }
 
   @override
@@ -577,6 +603,7 @@ class LaneKeysPainter extends CustomPainter {
       old.half != half ||
       old.hovered != hovered ||
       old.hoverOf != hoverOf ||
+      !listEquals(old.rings, rings) ||
       !listEquals(old.shapes, shapes) ||
       old.axis.frames != axis.frames ||
       old.axis.width != axis.width;

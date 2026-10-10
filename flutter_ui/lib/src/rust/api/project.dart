@@ -795,21 +795,28 @@ class ProjectReference {
 
   /// Tell the others what this person is looking at: the composition open,
   /// the layers selected in it, the playhead's frame, and the pointer over
-  /// the Viewer in composition pixels. Does nothing when the project is not
-  /// shared. Latest wins, so call it as often as any of them changes.
+  /// the Viewer in composition pixels. `properties` and `keys` are the
+  /// property rows and the keyframes selected in the Timeline, by whatever
+  /// names the frontend matches its own rows with, which the engine passes
+  /// on unread. Does nothing when the project is not shared. Latest wins,
+  /// so call it as often as any of them changes.
   void sharePresence(
           {CompositionReference? comp,
           required List<LayerReference> layers,
           PlatformInt64? playhead,
           double? cursorX,
-          double? cursorY}) =>
+          double? cursorY,
+          required List<String> properties,
+          required List<String> keys}) =>
       BridgeLib.instance.api.crateApiProjectProjectReferenceSharePresence(
           that: this,
           comp: comp,
           layers: layers,
           playhead: playhead,
           cursorX: cursorX,
-          cursorY: cursorY);
+          cursorY: cursorY,
+          properties: properties,
+          keys: keys);
 
   /// Whether people outside this network can get in, while this machine
   /// hosts the project. The events carry it as it changes.

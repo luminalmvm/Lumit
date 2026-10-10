@@ -20,6 +20,7 @@ import '../state/comp_time.dart';
 import '../state/drag_payloads.dart';
 import '../state/timeline_columns.dart';
 import '../theme/theme.dart';
+import '../widgets/share_marks.dart';
 import '../widgets/controls.dart';
 import 'placeholder.dart';
 import 'timeline_extras_frb.dart';
@@ -112,6 +113,11 @@ class FoldRow extends StatelessWidget {
   final String path;
   final List<String> selectedProperties;
 
+  /// The colour of each other person in a shared project who has this row
+  /// selected. The row is tinted in the first one's and carries a bar shared
+  /// out between them.
+  final List<int> others;
+
   /// Each selected path's graph line colours, one per axis — the label text
   /// takes them so the outline names its curves (docs/07 §5).
   final Map<String, List<Color>> graphColours;
@@ -162,6 +168,7 @@ class FoldRow extends StatelessWidget {
     required this.onToggle,
     required this.onChanged,
     required this.locked,
+    this.others = const [],
     this.onSetEnabled,
     this.onAddEffect,
   });
@@ -178,6 +185,7 @@ class FoldRow extends StatelessWidget {
     final selected = selectedProperties.contains(path);
     final contains =
         !selected && selectedProperties.any((p) => isUnderPath(path, p));
+    final theirs = others.isEmpty ? null : t.personColour(others.first);
     // Selection rides on the property's *name* (docs/07 §4.3) — and on any
     // press that *acts* on the row: the stopwatch, the ◄ ◆ ►
     // navigator, a value drag. Touching a row's controls IS choosing it, and
@@ -233,11 +241,16 @@ class FoldRow extends StatelessWidget {
                 ? rowSelectionFill(t)
                 : contains
                     ? rowSelectionFill(t).withValues(alpha: 0.45)
-                    : null,
+                    : theirs?.withValues(alpha: 0.16),
             borderRadius: t.shape == ThemeShape.lantern
                 ? BorderRadius.circular(t.tokens.controlRadius)
                 : null,
           ),
+          // Someone else's row keeps their bar under this person's own
+          // selection too. Painted over the row, so it moves nothing in it.
+          foregroundDecoration: theirs == null
+              ? null
+              : TheirBar([for (final c in others) t.personColour(c)]),
           // **The trailing inset is the layer rows' own** (`outlineRowTrailing`).
           // A fold row's value cells and its render-time reading sit in the
           // columns the layer rows set, and both are laid out from the right,

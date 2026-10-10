@@ -64,6 +64,10 @@ pub struct BridgeSharePerson {
     /// Their pointer over the Viewer, in composition pixels.
     pub cursor_x: Option<f64>,
     pub cursor_y: Option<f64>,
+    /// The property rows they have selected in the Timeline and the
+    /// keyframes, as the frontend named them in [`ProjectReference::share_presence`].
+    pub properties: Vec<String>,
+    pub keys: Vec<String>,
 }
 
 /// Why sharing stopped for a guest.
@@ -225,8 +229,16 @@ fn person(project: Uuid, doc: &Document, me: u32, person: Person) -> BridgeShare
         layers,
         playhead,
         cursor,
+        properties,
+        keys,
     } = person.presence;
     let comp = comp.and_then(|id| doc.comp(id));
+    // They name rows of that composition, so they go when it does.
+    let (properties, keys) = if comp.is_some() {
+        (properties, keys)
+    } else {
+        (Vec::new(), Vec::new())
+    };
     BridgeSharePerson {
         id: person.id,
         name: person.name,
@@ -243,6 +255,8 @@ fn person(project: Uuid, doc: &Document, me: u32, person: Person) -> BridgeShare
         playhead: comp.zip(playhead).map(|(c, t)| c.frame_rate.frame_at(t)),
         cursor_x: cursor.map(|(x, _)| x),
         cursor_y: cursor.map(|(_, y)| y),
+        properties,
+        keys,
     }
 }
 
@@ -561,9 +575,13 @@ impl ProjectReference {
 
     /// Tell the others what this person is looking at: the composition open,
     /// the layers selected in it, the playhead's frame, and the pointer over
-    /// the Viewer in composition pixels. Does nothing when the project is not
-    /// shared. Latest wins, so call it as often as any of them changes.
+    /// the Viewer in composition pixels. `properties` and `keys` are the
+    /// property rows and the keyframes selected in the Timeline, by whatever
+    /// names the frontend matches its own rows with, which the engine passes
+    /// on unread. Does nothing when the project is not shared. Latest wins,
+    /// so call it as often as any of them changes.
     #[frb(sync)]
+    #[allow(clippy::too_many_arguments)]
     pub fn share_presence(
         &self,
         comp: Option<CompositionReference>,
@@ -571,6 +589,8 @@ impl ProjectReference {
         playhead: Option<i64>,
         cursor_x: Option<f64>,
         cursor_y: Option<f64>,
+        properties: Vec<String>,
+        keys: Vec<String>,
     ) -> Result<(), BridgeError> {
         let shared = SHARED.lock().map_err(|_| BridgeError::ReadFailed)?;
         let Some(sharing) = shared.get(&self.id) else {
@@ -589,6 +609,8 @@ impl ProjectReference {
                 .zip(playhead)
                 .and_then(|(c, frame)| c.frame_rate.time_of_frame(frame).ok()),
             cursor: cursor_x.zip(cursor_y),
+            properties,
+            keys,
         });
         Ok(())
     }

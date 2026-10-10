@@ -15919,6 +15919,8 @@ fn wire__crate__api__project__project_reference_share_presence_impl(
             let api_playhead = <Option<i64>>::sse_decode(&mut deserializer);
             let api_cursor_x = <Option<f64>>::sse_decode(&mut deserializer);
             let api_cursor_y = <Option<f64>>::sse_decode(&mut deserializer);
+            let api_properties = <Vec<String>>::sse_decode(&mut deserializer);
+            let api_keys = <Vec<String>>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, BridgeError>((move || {
                 let output_ok = crate::api::project::ProjectReference::share_presence(
@@ -15928,6 +15930,8 @@ fn wire__crate__api__project__project_reference_share_presence_impl(
                     api_playhead,
                     api_cursor_x,
                     api_cursor_y,
+                    api_properties,
+                    api_keys,
                 )?;
                 Ok(output_ok)
             })())
@@ -21359,6 +21363,8 @@ impl SseDecode for crate::api::share::BridgeSharePerson {
         let mut var_playhead = <Option<i64>>::sse_decode(deserializer);
         let mut var_cursorX = <Option<f64>>::sse_decode(deserializer);
         let mut var_cursorY = <Option<f64>>::sse_decode(deserializer);
+        let mut var_properties = <Vec<String>>::sse_decode(deserializer);
+        let mut var_keys = <Vec<String>>::sse_decode(deserializer);
         return crate::api::share::BridgeSharePerson {
             id: var_id,
             name: var_name,
@@ -21369,6 +21375,8 @@ impl SseDecode for crate::api::share::BridgeSharePerson {
             playhead: var_playhead,
             cursor_x: var_cursorX,
             cursor_y: var_cursorY,
+            properties: var_properties,
+            keys: var_keys,
         };
     }
 }
@@ -29798,6 +29806,8 @@ impl flutter_rust_bridge::IntoDart for crate::api::share::BridgeSharePerson {
             self.playhead.into_into_dart().into_dart(),
             self.cursor_x.into_into_dart().into_dart(),
             self.cursor_y.into_into_dart().into_dart(),
+            self.properties.into_into_dart().into_dart(),
+            self.keys.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -33997,6 +34007,8 @@ impl SseEncode for crate::api::share::BridgeSharePerson {
         <Option<i64>>::sse_encode(self.playhead, serializer);
         <Option<f64>>::sse_encode(self.cursor_x, serializer);
         <Option<f64>>::sse_encode(self.cursor_y, serializer);
+        <Vec<String>>::sse_encode(self.properties, serializer);
+        <Vec<String>>::sse_encode(self.keys, serializer);
     }
 }
 

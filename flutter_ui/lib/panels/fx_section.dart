@@ -27,6 +27,7 @@ import 'package:uuid/uuid.dart';
 
 import '../icons/icons.dart';
 import '../theme/theme.dart';
+import '../widgets/share_marks.dart';
 import '../widgets/controls.dart';
 import '../widgets/dashed_outline.dart';
 
@@ -322,6 +323,19 @@ class FxSection extends StatelessWidget {
   /// recolours the heading and rebuilds nothing above it.
   final FxPick? pick;
 
+  /// The colours of the other people in a shared project who have this
+  /// section picked, or a row inside it in hand. The heading carries a bar
+  /// of them. Empty whenever nobody has. A section that names its own rows
+  /// passes it. One that gives a [scope] has it worked out.
+  final List<int> theirs;
+
+  /// What this section's rows are called in a shared project, for a section
+  /// whose rows have no names of their own: each is `scope/#n`, by its place
+  /// in [rows]. Where the Timeline has a group for the same rows this is its
+  /// path, so someone working in that group there marks this heading. Null
+  /// for a section that names each row itself, or takes no part.
+  final String? scope;
+
   /// The twirl mark's own key — it is the only thing that folds a selectable
   /// section, so it is worth being able to point at.
   final Key? twirlKey;
@@ -380,6 +394,8 @@ class FxSection extends StatelessWidget {
     this.onContextMenu,
     this.onSelect,
     this.pick,
+    this.theirs = const [],
+    this.scope,
     this.twirlKey,
     this.dragKey,
     this.onDropped,
@@ -393,21 +409,39 @@ class FxSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
+    // Bypassed: the heading wears a dashed outline instead of the stack
+    // being dimmed (docs/15 §5).
+    final heading = enabled
+        ? _draggableHeading(t)
+        : DashedOutline(child: _draggableHeading(t));
+    // Asked for only by a section whose rows go by their place in it, so
+    // every other section builds without looking.
+    final share = scope == null ? null : ShareRows.maybeOf(context);
+    final named = share != null && share.active ? share : null;
+    final holders = named == null ? theirs : named.under(scope!);
     final column = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Bypassed: the heading wears a dashed outline instead of the stack
-        // being dimmed (docs/15 §5).
-        enabled
-            ? _draggableHeading(t)
-            : DashedOutline(child: _draggableHeading(t)),
+        if (holders.isNotEmpty)
+          DecoratedBox(
+            position: DecorationPosition.foreground,
+            decoration: TheirBar(
+              [for (final c in holders) t.personColour(c)],
+              tint: 0.12,
+            ),
+            child: heading,
+          )
+        else
+          heading,
         if (open)
-          for (final row in rows)
+          for (var i = 0; i < rows.length; i++)
             Container(
               decoration: BoxDecoration(
                   border: Border(bottom: BorderSide(color: t.hairline))),
               padding: const EdgeInsets.fromLTRB(10, 2, 10, 2),
-              child: row,
+              child: named == null
+                  ? rows[i]
+                  : named.row('$scope/#$i', rows[i]),
             ),
       ],
     );
