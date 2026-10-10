@@ -1,0 +1,25 @@
+---
+// Where Starlight puts its row of icons, the main site's bar has plain words.
+// The same list sits at the foot of the menu on a phone.
+const links = [
+  { href: "https://lumitlab.com", label: "lumitlab.com" },
+  { href: "https://github.com/luminalmvm/Lumit", label: "Source" },
+  { href: "https://discord.gg/dc3p3XC7mM", label: "Discord" },
+  { href: "https://lumitlab.com/download", label: "Download" },
+];
+---
+
+{links.map((l) => <a href={l.href}>{l.label}</a>)}
+
+<style>
+  a {
+    font-size: 0.9375rem;
+    color: var(--sl-color-white);
+    text-decoration: none;
+    white-space: nowrap;
+    transition: color 0.15s;
+  }
+  a:hover {
+    color: var(--sl-color-accent-high);
+  }
+</style>

@@ -18,9 +18,12 @@
 
   --sl-color-bg: #0b0c0e; /* surface_0 - the page */
   --sl-color-black: #0b0c0e; /* the mobile menu, the search dialog, the page frame */
-  /* The marketing header's ground once it has scrolled, with the blur below. */
-  --sl-color-bg-nav: color-mix(in srgb, #0b0c0e 80%, transparent);
-  --sl-color-bg-sidebar: #0b0c0e;
+  /* Thin enough for the light at the head of the page to show through, with
+     the blur below to keep the page under it out of the way. */
+  --sl-color-bg-nav: color-mix(in srgb, #0b0c0e 60%, transparent);
+  /* Clear, so the light at the head of the page runs behind the sidebar too.
+     Only a wide screen reads this: the menu on a phone is --sl-color-black. */
+  --sl-color-bg-sidebar: transparent;
   --sl-color-bg-inline-code: rgb(255 255 255 / 0.04);
   --sl-color-white: #eef1f2; /* text_primary */
   --sl-color-gray-1: #eef1f2; /* text_primary - Starlight's strong text */
@@ -35,17 +38,379 @@
   --sl-color-accent-high: #478a70; /* the site's hover spruce, and link text here */
   --sl-color-accent-low: #162722; /* a quarter of the spruce over surface_0 */
   --sl-color-text-accent: #478a70;
+
+  /* What Starlight has no token for. */
+  --lm-surface-1: #131517; /* surface_1 - cards */
+  --lm-radius-ctl: 2px; /* a control's corner */
+  --lm-radius-card: 4px;
+
+  /* The main site's heading scale: its section title for a page's own, and
+     the steps under it kept well apart at a regular weight. */
+  --sl-text-h1: clamp(1.875rem, 3.9vw, 2.875rem);
+  --sl-text-h2: 1.75rem;
+  --sl-text-h3: 1.3125rem;
+  --sl-text-h4: 1.0625rem;
 }
 
+/* ---------- the bar ---------- */
+
+/* The wordmark at the main site's size, then "Docs" in the kicker's face. The
+   wordmark's file has room at its left for the mark to open into, so it is
+   pulled back to stand on the sidebar's edge. */
 .site-title {
-  letter-spacing: -0.035em;
-  font-weight: 600;
+  gap: 0.625rem;
+}
+.site-title img {
+  height: 18px;
+  margin-inline-start: -12px;
+}
+.site-title::after {
+  content: "Docs";
+  font-family: var(--sl-font-mono);
+  font-size: 0.75rem;
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sl-color-gray-3);
 }
 
-/* Starlight's header hairline, matched to the marketing site's */
-.header {
+/* Starlight's header hairline, matched to the main site's. `header`, as the
+   row inside it is a `.header` too and would draw a second line. */
+header.header {
   border-bottom: 1px solid var(--sl-color-hairline);
   backdrop-filter: blur(20px);
+}
+.social-icons {
+  gap: 1.75rem;
+}
+/* The divider before a theme picker that is not there. */
+.social-icons::after {
+  content: none;
+}
+
+/* The page is a timeline too: a playhead along the top edge that follows the
+   scroll, as on the main site. CSS alone, and absent where the browser cannot
+   do it. */
+header.header::before,
+header.header::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: none;
+  pointer-events: none;
+}
+header.header::before {
+  right: 0;
+  height: 2px;
+  background: linear-gradient(to right, transparent, var(--sl-color-accent-high));
+  transform-origin: left;
+}
+header.header::after {
+  margin-left: -5px;
+  border: 5px solid transparent;
+  border-top: 7px solid var(--sl-color-accent-high);
+}
+@supports (animation-timeline: scroll()) {
+  header.header::before,
+  header.header::after {
+    display: block;
+    animation: playhead-fill linear both;
+    animation-timeline: scroll(root block);
+  }
+  header.header::after {
+    animation-name: playhead-move;
+  }
+}
+@keyframes playhead-fill {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+@keyframes playhead-move {
+  from { left: 0; }
+  to { left: 100%; }
+}
+
+/* The search field is a control, so it has a control's corner. */
+site-search button[data-open-modal] {
+  border-radius: var(--lm-radius-ctl);
+}
+@media (min-width: 50rem) {
+  site-search button[data-open-modal] {
+    background: rgb(255 255 255 / 0.03);
+  }
+  site-search dialog {
+    border-color: var(--sl-color-hairline-light);
+    border-radius: var(--lm-radius-card);
+    background: var(--lm-surface-1);
+  }
+}
+#starlight__search {
+  --pagefind-ui-border-radius: var(--lm-radius-ctl);
+}
+site-search button > kbd {
+  border-radius: var(--lm-radius-ctl);
+  font-family: var(--sl-font-mono);
+}
+
+/* The menu button on a phone, as an outlined control and not a white disc. */
+starlight-menu-button button,
+[aria-expanded="true"] > starlight-menu-button button,
+starlight-menu-button[aria-expanded="true"] button {
+  border: 1px solid var(--sl-color-hairline-light);
+  border-radius: var(--lm-radius-ctl);
+  background: transparent;
+  color: var(--sl-color-white);
+  box-shadow: none;
+}
+
+mobile-starlight-toc .toggle {
+  border-radius: var(--lm-radius-ctl);
+}
+
+/* ---------- the light at the head of every page ---------- */
+
+/* The main site's three lights (`.page-glow` in web/src/styles/global.css). */
+body::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  z-index: -1;
+  height: 620px;
+  pointer-events: none;
+  background:
+    radial-gradient(60% 100% at 18% -30%, rgb(56 81 156 / 0.5), transparent 70%),
+    radial-gradient(50% 90% at 84% -35%, rgb(45 123 137 / 0.42), transparent 70%),
+    radial-gradient(40% 70% at 55% -22%, rgb(68 154 120 / 0.3), transparent 70%);
+}
+@media print {
+  body::before {
+    display: none;
+  }
+}
+
+/* ---------- shared marks, from web/src/styles/global.css ---------- */
+
+/* The eyebrow: mono caps, muted. */
+.kicker {
+  margin: 0;
+  font-family: var(--sl-font-mono);
+  font-size: 0.75rem;
+  line-height: 1.3;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sl-color-gray-3);
+}
+/* A ruled line with ticks along it and a marker hanging from it, the way the
+   hero's timeline has. It carries a kicker, and a note at its far end. */
+.sec-rule {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.375rem 1.5rem;
+  padding: 1.125rem 0 0 0.75rem;
+  border-top: 1px solid var(--sl-color-hairline);
+}
+.sec-rule::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 5px;
+  background: repeating-linear-gradient(to right, var(--sl-color-hairline-light) 0 1px, transparent 1px 60px);
+  -webkit-mask-image: linear-gradient(to right, #000, transparent 70%);
+  mask-image: linear-gradient(to right, #000, transparent 70%);
+}
+.sec-rule::after {
+  content: "";
+  position: absolute;
+  top: -1px;
+  left: 0;
+  margin-left: -5px;
+  border: 5px solid transparent;
+  border-top: 7px solid var(--sl-color-accent-high);
+}
+.sec-no {
+  margin: 0 0 0 auto;
+  font-family: var(--sl-font-mono);
+  font-size: 0.6875rem;
+  line-height: 1.3;
+  color: var(--sl-color-gray-4);
+  font-feature-settings: "zero";
+}
+
+/* ---------- the sidebar ---------- */
+
+/* The three topics as a row of tabs, in the kicker's face, the current one
+   with the spruce tick under it. The plugin's own rules are scoped and not in
+   a layer, so these carry `.sidebar-content` to outrank them. */
+.sidebar-content ul.starlight-sidebar-topics {
+  display: flex;
+  gap: 1.25rem;
+  padding-inline: 0.5rem;
+  border-bottom: 1px solid var(--sl-color-hairline);
+}
+.sidebar-content ul.starlight-sidebar-topics::after {
+  content: none;
+}
+.sidebar-content ul.starlight-sidebar-topics li + li {
+  margin-top: 0;
+}
+.sidebar-content ul.starlight-sidebar-topics a {
+  padding: 0.5rem 0 0.75rem;
+  font-family: var(--sl-font-mono);
+  font-size: 0.75rem;
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sl-color-gray-3);
+}
+.sidebar-content ul.starlight-sidebar-topics a:is(:hover, :focus-visible) {
+  color: var(--sl-color-white);
+}
+.sidebar-content ul.starlight-sidebar-topics a.starlight-sidebar-topics-current {
+  color: var(--sl-color-white);
+  box-shadow: 0 1px 0 var(--sl-color-accent-high), inset 0 -1px 0 var(--sl-color-accent-high);
+}
+.sidebar-content ul.starlight-sidebar-topics .starlight-sidebar-topics-icon {
+  display: none;
+}
+
+/* A group's name is a kicker at the top level and a plain label below it. */
+.sidebar-content .top-level > li > details > summary .large {
+  font-family: var(--sl-font-mono);
+  font-size: 0.75rem;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sl-color-gray-3);
+}
+.sidebar-content ul ul summary .large {
+  font-size: var(--sl-text-sm);
+  font-weight: 500;
+}
+.sidebar-content .top-level > li + li {
+  margin-top: 1.25rem;
+}
+.sidebar-content ul ul li {
+  border-inline-start-color: var(--sl-color-hairline);
+}
+.sidebar-content summary .caret {
+  color: var(--sl-color-gray-4);
+}
+/* The page you are on: lit, with the tick at its edge, not a filled block. */
+.sidebar-content a[aria-current="page"],
+.sidebar-content a[aria-current="page"]:hover,
+.sidebar-content a[aria-current="page"]:focus {
+  border-radius: var(--lm-radius-ctl);
+  font-weight: 500;
+  color: var(--sl-color-white);
+  background: rgb(255 255 255 / 0.06);
+  box-shadow: inset 2px 0 0 var(--sl-color-accent-high);
+}
+
+/* "On this page" is a label for the list under it. */
+.right-sidebar-panel h2 {
+  font-family: var(--sl-font-mono);
+  font-size: 0.75rem;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sl-color-gray-3);
+}
+
+/* ---------- the page ---------- */
+
+/* The rule is over the title now, so there is none under it. */
+.content-panel + .content-panel {
+  border-top: 0;
+  padding-top: 0.25rem;
+}
+
+/* Regular weight, tight tracking: nothing on the page is heavier than the
+   copy it sits above. */
+h1#_top,
+.sl-markdown-content :is(h1, h2, h3):not(:where(.not-content *)) {
+  font-weight: 400;
+  letter-spacing: -0.03em;
+}
+h1#_top {
+  margin-top: 1.5rem;
+  line-height: 1.05;
+}
+.sl-markdown-content :is(h4, h5, h6):not(:where(.not-content *)) {
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+/* A section of a page opens on a line as well, without the ticks. */
+.sl-markdown-content .sl-heading-wrapper.level-h2 {
+  margin-top: 2.75rem;
+  padding-top: 1.75rem;
+  border-top: 1px solid var(--sl-color-hairline);
+}
+
+/* A link is the text's own colour with a line under it, and spruce in hand. */
+.sl-markdown-content a:not(:where(.not-content *)) {
+  color: var(--sl-color-white);
+  text-decoration-color: var(--sl-color-gray-5);
+  text-underline-offset: 4px;
+  transition: color 0.15s, text-decoration-color 0.15s;
+}
+.sl-markdown-content a:hover:not(:where(.not-content *)) {
+  color: var(--sl-color-accent-high);
+  text-decoration-color: var(--sl-color-accent);
+}
+
+.sl-markdown-content :not(pre) > code:not(:where(.not-content *)) {
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: var(--lm-radius-ctl);
+  color: var(--sl-color-white);
+}
+
+.expressive-code .frame pre {
+  background: var(--lm-surface-1);
+}
+
+/* A table's header row is a row of labels. */
+.sl-markdown-content :is(th, td):not(:where(.not-content *)) {
+  border-bottom-color: var(--sl-color-hairline);
+}
+.sl-markdown-content th:not(:where(.not-content *)) {
+  border-bottom-color: var(--sl-color-hairline-light);
+  font-family: var(--sl-font-mono);
+  font-size: 0.6875rem;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sl-color-gray-3);
+}
+.sl-markdown-content td:first-child:not(:where(.not-content *)) {
+  color: var(--sl-color-white);
+}
+
+/* Previous and next, as two of the main site's cards. */
+.pagination-links a {
+  border-color: var(--sl-color-hairline);
+  border-radius: var(--lm-radius-card);
+  background: var(--lm-surface-1);
+  box-shadow: none;
+  font-family: var(--sl-font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sl-color-gray-3);
+  transition: border-color 0.15s;
+}
+.pagination-links a:hover {
+  border-color: var(--sl-color-hairline-light);
+}
+.pagination-links .link-title {
+  font-family: var(--sl-font);
+  font-size: var(--sl-text-lg);
+  letter-spacing: -0.02em;
+  text-transform: none;
 }
 
 /* Starlight hands the "On this page" rail the sidebar's width plus half of
@@ -88,7 +453,7 @@ figure.example figcaption {
 .compare {
   position: relative;
   overflow: hidden;
-  border-radius: 8px;
+  border-radius: var(--lm-radius-card);
   border: 1px solid var(--sl-color-hairline);
   background: var(--sl-color-bg-inline-code);
   line-height: 0;
