@@ -86,14 +86,15 @@ Widget _body(List<Widget> children) => Padding(
 
 /// Open the Shared project window: share the open project, join somebody
 /// else's, or see who is here. [invite] is a link to open it on the Join
-/// page with, as a click on one outside Lumit brings.
+/// page with, as a click on one outside Lumit brings. [relay] is a relay to
+/// offer on the Share page, as an extension with one of its own asks.
 Future<void> showShareFrb(BuildContext context, LumitState app,
-        {String? invite}) =>
+        {String? invite, String? relay}) =>
     showLumitModal<void>(
       context: context,
       id: 'share',
       builder: (close) => _ShareDialog(
-          app: app, invite: invite, onClose: () => close(null)),
+          app: app, invite: invite, relay: relay, onClose: () => close(null)),
     );
 
 /// The two things there are to do before a project is shared.
@@ -102,9 +103,11 @@ enum _Page { share, join }
 class _ShareDialog extends StatefulWidget {
   final LumitState app;
   final String? invite;
+  final String? relay;
   final VoidCallback onClose;
 
-  const _ShareDialog({required this.app, this.invite, required this.onClose});
+  const _ShareDialog(
+      {required this.app, this.invite, this.relay, required this.onClose});
 
   @override
   State<_ShareDialog> createState() => _ShareDialogState();
@@ -189,7 +192,10 @@ class _ShareDialogState extends State<_ShareDialog> {
     }
     _name = TextEditingController(text: _prefs.shareName);
     _port = TextEditingController(text: '${keptPort ?? _defaultPort}');
-    _relay = TextEditingController(text: _prefs.shareRelay);
+    _relay = TextEditingController(text: widget.relay ?? _prefs.shareRelay);
+    // A relay that came with the request is shown, so the person sees what
+    // their edits will pass through before they share.
+    _advanced = widget.relay != null;
     _joinInvite = TextEditingController(text: widget.invite)
       ..addListener(_readInvite);
     _newInvite.addListener(_readInvite);

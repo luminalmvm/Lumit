@@ -18,6 +18,7 @@ pub mod composition;
 pub mod effect;
 pub mod export;
 pub mod expressions;
+pub mod extensions;
 pub mod folder;
 pub mod footage;
 pub mod graph;
