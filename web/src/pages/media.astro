@@ -395,11 +395,12 @@ const assets = [
     for (const name of names) name.addEventListener("click", () => pick(name.dataset.pick!));
   }
 
-  // The animated wordmark, looping: a beat on the mark, the move, the word
-  // standing, and back by the same move. The component hands over its own
-  // pose and pacing when it is `controlled` (Wordmark.astro), and its three
-  // copies here keep the one clock. Still, and on the word, for a visitor who
-  // has asked for less motion.
+  // The animated wordmark, looping: a beat on the mark, the move, and the
+  // word standing, which is what the files hold. Then it starts again from
+  // the mark. The component hands over its own pose and pacing when it is
+  // `controlled` (Wordmark.astro), and its three copies here keep the one
+  // clock. Still, and on the word, for a visitor who has asked for less
+  // motion.
   type Posed = SVGSVGElement & { wmPose?: (t: number) => void; wmTiming?: (x: number) => number };
   const marks = [...document.querySelectorAll<Posed>(".art-animated .wm")].filter((m) => m.wmPose && m.wmTiming);
   if (marks.length) {
@@ -410,14 +411,12 @@ const assets = [
       const LEAD = 700;
       const MOVE = 1258;
       const STAND = 2400;
-      const BACK = 900;
-      const LOOP = LEAD + MOVE + STAND + BACK;
+      const LOOP = LEAD + MOVE + STAND;
       const frame = (now: number) => {
         const at = now % LOOP;
         if (at < LEAD) pose(0);
         else if (at < LEAD + MOVE) pose(marks[0].wmTiming!((at - LEAD) / MOVE));
-        else if (at < LEAD + MOVE + STAND) pose(1);
-        else pose(marks[0].wmTiming!(1 - (at - LEAD - MOVE - STAND) / BACK));
+        else pose(1);
         requestAnimationFrame(frame);
       };
       requestAnimationFrame(frame);
