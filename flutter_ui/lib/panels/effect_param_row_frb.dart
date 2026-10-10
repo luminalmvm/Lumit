@@ -2177,12 +2177,69 @@ BridgeEffectValue? chainedSibling({
 
 /// The effect schema, fetched once per session and then answered from here.
 ///
-/// `listEffects` serialises every built-in's declaration and `listParameters`
-/// one effect's worth; both are static for the life of the process, yet they
-/// were being re-fetched per card per rebuild — the whole schema crossing the
-/// bridge to look up one display label. Memoised, a rebuild costs nothing here.
-List<BridgeEffectInfo>? _effectSchema;
-List<BridgeEffectInfo> cachedListEffects() => _effectSchema ??= listEffects();
+/// `listEffects` serialises every effect's declaration and `listParameters`
+/// one effect's worth, yet they were being re-fetched per card per rebuild —
+/// the whole schema crossing the bridge to look up one display label.
+/// Memoised, a rebuild costs nothing here.
+///
+/// Plugins are not there from the start, each one joins the catalogue as the
+/// start-up scan reaches it. So while [scanned] is running a plugin's name is
+/// asked for afresh every time, and nothing about it is kept.
+class EffectSchemaMemo {
+  EffectSchemaMemo({
+    this.readEffects = listEffects,
+    this.readParameters = _listParameters,
+    this.readGroups = _listParameterGroups,
+  });
+
+  /// The engine's three reads, which a test stands in for.
+  final List<BridgeEffectInfo> Function() readEffects;
+  final List<BridgeParamInfo> Function(String effect) readParameters;
+  final List<BridgeParamGroup> Function(String effect) readGroups;
+
+  static List<BridgeParamInfo> _listParameters(String effect) =>
+      listParameters(effect: effect);
+  static List<BridgeParamGroup> _listParameterGroups(String effect) =>
+      listParameterGroups(effect: effect);
+
+  List<BridgeEffectInfo>? _effects;
+  final Map<String, List<BridgeParamInfo>> _parameters = {};
+  final Map<String, List<BridgeParamGroup>> _groups = {};
+  bool _scanning = false;
+
+  /// Run the plugin [scan], then drop what was read before the plugins were
+  /// in the catalogue.
+  Future<T> scanned<T>(Future<T> Function() scan) async {
+    _scanning = true;
+    try {
+      return await scan();
+    } finally {
+      _scanning = false;
+      _effects = null;
+      _parameters.clear();
+      _groups.clear();
+    }
+  }
+
+  /// Whether [effect] may only be missing because the scan has not reached it.
+  /// The host mints a plugin's name with a prefix (`ofx:`, `clap:`, `vst3:`),
+  /// and no built-in has a colon in its own.
+  bool _arriving(String effect) => _scanning && effect.contains(':');
+
+  /// The list to look [effect] up in.
+  List<BridgeEffectInfo> effectsFor(String effect) =>
+      _arriving(effect) ? readEffects() : _effects ??= readEffects();
+
+  List<BridgeParamInfo> parameters(String effect) => _arriving(effect)
+      ? readParameters(effect)
+      : _parameters[effect] ??= readParameters(effect);
+
+  List<BridgeParamGroup> groups(String effect) => _arriving(effect)
+      ? readGroups(effect)
+      : _groups[effect] ??= readGroups(effect);
+}
+
+final EffectSchemaMemo effectSchema = EffectSchemaMemo();
 
 /// The order a category's effects are listed in wherever one is chosen from:
 /// alphabetical by the label on the row. The engine's own order is the order
@@ -2191,7 +2248,7 @@ int byEffectLabel(BridgeEffectInfo a, BridgeEffectInfo b) =>
     engineLabel(a.label).toLowerCase().compareTo(
         engineLabel(b.label).toLowerCase());
 
-/// All nine layer styles, memoised for exactly [cachedListEffects]'
+/// All nine layer styles, memoised for exactly [effectSchema]'s
 /// reason: a fixed table that was crossing the bridge every time a menu tree or
 /// a panel heading was rebuilt.
 ///
@@ -2205,17 +2262,14 @@ List<BridgeStyleInfo> styleCatalogue() => _styleSchema ??= listStyles();
 Iterable<BridgeStyleInfo> offeredStyles() =>
     styleCatalogue().where((s) => s.offered);
 
-final Map<String, List<BridgeParamInfo>> _paramSchema = {};
 List<BridgeParamInfo> cachedListParameters(String effect) =>
-    _paramSchema[effect] ??= listParameters(effect: effect);
-
-final Map<String, List<BridgeParamGroup>> _groupSchema = {};
+    effectSchema.parameters(effect);
 
 /// An effect's parameter groups (docs/08 §1.2), memoised like
 /// the parameters: the twirls and conditional runs the panel folds the flat
 /// parameter list into.
 List<BridgeParamGroup> cachedListParameterGroups(String effect) =>
-    _groupSchema[effect] ??= listParameterGroups(effect: effect);
+    effectSchema.groups(effect);
 
 /// Whether a conditional group is showing, given the values in play. A group
 /// with `visible_when` is skipped whole, members included, while the named
@@ -2394,7 +2448,7 @@ Set<String> disabledParams(
 /// heading reading `style_drop_shadow` is what leaving them out looks like.
 /// The engine makes the same join in `fx::def`, and for the same reason.
 String effectLabelOf(String name) {
-  for (final info in cachedListEffects()) {
+  for (final info in effectSchema.effectsFor(name)) {
     if (info.name == name) return engineLabel(info.label);
   }
   for (final style in styleCatalogue()) {
