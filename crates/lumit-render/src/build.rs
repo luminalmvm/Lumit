@@ -1754,14 +1754,7 @@ fn comp_walk(
                     .get(&e.effect.match_name)
                     .is_some_and(|def| def.is_image_op())
             })
-            .map(|e| {
-                let (width, height, gray) = crate::roto::matte(e.id, source_frame)?;
-                Some(crate::draw::RotoMatteDraw {
-                    width,
-                    height,
-                    gray,
-                })
-            })
+            .map(|e| roto_matte_of(e, source_frame))
             .collect()
     };
 
@@ -1789,19 +1782,7 @@ fn comp_walk(
                     .get(&e.effect.match_name)
                     .is_some_and(|def| def.is_image_op())
             })
-            .map(|e| {
-                let (width, height, kind, data, content) =
-                    crate::planes::plane(e.id, source_frame)?;
-                Some(crate::draw::PlaneDraw {
-                    instance: e.id,
-                    source_frame,
-                    content,
-                    width,
-                    height,
-                    kind,
-                    data,
-                })
-            })
+            .map(|e| plane_of(e, source_frame))
             .collect()
     };
 
@@ -3861,6 +3842,40 @@ fn graph_comp_draw(
     }
 }
 
+/// One Roto brush's matte for one **source** frame, or `None` outside the
+/// propagated span, with nothing propagated yet, or with the cache folder
+/// deleted - the effect's passthrough and never a fault (docs/impl/roto.md §5).
+fn roto_matte_of(
+    brush: &lumit_core::model::EffectInstance,
+    source_frame: i64,
+) -> Option<crate::draw::RotoMatteDraw> {
+    let (width, height, gray) = crate::roto::matte(brush.id, source_frame)?;
+    Some(crate::draw::RotoMatteDraw {
+        width,
+        height,
+        gray,
+    })
+}
+
+/// One planes-tier effect's plane for one **source** frame, or `None` outside
+/// the analysed span, before any Analyse, and wherever no pack is installed
+/// (docs/impl/addons.md §6.1).
+fn plane_of(
+    fx: &lumit_core::model::EffectInstance,
+    source_frame: i64,
+) -> Option<crate::draw::PlaneDraw> {
+    let (width, height, kind, data, content) = crate::planes::plane(fx.id, source_frame)?;
+    Some(crate::draw::PlaneDraw {
+        instance: fx.id,
+        source_frame,
+        content,
+        width,
+        height,
+        kind,
+        data,
+    })
+}
+
 /// Where one output socket of a box landed in a graph's plan: the box, the
 /// socket, and the step, `None` where it reads transparent.
 type Landed = (Uuid, std::borrow::Cow<'static, str>, Option<usize>);
@@ -3996,6 +4011,9 @@ impl GraphLower<'_> {
                 picture: source,
                 colour_tables: vec![None],
                 flare_lens_files: vec![None],
+                roto: None,
+                plane: None,
+                baked_from: None,
             })
         };
         // Set channels picks, by their place in `SET_CHANNELS_OPTIONS`.
@@ -4238,6 +4256,10 @@ impl GraphLower<'_> {
                         NODE_GRAPH => self
                             .nested_step(inst, graph, id, input, &steps, &drivers, visited, plan),
                         _ => {
+                            // What an analysis filed for the file this box
+                            // reads, looked up once: every view of the box
+                            // draws through the same matte.
+                            let (roto, plane, baked_from) = self.baked_for(graph, inst, &steps);
                             let mut run = |inst: &lumit_core::model::EffectInstance| {
                                 let (fx_ids, ops) = lumit_core::fx::resolve_stack_temporal_named(
                                     std::slice::from_ref(inst),
@@ -4272,6 +4294,9 @@ impl GraphLower<'_> {
                                         std::slice::from_ref(inst),
                                         self.t,
                                     ),
+                                    roto: roto.clone(),
+                                    plane: plane.clone(),
+                                    baked_from,
                                 });
                                 Some(plan.steps.len() - 1)
                             };
@@ -4306,6 +4331,52 @@ impl GraphLower<'_> {
             steps.push((id, OUTPUT_PORT.id.into(), step));
         }
         wired(&steps, output, INPUT_PORT.id)
+    }
+
+    /// What a background analysis filed for one box at this frame, and the
+    /// Read step it was made from: a Roto brush's matte or a planes-tier
+    /// plane, looked up by the box and the **source** frame of the footage its
+    /// picture comes from, the lookup a layer's own carriage makes.
+    ///
+    /// All `None` for every other box, and for a box whose picture comes from
+    /// no Read. Which kind of item the Read brings in is not asked, as a
+    /// layer's carriage does not ask it: only footage can be analysed, so only
+    /// footage has anything filed.
+    fn baked_for(
+        &self,
+        graph: &lumit_core::comp_graph::CompGraph,
+        inst: &lumit_core::model::EffectInstance,
+        steps: &[Landed],
+    ) -> (
+        Option<crate::draw::RotoMatteDraw>,
+        Option<crate::draw::PlaneDraw>,
+        Option<usize>,
+    ) {
+        let brush = inst.effect.match_name == lumit_core::roto::ROTO_BRUSH;
+        if !brush && lumit_core::planes::task_of(inst).is_none() {
+            return (None, None, None);
+        }
+        let found = graph.read_behind(inst.id).and_then(|(read, _)| {
+            let step = steps
+                .iter()
+                .find(|(id, port, _)| *id == read && port == lumit_core::graph::OUTPUT_PORT.id)
+                .and_then(|(_, _, step)| *step)?;
+            // Nought for an item with no frames of its own, which is what a
+            // layer of one reads too.
+            let frame = self
+                .pixels_by_layer
+                .get(&read)
+                .map_or(0, |px| px.source_frame);
+            Some((step, frame))
+        });
+        let Some((step, frame)) = found else {
+            return (None, None, None);
+        };
+        if brush {
+            (roto_matte_of(inst, frame), None, Some(step))
+        } else {
+            (None, plane_of(inst, frame), Some(step))
+        }
     }
 
     /// One Read box as the layer it behaves like (§2.1): the item at default

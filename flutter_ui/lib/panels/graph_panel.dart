@@ -34,6 +34,8 @@ import 'dart:typed_data' show Float32List;
 import 'dart:ui' show PointMode;
 
 import 'package:flutter/gestures.dart';
+import 'package:flutter/rendering.dart'
+    show BoxHitTestEntry, BoxHitTestResult, RenderStack;
 import 'package:flutter/services.dart'
     show HardwareKeyboard, KeyDownEvent, KeyEvent, LogicalKeyboardKey;
 import 'package:flutter/widgets.dart';
@@ -2742,8 +2744,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
                           ..setEntry(1, 3, _pan.dy)
                           ..setEntry(0, 0, _zoom)
                           ..setEntry(1, 1, _zoom),
-                        child: Stack(
-                          clipBehavior: Clip.none,
+                        child: GraphBoxStack(
                           children: [
                             // The named regions, under every box and taking no
                             // pointer: a wash is something to read, never
@@ -3311,6 +3312,46 @@ class _FramePainter extends CustomPainter {
       old.fill != fill ||
       old.dashed != dashed ||
       old.radius != radius;
+}
+
+/// The boxes' own stack, under the canvas's pan and zoom.
+///
+/// **In plain terms.** A stack answers the pointer only inside its own
+/// rectangle, and this one is the size of the panel while what it holds is the
+/// whole canvas. Zoomed out, panned, or in a short panel, a box drawn outside
+/// that rectangle looked right and took no press: its tick, its twirl and its
+/// value wells were dead, and a drag on a well moved the box instead. This one
+/// asks its boxes wherever the pointer is.
+///
+/// Public for the reason [GraphNodeFrame] is: all three canvases lay their
+/// boxes out the same way.
+class GraphBoxStack extends Stack {
+  const GraphBoxStack({super.key, super.children})
+      : super(clipBehavior: Clip.none);
+
+  @override
+  RenderStack createRenderObject(BuildContext context) => _RenderBoxStack(
+        alignment: alignment,
+        textDirection: textDirection ?? Directionality.maybeOf(context),
+        fit: fit,
+        clipBehavior: clipBehavior,
+      );
+}
+
+class _RenderBoxStack extends RenderStack {
+  _RenderBoxStack({
+    super.alignment,
+    super.textDirection,
+    super.fit,
+    super.clipBehavior,
+  });
+
+  @override
+  bool hitTest(BoxHitTestResult result, {required Offset position}) {
+    if (!hitTestChildren(result, position: position)) return false;
+    result.add(BoxHitTestEntry(this, position));
+    return true;
+  }
 }
 
 /// A path as 3-on, 3-off dashes — the drawing's own stroke-dasharray. Public

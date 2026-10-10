@@ -385,7 +385,7 @@ pub fn fire_effect_action(
     // track's four: one doorway, so a press is one crossing whichever effect
     // made it.
     if fx.effect.match_name == lumit_core::roto::ROTO_BRUSH {
-        return crate::api::roto::press(&layer, fx, &param);
+        return crate::api::roto::press(crate::api::roto::layer_source(&layer), fx, &param);
     }
     // Extract channels' one button, through the same doorway (docs/08 §3.97):
     // read the layer's file again and rebuild the four dropdowns from what it
@@ -471,7 +471,7 @@ pub fn fire_effect_action(
     // And the planes tier's two, on the one predicate `lumit_core::planes`
     // owns rather than a list of names here (docs/impl/addons.md §6.1).
     if lumit_core::planes::task_of(fx).is_some() {
-        return crate::api::planes::press(&layer, fx, &param);
+        return crate::api::planes::press(crate::api::roto::layer_source(&layer), fx, &param);
     }
     if matches!(fx.effect.namespace, EffectNamespace::Ofx) {
         return press_plugin(layer, effect, param, frame.unwrap_or(0));
@@ -528,9 +528,18 @@ pub(crate) fn media_source(
     layer: &LayerReference,
     media: Uuid,
 ) -> Result<(PathBuf, Fingerprint), BridgeError> {
+    media_source_in(layer.project_id, media)
+}
+
+/// [`media_source`] by the project's own id, for a caller with no layer to
+/// name it through: a box in a node graph reads a footage item directly.
+pub(crate) fn media_source_in(
+    project: Uuid,
+    media: Uuid,
+) -> Result<(PathBuf, Fingerprint), BridgeError> {
     let projects = PROJECTS.read().map_err(|_| BridgeError::ReadFailed)?;
     let project = projects
-        .get(&layer.project_id)
+        .get(&project)
         .ok_or(BridgeError::InvalidProject)?
         .clone();
     drop(projects);

@@ -33,6 +33,13 @@
 // the stroke rides inside the new instance, so effect and stroke land as one op
 // and one undo step.
 //
+// **In a node graph the strokes belong to a box.** A node graph has no layers,
+// so there is no selected layer to scribble on. The brush is the Roto brush
+// box picked on the canvas, the file is the footage wired into it, and a
+// scribble is carried onto that file through where its Read laid it in the
+// graph's frame: centred, at its own size. Everything else is the same gesture,
+// committed through the graph's own op.
+//
 // **A tap is a tap or a prompt, and the effect's own Seed from row decides
 // which.** On Strokes it is the dab it has always been. On Segment, and on the
 // frame the shot is decided from, it is a point handed to a segmentation model
@@ -53,6 +60,8 @@ import 'dart:ui' show PointMode;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
+import 'package:lumit_flutter/src/rust/api/composition.dart';
+import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/roto.dart';
 import 'package:lumit_flutter/state/tools.dart';
@@ -119,6 +128,40 @@ Color rotoStrokeColour(BridgeRotoStrokeKind kind, LumitTheme t) =>
 /// what its base frame is seeded from.
 typedef RotoTarget = ({UuidValue effect, int view, int seed});
 
+/// What a Roto tool writes on: a footage layer's stack, or a Roto brush box in
+/// a node graph. Everything the gesture asks of either is here, so the code
+/// that lays a stroke down reads the same for both.
+class _Surface {
+  final LayerReference? layer;
+  final CompositionReference? graph;
+
+  /// Screen to the file's own pixels and back.
+  final ViewerLayerMap map;
+
+  const _Surface.layer(LayerReference this.layer, this.map) : graph = null;
+  const _Surface.graph(CompositionReference this.graph, this.map)
+      : layer = null;
+
+  /// The instances a stroke is staged on, freshly read.
+  List<BridgeEffectInstance> instances() =>
+      graph?.getNodeGraphInstances() ?? layer!.getEffects();
+
+  /// One commit, one undo step: the stack's own op, or the graph's.
+  void commit(List<BridgeEffectInstance> staged) {
+    final graph = this.graph;
+    if (graph == null) {
+      layer!.setEffects(effects: staged);
+    } else {
+      graph.setNodeGraph(
+          instances: staged, wiring: graph.getNodeGraph().wiring);
+    }
+  }
+
+  BridgeRotoStatus status(UuidValue effect) =>
+      graph?.graphRotoStatus(effect: effect) ??
+      rotoStatus(layer: layer!, effect: effect);
+}
+
 /// The Roto tools over the picture.
 class ViewerRotoLayer extends StatefulWidget {
   /// Whether a Roto tool is armed. Inert otherwise.
@@ -135,6 +178,19 @@ class ViewerRotoLayer extends StatefulWidget {
   /// The Roto brush on the selected layer, or null when it has none. Found by
   /// the Viewer from the read model it already holds.
   final RotoTarget? target;
+
+  /// The node graph on screen, when the fronted composition is one, and the
+  /// box picked on its canvas. A graph has no layers, so [boxes] is empty and
+  /// [target] is null there: the brush is the picked box, found by this
+  /// overlay's own read.
+  final CompositionReference? graph;
+  final UuidValue? graphBox;
+
+  /// The fitted picture's top-left and the composition's size in pixels: what
+  /// carries a pointer into a node graph's frame, which a layer's own map
+  /// already holds for a layer.
+  final Offset origin;
+  final Size compSize;
 
   /// The picture's magnification, so a scribble width in source pixels draws
   /// the ring it would really leave.
@@ -172,6 +228,10 @@ class ViewerRotoLayer extends StatefulWidget {
     required this.uiState,
     required this.boxes,
     required this.target,
+    this.graph,
+    this.graphBox,
+    this.origin = Offset.zero,
+    this.compSize = Size.zero,
     required this.viewScale,
     required this.playheadFrame,
     required this.revision,
@@ -211,8 +271,14 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
   Float32List _boundary = Float32List(0);
 
   /// What the last read was for.
-  ({int frame, BigInt? revision, int generation, UuidValue? effect, int view})?
-      _asked;
+  ({
+    int frame,
+    BigInt? revision,
+    int generation,
+    UuidValue? effect,
+    int view,
+    bool armed,
+  })? _asked;
 
   VoidCallback? _escapeRelease;
 
@@ -253,22 +319,80 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
   LayerBox? get _target =>
       primarySelectedBox(widget.boxes, widget.uiState.selectedLayerIds);
 
+  /// The picked box's brush in a node graph, and the size of the file wired
+  /// into it. Both from [_read], and both null until a Roto brush box with
+  /// footage behind it is picked.
+  RotoTarget? _graphBrush;
+  Size? _graphFile;
+
+  /// Whether footage is wired into the picked brush at all, which is what
+  /// tells an unwired box from one whose file will not read.
+  bool _graphWired = false;
+
+  /// The brush in hand: the selected layer's, or the picked box's.
+  RotoTarget? get _brush => widget.graph == null ? widget.target : _graphBrush;
+
+  /// What a stroke would be written on, or null when there is nothing to
+  /// stroke: no layer selected, or in a node graph no brush box picked with
+  /// footage wired into it.
+  _Surface? get _surface {
+    final graph = widget.graph;
+    if (graph == null) {
+      final box = _target;
+      return box == null ? null : _Surface.layer(box.layer, box.map);
+    }
+    final file = _graphFile;
+    if (_graphBrush == null || file == null) return null;
+    // Where the Read laid the file in the graph's frame: centred, at its own
+    // size, so the file's middle sits on the frame's middle.
+    return _Surface.graph(
+      graph,
+      ViewerLayerMap(
+        px: widget.compSize.width / 2,
+        py: widget.compSize.height / 2,
+        ax: file.width / 2,
+        ay: file.height / 2,
+        sx: 1,
+        sy: 1,
+        sin: 0,
+        cos: 1,
+        origin: widget.origin,
+        viewScale: widget.viewScale,
+      ),
+    );
+  }
+
+  /// Why there is nothing to stroke on, in the words for where the user is.
+  String get _noSurface {
+    if (widget.graph == null) return l10n.rotoSelectALayer;
+    if (_graphBrush == null) return l10n.rotoPickABox;
+    return _graphWired ? l10n.planeFailedUnreadable : l10n.graphBoxNoFootage;
+  }
+
   /// The three engine answers the overlay draws from, asked for once per frame,
   /// per document revision and per propagation landing — never per rebuild
   /// (`bridge_call_budget_test` is the gate).
   void _read() {
     if (!mounted) return;
-    final box = widget.active ? _target : null;
+    final graph = widget.graph;
+    final box = widget.active && graph == null ? _target : null;
     final brush = widget.target;
     final next = (
       frame: widget.playheadFrame,
       revision: widget.revision,
       generation: widget.generation,
-      effect: brush?.effect,
+      effect: graph == null ? brush?.effect : widget.graphBox,
       view: brush?.view ?? 0,
+      // A node graph's brush is found by the read itself, so arming the tool
+      // is a reason to read there. A layer's arrives from the Viewer.
+      armed: graph != null && widget.active,
     );
     if (_asked == next) return;
     _asked = next;
+    if (graph != null) {
+      _readBox(graph, widget.active ? widget.graphBox : null);
+      return;
+    }
     if (box == null) {
       if (_strokes.isNotEmpty ||
           _prompts.isNotEmpty ||
@@ -330,6 +454,81 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
     });
   }
 
+  /// [_read] for a node graph: the picked box's brush, the file wired into it
+  /// and which frame of that file is on screen, then the same three readings
+  /// the overlay draws. One walk of the graph's boxes per frame and per
+  /// document revision, as the layer's read is one walk of its stack.
+  void _readBox(CompositionReference graph, UuidValue? picked) {
+    // Nothing picked and nothing held: a frame going by with the tool put
+    // away asks nothing and redraws nothing.
+    if (picked == null &&
+        _graphBrush == null &&
+        _sourceFrame == null &&
+        _strokes.isEmpty &&
+        _prompts.isEmpty &&
+        _boundary.isEmpty) {
+      return;
+    }
+    RotoTarget? brush;
+    Size? file;
+    var wired = false;
+    int? frame;
+    var strokes = const <BridgeRotoStroke>[];
+    var prompts = const <BridgeRotoPrompt>[];
+    int? base;
+    var boundary = Float32List(0);
+    try {
+      final instance = picked == null
+          ? null
+          : graph
+              .getNodeGraphInstances()
+              .where((e) => e.id() == picked)
+              .firstOrNull;
+      final info = instance?.getInfo();
+      if (instance != null && info != null && info.name == 'roto_brush') {
+        var view = 0;
+        var seed = 0;
+        for (final v in info.values) {
+          if (v.value case BridgeEffectValue_Choice(:final field0)) {
+            if (v.id == 'view') view = field0;
+            if (v.id == 'seed') seed = field0;
+          }
+        }
+        brush = (effect: info.id, view: view, seed: seed);
+        strokes = instance.rotoStrokes();
+        prompts = instance.rotoPrompts();
+        base = instance.rotoBaseFrame();
+        // Refused where no footage is wired into the box: the brush is still
+        // the brush, with no file yet to stroke on.
+        final source =
+            graph.graphBoxSource(effect: info.id, frame: widget.playheadFrame);
+        wired = true;
+        frame = source.frame;
+        if (frame != null) {
+          file = Size(source.width.toDouble(), source.height.toDouble());
+          if (view == rotoViewBoundary) {
+            boundary =
+                (widget.boundaryOf ?? _boundaryFromEngine)(info.id, frame);
+          }
+        }
+      }
+    } catch (_) {
+      // The box went away under the overlay, or it has no footage behind it.
+      // What was read before the refusal stands.
+    }
+    if (!mounted) return;
+    setState(() {
+      _graphBrush = brush;
+      _graphFile = file;
+      _graphWired = wired;
+      _sourceFrame = frame;
+      _strokes = strokes;
+      _prompts = prompts;
+      _baseFrame = base;
+      _boundary = boundary;
+    });
+  }
+
   /// Whether a tap on the picture seeds the model instead of laying a one-point
   /// stroke (docs/impl/addons.md §6.2).
   ///
@@ -341,7 +540,7 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
   /// that is the only frame the model is asked about. A tap anywhere else is
   /// the correction dab it has always been.
   bool get _tapSeedsTheModel {
-    final brush = widget.target;
+    final brush = _brush;
     if (brush == null || brush.seed != rotoSeedSegment) return false;
     if (widget.tool != ToolMode.rotoBrush) return false;
     final base = _baseFrame;
@@ -352,7 +551,7 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
   Widget build(BuildContext context) {
     if (!widget.active) return const SizedBox.shrink();
     final t = ThemeScope.of(context).theme;
-    final box = _target;
+    final map = _surface?.map;
     final alt = HardwareKeyboard.instance.isAltPressed;
     return Positioned.fill(
       // The hardware crosshair leads: the OS moves it at input rate
@@ -378,7 +577,7 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
                 Positioned.fill(
                   child: CustomPaint(
                     painter: RotoOverlayPainter(
-                      map: box?.map,
+                      map: map,
                       strokes: _strokes,
                       prompts: _prompts,
                       sourceFrame: _sourceFrame,
@@ -450,9 +649,9 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
   /// no extra claim. Pressures are ignored: a roto stroke says *what a region
   /// is*, and how hard the pen was pressed says nothing about that.
   void _commit(List<Offset> screenPoints) {
-    final box = _target;
+    final box = _surface;
     if (box == null) {
-      widget.state.postNotice(l10n.rotoSelectALayer);
+      widget.state.postNotice(_noSurface);
       return;
     }
     final frame = _sourceFrame;
@@ -463,7 +662,7 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
       widget.state.postNotice(l10n.rotoNoSourceFrame);
       return;
     }
-    final brush = widget.target;
+    final brush = _brush;
     if (brush == null && widget.tool == ToolMode.refineEdge) {
       // A refine stroke widens the band around an answer, and a layer with no
       // Roto brush has no answer to widen — said plainly. The brush itself is
@@ -490,18 +689,21 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
     final radius = widget.uiState.tools.rotoSize / 2;
     try {
       final UuidValue effect;
+      final layer = box.layer;
       if (brush == null) {
+        // A node graph's surface is a picked brush, so only a layer gets here.
+        if (layer == null) return;
         // First scribble on a bare layer: the Roto brush and the stroke land
         // in one commit — one op, one undo step — instead of a refusal that
         // read as the tool doing nothing.
-        effect = box.layer.rotoFirstStroke(
+        effect = layer.rotoFirstStroke(
           points: Float32List.fromList(points),
           radius: radius,
           kind: kind,
           frame: frame,
         );
       } else {
-        final staged = box.layer.getEffects();
+        final staged = box.instances();
         final instance =
             staged.where((e) => e.id() == brush.effect).firstOrNull;
         if (instance == null) return;
@@ -511,13 +713,13 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
           kind: kind,
           frame: frame,
         );
-        box.layer.setEffects(effects: staged);
+        box.commit(staged);
         effect = brush.effect;
       }
       // The strokes moved, so the held copy is stale; the document's revision
       // has moved too, which is what re-reads it.
       widget.onChanged();
-      _solveNow(box.layer, effect, frame);
+      _solveNow(box, effect, frame);
     } catch (_) {
       // The layer or the effect went away mid-scribble, or the stroke had
       // nothing in it after thinning. Neither is worth a dialogue.
@@ -535,9 +737,9 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
   /// A second tap refines the first rather than proposing a second subject:
   /// every prompt on the base frame is handed to the decoder together.
   void _prompt(Offset screenPoint) {
-    final box = _target;
+    final box = _surface;
     if (box == null) {
-      widget.state.postNotice(l10n.rotoSelectALayer);
+      widget.state.postNotice(_noSurface);
       return;
     }
     final frame = _sourceFrame;
@@ -545,12 +747,12 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
       widget.state.postNotice(l10n.rotoNoSourceFrame);
       return;
     }
-    final brush = widget.target;
+    final brush = _brush;
     if (brush == null) return;
     final at = box.map.layerOf(screenPoint);
     final subject = !HardwareKeyboard.instance.isAltPressed;
     try {
-      final staged = box.layer.getEffects();
+      final staged = box.instances();
       final instance =
           staged.where((e) => e.id() == brush.effect).firstOrNull;
       if (instance == null) return;
@@ -559,9 +761,9 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
         labels: Uint8List.fromList([subject ? 1 : 0]),
         frame: frame,
       );
-      box.layer.setEffects(effects: staged);
+      box.commit(staged);
       widget.onChanged();
-      _solveNow(box.layer, brush.effect, frame);
+      _solveNow(box, brush.effect, frame);
     } catch (_) {
       // The layer or the effect went away under the tap, or the point landed
       // somewhere the engine would not read. Neither is worth a dialogue.
@@ -574,15 +776,18 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
   /// Best-effort on the way out of a gesture that already succeeded: a quiet
   /// `false` (another job holding the slot, offline media) leaves the stroke
   /// filed and visible, with Propagate as the press that reports refusals.
-  void _solveNow(LayerReference layer, UuidValue effect, int frame) {
+  void _solveNow(_Surface on, UuidValue effect, int frame) {
     final bool started;
     try {
-      started = (widget.solveFrameOf ?? _solveFrameFromEngine)(
-          layer, effect, frame);
+      final layer = on.layer;
+      started = layer == null
+          ? on.graph!.graphRotoSolveFrame(effect: effect, frame: frame)
+          : (widget.solveFrameOf ?? _solveFrameFromEngine)(
+              layer, effect, frame);
     } catch (_) {
       return;
     }
-    if (started) _watchSolve(layer, effect);
+    if (started) _watchSolve(on, effect);
   }
 
   /// Wait for the release-time solve to land, then tell the Viewer.
@@ -592,12 +797,12 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
   /// document's revision, so the picture would stay the one banked before it
   /// unless somebody who knows says so. The effect card says so too when it is
   /// open — but a scribble must not need a panel open to show its result.
-  void _watchSolve(LayerReference layer, UuidValue effect) {
+  void _watchSolve(_Surface on, UuidValue effect) {
     _solveTimer?.cancel();
     _solveTimer = Timer.periodic(statusPoll, (timer) {
       final BridgeRotoStatus s;
       try {
-        s = rotoStatus(layer: layer, effect: effect);
+        s = on.status(effect);
       } catch (_) {
         // The layer or the effect went away under the poll.
         timer.cancel();

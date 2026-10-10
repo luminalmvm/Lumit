@@ -427,3 +427,120 @@ fn a_layer_read_as_a_matte_source_draws_its_own_plane() {
     );
     lumit_render::planes::clear();
 }
+
+/// A node graph whose picture is a red solid `size` pixels square, read
+/// through a Transform box at its defaults into a Remove background box, and
+/// that box's own id so a matte can be filed under it.
+fn graph_cutting(size: u32) -> (Arc<Document>, Uuid, Uuid) {
+    use lumit_core::comp_graph::{CompGraph, GraphEdge, GraphNode};
+
+    let red = Uuid::now_v7();
+    let mut doc = Document::new();
+    doc.items.push(ProjectItem::Solid(SolidDef {
+        id: red,
+        name: "red".into(),
+        colour: LinearColour([1.0, 0.0, 0.0, 1.0]),
+        width: size,
+        height: size,
+        extra: serde_json::Map::new(),
+    }));
+
+    let cut = lumit_core::fx::instantiate("remove_background").expect("a built-in");
+    let instance = cut.id;
+    // A box between the Read and the one that cuts, so the file is found
+    // through it rather than only beside it.
+    let pass = lumit_core::fx::instantiate("transform").expect("a built-in");
+    let (read, through, out) = (Uuid::now_v7(), pass.id, Uuid::now_v7());
+    let wire = |from: Uuid, to: Uuid| GraphEdge {
+        from,
+        from_port: "output".into(),
+        to,
+        to_port: "input".into(),
+    };
+
+    let mut comp = comp_of(Vec::new());
+    comp.graph = Some(CompGraph {
+        nodes: vec![
+            GraphNode::Read {
+                id: read,
+                item: red,
+                custom_name: None,
+            },
+            GraphNode::Fx(pass),
+            GraphNode::Fx(cut),
+            GraphNode::Output { id: out },
+        ],
+        edges: vec![
+            wire(read, through),
+            wire(through, instance),
+            wire(instance, out),
+        ],
+        layout: Vec::new(),
+        exposed: Vec::new(),
+        groups: Vec::new(),
+    });
+    let comp_id = comp.id;
+    doc.items.push(ProjectItem::Composition(comp));
+    (Arc::new(doc), comp_id, instance)
+}
+
+/// **A Remove background box in a node graph cuts by the matte of the file its
+/// picture comes from**, and lays that matte where the file's picture is.
+///
+/// A box has no layer, so nothing used to carry a matte to it: Analyse did
+/// nothing and the box passed its picture through. Here the picture is a red
+/// solid read through one box into the one that cuts, and the coverage is
+/// nothing on the left and everything on the right, as it is for the layer
+/// above.
+///
+/// The second half is the placement. A Read lays its item centred at its own
+/// size, so a solid half the frame's width sits in the middle of it, and the
+/// matte made from that solid has to sit there with it: the cut falls down the
+/// middle of the solid, which is the middle of the frame, and not down the
+/// middle of some stretched copy.
+#[test]
+fn a_box_in_a_node_graph_cuts_by_the_matte_of_the_file_behind_it() {
+    let Ok(mut r) = HeadlessRenderer::shared() else {
+        lumit_gpu::no_adapter();
+        return;
+    };
+
+    // Nothing analysed yet: the box changes no pixel.
+    lumit_render::planes::clear();
+    let (doc, comp, instance) = graph_cutting(COMP);
+    let (before, w, _) = r.render_rgba(&doc, comp, 0, 1.0).expect("the plain render");
+    assert_eq!(px(&before, w, FAR), [255, 0, 0, 255]);
+
+    publish_matte(instance);
+    let (cut, w, _) = r.render_rgba(&doc, comp, 0, 1.0).expect("the cut render");
+    assert_eq!(
+        px(&cut, w, FAR)[0],
+        0,
+        "the half the matte does not cover is cut away"
+    );
+    assert_eq!(
+        px(&cut, w, NEAR),
+        [255, 0, 0, 255],
+        "and the half it covers is the solid's own red"
+    );
+
+    // A solid half the frame wide: it sits from a quarter to three quarters of
+    // the way across, and its own left half is what goes.
+    lumit_render::planes::clear();
+    let (doc, comp, instance) = graph_cutting(COMP / 2);
+    publish_matte(instance);
+    let (placed, w, _) = r
+        .render_rgba(&doc, comp, 0, 1.0)
+        .expect("the placed render");
+    assert_eq!(
+        px(&placed, w, COMP / 2 - 8)[0],
+        0,
+        "the solid's left half is cut, where the solid is"
+    );
+    assert_eq!(
+        px(&placed, w, COMP / 2 + 8),
+        [255, 0, 0, 255],
+        "and its right half is kept"
+    );
+    lumit_render::planes::clear();
+}

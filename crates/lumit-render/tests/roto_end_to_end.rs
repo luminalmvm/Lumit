@@ -215,3 +215,89 @@ fn a_propagated_matte_cuts_the_layer_it_sits_on_and_passes_through_outside_its_s
 
     lumit_render::roto::clear();
 }
+
+/// **A Roto brush box in a node graph cuts by the matte of the file its picture
+/// comes from**, the planes tier's own test one tier along.
+///
+/// A box has no layer, so nothing used to carry a propagated matte to it and a
+/// brush in a graph passed its picture through. Here a white solid is read
+/// straight into a stroked brush box, and the matte filed under that box cuts
+/// it exactly as it cuts the layer above.
+#[test]
+fn a_brush_box_in_a_node_graph_cuts_by_the_matte_filed_under_it() {
+    use lumit_core::comp_graph::{CompGraph, GraphEdge, GraphNode};
+
+    let Ok(mut r) = HeadlessRenderer::shared() else {
+        lumit_gpu::no_adapter();
+        return;
+    };
+    lumit_render::roto::clear();
+
+    // The layer project's own solid and brush, taken off the layer and put on
+    // a canvas instead.
+    let (layered, _, instance) = project();
+    let mut doc = (*layered).clone();
+    let (white, brush) = doc
+        .items
+        .iter()
+        .find_map(|item| match item {
+            ProjectItem::Composition(c) => match c.layers[0].kind {
+                LayerKind::Solid { def } => Some((def, c.layers[0].effects[0].clone())),
+                _ => None,
+            },
+            _ => None,
+        })
+        .expect("the layer project holds one solid layer");
+    let (read, out) = (Uuid::now_v7(), Uuid::now_v7());
+    let wire = |from: Uuid, to: Uuid| GraphEdge {
+        from,
+        from_port: "output".into(),
+        to,
+        to_port: "input".into(),
+    };
+    let mut graph = comp_of("Graph", Vec::new());
+    graph.graph = Some(CompGraph {
+        nodes: vec![
+            GraphNode::Read {
+                id: read,
+                item: white,
+                custom_name: None,
+            },
+            GraphNode::Fx(brush),
+            GraphNode::Output { id: out },
+        ],
+        edges: vec![wire(read, instance), wire(instance, out)],
+        layout: Vec::new(),
+        exposed: Vec::new(),
+        groups: Vec::new(),
+    });
+    let comp = graph.id;
+    doc.items.push(ProjectItem::Composition(graph));
+    let doc = Arc::new(doc);
+
+    let (before, w, _) = r.render_rgba(&doc, comp, 0, 1.0).expect("the plain render");
+    assert_eq!(
+        px(&before, w, CUT)[0],
+        255,
+        "with nothing propagated the brush box changes no pixel"
+    );
+
+    let run =
+        lumit_render::roto::run_from_planes(COMP, COMP, 60.0, 1, &[(0, [1u8; 32], half_matte())])
+            .expect("a run");
+    lumit_render::roto::publish(instance, run);
+    let (cut, w, _) = r
+        .render_rgba(&doc, comp, 0, 1.0)
+        .expect("the matted render");
+    assert_eq!(
+        px(&cut, w, KEPT)[0],
+        255,
+        "where the matte is solid the picture is untouched"
+    );
+    assert_eq!(
+        px(&cut, w, CUT),
+        [0, 0, 0, 255],
+        "where the matte is empty the picture is cut away"
+    );
+    lumit_render::roto::clear();
+}

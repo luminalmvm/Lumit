@@ -533,6 +533,9 @@ class ViewerStage extends StatelessWidget {
                   uiState.liveRotations,
                   uiState.liveText,
                   uiState.liveTransforms,
+                  // The box picked on a node graph's canvas is what the Roto
+                  // tools stroke on there.
+                  uiState.compGraphNode,
                 ]),
                 builder: (context, _) {
                   final boxes = _boxes();
@@ -633,6 +636,13 @@ class ViewerStage extends StatelessWidget {
                           uiState: uiState,
                           boxes: boxes,
                           target: _roto(),
+                          // A node graph has no layers: the brush is the box
+                          // picked on its canvas.
+                          graph: uiState.model.isNodeGraph ? comp : null,
+                          graphBox: uiState.compGraphNode.value?.id,
+                          origin: fitted.topLeft,
+                          compSize: Size(compSize.width.toDouble(),
+                              compSize.height.toDouble()),
                           viewScale: compSize.width == 0
                               ? 1.0
                               : fitted.width / compSize.width,

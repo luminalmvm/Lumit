@@ -45,6 +45,21 @@ Double-click a Read of a composition, or a Node graph box, to open what it names
 Double-click a [Custom shader](/effects/utility/custom-shader/) box to open its inner
 graph. `Escape` comes back out.
 
+## Boxes that read a file
+
+[Remove background](/effects/utility/remove-background/),
+[Depth](/effects/utility/depth/) and the [Roto brush](/effects/utility/roto-brush/) read a
+footage file. In a node graph the file is the footage wired into the box's **Input**,
+through any number of boxes. A Switch is followed down its first socket.
+
+- **Analyse** and **Propagate** are pressed on the box or in the Node panel. The Node panel
+  shows the effect's status under its rows.
+- With no footage wired in, the press is **refused**.
+- The matte or the depth is laid where the Read lays the footage. A box between the Read
+  and this one that moves the picture does not move it.
+- The Roto brush and Refine edge tools stroke on the Roto brush box picked on the canvas.
+  A first stroke does not add the box.
+
 ## What an Input reads
 
 | The graph is | A picture Input reads | A value Input reads |

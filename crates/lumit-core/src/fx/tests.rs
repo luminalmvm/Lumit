@@ -8271,6 +8271,11 @@ fn a_vector_pair_link_is_off_by_default_and_survives_the_file() {
     assert!(!e.pair_linked("light"), "a fresh pair is unlinked");
     assert!(e.linked_pairs.is_empty());
 
+    // A scale is the one pair that starts chained: a size, not a place.
+    let transform = instantiate("transform").expect("Transform is a built-in");
+    assert_eq!(transform.linked_pairs, vec!["scale".to_owned()]);
+    assert!(!transform.pair_linked("position"));
+
     // Nothing linked: nothing written.
     let bare = serde_json::to_value(&e).expect("an instance serialises");
     assert!(

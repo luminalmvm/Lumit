@@ -313,6 +313,17 @@ pub enum GraphStep {
         colour_tables: Vec<Option<crate::colour::TableRequest>>,
         /// 1:1 with the op, as [`CompLayerDraw::flare_lens_files`] is.
         flare_lens_files: Vec<Option<String>>,
+        /// What a background analysis filed for this box at this frame: a Roto
+        /// brush's matte, or a planes-tier plane. Both describe the **file**
+        /// the box reads, which is the footage of the Read its picture comes
+        /// from ([`lumit_core::comp_graph::CompGraph::read_behind`]). `None`
+        /// on every other box, and wherever nothing has been filed.
+        roto: Option<RotoMatteDraw>,
+        plane: Option<PlaneDraw>,
+        /// That Read's own step, whose placement the baked picture takes: it
+        /// was made from the file's frame, so it is laid in the graph's frame
+        /// exactly where the file's picture is.
+        baked_from: Option<usize>,
     },
     /// Picture A laid over picture B, the node a layer stack has no word for.
     Merge {

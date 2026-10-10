@@ -1522,13 +1522,24 @@ pub fn job_for(
 }
 
 /// Every cached run a document could be holding, as warm-pass jobs: one per
-/// enabled Roto brush on a footage layer whose media has a fingerprint.
+/// enabled Roto brush on a footage layer whose media has a fingerprint, and one
+/// per brush box in a node graph, against the footage its picture comes from.
 ///
 /// One job per **instance**, because that is what a run is filed under. A
 /// footage item with no fingerprint or no resolved path is skipped: it is
 /// offline, and there is nothing to name a run with.
 #[must_use]
 pub fn warm_jobs(doc: &Document) -> Vec<RotoJob> {
+    let source_of = |media: Uuid| {
+        let footage = doc.items.iter().find_map(|i| match i {
+            lumit_core::model::ProjectItem::Footage(f) if f.id == media => Some(f),
+            _ => None,
+        })?;
+        let fingerprint = footage.media.fingerprint.as_ref()?;
+        (!footage.media.absolute_path.is_empty())
+            .then(|| (PathBuf::from(&footage.media.absolute_path), fingerprint))
+    };
+    let stroked = |fx: &EffectInstance| !fx.roto.as_ref().is_none_or(RotoBlock::is_empty);
     let mut out = Vec::new();
     for item in &doc.items {
         let lumit_core::model::ProjectItem::Composition(comp) = item else {
@@ -1538,26 +1549,21 @@ pub fn warm_jobs(doc: &Document) -> Vec<RotoJob> {
             let LayerKind::Footage { item: media, .. } = layer.kind else {
                 continue;
             };
-            let Some(footage) = doc.items.iter().find_map(|i| match i {
-                lumit_core::model::ProjectItem::Footage(f) if f.id == media => Some(f),
-                _ => None,
-            }) else {
+            let Some((path, fingerprint)) = source_of(media) else {
                 continue;
             };
-            let (Some(fingerprint), false) = (
-                footage.media.fingerprint.as_ref(),
-                footage.media.absolute_path.is_empty(),
-            ) else {
-                continue;
-            };
-            for fx in lumit_core::roto::brushes(&layer.effects) {
-                if fx.roto.as_ref().is_none_or(RotoBlock::is_empty) {
-                    continue;
-                }
-                let path = PathBuf::from(&footage.media.absolute_path);
-                if let Some(job) = job_for(fx, path, fingerprint, false) {
+            for fx in lumit_core::roto::brushes(&layer.effects).filter(|fx| stroked(fx)) {
+                if let Some(job) = job_for(fx, path.clone(), fingerprint, false) {
                     out.push(job);
                 }
+            }
+        }
+        for (fx, _, media) in comp.graph.iter().flat_map(|g| g.analysis_boxes()) {
+            if fx.effect.match_name != lumit_core::roto::ROTO_BRUSH || !stroked(fx) {
+                continue;
+            }
+            if let Some((path, fingerprint)) = source_of(media) {
+                out.extend(job_for(fx, path, fingerprint, false));
             }
         }
     }

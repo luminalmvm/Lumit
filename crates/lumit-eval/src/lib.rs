@@ -609,6 +609,7 @@ fn feed_comp_graph(
         h.update(b"graph-drivers/");
         feed_f64(h, t);
     }
+    feed_graph_analyses(h, doc, comp, graph, t, stamper);
     Some(())
 }
 
@@ -2331,13 +2332,24 @@ fn feed_roto(
     }
     let frame = i64::try_from(frame).unwrap_or(i64::MAX);
     for fx in lumit_core::roto::brushes(&layer.effects) {
-        if let Some(chain) = lumit_core::roto::frame_stamp(fx, frame) {
-            h.update(b"roto/");
-            h.update(&chain);
-            if lumit_core::roto::RotoSettings::of(fx).segments() {
-                if let Some(identity) = stamper.roto_identity(fx.id, frame) {
-                    h.update(&identity);
-                }
+        feed_brush(h, fx, frame, stamper);
+    }
+}
+
+/// One Roto brush's stamp at one source frame: [`feed_roto`]'s body, which a
+/// brush in a node graph is named by as well.
+fn feed_brush(
+    h: &mut blake3::Hasher,
+    fx: &lumit_core::model::EffectInstance,
+    frame: i64,
+    stamper: &dyn SourceStamper,
+) {
+    if let Some(chain) = lumit_core::roto::frame_stamp(fx, frame) {
+        h.update(b"roto/");
+        h.update(&chain);
+        if lumit_core::roto::RotoSettings::of(fx).segments() {
+            if let Some(identity) = stamper.roto_identity(fx.id, frame) {
+                h.update(&identity);
             }
         }
     }
@@ -2368,17 +2380,69 @@ fn feed_planes(
     }
     let frame = i64::try_from(frame).unwrap_or(i64::MAX);
     for fx in lumit_core::planes::analyses(&layer.effects) {
-        let (Some(task), Some(stamp)) = (
-            lumit_core::planes::task_of(fx),
-            lumit_core::planes::frame_stamp(fx, frame),
-        ) else {
+        feed_plane(h, fx, frame, stamper);
+    }
+}
+
+/// One planes-tier effect's stamp at one source frame: [`feed_planes`]'s body,
+/// which a box in a node graph is named by as well.
+fn feed_plane(
+    h: &mut blake3::Hasher,
+    fx: &lumit_core::model::EffectInstance,
+    frame: i64,
+    stamper: &dyn SourceStamper,
+) {
+    let (Some(task), Some(stamp)) = (
+        lumit_core::planes::task_of(fx),
+        lumit_core::planes::frame_stamp(fx, frame),
+    ) else {
+        return;
+    };
+    h.update(b"planes/");
+    h.update(&stamp);
+    if let Some(identity) = stamper.planes_identity(task, fx.id) {
+        h.update(&identity);
+    }
+}
+
+/// The stamps of what a background analysis filed for a node graph's boxes
+/// (docs/impl/roto.md §5, docs/impl/addons.md §6.1).
+///
+/// A Roto brush or a planes-tier box draws through a picture the document does
+/// not contain, exactly as it does on a layer, so the frame's name needs the
+/// same two terms. What differs is whose frames they describe: a box has no
+/// layer, so it reads the footage its picture comes from
+/// ([`lumit_core::comp_graph::CompGraph::read_behind`]), and the stamp is made
+/// at that footage's source frame.
+///
+/// Emits nothing for a graph with no such box, which is every graph written
+/// before this existed.
+fn feed_graph_analyses(
+    h: &mut blake3::Hasher,
+    doc: &Document,
+    comp: &Composition,
+    graph: &lumit_core::comp_graph::CompGraph,
+    t: f64,
+    stamper: &dyn SourceStamper,
+) {
+    for (fx, read, item) in graph.analysis_boxes() {
+        let Some(layer) = doc
+            .item(item)
+            .and_then(|i| lumit_core::comp_graph::read_layer(read, i, comp))
+        else {
             continue;
         };
-        h.update(b"planes/");
-        h.update(&stamp);
-        if let Some(identity) = stamper.planes_identity(task, fx.id) {
-            h.update(&identity);
+        if !matches!(layer.kind, LayerKind::Footage { .. }) {
+            continue;
         }
+        // Unprobed media has no frame to name yet; the Read's own arm has
+        // already made the whole key unknowable in that case.
+        let Some((_, frame)) = stamper.stamp(item, layer.source_time_at(t), false) else {
+            continue;
+        };
+        let frame = i64::try_from(frame).unwrap_or(i64::MAX);
+        feed_brush(h, fx, frame, stamper);
+        feed_plane(h, fx, frame, stamper);
     }
 }
 

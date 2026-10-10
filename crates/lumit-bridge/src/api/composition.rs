@@ -1978,7 +1978,7 @@ impl CompositionReference {
     }
 
     #[frb(ignore)]
-    fn document(&self) -> Result<std::sync::Arc<lumit_core::Document>, BridgeError> {
+    pub(crate) fn document(&self) -> Result<std::sync::Arc<lumit_core::Document>, BridgeError> {
         let proj = self.project()?;
         let proj = proj.read().map_err(|_| BridgeError::ReadFailed)?;
         Ok(proj.store.snapshot())
@@ -3465,7 +3465,7 @@ impl CompositionReference {
     /// This composition's graph, or [`BridgeError::InvalidComp`] for a comp
     /// that is a layer stack: there is no graph on one to read or write.
     #[frb(ignore)]
-    fn graph_of<'a>(
+    pub(crate) fn graph_of<'a>(
         &self,
         doc: &'a lumit_core::Document,
     ) -> Result<&'a lumit_core::comp_graph::CompGraph, BridgeError> {
