@@ -22,7 +22,8 @@ import 'package:provider/provider.dart';
 
 import '../icons/icons.dart';
 import '../l10n/strings.dart';
-import '../state/comp_time.dart' show sampledScalar, timeOfFrame;
+import '../state/comp_time.dart'
+    show sampledExpression, sampledScalar, timeOfFrame;
 import '../state/layer_bounds.dart' show shapeContentsRect, textLayerBounds;
 import '../shell/tool_bar_frb.dart';
 import '../state/share.dart';
@@ -247,8 +248,14 @@ class ViewerStage extends StatelessWidget {
     // The exact comp time, asked for only once a keyed channel needs it: a
     // comp with nothing animated pays for no frame conversion at all.
     late final at = timeOfFrame(comp, uiState.playheadFrame.value);
-    double read(BridgeScalar s) =>
-        s is BridgeScalar_Static ? s.field0 : sampledScalar(s, at);
+    double read(BridgeScalar s, LayerReference layer) => switch (s) {
+          BridgeScalar_Static(:final field0) => field0,
+          // An expression needs the layer it runs on, or the box stays behind
+          // while the picture moves.
+          BridgeScalar_Expression() =>
+            sampledExpression(s, at, layer, revision),
+          _ => sampledScalar(s, at),
+        };
 
     final out = <LayerBox>[];
     for (final entry in model.heldLayers) {
@@ -263,19 +270,19 @@ class ViewerStage extends StatelessWidget {
       final tf = uiState.liveTransforms.value[entry.layer.internallayerId] ??
           entry.info.transform;
       final positionStill = isStill(tf.positionX) && isStill(tf.positionY);
-      final rotation = read(tf.rotation);
+      final rotation = read(tf.rotation, entry.layer);
       final live = uiState.liveText.value[entry.layer.internallayerId];
       final id = entry.layer.internallayerId;
       out.add(LayerBox(
         layer: entry.layer,
         id: id,
         map: ViewerLayerMap.of(
-          positionX: read(tf.positionX),
-          positionY: read(tf.positionY),
-          anchorX: read(tf.anchorX),
-          anchorY: read(tf.anchorY),
-          scaleXPercent: read(tf.scaleX),
-          scaleYPercent: read(tf.scaleY),
+          positionX: read(tf.positionX, entry.layer),
+          positionY: read(tf.positionY, entry.layer),
+          anchorX: read(tf.anchorX, entry.layer),
+          anchorY: read(tf.anchorY, entry.layer),
+          scaleXPercent: read(tf.scaleX, entry.layer),
+          scaleYPercent: read(tf.scaleY, entry.layer),
           rotationDegrees: rotation,
           origin: fitted.topLeft,
           viewScale: viewScale,
