@@ -78,6 +78,16 @@ r.addEventListener("input",set);set()})})`,
       // with its own list underneath. There is no `sidebar` option here on
       // purpose - the plugin below owns it, and Starlight refuses both at once.
       plugins: [
+        // Has to come before the topics plugin, so its middleware runs first
+        // and still sees the whole sidebar (src/fullSidebar.ts).
+        {
+          name: "lumit-full-sidebar",
+          hooks: {
+            "config:setup"({ addRouteMiddleware }) {
+              addRouteMiddleware({ entrypoint: "./src/fullSidebar.ts", order: "pre" });
+            },
+          },
+        },
         starlightSidebarTopics(
           [
             // Read in order, once: install it, learn the shape of a

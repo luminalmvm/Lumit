@@ -43,6 +43,15 @@
   --lm-surface-1: #131517; /* surface_1 - cards */
   --lm-radius-ctl: 2px; /* a control's corner */
   --lm-radius-card: 4px;
+  /* The application's label colours (flutter_ui/lib/theme/theme.dart, `_labelSet`). */
+  --label-azure: #4aa3e0;
+  --label-amber: #e0a33c;
+  --label-violet: #a06ce0;
+  --label-mint: #46c98e;
+  --label-teal: #3cc9c0;
+  --label-indigo: #6673e6;
+  --label-magenta: #d45cb8;
+  --label-coral: #e0704a;
 
   /* The main site's heading scale: its section title for a page's own, and
      the steps under it kept well apart at a regular weight. */
@@ -238,6 +247,75 @@ body::before {
   line-height: 1.3;
   color: var(--sl-color-gray-4);
   font-feature-settings: "zero";
+}
+.lede {
+  max-width: 38.75rem;
+  line-height: 1.5;
+  color: var(--sl-color-gray-3);
+}
+/* A link that reads as the next step: mono, with an arrow that moves. */
+.sl-markdown-content a.go,
+.go {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--sl-font-mono);
+  font-size: 0.8125rem;
+  color: var(--sl-color-gray-2);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+.go::after {
+  content: "\2192";
+  transition: transform 0.2s;
+}
+.sl-markdown-content a.go:hover,
+.go:hover {
+  color: var(--sl-color-white);
+}
+.go:hover::after {
+  transform: translateX(3px);
+}
+/* A card that lights under the pointer: its label colour runs along the top
+   edge and lights the corner. */
+.lit {
+  position: relative;
+  overflow: hidden;
+}
+.lit::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  z-index: 1;
+  height: 2px;
+  background: var(--c, var(--sl-color-accent-high));
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.3s ease-out;
+}
+.lit::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(70% 90% at 0% 0%, color-mix(in srgb, var(--c, var(--sl-color-accent-high)) 12%, transparent), transparent 70%);
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+}
+.lit:hover::before,
+.lit:focus-visible::before {
+  transform: scaleX(1);
+}
+.lit:hover::after,
+.lit:focus-visible::after {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lit::before,
+  .lit::after,
+  .go::after {
+    transition: none;
+  }
 }
 
 /* ---------- the sidebar ---------- */
