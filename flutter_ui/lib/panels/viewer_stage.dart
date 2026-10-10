@@ -35,6 +35,7 @@ import '../widgets/controls.dart';
 import 'viewer_anchor.dart';
 import 'viewer_camera.dart';
 import 'viewer_dropper_layer.dart';
+import 'viewer_effect_points.dart';
 import 'viewer_gizmo.dart';
 import 'viewer_layer_map.dart';
 import 'viewer_overlays.dart';
@@ -759,6 +760,20 @@ class ViewerStage extends StatelessWidget {
                 },
               ),
             ),
+            // Where the selected effects' points are, as the anchor is shown
+            // for a selected layer. A mark like the layer controls, so the
+            // same switch puts it away.
+            if (wireframes)
+              ViewerEffectPoints(
+                comp: comp,
+                uiState: uiState,
+                fitted: fitted,
+                compSize: Size(
+                  compSize.width.toDouble(),
+                  compSize.height.toDouble(),
+                ),
+                colour: t.accent,
+              ),
             // The region of interest: the outline whenever one is set,
             // and — only while armed — the drag that sweeps a new one. Above
             // the layer controls for the same reason the Zoom tool is: while a

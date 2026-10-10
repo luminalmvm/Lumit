@@ -2583,6 +2583,11 @@ class EffectStackEditor {
   /// unaffected: [write] still commits the one parameter it is given.
   final Map<(UuidValue, String), BridgeEffectValue> _staged = {};
 
+  /// The same values, published while a drag is in flight, so the Viewer's
+  /// point marks move with the picture and not on release. Empty otherwise.
+  static final ValueNotifier<Map<(UuidValue, String), BridgeEffectValue>>
+      staging = ValueNotifier(const {});
+
   /// Roughly one preview render per 20 ms, so a fast drag cannot outrun the
   /// renderer and queue up work it will only throw away — but the tick that
   /// lands inside the interval is *held*, not dropped, so the pointer's last
@@ -2638,6 +2643,7 @@ class EffectStackEditor {
     required double scale,
   }) {
     _staged[(effect, param)] = value;
+    staging.value = Map.of(_staged);
     // A group header's drag stages without a live preview render: the
     // preview overlay stands a stack in for the LAYER's own, and a header's
     // stack is not that — the picture would blur the carrier alone. The row
@@ -2696,11 +2702,15 @@ class EffectStackEditor {
       // Someone else edited the stack mid-drag. Drop ours and re-read.
     }
     _staged.clear();
+    staging.value = const {};
   }
 
   /// Forget any drag in progress — a cancelled gesture.
   void clear() {
     _throttle.cancel();
+    // Told once this call is over: it runs from `dispose`, where nothing may
+    // be asked to rebuild.
+    if (_staged.isNotEmpty) Future.microtask(() => staging.value = const {});
     _staged.clear();
   }
 }
