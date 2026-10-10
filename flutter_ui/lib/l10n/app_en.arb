@@ -9736,9 +9736,9 @@
   "@aeShapeContentsNotMapped": {
     "description": "Import report row reason, lower case. A shape layer's paths, fills and strokes are a later stage of the importer."
   },
-  "aeTextStylingNotMapped": "the words, size and fill colour imported; the rest of the styling did not",
+  "aeTextStylingNotMapped": "the text imported, but not its animators, path, tsume, fully justified last line or changing source text",
   "@aeTextStylingNotMapped": {
-    "description": "Import report row reason, lower case. A text layer arrives readable but not fully styled."
+    "description": "Import report row reason, lower case. A text layer arrived with its font and styling, but used at least one thing Lumit's text has no place for: text animators, text on a path, tsume, a justified last line, or source text that changes over time."
   },
   "aeLightKindApproximated": "a {aeKind} light has no equivalent — imported as the nearest kind",
   "@aeLightKindApproximated": {
