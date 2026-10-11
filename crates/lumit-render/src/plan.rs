@@ -630,14 +630,36 @@ pub fn collect_comp_jobs(
                         cuts: Vec::new(),
                     })
                 };
-                let Some(mut job) = clip_job(lt, false) else {
+                let live = clip_job(lt, false);
+                let in_gap = live.is_none();
+                // A layer in a gap now may show a clip at a moment a temporal
+                // effect above builds it again at, and a job is the only
+                // thing a clip's pixels travel in. So the first such clip
+                // stands as the job, and the frame's own moment is filed as
+                // the gap it is, which is how the builder knows to draw
+                // nothing here.
+                let stand_in = || {
+                    // A Posterize-held layer keeps what it holds.
+                    let held = sample_times[idx] != t;
+                    let mut moments = layer_moments[idx].iter().filter(|_| !held);
+                    moments.find_map(|&tau| {
+                        clip_job(
+                            lumit_core::time::layer_time(tau, layer.start_offset.0),
+                            true,
+                        )
+                    })
+                };
+                let Some(mut job) = live.or_else(stand_in) else {
                     continue;
                 };
+                if in_gap {
+                    job.cuts.push(Cut::Moment(0.0, None));
+                }
                 // Neighbour frames for a temporal effect stack, as a Footage
                 // layer's are, through whichever clip is live then. A clip of
                 // this job's footage is one more frame of it, and any other
                 // is a job of its own. A gap is no neighbour.
-                if lumit_core::fx::stack_is_temporal(&layer.effects, layer.switches.fx) {
+                if !in_gap && lumit_core::fx::stack_is_temporal(&layer.effects, layer.switches.fx) {
                     let window = lumit_core::fx::stack_temporal_window(
                         &layer.effects,
                         layer.switches.fx,

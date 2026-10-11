@@ -1384,6 +1384,12 @@ fn comp_walk(
     // where the planner fetched it.
     let at_moment = pixels_at_moment(doc, comp, t_comp, frame_t, pixels_by_layer);
     let pixels_by_layer = at_moment.as_ref().unwrap_or(pixels_by_layer);
+    // A Sequence layer in a gap now draws nothing, and may still be in the
+    // map for a clip it shows a frame away. `fetched` keeps it, for the
+    // neighbours a temporal effect on an adjustment layer builds.
+    let fetched = pixels_by_layer;
+    let shown = without_gaps(comp, fetched);
+    let pixels_by_layer = shown.as_ref().unwrap_or(fetched);
     let in_span = |l: &lumit_core::model::Layer| {
         t_comp >= l.in_point.0.to_f64() && t_comp < l.out_point.0.to_f64()
     };
@@ -3512,7 +3518,7 @@ fn comp_walk(
                             idx,
                             t_comp,
                             frame_t,
-                            pixels_by_layer,
+                            fetched,
                             visited,
                             clone_number,
                         )
@@ -5196,6 +5202,29 @@ fn pixels_at_moment<'a>(
     out
 }
 
+/// `pixels_by_layer` without the Sequence layers of `comp` that are in a gap
+/// at the frame's own time. The planner fetches such a layer for the clip it
+/// shows at another moment, and files the frame's own moment as a gap
+/// ([`crate::decode::Cut::Moment`]). `None` when there are none, which is
+/// nearly always, so nothing is copied.
+fn without_gaps<'a>(
+    comp: &lumit_core::model::Composition,
+    pixels_by_layer: &std::collections::HashMap<uuid::Uuid, &'a CompLayerPixels>,
+) -> Option<std::collections::HashMap<uuid::Uuid, &'a CompLayerPixels>> {
+    let mut out = None;
+    for layer in &comp.layers {
+        let in_gap = pixels_by_layer.get(&layer.id).is_some_and(|lp| {
+            let mut moments = lp.shutter.iter();
+            moments.any(|(offset, clip)| *offset == 0.0 && clip.is_none())
+        });
+        if in_gap {
+            let out = out.get_or_insert_with(|| pixels_by_layer.clone());
+            out.remove(&layer.id);
+        }
+    }
+    out
+}
+
 /// Every box of the node graphs `effects` apply, graphs nested in them
 /// included, each with one frame of its own comp in seconds. A graph's Read
 /// of footage is filed under its box. `seen` stops a graph that applies
@@ -6710,6 +6739,47 @@ mod render_below_at_tests {
         assert!(
             jobs.iter().any(|j| j.layer == next.id),
             "the shot after the cut is planned for the neighbour it is in"
+        );
+        // The same for a Sequence layer in a gap now whose clip starts on the
+        // next frame. The clip is fetched for that frame and drawn in it, and
+        // nothing of it is drawn in this one or in the gap a frame back.
+        let LayerKind::Footage { item } = footage.kind else {
+            panic!("a footage layer");
+        };
+        let at = |n, d| Rational::new(n, d).unwrap();
+        let mut gap = footage.clone();
+        gap.id = Uuid::now_v7();
+        gap.kind = LayerKind::Sequence {
+            clips: vec![lumit_core::sequence::Clip::new(
+                lumit_core::sequence::ClipSource::Footage(item),
+                at(0, 1),
+                at(94, 10),
+                at(6, 10),
+                at(94, 10),
+            )],
+        };
+        let gap_id = gap.id;
+        let cut = comp_with(10, vec![adjust.clone(), gap]);
+        let jobs = crate::plan_comp_frame(&doc, &cut, 0.5, crate::Quality::default(), &probes);
+        let lp = decoded(jobs.first().expect("the clip after the gap is planned"));
+        let pixels: HashMap<Uuid, &CompLayerPixels> = [(gap_id, &lp)].into_iter().collect();
+        let mut v = vec![cut.id];
+        let draws = build_comp_draws(
+            &std::sync::Arc::new(doc.clone()),
+            &cut,
+            0.5,
+            &pixels,
+            &mut v,
+        );
+        assert_eq!(draws.len(), 1, "a layer in a gap draws nothing");
+        assert_eq!(
+            draws[0]
+                .flow_below
+                .iter()
+                .map(|(o, below, ..)| (*o, below.len()))
+                .collect::<Vec<_>>(),
+            vec![(-1, 0), (1, 1)],
+            "the clip after the gap is in the neighbour it starts in"
         );
         let comp = comp_with(10, vec![adjust, footage]);
 

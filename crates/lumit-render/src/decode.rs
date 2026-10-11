@@ -116,6 +116,8 @@ pub enum Cut {
     Neighbour(i32, CompJob),
     /// The layer at a moment a temporal effect above builds it again at, by
     /// [`CompJob::shutter`]'s offset. `None` in a gap, where it shows nothing.
+    /// Offset zero is the frame's own moment, filed as a gap when the job is
+    /// there only for a clip the layer shows at another.
     Moment(f64, Option<CompJob>),
 }
 
