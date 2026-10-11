@@ -2331,7 +2331,7 @@ void main() {
       expect(consumer.getMatte(), isNull);
       await tester.tap(find.byKey(ValueKey<String>('tl-matte-$id')));
       await tester.pumpAndSettle();
-      // Numbered by place in the composition since item 6.13.
+      // The entry leads with the layer's number, in a text of its own.
       await tester.tap(find.textContaining('Matte source').last);
       await tester.pumpAndSettle();
 

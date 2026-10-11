@@ -171,8 +171,7 @@ void main() {
       await tester.tap(
           find.byKey(ValueKey<String>('tl-parent-${child.internallayerId}')));
       await tester.pumpAndSettle();
-      // Numbered by place in the composition since item 6.13, so the entry
-      // reads "1. Adjustment" rather than the bare name.
+      // The entry leads with the layer's number, in a text of its own.
       await tester.tap(find.textContaining(parent.getName()).last);
       await tester.pumpAndSettle();
 

@@ -4218,6 +4218,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                           child: Outline(
                                             comp: comp,
                                             rows: rows,
+                                            stack: ui.model.heldLayers,
                                             vScroll: _vOutline,
                                             viewport: box.maxHeight,
                                             onOpenSequence: _openLayerView,

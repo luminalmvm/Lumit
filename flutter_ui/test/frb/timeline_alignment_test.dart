@@ -1041,7 +1041,7 @@ void main() {
     });
 
     /// 10d-ter. **The compose columns start at their content**: the
-    /// drawing's 84 / 84 / 64 faces, and — with no matte set anywhere in the
+    /// drawing's 84 faces, and — with no matte set anywhere in the
     /// comp — nothing else. They had been 118 / 112 / 96, which is
     /// slack no picker ever used; then the matte column kept the mode toggles'
     /// 28 whether or not they were drawn, which read as a hole between the
@@ -1053,13 +1053,14 @@ void main() {
       p.uiState.model.refresh();
       await mount(tester, p);
 
-      expect((matteFaceWidth, blendCellWidth, parentCellWidth), (84.0, 84, 64),
-          reason: 'the drawing\'s dropdown faces');
+      expect((matteFaceWidth, blendCellWidth, parentCellWidth), (84.0, 84, 84),
+          reason: 'the drawing\'s dropdown face, and the parent\'s is the '
+              'matte\'s since it names a layer by number and name too');
       expect(composeGroupWidth, 84 + cellGap + 84,
           reason: 'the compose group at rest is the matte and the blend and '
               'the gap between — no room held back for toggles nobody has '
               'asked for');
-      expect(parentGroupWidth, 64,
+      expect(parentGroupWidth, 84,
           reason: 'and the parent picker is a cluster of its own, so '
               "the bottom bar's Parent toggle hides it and nothing else");
       expect(composeGroupWidth + groupDividerWidth + parentGroupWidth,
@@ -1067,8 +1068,8 @@ void main() {
           reason: 'the three faces together are narrower than the 334 that '
               'shipped');
 
-      // **The faces themselves are 84 / 84 / 64** (owner, 2026-08-24): a
-      // dropdown never swells past the width the drawing gives it.
+      // **The faces themselves are 84 each**: a dropdown never swells past
+      // the width it is given.
       for (final (cell, width) in [
         ('matte', matteFaceWidth),
         ('blend', blendCellWidth),
