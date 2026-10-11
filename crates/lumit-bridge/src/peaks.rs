@@ -15,7 +15,9 @@
 //!
 //! The memory is keyed by **file path**, not by layer or by item: two layers
 //! cut from the same music summarise it once between them, which is exactly
-//! the case a music video hits on every cut. It is bounded by bytes, and the
+//! the case a music video hits on every cut. With the path goes which of the
+//! file's audio streams are summarised, since two layers that sound different
+//! streams of one recording draw different waves. It is bounded by bytes, and the
 //! least recently asked-for entry is dropped when a new one will not fit
 //! (docs/14 §5, budgeted allocations).
 //!
@@ -27,7 +29,7 @@
 //! (docs/14 §3).
 
 #[cfg(feature = "media")]
-use std::path::{Path, PathBuf};
+use lumit_media::SoundSource;
 #[cfg(feature = "media")]
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -63,7 +65,7 @@ const MAX_BYTES: usize = 96 * 1024 * 1024;
 
 #[cfg(feature = "media")]
 struct PeakEntry {
-    path: PathBuf,
+    sound: SoundSource,
     pyramid: Arc<PeakPyramid>,
     /// When this entry was last asked for, on the cache's own counter.
     used: u64,
@@ -82,22 +84,22 @@ fn cache() -> &'static Mutex<PeakCache> {
     CACHE.get_or_init(|| Mutex::new(PeakCache::default()))
 }
 
-/// This file's summary: from memory, else from its peak file, else built by
+/// This sound's summary: from memory, else from its peak file, else built by
 /// decoding the file through once (a stretch at a time, never the whole of
 /// it in hand) and written to a peak file for next time. `None` when the file
 /// cannot be decoded (a missing path, a video with no audio stream), which a
 /// lane draws as no waveform at all rather than as an error.
 #[cfg(feature = "media")]
-pub(crate) fn pyramid_for(path: &Path) -> Option<Arc<PeakPyramid>> {
+pub(crate) fn pyramid_for(sound: &SoundSource) -> Option<Arc<PeakPyramid>> {
     if let Ok(mut held) = cache().lock() {
         held.tick = held.tick.wrapping_add(1);
         let tick = held.tick;
-        if let Some(entry) = held.entries.iter_mut().find(|e| e.path == path) {
+        if let Some(entry) = held.entries.iter_mut().find(|e| e.sound == *sound) {
             entry.used = tick;
             let pyramid = Arc::clone(&entry.pyramid);
             // A pyramid grows when a lane first zooms right in on it, so the
             // budget is held to on a hit as well as on a miss.
-            held.trim(path);
+            held.trim(sound);
             return Some(pyramid);
         }
     }
@@ -105,7 +107,7 @@ pub(crate) fn pyramid_for(path: &Path) -> Option<Arc<PeakPyramid>> {
     // Nothing held while the file is read or FFmpeg runs. The peak files live
     // beside the frame indexes: both describe the file and not the project.
     let pyramid = Arc::new(lumit_audio::peaks::load_or_build(
-        path,
+        sound,
         PEAK_RATE,
         lumit_project::media_index_dir().as_deref(),
     )?);
@@ -113,13 +115,13 @@ pub(crate) fn pyramid_for(path: &Path) -> Option<Arc<PeakPyramid>> {
     if let Ok(mut held) = cache().lock() {
         held.tick = held.tick.wrapping_add(1);
         let tick = held.tick;
-        held.entries.retain(|e| e.path != path);
+        held.entries.retain(|e| e.sound != *sound);
         held.entries.push(PeakEntry {
-            path: path.to_path_buf(),
+            sound: sound.clone(),
             pyramid: Arc::clone(&pyramid),
             used: tick,
         });
-        held.trim(path);
+        held.trim(sound);
     }
     Some(pyramid)
 }
@@ -130,7 +132,7 @@ impl PeakCache {
     /// one for `keep`: it was just asked for, and on a machine where one file
     /// alone breaks the budget, dropping it would mean fetching it again on
     /// the very next paint.
-    fn trim(&mut self, keep: &Path) {
+    fn trim(&mut self, keep: &SoundSource) {
         while self.entries.len() > MAX_ENTRIES
             || self
                 .entries
@@ -143,7 +145,7 @@ impl PeakCache {
                 .entries
                 .iter()
                 .enumerate()
-                .filter(|(_, e)| e.path != keep)
+                .filter(|(_, e)| e.sound != *keep)
                 .min_by_key(|(_, e)| e.used)
                 .map(|(i, _)| i)
             else {
@@ -182,7 +184,7 @@ const MAX_SPECTRA_BYTES: usize = 32 * 1024 * 1024;
 
 #[cfg(feature = "media")]
 struct SpectraEntry {
-    path: PathBuf,
+    sound: SoundSource,
     grid: Arc<lumit_audio::spectra::Spectrogram>,
     used: u64,
 }
@@ -200,22 +202,24 @@ fn spectra_cache() -> &'static Mutex<SpectraCache> {
     CACHE.get_or_init(|| Mutex::new(SpectraCache::default()))
 }
 
-/// This file's spectrogram, decoding and building it on the first ask —
+/// This sound's spectrogram, decoding and building it on the first ask —
 /// the same look-up/decode/store discipline as [`pyramid_for`], with the
 /// same rule about the lock: never held across the decode (docs/14 §3).
 #[cfg(feature = "media")]
-pub(crate) fn spectrogram_for(path: &Path) -> Option<Arc<lumit_audio::spectra::Spectrogram>> {
+pub(crate) fn spectrogram_for(
+    sound: &SoundSource,
+) -> Option<Arc<lumit_audio::spectra::Spectrogram>> {
     if let Ok(mut held) = spectra_cache().lock() {
         held.tick = held.tick.wrapping_add(1);
         let tick = held.tick;
-        if let Some(entry) = held.entries.iter_mut().find(|e| e.path == path) {
+        if let Some(entry) = held.entries.iter_mut().find(|e| e.sound == *sound) {
             entry.used = tick;
             return Some(Arc::clone(&entry.grid));
         }
     }
 
     // Nothing held while FFmpeg and the FFT run.
-    let buffer = lumit_media::audio::decode_all(path, PEAK_RATE).ok()?;
+    let buffer = lumit_media::audio::decode_sound(sound, PEAK_RATE).ok()?;
     let grid = Arc::new(lumit_audio::spectra::Spectrogram::build(
         &buffer.samples,
         PEAK_RATE,
@@ -228,9 +232,9 @@ pub(crate) fn spectrogram_for(path: &Path) -> Option<Arc<lumit_audio::spectra::S
     if let Ok(mut held) = spectra_cache().lock() {
         held.tick = held.tick.wrapping_add(1);
         let tick = held.tick;
-        held.entries.retain(|e| e.path != path);
+        held.entries.retain(|e| e.sound != *sound);
         held.entries.push(SpectraEntry {
-            path: path.to_path_buf(),
+            sound: sound.clone(),
             grid: Arc::clone(&grid),
             used: tick,
         });
@@ -280,7 +284,8 @@ mod tests {
     #[test]
     fn an_unreadable_file_caches_nothing() {
         clear();
-        assert!(pyramid_for(Path::new("/definitely/not/a/file.wav")).is_none());
+        let gone = SoundSource::file("/definitely/not/a/file.wav");
+        assert!(pyramid_for(&gone).is_none());
         let held = cache().lock().unwrap();
         assert!(held.entries.is_empty());
     }

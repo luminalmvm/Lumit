@@ -24,6 +24,7 @@ import 'roto.dart';
 import 'share.dart';
 import 'solid.dart';
 import 'state.dart';
+import 'streams.dart';
 import 'wireframes.dart';
 
 // These functions are ignored because they are not marked as `pub`: `add_at`, `add_graph_group`, `bridge_marker`, `colour_view_pair`, `commit_slide`, `commit`, `composition`, `core_marker`, `core_markers`, `dispatch`, `document`, `footage_span_and_size`, `graph_of`, `has_picture`, `insert_row`, `layer_switch_op`, `place_footage`, `project`, `read_groups`, `runs_as_video`, `to_engine`
@@ -553,11 +554,13 @@ class CompositionReference {
   /// the other case: a video file whose picture is not wanted on this row, so
   /// its sound can be cut, faded and keyframed by itself.
   ///
-  /// One `AddLayer` op, so it is one undo step like every other placement.
-  Future<void> addAudioLayer({required FootageReference footage}) =>
+  /// One undo step like every other placement. `arrival` is as for
+  /// [`Self::add_footage_layer`].
+  Future<void> addAudioLayer(
+          {required FootageReference footage, BridgeStreamsArrival? arrival}) =>
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceAddAudioLayer(
-              that: this, footage: footage);
+              that: this, footage: footage, arrival: arrival);
 
   /// Add a Camera layer looking at the comp centre from the After Effects
   /// 50 mm distance, `comp width × 50/36`, so a fresh camera changes no
@@ -591,13 +594,25 @@ class CompositionReference {
   /// undo step and one funnel: every route into a comp — a drop, a
   /// double-click, a menu — comes through here and cannot disagree with the
   /// others about what a video import becomes.
+  ///
+  /// `arrival` is the setting beside it, *Several audio streams arrive as*:
+  /// what a file with more than one audio stream becomes. Left out, it is
+  /// the first stream on the one layer, as a file with one stream arrives.
+  /// Mixed, the one layer sounds them all. Split, each stream after the
+  /// first is an Audio layer of its own directly below, in the same undo
+  /// step.
   void addFootageLayer(
           {required FootageReference footage,
           required bool asSequence,
-          int? row}) =>
+          int? row,
+          BridgeStreamsArrival? arrival}) =>
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceAddFootageLayer(
-              that: this, footage: footage, asSequence: asSequence, row: row);
+              that: this,
+              footage: footage,
+              asSequence: asSequence,
+              row: row,
+              arrival: arrival);
 
   /// Append the built-in effect named `name` to a group header's stack — the
   /// group arm of `LayerReference::add_effect`, and the same road every
@@ -938,6 +953,15 @@ class CompositionReference {
           .crateApiCompositionCompositionReferenceCutMatchFrame(
               that: this, frame: frame, layer: layer);
 
+  /// **Merge audio streams**: fold the clips split off these ones back into
+  /// them, each left sounding the streams mixed, and take away a sound row
+  /// that leaves empty. A clip that was never split is set to every stream
+  /// its file has. `Nothing` when that changes no clip.
+  BridgeCutResult cutMergeAudioStreams({required List<UuidValue> clips}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutMergeAudioStreams(
+              that: this, clips: clips);
+
   /// Move clips by `by_frames`, overwriting what they land on.
   ///
   /// `grabbed` is the clip under the pointer and `target` the Sequence
@@ -1001,6 +1025,11 @@ class CompositionReference {
   /// takes the picture clip and no sound clip is made. A file with no
   /// picture, or any file placed on an audio-only target, puts down its
   /// sound alone.
+  ///
+  /// **A file with several audio streams** arrives as `arrival` says: its
+  /// first stream as a file with one does, which is also what leaving it
+  /// out means, every stream mixed in the one sound clip, or a linked sound
+  /// clip to each stream, each on a sound row of its own.
   BridgeCutResult cutPlace(
           {LayerReference? target,
           required FootageReference footage,
@@ -1008,7 +1037,8 @@ class CompositionReference {
           required BridgeRational sourceOut,
           required PlatformInt64 atFrame,
           required bool insert,
-          required bool linked}) =>
+          required bool linked,
+          BridgeStreamsArrival? arrival}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceCutPlace(
           that: this,
           target: target,
@@ -1017,7 +1047,8 @@ class CompositionReference {
           sourceOut: sourceOut,
           atFrame: atFrame,
           insert: insert,
-          linked: linked);
+          linked: linked,
+          arrival: arrival);
 
   /// Razor: cut every clip under `at_frame` on `layers`, or on every
   /// unlocked Sequence layer when the list is empty. With `linked` a clip
@@ -1090,6 +1121,15 @@ class CompositionReference {
           required bool linked}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceCutSlip(
           that: this, clip: clip, byFrames: byFrames, linked: linked);
+
+  /// **Split audio streams**: give each audio stream these clips sound a
+  /// clip of its own, on a sound row of its own, linked to the clip it came
+  /// off. Asked of a picture clip, it is the clip carrying its sound that is
+  /// split. `Nothing` when no clip named sounds more than one stream.
+  BridgeCutResult cutSplitAudioStreams({required List<UuidValue> clips}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutSplitAudioStreams(
+              that: this, clips: clips);
 
   /// Put a transition of `frames` on one edge of a clip: its end when
   /// `end_edge` is set, and its start otherwise.

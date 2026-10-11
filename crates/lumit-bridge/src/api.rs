@@ -35,6 +35,7 @@ pub mod share;
 pub mod shell;
 pub mod solid;
 pub mod state;
+pub mod streams;
 pub mod system;
 pub mod track;
 pub mod wireframes;

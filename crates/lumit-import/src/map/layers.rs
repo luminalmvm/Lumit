@@ -182,6 +182,7 @@ pub(crate) fn map_layer(
         volume_db: volume(conv, &path, props),
         pan: lumit_core::anim::Property::zero(),
         audio_only: false,
+        audio_streams: Default::default(),
         adjustment: false,
         retime,
         interpolation,

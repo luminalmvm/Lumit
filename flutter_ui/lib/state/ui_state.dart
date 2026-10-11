@@ -44,6 +44,8 @@ import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:lumit_flutter/src/rust/api/shell.dart'
     show setAutosave, setFullResDragPreviews, setHardwareDecode;
 import 'package:lumit_flutter/src/rust/api/state.dart';
+import 'package:lumit_flutter/src/rust/api/streams.dart'
+    show BridgeStreamsArrival;
 import 'package:lumit_flutter/src/rust/api/share.dart' as bridge_share
     show shareSetLimits, shareSetFootage;
 import 'package:lumit_flutter/state/account.dart';
@@ -2722,6 +2724,17 @@ class LumitUiState extends ChangeNotifier {
   /// Not written down.
   final ValueNotifier<bool> cutLinked = ValueNotifier(true);
 
+  /// Settings ▸ Timeline ▸ Editing ▸ *Several audio streams arrive as*, as
+  /// the engine's calls take it. Every door footage comes into a composition
+  /// by forwards this, so they cannot disagree about what a recording with
+  /// several audio streams becomes.
+  BridgeStreamsArrival get streamsArrival =>
+      switch (workspace.interface.streamsArrival) {
+        StreamsArrival.first => BridgeStreamsArrival.first,
+        StreamsArrival.mixed => BridgeStreamsArrival.mixed,
+        StreamsArrival.split => BridgeStreamsArrival.split,
+      };
+
   /// The Viewer's source side: the first footage view on screen, or null.
   ViewerSurface? get sourceView {
     for (final view in views.views) {
@@ -2784,6 +2797,7 @@ class LumitUiState extends ChangeNotifier {
         atFrame: at,
         insert: insert,
         linked: cutLinked.value,
+        arrival: streamsArrival,
       );
     } catch (_) {
       // The item or the composition went away under the press.

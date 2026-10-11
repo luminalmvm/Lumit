@@ -86,7 +86,10 @@ pub struct AudioJob {
     /// (docs/impl/audio-nodes.md §2); the mixer sums the jobs it is handed
     /// whatever clips they came from.
     pub clip: Option<uuid::Uuid>,
-    pub path: PathBuf,
+    /// The file the sound is read from, and which of its audio streams: the
+    /// first for nearly every layer, another or several mixed for a layer or
+    /// clip that has chosen (`lumit_core::model::AudioStreams`).
+    pub sound: lumit_media::SoundSource,
     pub in_s: f64,
     pub out_s: f64,
     pub offset_s: f64,
@@ -2545,7 +2548,7 @@ pub fn mixdown_counting(
     let pool = lumit_audio::stream::pool();
     let sourced: Vec<(Arc<Source>, &AudioJob)> = jobs
         .iter()
-        .map(|job| (pool.source(&job.path, rate), job))
+        .map(|job| (pool.source(&job.sound, rate), job))
         .collect();
     mix_sources(&sourced, rate, duration_s, master_gain, on_decoded)
 }
@@ -2733,6 +2736,10 @@ type Baked = Option<(Arc<Source>, u32)>;
 #[derive(PartialEq)]
 struct BakeKey {
     item: Uuid,
+    /// Which of the item's audio streams went through the racks: two rows
+    /// split from one recording share an item, a span and a rack, and
+    /// differ in this alone.
+    streams: Vec<u32>,
     rate: u32,
     start_frame: i64,
     src_start: usize,
@@ -2842,6 +2849,7 @@ pub fn live_plan(
         let baked: Baked = if racked {
             let key = BakeKey {
                 item: job.item,
+                streams: job.sound.streams().to_vec(),
                 rate,
                 start_frame,
                 src_start,
@@ -3445,6 +3453,7 @@ mod tests {
                 volume_db: lumit_core::anim::Property::zero(),
                 pan: lumit_core::anim::Property::zero(),
                 audio_only: false,
+                audio_streams: Default::default(),
                 adjustment: false,
                 retime: None,
                 interpolation: Default::default(),
@@ -3571,7 +3580,7 @@ mod tests {
             item: uuid::Uuid::nil(),
             layer: uuid::Uuid::nil(),
             clip: None,
-            path: PathBuf::new(),
+            sound: lumit_media::SoundSource::file(PathBuf::new()),
             in_s: 0.0,
             out_s: 10.0,
             offset_s,
@@ -3767,7 +3776,7 @@ mod tests {
             item: uuid::Uuid::nil(),
             layer: uuid::Uuid::nil(),
             clip: None,
-            path: PathBuf::new(),
+            sound: lumit_media::SoundSource::file(PathBuf::new()),
             in_s: 0.0,
             out_s: 1.0,
             offset_s: 0.0,
@@ -4958,7 +4967,7 @@ mod tests {
             item: Uuid::nil(),
             layer: Uuid::nil(),
             clip: None,
-            path: PathBuf::new(),
+            sound: lumit_media::SoundSource::file(PathBuf::new()),
             in_s: 0.0,
             out_s: 1.0,
             offset_s: 0.0,

@@ -3833,7 +3833,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                     comp.addFootageLayer(
                         footage: f,
                         asSequence: _videoAsSequence(context),
-                        row: at);
+                        row: at,
+                        arrival: ui.streamsArrival);
                   }
                 case CompDragData(comp: final dropped):
                   // A comp cannot nest into itself; the engine refuses and

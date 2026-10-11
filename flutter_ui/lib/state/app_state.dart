@@ -711,6 +711,8 @@ class LumitState extends ChangeNotifier {
           .workspace
           .interface
           .videoAsSequenceLayer,
+      arrival:
+          Provider.of<LumitUiState>(context, listen: false).streamsArrival,
     );
     if (comp == null) return null;
     notifyDocumentChanged();
