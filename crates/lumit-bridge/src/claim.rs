@@ -111,10 +111,92 @@ pub(crate) fn bring_forward(holder: u32) -> bool {
     }
 }
 
+/// Bring the Lumit that is the process `holder` forward. False when macOS
+/// knows no application by that number or will not make it active.
+///
+/// macOS lets the application in front hand its place on, and whoever asked
+/// to open a project has just used this one. A second Lumit is rare on a Mac,
+/// where the Finder hands a document to the one already running: it takes
+/// `open -n`, a second copy of the application, or the program started from a
+/// terminal.
+///
+/// Spoken to the Objective-C runtime directly, as `api::system` does for the
+/// machine's memory, rather than through a binding crate nothing else here
+/// needs. Called from whichever thread is opening the project, which AppKit
+/// allows of `NSRunningApplication` and of little else.
+// ponytail: a window minimised to the Dock stays there, with its application
+// in front. Restoring it takes a reopen Apple event sent to `holder`.
+#[cfg(target_os = "macos")]
+pub(crate) fn bring_forward(holder: u32) -> bool {
+    use std::ffi::{c_char, c_void};
+
+    type Id = *mut c_void;
+    type Find = unsafe extern "C" fn(Id, Id, i32) -> Id;
+    type Activate = unsafe extern "C" fn(Id, Id, usize) -> i8;
+
+    // AppKit is named so that the class is there to be found in a program
+    // that is not an application, a test above all.
+    #[link(name = "AppKit", kind = "framework")]
+    #[link(name = "objc")]
+    extern "C" {
+        fn objc_getClass(name: *const c_char) -> Id;
+        fn sel_registerName(name: *const c_char) -> Id;
+        fn objc_msgSend();
+        fn objc_autoreleasePoolPush() -> *mut c_void;
+        fn objc_autoreleasePoolPop(pool: *mut c_void);
+    }
+    /// `NSApplicationActivateAllWindows`, from NSRunningApplication.h.
+    const ALL_WINDOWS: usize = 1;
+
+    let Ok(holder) = i32::try_from(holder) else {
+        return false;
+    };
+    // SAFETY: the names are NUL-terminated literals. `objc_msgSend` is called
+    // through the signature of the method each selector names, which is how
+    // the runtime means it to be called: a class method taking a `pid_t` and
+    // returning an object, then an instance method taking an `NSUInteger` and
+    // returning a `BOOL`. A message to nil does nothing and answers nil, and
+    // `app` is checked all the same. The object found is autoreleased, and
+    // the pool it goes into is opened and drained here, on this thread.
+    unsafe {
+        let pool = objc_autoreleasePoolPush();
+        let send = objc_msgSend as unsafe extern "C" fn();
+        let find = std::mem::transmute::<unsafe extern "C" fn(), Find>(send);
+        let activate = std::mem::transmute::<unsafe extern "C" fn(), Activate>(send);
+        let app = find(
+            objc_getClass(c"NSRunningApplication".as_ptr()),
+            sel_registerName(c"runningApplicationWithProcessIdentifier:".as_ptr()),
+            holder,
+        );
+        let forward = !app.is_null()
+            && activate(
+                app,
+                sel_registerName(c"activateWithOptions:".as_ptr()),
+                ALL_WINDOWS,
+            ) != 0;
+        objc_autoreleasePoolPop(pool);
+        forward
+    }
+}
+
 /// Nothing here brings another program's window forward on Linux, where a
-/// compositor decides that, and macOS is its own piece of work. The caller
-/// says the project is open in another window instead.
-#[cfg(not(windows))]
+/// compositor decides that. The caller says the project is open in another
+/// window instead.
+#[cfg(not(any(windows, target_os = "macos")))]
 pub(crate) fn bring_forward(_holder: u32) -> bool {
     false
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod tests {
+    use super::bring_forward;
+
+    /// The half a test can reach without taking the screen from whoever is
+    /// running it: a process that is no application is not brought forward.
+    /// This test program is one such, and has no window.
+    #[test]
+    fn a_process_that_is_no_application_is_not_brought_forward() {
+        assert!(!bring_forward(std::process::id()));
+        assert!(!bring_forward(u32::MAX));
+    }
 }
