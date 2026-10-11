@@ -24,8 +24,11 @@
 //! switched off opens as the one page of text Illustrator leaves in its place.
 //!
 //! The PDF itself is parsed and drawn by `hayro`. It is a stranger's bytes
-//! going through somebody else's code, so the file's length and the frame's
-//! size are checked here first, and a panic in there comes back as an error.
+//! going through somebody else's code, and a file can ask for more memory
+//! than its stated size lets on. So the reading is done in a helper program,
+//! `lumit-media-broker`, with a cap on its memory and a limit on its time:
+//! see `helper`. A file that breaks the reader ends the helper, and the
+//! read comes back as an error.
 
 use std::path::Path;
 
@@ -45,6 +48,9 @@ use crate::decode::{DecodedFrame, PixelFormat};
 use crate::probe::{MediaProbe, VideoInfo};
 use crate::MediaError;
 
+mod helper;
+pub use helper::{serve, BROKER_EXE_ENV};
+
 /// What one read may spend: a picture's worth of bytes, and more layers than
 /// anybody draws on.
 const LIMITS: Limits = Limits::IMAGE;
@@ -59,7 +65,7 @@ const MAX_FILE: u64 = 1 << 30;
 const MAX_SIDE: u32 = 16_384;
 
 /// One top-level layer.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct AiLayer {
     pub name: String,
     pub visible: bool,
@@ -68,7 +74,7 @@ pub struct AiLayer {
 }
 
 /// An artboard's size and its layer list.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct AiDocument {
     pub width: u32,
     pub height: u32,
@@ -82,6 +88,22 @@ fn bad(what: &'static str) -> MediaError {
     MediaError::Ai(what)
 }
 
+/// The reason for a file nothing more can be said about.
+const UNREADABLE: &str = "the file could not be read";
+
+/// Every reason the reader gives. The helper's comes back as text, and this
+/// is how the caller tells which one it was. One left out of here comes back
+/// as [`UNREADABLE`].
+const REASONS: [&str; 7] = [
+    UNREADABLE,
+    "the file has no PDF copy of the artwork to read",
+    "the file is damaged, or locked with a password",
+    "no artboard",
+    "the artboard size is out of range",
+    "the layers can't be told apart",
+    "no such layer",
+];
+
 /// Whether this path names an Illustrator document, by extension.
 #[must_use]
 pub fn is_ai(path: &Path) -> bool {
@@ -92,6 +114,11 @@ pub fn is_ai(path: &Path) -> bool {
 
 /// The first artboard's size and layer list. Nothing is drawn.
 pub fn open(path: &Path) -> Result<AiDocument, MediaError> {
+    helper::open(path)
+}
+
+/// [`open`], in this process. Only the helper does this to a file it is given.
+fn open_here(path: &Path) -> Result<AiDocument, MediaError> {
     let bytes = lumit_ingress::read_capped(path, MAX_FILE)?;
     guarded(move || Ok(parse(bytes)?.1))
 }
@@ -125,6 +152,28 @@ pub fn read_layer(
     index: Option<u32>,
     target_width: Option<u32>,
 ) -> Result<DecodedFrame, MediaError> {
+    helper::read_layer(path, index, target_width, helper::DEADLINE)
+}
+
+/// [`read_layer`] with the helper given `deadline` to answer in, so a test
+/// can watch one run out of time.
+#[cfg(any(test, feature = "test-fixtures"))]
+pub fn read_layer_within(
+    path: &Path,
+    index: Option<u32>,
+    target_width: Option<u32>,
+    deadline: std::time::Duration,
+) -> Result<DecodedFrame, MediaError> {
+    helper::read_layer(path, index, target_width, deadline)
+}
+
+/// [`read_layer`], in this process. Only the helper does this to a file it is
+/// given.
+fn read_layer_here(
+    path: &Path,
+    index: Option<u32>,
+    target_width: Option<u32>,
+) -> Result<DecodedFrame, MediaError> {
     let bytes = lumit_ingress::read_capped(path, MAX_FILE)?;
     guarded(move || draw(bytes, index, target_width))
 }
@@ -134,7 +183,7 @@ pub fn read_layer(
 /// a parser that may.
 fn guarded<T>(read: impl FnOnce() -> Result<T, MediaError>) -> Result<T, MediaError> {
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(read))
-        .unwrap_or_else(|_| Err(bad("the file could not be read")))
+        .unwrap_or_else(|_| Err(bad(UNREADABLE)))
 }
 
 /// The PDF in `bytes` and what it holds.

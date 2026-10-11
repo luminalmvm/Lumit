@@ -185,6 +185,7 @@ One Cargo workspace. Every `crates/lumit-*` folder is a member, one job each.
 | `lumit-budget` | The resource governor's ledger |
 | `lumit-flow` | Optical flow, CPU and WGSL |
 | `lumit-media` | FFmpeg: probe, index, seek, hardware decode, encode. Reads PSD and Illustrator files by layer |
+| `lumit-media-broker` | The process an Illustrator file is read in, so a bad one can't take Lumit down |
 | `lumit-audio` | Playback, the audio clock, mixing, waveforms, beat detection |
 | `lumit-text` | Text: system fonts, shaping, layout and rasterisation |
 | `lumit-colour` | OCIO, implemented natively |

@@ -2235,6 +2235,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "lumit-media-broker"
+version = "0.6.0"
+dependencies = [
+ "lumit-media",
+ "tempfile",
+]
+
+[[package]]
 name = "lumit-ml"
 version = "0.6.0"
 dependencies = [

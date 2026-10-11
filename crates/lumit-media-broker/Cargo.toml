@@ -1,0 +1,26 @@
+[package]
+name = "lumit-media-broker"
+version.workspace = true
+edition = "2021"
+license = "GPL-3.0-only"
+publish = false
+
+[[bin]]
+# The name `lumit-media` looks for beside Lumit's own executable. It is
+# spelled here so that renaming the crate cannot quietly rename the file.
+name = "lumit-media-broker"
+path = "src/main.rs"
+
+[dependencies]
+# Everything the helper does is `lumit-media`'s own code. The helper is that
+# code in a process that can be stopped.
+lumit-media = { path = "../lumit-media" }
+
+[dev-dependencies]
+# The test lives here for one Cargo reason: `CARGO_BIN_EXE_lumit-media-broker`
+# exists only for tests in the package that owns the binary.
+lumit-media = { path = "../lumit-media", features = ["test-fixtures"] }
+tempfile = "3"
+
+[lints]
+workspace = true

@@ -129,7 +129,8 @@ endif()
 
 # === The plugin brokers ===
 # The second processes plugins live in (docs/12 §2.3): OFX ones per bundle, CLAP
-# ones per module. They go beside the runner, which is where each host
+# ones per module. `lumit-media-broker` is the process an Illustrator file is
+# read in. They go beside the runner, which is where each host
 # looks for its own and what `install.sh` copies wholesale.
 set(LUMIT_WORKSPACE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../..")
 if(CMAKE_BUILD_TYPE MATCHES "Debug")
@@ -140,7 +141,7 @@ else()
   set(LUMIT_CARGO_RELEASE "--release")
 endif()
 add_custom_target(lumit_brokers ALL
-  COMMAND cargo build -p lumit-ofx-broker -p lumit-aplug-broker ${LUMIT_CARGO_RELEASE}
+  COMMAND cargo build -p lumit-ofx-broker -p lumit-aplug-broker -p lumit-media-broker ${LUMIT_CARGO_RELEASE}
   WORKING_DIRECTORY "${LUMIT_WORKSPACE_DIR}"
   VERBATIM
   COMMENT "Building the plugin brokers")
@@ -149,5 +150,8 @@ install(PROGRAMS "${LUMIT_WORKSPACE_DIR}/target/${LUMIT_CARGO_DIR}/lumit-ofx-bro
   DESTINATION "${CMAKE_INSTALL_PREFIX}"
   COMPONENT Runtime)
 install(PROGRAMS "${LUMIT_WORKSPACE_DIR}/target/${LUMIT_CARGO_DIR}/lumit-aplug-broker"
+  DESTINATION "${CMAKE_INSTALL_PREFIX}"
+  COMPONENT Runtime)
+install(PROGRAMS "${LUMIT_WORKSPACE_DIR}/target/${LUMIT_CARGO_DIR}/lumit-media-broker"
   DESTINATION "${CMAKE_INSTALL_PREFIX}"
   COMPONENT Runtime)

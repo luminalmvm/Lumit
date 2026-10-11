@@ -44,8 +44,9 @@ Compression=lzma2
 SolidCompression=yes
 
 [Files]
-; The whole runner directory, recursively — which is how `lumit-ofx-broker.exe`
-; and `lumit-aplug-broker.exe` ship without rules of their own: the Windows CMake
+; The whole runner directory, recursively, which is how `lumit-ofx-broker.exe`,
+; `lumit-aplug-broker.exe` and `lumit-media-broker.exe` ship without rules of
+; their own: the Windows CMake
 ; install step puts them beside the runner (docs/12 §2.3), and everything
 ; beside the runner is copied here.
 ;

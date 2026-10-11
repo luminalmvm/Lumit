@@ -123,7 +123,8 @@ install(FILES "${AOT_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
 # === The plugin brokers ===
 # Third-party plugins never load into Lumit's own process (docs/12 §2.3): OFX
 # ones load into `lumit-ofx-broker`, one process per bundle, and CLAP ones into
-# `lumit-aplug-broker`, one process per module. Both are spawned from
+# `lumit-aplug-broker`, one process per module. `lumit-media-broker` is the
+# process an Illustrator file is read in. All three are spawned from
 # beside the host's own executable. cargokit builds the bridge's cdylib and has
 # no notion of a second binary, so the one command that builds these lives here —
 # and they are installed next to the runner, which is where
@@ -136,7 +137,7 @@ set(LUMIT_WORKSPACE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../..")
 # expands to nothing is not. `dev` and `release` are Cargo's own names for the
 # two profiles, and they are what `target/debug` and `target/release` below are.
 add_custom_target(lumit_brokers ALL
-  COMMAND cargo build -p lumit-ofx-broker -p lumit-aplug-broker --profile "$<IF:$<CONFIG:Debug>,dev,release>"
+  COMMAND cargo build -p lumit-ofx-broker -p lumit-aplug-broker -p lumit-media-broker --profile "$<IF:$<CONFIG:Debug>,dev,release>"
   WORKING_DIRECTORY "${LUMIT_WORKSPACE_DIR}"
   VERBATIM
   COMMENT "Building the plugin brokers")
@@ -159,6 +160,14 @@ install(PROGRAMS "${LUMIT_WORKSPACE_DIR}/target/debug/lumit-aplug-broker.exe"
   CONFIGURATIONS Debug
   COMPONENT Runtime)
 install(PROGRAMS "${LUMIT_WORKSPACE_DIR}/target/release/lumit-aplug-broker.exe"
+  DESTINATION "${CMAKE_INSTALL_PREFIX}"
+  CONFIGURATIONS Profile;Release
+  COMPONENT Runtime)
+install(PROGRAMS "${LUMIT_WORKSPACE_DIR}/target/debug/lumit-media-broker.exe"
+  DESTINATION "${CMAKE_INSTALL_PREFIX}"
+  CONFIGURATIONS Debug
+  COMPONENT Runtime)
+install(PROGRAMS "${LUMIT_WORKSPACE_DIR}/target/release/lumit-media-broker.exe"
   DESTINATION "${CMAKE_INSTALL_PREFIX}"
   CONFIGURATIONS Profile;Release
   COMPONENT Runtime)
