@@ -153,6 +153,10 @@ struct AudioState {
     /// edit has anything new to prepare. Weak, so remembering it does not
     /// keep a document alive that nothing else is holding.
     scrub_doc: std::sync::Weak<lumit_core::Document>,
+    /// The burst a [`scrub`] asked for while the mix for it was still being
+    /// prepared: where, and how long. Sounded once that mix lands, so a scrub
+    /// straight after an edit is never the mix from before it.
+    scrub_held: Option<(f64, f64)>,
 }
 
 impl AudioState {
@@ -174,6 +178,7 @@ impl AudioState {
             meter_strips: Vec::new(),
             loaded_plan: None,
             scrub_doc: std::sync::Weak::new(),
+            scrub_held: None,
         }
     }
 }
@@ -599,6 +604,13 @@ fn run_prepare(mut comp: Uuid, mut doc: Arc<lumit_core::Document>) {
                 Some(next) => Some(next),
                 None => {
                     st.worker_busy = false;
+                    // The mix a scrub was waiting on is in, if it is going
+                    // to be: sound where the playhead got to meanwhile.
+                    if let Some((at, len)) = st.scrub_held.take() {
+                        if st.loaded_comp == Some(comp) {
+                            send(&st, Cmd::Scrub { at, len });
+                        }
+                    }
                     None
                 }
             }
@@ -958,27 +970,34 @@ pub(crate) fn scrub(comp: Uuid, frame: u64, doc: Arc<lumit_core::Document>) {
     // The comp is what the user wants to hear now, as in `play`.
     st.wanted_preview = None;
     let loaded = st.loaded_comp == Some(comp);
-    if loaded {
-        send(
-            &st,
-            Cmd::Scrub {
-                at: frame as f64 / fps,
-                len: (1.0 / fps).max(SCRUB_BURST_S),
-            },
-        );
-    } else if st.loaded_comp.is_some() {
-        // Another comp's mix, or a footage preview, is in the engine. Silence
-        // it, and leave the transport stopped so this comp's mix does not
-        // start playing by itself when it lands.
-        send(&st, Cmd::Unload);
-        st.playing = false;
-        st.loaded_comp = None;
-        st.loaded_sig = None;
-        st.meter_strips.clear();
-        st.loaded_plan = None;
-    }
+    let (at, len) = (frame as f64 / fps, (1.0 / fps).max(SCRUB_BURST_S));
     let seen = Arc::downgrade(&doc);
-    if !loaded || !st.scrub_doc.ptr_eq(&seen) {
+    let mut changed = !st.scrub_doc.ptr_eq(&seen);
+    if !loaded {
+        // The transport stays stopped, so this comp's mix does not start
+        // playing by itself when it lands.
+        st.playing = false;
+        if st.loaded_comp.is_some() {
+            // Another comp's mix, or a footage preview, is in the engine.
+            // Silence it, and prepare this one whatever was asked before.
+            send(&st, Cmd::Unload);
+            st.loaded_comp = None;
+            st.loaded_sig = None;
+            st.meter_strips.clear();
+            st.loaded_plan = None;
+            changed = true;
+        }
+    }
+    // The mix for this document is in the engine: one message. Otherwise it
+    // is on its way, or about to be, and the burst waits for it. Only a new
+    // document has anything to prepare, so a comp with no sound in it is
+    // asked about once and not on every frame the playhead crosses.
+    if loaded && !changed && st.scrub_held.is_none() {
+        send(&st, Cmd::Scrub { at, len });
+    } else if changed || st.scrub_held.is_some() {
+        st.scrub_held = Some((at, len));
+    }
+    if changed {
         st.scrub_doc = seen;
         kick_prepare(&mut st, comp, doc);
     }

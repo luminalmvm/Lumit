@@ -1634,7 +1634,7 @@ fn feed_layer(
             let any_solo = lumit_core::model::any_picture_solo(comp);
             let below = comp.layers.iter().skip_while(|l| l.id != layer.id).skip(1);
             for o in window() {
-                let tau = t + f64::from(o) * comp_dt;
+                let tau = lumit_core::time::frames_on(t, o, comp_dt);
                 h.update(&o.to_le_bytes());
                 // The gates `feed_comp` puts in front of a layer, at `tau`.
                 for l in below.clone().filter(|l| {
@@ -1679,8 +1679,8 @@ fn feed_layer(
             let native = wants_flow(layer, &lumit_core::retime::Interpolation::Nearest);
             for o in window() {
                 h.update(&o.to_le_bytes());
-                let stamp = match lumit_core::sequence::resolve(clips, lt + f64::from(o) * comp_dt)
-                {
+                let at = lumit_core::time::frames_on(lt, o, comp_dt);
+                let stamp = match lumit_core::sequence::resolve(clips, at) {
                     Some((_, lumit_core::sequence::ClipSource::Footage(item), st)) => {
                         stamper.stamp(item, st, native)
                     }
@@ -2034,14 +2034,32 @@ fn feed_source(
                 h.update(&document.paragraph.key_bytes());
                 h.update(&[0]);
             }
-            // Text on a path. The mask this names is already fed to
-            // the key by the layer's own mask walk, so what is left is which
-            // mask it is and how far the line has been slid along it — both of
-            // which change the picture without changing a single glyph.
+            // Text on a path: which mask it is, how far the line has been
+            // slid along it, and the mask's own shape. The layer's own mask
+            // walk feeds the shape too, but not when the layer is hidden or
+            // is only read by another layer's effect, and Text to points
+            // reads a hidden one. Without it here, moving the path left the
+            // points where they were.
             if let Some(path) = document.path {
                 h.update(b"onpath/");
                 h.update(path.as_bytes());
                 feed_f64(h, document.path_offset.value_at(lt));
+                if let Some(mask) = layer.masks.iter().find(|mask| mask.id == path) {
+                    let shape = mask.path_at(lt);
+                    for v in &shape.vertices {
+                        for c in [
+                            v.pos.0,
+                            v.pos.1,
+                            v.tan_in.0,
+                            v.tan_in.1,
+                            v.tan_out.0,
+                            v.tan_out.1,
+                        ] {
+                            feed_f64(h, c);
+                        }
+                    }
+                    h.update(&[u8::from(shape.closed)]);
+                }
             }
             // Text animators. What is fed is what actually reaches the
             // picture — each letter's resolved push, turn, size, opacity and

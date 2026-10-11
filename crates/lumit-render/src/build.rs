@@ -1268,6 +1268,12 @@ struct Walk<'a> {
     /// that graph (docs/impl/node-graph-comp.md §5.3). Empty on every other
     /// walk, which is a graph on its own defaults.
     values: &'a [(String, lumit_core::model::EffectValue)],
+    /// This walk is a comp built again at another moment, for a temporal
+    /// effect further up to read as its neighbour. A neighbour carries no
+    /// neighbours of its own, so nothing in it builds any: otherwise an Echo
+    /// over a Precomp that holds an Echo builds the whole of the inside once
+    /// for every frame of both windows, only to throw it away.
+    rebuild: bool,
 }
 
 impl Walk<'static> {
@@ -1275,6 +1281,7 @@ impl Walk<'static> {
     const PLAIN: Walk<'static> = Walk {
         clone: lumit_core::fx::drivers::NO_CLONE,
         values: &[],
+        rebuild: false,
     };
 }
 
@@ -1332,6 +1339,7 @@ pub fn late_clone_pictures(
         Walk {
             clone: spec.clone,
             values: &[],
+            rebuild: false,
         },
         Some(&mut probe),
     );
@@ -1367,6 +1375,7 @@ fn comp_walk(
     let inner = Walk {
         clone: clone_number,
         values: &[],
+        rebuild: with.rebuild,
     };
     // A nested frame's name says nothing of which copy it is, so a numbered
     // copy is never named and never served from the nested store.
@@ -2276,6 +2285,7 @@ fn comp_walk(
                         Walk {
                             clone: p.clone.unwrap_or(clone_number),
                             values: &[],
+                            rebuild: with.rebuild,
                         },
                         Some(&mut probe),
                     );
@@ -3223,6 +3233,8 @@ fn comp_walk(
                 let dt = 1.0 / comp.frame_rate.fps().max(1.0);
                 flow_below = crate::plan::rebuild_offsets(layer, lt, dt)
                     .into_iter()
+                    // None inside a walk that is itself a neighbour.
+                    .filter(|_| !with.rebuild)
                     .map(|(offset, measure)| {
                         // The neighbour's own layer time, then the Retime
                         // map (§5.6): a retimed Precomp measures its
@@ -3235,6 +3247,15 @@ fn comp_walk(
                                 layer.start_offset.0,
                             ),
                         );
+                        // Under the same Input values the frame itself is
+                        // built under, read at the neighbour's moment. On
+                        // the graph's defaults the neighbour was another
+                        // picture, and the difference read as motion.
+                        let values = nested
+                            .graph
+                            .as_ref()
+                            .filter(|_| layer.graph_inputs.is_some())
+                            .map_or_else(Vec::new, |graph| graph_values(layer, graph, nt));
                         let mut neighbour = comp_walk(
                             doc,
                             nested,
@@ -3244,7 +3265,11 @@ fn comp_walk(
                             visited,
                             None,
                             false,
-                            inner,
+                            Walk {
+                                rebuild: true,
+                                values: &values,
+                                ..inner
+                            },
                             None,
                         );
                         strip_temporal_inputs(&mut neighbour);
@@ -3477,17 +3502,21 @@ fn comp_walk(
                     // below-stack again at each neighbour time. Empty unless
                     // one of those effects is live, which is the whole cost
                     // gate — nothing else on an adjustment layer builds it.
-                    flow_below: adjustment_flow_below(
-                        doc,
-                        comp,
-                        layer,
-                        idx,
-                        t_comp,
-                        frame_t,
-                        pixels_by_layer,
-                        visited,
-                        clone_number,
-                    ),
+                    flow_below: if with.rebuild {
+                        Vec::new()
+                    } else {
+                        adjustment_flow_below(
+                            doc,
+                            comp,
+                            layer,
+                            idx,
+                            t_comp,
+                            frame_t,
+                            pixels_by_layer,
+                            visited,
+                            clone_number,
+                        )
+                    },
                 });
                 continue;
             }
@@ -4543,6 +4572,7 @@ impl GraphLower<'_> {
                         Walk {
                             clone: self.clone,
                             values: &[],
+                            rebuild: false,
                         },
                         None,
                     ),
@@ -4842,7 +4872,11 @@ fn below_draws_cloned(
         visited,
         None,
         false,
-        Walk { clone, values: &[] },
+        Walk {
+            clone,
+            values: &[],
+            rebuild: true,
+        },
         None,
     );
     strip_temporal_inputs(&mut draws);
@@ -5079,7 +5113,7 @@ fn adjustment_flow_below(
                 doc,
                 comp,
                 below,
-                t_comp + f64::from(offset) * dt,
+                lumit_core::time::frames_on(t_comp, offset, dt),
                 frame_t,
                 None,
                 pixels_by_layer,
@@ -5203,10 +5237,9 @@ fn strip_temporal_inputs(draws: &mut [CompLayerDraw]) {
     for d in draws.iter_mut() {
         d.neighbours = Vec::new();
         d.flow_fields = Vec::new();
-        // The composite measurement (§3.2) is temporal too, and dropping
-        // it here is what bounds the work: without this, an adjustment inside a
-        // neighbour render would build its own neighbours, and a stack of them
-        // would multiply a frame's cost by two to the depth.
+        // The composite measurement (§3.2) is temporal too. A walk that is a
+        // rebuild never builds one (`Walk::rebuild`), which is what bounds the
+        // work. This is for a draw that came from anywhere else.
         d.flow_below = Vec::new();
         if let DrawSource::Nested { draws: inner, .. } = &mut d.source {
             strip_temporal_inputs(inner);
@@ -6665,6 +6698,19 @@ mod render_below_at_tests {
         let mut adjust = flow_adjustment(&[]);
         adjust.effects = vec![previous_frame_effect()];
         let plain = comp_with(10, vec![footage.clone()]);
+        // The frame before a cut: a shot that starts on the next frame is not
+        // on screen yet, and is planned all the same, for the frame the
+        // plugin reads ahead. Without it that frame is drawn with a hole
+        // where the next shot is.
+        let mut next = footage.clone();
+        next.id = Uuid::now_v7();
+        next.in_point = lumit_core::time::CompTime(Rational::new(6, 10).unwrap());
+        let cut = comp_with(10, vec![adjust.clone(), next.clone(), footage.clone()]);
+        let jobs = crate::plan_comp_frame(&doc, &cut, 0.5, crate::Quality::default(), &probes);
+        assert!(
+            jobs.iter().any(|j| j.layer == next.id),
+            "the shot after the cut is planned for the neighbour it is in"
+        );
         let comp = comp_with(10, vec![adjust, footage]);
 
         let jobs = crate::plan_comp_frame(&doc, &comp, 0.5, crate::Quality::default(), &probes);

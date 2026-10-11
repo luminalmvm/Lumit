@@ -6053,7 +6053,7 @@ impl LayerReference {
     /// every generated kind, for media that will not read, and in builds
     /// without the `media` feature — "no length" is never a guessed length.
     #[frb(ignore)]
-    fn source_length(&self, layer: &Layer) -> Option<Duration> {
+    pub(crate) fn source_length(&self, layer: &Layer) -> Option<Duration> {
         let proj = self.project().ok()?;
         let proj = proj.read().ok()?;
         let doc = proj.store.snapshot();

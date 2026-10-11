@@ -2362,6 +2362,19 @@ fn precompose_packs_the_chosen_layers_and_leaves_one_precomp_behind() {
     assert_eq!(back[0].layer_id, top.layer_id);
     assert_eq!(back[1].layer_id, middle.layer_id);
     assert_eq!(back[2].layer_id, bottom.layer_id);
+
+    // Leaving its attributes behind, one layer's Precomp layer stands where
+    // the layer stood, under its id: a child, a matte or an effect's layer
+    // row that pointed at the layer goes on pointing at something.
+    let left = comp
+        .precompose(vec![top.layer_id], String::new(), true, false, None)
+        .expect("precomposed");
+    assert_eq!(left.layer_id, top.layer_id);
+    let Some(ItemReference::Composition(inner)) = left.get_source_item().expect("source") else {
+        panic!("a Precomp layer's source is a composition");
+    };
+    let inside = inner.get_layers().expect("layers");
+    assert!(inside.len() == 1 && inside[0].layer_id != top.layer_id);
 }
 
 /// Converting the mix to a precomp, the two-level pack

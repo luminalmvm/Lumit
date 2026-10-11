@@ -153,6 +153,20 @@ pub fn layer_time(t: f64, start_offset: Rational) -> f64 {
         .map_or(t - start_offset.to_f64(), Rational::to_f64)
 }
 
+/// The time `frames` frames of `dt` seconds on from `t`, taken on the flick
+/// grid as [`layer_time`] is.
+///
+/// **In plain terms.** A temporal effect reads the frames either side of the
+/// one being drawn. Worked out in plain f64, the frame after frame `k` is
+/// often one bit short of frame `k + 1`'s own time, and anything that asks
+/// "has this layer started yet" or "which clip is this" of it gets the answer
+/// for the frame before: on the frame before a cut, the neighbour was the
+/// outgoing shot held, and not the incoming one.
+#[inline]
+pub fn frames_on(t: f64, frames: i32, dt: f64) -> f64 {
+    layer_time(t + f64::from(frames) * dt, Rational::ZERO)
+}
+
 fn round_ties_even(x: f64) -> f64 {
     let r = x.round();
     if (x - x.trunc()).abs() == 0.5 && r % 2.0 != 0.0 {

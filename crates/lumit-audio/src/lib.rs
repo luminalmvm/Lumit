@@ -469,9 +469,9 @@ fn fill_scrub(shared: &Shared, scrub: &mut Scrub, out: &mut [f32], channels: usi
     for frame in out.chunks_exact_mut(channels) {
         let (mut l, mut r) = (0.0f32, 0.0f32);
         for burst in [&mut scrub.now, &mut scrub.was] {
-            if burst.at >= plan.total_frames {
-                burst.left = 0;
-            }
+            // No further than the mix runs. Shortened and not stopped, so a
+            // burst that reaches the end fades into it and does not click.
+            burst.left = burst.left.min(plan.total_frames.saturating_sub(burst.at));
             if burst.left == 0 {
                 continue;
             }

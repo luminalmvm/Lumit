@@ -1366,10 +1366,29 @@ impl CompositionReference {
             name.trim().to_string()
         };
 
+        // A retimed layer that leaves its attributes behind leaves its Retime
+        // too, and its place in time goes with that: the Retime reads the
+        // layer's own clock, so the Precomp layer has to keep that clock. The
+        // layer inside then starts at nought and runs the whole of the new
+        // comp, which is made long enough to hold all of its source.
+        let retimed = leave_attributes && packed.iter().any(|l| l.retime.is_some());
+        let duration = if retimed {
+            let source = packed.first().and_then(|src| {
+                LayerReference::new(self.project, self.id, src.id).source_length(src)
+            });
+            duration.max(source.unwrap_or(duration))
+        } else {
+            duration
+        };
+
         let mut inner_layers = Vec::with_capacity(packed.len());
         for src in &packed {
             let mut layer = src.clone();
             if leave_attributes {
+                // An id of its own. The Precomp layer takes this one's, and
+                // with it everything in the comp that points here: a child, a
+                // matte, an effect's layer row.
+                layer.id = Uuid::now_v7();
                 // Stripped back to its source: the attributes are staying
                 // behind on the Precomp layer, and a copy on both would apply
                 // each of them twice.
@@ -1387,9 +1406,15 @@ impl CompositionReference {
                 layer.parent = None;
                 layer.matte = None;
             }
-            layer.in_point = shift_back(src.in_point)?;
-            layer.out_point = shift_back(src.out_point)?;
-            layer.start_offset = shift_back(src.start_offset)?;
+            if retimed {
+                layer.in_point = CompTime::ZERO;
+                layer.out_point = CompTime(duration.0);
+                layer.start_offset = CompTime::ZERO;
+            } else {
+                layer.in_point = shift_back(src.in_point)?;
+                layer.out_point = shift_back(src.out_point)?;
+                layer.start_offset = shift_back(src.start_offset)?;
+            }
             inner_layers.push(layer);
         }
 
@@ -1492,6 +1517,16 @@ impl CompositionReference {
             layer.retime = src.retime.clone();
             layer.blend = src.blend;
             layer.switches = src.switches.clone();
+            // It stands where the layer stood: under the same id, with the
+            // same parent and the same matte.
+            layer.id = src.id;
+            layer.parent = src.parent;
+            layer.matte = src.matte.clone();
+            if retimed {
+                layer.in_point = src.in_point;
+                layer.out_point = src.out_point;
+                layer.start_offset = src.start_offset;
+            }
         }
         if let Some(g) = &carried {
             // The header's stack lands after any attributes the layer kept —

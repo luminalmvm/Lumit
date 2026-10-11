@@ -41,6 +41,11 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
+/// The most pairs of points the nearest-neighbour sweep measures for one
+/// frame, as Relax has for its own. A frame is drawn on a thread nobody can
+/// stop part-way through this.
+const MAX_TESTS: u64 = 50_000_000;
+
 /// The wire-only data input (points-stream.md §4.1).
 pub const POINTS_PORT: &str = "points";
 
@@ -583,8 +588,11 @@ impl ConnectPoints {
         // ponytail: a sorted sweep, not a tree. The ceiling is a stream that
         // is tall and thin, where every point is close across to every other
         // and the sweep asks all of them, so n points cost n² distances. A
-        // k-d tree is the upgrade if a column of points has to be fast.
+        // k-d tree is the upgrade if a column of points has to be fast. Until
+        // then the sweep stops at [`MAX_TESTS`], in the same place every
+        // time, so the frame comes back and comes back the same.
         let x = |i: usize| flat.get(i).map_or(0.0, |p| p[0]);
+        let mut tests = 0u64;
         let mut by_x: Vec<usize> = (0..flat.len()).collect();
         by_x.sort_by(|a, b| x(*a).total_cmp(&x(*b)).then(a.cmp(b)));
         let mut pairs: Vec<(usize, usize)> = Vec::new();
@@ -592,7 +600,7 @@ impl ConnectPoints {
         // equal distance.
         let mut best: Vec<(f32, usize)> = Vec::with_capacity(k + 1);
         for (at, &i) in by_x.iter().enumerate() {
-            if pairs.len() >= points::CAP_HARD as usize {
+            if pairs.len() >= points::CAP_HARD as usize || tests >= MAX_TESTS {
                 break;
             }
             best.clear();
@@ -616,11 +624,13 @@ impl ConnectPoints {
             };
             let (left, right) = by_x.split_at(at);
             for &j in right.iter().skip(1) {
+                tests += 1;
                 if !consider(j) {
                     break;
                 }
             }
             for &j in left.iter().rev() {
+                tests += 1;
                 if !consider(j) {
                     break;
                 }
