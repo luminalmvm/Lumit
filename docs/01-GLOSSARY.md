@@ -10,7 +10,7 @@ its entry here first. AE and Vegas names are noted only to help people arriving 
 | **Project** | The whole document, saved as a `.lum` file. One open at a time |
 | **Asset** | Anything in the Project panel: footage, audio, sequences, stills, comps |
 | **Footage item** | An asset pointing at a media file. Lumit never changes the file |
-| **Source layer** | One layer of a layered image file such as a PSD or an Illustrator document, which a footage item can read on its own |
+| **File layer** | One layer of a layered image file such as a PSD or an Illustrator document, which a footage item can read on its own |
 | **Audio item** | An asset pointing at an audio file |
 | **Packed project** | A `.lum` that also carries its footage files inside it. The verbs are **pack** and **unpack** |
 | **Shared project** | A project several people edit at once. The **host** shares it and owns the file, the **guests** join with an **invite**, which is written as an **invite link** |
@@ -97,6 +97,7 @@ Not interchangeable.
 | **Roto brush** | Builds a matte from painted strokes, carried by optical flow. **Refine edge** is its soft boundary |
 | **Blend mode** | How a layer composites over what's below |
 | **Effect** | One operation in a layer's **effect stack**, or one box in a node graph |
+| **Source layer** | Another layer an effect reads as an input, such as the one Emit from image takes its points from |
 | **Driver** | A node that makes a value rather than a picture and drives a parameter through a wire |
 | **Read**, **Input**, **Output** nodes | Bring an item in, take a value or picture from outside, the one picture the graph shows |
 | **Merge**, **Switch**, **Time offset** nodes | A over B, pick one input, show the input at another time |

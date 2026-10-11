@@ -180,7 +180,7 @@ pub struct FootageItem {
     /// Set when this item reads one layer of a layered image file (a
     /// Photoshop document) rather than the file's flattened picture: the
     /// layer's place in the file's own list, bottom first
-    /// (docs/01-GLOSSARY.md: Source layer).
+    /// (docs/01-GLOSSARY.md: File layer).
     // ponytail: an index, so reordering the layers in Photoshop re-points
     // it. The file's own layer ids are the upgrade.
     #[serde(default, skip_serializing_if = "Option::is_none")]

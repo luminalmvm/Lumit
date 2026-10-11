@@ -1857,7 +1857,7 @@ mod tests {
         doc
     }
 
-    /// The same bargain for a source layer: nothing in a project that has
+    /// The same bargain for a file layer: nothing in a project that has
     /// none, and the pick carried back in one that does.
     #[test]
     fn a_source_layer_saves_only_when_there_is_one() {
@@ -1865,7 +1865,7 @@ mod tests {
         let json = serde_json::to_string(&plain).unwrap();
         assert!(
             !json.contains("source_layer"),
-            "a flat file must not grow a source layer field: {json}"
+            "a flat file must not grow a file layer field: {json}"
         );
 
         let mut layer = footage("Hat/art.psd");
