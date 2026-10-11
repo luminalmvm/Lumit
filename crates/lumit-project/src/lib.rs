@@ -679,15 +679,39 @@ fn project_dirs() -> Option<directories::ProjectDirs> {
     }
 }
 
-/// Where a document's sidecar journal lives (docs/10-FILE-FORMAT.md §3–4).
+/// Where a document's sidecar journal lives (docs/10-FILE-FORMAT.md §3–4)
+/// while it has no file of its own.
 pub fn journal_path(doc_id: Uuid) -> Option<PathBuf> {
-    let dirs = project_dirs()?;
-    Some(
-        dirs.cache_dir()
-            .join(doc_id.to_string())
-            .join("journal")
-            .join("ops.jsonl"),
-    )
+    journal_path_for(doc_id, None)
+}
+
+/// [`journal_path`] for a document saved as `project`.
+pub fn journal_path_for(doc_id: Uuid, project: Option<&Path>) -> Option<PathBuf> {
+    Some(journal_in(project_dirs()?.cache_dir(), doc_id, project))
+}
+
+/// The journal of the document `doc_id` saved as `project`, under `cache`.
+///
+/// **In plain terms.** The journal is the edits made since the last save, kept
+/// so a crash loses none of them. They only make sense on top of the file they
+/// were made on. Save As keeps a document's id, and so does a copy made in a
+/// file manager, so each file has a journal of its own: the edits a crash left
+/// beside one are never offered to the other.
+#[must_use]
+pub fn journal_in(cache: &Path, doc_id: Uuid, project: Option<&Path>) -> PathBuf {
+    let name = match project {
+        None => "ops.jsonl".to_owned(),
+        Some(project) => {
+            // The file as the disk names it, so two spellings of one path are
+            // one journal. Case is folded for the same reason, which costs two
+            // files that differ only by case sharing one.
+            let named = fs::canonicalize(project).unwrap_or_else(|_| project.to_path_buf());
+            let key = blake3::hash(named.to_string_lossy().to_lowercase().as_bytes());
+            let key = key.to_hex();
+            format!("ops-{}.jsonl", key.get(..16).unwrap_or("0"))
+        }
+    };
+    cache.join(doc_id.to_string()).join("journal").join(name)
 }
 
 /// Where a shared project keeps what closing Lumit must not lose: a host's
@@ -1484,6 +1508,31 @@ impl JournalFile {
         journal_path(doc_id).map(|path| Self { path })
     }
 
+    /// The journal of a document saved as `project` ([`journal_in`]).
+    pub fn for_project(doc_id: Uuid, project: Option<&Path>) -> Option<Self> {
+        journal_path_for(doc_id, project).map(|path| Self { path })
+    }
+
+    /// Whether two handles are the one journal.
+    #[must_use]
+    pub fn same_as(&self, other: &JournalFile) -> bool {
+        self.path == other.path
+    }
+
+    /// Carry what this journal holds over to `other`, for a document that has
+    /// just been saved under another name. Whatever `other` held belonged to
+    /// the file the save has replaced.
+    pub fn hand_to(&self, other: &JournalFile) {
+        let _ = other.clear();
+        if self.size() > 0 {
+            if let Some(parent) = other.path.parent() {
+                let _ = fs::create_dir_all(parent);
+            }
+            let _ = fs::rename(&self.path, &other.path);
+        }
+        let _ = self.clear();
+    }
+
     pub fn at_path(path: PathBuf) -> Self {
         Self { path }
     }
@@ -1543,22 +1592,22 @@ impl JournalFile {
     /// Drop the first `bytes` of the journal, which a save has just written
     /// into the project file, and keep the edits made after them.
     pub fn forget(&self, bytes: u64) -> Result<(), ProjectError> {
-        let all = match fs::read(&self.path) {
+        let mut all = match File::open(&self.path) {
             Ok(all) => all,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
             Err(e) => return Err(e.into()),
         };
-        let kept = usize::try_from(bytes)
-            .ok()
-            .and_then(|from| all.get(from..))
-            .unwrap_or_default();
-        if kept.is_empty() {
+        if bytes >= all.metadata()?.len() {
+            drop(all);
             return self.clear();
         }
         // Written beside the journal and moved over it, so a crash part way
-        // leaves the old journal and not half of the new one.
+        // leaves the old journal and not half of the new one. Copied across
+        // and never read whole: a long day's journal is a long file.
         let beside = self.path.with_extension("tmp");
-        fs::write(&beside, kept)?;
+        all.seek(SeekFrom::Start(bytes))?;
+        std::io::copy(&mut all, &mut File::create(&beside)?)?;
+        drop(all);
         fs::rename(&beside, &self.path)?;
         Ok(())
     }

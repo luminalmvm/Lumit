@@ -2850,13 +2850,13 @@ fn every_commit_is_journalled_and_a_save_clears_it() {
     let _journals = crate::api::state::journals_in(journals.path());
     let project = LumitBridgeState::new_project(None).expect("a new project");
 
-    let journal = {
+    let armed = || {
         let state = project.state().expect("state");
         let state = state.read().expect("read");
         let handle = state.journal.lock().expect("journal");
         handle.clone()
     };
-    let Some(journal) = journal else {
+    let Some(journal) = armed() else {
         // No home for a journal on this platform; nothing to assert.
         return;
     };
@@ -2888,6 +2888,11 @@ fn every_commit_is_journalled_and_a_save_clears_it() {
         journal.read().expect("journal read").is_empty(),
         "the journal is cleared by a save"
     );
+    // From the save on the journal is that file's own. Save As keeps the
+    // document's id, and a copy must never be offered its original's edits.
+    let unsaved = journal;
+    let journal = armed().expect("still journalled");
+    assert!(!journal.same_as(&unsaved));
 
     // An edit after the save is journalled again, or a crash from here would
     // lose everything since the save.
@@ -2897,6 +2902,18 @@ fn every_commit_is_journalled_and_a_save_clears_it() {
     assert_eq!(journal.read().expect("journal read").len(), 1);
     // Nothing has closed the project, so this is what a crash leaves behind.
     assert!(journal.ended_badly());
+
+    // Saved under another name, the edits since go with the document, and
+    // the file it was is left with nothing to be offered.
+    project
+        .new_composition("Unsaved".into(), None)
+        .expect("an edit");
+    let copy = dir.join("copy.lum");
+    project
+        .save(copy.to_string_lossy().into_owned())
+        .expect("saved as");
+    assert!(!journal.ended_badly(), "the first file has no journal now");
+    assert!(!armed().expect("journalled").same_as(&journal));
 
     std::fs::remove_dir_all(&dir).ok();
 }

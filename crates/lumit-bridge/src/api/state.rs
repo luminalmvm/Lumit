@@ -58,17 +58,19 @@ pub struct LumitBridgeState {
 /// or after a save has made it redundant.
 pub type SharedJournal = Arc<Mutex<Option<JournalFile>>>;
 
-/// Arm a journal for `document`, if this platform gives us somewhere to put one.
+/// Arm a journal for `document` as saved at `saved_at`, if this platform gives
+/// us somewhere to put one.
 #[frb(ignore)]
-pub(crate) fn journal_for(document: &Document) -> SharedJournal {
-    Arc::new(Mutex::new(journal_file(document.id)))
+pub(crate) fn journal_for(document: &Document, saved_at: Option<&Path>) -> SharedJournal {
+    Arc::new(Mutex::new(journal_file(document.id, saved_at)))
 }
 
-/// The journal file for a document, wherever this build keeps them.
+/// The journal file for a document saved at `saved_at`, wherever this build
+/// keeps them. Each file has its own (`lumit_project::journal_in`).
 #[cfg(not(test))]
 #[frb(ignore)]
-pub(crate) fn journal_file(doc_id: Uuid) -> Option<JournalFile> {
-    JournalFile::for_document(doc_id)
+pub(crate) fn journal_file(doc_id: Uuid, saved_at: Option<&Path>) -> Option<JournalFile> {
+    JournalFile::for_project(doc_id, saved_at)
 }
 
 // Tests must never write into the user's real cache folder, so a test's
@@ -82,13 +84,11 @@ thread_local! {
 }
 
 #[cfg(test)]
-pub(crate) fn journal_file(doc_id: Uuid) -> Option<JournalFile> {
+pub(crate) fn journal_file(doc_id: Uuid, saved_at: Option<&Path>) -> Option<JournalFile> {
     let dir = TEST_JOURNAL_DIR.with(|dir| dir.borrow().clone())?;
-    Some(JournalFile::at_path(
-        dir.join(doc_id.to_string())
-            .join("journal")
-            .join("ops.jsonl"),
-    ))
+    Some(JournalFile::at_path(lumit_project::journal_in(
+        &dir, doc_id, saved_at,
+    )))
 }
 
 /// Keeps this thread's journals under a folder until it drops (tests only).
@@ -768,7 +768,7 @@ impl LumitBridgeState {
         }
 
         let document = Document::new();
-        let journal = journal_for(&document);
+        let journal = journal_for(&document, None);
         let store = Arc::new(DocumentStore::new(document));
         let state = LumitBridgeState {
             saved_revision: store.revision(),
@@ -1004,7 +1004,7 @@ pub(crate) fn adopt(
     // nothing on the machine is asked to compile a graph for it.
     let planes = lumit_render::planes::warm_jobs(&doc);
 
-    let journal = journal_for(&doc);
+    let journal = journal_for(&doc, saved_at.as_deref());
     let store = Arc::new(DocumentStore::new(doc));
     let state = LumitBridgeState {
         saved_revision: store.revision(),

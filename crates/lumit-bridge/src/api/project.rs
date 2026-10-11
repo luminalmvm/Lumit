@@ -995,9 +995,20 @@ impl ProjectReference {
         // dropped from it, or a recovery would replay those edits twice. An
         // edit made while the disk was busy stays, and the journal carries on
         // for the edits after this save.
-        if let Ok(journal) = state.journal.lock() {
+        if let Ok(mut journal) = state.journal.lock() {
             if let Some(file) = journal.as_ref() {
                 let _ = file.forget(journalled);
+            }
+            // A journal belongs to the file its edits were made on. Saved
+            // under a new name, or for the first time, the edits still in it
+            // go with the document to that file's own journal, and the name
+            // it had is left with none.
+            let document = state.store.snapshot().id;
+            if let Some(named) = crate::api::state::journal_file(document, Some(&target)) {
+                if let Some(was) = journal.as_ref().filter(|was| !was.same_as(&named)) {
+                    was.hand_to(&named);
+                }
+                *journal = Some(named);
             }
         }
         state.path = Some(target);
@@ -1343,7 +1354,11 @@ impl ProjectReference {
     #[frb(sync)]
     pub fn jump_history(&self, applied: u32) -> Result<(), BridgeError> {
         let s = self.state()?;
-        let s = s.read().map_err(|_| BridgeError::ReadFailed)?;
+        // The project's lock as an edit takes it, like undo and redo below. A
+        // save reads the journal's length and the document under this lock,
+        // and a step back landing between the two would be in the file and
+        // still in the journal, to be replayed a second time after a crash.
+        let s = s.write().map_err(|_| BridgeError::WriteFailed)?;
         s.store
             .jump_to(applied as usize)
             .map_err(BridgeError::OpError)
@@ -1352,7 +1367,7 @@ impl ProjectReference {
     #[frb(sync)]
     pub fn undo(&self) -> Result<(), BridgeError> {
         let s = self.state()?;
-        let s = s.read().map_err(|_| BridgeError::ReadFailed)?;
+        let s = s.write().map_err(|_| BridgeError::WriteFailed)?;
 
         s.store.undo().map_err(BridgeError::OpError)?;
 
@@ -1362,7 +1377,7 @@ impl ProjectReference {
     #[frb(sync)]
     pub fn redo(&self) -> Result<(), BridgeError> {
         let s = self.state()?;
-        let s = s.read().map_err(|_| BridgeError::ReadFailed)?;
+        let s = s.write().map_err(|_| BridgeError::WriteFailed)?;
 
         s.store.redo().map_err(BridgeError::OpError)?;
 

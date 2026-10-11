@@ -273,7 +273,7 @@ impl ProjectReference {
         let (mut doc, _manifest) =
             lumit_project::open(&path).map_err(|_| BridgeError::ReadFailed)?;
 
-        let ops = crate::api::state::journal_file(doc.id)
+        let ops = crate::api::state::journal_file(doc.id, Some(&path))
             .and_then(|journal| journal.read().ok())
             .unwrap_or_default();
         let found = ops.len() as u32;
@@ -299,7 +299,7 @@ impl ProjectReference {
         // points at the wrong file — and every edit from here is journalled
         // against the recovered document or not at all.
         if let Ok(mut journal) = state.journal.lock() {
-            *journal = crate::api::state::journal_file(doc.id);
+            *journal = crate::api::state::journal_file(doc.id, Some(&path));
         }
         state.store.replace_document(doc);
         state.path = Some(path);

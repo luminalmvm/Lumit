@@ -18,8 +18,9 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::{self, File, OpenOptions};
-use std::io::{Read, Write};
+use std::io::{Read, Seek, Write};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::{Duration, SystemTime};
 
 use lumit_core::model::{Fingerprint, MediaRef, PackedMedia};
@@ -110,7 +111,13 @@ fn split_entry(entry: &str) -> Option<(&str, &str)> {
 }
 
 fn plain_name(name: &str) -> bool {
-    !name.is_empty() && name != "." && name != ".." && !name.contains(['/', '\\', ':', '\0'])
+    // Windows drops a dot or a space off the end of a name, which would make
+    // `.. ` the folder above.
+    !name.is_empty()
+        && name != "."
+        && name != ".."
+        && !name.ends_with(['.', ' '])
+        && !name.contains(['/', '\\', ':', '\0'])
 }
 
 fn plain_path(name: &str) -> bool {
@@ -132,10 +139,13 @@ fn name_under(dir: &Path, file: &Path) -> Option<String> {
 /// The stored media files of an archive, by folder.
 ///
 /// Only stored entries count. That is all a save writes, and a stored entry
-/// cannot expand past its own size in the file, so reading one back never
-/// writes more than the archive holds.
-fn media_index(archive: usize, zip: &mut ZipArchive<File>, into: &mut HeldFolders) {
+/// cannot expand past its own size in the file. Together they cannot come to
+/// more than the archive's own `length` either, unless the same bytes are
+/// listed under many names, which no save writes. So the listing stops there,
+/// and reading it back never writes more than the archive holds.
+fn media_index(archive: usize, zip: &mut ZipArchive<File>, length: u64, into: &mut HeldFolders) {
     let mut found = HeldFolders::new();
+    let mut listed = 0u64;
     for index in 0..zip.len() {
         let Ok(entry) = zip.by_index_raw(index) else {
             continue;
@@ -146,6 +156,10 @@ fn media_index(archive: usize, zip: &mut ZipArchive<File>, into: &mut HeldFolder
         let Some((folder, name)) = split_entry(entry.name()) else {
             continue;
         };
+        listed = listed.saturating_add(entry.size());
+        if listed > length {
+            break;
+        }
         found.entry(folder.to_owned()).or_default().push(HeldFile {
             name: name.to_owned(),
             size: entry.size(),
@@ -164,9 +178,10 @@ fn open_archives(paths: &[PathBuf]) -> (Zips, HeldFolders) {
     let mut held = HeldFolders::new();
     let mut zips = Vec::with_capacity(paths.len());
     for (n, path) in paths.iter().enumerate() {
+        let length = fs::metadata(path).map_or(0, |meta| meta.len());
         let mut zip = File::open(path).ok().and_then(|f| ZipArchive::new(f).ok());
         if let Some(zip) = zip.as_mut() {
-            media_index(n, zip, &mut held);
+            media_index(n, zip, length, &mut held);
         }
         zips.push(zip);
     }
@@ -276,10 +291,14 @@ pub fn save_packed(
 ) -> Result<Packed, ProjectError> {
     let dir = path.parent().unwrap_or(Path::new("."));
     let stem = path.file_name().map(|n| n.to_string_lossy().into_owned());
+    // A number of its own as well as the process's, so two saves started
+    // close together never write through the same file.
+    static SAVES: AtomicU32 = AtomicU32::new(0);
     let tmp = dir.join(format!(
-        ".{}.tmp-{}",
+        ".{}.tmp-{}-{}",
         stem.unwrap_or_else(|| "project.lum".into()),
-        std::process::id()
+        std::process::id(),
+        SAVES.fetch_add(1, Ordering::Relaxed)
     ));
 
     let result = (|| -> Result<Packed, ProjectError> {
@@ -469,7 +488,11 @@ pub fn save_packed(
         written.packed.clone_from(&packed);
         zip.start_file("project.json", text)?;
         zip.write_all(serde_json::to_string_pretty(&written)?.as_bytes())?;
-        let file = zip.finish()?;
+        let mut file = zip.finish()?;
+        // An entry given up part-way leaves its bytes past the end of the
+        // archive when what followed was shorter. They are cut off here.
+        let end = file.stream_position()?;
+        file.set_len(end)?;
         file.sync_all()?;
         // The old file may be the one being replaced, and Windows will not
         // rename over a file somebody has open.
@@ -499,9 +522,15 @@ fn write_out(
     progress: Progress<'_>,
 ) -> Result<u64, ProjectError> {
     let mut written = 0;
+    // The file the item names says whose folder this is. When it is not the
+    // one that was packed, the folder is an older pack's and nothing in it is
+    // kept: a frame the same size as the one wanted is still another frame.
+    let ours = files
+        .iter()
+        .any(|file| file.name == main.0 && already_there(&dest_dir.join(&file.name), file, main));
     for file in files {
         let out = dest_dir.join(&file.name);
-        if already_there(&out, file, main) {
+        if ours && already_there(&out, file, main) {
             *done += file.size;
             continue;
         }
@@ -600,11 +629,11 @@ pub fn restore_packed(
         .iter()
         .filter_map(|(_, media)| split_entry(&media.entry).map(|(folder, _)| folder))
         .collect();
-    let total: u64 = folders
+    let total = folders
         .iter()
         .filter_map(|folder| held.get(*folder))
         .flat_map(|files| files.iter().map(|f| f.size))
-        .sum();
+        .fold(0u64, u64::saturating_add);
     let mut done = 0u64;
     let mut read: HashSet<&str> = HashSet::new();
     let mut restored = 0;
@@ -657,17 +686,25 @@ pub fn restore_packed(
 /// parameter at a copy under `copies`. Every save does this to the document it
 /// writes, so a file never keeps a path inside one machine's cache.
 pub(crate) fn keep_original_paths(doc: &mut Document, copies: &Path) {
-    let originals: Vec<(Uuid, String)> = doc
+    // By the copy's path and not by whose file it is: a layer split or
+    // duplicated since the open has effects with ids of their own, reading
+    // the same copy.
+    let originals: HashMap<String, String> = doc
         .packed
         .iter()
-        .filter_map(|(id, entry)| Some((*id, entry.original.clone()?)))
+        .filter_map(|(id, entry)| {
+            let copy = doc
+                .packed_path(*id)
+                .filter(|path| Path::new(path).starts_with(copies))?;
+            Some((copy.to_owned(), entry.original.clone()?))
+        })
         .collect();
-    for (id, original) in originals {
-        let copy = doc
-            .packed_path_mut(id)
-            .filter(|path| Path::new(path.as_str()).starts_with(copies));
-        if let Some(path) = copy {
-            *path = original;
+    if originals.is_empty() {
+        return;
+    }
+    for path in doc.effect_file_paths_mut() {
+        if let Some(original) = originals.get(path.as_str()) {
+            path.clone_from(original);
         }
     }
 }
@@ -867,6 +904,10 @@ fn unpack_place(
 /// reading from it.
 const IN_USE: &str = ".in-use";
 
+/// What a folder is renamed to start with when it is being cleared away, so
+/// it stops being a document's at once and is emptied afterwards.
+const GONE: &str = ".gone-";
+
 /// How long a folder has to sit unopened before it counts as unused. Sooner,
 /// and someone working on two packed projects would read each one out of its
 /// file again on every open.
@@ -911,6 +952,14 @@ pub fn hold_read_out(root: &Path, doc_id: Uuid, wanted: bool) -> Option<File> {
         // Only the folders this module makes, each named for a document. A
         // link to a folder is not one.
         let name = entry.file_name();
+        // One on its way out that a Lumit did not live to finish with.
+        if name.to_str().is_some_and(|name| name.starts_with(GONE))
+            && entry.file_type().is_ok_and(|kind| kind.is_dir())
+        {
+            let gone = entry.path();
+            std::thread::spawn(move || fs::remove_dir_all(gone));
+            continue;
+        }
         let theirs = name
             .to_str()
             .is_some_and(|name| name != mine && Uuid::parse_str(name).is_ok());
@@ -931,7 +980,13 @@ pub fn hold_read_out(root: &Path, doc_id: Uuid, wanted: bool) -> Option<File> {
             _ => false,
         };
         if unused {
-            let _ = fs::remove_dir_all(&dir);
+            // Out of the way under a name no document has, which is quick,
+            // and then gone on a thread of its own: taking out a few thousand
+            // frames can take seconds, and an open is waiting on this.
+            let gone = root.join(format!("{GONE}{}", name.to_string_lossy()));
+            if fs::rename(&dir, &gone).is_ok() {
+                std::thread::spawn(move || fs::remove_dir_all(gone));
+            }
         }
     }
     held

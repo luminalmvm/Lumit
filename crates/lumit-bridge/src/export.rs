@@ -807,10 +807,16 @@ pub(crate) fn reveal_in_folder(path: &str) -> bool {
     if !path.exists() {
         return false;
     }
+    // Quoted by hand. Explorer splits its switch on commas, and an argument is
+    // only quoted for it when it holds a space, so a comma in a name with no
+    // space in it opened the wrong folder. A Windows path cannot hold a quote.
     #[cfg(target_os = "windows")]
-    let launched = std::process::Command::new("explorer")
-        .arg(format!("/select,{}", path.display()))
-        .spawn();
+    let launched = {
+        use std::os::windows::process::CommandExt;
+        std::process::Command::new("explorer")
+            .raw_arg(format!("/select,\"{}\"", path.display()))
+            .spawn()
+    };
     #[cfg(target_os = "macos")]
     let launched = std::process::Command::new("open")
         .arg("-R")

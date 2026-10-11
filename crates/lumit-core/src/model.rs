@@ -3585,6 +3585,22 @@ impl Document {
         })
     }
 
+    /// [`Self::effect_files`], to point each path somewhere else.
+    pub fn effect_file_paths_mut(&mut self) -> impl Iterator<Item = &mut String> {
+        let comps = self.items.iter_mut().filter_map(|item| match item {
+            ProjectItem::Composition(c) => Some(c),
+            _ => None,
+        });
+        comps
+            .flat_map(Composition::effects_mut)
+            .flat_map(|fx| fx.params.iter_mut())
+            .filter_map(|param| match &mut param.value {
+                EffectValue::File(file) => Some(file.paths.iter_mut()),
+                _ => None,
+            })
+            .flatten()
+    }
+
     /// Where the file behind a packed id is read from: the path
     /// [`Self::packed_ref`]'s reference was found at, or the one an effect's
     /// parameter holds. `None` when nothing live is behind the id.

@@ -80,15 +80,23 @@ Future<RecoveryChoice?> showRecoveryDialogFrb({
     builder: (close) => _RecoveryDialog(
         onChoose: close, hasAutosave: autosaves.isNotEmpty),
   );
-  if (choice == null) return null;
+  if (choice == null) {
+    // Closed without picking one. After a crash that is still an answer
+    // other than restoring, so the edits go: left in the journal they would
+    // sit under whatever is done next and come back on top of it.
+    if (crashed) state.project?.discardJournal();
+    return null;
+  }
 
   switch (choice) {
     case RecoveryChoice.journal:
       state.project?.restoreJournal(projectPath: projectPath);
       state.sharingLetGo();
     case RecoveryChoice.autosave:
-      await state.openProject(autosaves.first.path, recover: false);
+      // Before the autosave opens: the edits are the saved file's, and the
+      // project in hand stops being that file the moment another opens.
       if (crashed) state.project?.discardJournal();
+      await state.openProject(autosaves.first.path, recover: false);
     case RecoveryChoice.discard:
       if (crashed) state.project?.discardJournal();
   }
