@@ -365,6 +365,8 @@ class _ShareDialogState extends State<_ShareDialog> {
     setState(() {
       _joining = false;
       _error = switch (outcome) {
+        // Asked about the unsaved project in hand, and kept it.
+        null => null,
         BridgeJoinOutcome_BadInvite() => l10n.shareBadInvite,
         BridgeJoinOutcome_PasswordNeeded() => l10n.sharePasswordNeeded,
         // A wrong password gets no answer either, so it is one of the two.
@@ -958,9 +960,14 @@ class _ShareDialogState extends State<_ShareDialog> {
             Row(
               children: [
                 Expanded(
-                  child: _field(t, 'share-reinvite', _newInvite,
+                  // A pasted invite is a link like the one joined by, and is
+                  // hidden the same way.
+                  child: _veiledField(t, 'share-reinvite', _newInvite,
+                      shown: _shown || _newInvite.text.isEmpty,
                       onSubmitted: _reinvite),
                 ),
+                const SizedBox(width: 8),
+                _showButton(t),
                 const SizedBox(width: 8),
                 HouseButton(
                   key: const ValueKey('share-reconnect'),

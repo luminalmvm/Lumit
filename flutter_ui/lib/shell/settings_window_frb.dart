@@ -874,6 +874,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         settings.retimeOpensToSpeed = shipped.retimeOpensToSpeed;
         settings.retimeInSeconds = shipped.retimeInSeconds;
         settings.videoAsSequenceLayer = shipped.videoAsSequenceLayer;
+        settings.streamsArrival = shipped.streamsArrival;
         settings.pasteLayersAtOriginalTime = shipped.pasteLayersAtOriginalTime;
         settings.playheadStaysOnStop = shipped.playheadStaysOnStop;
         settings.transformInEffectControls = shipped.transformInEffectControls;
@@ -1802,6 +1803,28 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             settings.videoAsSequenceLayer = on;
             changed();
           }),
+          // What a recording with the game on one audio stream and the
+          // microphone on another becomes when it is placed. A layer can be
+          // split or merged afterwards whichever this says.
+          _row(
+            t,
+            l10n.settingsSeveralAudioStreamsArriveAs,
+            _dropdown<StreamsArrival>(
+              key: 'settings-streams-arrival',
+              width: _ddWide,
+              value: settings.streamsArrival,
+              options: StreamsArrival.values,
+              label: (arrival) => switch (arrival) {
+                StreamsArrival.first => l10n.streamsArrivalFirst,
+                StreamsArrival.mixed => l10n.streamsArrivalMixed,
+                StreamsArrival.split => l10n.streamsArrivalSplit,
+              },
+              onChanged: (arrival) => setState(() {
+                settings.streamsArrival = arrival;
+                changed();
+              }),
+            ),
+          ),
           _flag(t, 'settings-paste-at-original-time',
               l10n.settingsPasteLayersAtTheirOriginal,
               value: settings.pasteLayersAtOriginalTime, set: (on) {

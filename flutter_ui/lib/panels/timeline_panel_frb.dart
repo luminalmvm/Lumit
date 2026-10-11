@@ -3208,6 +3208,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     _liveResize.dispose();
     _rowSelection.dispose();
     _laneKeys.dispose();
+    _laneMarquee.dispose();
+    _markerPreview.dispose();
     _vOutline.dispose();
     _vLane.dispose();
     _hLane.dispose();
@@ -3833,7 +3835,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                     comp.addFootageLayer(
                         footage: f,
                         asSequence: _videoAsSequence(context),
-                        row: at);
+                        row: at,
+                        arrival: ui.streamsArrival);
                   }
                 case CompDragData(comp: final dropped):
                   // A comp cannot nest into itself; the engine refuses and
@@ -4218,6 +4221,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                           child: Outline(
                                             comp: comp,
                                             rows: rows,
+                                            stack: ui.model.heldLayers,
                                             vScroll: _vOutline,
                                             viewport: box.maxHeight,
                                             onOpenSequence: _openLayerView,

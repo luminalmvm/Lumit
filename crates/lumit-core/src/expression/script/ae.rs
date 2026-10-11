@@ -249,6 +249,39 @@ impl<'a> Ae<'a> {
     fn sample(&self, comp: Uuid, layer: &Layer, property: &Property, t: f64) -> f64 {
         let local = t - layer.start_offset.0.to_f64();
         match &property.animation {
+            Animation::Expression(_) => {
+                // The property this expression is written on, or the other
+                // half of its own point, reads as it was before the expression:
+                // that is what `[position[0], 540]` on a position means in
+                // After Effects. Running it again here instead would run it
+                // twice for each of those two, a level deeper each time. A
+                // property is told from the rest of its layer's by its seed,
+                // which the two halves of a point share.
+                let kept = super::Slot::read(&property.extra);
+                if self.context.layer == Some(layer.id)
+                    && kept.seed != 0
+                    && kept.seed == self.slot.seed
+                {
+                    if let Some(own) = kept.own() {
+                        return own;
+                    }
+                }
+                self.sample_driven(comp, layer, property, local, t)
+            }
+            _ => property.value_at(local),
+        }
+    }
+
+    /// [`Self::sample`] for a property that is another expression.
+    fn sample_driven(
+        &self,
+        comp: Uuid,
+        layer: &Layer,
+        property: &Property,
+        local: f64,
+        t: f64,
+    ) -> f64 {
+        match &property.animation {
             // Only a property that is itself an expression needs a context
             // of its own, a level deeper so two that read each other stop.
             Animation::Expression(_) => property.value_at_with_context(

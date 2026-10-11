@@ -47,6 +47,7 @@ import 'package:lumit_flutter/state/share.dart';
 import 'package:lumit_flutter/state/ui_state.dart';
 import 'package:lumit_flutter/state/viewer_views.dart';
 import 'package:lumit_flutter/theme/motion.dart';
+import 'package:lumit_flutter/theme/theme.dart' show AnimationLevel;
 import 'package:lumit_flutter/widgets/escape_ladder.dart';
 import 'package:lumit_flutter/widgets/controls.dart';
 import 'package:lumit_flutter/widgets/ui_scale.dart';
@@ -95,7 +96,10 @@ class LumitAppNew extends StatelessWidget {
             listenable: uiState,
             builder: (context, _) => ThemeScope(
               theme: uiState.theme,
-              animationLevel: uiState.workspace.animationLevel,
+              // The system's own "no animations" setting outranks Lumit's.
+              animationLevel: MediaQuery.disableAnimationsOf(context)
+                  ? AnimationLevel.none
+                  : uiState.workspace.animationLevel,
               showTooltips: uiState.workspace.interface.showTooltips,
               child: Directionality(
                 textDirection: TextDirection.ltr,
@@ -417,13 +421,20 @@ class _LumitAppViewState extends State<LumitAppView> {
           builder: (context, opening, _) => opening
               ? ValueListenableBuilder<OpenProgress?>(
                   valueListenable: state.openProgress,
-                  // Null is the sweep: an import says nothing about how far it
-                  // has got, and opening a `.lum` says everything.
-                  builder: (context, progress, _) => OpeningOverlay(
-                    label: progress == null
-                        ? null
-                        : openPhaseLabel(progress.phase),
-                    fraction: progress?.fraction,
+                  // Null is the sweep, for a job that says nothing about how
+                  // far it has got.
+                  builder: (context, progress, _) =>
+                      ValueListenableBuilder<VoidCallback?>(
+                    valueListenable: state.openCancel,
+                    builder: (context, cancel, _) => OpeningOverlay(
+                      label: progress == null
+                          ? null
+                          : openPhaseLabel(progress.phase),
+                      fraction: progress?.fraction,
+                      onCancel: cancel,
+                      cancelLabel:
+                          state.openIsImport ? l10n.cancelImport : null,
+                    ),
                   ),
                 )
               : const SizedBox.shrink(),
@@ -434,7 +445,8 @@ class _LumitAppViewState extends State<LumitAppView> {
         BusyOverlay(
             busy: state.busy,
             progress: state.busyProgress,
-            cancel: state.busyCancel),
+            cancel: state.busyCancel,
+            cancelLabel: state.busyCancelLabel),
       ]),
     );
   }

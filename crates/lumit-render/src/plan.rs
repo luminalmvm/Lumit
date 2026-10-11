@@ -392,11 +392,47 @@ pub fn collect_comp_jobs(
                 .flat_map(move |e| clone_moments_of(e, doc, comp, t, lt))
         })
         .collect();
-    // A clone layer out of its span now may be in it at a moment a stamp
-    // shows, so it is planned all the same.
-    let cloned_in_span = |l: &lumit_core::model::Layer| {
-        clone_moments.iter().any(|(id, tau)| {
-            *id == l.id && *tau >= l.in_point.0.to_f64() && *tau < l.out_point.0.to_f64()
+    let comp_dt = 1.0 / comp.frame_rate.fps().max(1.0);
+    // The times each layer is built again at: the ones this comp was handed,
+    // and for a layer under an adjustment with a temporal stack, that
+    // adjustment's neighbours. The builder rebuilds the layers below at the
+    // same times (`adjustment_flow_below`). Empty everywhere in an ordinary
+    // comp.
+    let mut rebuilt = moments.to_vec();
+    let mut layer_moments = Vec::with_capacity(comp.layers.len());
+    for l in &comp.layers {
+        // And the moments a Clone to points shows this layer at.
+        let cloned = clone_moments.iter().filter(|(id, _)| *id == l.id);
+        layer_moments.push(
+            rebuilt
+                .iter()
+                .copied()
+                .chain(cloned.map(|(_, tau)| *tau))
+                .collect::<Vec<f64>>(),
+        );
+        if l.is_adjustment()
+            && l.switches.visible
+            && !l.graph.out_unwired
+            && in_span(l)
+            && !(any_solo && !l.switches.solo)
+        {
+            let lt = lumit_core::time::layer_time(t, l.start_offset.0);
+            rebuilt.extend(
+                rebuild_offsets(l, lt, comp_dt)
+                    .into_iter()
+                    .map(|(o, _)| lumit_core::time::frames_on(t, o, comp_dt)),
+            );
+        }
+    }
+    // A layer out of its span now may be in it at one of those moments: a
+    // clone at a moment a stamp shows, or the next shot on the frame before a
+    // cut, which is the neighbour a temporal effect above the two reads. It
+    // is planned all the same, or that neighbour is drawn without it.
+    let moment_in_span = |idx: usize, l: &lumit_core::model::Layer| {
+        layer_moments.get(idx).is_some_and(|moments| {
+            moments
+                .iter()
+                .any(|tau| *tau >= l.in_point.0.to_f64() && *tau < l.out_point.0.to_f64())
         })
     };
     // Those moments on a layer's own clock, which is the clock a graph it
@@ -416,7 +452,10 @@ pub fn collect_comp_jobs(
         if l.audio_only {
             continue;
         }
-        if l.switches.visible && in_span(l) && !(any_solo && !l.switches.solo) {
+        if l.switches.visible
+            && (in_span(l) || moment_in_span(idx, l))
+            && !(any_solo && !l.switches.solo)
+        {
             // A layer acting as an adjustment draws the composite
             // beneath it, so its OWN frames are never asked for — decoding them
             // would be a video decode nobody looks at. Only its own frames,
@@ -473,7 +512,7 @@ pub fn collect_comp_jobs(
     for (idx, l) in comp.layers.iter().enumerate() {
         if drawn(idx, l)
             || !wanted.contains(&l.id)
-            || !(in_span(l) || cloned_in_span(l))
+            || !(in_span(l) || moment_in_span(idx, l))
             || !l.switches.fx
         {
             continue;
@@ -507,40 +546,8 @@ pub fn collect_comp_jobs(
     // layer's footage is wanted at by the adjustments above it, in comp
     // frames. Empty everywhere in an ordinary comp.
     let shutter_offsets = lumit_core::fx::accumulation_shutter_offsets(&comp.layers, t);
-    let comp_dt = 1.0 / comp.frame_rate.fps().max(1.0);
-    // The times each layer is built again at: the ones this comp was handed,
-    // and for a layer under an adjustment with a temporal stack, that
-    // adjustment's neighbours. The builder rebuilds the layers below at the
-    // same times (`adjustment_flow_below`). Empty everywhere in an ordinary
-    // comp.
-    let mut rebuilt = moments.to_vec();
-    let mut layer_moments = Vec::with_capacity(comp.layers.len());
-    for l in &comp.layers {
-        // And the moments a Clone to points shows this layer at.
-        let cloned = clone_moments.iter().filter(|(id, _)| *id == l.id);
-        layer_moments.push(
-            rebuilt
-                .iter()
-                .copied()
-                .chain(cloned.map(|(_, tau)| *tau))
-                .collect::<Vec<f64>>(),
-        );
-        if l.is_adjustment()
-            && l.switches.visible
-            && !l.graph.out_unwired
-            && in_span(l)
-            && !(any_solo && !l.switches.solo)
-        {
-            let lt = lumit_core::time::layer_time(t, l.start_offset.0);
-            rebuilt.extend(
-                rebuild_offsets(l, lt, comp_dt)
-                    .into_iter()
-                    .map(|(o, _)| t + f64::from(o) * comp_dt),
-            );
-        }
-    }
     for (idx, layer) in comp.layers.iter().enumerate() {
-        if !wanted.contains(&layer.id) || !(in_span(layer) || cloned_in_span(layer)) {
+        if !wanted.contains(&layer.id) || !(in_span(layer) || moment_in_span(idx, layer)) {
             continue;
         }
         let lt = lumit_core::time::layer_time(sample_times[idx], layer.start_offset.0);
@@ -705,22 +712,44 @@ pub fn collect_comp_jobs(
                     collect_comp_jobs(ctx, nested, st, &[], jobs, visited, false);
                     visited.pop();
                 }
-                let Some(mut job) = shown_job(shown, lt, false) else {
+                let live = shown_job(shown, lt, false);
+                let in_gap = matches!(shown, Shown::Nothing);
+                // A layer in a gap now may show a clip at a moment a temporal
+                // effect above builds it again at, and a job is the only
+                // thing a clip's pixels travel in. So the first such clip
+                // stands as the job, and the frame's own moment is filed as
+                // the gap it is, which is how the builder knows to draw
+                // nothing here.
+                let stand_in = || {
+                    // A Posterize-held layer keeps what it holds.
+                    let held = sample_times[idx] != t;
+                    let mut moments = layer_moments[idx].iter().filter(|_| in_gap && !held);
+                    moments.find_map(|&tau| {
+                        clip_job(
+                            lumit_core::time::layer_time(tau, layer.start_offset.0),
+                            true,
+                        )
+                    })
+                };
+                let Some(mut job) = live.or_else(stand_in) else {
                     continue;
                 };
+                if in_gap {
+                    job.cuts.push(Cut::Moment(0.0, None));
+                }
                 // Neighbour frames for a temporal effect stack, as a Footage
                 // layer's are, through whichever clip is live then. A clip of
                 // this job's footage is one more frame of it, and any other
                 // is a job of its own, as is one inside a fade or a dissolve.
                 // A gap is no neighbour.
-                if lumit_core::fx::stack_is_temporal(&layer.effects, layer.switches.fx) {
+                if !in_gap && lumit_core::fx::stack_is_temporal(&layer.effects, layer.switches.fx) {
                     let window = lumit_core::fx::stack_temporal_window(
                         &layer.effects,
                         layer.switches.fx,
                         lt / comp_dt,
                     );
                     for o in window.into_iter().filter(|&o| o != 0) {
-                        match clip_job(lt + f64::from(o) * comp_dt, true) {
+                        match clip_job(lumit_core::time::frames_on(lt, o, comp_dt), true) {
                             Some(n) if n.item == job.item && n.cuts.is_empty() => {
                                 job.temporal.push((o, n.source_frame));
                             }
@@ -1512,6 +1541,7 @@ mod tests {
             volume_db: lumit_core::anim::Property::zero(),
             pan: lumit_core::anim::Property::zero(),
             audio_only: false,
+            audio_streams: Default::default(),
             adjustment: false,
             retime: None,
             interpolation: lumit_core::retime::Interpolation::default(),
@@ -1645,6 +1675,7 @@ mod tests {
             volume_db: Property::zero(),
             pan: Property::zero(),
             audio_only: false,
+            audio_streams: Default::default(),
             adjustment: false,
             retime: None,
             interpolation: lumit_core::retime::Interpolation::default(),
@@ -1784,6 +1815,7 @@ mod tests {
             volume_db: lumit_core::anim::Property::zero(),
             pan: lumit_core::anim::Property::zero(),
             audio_only: false,
+            audio_streams: Default::default(),
             adjustment: false,
             retime: None,
             interpolation: lumit_core::retime::Interpolation::default(),
@@ -1967,6 +1999,7 @@ mod tests {
             volume_db: Property::zero(),
             pan: Property::zero(),
             audio_only: false,
+            audio_streams: Default::default(),
             adjustment: false,
             retime: None,
             interpolation: lumit_core::retime::Interpolation::default(),

@@ -86,7 +86,10 @@ pub struct AudioJob {
     /// (docs/impl/audio-nodes.md §2); the mixer sums the jobs it is handed
     /// whatever clips they came from.
     pub clip: Option<uuid::Uuid>,
-    pub path: PathBuf,
+    /// The file the sound is read from, and which of its audio streams: the
+    /// first for nearly every layer, another or several mixed for a layer or
+    /// clip that has chosen (`lumit_core::model::AudioStreams`).
+    pub sound: lumit_media::SoundSource,
     pub in_s: f64,
     pub out_s: f64,
     pub offset_s: f64,
@@ -2493,15 +2496,25 @@ pub fn start(
     let cancel = Arc::new(AtomicBool::new(false));
     let flag = cancel.clone();
     std::thread::spawn(move || {
-        let result = run(&doc, comp_id, &audio, &out_path, &spec, &tx, &flag);
+        let opened = AtomicBool::new(false);
+        let result = run(&doc, comp_id, &audio, &out_path, &spec, &tx, &flag, &opened);
+        // No half files, but only a file this export began. One that failed
+        // before it opened anything has written nothing, and an image
+        // sequence never writes to the name it was given, so whatever is
+        // there under that name was there before and is somebody's.
+        let unfinished = || {
+            if opened.load(Ordering::Relaxed) {
+                let _ = std::fs::remove_file(&out_path);
+            }
+        };
         let _ = match result {
             Ok(()) if flag.load(Ordering::Relaxed) => {
-                let _ = std::fs::remove_file(&out_path); // no half files
+                unfinished();
                 tx.send(ExportEvent::Failed("cancelled".into()))
             }
             Ok(()) => tx.send(ExportEvent::Done(out_path)),
             Err(e) => {
-                let _ = std::fs::remove_file(&out_path);
+                unfinished();
                 tx.send(ExportEvent::Failed(e))
             }
         };
@@ -2545,7 +2558,7 @@ pub fn mixdown_counting(
     let pool = lumit_audio::stream::pool();
     let sourced: Vec<(Arc<Source>, &AudioJob)> = jobs
         .iter()
-        .map(|job| (pool.source(&job.path, rate), job))
+        .map(|job| (pool.source(&job.sound, rate), job))
         .collect();
     mix_sources(&sourced, rate, duration_s, master_gain, on_decoded)
 }
@@ -2733,6 +2746,10 @@ type Baked = Option<(Arc<Source>, u32)>;
 #[derive(PartialEq)]
 struct BakeKey {
     item: Uuid,
+    /// Which of the item's audio streams went through the racks: two rows
+    /// split from one recording share an item, a span and a rack, and
+    /// differ in this alone.
+    streams: Vec<u32>,
     rate: u32,
     start_frame: i64,
     src_start: usize,
@@ -2842,6 +2859,7 @@ pub fn live_plan(
         let baked: Baked = if racked {
             let key = BakeKey {
                 item: job.item,
+                streams: job.sound.streams().to_vec(),
                 rate,
                 start_frame,
                 src_start,
@@ -2909,6 +2927,7 @@ pub fn audio_samples_through(frame_count: usize, fps: f64, rate: u32) -> usize {
     ((frame_count as f64 / fps) * f64::from(rate)).round() as usize
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run(
     doc: &Arc<Document>,
     comp_id: Uuid,
@@ -2917,6 +2936,9 @@ fn run(
     spec: &ExportSpec,
     tx: &Sender<ExportEvent>,
     cancel: &AtomicBool,
+    // Raised just before the output file is opened, which is the first moment
+    // there is anything of this export's at `out_path`.
+    opened: &AtomicBool,
 ) -> Result<(), String> {
     // The render settings that change the document do it on this export's own
     // throwaway snapshot, never on the project (docs/06 §7.2).
@@ -2978,6 +3000,7 @@ fn run(
     // Sound with no picture needs no compositor and no graphics card at all:
     // the mix is already made, and there is nothing to render.
     if let ExportFormat::Audio(format) = spec.format {
+        opened.store(true, Ordering::Relaxed);
         return run_audio_only(
             out_path,
             format,
@@ -3044,6 +3067,7 @@ fn run(
                 Some((target, peak)) => (Some(target), peak),
                 None => (None, None),
             };
+            opened.store(true, Ordering::Relaxed);
             let encoder = lumit_media::Encoder::open(
                 out_path,
                 Some(&lumit_media::encode::VideoSettings {
@@ -3445,6 +3469,7 @@ mod tests {
                 volume_db: lumit_core::anim::Property::zero(),
                 pan: lumit_core::anim::Property::zero(),
                 audio_only: false,
+                audio_streams: Default::default(),
                 adjustment: false,
                 retime: None,
                 interpolation: Default::default(),
@@ -3511,7 +3536,16 @@ mod tests {
     ) -> Option<Result<(), String>> {
         let (tx, _rx) = channel();
         let cancel = AtomicBool::new(false);
-        match run(doc, comp, &[], path, spec, &tx, &cancel) {
+        match run(
+            doc,
+            comp,
+            &[],
+            path,
+            spec,
+            &tx,
+            &cancel,
+            &AtomicBool::new(false),
+        ) {
             Err(e) if e.starts_with("export renderer:") => {
                 lumit_gpu::no_adapter();
                 None
@@ -3571,7 +3605,7 @@ mod tests {
             item: uuid::Uuid::nil(),
             layer: uuid::Uuid::nil(),
             clip: None,
-            path: PathBuf::new(),
+            sound: lumit_media::SoundSource::file(PathBuf::new()),
             in_s: 0.0,
             out_s: 10.0,
             offset_s,
@@ -3767,7 +3801,7 @@ mod tests {
             item: uuid::Uuid::nil(),
             layer: uuid::Uuid::nil(),
             clip: None,
-            path: PathBuf::new(),
+            sound: lumit_media::SoundSource::file(PathBuf::new()),
             in_s: 0.0,
             out_s: 1.0,
             offset_s: 0.0,
@@ -4709,8 +4743,17 @@ mod tests {
                         ));
                         let (tx, _rx) = channel();
                         let cancel = AtomicBool::new(false);
-                        run(&doc, comp, &[], &path, &sp, &tx, &cancel)
-                            .unwrap_or_else(|e| panic!("{ext} {rate} Hz: {e}"));
+                        run(
+                            &doc,
+                            comp,
+                            &[],
+                            &path,
+                            &sp,
+                            &tx,
+                            &cancel,
+                            &AtomicBool::new(false),
+                        )
+                        .unwrap_or_else(|e| panic!("{ext} {rate} Hz: {e}"));
 
                         let probe = lumit_media::probe::probe(&path).unwrap();
                         let audio = probe.audio.expect("it is all sound");
@@ -4958,7 +5001,7 @@ mod tests {
             item: Uuid::nil(),
             layer: Uuid::nil(),
             clip: None,
-            path: PathBuf::new(),
+            sound: lumit_media::SoundSource::file(PathBuf::new()),
             in_s: 0.0,
             out_s: 1.0,
             offset_s: 0.0,

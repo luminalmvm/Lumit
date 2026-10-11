@@ -574,6 +574,11 @@ impl Frame {
         {
             return None;
         }
+        // No frame is written with more, and everything below is sized by
+        // this number, which a file can say anything in.
+        if stored.count as usize > MAX_POINTS {
+            return None;
+        }
         let n = stored.count as usize;
         let ids = match stored.run {
             Some(first) => Ids::Run(first),

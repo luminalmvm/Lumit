@@ -1495,7 +1495,9 @@ class _SourceBarState extends State<_SourceBar>
     _sound = false;
     if (facts.audioCodec != null) {
       try {
-        _sound = footage.previewAudioFrom(startSeconds: _from / _rate);
+        // A file with several audio streams is heard as it would be placed.
+        _sound = footage.previewAudioFrom(
+            startSeconds: _from / _rate, arrival: ui.streamsArrival);
       } catch (_) {
         // No sound to follow, so the picture is counted on by itself.
       }

@@ -889,6 +889,9 @@ String? _previewCodecs(
     if (info.audioCodec != null && info.sampleRate > 0)
       '${projectSampleRateText(info.sampleRate)} '
           '${projectChannelText(info.channels)}',
+    // Said only of a file with more than one: the rate and layout before it
+    // are the first stream's, and this is what says there are others.
+    if (info.audioStreams > 1) l10n.projectAudioStreamCount(info.audioStreams),
   ];
   return parts.isEmpty ? null : parts.join(' · ');
 }

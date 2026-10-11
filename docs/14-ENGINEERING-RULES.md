@@ -82,7 +82,7 @@ Same project and inputs, same exported pixels, every run.
 
 - Every WGSL effect has a CPU twin, and tests hold the two within the effect's declared
   tolerance.
-- Retime and rational time get property tests. So does the journal (apply, invert, apply).
+- Rational time and keyframe evaluation get property tests.
 - A test has to earn its place. No tests for labels, layout, getters, or a second route
   to something already tested.
 - A bug fix gets a regression test only if the bug lost work, crashed, hung, or exported

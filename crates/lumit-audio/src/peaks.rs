@@ -29,6 +29,7 @@
 //! ([`load_or_build`]) so the next run of Lumit reads it back instead of decoding
 //! the file again.
 
+use lumit_media::SoundSource;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
@@ -382,8 +383,9 @@ pub struct PeakPyramid {
     samples: OnceLock<Vec<i16>>,
     /// Whether a build of this source keeps its samples: it is short enough.
     keeps_samples: bool,
-    /// The file the samples can be decoded from again.
-    source: Option<PathBuf>,
+    /// The file, and the streams of it, the samples can be decoded from
+    /// again.
+    source: Option<SoundSource>,
 }
 
 /// A source being summarised a stretch at a time.
@@ -585,13 +587,26 @@ const BUILD_FRAMES: usize = 1 << 15;
 
 /// The peak file for a file with this fingerprint, in `dir`. Named as the
 /// frame index beside it is, with the rate the sound was summarised at, since
-/// the same file summarised at another rate is another pyramid.
+/// the same file summarised at another rate is another pyramid. So is another
+/// of its audio streams, or several of them mixed: those are named for the
+/// streams as well, counted from one as the interface counts them, and the
+/// first stream alone keeps the name it always had.
 #[must_use]
-pub fn peak_path(dir: &Path, fingerprint: &lumit_media::Fingerprint, sample_rate: u32) -> PathBuf {
-    dir.join(format!("{}.{sample_rate}.peak", fingerprint.cache_key()))
+pub fn peak_path(
+    dir: &Path,
+    fingerprint: &lumit_media::Fingerprint,
+    streams: &[u32],
+    sample_rate: u32,
+) -> PathBuf {
+    let key = fingerprint.cache_key();
+    if streams == [0] {
+        return dir.join(format!("{key}.{sample_rate}.peak"));
+    }
+    let named: Vec<String> = streams.iter().map(|s| (s + 1).to_string()).collect();
+    dir.join(format!("{key}.{sample_rate}.a{}.peak", named.join("-")))
 }
 
-/// This file's pyramid at `sample_rate`: read from its peak file in
+/// This sound's pyramid at `sample_rate`: read from its peak file in
 /// `cache_dir` when one is there for the file as it is now, else built by
 /// decoding the file through once and written there for next time. `None`
 /// when the file cannot be decoded.
@@ -602,21 +617,21 @@ pub fn peak_path(dir: &Path, fingerprint: &lumit_media::Fingerprint, sample_rate
 /// is built and handed back all the same.
 #[must_use]
 pub fn load_or_build(
-    path: &Path,
+    sound: &SoundSource,
     sample_rate: u32,
     cache_dir: Option<&Path>,
 ) -> Option<PeakPyramid> {
-    let fingerprint = lumit_media::Fingerprint::of(path).ok();
+    let fingerprint = lumit_media::Fingerprint::of(&sound.path).ok();
     if let (Some(dir), Some(fp)) = (cache_dir, &fingerprint) {
-        let held = std::fs::read(peak_path(dir, fp, sample_rate))
+        let held = std::fs::read(peak_path(dir, fp, sound.streams(), sample_rate))
             .ok()
             .and_then(|bytes| PeakPyramid::from_bytes(&bytes, fp, sample_rate));
         if let Some(mut pyramid) = held {
-            pyramid.source = Some(path.to_path_buf());
+            pyramid.source = Some(sound.clone());
             return Some(pyramid);
         }
     }
-    let mut reader = lumit_media::audio::AudioReader::open(path, sample_rate).ok()?;
+    let mut reader = lumit_media::audio::SoundReader::open(sound, sample_rate).ok()?;
     let mut builder = PyramidBuilder::new(sample_rate);
     let mut at = 0u64;
     loop {
@@ -631,12 +646,15 @@ pub fn load_or_build(
     if pyramid.is_empty() {
         return None;
     }
-    pyramid.source = Some(path.to_path_buf());
+    pyramid.source = Some(sound.clone());
     if let (Some(dir), Some(fp)) = (cache_dir, &fingerprint) {
         // Best-effort: a cache that cannot be written costs the next run the
         // decode again, never this one its answer.
         if std::fs::create_dir_all(dir).is_ok() {
-            let _ = std::fs::write(peak_path(dir, fp, sample_rate), pyramid.to_bytes(fp));
+            let _ = std::fs::write(
+                peak_path(dir, fp, sound.streams(), sample_rate),
+                pyramid.to_bytes(fp),
+            );
         }
     }
     Some(pyramid)
@@ -778,10 +796,10 @@ impl PeakPyramid {
     /// right in on, and never for the rest.
     fn samples(&self) -> &[i16] {
         self.samples.get_or_init(|| {
-            let (true, Some(path)) = (self.keeps_samples, &self.source) else {
+            let (true, Some(sound)) = (self.keeps_samples, &self.source) else {
                 return Vec::new();
             };
-            let Ok(mut reader) = lumit_media::audio::AudioReader::open(path, self.sample_rate)
+            let Ok(mut reader) = lumit_media::audio::SoundReader::open(sound, self.sample_rate)
             else {
                 return Vec::new();
             };
@@ -1086,12 +1104,13 @@ mod tests {
         let whole = lumit_media::audio::decode_all(&path, RATE).unwrap();
         let in_memory = PeakPyramid::build(&whole.samples, RATE);
         // Built from the file a stretch at a time, which writes the peak file.
-        let built = load_or_build(&path, RATE, Some(&cache)).unwrap();
+        let sound = SoundSource::file(&path);
+        let built = load_or_build(&sound, RATE, Some(&cache)).unwrap();
         let fingerprint = lumit_media::Fingerprint::of(&path).unwrap();
-        let file = peak_path(&cache, &fingerprint, RATE);
+        let file = peak_path(&cache, &fingerprint, sound.streams(), RATE);
         assert!(file.is_file(), "the build left its peak file");
         // Read back: nothing is decoded to make this one.
-        let read = load_or_build(&path, RATE, Some(&cache)).unwrap();
+        let read = load_or_build(&sound, RATE, Some(&cache)).unwrap();
         assert!(
             read.samples.get().is_none(),
             "read from the file, not rebuilt"

@@ -4409,6 +4409,7 @@ impl LayerReference {
 
         let mut converted = layer.clone();
         converted.kind = LayerKind::Footage { item };
+        converted.audio_streams = clip.audio_streams.clone();
         converted.interpolation = clip.interpolation.clone();
         // The clip's own map becomes the layer's, which is exact: the clip
         // spans the whole layer, so clip time and layer time are the same
@@ -4681,6 +4682,9 @@ impl LayerReference {
         let source_out = local.checked_add(duration).unwrap_or(duration);
 
         let mut converted = layer.clone();
+        // The choice of audio streams moves onto the clip, which is where a
+        // Sequence layer keeps one.
+        converted.audio_streams = Default::default();
         converted.kind = LayerKind::Sequence {
             clips: vec![Clip {
                 id: Uuid::now_v7(),
@@ -4700,6 +4704,7 @@ impl LayerReference {
                 fx: true,
                 gain_db: 0.0,
                 link: None,
+                audio_streams: layer.audio_streams.clone(),
                 extra: serde_json::Map::new(),
             }],
         };
@@ -5543,7 +5548,9 @@ impl LayerReference {
             let Some(path) = path else {
                 return Ok(BridgeAudioPeaks::empty());
             };
-            let Some(pyramid) = crate::peaks::pyramid_for(&path) else {
+            // The streams this layer sounds are the ones its wave is of.
+            let sound = lumit_media::SoundSource::streams_of(path, layer.audio_streams.places());
+            let Some(pyramid) = crate::peaks::pyramid_for(&sound) else {
                 return Ok(BridgeAudioPeaks::empty());
             };
 
@@ -5641,7 +5648,8 @@ impl LayerReference {
             let Some(path) = path else {
                 return Ok(BridgeSpectrogram::empty());
             };
-            let Some(grid) = crate::peaks::spectrogram_for(&path) else {
+            let sound = lumit_media::SoundSource::streams_of(path, layer.audio_streams.places());
+            let Some(grid) = crate::peaks::spectrogram_for(&sound) else {
                 return Ok(BridgeSpectrogram::empty());
             };
 
@@ -5729,7 +5737,9 @@ impl LayerReference {
             let Some(path) = path else {
                 return Ok(BridgeAudioPeaks::empty());
             };
-            let Some(pyramid) = crate::peaks::pyramid_for(&path) else {
+            // The streams this clip sounds are the ones its wave is of.
+            let sound = lumit_media::SoundSource::streams_of(path, clip.audio_streams.places());
+            let Some(pyramid) = crate::peaks::pyramid_for(&sound) else {
                 return Ok(BridgeAudioPeaks::empty());
             };
 
@@ -5825,7 +5835,8 @@ impl LayerReference {
             let Some(path) = path else {
                 return Ok(BridgeSpectrogram::empty());
             };
-            let Some(grid) = crate::peaks::spectrogram_for(&path) else {
+            let sound = lumit_media::SoundSource::streams_of(path, clip.audio_streams.places());
+            let Some(grid) = crate::peaks::spectrogram_for(&sound) else {
                 return Ok(BridgeSpectrogram::empty());
             };
 
@@ -6073,7 +6084,7 @@ impl LayerReference {
     /// every generated kind, for media that will not read, and in builds
     /// without the `media` feature — "no length" is never a guessed length.
     #[frb(ignore)]
-    fn source_length(&self, layer: &Layer) -> Option<Duration> {
+    pub(crate) fn source_length(&self, layer: &Layer) -> Option<Duration> {
         let proj = self.project().ok()?;
         let proj = proj.read().ok()?;
         let doc = proj.store.snapshot();

@@ -176,7 +176,9 @@ List<BridgePresetInfo> listGraphGroups() =>
 ///
 /// The file is told apart by its first bytes and not by its name. A file that
 /// is neither is refused as any other non-preset is.
-String readEffectPreset({required String path}) =>
+///
+/// Not sync: it reads a file, and converts one that is After Effects' own.
+Future<String> readEffectPreset({required String path}) =>
     BridgeLib.instance.api.crateApiEffectReadEffectPreset(path: path);
 
 /// Where the preset library lives, created on first ask — the save dialogue's

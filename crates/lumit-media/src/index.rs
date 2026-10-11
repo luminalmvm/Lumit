@@ -368,6 +368,41 @@ pub mod tests_support {
         status.success().then_some(out)
     }
 
+    /// A recording with two audio streams, the shape a screen capture with
+    /// the game and the microphone kept apart has: four seconds of a small
+    /// picture, three seconds of a 220 Hz tone on the first stream, named
+    /// Game, and four of a 1760 Hz tone on the second, named Microphone and
+    /// marked English. Uncompressed sound in a QuickTime file, so the samples
+    /// that come back are the ones that went in and a reader can jump in it.
+    pub fn two_audio_streams(dir: &Path) -> Option<PathBuf> {
+        let bin = ffmpeg_bin()?;
+        let out = dir.join("two_streams.mov");
+        let status = Command::new(bin)
+            .args(["-v", "error", "-y"])
+            .args(["-f", "lavfi", "-i"])
+            .arg("color=c=blue:size=64x64:rate=10:duration=4")
+            .args(["-f", "lavfi", "-i"])
+            .arg("sine=frequency=220:sample_rate=48000:duration=3")
+            .args(["-f", "lavfi", "-i"])
+            .arg("sine=frequency=1760:sample_rate=48000:duration=4")
+            .args(["-map", "0:v", "-map", "1:a", "-map", "2:a"])
+            .args([
+                "-c:v",
+                "libx264",
+                "-pix_fmt",
+                "yuv420p",
+                "-c:a",
+                "pcm_s16le",
+            ])
+            .args(["-metadata:s:a:0", "title=Game"])
+            .args(["-metadata:s:a:1", "title=Microphone"])
+            .args(["-metadata:s:a:1", "language=eng"])
+            .arg(&out)
+            .status()
+            .ok()?;
+        status.success().then_some(out)
+    }
+
     /// An audio file with embedded cover art: one second of tone in a FLAC,
     /// plus a single still image written as an attached-picture stream — the
     /// shape of a music file with album artwork (native flac + png encoders,
@@ -699,5 +734,20 @@ mod tests {
             FrameIndex::load_cached(&cache, &fp).expect("the good index replaced the bad one"),
             index
         );
+    }
+
+    // A file cut short, as a download that stopped or an export that crashed
+    // leaves one: its start reads as media and the rest is not there.
+    #[test]
+    fn build_frame_index_on_truncated_file_errors_not_panics() {
+        let dir = tempfile::tempdir().unwrap();
+        let Some(file) = fixture(dir.path()) else {
+            eprintln!("skipping: no ffmpeg CLI available for fixture generation");
+            return;
+        };
+        // Cut well before the moov atom (written at the end by default for
+        // this muxer), so stream info can never be recovered.
+        let truncated = tests_support::truncated_copy(&file, dir.path(), 200);
+        assert!(build_frame_index(&truncated).is_err());
     }
 }

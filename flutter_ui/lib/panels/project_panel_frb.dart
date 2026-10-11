@@ -1074,7 +1074,11 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
       setState(() => _soundId = null);
       return;
     }
-    setState(() => _soundId = item.field0.previewAudio() ? id : null);
+    // A file with several audio streams is heard as it would be placed.
+    final arrival =
+        Provider.of<LumitUiState>(context, listen: false).streamsArrival;
+    setState(() => _soundId =
+        item.field0.previewAudio(arrival: arrival) ? id : null);
   }
 
   /// Stop a preview that is running, whatever moved on — another selection,

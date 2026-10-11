@@ -13,7 +13,7 @@
 use std::sync::Mutex;
 
 use flutter_rust_bridge::frb;
-use lumit_core::model::{Composition, FootageItem, Layer, LayerKind, ProjectItem};
+use lumit_core::model::{AudioStreams, Composition, FootageItem, Layer, LayerKind, ProjectItem};
 use lumit_core::sequence::{self, Clip, ClipSource, FadeShape};
 use lumit_core::time::{CompTime, Duration, Rational, TimeError};
 use lumit_core::Op;
@@ -26,6 +26,7 @@ use crate::api::{
     layer::{clip_source_duration, placed, trimmed, LayerReference},
     project::ProjectReference,
     state::LumitBridgeState,
+    streams::BridgeStreamsArrival,
     BridgeError,
 };
 
@@ -168,6 +169,9 @@ struct Edit<'a> {
     /// Ops to run ahead of the rows in the same batch: a composition made
     /// for a clip to play.
     first: Vec<Op>,
+    /// Sound rows this edit emptied by folding their clips into another, which
+    /// go with them.
+    gone: Vec<Uuid>,
 }
 
 /// Open an edit on `of`, run it, and turn how it ended into the answer.
@@ -217,6 +221,20 @@ fn is_still(state: &LumitBridgeState, footage: &FootageItem) -> bool {
         let _ = (state, footage);
         false
     }
+}
+
+/// Whether two clips are the same stretch of the same thing at the same
+/// moment: what a split of audio streams leaves on rows of their own, and
+/// what a merge folds back together.
+#[frb(ignore)]
+fn same_stretch(clip: &Clip, other: &Clip) -> bool {
+    other.id != clip.id
+        && other.source == clip.source
+        && other.link == clip.link
+        && other.place_start == clip.place_start
+        && other.place_duration == clip.place_duration
+        && other.source_in == clip.source_in
+        && other.retime == clip.retime
 }
 
 /// Whether `clip` shares any of the row with the span `start..end`.
@@ -354,6 +372,7 @@ impl<'a> Edit<'a> {
             rows,
             carried: Vec::new(),
             first: Vec::new(),
+            gone: Vec::new(),
         })
     }
 
@@ -561,6 +580,9 @@ impl<'a> Edit<'a> {
         let mut ops = self.first;
         let mut added: Vec<(usize, Layer)> = Vec::new();
         for row in self.rows {
+            if self.gone.contains(&row.id) {
+                continue;
+            }
             // A clip's place is layer time and cannot go negative, so a clip
             // put before the layer's own zero takes the zero back with it, as
             // `LayerReference::slide_clip` does.
@@ -610,6 +632,9 @@ impl<'a> Edit<'a> {
                 layer: Box::new(layer),
             });
         }
+        for layer in self.gone {
+            ops.push(Op::RemoveLayer { comp, layer });
+        }
         if ops.is_empty() {
             return Ok(());
         }
@@ -646,6 +671,7 @@ impl<'a> Edit<'a> {
         at_frame: i64,
         insert: bool,
         linked: bool,
+        arrival: BridgeStreamsArrival,
     ) -> Cut {
         let source_in = Rational::new(source_in.num, source_in.den)?;
         let source_out = Rational::new(source_out.num, source_out.den)?;
@@ -656,7 +682,7 @@ impl<'a> Edit<'a> {
         let at = self.time(at_frame.max(0))?;
         let end = at.checked_add(length)?;
         let item = footage.id();
-        let (name, picture, sound, (_, width, height)) = {
+        let (name, picture, sound, streams, (_, width, height)) = {
             let proj = self.of.project()?;
             let state = proj.read().map_err(|_| BridgeError::ReadFailed)?;
             let doc = state.store.snapshot();
@@ -667,9 +693,13 @@ impl<'a> Edit<'a> {
                 f.name.clone(),
                 CompositionReference::has_picture(&state, f),
                 has_sound(&state, f),
+                crate::streams::of_item(&state, f),
                 CompositionReference::footage_span_and_size(&state, f, &self.comp),
             )
         };
+        // What each clip that sounds plays: the first stream as ever, every
+        // stream mixed, or a clip to a stream.
+        let sounds = arrival.sounds(streams.len());
         let target = match target {
             Some(layer) => Some(self.row_of(layer.id()).ok_or(BridgeError::NotSequence)?),
             None => None,
@@ -690,46 +720,82 @@ impl<'a> Edit<'a> {
                 Some(r) => linked && !self.rows[r].audible,
                 None => true,
             };
-        let sound_row = match (wanted, target) {
-            (false, _) => None,
-            (true, Some(r)) if onto_sound => Some(r),
-            (true, _) => {
-                // The sound row this picture row already keeps its sound on,
-                // else the first one with room, else a new one at the bottom.
-                let links: Vec<Uuid> = picture_row
-                    .into_iter()
-                    .flat_map(|r| self.rows[r].clips.iter().filter_map(|c| c.link))
-                    .collect();
-                let open = |row: &&Row| row.audio_only && !row.locked;
-                let paired = |row: &&Row| {
-                    row.clips
+        // A picture row that is heard plays the first of them from its own
+        // clip, and with `linked` the rest go down as sound clips beside it.
+        let picture_sounds = sound && picture_row.is_some_and(|r| self.rows[r].audible);
+        let on_sound_rows: &[AudioStreams] = match (wanted, picture_sounds && linked) {
+            (true, _) => &sounds,
+            (false, true) => sounds.get(1..).unwrap_or_default(),
+            (false, false) => &[],
+        };
+        // A row there already for each, where one will do, and `None` where
+        // one has to be made.
+        let mut landings: Vec<Option<usize>> = Vec::with_capacity(on_sound_rows.len());
+        for n in 0..on_sound_rows.len() {
+            // The sound of the file itself goes where it always has. A stream
+            // split off beside it goes on a row nothing of this file is on.
+            let whole = n == 0 && wanted;
+            if whole && onto_sound {
+                landings.push(target);
+                continue;
+            }
+            // The sound row this picture row already keeps its sound on,
+            // else the first one with room, else a new one at the bottom.
+            let links: Vec<Uuid> = picture_row
+                .into_iter()
+                .flat_map(|r| self.rows[r].clips.iter().filter_map(|c| c.link))
+                .collect();
+            let taken: Vec<Uuid> = landings
+                .iter()
+                .flatten()
+                .map(|r| self.rows[*r].id)
+                .collect();
+            let open = |row: &&Row| row.audio_only && !row.locked && !taken.contains(&row.id);
+            let paired = |row: &&Row| {
+                whole
+                    && row
+                        .clips
                         .iter()
                         .any(|c| c.link.is_some_and(|l| links.contains(&l)))
-                };
-                // An insert opens its own room, so only a clip the point
-                // falls inside is in the way.
-                let free = |row: &&Row| {
-                    !row.clips.iter().any(|c| {
-                        if insert {
-                            c.place_start < at && at < c.place_end()
-                        } else {
-                            covers(c, at, end)
-                        }
-                    })
-                };
-                let found = self.rows.iter().filter(open).find(paired);
-                let found = found.or_else(|| self.rows.iter().filter(open).find(free));
-                Some(match found.map(|row| row.id) {
-                    Some(id) => self.row_of(id).ok_or(BridgeError::InvalidLayer)?,
-                    None => {
-                        let (w, h) = (f64::from(self.comp.width), f64::from(self.comp.height));
-                        self.add_row(name, true, w, h)
+            };
+            // An insert opens its own room, so only a clip the point
+            // falls inside is in the way.
+            let free = |row: &&Row| {
+                !row.clips.iter().any(|c| {
+                    if insert {
+                        c.place_start < at && at < c.place_end()
+                    } else {
+                        covers(c, at, end)
                     }
                 })
+            };
+            let found = self.rows.iter().filter(open).find(paired);
+            let found = found.or_else(|| self.rows.iter().filter(open).find(free));
+            landings.push(match found.map(|row| row.id) {
+                Some(id) => Some(self.row_of(id).ok_or(BridgeError::InvalidLayer)?),
+                None => None,
+            });
+        }
+        // The rows to make, the last stream's first: each new sound row goes
+        // in above the one made before it, so the streams read down the
+        // stack in the file's own order.
+        for (n, plays) in on_sound_rows.iter().enumerate().rev() {
+            if landings[n].is_some() {
+                continue;
             }
-        };
+            let (w, h) = (f64::from(self.comp.width), f64::from(self.comp.height));
+            let name = match plays.places() {
+                [place] if n > 0 || !wanted => crate::streams::split_name(&name, *place, &streams),
+                _ => name.clone(),
+            };
+            landings[n] = Some(self.add_row(name, true, w, h));
+        }
+        let sound_rows: Vec<usize> = landings.into_iter().flatten().collect();
 
-        let rows: Vec<usize> = picture_row.into_iter().chain(sound_row).collect();
+        let rows: Vec<usize> = picture_row
+            .into_iter()
+            .chain(sound_rows.iter().copied())
+            .collect();
         if rows.is_empty() {
             return Err(BridgeCutResult::WrongLayer.into());
         }
@@ -742,14 +808,190 @@ impl<'a> Edit<'a> {
             self.razor(&rows, at, linked)?;
             self.ripple(at, length)?;
         }
-        let link = (picture_row.is_some() && sound_row.is_some()).then(Uuid::now_v7);
-        for r in rows {
+        let link = (rows.len() > 1).then(Uuid::now_v7);
+        // The picture clip first where there is one, then a clip to each
+        // sound row, in the order the streams were given their rows.
+        let picture_plays = picture_row.map(|_| match picture_sounds {
+            true => sounds.first().cloned().unwrap_or_default(),
+            false => AudioStreams::default(),
+        });
+        let plays = picture_plays
+            .into_iter()
+            .chain(on_sound_rows.iter().cloned());
+        for (r, plays) in rows.into_iter().zip(plays) {
             let mut clip = Clip::new(ClipSource::Footage(item), source_in, source_out, at, length);
             clip.link = link;
+            clip.audio_streams = plays;
             let dropped = clip.id;
             let row = &mut self.rows[r];
             row.clips.push(clip);
             row.clips = placed(std::mem::take(&mut row.clips), dropped, false);
+        }
+        self.commit()
+    }
+
+    /// The audio streams of the file a footage item names, and the item's
+    /// name. None of either for anything else.
+    fn streams_of(&self, item: Uuid) -> Cut<(String, Vec<crate::streams::Stream>)> {
+        let proj = self.of.project()?;
+        let state = proj.read().map_err(|_| BridgeError::ReadFailed)?;
+        let doc = state.store.snapshot();
+        Ok(match doc.item(item) {
+            Some(ProjectItem::Footage(f)) => (f.name.clone(), crate::streams::of_item(&state, f)),
+            _ => (String::new(), Vec::new()),
+        })
+    }
+
+    /// The clips an edit of audio streams works on: the named ones and the
+    /// clips linked to them, less any on a row that is not heard, which has
+    /// no sound to split or merge. So the edit can be asked of a picture clip
+    /// and lands on the clip that carries its sound.
+    fn sounding(&self, clips: &[Uuid]) -> Cut<Vec<Uuid>> {
+        let mut heard = Vec::new();
+        for id in self.with_linked(clips, true)? {
+            let (r, _) = self.find(id)?;
+            if self.rows[r].audible {
+                heard.push(id);
+            }
+        }
+        Ok(heard)
+    }
+
+    /// **Split audio streams.** Each clip that sounds several streams of its
+    /// file is left sounding the first of them, and each of the others goes
+    /// down as a clip of its own, linked to it, on a sound row: the first
+    /// with room that holds none of the others, else a new one at the bottom.
+    /// A clip that sounds the first stream, as one does until told otherwise,
+    /// is split into every stream its file has, less any a clip already
+    /// split off beside it sounds: a clip that has been split has no more to
+    /// give.
+    fn split_streams(mut self, clips: &[Uuid]) -> Cut {
+        let mut split = false;
+        for id in self.sounding(clips)? {
+            let (r, c) = self.find(id)?;
+            let clip = self.rows[r].clips[c].clone();
+            let ClipSource::Footage(item) = clip.source else {
+                continue;
+            };
+            let (name, streams) = self.streams_of(item)?;
+            let sound_rows = self.rows.iter().filter(|row| row.audio_only);
+            let apart: Vec<u32> = sound_rows
+                .flat_map(|row| row.clips.iter().filter(|other| same_stretch(&clip, other)))
+                .flat_map(|other| other.audio_streams.places().to_vec())
+                .collect();
+            // The clip keeps the first of its streams whatever is beside it.
+            let places = crate::streams::to_split(&clip.audio_streams, streams.len());
+            let Some((first, rest)) = places.split_first() else {
+                continue;
+            };
+            let rest: Vec<u32> = rest
+                .iter()
+                .copied()
+                .filter(|p| !apart.contains(p))
+                .collect();
+            if rest.is_empty() {
+                continue;
+            }
+            if self.rows[r].locked {
+                return Err(BridgeCutResult::Locked.into());
+            }
+            let link = clip.link.unwrap_or_else(Uuid::now_v7);
+            let kept = &mut self.rows[r].clips[c];
+            kept.link = Some(link);
+            kept.audio_streams = AudioStreams::only(*first);
+
+            let (start, end) = (clip.place_start, clip.place_end());
+            // A row with room for each stream, where there is one.
+            let mut used = vec![r];
+            let mut landings: Vec<Option<usize>> = Vec::with_capacity(rest.len());
+            for _ in &rest {
+                let room = (0..self.rows.len()).find(|i| {
+                    let row = &self.rows[*i];
+                    row.audio_only
+                        && !row.locked
+                        && !used.contains(i)
+                        && !row.clips.iter().any(|c| covers(c, start, end))
+                });
+                used.extend(room);
+                landings.push(room);
+            }
+            // And a new row for each of the rest, the last stream's first:
+            // each goes in above the one made before it, so the streams read
+            // down the stack in the file's own order.
+            for (n, place) in rest.iter().enumerate().rev() {
+                if landings[n].is_none() {
+                    let (w, h) = (f64::from(self.comp.width), f64::from(self.comp.height));
+                    let name = crate::streams::split_name(&name, *place, &streams);
+                    landings[n] = Some(self.add_row(name, true, w, h));
+                }
+            }
+            for (place, landing) in rest.iter().zip(landings.into_iter().flatten()) {
+                let mut sound = clip.duplicate();
+                sound.link = Some(link);
+                sound.audio_streams = AudioStreams::only(*place);
+                self.rows[landing].clips.push(sound);
+            }
+            split = true;
+        }
+        if !split {
+            return Err(BridgeCutResult::Nothing.into());
+        }
+        self.commit()
+    }
+
+    /// **Merge audio streams**, the way back from a split. A clip takes the
+    /// streams of every clip on a sound row that is the same stretch of the
+    /// same file at the same moment, and those clips go. A sound row left
+    /// with nothing on it goes too. A clip with no such clip beside it sounds
+    /// every stream its file has.
+    fn merge_streams(mut self, clips: &[Uuid]) -> Cut {
+        let mut merged = false;
+        let mut folded: Vec<Uuid> = Vec::new();
+        for id in self.sounding(clips)? {
+            if folded.contains(&id) {
+                continue;
+            }
+            let (r, c) = self.find(id)?;
+            let kept = self.rows[r].clips[c].clone();
+            let ClipSource::Footage(item) = kept.source else {
+                continue;
+            };
+            let beside = |other: &&Clip| same_stretch(&kept, other);
+            let mut places = kept.audio_streams.places().to_vec();
+            let mut gone: Vec<Uuid> = Vec::new();
+            for (i, row) in self.rows.iter().enumerate() {
+                if i == r || !row.audio_only || row.locked {
+                    continue;
+                }
+                for other in row.clips.iter().filter(beside) {
+                    places.extend_from_slice(other.audio_streams.places());
+                    gone.push(other.id);
+                }
+            }
+            let plays = if gone.is_empty() {
+                crate::streams::all(self.streams_of(item)?.1.len())
+            } else {
+                AudioStreams::of(&places)
+            };
+            if gone.is_empty() && plays == kept.audio_streams {
+                continue;
+            }
+            if self.rows[r].locked {
+                return Err(BridgeCutResult::Locked.into());
+            }
+            self.rows[r].clips[c].audio_streams = plays;
+            for row in &mut self.rows {
+                let before = row.clips.len();
+                row.clips.retain(|c| !gone.contains(&c.id));
+                if row.clips.is_empty() && before > 0 && row.audio_only && row.fresh.is_none() {
+                    self.gone.push(row.id);
+                }
+            }
+            folded.extend(gone);
+            merged = true;
+        }
+        if !merged {
+            return Err(BridgeCutResult::Nothing.into());
         }
         self.commit()
     }
@@ -1327,6 +1569,8 @@ impl<'a> Edit<'a> {
                     crate::edits::centred_transform(width, height, inner.width, inner.height),
                 );
                 layer.audio_only = !CompositionReference::has_picture(&state, f);
+                // The composition sounds the streams the clip did.
+                layer.audio_streams = this.audio_streams.clone();
                 inner.layers = vec![layer];
                 // Composition time is source time in there, so the work
                 // area is the stretch the clip plays.
@@ -1339,6 +1583,7 @@ impl<'a> Edit<'a> {
         };
         self.first = ops;
         self.rows[r].clips[c].source = ClipSource::Comp(id);
+        self.rows[r].clips[c].audio_streams = AudioStreams::default();
         *made = Some(id);
         self.commit()
     }
@@ -1366,6 +1611,11 @@ impl CompositionReference {
     /// takes the picture clip and no sound clip is made. A file with no
     /// picture, or any file placed on an audio-only target, puts down its
     /// sound alone.
+    ///
+    /// **A file with several audio streams** arrives as `arrival` says: its
+    /// first stream as a file with one does, which is also what leaving it
+    /// out means, every stream mixed in the one sound clip, or a linked sound
+    /// clip to each stream, each on a sound row of its own.
     #[allow(clippy::too_many_arguments)]
     #[frb(sync)]
     pub fn cut_place(
@@ -1377,12 +1627,38 @@ impl CompositionReference {
         at_frame: i64,
         insert: bool,
         linked: bool,
+        arrival: Option<BridgeStreamsArrival>,
     ) -> Result<BridgeCutResult, BridgeError> {
+        let arrival = arrival.unwrap_or(BridgeStreamsArrival::First);
         cut(self, |edit| {
             edit.place(
-                target, footage, source_in, source_out, at_frame, insert, linked,
+                target, footage, source_in, source_out, at_frame, insert, linked, arrival,
             )
         })
+    }
+
+    /// **Split audio streams**: give each audio stream these clips sound a
+    /// clip of its own, on a sound row of its own, linked to the clip it came
+    /// off. Asked of a picture clip, it is the clip carrying its sound that is
+    /// split. `Nothing` when no clip named sounds more than one stream.
+    #[frb(sync)]
+    pub fn cut_split_audio_streams(
+        &self,
+        clips: Vec<Uuid>,
+    ) -> Result<BridgeCutResult, BridgeError> {
+        cut(self, |edit| edit.split_streams(&clips))
+    }
+
+    /// **Merge audio streams**: fold the clips split off these ones back into
+    /// them, each left sounding the streams mixed, and take away a sound row
+    /// that leaves empty. A clip that was never split is set to every stream
+    /// its file has. `Nothing` when that changes no clip.
+    #[frb(sync)]
+    pub fn cut_merge_audio_streams(
+        &self,
+        clips: Vec<Uuid>,
+    ) -> Result<BridgeCutResult, BridgeError> {
+        cut(self, |edit| edit.merge_streams(&clips))
     }
 
     /// Delete clips, on any Sequence layers of this composition. With

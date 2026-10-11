@@ -29,7 +29,10 @@ import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:lumit_flutter/src/rust/api/keymap.dart';
 import 'package:lumit_flutter/state/keymap.dart';
+import 'package:lumit_flutter/src/rust/api/cut.dart' show BridgeCutResult;
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/streams.dart'
+    show BridgeAudioStreams;
 import 'package:provider/provider.dart';
 
 import '../icons/icons.dart';
@@ -51,6 +54,7 @@ import '../widgets/marquee.dart';
 import '../widgets/smooth_zoom.dart';
 import '../widgets/time_readout.dart';
 import '../widgets/zoom_anchored_scroll.dart';
+import 'audio_streams_menu_frb.dart';
 import 'audio_timeline_clips_frb.dart';
 import 'audio_timeline_fades_frb.dart';
 import 'audio_timeline_rows_frb.dart';
@@ -1566,7 +1570,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
       );
     } else {
       for (final f in footage) {
-        await comp.addAudioLayer(footage: f);
+        await comp.addAudioLayer(footage: f, arrival: _ui?.streamsArrival);
       }
     }
     if (mounted) _afterWrite();
@@ -1832,11 +1836,39 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
     );
   }
 
+  /// Split or merge the audio streams of one clip, and say so in the status
+  /// line where there was nothing to do.
+  void _clipStreams(CompositionReference comp, BridgeClip clip,
+      {required bool split}) {
+    var done = false;
+    try {
+      final result = split
+          ? comp.cutSplitAudioStreams(clips: [clip.id])
+          : comp.cutMergeAudioStreams(clips: [clip.id]);
+      done = result == BridgeCutResult.done;
+    } catch (_) {}
+    if (!mounted) return;
+    if (!done) {
+      Provider.of<LumitState>(context, listen: false).postNotice(split
+          ? l10n.audioStreamsNothingToSplit
+          : l10n.audioStreamsNothingToMerge);
+      return;
+    }
+    _afterWrite();
+  }
+
   /// What can be done to one clip: its two fades by shape, the split at the
   /// playhead, and the delete.
   Future<void> _clipMenu(
       AudioTrackRow track, BridgeClip clip, Offset at) async {
     final ui = _ui;
+    // The audio streams of the clip's file, for the rows that choose among
+    // them. The track draws the clip's wave, so its file has been opened.
+    BridgeAudioStreams? streams;
+    try {
+      streams = track.entry.layer.clipAudioStreams(clip: clip.id);
+    } catch (_) {}
+    final comp = ui?.selectedComp;
     Widget shapes(VoidCallback dismiss, {required bool into}) => FloatSurface(
           width: 140,
           child: Column(
@@ -1884,6 +1916,38 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
           },
           child: Text(l10n.clipSplitAtPlayhead),
         ),
+        // A file with several audio streams: which of them this clip plays,
+        // a clip to each on a track of its own, and back onto one.
+        if (streams != null && streams.streams.length > 1 && comp != null) ...[
+          audioStreamsSubmenu(
+            key: ValueKey<String>('atl-clip-audio-streams-${clip.id}'),
+            closeParent: () => close(null),
+            streams: streams,
+            onChoose: (places) {
+              try {
+                track.entry.layer
+                    .setClipAudioStreams(clip: clip.id, streams: places);
+              } catch (_) {}
+              _afterWrite();
+            },
+          ),
+          MenuRow(
+            key: ValueKey<String>('atl-clip-split-streams-${clip.id}'),
+            onPressed: () {
+              close(null);
+              _clipStreams(comp, clip, split: true);
+            },
+            child: Text(l10n.menuSplitAudioStreams),
+          ),
+          MenuRow(
+            key: ValueKey<String>('atl-clip-merge-streams-${clip.id}'),
+            onPressed: () {
+              close(null);
+              _clipStreams(comp, clip, split: false);
+            },
+            child: Text(l10n.menuMergeAudioStreams),
+          ),
+        ],
         MenuRow(
           key: ValueKey<String>('atl-clip-delete-${clip.id}'),
           onPressed: () {

@@ -41,7 +41,23 @@ String engineLabel(String english) => _table[english] ?? english;
 /// Whether [english] is a label this table knows — what the sync test asserts.
 bool hasEngineLabel(String english) => _table.containsKey(english);
 
-Map<String, String> get _table => {
+/// The table for the language in use, built once for it. It is asked for a
+/// word at a time, by a sort of the whole effects list among others, and
+/// building a thousand entries for each word was most of what a keystroke in
+/// that list's search cost.
+Map<String, String> get _table {
+  final now = l10n;
+  if (!identical(now, _tableOf)) {
+    _tableOf = now;
+    _held = _built;
+  }
+  return _held;
+}
+
+Strings? _tableOf;
+Map<String, String> _held = const {};
+
+Map<String, String> get _built => {
       "1 kHz": l10n.fx1kHz,
       "125 Hz": l10n.fx125Hz,
       "16 kHz": l10n.fx16kHz,
@@ -1435,6 +1451,7 @@ Map<String, String> get _table => {
       "Trim comp to work area": l10n.menuTrimCompToWorkArea,
       "Crop comp to region of interest": l10n.menuCropCompToRegion,
       "Edit pan": l10n.histEditPan,
+      "Set audio streams": l10n.histSetAudioStreams,
       "Move master fader": l10n.histMoveMasterFader,
       // The mark the Audio timeline writes, which reads in the history under
       // the same words the row carries.

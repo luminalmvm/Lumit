@@ -257,6 +257,7 @@ fn export_format(codec: &str) -> Result<lumit_render::export::ExportFormat, Stri
         "hevc" => ExportFormat::Video(VideoCodec::Hevc),
         "png" => ExportFormat::Images(ImageFormat::Png),
         "tiff" => ExportFormat::Images(ImageFormat::Tiff),
+        "exr" => ExportFormat::Images(ImageFormat::Exr),
         "m4a" => ExportFormat::Audio(AudioFormat::M4a),
         "wav" => ExportFormat::Audio(AudioFormat::Wav),
         other => return Err(format!("export: unknown format '{other}'")),
@@ -272,9 +273,11 @@ fn with_format_extension(out_path: &str, codec: &str) -> String {
         return out_path.to_owned();
     };
     let ext = format.extension();
-    let has_it = std::path::Path::new(out_path)
-        .extension()
-        .is_some_and(|e| e.eq_ignore_ascii_case(ext));
+    // The same test the save dialogue makes, so the two never disagree about
+    // a name that is nothing but its extension.
+    let has_it = out_path
+        .to_lowercase()
+        .ends_with(&format!(".{}", ext.to_lowercase()));
     if has_it {
         out_path.to_owned()
     } else {
@@ -804,10 +807,16 @@ pub(crate) fn reveal_in_folder(path: &str) -> bool {
     if !path.exists() {
         return false;
     }
+    // Quoted by hand. Explorer splits its switch on commas, and an argument is
+    // only quoted for it when it holds a space, so a comma in a name with no
+    // space in it opened the wrong folder. A Windows path cannot hold a quote.
     #[cfg(target_os = "windows")]
-    let launched = std::process::Command::new("explorer")
-        .arg(format!("/select,{}", path.display()))
-        .spawn();
+    let launched = {
+        use std::os::windows::process::CommandExt;
+        std::process::Command::new("explorer")
+            .raw_arg(format!("/select,\"{}\"", path.display()))
+            .spawn()
+    };
     #[cfg(target_os = "macos")]
     let launched = std::process::Command::new("open")
         .arg("-R")

@@ -63,6 +63,7 @@ fn layer(name: &str, kind: LayerKind, out_s: i64) -> Layer {
         volume_db: Property::zero(),
         pan: Property::zero(),
         audio_only: false,
+        audio_streams: Default::default(),
         adjustment: false,
         retime: None,
         interpolation: Default::default(),

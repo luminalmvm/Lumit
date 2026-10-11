@@ -24,8 +24,9 @@
 
     It is not the only thing the app needs: lumit-ofx-broker and
     lumit-aplug-broker are separate executables that open one OFX bundle, or one
-    CLAP module, in a process of their own, and a full --workspace
-    build makes them. `flutter run` builds all three itself.
+    CLAP module, in a process of their own, lumit-media-broker is the one an
+    Illustrator file is read in, and a full --workspace build makes them.
+    `flutter run` builds all four itself.
 
 .EXAMPLE
     .\scripts\build.ps1

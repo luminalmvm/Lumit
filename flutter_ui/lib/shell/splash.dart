@@ -13,6 +13,7 @@ import 'package:flutter/widgets.dart';
 import '../l10n/strings.dart';
 import '../src/rust/api/state.dart' show OpenPhase;
 import '../widgets/controls.dart';
+import '../widgets/escape_ladder.dart';
 
 /// The line the opening card shows for one phase of a project open.
 ///
@@ -69,7 +70,11 @@ class OpeningOverlay extends StatefulWidget {
   /// Cancel button, the one thing on it that takes a click.
   final VoidCallback? onCancel;
 
-  const OpeningOverlay({super.key, this.label, this.fraction, this.onCancel});
+  /// What the Cancel button says. Null is the plain word.
+  final String? cancelLabel;
+
+  const OpeningOverlay(
+      {super.key, this.label, this.fraction, this.onCancel, this.cancelLabel});
 
   @override
   State<OpeningOverlay> createState() => _OpeningOverlayState();
@@ -82,6 +87,8 @@ class _OpeningOverlayState extends State<OpeningOverlay>
   /// settling, for an animation nothing draws.
   AnimationController? _sweep;
 
+  VoidCallback? _escapeRelease;
+
   @override
   void initState() {
     super.initState();
@@ -91,10 +98,17 @@ class _OpeningOverlayState extends State<OpeningOverlay>
         duration: const Duration(milliseconds: 900),
       )..repeat();
     }
+    // The card has the window, so Escape is its own: it presses Cancel where
+    // there is one, and reaches nothing underneath either way.
+    _escapeRelease = EscapeLadder.register(EscapeRung.dialog, () {
+      widget.onCancel?.call();
+      return true;
+    });
   }
 
   @override
   void dispose() {
+    _escapeRelease?.call();
     _sweep?.dispose();
     super.dispose();
   }
@@ -158,7 +172,7 @@ class _OpeningOverlayState extends State<OpeningOverlay>
                         key: const ValueKey('busy-cancel'),
                         padding: const EdgeInsets.symmetric(horizontal: 12),
                         onPressed: cancel,
-                        child: Text(l10n.cancel),
+                        child: Text(widget.cancelLabel ?? l10n.cancel),
                       ),
                     ),
                   ],
@@ -184,14 +198,20 @@ class _OpeningOverlayState extends State<OpeningOverlay>
 /// which claims nothing about work it cannot see.
 ///
 /// [cancel] is how the job is stopped, where it can be: packing a project can,
-/// and its card carries a Cancel button. It is read when the card goes up.
+/// and its card carries a Cancel button. It is read when the card goes up, and
+/// so is [cancelLabel], which is what the button says.
 class BusyOverlay extends StatelessWidget {
   final ValueListenable<String?> busy;
   final ValueListenable<double?>? progress;
   final ValueListenable<VoidCallback?>? cancel;
+  final ValueListenable<String?>? cancelLabel;
 
   const BusyOverlay(
-      {super.key, required this.busy, this.progress, this.cancel});
+      {super.key,
+      required this.busy,
+      this.progress,
+      this.cancel,
+      this.cancelLabel});
 
   @override
   Widget build(BuildContext context) => ValueListenableBuilder<String?>(
@@ -200,13 +220,18 @@ class BusyOverlay extends StatelessWidget {
           if (label == null) return const SizedBox.shrink();
           final reported = progress;
           final onCancel = cancel?.value;
+          final says = cancelLabel?.value;
           if (reported == null) {
-            return OpeningOverlay(label: label, onCancel: onCancel);
+            return OpeningOverlay(
+                label: label, onCancel: onCancel, cancelLabel: says);
           }
           return ValueListenableBuilder<double?>(
             valueListenable: reported,
             builder: (context, fraction, _) => OpeningOverlay(
-                label: label, fraction: fraction, onCancel: onCancel),
+                label: label,
+                fraction: fraction,
+                onCancel: onCancel,
+                cancelLabel: says),
           );
         },
       );

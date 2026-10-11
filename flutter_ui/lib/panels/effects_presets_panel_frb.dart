@@ -426,7 +426,7 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
 
   /// Apply a library preset's whole stack to the primary layer only, as
   /// [_apply] does. A file that has gone away just refreshes the listing.
-  void _applyPreset(LumitUiState ui, BridgePresetInfo preset) {
+  Future<void> _applyPreset(LumitUiState ui, BridgePresetInfo preset) async {
     final layer = ui.selectedLayer.value;
     if (layer == null) return;
     final file = File(preset.path);
@@ -436,14 +436,14 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
     }
     final String text;
     try {
-      text = readEffectPreset(path: preset.path);
+      text = await readEffectPreset(path: preset.path);
     } catch (_) {
       return;
     }
     try {
       layer.loadPreset(text: text);
     } catch (_) {}
-    setState(() {});
+    if (mounted) setState(() {});
   }
 }
 
@@ -776,7 +776,7 @@ class _PresetBar extends StatelessWidget {
     if (!file.existsSync()) return;
     final String text;
     try {
-      text = readEffectPreset(path: path);
+      text = await readEffectPreset(path: path);
     } catch (_) {
       return;
     }

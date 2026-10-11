@@ -28,8 +28,6 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
-import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
-    show RustStreamSink;
 import 'package:lumit_flutter/main.dart';
 import 'package:provider/provider.dart';
 
@@ -767,11 +765,11 @@ class LumitMenuBarFrb extends StatelessWidget {
     }
 
     // A saved preset's whole stack, to the primary layer only.
-    void applyPreset(BridgePresetInfo preset) {
+    Future<void> applyPreset(BridgePresetInfo preset) async {
       final layer = ui.selectedLayer.value;
       if (layer == null) return;
       try {
-        layer.loadPreset(text: readEffectPreset(path: preset.path));
+        layer.loadPreset(text: await readEffectPreset(path: preset.path));
       } catch (_) {
         return;
       }
@@ -1241,6 +1239,39 @@ List<MenuSection> lumitMenus(
                         }
                       })
                     : null,
+              ),
+              // A file with several audio streams: each onto a row of its
+              // own, and back onto one. Offered on any layer and answered in
+              // the status line where there is nothing to do, as Detach is.
+              // Which streams a layer plays is chosen on its own right-click
+              // menu, which can read the file's streams when it is opened.
+              MenuEntry(
+                l10n.menuSplitAudioStreams,
+                onLayer((l) {
+                  var split = false;
+                  try {
+                    split = l.splitAudioStreams();
+                  } catch (_) {}
+                  if (split) {
+                    app.notifyDocumentChanged();
+                  } else {
+                    app.postNotice(l10n.audioStreamsNothingToSplit);
+                  }
+                }),
+              ),
+              MenuEntry(
+                l10n.menuMergeAudioStreams,
+                onLayer((l) {
+                  var merged = false;
+                  try {
+                    merged = l.mergeAudioStreams();
+                  } catch (_) {}
+                  if (merged) {
+                    app.notifyDocumentChanged();
+                  } else {
+                    app.postNotice(l10n.audioStreamsNothingToMerge);
+                  }
+                }),
               ),
             ]),
             // The selected layer's Retime. In the menu as well as on the keyboard
@@ -2169,53 +2200,15 @@ BridgePackState? _packState(ProjectReference? project) {
   }
 }
 
-/// Run a pack or an unpack with the card up over the shell, the engine's own
-/// progress on its bar and a Cancel that stops the copy.
-///
-/// [after] holds the card back for a job that is usually over at once: an
-/// ordinary save of a packed project copies its footage too, and a card that
-/// flashed up on every Ctrl+S of a small one would be noise.
-Future<T> _withPackingCard<T>(
-  LumitState app,
-  String label,
-  Future<T> Function(RustStreamSink<double> progress) start, {
-  Duration after = Duration.zero,
-}) async {
-  final project = app.project;
-  // Set before the card goes up: it keeps whichever bar it opened with.
-  app.busyProgress.value = 0;
-  app.busyCancel.value = () => project?.cancelPacking();
-  StreamSubscription<double>? watching;
-  Timer? raise;
-  try {
-    final progress = RustStreamSink<double>();
-    // The call is started before the sink is listened to, as an open's is: a
-    // sink has no stream until it has been handed to a call.
-    final pending = start(progress);
-    watching = progress.stream.listen((fraction) {
-      if (fraction >= (app.busyProgress.value ?? 0)) {
-        app.busyProgress.value = fraction;
-      }
-    });
-    raise = Timer(after, () => app.busy.value = label);
-    return await pending;
-  } finally {
-    raise?.cancel();
-    watching?.cancel();
-    app.busy.value = null;
-    app.busyProgress.value = null;
-    app.busyCancel.value = null;
-  }
-}
-
 /// Write the packed footage back out beside the project and save the project
 /// without it.
 Future<void> unpackProjectFrb(LumitState app) async {
   final project = app.project;
   if (project == null) return;
   try {
-    final done = await _withPackingCard(app, l10n.unpackingProject,
-        (progress) => project.unpack(onProgress: progress));
+    final done = await app.withBusyCard(l10n.unpackingProject,
+        (progress) => project.unpack(onProgress: progress),
+        cancel: project.cancelPacking);
     if (done.cancelled) {
       app.postNotice(l10n.unpackCancelled);
     } else if (done.kept > 0) {
@@ -2270,11 +2263,11 @@ Future<void> saveProjectFrb(
       written = await project.save(path: target);
       app.postNotice(l10n.savedTo(written));
     } else {
-      final saved = await _withPackingCard(
-        app,
+      final saved = await app.withBusyCard(
         l10n.packingProject,
         (progress) => project.savePacked(
             path: target, packAll: pack, onProgress: progress),
+        cancel: project.cancelPacking,
         after: pack ? Duration.zero : const Duration(milliseconds: 300),
       );
       if (saved.cancelled) {

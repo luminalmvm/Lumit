@@ -132,10 +132,57 @@ fn open_at(
         Err(ONLY_FOR_GOOD) => {
             mapping.lease = 0;
             mapping.add().map_err(|_| Closed::Refused)?;
+            // Nothing closes this one but being asked to. A note is left so
+            // that a run after one that never got to ask does it instead.
+            if let Some(note) = left_open() {
+                if let Some(dir) = note.parent() {
+                    let _ = std::fs::create_dir_all(dir);
+                }
+                let _ = std::fs::write(note, port.to_string());
+            }
         }
         Err(_) => return Err(Closed::Refused),
     }
     Ok((mapping, outside))
+}
+
+/// The note that says a router was left passing a port on for good.
+fn left_open() -> Option<std::path::PathBuf> {
+    Some(lumit_project::shared_dir()?.join("port-open"))
+}
+
+/// Take back a port a router is still passing on for good, from a run that
+/// ended before it could ask: a crash, or a power cut. For a share that is
+/// not asking the router for anything, which would otherwise be reachable
+/// from outside while saying it is not. Nothing is asked of anyone unless
+/// such a run left its note.
+pub(crate) fn take_back(stop: &AtomicBool) {
+    let Some(note) = left_open().filter(|note| note.is_file()) else {
+        return;
+    };
+    let port = std::fs::read_to_string(&note)
+        .ok()
+        .and_then(|port| port.trim().parse::<u16>().ok());
+    let Some(port) = port else {
+        let _ = std::fs::remove_file(note);
+        return;
+    };
+    for (router, description) in search(stop) {
+        if stop.load(Ordering::Relaxed) {
+            break;
+        }
+        if let Some((control, service)) = describe(router, &description) {
+            let mapping = Mapping {
+                router,
+                control,
+                service,
+                port,
+                here: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
+                lease: 0,
+            };
+            mapping.close();
+        }
+    }
 }
 
 impl Mapping {
@@ -173,7 +220,12 @@ impl Mapping {
             ("NewExternalPort", port.as_str()),
             ("NewProtocol", "TCP"),
         ];
-        let _ = self.ask("DeletePortMapping", &asked);
+        let closed = self.ask("DeletePortMapping", &asked).is_ok();
+        if closed && self.lease == 0 {
+            if let Some(note) = left_open() {
+                let _ = std::fs::remove_file(note);
+            }
+        }
     }
 
     /// Ask the router's port service one thing. Answers what it said, or the

@@ -24,6 +24,7 @@ mod lex;
 mod parse;
 
 use crate::expression::ExpressionContext;
+pub(crate) use interp::sparingly;
 use interp::{to_number, Interp, Value};
 pub(crate) use parse::Program;
 
@@ -230,6 +231,7 @@ pub(crate) fn run(
     slot: Slot,
     vars: &[(&str, f64)],
 ) -> Result<Answer, String> {
+    let _running = interp::Running::begin();
     let mut interp = Interp::new(program, ae::Ae::new(context, slot, vars));
     let value = interp.run()?;
     let value = interp.plain(value).map_err(|abort| match abort {

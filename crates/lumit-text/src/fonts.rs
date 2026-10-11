@@ -63,8 +63,10 @@ struct Registry {
 
 /// The system's fonts and the faces loaded so far.
 ///
-/// One lock for both, taken for a lookup and held across the first load of a
-/// face, which maps one file. Every later draw with that face is a map lookup.
+/// One lock for both, taken for a lookup and let go of before a face's file
+/// is read: the interface measures text under the same lock, and must not
+/// wait on a disk a render is reading. Every later draw with that face is a
+/// map lookup.
 fn registry() -> &'static Mutex<Registry> {
     static REGISTRY: OnceLock<Mutex<Registry>> = OnceLock::new();
     REGISTRY.get_or_init(|| {
@@ -124,8 +126,7 @@ pub fn families() -> Vec<String> {
 /// family isn't installed.
 #[must_use]
 pub fn faces(family: &str) -> Vec<String> {
-    let mut registry = registry().lock().unwrap_or_else(PoisonError::into_inner);
-    let Some(info) = registry.system.family_by_name(family) else {
+    let Some(info) = family_named(family) else {
         return Vec::new();
     };
     let mut out: Vec<String> = Vec::new();
@@ -152,17 +153,28 @@ pub(crate) fn face(family: &str, face: &str) -> Arc<Face> {
         return builtin();
     }
     let key = (family.to_owned(), face.to_owned());
-    let mut registry = registry().lock().unwrap_or_else(PoisonError::into_inner);
-    if let Some(found) = registry.loaded.get(&key) {
+    let known = registry().lock().unwrap_or_else(PoisonError::into_inner);
+    if let Some(found) = known.loaded.get(&key) {
         return found.clone();
     }
-    let found = load(&mut registry.system, family, face).unwrap_or_else(builtin);
-    registry.loaded.insert(key, found.clone());
-    found
+    drop(known);
+    // Read with the lock let go of. Two threads after the same new face both
+    // read it, and the first one in is the one kept.
+    let found = family_named(family)
+        .and_then(|info| load(&info, face))
+        .unwrap_or_else(builtin);
+    let mut registry = registry().lock().unwrap_or_else(PoisonError::into_inner);
+    registry.loaded.entry(key).or_insert(found).clone()
 }
 
-fn load(system: &mut fontique::Collection, family: &str, face: &str) -> Option<Arc<Face>> {
-    let info = system.family_by_name(family)?;
+/// The family of this name among the system's, looked up under the lock and
+/// handed back to read from without it.
+fn family_named(family: &str) -> Option<fontique::FamilyInfo> {
+    let mut registry = registry().lock().unwrap_or_else(PoisonError::into_inner);
+    registry.system.family_by_name(family)
+}
+
+fn load(info: &fontique::FamilyInfo, face: &str) -> Option<Arc<Face>> {
     // The first pass looks for the face by name. The second takes the family's
     // regular, and the last whatever the family holds.
     for wanted in [face, "Regular", ""] {

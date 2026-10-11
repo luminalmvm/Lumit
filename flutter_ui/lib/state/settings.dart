@@ -218,6 +218,21 @@ enum DiscordStatus {
   names,
 }
 
+/// What a file with more than one audio stream becomes when it is added to a
+/// composition. The engine's `BridgeStreamsArrival`, kept as an enum of the
+/// settings file's own so that file does not depend on a generated name.
+enum StreamsArrival {
+  /// The layer plays the first stream, as a file with one stream arrives.
+  /// What a fresh install has.
+  first,
+
+  /// One layer plays every stream mixed.
+  mixed,
+
+  /// A layer to each stream.
+  split,
+}
+
 /// Which room Lantern's cards stand in.
 enum LanternRoom {
   /// The style's own room, which is the night room for every scheme. A dark
@@ -310,6 +325,10 @@ class InterfaceSettings {
   ///
   /// Still images never do: there is nothing to cut in a single frame.
   bool videoAsSequenceLayer;
+
+  /// What a file with more than one audio stream becomes when it is added to
+  /// a composition.
+  StreamsArrival streamsArrival;
 
   /// Whether stopping playback leaves the playhead on the frame that was on
   /// screen, rather than putting it back where play started.
@@ -495,6 +514,7 @@ class InterfaceSettings {
     this.retimeOpensToSpeed = false,
     this.retimeInSeconds = false,
     this.videoAsSequenceLayer = false,
+    this.streamsArrival = StreamsArrival.first,
     this.playheadStaysOnStop = false,
     this.pasteLayersAtOriginalTime = false,
     this.multiwaveWaveforms = true,
@@ -529,6 +549,7 @@ class InterfaceSettings {
         'retime_opens_to_speed': retimeOpensToSpeed,
         'retime_in_seconds': retimeInSeconds,
         'video_as_sequence_layer': videoAsSequenceLayer,
+        'streams_arrival': streamsArrival.name,
         'playhead_stays_on_stop': playheadStaysOnStop,
         'paste_layers_at_original_time': pasteLayersAtOriginalTime,
         'multiwave_waveforms': multiwaveWaveforms,
@@ -584,6 +605,9 @@ class InterfaceSettings {
         // settings file written before this field existed adopts it.
         retimeInSeconds: j['retime_in_seconds'] as bool? ?? false,
         videoAsSequenceLayer: j['video_as_sequence_layer'] as bool? ?? false,
+        streamsArrival: StreamsArrival.values.firstWhere(
+            (a) => a.name == j['streams_arrival'],
+            orElse: () => StreamsArrival.first),
         // Absent means off here too, but for the opposite reason: the returning
         // playhead is the *new* default, so a settings file written
         // before this field existed adopts it rather than being pinned to the

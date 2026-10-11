@@ -98,9 +98,11 @@ cp "$root/crates/lumit-colour/vendored/"*.artefact "$app/Contents/Resources/colo
 # executables do belong. Built here rather than by the podspec, which knows how
 # to build one static library and nothing else. Before the signing loop below, so
 # they are signed like everything else in the app.
-(cd "$root" && cargo build --release -p lumit-ofx-broker -p lumit-aplug-broker)
+(cd "$root" && cargo build --release -p lumit-ofx-broker -p lumit-aplug-broker -p lumit-media-broker)
 cp "$root/target/release/lumit-ofx-broker" "$app/Contents/MacOS/"
 cp "$root/target/release/lumit-aplug-broker" "$app/Contents/MacOS/"
+# The process an Illustrator file is read in goes with them.
+cp "$root/target/release/lumit-media-broker" "$app/Contents/MacOS/"
 
 # Every Mach-O in the app that still links a Homebrew path gets handed to
 # dylibbundler. The bridge dylib is the expected hit; the loop rather than a

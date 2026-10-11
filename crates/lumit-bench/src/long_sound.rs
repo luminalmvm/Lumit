@@ -111,7 +111,7 @@ impl SoundHarness {
         let seconds = FRAMES as f64 / FPS as f64;
         let (plan, _) = live_plan(
             jobs,
-            &|job| Some(pool.source(&job.path, RATE)),
+            &|job| Some(pool.source(&job.sound, RATE)),
             RATE,
             seconds,
             0.0,
@@ -249,7 +249,8 @@ impl SoundHarness {
             // Left over from a run that was stopped: it has to be cold.
             let _ = std::fs::remove_dir_all(&cache);
             let t = Instant::now();
-            let pyramid = lumit_audio::peaks::load_or_build(&self.file, RATE, Some(&cache));
+            let sound = stream::SoundSource::file(&self.file);
+            let pyramid = lumit_audio::peaks::load_or_build(&sound, RATE, Some(&cache));
             best = best.min(elapsed_ms(t));
             let _ = std::fs::remove_dir_all(&cache);
             if pyramid.is_none() {

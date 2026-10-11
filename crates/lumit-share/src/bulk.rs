@@ -94,6 +94,12 @@ pub trait Footage: Send + Sync {
     /// `None` when this machine will not take it.
     fn room(&self, wanted: &Wanted) -> Option<PathBuf>;
 
+    /// The most bytes this machine will take for `wanted`. The sender says
+    /// how big its file is, and this is what stops it saying anything.
+    fn most(&self, _wanted: &Wanted) -> u64 {
+        u64::MAX
+    }
+
     /// Something happened to a transfer.
     fn told(&self, news: News);
 }
@@ -190,6 +196,8 @@ const DATA: u8 = 3;
 const END: u8 = 4;
 const NO: u8 = 5;
 const STILL_HERE: u8 = 6;
+/// The asker no longer wants what it asked for.
+const UNWANT: u8 = 7;
 
 /// A frame's heading: what it is and which request it belongs to.
 fn frame(kind: u8, request: u64, rest: &[u8]) -> Vec<u8> {
@@ -205,12 +213,21 @@ fn frame(kind: u8, request: u64, rest: &[u8]) -> Vec<u8> {
 /// there only if its file starts with the same bytes.
 type Resume = (u64, [u8; 32]);
 
-/// The hash of the first `length` bytes of the file at `path`.
+/// What tells the first `length` bytes of the file at `path` from the start
+/// of another file: how many they are, and the hash of the last megabyte of
+/// them. Not of all of them. This is asked on the thread the interface runs
+/// on, and again on the sending end with the link waiting, for a file that
+/// may be many gigabytes.
 fn start_of(path: &Path, length: u64) -> Option<[u8; 32]> {
+    const END: u64 = 1 << 20;
+    let from = length.saturating_sub(END);
     let mut hasher = blake3::Hasher::new();
-    let mut file = File::open(path).ok()?.take(length);
+    hasher.update(&length.to_le_bytes());
+    let mut file = File::open(path).ok()?;
+    file.seek(SeekFrom::Start(from)).ok()?;
+    let mut file = file.take(length - from);
     let mut piece = vec![0u8; PIECE];
-    let mut left = length;
+    let mut left = length - from;
     while left > 0 {
         let n = file.read(&mut piece).ok().filter(|n| *n > 0)?;
         hasher.update(&piece[..n]);
@@ -250,6 +267,8 @@ struct Taking {
     file: Option<File>,
     done: u64,
     total: u64,
+    /// The most this machine takes for it ([`Footage::most`]).
+    most: u64,
     told: Instant,
 }
 
@@ -280,6 +299,10 @@ pub(crate) struct Hub {
     holds: Mutex<HashMap<u32, Vec<Held>>>,
     /// What a guest wants and has no link to ask down yet.
     waiting: Mutex<Vec<Wanted>>,
+    /// What a peer asked this end for and has since said it does not want:
+    /// the peer, and its request. Checked before a file is made and between
+    /// its pieces. An entry goes when it is acted on or the link drops.
+    withdrawn: Mutex<Vec<(u32, u64)>>,
 }
 
 /// The file a transfer is written to until it is whole.
@@ -302,6 +325,7 @@ impl Hub {
             owed: Mutex::new(Vec::new()),
             holds: Mutex::new(HashMap::new()),
             waiting: Mutex::new(Vec::new()),
+            withdrawn: Mutex::new(Vec::new()),
         })
     }
 
@@ -346,10 +370,49 @@ impl Hub {
         who
     }
 
-    /// `peer` has gone, and what it was known to have with it.
+    /// `peer` has gone, and what it was known to have with it. Its footage
+    /// link goes too: someone taken out of the project is not left with a
+    /// way to go on asking for files.
     pub(crate) fn forget(&self, peer: u32) {
         self.holds.lock().remove(&peer);
+        self.links.lock().retain(|link| {
+            if link.peer == peer {
+                let _ = link.socket.shutdown(Shutdown::Both);
+            }
+            link.peer != peer
+        });
         self.footage.told(News::Holders);
+    }
+
+    /// Stop taking `wanted`, and tell whoever is sending it. What has come
+    /// of it so far is kept, to carry on from if it is asked for again.
+    pub(crate) fn unwant(&self, wanted: &Wanted) {
+        self.waiting.lock().retain(|waiting| waiting != wanted);
+        let gone: Vec<(u64, u32)> = {
+            let mut taking = self.taking.lock();
+            let mine: Vec<u64> = taking
+                .iter()
+                .filter(|(_, t)| t.wanted == *wanted)
+                .map(|(request, _)| *request)
+                .collect();
+            mine.iter()
+                .filter_map(|request| Some((*request, taking.remove(request)?.peer)))
+                .collect()
+        };
+        for (request, peer) in gone {
+            if let Some(out) = self.out(peer) {
+                let _ = out.try_send(Out::Frame(frame(UNWANT, request, &[])));
+            }
+        }
+    }
+
+    /// Whether `peer` has said it no longer wants its `request`. Asked once:
+    /// the note is taken down as it is read.
+    fn unwanted(&self, peer: u32, request: u64) -> bool {
+        let mut withdrawn = self.withdrawn.lock();
+        let before = withdrawn.len();
+        withdrawn.retain(|entry| *entry != (peer, request));
+        withdrawn.len() != before
     }
 
     fn out(&self, peer: u32) -> Option<SyncSender<Out>> {
@@ -415,6 +478,7 @@ impl Hub {
         };
         let request = self.next.fetch_add(1, Ordering::Relaxed);
         let taking = Taking {
+            most: self.footage.most(&wanted),
             wanted,
             peer,
             path,
@@ -472,7 +536,7 @@ impl Hub {
         let sending = self.clone();
         let sends = thread::Builder::new()
             .name("lumit-share-bulk-send".into())
-            .spawn(move || sending.send_loop(sender, &outbox));
+            .spawn(move || sending.send_loop(peer, sender, &outbox));
         let making = self.clone();
         let reply = out.clone();
         let makes = thread::Builder::new()
@@ -502,6 +566,7 @@ impl Hub {
         }
         let _ = socket.shutdown(Shutdown::Both);
         self.links.lock().retain(|l| l.id != id);
+        self.withdrawn.lock().retain(|(who, _)| *who != peer);
         if self.host {
             self.dropped(peer);
         }
@@ -559,6 +624,9 @@ impl Hub {
             if self.stopped() {
                 break;
             }
+            if self.unwanted(peer, request) {
+                continue;
+            }
             if let Some(path) = self.footage.make(&wanted, &self.stop) {
                 let file = Out::File {
                     request,
@@ -594,7 +662,7 @@ impl Hub {
 
     /// Send what is queued for a link: frames as they come, and a file a
     /// piece at a time with any frame that turns up let past between pieces.
-    fn send_loop(&self, mut sender: Sender, outbox: &Queue<Out>) {
+    fn send_loop(&self, peer: u32, mut sender: Sender, outbox: &Queue<Out>) {
         let mut files: VecDeque<(u64, Wanted, PathBuf, Resume)> = VecDeque::new();
         let mut said = Instant::now();
         'link: loop {
@@ -637,6 +705,9 @@ impl Hub {
             let Some((request, wanted, path, (have, start))) = files.pop_front() else {
                 continue;
             };
+            if self.unwanted(peer, request) {
+                continue;
+            }
             let opened = File::open(&path).and_then(|mut file| {
                 let total = file.metadata()?.len();
                 // Carried on from where the other end got to only if what
@@ -660,9 +731,14 @@ impl Hub {
             let mut done = from;
             let mut told = Instant::now();
             let mut piece = vec![0u8; PIECE];
+            let mut dropped = false;
             loop {
                 if self.stopped() {
                     break 'link;
+                }
+                if self.unwanted(peer, request) {
+                    dropped = true;
+                    break;
                 }
                 while let Ok(between) = outbox.try_recv() {
                     match between {
@@ -699,6 +775,10 @@ impl Hub {
                         sending: true,
                     });
                 }
+            }
+            // Given up on by the other end: nothing more is said of it.
+            if dropped {
+                continue;
             }
             if sender
                 .send(&frame(END, request, &done.to_le_bytes()))
@@ -749,6 +829,19 @@ impl Hub {
                     }
                     true
                 }
+                UNWANT => {
+                    // What the host was still getting for it is no longer
+                    // owed, and what is being made or sent stops when it
+                    // next looks.
+                    self.owed
+                        .lock()
+                        .retain(|o| o.peer != peer || o.request != request);
+                    let mut withdrawn = self.withdrawn.lock();
+                    if withdrawn.len() < ASKED_ROOM * 2 {
+                        withdrawn.push((peer, request));
+                    }
+                    true
+                }
                 _ => false,
             };
             if !kept {
@@ -784,10 +877,20 @@ impl Hub {
     /// The file a request is answered with is `total` bytes, and is coming
     /// from byte `from`: nought, or as much as this machine said it had.
     fn sized(&self, peer: u32, request: u64, total: u64, from: u64) -> bool {
-        let mut taking = self.taking.lock();
-        let Some(taking) = taking.get_mut(&request).filter(|t| t.peer == peer) else {
+        let mut all = self.taking.lock();
+        let Some(taking) = all.get_mut(&request).filter(|t| t.peer == peer) else {
             return true;
         };
+        // More than this machine will take for it. The sender chooses this
+        // number, and every byte up to it would be written to the disk.
+        if total > taking.most {
+            let refused = all.remove(&request).map(|t| t.wanted);
+            drop(all);
+            if let Some(wanted) = refused {
+                self.refuse(&wanted);
+            }
+            return true;
+        }
         let path = part(&taking.path);
         if let Some(folder) = path.parent() {
             let _ = fs::create_dir_all(folder);

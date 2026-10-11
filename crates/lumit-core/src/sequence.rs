@@ -204,6 +204,11 @@ pub struct Clip {
     /// file while unset.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub link: Option<Uuid>,
+    /// Which of its file's audio streams this clip sounds, for a footage clip
+    /// of a file with more than one. The first unless it has been told
+    /// otherwise, and left out of the file until then.
+    #[serde(default, skip_serializing_if = "crate::model::AudioStreams::is_first")]
+    pub audio_streams: crate::model::AudioStreams,
     /// Unknown fields from newer Lumit versions (docs/10-FILE-FORMAT.md §1.1).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
@@ -234,6 +239,7 @@ impl Clip {
             fx: true,
             gain_db: 0.0,
             link: None,
+            audio_streams: crate::model::AudioStreams::default(),
             extra: serde_json::Map::new(),
         }
     }
@@ -678,6 +684,7 @@ impl Clip {
             fx: self.fx,
             gain_db: self.gain_db,
             link: self.link,
+            audio_streams: self.audio_streams.clone(),
             extra: self.extra.clone(),
         };
         let right = Clip {
@@ -695,6 +702,7 @@ impl Clip {
             fx: self.fx,
             gain_db: self.gain_db,
             link: self.link,
+            audio_streams: self.audio_streams.clone(),
             extra: self.extra.clone(),
         };
         Some((left, right))

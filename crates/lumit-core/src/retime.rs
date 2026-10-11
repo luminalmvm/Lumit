@@ -1080,7 +1080,6 @@ fn solve_u(x: &[f64; 4], t: f64) -> f64 {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
-    use proptest::prelude::*;
 
     fn rat(n: i64, d: i64) -> Rational {
         Rational::new(n, d).unwrap()
@@ -1250,8 +1249,6 @@ mod tests {
             serde_json::from_value(serde_json::to_value(&chosen).unwrap()).unwrap();
         assert_eq!(back.engine, FlowEngineChoice::Rife, "and a choice survives");
     }
-
-    proptest! {}
 }
 
 #[cfg(test)]

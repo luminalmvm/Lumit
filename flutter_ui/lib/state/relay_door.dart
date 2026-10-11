@@ -25,7 +25,7 @@ import 'account.dart';
 
 /// What every first line starts with, and how long one may be
 /// (`lumit-relay`).
-const String _call = 'LUMIT-RELAY 1 ';
+const String _call = 'LUMIT-RELAY 2 ';
 const int _lineLimit = 128;
 
 /// How long the relay has to answer a first line. The engine gives up on the
@@ -123,10 +123,12 @@ class RelayDoor {
               .timeout(_patience);
           relay.pingInterval = _alive;
           await _pass(local, said, rest, relay);
-        case 'TAKE' when words.length > 2 && _takeKeys[room] != null:
+        case 'TAKE' when words.length > 3 && _takeKeys[room] != null:
+          // The engine names the room's token before the guest. It was given
+          // none by this door, which keeps the relay's own key for the room.
           // The key goes in a header. An address is what ends up in logs.
           relay = await WebSocket.connect(
-                  '${_at('/v1/relay/$room/take/${words[2]}')}',
+                  '${_at('/v1/relay/$room/take/${words[3]}')}',
                   headers: {'X-Lumit-Take': _takeKeys[room]!})
               .timeout(_patience);
           relay.pingInterval = _alive;

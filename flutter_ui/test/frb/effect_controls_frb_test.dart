@@ -683,8 +683,7 @@ void main() {
       // And the picker binds a layer, which reads back as that layer.
       await tester.tap(picker);
       await tester.pumpAndSettle();
-      // Numbered by place in the composition since item 6.13, so the entry
-      // is "1. Solid" rather than the bare name.
+      // The entry leads with the layer's number, in a text of its own.
       await tester.tap(find.textContaining(other.getInfo().name).last);
       await tester.pumpAndSettle();
       expect(

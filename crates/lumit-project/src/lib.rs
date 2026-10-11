@@ -679,15 +679,149 @@ fn project_dirs() -> Option<directories::ProjectDirs> {
     }
 }
 
-/// Where a document's sidecar journal lives (docs/10-FILE-FORMAT.md §3–4).
+/// Where a document's sidecar journal lives (docs/10-FILE-FORMAT.md §3–4)
+/// while it has no file of its own.
 pub fn journal_path(doc_id: Uuid) -> Option<PathBuf> {
-    let dirs = project_dirs()?;
+    journal_path_for(doc_id, None)
+}
+
+/// [`journal_path`] for a document saved as `project`.
+pub fn journal_path_for(doc_id: Uuid, project: Option<&Path>) -> Option<PathBuf> {
+    Some(journal_in(project_dirs()?.cache_dir(), doc_id, project))
+}
+
+/// The journal of the document `doc_id` saved as `project`, under `cache`.
+///
+/// **In plain terms.** The journal is the edits made since the last save, kept
+/// so a crash loses none of them. They only make sense on top of the file they
+/// were made on. Save As keeps a document's id, and so does a copy made in a
+/// file manager, so each file has a journal of its own: the edits a crash left
+/// beside one are never offered to the other.
+#[must_use]
+pub fn journal_in(cache: &Path, doc_id: Uuid, project: Option<&Path>) -> PathBuf {
+    let name = match project {
+        None => "ops.jsonl".to_owned(),
+        Some(project) => format!("ops-{}.jsonl", path_key(project)),
+    };
+    cache.join(doc_id.to_string()).join("journal").join(name)
+}
+
+/// What the cache names a saved project's own files by: a hash of where the
+/// project is on disk.
+fn path_key(project: &Path) -> String {
+    // The file as the disk names it, so two spellings of one path are one
+    // name. Case is folded for the same reason, which costs two files that
+    // differ only by case sharing one.
+    let named = fs::canonicalize(project).unwrap_or_else(|_| project.to_path_buf());
+    let key = blake3::hash(named.to_string_lossy().to_lowercase().as_bytes());
+    let key = key.to_hex();
+    key.get(..16).unwrap_or("0").to_owned()
+}
+
+/// The note this machine keeps when it has switched on packing every save
+/// for the document `doc_id` saved as `project`.
+///
+/// **In plain terms.** A `.lum` says for itself whether every save packs its
+/// footage, and the files its effects read go in with it. A file from somebody
+/// else can arrive saying so, with an effect pointed at something private on
+/// this machine, and the next save would put that in the file. So the file's
+/// word counts only when this note is here, and the note is only ever written
+/// by a choice made on this machine. It is named the way a journal is, since
+/// a copy of the file somewhere else is another file.
+///
+/// The local data folder, and not the cache: the cache can be deleted at any
+/// time, and this is something somebody chose.
+pub fn auto_pack_note(doc_id: Uuid, project: &Path) -> Option<PathBuf> {
+    let name = format!("{doc_id}-{}", path_key(project));
     Some(
-        dirs.cache_dir()
-            .join(doc_id.to_string())
-            .join("journal")
-            .join("ops.jsonl"),
+        project_dirs()?
+            .data_local_dir()
+            .join("auto-pack")
+            .join(name),
     )
+}
+
+/// A saved project held open by one Lumit, so that a second does not open it
+/// as well.
+///
+/// **In plain terms.** Two windows on one file write the same journal, and a
+/// recovery then replays a mix of both. So whoever opens a project first
+/// claims it, and the claim goes when that Lumit does, however it ends.
+///
+/// The claim is a file in the cache, named for the project's path as its
+/// journal is, holding the process id of whoever has it. On Windows nobody
+/// else can open the file for writing while it is held, and it is deleted as
+/// its handle closes. Elsewhere it is a lock on the file, which the system
+/// lets go of with the process. The file stays behind there and means
+/// nothing without its lock.
+pub struct OpenClaim {
+    // Held for as long as the claim is.
+    _file: File,
+    key: String,
+}
+
+impl OpenClaim {
+    /// Claim the project saved at `project` for this process.
+    ///
+    /// `Ok(None)` when no claim can be made here, for want of a cache folder
+    /// or the right to write in it. That is no reason to refuse an open.
+    /// `Err` when somebody holds it, with the process id they wrote, or 0
+    /// when that can't be read.
+    pub fn take(project: &Path) -> Result<Option<Self>, u32> {
+        match project_dirs() {
+            Some(dirs) => Self::take_in(&dirs.cache_dir().join("open"), project),
+            None => Ok(None),
+        }
+    }
+
+    /// [`Self::take`], with the claims kept in `dir`.
+    pub fn take_in(dir: &Path, project: &Path) -> Result<Option<Self>, u32> {
+        let key = path_key(project);
+        let path = dir.join(format!("{key}.lock"));
+        let _ = fs::create_dir_all(dir);
+        let holder = || {
+            let id = fs::read_to_string(&path).ok();
+            id.and_then(|id| id.trim().parse().ok()).unwrap_or(0)
+        };
+        let mut options = OpenOptions::new();
+        options.write(true).create(true).truncate(false);
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::OpenOptionsExt;
+            const FILE_SHARE_READ: u32 = 0x1;
+            const FILE_SHARE_DELETE: u32 = 0x4;
+            const GENERIC_WRITE: u32 = 0x4000_0000;
+            const DELETE: u32 = 0x0001_0000;
+            const FILE_FLAG_DELETE_ON_CLOSE: u32 = 0x0400_0000;
+            // Others may read the file and nothing more, and it is deleted
+            // when this handle closes.
+            options
+                .share_mode(FILE_SHARE_READ | FILE_SHARE_DELETE)
+                .access_mode(GENERIC_WRITE | DELETE)
+                .custom_flags(FILE_FLAG_DELETE_ON_CLOSE);
+        }
+        let mut file = match options.open(&path) {
+            Ok(file) => file,
+            // ERROR_SHARING_VIOLATION, which is the holder's handle saying no.
+            Err(e) if cfg!(windows) && e.raw_os_error() == Some(32) => return Err(holder()),
+            Err(_) => return Ok(None),
+        };
+        #[cfg(not(windows))]
+        match file.try_lock() {
+            Ok(()) => {}
+            Err(fs::TryLockError::WouldBlock) => return Err(holder()),
+            Err(_) => return Ok(None),
+        }
+        let _ = file.set_len(0);
+        let _ = write!(file, "{}", std::process::id());
+        Ok(Some(Self { _file: file, key }))
+    }
+
+    /// Whether this is the claim on the project saved at `project`.
+    #[must_use]
+    pub fn covers(&self, project: &Path) -> bool {
+        self.key == path_key(project)
+    }
 }
 
 /// Where a shared project keeps what closing Lumit must not lose: a host's
@@ -1484,6 +1618,31 @@ impl JournalFile {
         journal_path(doc_id).map(|path| Self { path })
     }
 
+    /// The journal of a document saved as `project` ([`journal_in`]).
+    pub fn for_project(doc_id: Uuid, project: Option<&Path>) -> Option<Self> {
+        journal_path_for(doc_id, project).map(|path| Self { path })
+    }
+
+    /// Whether two handles are the one journal.
+    #[must_use]
+    pub fn same_as(&self, other: &JournalFile) -> bool {
+        self.path == other.path
+    }
+
+    /// Carry what this journal holds over to `other`, for a document that has
+    /// just been saved under another name. Whatever `other` held belonged to
+    /// the file the save has replaced.
+    pub fn hand_to(&self, other: &JournalFile) {
+        let _ = other.clear();
+        if self.size() > 0 {
+            if let Some(parent) = other.path.parent() {
+                let _ = fs::create_dir_all(parent);
+            }
+            let _ = fs::rename(&self.path, &other.path);
+        }
+        let _ = self.clear();
+    }
+
     pub fn at_path(path: PathBuf) -> Self {
         Self { path }
     }
@@ -1543,22 +1702,22 @@ impl JournalFile {
     /// Drop the first `bytes` of the journal, which a save has just written
     /// into the project file, and keep the edits made after them.
     pub fn forget(&self, bytes: u64) -> Result<(), ProjectError> {
-        let all = match fs::read(&self.path) {
+        let mut all = match File::open(&self.path) {
             Ok(all) => all,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
             Err(e) => return Err(e.into()),
         };
-        let kept = usize::try_from(bytes)
-            .ok()
-            .and_then(|from| all.get(from..))
-            .unwrap_or_default();
-        if kept.is_empty() {
+        if bytes >= all.metadata()?.len() {
+            drop(all);
             return self.clear();
         }
         // Written beside the journal and moved over it, so a crash part way
-        // leaves the old journal and not half of the new one.
+        // leaves the old journal and not half of the new one. Copied across
+        // and never read whole: a long day's journal is a long file.
         let beside = self.path.with_extension("tmp");
-        fs::write(&beside, kept)?;
+        all.seek(SeekFrom::Start(bytes))?;
+        std::io::copy(&mut all, &mut File::create(&beside)?)?;
+        drop(all);
         fs::rename(&beside, &self.path)?;
         Ok(())
     }
@@ -1698,7 +1857,7 @@ mod tests {
         doc
     }
 
-    /// The same bargain for a source layer: nothing in a project that has
+    /// The same bargain for a file layer: nothing in a project that has
     /// none, and the pick carried back in one that does.
     #[test]
     fn a_source_layer_saves_only_when_there_is_one() {
@@ -1706,7 +1865,7 @@ mod tests {
         let json = serde_json::to_string(&plain).unwrap();
         assert!(
             !json.contains("source_layer"),
-            "a flat file must not grow a source layer field: {json}"
+            "a flat file must not grow a file layer field: {json}"
         );
 
         let mut layer = footage("Hat/art.psd");
@@ -2677,6 +2836,7 @@ mod tests {
             volume_db: lumit_core::anim::Property::zero(),
             pan: lumit_core::anim::Property::zero(),
             audio_only: false,
+            audio_streams: Default::default(),
             adjustment: false,
             retime: None,
             interpolation: Default::default(),
@@ -3036,6 +3196,32 @@ mod tests {
         assert_eq!(loaded.extra["gen"], serde_json::json!(42));
     }
 
+    // Two Lumits on one project would write one journal, so the second is
+    // turned away for as long as the first holds its claim.
+    #[test]
+    fn a_project_is_claimed_by_one_holder_at_a_time() {
+        let dir = tempfile::tempdir().unwrap();
+        let claims = dir.path().join("open");
+        let project = dir.path().join("scene.lum");
+        fs::write(&project, b"").unwrap();
+        let take = |project: &Path| OpenClaim::take_in(&claims, project);
+
+        let first = take(&project).ok().flatten().expect("nobody has it yet");
+        assert!(first.covers(&project));
+        assert_eq!(
+            take(&project).err(),
+            Some(std::process::id()),
+            "the holder is named"
+        );
+        // Another file is another project.
+        let other = dir.path().join("other.lum");
+        fs::write(&other, b"").unwrap();
+        assert!(take(&other).is_ok_and(|claim| claim.is_some()));
+
+        drop(first);
+        assert!(take(&project).is_ok_and(|claim| claim.is_some()));
+    }
+
     #[test]
     fn journal_appends_reads_and_tolerates_torn_tail() {
         let dir = tempfile::tempdir().unwrap();
@@ -3189,6 +3375,7 @@ mod tests {
             volume_db: lumit_core::anim::Property::zero(),
             pan: lumit_core::anim::Property::zero(),
             audio_only: true,
+            audio_streams: Default::default(),
             adjustment: false,
             retime: None,
             interpolation: Default::default(),

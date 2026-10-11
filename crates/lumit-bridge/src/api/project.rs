@@ -116,6 +116,17 @@ pub struct BridgeUnpackResult {
 /// The fraction of a pack or an unpack that is done, 0..=1.
 pub type PackProgressStream = StreamSink<f64>;
 
+/// How an import of files ended.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BridgeImported {
+    /// True when the import was stopped, which leaves the project as it was.
+    pub cancelled: bool,
+    /// How many layers of the layered files were left out because they hold
+    /// no picture.
+    pub left_out: u32,
+}
+
 #[derive(Debug, Clone)]
 #[frb]
 pub struct ProjectReference {
@@ -180,6 +191,8 @@ impl ProjectReference {
     pub fn close(&self) -> Result<(), BridgeError> {
         // A shared project stops being shared when it closes.
         crate::api::share::stop(self.id);
+        // And another Lumit may open its file.
+        crate::claim::release(self.id);
         // Clips copied in the Cut workspace name this project's items.
         crate::api::cut::forget_copied(self.id);
         // One registry at a time, never nested — the lock order rule in
@@ -503,7 +516,8 @@ impl ProjectReference {
     ///
     /// Only the layer list is read here. The pixels are read when a layer is
     /// first drawn.
-    #[frb(sync)]
+    ///
+    /// Not sync: reading the layer list of a big file takes a while.
     pub fn import_layers(&self, path: String) -> Result<Option<u32>, BridgeError> {
         #[cfg(not(feature = "media"))]
         {
@@ -516,6 +530,19 @@ impl ProjectReference {
             let Some(layered) = crate::layered::Layered::open(&file) else {
                 return Ok(None);
             };
+            self.place_layers(file, &layered).map(Some)
+        }
+    }
+
+    /// The second half of [`Self::import_layers`], for a file already read.
+    #[cfg(feature = "media")]
+    #[frb(ignore)]
+    fn place_layers(
+        &self,
+        file: std::path::PathBuf,
+        layered: &crate::layered::Layered,
+    ) -> Result<u32, BridgeError> {
+        {
             let (width, height) = layered.size();
             let name = file
                 .file_stem()
@@ -555,8 +582,86 @@ impl ProjectReference {
 
             // Outside the lock: one probe answers for every layer of the file.
             crate::probe::request(file);
-            Ok(Some(left_out))
+            Ok(left_out)
         }
+    }
+
+    /// Import each of `paths`, as one undo step: a layered file as a
+    /// composition ([`Self::import_layers`]) and any other as footage
+    /// ([`Self::import_footage`]). This is the call the Import command makes.
+    ///
+    /// Not sync. Every file is read before the project is touched, which is
+    /// the slow part. `on_progress` hears the fraction of the files read, and
+    /// [`crate::api::import::cancel_import`] stops it between two files with
+    /// the project left as it was.
+    pub fn import_files(
+        &self,
+        paths: Vec<String>,
+        on_progress: Option<StreamSink<f64>>,
+    ) -> Result<BridgeImported, BridgeError> {
+        crate::packing::begin();
+        self.import_while(
+            paths,
+            &mut crate::packing::progress(|fraction| {
+                if let Some(sink) = &on_progress {
+                    let _ = sink.add(fraction);
+                }
+            }),
+        )
+    }
+
+    /// [`Self::import_files`], which stops when `carry_on` says no. It is
+    /// asked before each file is read, with how many have been and how many
+    /// there are, and once more before the project is touched.
+    #[frb(ignore)]
+    pub(crate) fn import_while(
+        &self,
+        paths: Vec<String>,
+        carry_on: &mut dyn FnMut(u64, u64) -> bool,
+    ) -> Result<BridgeImported, BridgeError> {
+        let total = paths.len() as u64;
+        #[cfg(feature = "media")]
+        let mut read = Vec::new();
+        let mut stopped = false;
+        for (at, path) in paths.iter().enumerate() {
+            stopped = !carry_on(at as u64, total);
+            if stopped {
+                break;
+            }
+            #[cfg(feature = "media")]
+            read.push(crate::layered::Layered::open(std::path::Path::new(path)));
+            #[cfg(not(feature = "media"))]
+            let _ = path;
+        }
+        if stopped || !carry_on(total, total) {
+            return Ok(BridgeImported {
+                cancelled: true,
+                left_out: 0,
+            });
+        }
+
+        let group = paths.len() > 1;
+        if group {
+            self.begin_undo_group()?;
+        }
+        let mut placed = paths.into_iter().enumerate();
+        let left_out = placed.try_fold(0_u32, |left_out, (at, path)| {
+            #[cfg(feature = "media")]
+            if let Some(Some(layered)) = read.get(at) {
+                return Ok(left_out + self.place_layers(path.into(), layered)?);
+            }
+            #[cfg(not(feature = "media"))]
+            let _ = at;
+            self.import_footage(path).map(|_| left_out)
+        });
+        // A group left open records nothing, so it closes whatever happened.
+        if group {
+            self.end_undo_group()?;
+        }
+        Ok(BridgeImported {
+            cancelled: false,
+            left_out: left_out?,
+        })
     }
 
     /// Record `path` as a footage item, as one undo step.
@@ -763,21 +868,33 @@ impl ProjectReference {
         Ok(BridgePackState {
             footage: count,
             packed,
-            auto_pack: doc.auto_pack,
+            auto_pack: doc.auto_pack && state.auto_pack_here,
         })
     }
 
     /// Set whether every save packs the project's footage. An ordinary op, so
     /// it is undoable and travels in the `.lum`. Nothing is packed until the
     /// next save.
+    ///
+    /// This is also what makes the switch this machine's own choice, which is
+    /// the only way it counts (`lumit_project::auto_pack_note`).
     #[frb(sync)]
     pub fn set_auto_pack(&self, auto_pack: bool) -> Result<(), BridgeError> {
         let state = self.state()?;
-        let state = state.write().map_err(|_| BridgeError::WriteFailed)?;
-        state
-            .store
-            .commit(Op::SetAutoPack { auto_pack })
-            .map_err(BridgeError::OpError)?;
+        let saved = {
+            let mut state = state.write().map_err(|_| BridgeError::WriteFailed)?;
+            state
+                .store
+                .commit(Op::SetAutoPack { auto_pack })
+                .map_err(BridgeError::OpError)?;
+            state.auto_pack_here = auto_pack;
+            let document = state.store.snapshot().id;
+            state.path.clone().map(|path| (document, path))
+        };
+        // A project with no file yet is noted by the save that gives it one.
+        if let Some((document, path)) = saved {
+            crate::packing::note_auto_pack(document, &path, auto_pack);
+        }
         Ok(())
     }
 
@@ -874,7 +991,7 @@ impl ProjectReference {
         // it, and so does a guest's whose host is away. Asked before this
         // project's own lock, the order the share registry is always taken in.
         let hosted = crate::api::share::saving(self.id);
-        let (document, target, revision, previous, journalled) = {
+        let (document, target, revision, previous, journalled, auto_pack_here) = {
             let state = project.read().map_err(|_| BridgeError::ReadFailed)?;
             // How much of the journal the file is about to hold. An edit takes
             // this project's lock, so none lands between this and the document.
@@ -908,10 +1025,20 @@ impl ProjectReference {
                     .store
                     .frozen(|document| (document, state.store.revision())),
             };
-            (document, target, revision, state.path.clone(), journalled)
+            (
+                document,
+                target,
+                revision,
+                state.path.clone(),
+                journalled,
+                state.auto_pack_here,
+            )
         };
 
         // Everything from here is outside the lock.
+        // A file another Lumit window has open is not saved over, or the two
+        // would share its journal.
+        let claim = crate::claim::take(&target).map_err(|_| BridgeError::WriteFailed)?;
         let dir = target.parent().unwrap_or_else(|| std::path::Path::new(""));
         let doc = lumit_project::rebase_for_save(&document, dir);
         let is_footage = |doc: &lumit_core::Document, id: Uuid| {
@@ -920,7 +1047,10 @@ impl ProjectReference {
                 Some(lumit_core::model::ProjectItem::Footage(_))
             )
         };
-        let all = pack_all || doc.auto_pack;
+        // The document's switch counts only as this machine's own choice. A
+        // file, or another person in a shared project, can set it too.
+        let auto_pack = doc.auto_pack && auto_pack_here;
+        let all = pack_all || auto_pack;
         let mut result = BridgePackResult {
             path: String::new(),
             cancelled: false,
@@ -977,6 +1107,16 @@ impl ProjectReference {
         };
 
         result.path = target.to_string_lossy().into_owned();
+        // The file as it was just written: under a new name it is a new file,
+        // and one saved with the switch off is no longer vouched for.
+        crate::packing::note_auto_pack(document.id, &target, auto_pack);
+        if all {
+            crate::packing::trust(document.id);
+        }
+        // The claim follows the project to the file it is now saved as. A
+        // new file is claimed here, now it has a name on disk to claim by.
+        let claim = crate::claim::take(&target).ok().flatten().or(claim);
+        crate::claim::settle(self.id, Some(&target), claim);
         // A host keeps its edits since the last save, and that is now.
         crate::api::share::saved(self.id, document.id, hosted.map(|(_, _, mark)| mark));
         let mut state = project.write().map_err(|_| BridgeError::WriteFailed)?;
@@ -997,9 +1137,20 @@ impl ProjectReference {
         // dropped from it, or a recovery would replay those edits twice. An
         // edit made while the disk was busy stays, and the journal carries on
         // for the edits after this save.
-        if let Ok(journal) = state.journal.lock() {
+        if let Ok(mut journal) = state.journal.lock() {
             if let Some(file) = journal.as_ref() {
                 let _ = file.forget(journalled);
+            }
+            // A journal belongs to the file its edits were made on. Saved
+            // under a new name, or for the first time, the edits still in it
+            // go with the document to that file's own journal, and the name
+            // it had is left with none.
+            let document = state.store.snapshot().id;
+            if let Some(named) = crate::api::state::journal_file(document, Some(&target)) {
+                if let Some(was) = journal.as_ref().filter(|was| !was.same_as(&named)) {
+                    was.hand_to(&named);
+                }
+                *journal = Some(named);
             }
         }
         state.path = Some(target);
@@ -1345,7 +1496,11 @@ impl ProjectReference {
     #[frb(sync)]
     pub fn jump_history(&self, applied: u32) -> Result<(), BridgeError> {
         let s = self.state()?;
-        let s = s.read().map_err(|_| BridgeError::ReadFailed)?;
+        // The project's lock as an edit takes it, like undo and redo below. A
+        // save reads the journal's length and the document under this lock,
+        // and a step back landing between the two would be in the file and
+        // still in the journal, to be replayed a second time after a crash.
+        let s = s.write().map_err(|_| BridgeError::WriteFailed)?;
         s.store
             .jump_to(applied as usize)
             .map_err(BridgeError::OpError)
@@ -1354,7 +1509,7 @@ impl ProjectReference {
     #[frb(sync)]
     pub fn undo(&self) -> Result<(), BridgeError> {
         let s = self.state()?;
-        let s = s.read().map_err(|_| BridgeError::ReadFailed)?;
+        let s = s.write().map_err(|_| BridgeError::WriteFailed)?;
 
         s.store.undo().map_err(BridgeError::OpError)?;
 
@@ -1364,7 +1519,7 @@ impl ProjectReference {
     #[frb(sync)]
     pub fn redo(&self) -> Result<(), BridgeError> {
         let s = self.state()?;
-        let s = s.read().map_err(|_| BridgeError::ReadFailed)?;
+        let s = s.write().map_err(|_| BridgeError::WriteFailed)?;
 
         s.store.redo().map_err(BridgeError::OpError)?;
 

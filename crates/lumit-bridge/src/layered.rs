@@ -7,8 +7,9 @@
 //! each. Every layer is read at the document's size, so each one sits where it
 //! sat in Photoshop with a centred transform and nothing else. A solid colour
 //! fill with no mask becomes a Solid layer instead, and a layer keeps the
-//! layer styles that Lumit also has. An adjustment layer becomes an
-//! Adjustment layer carrying the nearest effect, switched off.
+//! layer styles that Lumit also has. A vector mask the file has not already
+//! drawn into the layer's picture becomes masks on the layer. An adjustment
+//! layer becomes an Adjustment layer carrying the nearest effect, switched off.
 //!
 //! A group becomes a layer group where that changes nothing about the
 //! picture: straight inside a composition, passing its layers' blend modes
@@ -26,6 +27,7 @@ use std::path::Path;
 
 use lumit_core::anim::Property;
 use lumit_core::group::LayerGroup;
+use lumit_core::mask::{BezierPath, Mask, MaskMode, Vertex};
 use lumit_core::model::{
     BlendMode, Composition, EffectInstance, EffectValue, Folder, FootageItem, Layer, LayerKind,
     LinearColour, MatteChannel, MatteRef, MediaRef, MotionBlur, ProjectItem, SolidDef,
@@ -228,6 +230,65 @@ fn styles(psd: &PsdDocument, record: &PsdLayer) -> Vec<EffectInstance> {
     }
     lumit_core::fx::normalise_styles(&mut out);
     out
+}
+
+/// The masks `record`'s vector mask becomes: one for each subpath, in the
+/// file's order. A layer is read at the document's size, so a point's place in
+/// the document is its place on the layer.
+// ponytail: the mask's feather and density are not carried, and a subpath
+// that crosses itself fills the way Lumit fills any path. The upgrade is
+// reading the first two from the layer's mask data.
+fn masks(psd: &PsdDocument, record: &PsdLayer) -> Vec<Mask> {
+    let Some(vector) = record.vector_mask() else {
+        return Vec::new();
+    };
+    let place = |(x, y): (f64, f64)| (x * f64::from(psd.width), y * f64::from(psd.height));
+    let subpaths = vector.paths.iter().enumerate();
+    subpaths
+        .map(|(index, subpath)| {
+            let vertices = subpath.knots.iter().map(|[before, point, after]| {
+                let (pos, before, after) = (place(*point), place(*before), place(*after));
+                Vertex {
+                    pos,
+                    tan_in: (before.0 - pos.0, before.1 - pos.1),
+                    tan_out: (after.0 - pos.0, after.1 - pos.1),
+                }
+            });
+            // The first subpath is the shape itself, unless it is cut out of
+            // the whole layer.
+            let mode = match (index, subpath.operation) {
+                (_, 2) => MaskMode::Subtract,
+                (0, _) => MaskMode::Add,
+                (_, 3) => MaskMode::Intersect,
+                (_, 0) => MaskMode::Difference,
+                _ => MaskMode::Add,
+            };
+            // An inverted mask is the same list with every step turned over.
+            let (mode, inverted) = match mode {
+                _ if !vector.inverted => (mode, false),
+                MaskMode::Add => (MaskMode::Intersect, true),
+                MaskMode::Intersect => (MaskMode::Add, true),
+                MaskMode::Subtract => (MaskMode::Add, false),
+                _ => (mode, false),
+            };
+            Mask {
+                id: Uuid::now_v7(),
+                name: record.name.clone(),
+                path: BezierPath {
+                    vertices: vertices.collect(),
+                    closed: true,
+                },
+                path_keys: Vec::new(),
+                inverted,
+                opacity: Property::fixed(100.0),
+                mode,
+                feather: Property::zero(),
+                vertex_feather: Vec::new(),
+                expansion: Property::zero(),
+                extra: serde_json::Map::new(),
+            }
+        })
+        .collect()
 }
 
 /// The Lumit effects a Photoshop adjustment layer becomes, or `None` for a
@@ -614,6 +675,12 @@ impl Scope<'_> {
     }
 }
 
+/// How many groups may sit inside each other and each still become a
+/// composition of its own. A group past that is read as plain layers of the
+/// one it is in. Every composition inside another is a level the renderer
+/// walks down by calling itself, and a file can hold thousands of groups.
+const MAX_GROUP_DEPTH: usize = 16;
+
 /// The ops that fill `comp` with `psd`'s layers, and how many records were
 /// left out because they hold no picture: an adjustment layer of a kind that
 /// is not mapped, a gradient or pattern fill, an empty layer.
@@ -648,9 +715,12 @@ fn psd_ops(
         fold: None,
     }];
     let mut left_out = 0u32;
+    // Groups opened past [`MAX_GROUP_DEPTH`], which are read as plain layers.
+    let mut flat = 0u32;
 
     // The file lists its layers bottom first, and a comp lists them top first.
     for (index, record) in psd.layers.iter().enumerate().rev() {
+        let depth = scopes.len();
         let Some(scope) = scopes.last_mut() else {
             break;
         };
@@ -658,7 +728,10 @@ fn psd_ops(
             // A layer group never changes the picture, so it stands in for a
             // group only where the group did not either.
             Section::Group
-                if scope.fold.is_none() && record.blend == *b"pass" && record.opacity == 255 =>
+                if scope.fold.is_none()
+                    && record.blend == *b"pass"
+                    && record.opacity == 255
+                    && record.fill_opacity == 255 =>
             {
                 let group = LayerGroup {
                     id: Uuid::now_v7(),
@@ -669,12 +742,14 @@ fn psd_ops(
                 };
                 scope.fold = Some((group, record.visible));
             }
+            Section::Group if depth > MAX_GROUP_DEPTH => flat += 1,
             Section::Group => scopes.push(Scope {
                 header: Some(record),
                 layers: Vec::new(),
                 groups: Vec::new(),
                 fold: None,
             }),
+            Section::GroupEnd if flat > 0 => flat -= 1,
             Section::GroupEnd => {
                 close(&mut scopes, &mut items, comp_size, rate, out);
             }
@@ -749,8 +824,9 @@ fn psd_ops(
                     out,
                     centred(psd.width, psd.height),
                 );
-                dress(&mut layer, record);
                 layer.styles = styles(psd, record);
+                layer.masks = masks(psd, record);
+                dress(&mut layer, record);
                 scope.place(layer);
             }
         }
@@ -767,7 +843,17 @@ fn psd_ops(
 
 /// A record's opacity, blend mode and visibility, onto the layer made for it.
 fn dress(layer: &mut Layer, record: &PsdLayer) {
-    layer.transform.opacity = Property::fixed(f64::from(record.opacity) / 2.55);
+    // Photoshop's Fill fades a layer's picture and leaves its styles alone.
+    // Lumit has one opacity for both, so Fill is carried where no style came
+    // across, and there it is one more opacity.
+    // ponytail: a layer that wears a style keeps its picture at full Fill.
+    // The upgrade is a Fill row on the layer.
+    let fill = if layer.styles.is_empty() {
+        f64::from(record.fill_opacity) / 255.0
+    } else {
+        1.0
+    };
+    layer.transform.opacity = Property::fixed(f64::from(record.opacity) / 2.55 * fill);
     layer.blend = blend_of(record.blend);
     layer.switches.visible = record.visible;
 }

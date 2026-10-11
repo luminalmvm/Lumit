@@ -38,6 +38,11 @@ pub struct LumitBridgeState {
     /// and a `Mutex` rather than a bare handle so recovery can re-arm it when
     /// the document changes identity.
     pub journal: SharedJournal,
+    /// Whether this machine switched on packing every save for this project.
+    /// The document's own switch counts only while this is set, since a file
+    /// or another person in a shared project can set that one
+    /// (`lumit_project::auto_pack_note`).
+    pub(crate) auto_pack_here: bool,
     pub sender: Option<Sender<WorkerRequest>>,
     /// The project's OCIO config as the *seam* holds it: the parse and
     /// the baked output-space tables the colour reads answer from.
@@ -58,17 +63,19 @@ pub struct LumitBridgeState {
 /// or after a save has made it redundant.
 pub type SharedJournal = Arc<Mutex<Option<JournalFile>>>;
 
-/// Arm a journal for `document`, if this platform gives us somewhere to put one.
+/// Arm a journal for `document` as saved at `saved_at`, if this platform gives
+/// us somewhere to put one.
 #[frb(ignore)]
-pub(crate) fn journal_for(document: &Document) -> SharedJournal {
-    Arc::new(Mutex::new(journal_file(document.id)))
+pub(crate) fn journal_for(document: &Document, saved_at: Option<&Path>) -> SharedJournal {
+    Arc::new(Mutex::new(journal_file(document.id, saved_at)))
 }
 
-/// The journal file for a document, wherever this build keeps them.
+/// The journal file for a document saved at `saved_at`, wherever this build
+/// keeps them. Each file has its own (`lumit_project::journal_in`).
 #[cfg(not(test))]
 #[frb(ignore)]
-pub(crate) fn journal_file(doc_id: Uuid) -> Option<JournalFile> {
-    JournalFile::for_document(doc_id)
+pub(crate) fn journal_file(doc_id: Uuid, saved_at: Option<&Path>) -> Option<JournalFile> {
+    JournalFile::for_project(doc_id, saved_at)
 }
 
 // Tests must never write into the user's real cache folder, so a test's
@@ -82,13 +89,11 @@ thread_local! {
 }
 
 #[cfg(test)]
-pub(crate) fn journal_file(doc_id: Uuid) -> Option<JournalFile> {
+pub(crate) fn journal_file(doc_id: Uuid, saved_at: Option<&Path>) -> Option<JournalFile> {
     let dir = TEST_JOURNAL_DIR.with(|dir| dir.borrow().clone())?;
-    Some(JournalFile::at_path(
-        dir.join(doc_id.to_string())
-            .join("journal")
-            .join("ops.jsonl"),
-    ))
+    Some(JournalFile::at_path(lumit_project::journal_in(
+        &dir, doc_id, saved_at,
+    )))
 }
 
 /// Keeps this thread's journals under a folder until it drops (tests only).
@@ -534,6 +539,25 @@ pub struct OpenProgress {
 
 pub type OpenProgressStream = StreamSink<OpenProgress>;
 
+/// How opening a project went.
+#[frb(non_opaque)]
+#[derive(Debug, Clone)]
+pub enum BridgeOpened {
+    Opened {
+        project: ProjectReference,
+    },
+    /// The file would not open, or the open was cancelled. Whatever was open
+    /// stays.
+    NotOpened,
+    /// Another Lumit window has this project open, so it was not opened here
+    /// as well: two windows on one file would write the same crash journal.
+    /// `focused` says whether that window was brought forward, which only
+    /// Windows does.
+    OpenElsewhere {
+        focused: bool,
+    },
+}
+
 /// Where each phase begins on the bar. One table, so the weights cannot
 /// disagree between the two places that report them.
 fn phase_fraction(phase: OpenPhase) -> f64 {
@@ -548,7 +572,7 @@ fn phase_fraction(phase: OpenPhase) -> f64 {
 
 /// Say a phase has begun, if anyone is listening. A dropped report costs the
 /// bar one step and nothing else, so it is never worth failing an open over.
-fn report_phase(sink: Option<&OpenProgressStream>, phase: OpenPhase) {
+pub(crate) fn report_phase(sink: Option<&OpenProgressStream>, phase: OpenPhase) {
     if let Some(sink) = sink {
         let _ = sink.add(OpenProgress {
             phase,
@@ -741,6 +765,7 @@ pub(crate) fn op_scope(op: &lumit_core::Op) -> (Option<Uuid>, Option<Uuid>, bool
         | Op::SetCameraSolveLink { comp, layer, .. }
         | Op::SetLayerVolume { comp, layer, .. }
         | Op::SetLayerPan { comp, layer, .. }
+        | Op::SetLayerAudioStreams { comp, layer, .. }
         | Op::SetLayerInterpolation { comp, layer, .. }
         | Op::SetRetimeProperty { comp, layer, .. } => (Some(*comp), Some(*layer), false),
 
@@ -768,7 +793,7 @@ impl LumitBridgeState {
         }
 
         let document = Document::new();
-        let journal = journal_for(&document);
+        let journal = journal_for(&document, None);
         let store = Arc::new(DocumentStore::new(document));
         let state = LumitBridgeState {
             saved_revision: store.revision(),
@@ -776,6 +801,7 @@ impl LumitBridgeState {
             path: None,
             media: MediaCache::default(),
             journal: Arc::clone(&journal),
+            auto_pack_here: false,
             sender: None,
             colour: Mutex::new(lumit_render::colour::ColourState::default()),
         };
@@ -876,19 +902,33 @@ impl LumitBridgeState {
     /// project, closed while its host was away. It opens as it was left and
     /// carries on looking for the host, and [`ProjectReference::share_guest`]
     /// says so.
+    ///
+    /// Not opened as well when [`crate::api::import::cancel_import`] stopped
+    /// it, which leaves whatever was open as it was.
     pub fn open_project(
         path: &str,
         on_change_stream: Option<CallbackStream>,
         on_progress_stream: Option<OpenProgressStream>,
         share_events: Option<StreamSink<crate::api::share::BridgeShareEvent>>,
-    ) -> Result<Option<ProjectReference>, BridgeError> {
+    ) -> Result<BridgeOpened, BridgeError> {
         let progress = on_progress_stream.as_ref();
+        crate::packing::begin();
         report_phase(progress, OpenPhase::ReadingFile);
         let path = PathBuf::from(path);
+        // Claimed before anything is read. It is let go again by itself if
+        // the open comes to nothing.
+        let claim = match crate::claim::take(&path) {
+            Ok(claim) => claim,
+            Err(holder) => {
+                return Ok(BridgeOpened::OpenElsewhere {
+                    focused: crate::claim::bring_forward(holder),
+                })
+            }
+        };
         let Ok((mut doc, _manifest)) = lumit_project::open(&path) else {
             // Not an error to report: a `.lum` that will not open is the file
-            // picker's problem, and Dart shows its own notice for None.
-            return Ok(None);
+            // picker's problem, and Dart shows its own notice for it.
+            return Ok(BridgeOpened::NotOpened);
         };
         // What was kept is the copy as a guest left it, so it is what opens.
         let beside = path.parent().unwrap_or_else(|| Path::new(""));
@@ -902,12 +942,22 @@ impl LumitBridgeState {
         // directory, which `Path::new("")` gives us — nothing to relink from,
         // rather than a panic.
         let project_dir = path.parent().unwrap_or_else(|| Path::new("")).to_path_buf();
-        let (project, _missing) = adopt(doc, Some(path), &project_dir, on_change_stream, progress)?;
+        let Some((project, _missing)) = adopt(
+            doc,
+            Some(path.clone()),
+            &project_dir,
+            on_change_stream,
+            progress,
+        )?
+        else {
+            return Ok(BridgeOpened::NotOpened);
+        };
+        crate::claim::settle(project.id, Some(&path), claim);
         if let Some(resuming) = resuming {
             crate::api::share::resume(&project, resuming, share_events)?;
         }
         report_phase(progress, OpenPhase::StartingPreview);
-        Ok(Some(project))
+        Ok(BridgeOpened::Opened { project })
     }
 }
 
@@ -932,14 +982,29 @@ impl LumitBridgeState {
 /// §2.5). Opening a `.lum` ignores the list — the Project panel already draws a
 /// relink slate on each of them — while the importer turns it into report rows,
 /// because an import is exactly the moment somebody wants to be told.
+///
+/// `None` when it was cancelled (`crate::packing::cancel`), with nothing
+/// changed. The caller clears the flag before it starts.
 pub(crate) fn adopt(
     mut doc: Document,
     saved_at: Option<PathBuf>,
     media_root: &Path,
     on_change_stream: Option<CallbackStream>,
     on_progress: Option<&OpenProgressStream>,
-) -> Result<(ProjectReference, Vec<String>), BridgeError> {
+) -> Result<Option<(ProjectReference, Vec<String>)>, BridgeError> {
     let id = Uuid::now_v7();
+
+    // A file that says every save packs is believed only when this machine
+    // switched that on for it. Any other opens with it off, which is not an
+    // edit, and it can be switched on again by hand. A document that came
+    // from somebody else in a shared project is left as they have it, and is
+    // not believed either.
+    let auto_pack_here = saved_at
+        .as_deref()
+        .is_some_and(|path| doc.auto_pack && crate::packing::auto_packs(doc.id, path));
+    if saved_at.is_some() {
+        doc.auto_pack = auto_pack_here;
+    }
 
     // Packed footage first, so the resolver finds those items already placed
     // and does not go looking for files that were never sent.
@@ -962,10 +1027,20 @@ pub(crate) fn adopt(
             }
         });
     }
+    if crate::packing::cancelled() {
+        return Ok(None);
+    }
     report_phase(on_progress, OpenPhase::ResolvingMedia);
     let (_relinked, missing) = lumit_project::resolve_all_media(&mut doc, media_root, &[]);
     // What is still missing may be something another person sent before.
     crate::footage::restore(&mut doc);
+    crate::packing::settle(&doc);
+    // The last moment to stop: from here the project that was open is closed.
+    if crate::packing::cancelled() {
+        return Ok(None);
+    }
+    // Its claim on its file goes with it, unless this is that file again.
+    crate::claim::settle(id, saved_at.as_deref(), None);
     report_phase(on_progress, OpenPhase::PreparingProject);
 
     // Every footage file this project holds, handed to the probe worker
@@ -1004,7 +1079,7 @@ pub(crate) fn adopt(
     // nothing on the machine is asked to compile a graph for it.
     let planes = lumit_render::planes::warm_jobs(&doc);
 
-    let journal = journal_for(&doc);
+    let journal = journal_for(&doc, saved_at.as_deref());
     let store = Arc::new(DocumentStore::new(doc));
     let state = LumitBridgeState {
         saved_revision: store.revision(),
@@ -1012,6 +1087,7 @@ pub(crate) fn adopt(
         path: saved_at,
         media: MediaCache::default(),
         journal: Arc::clone(&journal),
+        auto_pack_here,
         sender: None,
         colour: Mutex::new(lumit_render::colour::ColourState::default()),
     };
@@ -1080,5 +1156,5 @@ pub(crate) fn adopt(
         crate::probe::request(file);
     }
 
-    Ok((ProjectReference::new(id), missing))
+    Ok(Some((ProjectReference::new(id), missing)))
 }

@@ -303,3 +303,44 @@ fn a_config_defined_working_space_carries_the_built_in_edges_across() {
     assert!(legacy.rec709_to_working().is_none());
     assert!(legacy.artefact(&Edge::Untagged).is_none());
 }
+
+/// The input transform reaches the decode pass. A footage layer's pixels
+/// carry the item's colour space with them, because by the time the realiser
+/// sees a draw the list has been flattened and there is no comp left to ask.
+/// Without this, footage tagged with a colour space draws without its
+/// conversion and nothing says so.
+#[test]
+fn a_footage_layers_pixels_carry_the_items_colour_space() {
+    use lumit_core::model::LayerKind;
+    use lumit_render::colour::footage_colour_space;
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("config.ocio");
+    std::fs::write(&path, GOOD).unwrap();
+    let doc = doc_naming(&path);
+    let item = doc.items[0].id();
+
+    let footage = LayerKind::Footage { item };
+    assert_eq!(
+        footage_colour_space(&doc, &footage).as_deref(),
+        Some("srgb_texture")
+    );
+
+    // Anything that is not footage has no interpretation to state.
+    assert_eq!(
+        footage_colour_space(
+            &doc,
+            &LayerKind::Solid {
+                def: Uuid::now_v7()
+            }
+        ),
+        None
+    );
+
+    // Nor does a footage item nobody has assigned.
+    let mut plain = doc.clone();
+    if let Some(ProjectItem::Footage(f)) = plain.items.first_mut() {
+        f.colour_space = None;
+    }
+    assert_eq!(footage_colour_space(&plain, &footage), None);
+}

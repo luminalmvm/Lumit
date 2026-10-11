@@ -155,13 +155,18 @@ class BridgeRecovery {
   /// that failed was written against a document that no longer exists.
   final int replayed;
 
+  /// True when the replay was stopped. The project and its journal are then
+  /// as they were, so the edits can still be restored.
+  final bool cancelled;
+
   const BridgeRecovery({
     required this.found,
     required this.replayed,
+    required this.cancelled,
   });
 
   @override
-  int get hashCode => found.hashCode ^ replayed.hashCode;
+  int get hashCode => found.hashCode ^ replayed.hashCode ^ cancelled.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -169,5 +174,6 @@ class BridgeRecovery {
       other is BridgeRecovery &&
           runtimeType == other.runtimeType &&
           found == other.found &&
-          replayed == other.replayed;
+          replayed == other.replayed &&
+          cancelled == other.cancelled;
 }

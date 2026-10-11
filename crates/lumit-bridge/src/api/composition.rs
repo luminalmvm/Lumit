@@ -906,6 +906,7 @@ impl CompositionReference {
                 duration,
             );
             clip.interpolation = row.interpolation.clone();
+            clip.audio_streams = row.audio_streams.clone();
             clip
         }
 
@@ -1366,10 +1367,29 @@ impl CompositionReference {
             name.trim().to_string()
         };
 
+        // A retimed layer that leaves its attributes behind leaves its Retime
+        // too, and its place in time goes with that: the Retime reads the
+        // layer's own clock, so the Precomp layer has to keep that clock. The
+        // layer inside then starts at nought and runs the whole of the new
+        // comp, which is made long enough to hold all of its source.
+        let retimed = leave_attributes && packed.iter().any(|l| l.retime.is_some());
+        let duration = if retimed {
+            let source = packed.first().and_then(|src| {
+                LayerReference::new(self.project, self.id, src.id).source_length(src)
+            });
+            duration.max(source.unwrap_or(duration))
+        } else {
+            duration
+        };
+
         let mut inner_layers = Vec::with_capacity(packed.len());
         for src in &packed {
             let mut layer = src.clone();
             if leave_attributes {
+                // An id of its own. The Precomp layer takes this one's, and
+                // with it everything in the comp that points here: a child, a
+                // matte, an effect's layer row.
+                layer.id = Uuid::now_v7();
                 // Stripped back to its source: the attributes are staying
                 // behind on the Precomp layer, and a copy on both would apply
                 // each of them twice.
@@ -1387,9 +1407,15 @@ impl CompositionReference {
                 layer.parent = None;
                 layer.matte = None;
             }
-            layer.in_point = shift_back(src.in_point)?;
-            layer.out_point = shift_back(src.out_point)?;
-            layer.start_offset = shift_back(src.start_offset)?;
+            if retimed {
+                layer.in_point = CompTime::ZERO;
+                layer.out_point = CompTime(duration.0);
+                layer.start_offset = CompTime::ZERO;
+            } else {
+                layer.in_point = shift_back(src.in_point)?;
+                layer.out_point = shift_back(src.out_point)?;
+                layer.start_offset = shift_back(src.start_offset)?;
+            }
             inner_layers.push(layer);
         }
 
@@ -1492,6 +1518,16 @@ impl CompositionReference {
             layer.retime = src.retime.clone();
             layer.blend = src.blend;
             layer.switches = src.switches.clone();
+            // It stands where the layer stood: under the same id, with the
+            // same parent and the same matte.
+            layer.id = src.id;
+            layer.parent = src.parent;
+            layer.matte = src.matte.clone();
+            if retimed {
+                layer.in_point = src.in_point;
+                layer.out_point = src.out_point;
+                layer.start_offset = src.start_offset;
+            }
         }
         if let Some(g) = &carried {
             // The header's stack lands after any attributes the layer kept —
@@ -2039,13 +2075,21 @@ impl CompositionReference {
     /// undo step and one funnel: every route into a comp — a drop, a
     /// double-click, a menu — comes through here and cannot disagree with the
     /// others about what a video import becomes.
+    ///
+    /// `arrival` is the setting beside it, *Several audio streams arrive as*:
+    /// what a file with more than one audio stream becomes. Left out, it is
+    /// the first stream on the one layer, as a file with one stream arrives.
+    /// Mixed, the one layer sounds them all. Split, each stream after the
+    /// first is an Audio layer of its own directly below, in the same undo
+    /// step.
     pub fn add_footage_layer(
         &self,
         footage: &FootageReference,
         as_sequence: bool,
         row: Option<u32>,
+        arrival: Option<crate::api::streams::BridgeStreamsArrival>,
     ) -> Result<(), BridgeError> {
-        self.place_footage(footage, as_sequence, false, row)
+        self.place_footage(footage, as_sequence, false, row, arrival)
     }
 
     /// Add **the sound of** this footage item as its own layer: an
@@ -2058,9 +2102,14 @@ impl CompositionReference {
     /// the other case: a video file whose picture is not wanted on this row, so
     /// its sound can be cut, faded and keyframed by itself.
     ///
-    /// One `AddLayer` op, so it is one undo step like every other placement.
-    pub fn add_audio_layer(&self, footage: &FootageReference) -> Result<(), BridgeError> {
-        self.place_footage(footage, false, true, None)
+    /// One undo step like every other placement. `arrival` is as for
+    /// [`Self::add_footage_layer`].
+    pub fn add_audio_layer(
+        &self,
+        footage: &FootageReference,
+        arrival: Option<crate::api::streams::BridgeStreamsArrival>,
+    ) -> Result<(), BridgeError> {
+        self.place_footage(footage, false, true, None, arrival)
     }
 
     #[frb(ignore)]
@@ -2070,11 +2119,14 @@ impl CompositionReference {
         as_sequence: bool,
         audio_only: bool,
         row: Option<u32>,
+        arrival: Option<crate::api::streams::BridgeStreamsArrival>,
     ) -> Result<(), BridgeError> {
+        use lumit_core::sequence::{Clip, ClipSource};
+        let arrival = arrival.unwrap_or(crate::api::streams::BridgeStreamsArrival::First);
         let proj = self.project()?;
         let comp = self.composition()?;
 
-        let layer = {
+        let (layer, beside) = {
             let p = proj.read().map_err(|_| BridgeError::ReadFailed)?;
             let doc = p.store.snapshot();
 
@@ -2091,15 +2143,29 @@ impl CompositionReference {
             let audio_only = audio_only || !Self::has_picture(&p, f);
             let sequenced = as_sequence && !audio_only && Self::runs_as_video(&p, f);
 
+            // What the layer sounds, and what each row split off beside it
+            // does: nothing beside it unless the file has several streams and
+            // they were asked for apart.
+            let streams = crate::streams::of_item(&p, f);
+            let sounds = arrival.sounds(streams.len());
+            let (first, rest) = match sounds.split_first() {
+                Some((first, rest)) => (first.clone(), rest),
+                None => (Default::default(), &[][..]),
+            };
+            // A stream on a row of its own is the same stretch of the file
+            // as the picture, so the two are linked as a cut's are.
+            let link = (sequenced && !rest.is_empty()).then(Uuid::now_v7);
+            let clip_of = |plays: &lumit_core::model::AudioStreams| {
+                let zero = lumit_core::time::Rational::ZERO;
+                let mut clip = Clip::new(ClipSource::Footage(item), zero, out, zero, out);
+                clip.audio_streams = plays.clone();
+                clip.link = link;
+                clip
+            };
+
             let kind = if sequenced {
                 lumit_core::model::LayerKind::Sequence {
-                    clips: vec![lumit_core::sequence::Clip::new(
-                        lumit_core::sequence::ClipSource::Footage(item),
-                        lumit_core::time::Rational::ZERO,
-                        out,
-                        lumit_core::time::Rational::ZERO,
-                        out,
-                    )],
+                    clips: vec![clip_of(&first)],
                 }
             } else {
                 lumit_core::model::LayerKind::Footage { item }
@@ -2112,18 +2178,60 @@ impl CompositionReference {
                 crate::edits::centred_transform(nat_w, nat_h, comp.width, comp.height),
             );
             layer.audio_only = audio_only;
+            if !sequenced {
+                layer.audio_streams = first;
+            }
             crate::edits::solo_on_arrival(&mut layer, comp.layers.iter());
-            layer
+
+            let beside: Vec<lumit_core::model::Layer> = rest
+                .iter()
+                .map(|plays| {
+                    let mut sound = layer.clone();
+                    sound.id = Uuid::now_v7();
+                    sound.audio_only = true;
+                    if let [place] = plays.places() {
+                        sound.name = crate::streams::split_name(&f.name, *place, &streams);
+                    }
+                    if sequenced {
+                        sound.kind = lumit_core::model::LayerKind::Sequence {
+                            clips: vec![clip_of(plays)],
+                        };
+                        // The label an Audio layer starts on, as a sound row
+                        // made by a cut wears.
+                        sound.label = 1;
+                    } else {
+                        sound.audio_streams = plays.clone();
+                    }
+                    // Asked again, as an Audio layer: it counts every solo in
+                    // the comp, where a layer with a picture counts the ones
+                    // that draw.
+                    crate::edits::solo_on_arrival(&mut sound, comp.layers.iter());
+                    sound
+                })
+                .collect();
+            (layer, beside)
         };
 
-        let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
-        proj.store
-            .commit(lumit_core::Op::AddLayer {
+        // The layer, and directly below it each row split off beside it.
+        let index = insert_row(row, comp.layers.len());
+        let mut ops = vec![lumit_core::Op::AddLayer {
+            comp: self.id,
+            index,
+            layer: Box::new(layer),
+        }];
+        for (n, sound) in beside.into_iter().enumerate() {
+            ops.push(lumit_core::Op::AddLayer {
                 comp: self.id,
-                index: insert_row(row, comp.layers.len()),
-                layer: Box::new(layer),
-            })
-            .map_err(BridgeError::OpError)?;
+                index: index + 1 + n,
+                layer: Box::new(sound),
+            });
+        }
+        let op = match ops.len() {
+            1 => ops.remove(0),
+            _ => lumit_core::Op::Batch { ops },
+        };
+        let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
+        proj.store.commit(op).map_err(BridgeError::OpError)?;
         Ok(())
     }
 

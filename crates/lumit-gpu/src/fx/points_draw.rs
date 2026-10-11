@@ -338,7 +338,15 @@ impl FxEngine {
         fit: &SpriteFit,
     ) {
         use wgpu::util::DeviceExt;
-        let count = u32::try_from(op.points.len()).unwrap_or(u32::MAX);
+        // No more points than the card takes in one buffer. Past that the
+        // bind group is refused and the whole draw is lost without a word,
+        // so the first that fit are drawn and the rest are left out.
+        let most = ctx.device.limits().max_storage_buffer_binding_size as u64 / (STREAM_WORDS * 4);
+        let points = usize::try_from(most)
+            .ok()
+            .and_then(|most| op.points.get(..most))
+            .unwrap_or(op.points);
+        let count = u32::try_from(points.len()).unwrap_or(u32::MAX);
         // The stream layout Particulate's compaction writes, filled from the
         // host instead: the regions the draw reads carry the points, and the
         // ones only a data consumer would read stay nought. The strides are
@@ -352,7 +360,7 @@ impl FxEngine {
         let cap = u64::from(count);
         let mut words = vec![0u32; (cap * STREAM_WORDS) as usize];
         let region = |k: u64| (k * cap) as usize;
-        for (i, pt) in op.points.iter().enumerate() {
+        for (i, pt) in points.iter().enumerate() {
             for c in 0..3 {
                 words[region(0) + i * 3 + c] = pt.position[c].to_bits();
                 words[region(14) + i * 3 + c] = pt.tail[c].to_bits();

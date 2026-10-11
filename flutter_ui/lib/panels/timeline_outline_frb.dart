@@ -842,6 +842,11 @@ class Outline extends StatelessWidget {
   /// height are one answer rather than two that agree.
   final List<LayerRow> rows;
 
+  /// Every layer in the comp, top of the stack first. The rows are numbered
+  /// from this, so a layer keeps its number while a search or the shy filter
+  /// hides the rows around it.
+  final List<BridgeLayerEntry> stack;
+
   /// The column groups in their current order and at their current widths
   /// (docs/07 §4.2) — rows draw their cells to match the header's.
   final List<TimelineGroup> groupOrder;
@@ -889,6 +894,7 @@ class Outline extends StatelessWidget {
     super.key,
     required this.comp,
     required this.rows,
+    required this.stack,
     required this.groupOrder,
     required this.widths,
     required this.matteToggles,
@@ -917,10 +923,14 @@ class Outline extends StatelessWidget {
     final valueColumn = valueColumnFor(groupOrder, widths);
     final timingsColumn = timingsColumnFor(groupOrder, widths);
     final baseIndent = identityStart(groupOrder, widths);
-    // The layer entries, for the parent picker's menu — every layer is on
-    // offer as a parent, and they come from the row list rather than from a
-    // second list handed in beside it.
+    // The rows on screen, which is what a drag and a multi-row command act
+    // on.
     final layers = [for (final row in rows) row.entry];
+    // Each layer's number, looked up once here and not once a row.
+    final numbers = {
+      for (var i = 0; i < stack.length; i++)
+        stack[i].layer.internallayerId.toString(): i + 1,
+    };
     // Only the blocks in view are built; the rest are two blanks holding the
     // stack open, so the outline costs what is on screen rather than what the
     // comp has.
@@ -1010,6 +1020,8 @@ class Outline extends StatelessWidget {
                   entry: rows[i].entry,
                   onOpenSequence: () => onOpenSequence?.call(rows[i].entry),
                   layers: layers,
+                  stack: stack,
+                  number: numbers[rows[i].id] ?? i + 1,
                   groupOrder: groupOrder,
                   widths: widths,
                   matteToggles: matteToggles,
