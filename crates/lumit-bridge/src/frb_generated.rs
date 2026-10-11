@@ -21415,6 +21415,34 @@ impl SseDecode for crate::api::graph::BridgeNodeRef {
     }
 }
 
+impl SseDecode for crate::api::state::BridgeOpened {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut tag_ = <i32>::sse_decode(deserializer);
+        match tag_ {
+            0 => {
+                let mut var_project =
+                    <crate::api::project::ProjectReference>::sse_decode(deserializer);
+                return crate::api::state::BridgeOpened::Opened {
+                    project: var_project,
+                };
+            }
+            1 => {
+                return crate::api::state::BridgeOpened::NotOpened;
+            }
+            2 => {
+                let mut var_focused = <bool>::sse_decode(deserializer);
+                return crate::api::state::BridgeOpened::OpenElsewhere {
+                    focused: var_focused,
+                };
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+
 impl SseDecode for crate::api::graph::BridgeOutputRef {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -29934,6 +29962,34 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::graph::BridgeNodeRef>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::state::BridgeOpened {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            crate::api::state::BridgeOpened::Opened { project } => {
+                [0.into_dart(), project.into_into_dart().into_dart()].into_dart()
+            }
+            crate::api::state::BridgeOpened::NotOpened => [1.into_dart()].into_dart(),
+            crate::api::state::BridgeOpened::OpenElsewhere { focused } => {
+                [2.into_dart(), focused.into_into_dart().into_dart()].into_dart()
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::state::BridgeOpened
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::state::BridgeOpened>
+    for crate::api::state::BridgeOpened
+{
+    fn into_into_dart(self) -> crate::api::state::BridgeOpened {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::graph::BridgeOutputRef {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         match self {
@@ -35080,6 +35136,28 @@ impl SseEncode for crate::api::graph::BridgeNodeRef {
             }
             crate::api::graph::BridgeNodeRef::Out => {
                 <i32>::sse_encode(3, serializer);
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+
+impl SseEncode for crate::api::state::BridgeOpened {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        match self {
+            crate::api::state::BridgeOpened::Opened { project } => {
+                <i32>::sse_encode(0, serializer);
+                <crate::api::project::ProjectReference>::sse_encode(project, serializer);
+            }
+            crate::api::state::BridgeOpened::NotOpened => {
+                <i32>::sse_encode(1, serializer);
+            }
+            crate::api::state::BridgeOpened::OpenElsewhere { focused } => {
+                <i32>::sse_encode(2, serializer);
+                <bool>::sse_encode(focused, serializer);
             }
             _ => {
                 unimplemented!("");

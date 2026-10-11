@@ -539,6 +539,25 @@ pub struct OpenProgress {
 
 pub type OpenProgressStream = StreamSink<OpenProgress>;
 
+/// How opening a project went.
+#[frb(non_opaque)]
+#[derive(Debug, Clone)]
+pub enum BridgeOpened {
+    Opened {
+        project: ProjectReference,
+    },
+    /// The file would not open, or the open was cancelled. Whatever was open
+    /// stays.
+    NotOpened,
+    /// Another Lumit window has this project open, so it was not opened here
+    /// as well: two windows on one file would write the same crash journal.
+    /// `focused` says whether that window was brought forward, which only
+    /// Windows does.
+    OpenElsewhere {
+        focused: bool,
+    },
+}
+
 /// Where each phase begins on the bar. One table, so the weights cannot
 /// disagree between the two places that report them.
 fn phase_fraction(phase: OpenPhase) -> f64 {
@@ -883,22 +902,32 @@ impl LumitBridgeState {
     /// carries on looking for the host, and [`ProjectReference::share_guest`]
     /// says so.
     ///
-    /// `None` as well when [`crate::api::import::cancel_import`] stopped it,
-    /// which leaves whatever was open as it was.
+    /// Not opened as well when [`crate::api::import::cancel_import`] stopped
+    /// it, which leaves whatever was open as it was.
     pub fn open_project(
         path: &str,
         on_change_stream: Option<CallbackStream>,
         on_progress_stream: Option<OpenProgressStream>,
         share_events: Option<StreamSink<crate::api::share::BridgeShareEvent>>,
-    ) -> Result<Option<ProjectReference>, BridgeError> {
+    ) -> Result<BridgeOpened, BridgeError> {
         let progress = on_progress_stream.as_ref();
         crate::packing::begin();
         report_phase(progress, OpenPhase::ReadingFile);
         let path = PathBuf::from(path);
+        // Claimed before anything is read. It is let go again by itself if
+        // the open comes to nothing.
+        let claim = match crate::claim::take(&path) {
+            Ok(claim) => claim,
+            Err(holder) => {
+                return Ok(BridgeOpened::OpenElsewhere {
+                    focused: crate::claim::bring_forward(holder),
+                })
+            }
+        };
         let Ok((mut doc, _manifest)) = lumit_project::open(&path) else {
             // Not an error to report: a `.lum` that will not open is the file
-            // picker's problem, and Dart shows its own notice for None.
-            return Ok(None);
+            // picker's problem, and Dart shows its own notice for it.
+            return Ok(BridgeOpened::NotOpened);
         };
         // What was kept is the copy as a guest left it, so it is what opens.
         let beside = path.parent().unwrap_or_else(|| Path::new(""));
@@ -912,16 +941,22 @@ impl LumitBridgeState {
         // directory, which `Path::new("")` gives us — nothing to relink from,
         // rather than a panic.
         let project_dir = path.parent().unwrap_or_else(|| Path::new("")).to_path_buf();
-        let Some((project, _missing)) =
-            adopt(doc, Some(path), &project_dir, on_change_stream, progress)?
+        let Some((project, _missing)) = adopt(
+            doc,
+            Some(path.clone()),
+            &project_dir,
+            on_change_stream,
+            progress,
+        )?
         else {
-            return Ok(None);
+            return Ok(BridgeOpened::NotOpened);
         };
+        crate::claim::settle(project.id, Some(&path), claim);
         if let Some(resuming) = resuming {
             crate::api::share::resume(&project, resuming, share_events)?;
         }
         report_phase(progress, OpenPhase::StartingPreview);
-        Ok(Some(project))
+        Ok(BridgeOpened::Opened { project })
     }
 }
 
@@ -1002,6 +1037,8 @@ pub(crate) fn adopt(
     if crate::packing::cancelled() {
         return Ok(None);
     }
+    // Its claim on its file goes with it, unless this is that file again.
+    crate::claim::settle(id, saved_at.as_deref(), None);
     report_phase(on_progress, OpenPhase::PreparingProject);
 
     // Every footage file this project holds, handed to the probe worker

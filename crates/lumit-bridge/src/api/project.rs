@@ -191,6 +191,8 @@ impl ProjectReference {
     pub fn close(&self) -> Result<(), BridgeError> {
         // A shared project stops being shared when it closes.
         crate::api::share::stop(self.id);
+        // And another Lumit may open its file.
+        crate::claim::release(self.id);
         // One registry at a time, never nested — the lock order rule in
         // `state.rs`. The state's last strong reference is usually the one
         // removed here; binding it keeps the drop (and the worker channel's
@@ -1032,6 +1034,9 @@ impl ProjectReference {
         };
 
         // Everything from here is outside the lock.
+        // A file another Lumit window has open is not saved over, or the two
+        // would share its journal.
+        let claim = crate::claim::take(&target).map_err(|_| BridgeError::WriteFailed)?;
         let dir = target.parent().unwrap_or_else(|| std::path::Path::new(""));
         let doc = lumit_project::rebase_for_save(&document, dir);
         let is_footage = |doc: &lumit_core::Document, id: Uuid| {
@@ -1103,6 +1108,10 @@ impl ProjectReference {
         // The file as it was just written: under a new name it is a new file,
         // and one saved with the switch off is no longer vouched for.
         crate::packing::note_auto_pack(document.id, &target, auto_pack);
+        // The claim follows the project to the file it is now saved as. A
+        // new file is claimed here, now it has a name on disk to claim by.
+        let claim = crate::claim::take(&target).ok().flatten().or(claim);
+        crate::claim::settle(self.id, Some(&target), claim);
         // A host keeps its edits since the last save, and that is now.
         crate::api::share::saved(self.id, document.id, hosted.map(|(_, _, mark)| mark));
         let mut state = project.write().map_err(|_| BridgeError::WriteFailed)?;

@@ -250,7 +250,7 @@ abstract class BridgeLibApi extends BaseApi {
   ProjectReference crateApiStateLumitBridgeStateNewProject(
       {RustStreamSink<ScopedChange>? onChangeStream});
 
-  Future<ProjectReference?> crateApiStateLumitBridgeStateOpenProject(
+  Future<BridgeOpened> crateApiStateLumitBridgeStateOpenProject(
       {required String path,
       RustStreamSink<ScopedChange>? onChangeStream,
       RustStreamSink<OpenProgress>? onProgressStream,
@@ -3164,7 +3164,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       );
 
   @override
-  Future<ProjectReference?> crateApiStateLumitBridgeStateOpenProject(
+  Future<BridgeOpened> crateApiStateLumitBridgeStateOpenProject(
       {required String path,
       RustStreamSink<ScopedChange>? onChangeStream,
       RustStreamSink<OpenProgress>? onProgressStream,
@@ -3182,7 +3182,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
             funcId: 42, port: port_);
       },
       codec: SseCodec(
-        decodeSuccessData: sse_decode_opt_box_autoadd_project_reference,
+        decodeSuccessData: sse_decode_bridge_opened,
         decodeErrorData:
             sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBridgeError,
       ),
@@ -19590,6 +19590,25 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  BridgeOpened dco_decode_bridge_opened(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    switch (raw[0]) {
+      case 0:
+        return BridgeOpened_Opened(
+          project: dco_decode_box_autoadd_project_reference(raw[1]),
+        );
+      case 1:
+        return BridgeOpened_NotOpened();
+      case 2:
+        return BridgeOpened_OpenElsewhere(
+          focused: dco_decode_bool(raw[1]),
+        );
+      default:
+        throw Exception("unreachable");
+    }
+  }
+
+  @protected
   BridgeOutputRef dco_decode_bridge_output_ref(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     switch (raw[0]) {
@@ -25109,6 +25128,26 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         return BridgeNodeRef_Driver(var_field0);
       case 3:
         return BridgeNodeRef_Out();
+      default:
+        throw UnimplementedError('');
+    }
+  }
+
+  @protected
+  BridgeOpened sse_decode_bridge_opened(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var tag_ = sse_decode_i_32(deserializer);
+    switch (tag_) {
+      case 0:
+        var var_project =
+            sse_decode_box_autoadd_project_reference(deserializer);
+        return BridgeOpened_Opened(project: var_project);
+      case 1:
+        return BridgeOpened_NotOpened();
+      case 2:
+        var var_focused = sse_decode_bool(deserializer);
+        return BridgeOpened_OpenElsewhere(focused: var_focused);
       default:
         throw UnimplementedError('');
     }
@@ -31067,6 +31106,21 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_Uuid(field0, serializer);
       case BridgeNodeRef_Out():
         sse_encode_i_32(3, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_bridge_opened(BridgeOpened self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    switch (self) {
+      case BridgeOpened_Opened(project: final project):
+        sse_encode_i_32(0, serializer);
+        sse_encode_box_autoadd_project_reference(project, serializer);
+      case BridgeOpened_NotOpened():
+        sse_encode_i_32(1, serializer);
+      case BridgeOpened_OpenElsewhere(focused: final focused):
+        sse_encode_i_32(2, serializer);
+        sse_encode_bool(focused, serializer);
     }
   }
 

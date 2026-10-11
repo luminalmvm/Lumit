@@ -298,6 +298,10 @@
       }
     }
   },
+  "projectOpenElsewhere": "This project is already open in another Lumit window",
+  "@projectOpenElsewhere": {
+    "description": "Bottom-strip notice when a project was not opened because another running copy of Lumit has it open, and that window could not be brought forward. Not an error: the project is safe where it is."
+  },
   "deletePuppetPin": "Delete pin",
   "@deletePuppetPin": {
     "description": "Context-menu item on a puppet pin's Timeline row: remove that pin."

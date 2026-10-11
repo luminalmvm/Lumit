@@ -3,7 +3,7 @@
 // path off the command line. Lifted out of main.dart unchanged.
 
 import 'dart:async';
-import 'dart:io' show Directory, File;
+import 'dart:io' show Directory, File, exit;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -463,7 +463,11 @@ class LumitState extends ChangeNotifier {
 
   /// [recover] false opens the file as it is, for the recovery dialogue's own
   /// opens, which must not ask the question again.
-  Future<void> openProject(String path, {bool recover = true}) async {
+  ///
+  /// [launch] is the open a document on the command line asks for, by a Lumit
+  /// started to do nothing else.
+  Future<void> openProject(String path,
+      {bool recover = true, bool launch = false}) async {
     // One at a time: the change sink below is a single pending field, and two
     // opens in flight would have the second take the first's.
     if (opening.value) return;
@@ -501,17 +505,27 @@ class LumitState extends ChangeNotifier {
         shareEvents: shareEvents);
     _openProgressWatch?.cancel();
     _openProgressWatch = progress.stream.listen(_reportOpenProgress);
-    // Null means the file would not open; the previous project stays loaded
-    // rather than the app being left with none.
-    final opened = await pending;
+    // Anything but opened leaves the previous project loaded, rather than the
+    // app being left with none.
+    final outcome = await pending;
     offer.cancel();
     openCancel.value = null;
-    if (opened == null) {
-      if (!_openCancelled) postNotice(l10n.couldNotOpen(path), error: true);
+    if (outcome is! BridgeOpened_Opened) {
       openProgress.value = null;
       opening.value = false;
+      if (outcome is BridgeOpened_OpenElsewhere) {
+        // Another Lumit window has this project, and it has come forward
+        // where the system allows. A Lumit started only to open it has
+        // nothing else to show, so it goes: opening a project twice from the
+        // file manager is one window.
+        if (outcome.focused && launch && launchInvite == null) exit(0);
+        if (!outcome.focused) postNotice(l10n.projectOpenElsewhere);
+      } else if (!_openCancelled) {
+        postNotice(l10n.couldNotOpen(path), error: true);
+      }
       return;
     }
+    final opened = outcome.project;
     // Deliberately still `opening`: the document is in, the picture is not.
     _adopt(opened);
     // A guest's own copy, closed while its host was away, opens still a guest

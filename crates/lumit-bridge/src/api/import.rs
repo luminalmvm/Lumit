@@ -130,10 +130,11 @@ impl LumitBridgeState {
     /// `None` when what was picked is not either of those, or is one this build
     /// cannot read: the previous project stays loaded and the frontend shows
     /// its own notice, exactly as [`LumitBridgeState::open_project`] does for a
-    /// `.lum` that will not open. `None` as well when [`cancel_import`] stopped
-    /// it. Anything short of that is not a failure — an
+    /// `.lum` that will not open. Anything short of that is not a failure — an
     /// import **always completes** (docs/11 §9), and what could not be carried
     /// across is in the report rather than in an error.
+    ///
+    /// `None` as well when [`cancel_import`] stopped it.
     ///
     /// The project it leaves open has **no path**: an import is not a file, and
     /// the first save must ask where to put it.

@@ -13,6 +13,367 @@ part of 'state.dart';
 T _$identity<T>(T value) => value;
 
 /// @nodoc
+mixin _$BridgeOpened {
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType && other is BridgeOpened);
+  }
+
+  @override
+  int get hashCode => runtimeType.hashCode;
+
+  @override
+  String toString() {
+    return 'BridgeOpened()';
+  }
+}
+
+/// @nodoc
+class $BridgeOpenedCopyWith<$Res> {
+  $BridgeOpenedCopyWith(BridgeOpened _, $Res Function(BridgeOpened) __);
+}
+
+/// Adds pattern-matching-related methods to [BridgeOpened].
+extension BridgeOpenedPatterns on BridgeOpened {
+  /// A variant of `map` that fallback to returning `orElse`.
+  ///
+  /// It is equivalent to doing:
+  /// ```dart
+  /// switch (sealedClass) {
+  ///   case final Subclass value:
+  ///     return ...;
+  ///   case _:
+  ///     return orElse();
+  /// }
+  /// ```
+
+  @optionalTypeArgs
+  TResult maybeMap<TResult extends Object?>({
+    TResult Function(BridgeOpened_Opened value)? opened,
+    TResult Function(BridgeOpened_NotOpened value)? notOpened,
+    TResult Function(BridgeOpened_OpenElsewhere value)? openElsewhere,
+    required TResult orElse(),
+  }) {
+    final _that = this;
+    switch (_that) {
+      case BridgeOpened_Opened() when opened != null:
+        return opened(_that);
+      case BridgeOpened_NotOpened() when notOpened != null:
+        return notOpened(_that);
+      case BridgeOpened_OpenElsewhere() when openElsewhere != null:
+        return openElsewhere(_that);
+      case _:
+        return orElse();
+    }
+  }
+
+  /// A `switch`-like method, using callbacks.
+  ///
+  /// Callbacks receives the raw object, upcasted.
+  /// It is equivalent to doing:
+  /// ```dart
+  /// switch (sealedClass) {
+  ///   case final Subclass value:
+  ///     return ...;
+  ///   case final Subclass2 value:
+  ///     return ...;
+  /// }
+  /// ```
+
+  @optionalTypeArgs
+  TResult map<TResult extends Object?>({
+    required TResult Function(BridgeOpened_Opened value) opened,
+    required TResult Function(BridgeOpened_NotOpened value) notOpened,
+    required TResult Function(BridgeOpened_OpenElsewhere value) openElsewhere,
+  }) {
+    final _that = this;
+    switch (_that) {
+      case BridgeOpened_Opened():
+        return opened(_that);
+      case BridgeOpened_NotOpened():
+        return notOpened(_that);
+      case BridgeOpened_OpenElsewhere():
+        return openElsewhere(_that);
+    }
+  }
+
+  /// A variant of `map` that fallback to returning `null`.
+  ///
+  /// It is equivalent to doing:
+  /// ```dart
+  /// switch (sealedClass) {
+  ///   case final Subclass value:
+  ///     return ...;
+  ///   case _:
+  ///     return null;
+  /// }
+  /// ```
+
+  @optionalTypeArgs
+  TResult? mapOrNull<TResult extends Object?>({
+    TResult? Function(BridgeOpened_Opened value)? opened,
+    TResult? Function(BridgeOpened_NotOpened value)? notOpened,
+    TResult? Function(BridgeOpened_OpenElsewhere value)? openElsewhere,
+  }) {
+    final _that = this;
+    switch (_that) {
+      case BridgeOpened_Opened() when opened != null:
+        return opened(_that);
+      case BridgeOpened_NotOpened() when notOpened != null:
+        return notOpened(_that);
+      case BridgeOpened_OpenElsewhere() when openElsewhere != null:
+        return openElsewhere(_that);
+      case _:
+        return null;
+    }
+  }
+
+  /// A variant of `when` that fallback to an `orElse` callback.
+  ///
+  /// It is equivalent to doing:
+  /// ```dart
+  /// switch (sealedClass) {
+  ///   case Subclass(:final field):
+  ///     return ...;
+  ///   case _:
+  ///     return orElse();
+  /// }
+  /// ```
+
+  @optionalTypeArgs
+  TResult maybeWhen<TResult extends Object?>({
+    TResult Function(ProjectReference project)? opened,
+    TResult Function()? notOpened,
+    TResult Function(bool focused)? openElsewhere,
+    required TResult orElse(),
+  }) {
+    final _that = this;
+    switch (_that) {
+      case BridgeOpened_Opened() when opened != null:
+        return opened(_that.project);
+      case BridgeOpened_NotOpened() when notOpened != null:
+        return notOpened();
+      case BridgeOpened_OpenElsewhere() when openElsewhere != null:
+        return openElsewhere(_that.focused);
+      case _:
+        return orElse();
+    }
+  }
+
+  /// A `switch`-like method, using callbacks.
+  ///
+  /// As opposed to `map`, this offers destructuring.
+  /// It is equivalent to doing:
+  /// ```dart
+  /// switch (sealedClass) {
+  ///   case Subclass(:final field):
+  ///     return ...;
+  ///   case Subclass2(:final field2):
+  ///     return ...;
+  /// }
+  /// ```
+
+  @optionalTypeArgs
+  TResult when<TResult extends Object?>({
+    required TResult Function(ProjectReference project) opened,
+    required TResult Function() notOpened,
+    required TResult Function(bool focused) openElsewhere,
+  }) {
+    final _that = this;
+    switch (_that) {
+      case BridgeOpened_Opened():
+        return opened(_that.project);
+      case BridgeOpened_NotOpened():
+        return notOpened();
+      case BridgeOpened_OpenElsewhere():
+        return openElsewhere(_that.focused);
+    }
+  }
+
+  /// A variant of `when` that fallback to returning `null`
+  ///
+  /// It is equivalent to doing:
+  /// ```dart
+  /// switch (sealedClass) {
+  ///   case Subclass(:final field):
+  ///     return ...;
+  ///   case _:
+  ///     return null;
+  /// }
+  /// ```
+
+  @optionalTypeArgs
+  TResult? whenOrNull<TResult extends Object?>({
+    TResult? Function(ProjectReference project)? opened,
+    TResult? Function()? notOpened,
+    TResult? Function(bool focused)? openElsewhere,
+  }) {
+    final _that = this;
+    switch (_that) {
+      case BridgeOpened_Opened() when opened != null:
+        return opened(_that.project);
+      case BridgeOpened_NotOpened() when notOpened != null:
+        return notOpened();
+      case BridgeOpened_OpenElsewhere() when openElsewhere != null:
+        return openElsewhere(_that.focused);
+      case _:
+        return null;
+    }
+  }
+}
+
+/// @nodoc
+
+class BridgeOpened_Opened extends BridgeOpened {
+  const BridgeOpened_Opened({required this.project}) : super._();
+
+  final ProjectReference project;
+
+  /// Create a copy of BridgeOpened
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  @pragma('vm:prefer-inline')
+  $BridgeOpened_OpenedCopyWith<BridgeOpened_Opened> get copyWith =>
+      _$BridgeOpened_OpenedCopyWithImpl<BridgeOpened_Opened>(this, _$identity);
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is BridgeOpened_Opened &&
+            (identical(other.project, project) || other.project == project));
+  }
+
+  @override
+  int get hashCode => Object.hash(runtimeType, project);
+
+  @override
+  String toString() {
+    return 'BridgeOpened.opened(project: $project)';
+  }
+}
+
+/// @nodoc
+abstract mixin class $BridgeOpened_OpenedCopyWith<$Res>
+    implements $BridgeOpenedCopyWith<$Res> {
+  factory $BridgeOpened_OpenedCopyWith(
+          BridgeOpened_Opened value, $Res Function(BridgeOpened_Opened) _then) =
+      _$BridgeOpened_OpenedCopyWithImpl;
+  @useResult
+  $Res call({ProjectReference project});
+}
+
+/// @nodoc
+class _$BridgeOpened_OpenedCopyWithImpl<$Res>
+    implements $BridgeOpened_OpenedCopyWith<$Res> {
+  _$BridgeOpened_OpenedCopyWithImpl(this._self, this._then);
+
+  final BridgeOpened_Opened _self;
+  final $Res Function(BridgeOpened_Opened) _then;
+
+  /// Create a copy of BridgeOpened
+  /// with the given fields replaced by the non-null parameter values.
+  @pragma('vm:prefer-inline')
+  $Res call({
+    Object? project = null,
+  }) {
+    return _then(BridgeOpened_Opened(
+      project: null == project
+          ? _self.project
+          : project // ignore: cast_nullable_to_non_nullable
+              as ProjectReference,
+    ));
+  }
+}
+
+/// @nodoc
+
+class BridgeOpened_NotOpened extends BridgeOpened {
+  const BridgeOpened_NotOpened() : super._();
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType && other is BridgeOpened_NotOpened);
+  }
+
+  @override
+  int get hashCode => runtimeType.hashCode;
+
+  @override
+  String toString() {
+    return 'BridgeOpened.notOpened()';
+  }
+}
+
+/// @nodoc
+
+class BridgeOpened_OpenElsewhere extends BridgeOpened {
+  const BridgeOpened_OpenElsewhere({required this.focused}) : super._();
+
+  final bool focused;
+
+  /// Create a copy of BridgeOpened
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  @pragma('vm:prefer-inline')
+  $BridgeOpened_OpenElsewhereCopyWith<BridgeOpened_OpenElsewhere>
+      get copyWith =>
+          _$BridgeOpened_OpenElsewhereCopyWithImpl<BridgeOpened_OpenElsewhere>(
+              this, _$identity);
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is BridgeOpened_OpenElsewhere &&
+            (identical(other.focused, focused) || other.focused == focused));
+  }
+
+  @override
+  int get hashCode => Object.hash(runtimeType, focused);
+
+  @override
+  String toString() {
+    return 'BridgeOpened.openElsewhere(focused: $focused)';
+  }
+}
+
+/// @nodoc
+abstract mixin class $BridgeOpened_OpenElsewhereCopyWith<$Res>
+    implements $BridgeOpenedCopyWith<$Res> {
+  factory $BridgeOpened_OpenElsewhereCopyWith(BridgeOpened_OpenElsewhere value,
+          $Res Function(BridgeOpened_OpenElsewhere) _then) =
+      _$BridgeOpened_OpenElsewhereCopyWithImpl;
+  @useResult
+  $Res call({bool focused});
+}
+
+/// @nodoc
+class _$BridgeOpened_OpenElsewhereCopyWithImpl<$Res>
+    implements $BridgeOpened_OpenElsewhereCopyWith<$Res> {
+  _$BridgeOpened_OpenElsewhereCopyWithImpl(this._self, this._then);
+
+  final BridgeOpened_OpenElsewhere _self;
+  final $Res Function(BridgeOpened_OpenElsewhere) _then;
+
+  /// Create a copy of BridgeOpened
+  /// with the given fields replaced by the non-null parameter values.
+  @pragma('vm:prefer-inline')
+  $Res call({
+    Object? focused = null,
+  }) {
+    return _then(BridgeOpened_OpenElsewhere(
+      focused: null == focused
+          ? _self.focused
+          : focused // ignore: cast_nullable_to_non_nullable
+              as bool,
+    ));
+  }
+}
+
+/// @nodoc
 mixin _$WorkerResponse {
   @override
   bool operator ==(Object other) {

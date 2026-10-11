@@ -778,6 +778,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeNodeRef dco_decode_bridge_node_ref(dynamic raw);
 
   @protected
+  BridgeOpened dco_decode_bridge_opened(dynamic raw);
+
+  @protected
   BridgeOutputRef dco_decode_bridge_output_ref(dynamic raw);
 
   @protected
@@ -2481,6 +2484,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeNodeRef sse_decode_bridge_node_ref(SseDeserializer deserializer);
+
+  @protected
+  BridgeOpened sse_decode_bridge_opened(SseDeserializer deserializer);
 
   @protected
   BridgeOutputRef sse_decode_bridge_output_ref(SseDeserializer deserializer);
@@ -4402,6 +4408,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   void sse_encode_bridge_node_ref(BridgeNodeRef self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_opened(BridgeOpened self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_output_ref(

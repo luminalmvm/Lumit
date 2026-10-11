@@ -706,7 +706,8 @@ pub fn journal_in(cache: &Path, doc_id: Uuid, project: Option<&Path>) -> PathBuf
     cache.join(doc_id.to_string()).join("journal").join(name)
 }
 
-/// A short name for where `project` is on disk.
+/// What the cache names a saved project's own files by: a hash of where the
+/// project is on disk.
 fn path_key(project: &Path) -> String {
     // The file as the disk names it, so two spellings of one path are one
     // name. Case is folded for the same reason, which costs two files that
@@ -738,6 +739,89 @@ pub fn auto_pack_note(doc_id: Uuid, project: &Path) -> Option<PathBuf> {
             .join("auto-pack")
             .join(name),
     )
+}
+
+/// A saved project held open by one Lumit, so that a second does not open it
+/// as well.
+///
+/// **In plain terms.** Two windows on one file write the same journal, and a
+/// recovery then replays a mix of both. So whoever opens a project first
+/// claims it, and the claim goes when that Lumit does, however it ends.
+///
+/// The claim is a file in the cache, named for the project's path as its
+/// journal is, holding the process id of whoever has it. On Windows nobody
+/// else can open the file for writing while it is held, and it is deleted as
+/// its handle closes. Elsewhere it is a lock on the file, which the system
+/// lets go of with the process. The file stays behind there and means
+/// nothing without its lock.
+pub struct OpenClaim {
+    // Held for as long as the claim is.
+    _file: File,
+    key: String,
+}
+
+impl OpenClaim {
+    /// Claim the project saved at `project` for this process.
+    ///
+    /// `Ok(None)` when no claim can be made here, for want of a cache folder
+    /// or the right to write in it. That is no reason to refuse an open.
+    /// `Err` when somebody holds it, with the process id they wrote, or 0
+    /// when that can't be read.
+    pub fn take(project: &Path) -> Result<Option<Self>, u32> {
+        match project_dirs() {
+            Some(dirs) => Self::take_in(&dirs.cache_dir().join("open"), project),
+            None => Ok(None),
+        }
+    }
+
+    /// [`Self::take`], with the claims kept in `dir`.
+    pub fn take_in(dir: &Path, project: &Path) -> Result<Option<Self>, u32> {
+        let key = path_key(project);
+        let path = dir.join(format!("{key}.lock"));
+        let _ = fs::create_dir_all(dir);
+        let holder = || {
+            let id = fs::read_to_string(&path).ok();
+            id.and_then(|id| id.trim().parse().ok()).unwrap_or(0)
+        };
+        let mut options = OpenOptions::new();
+        options.write(true).create(true).truncate(false);
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::OpenOptionsExt;
+            const FILE_SHARE_READ: u32 = 0x1;
+            const FILE_SHARE_DELETE: u32 = 0x4;
+            const GENERIC_WRITE: u32 = 0x4000_0000;
+            const DELETE: u32 = 0x0001_0000;
+            const FILE_FLAG_DELETE_ON_CLOSE: u32 = 0x0400_0000;
+            // Others may read the file and nothing more, and it is deleted
+            // when this handle closes.
+            options
+                .share_mode(FILE_SHARE_READ | FILE_SHARE_DELETE)
+                .access_mode(GENERIC_WRITE | DELETE)
+                .custom_flags(FILE_FLAG_DELETE_ON_CLOSE);
+        }
+        let mut file = match options.open(&path) {
+            Ok(file) => file,
+            // ERROR_SHARING_VIOLATION, which is the holder's handle saying no.
+            Err(e) if cfg!(windows) && e.raw_os_error() == Some(32) => return Err(holder()),
+            Err(_) => return Ok(None),
+        };
+        #[cfg(not(windows))]
+        match file.try_lock() {
+            Ok(()) => {}
+            Err(fs::TryLockError::WouldBlock) => return Err(holder()),
+            Err(_) => return Ok(None),
+        }
+        let _ = file.set_len(0);
+        let _ = write!(file, "{}", std::process::id());
+        Ok(Some(Self { _file: file, key }))
+    }
+
+    /// Whether this is the claim on the project saved at `project`.
+    #[must_use]
+    pub fn covers(&self, project: &Path) -> bool {
+        self.key == path_key(project)
+    }
 }
 
 /// Where a shared project keeps what closing Lumit must not lose: a host's
@@ -3109,6 +3193,32 @@ mod tests {
         );
         let (loaded, _) = open(&found).unwrap();
         assert_eq!(loaded.extra["gen"], serde_json::json!(42));
+    }
+
+    // Two Lumits on one project would write one journal, so the second is
+    // turned away for as long as the first holds its claim.
+    #[test]
+    fn a_project_is_claimed_by_one_holder_at_a_time() {
+        let dir = tempfile::tempdir().unwrap();
+        let claims = dir.path().join("open");
+        let project = dir.path().join("scene.lum");
+        fs::write(&project, b"").unwrap();
+        let take = |project: &Path| OpenClaim::take_in(&claims, project);
+
+        let first = take(&project).ok().flatten().expect("nobody has it yet");
+        assert!(first.covers(&project));
+        assert_eq!(
+            take(&project).err(),
+            Some(std::process::id()),
+            "the holder is named"
+        );
+        // Another file is another project.
+        let other = dir.path().join("other.lum");
+        fs::write(&other, b"").unwrap();
+        assert!(take(&other).is_ok_and(|claim| claim.is_some()));
+
+        drop(first);
+        assert!(take(&project).is_ok_and(|claim| claim.is_some()));
     }
 
     #[test]

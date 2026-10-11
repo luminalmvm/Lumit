@@ -81,6 +81,7 @@ mod note;
 mod audio;
 mod autosave;
 mod beats;
+mod claim;
 mod edits;
 mod export;
 mod faults;
