@@ -81,23 +81,39 @@ Future<List<String>> pickFootage() async {
 /// when cancelled. The generic save seam the export dialogue and the share
 /// exports both drive. `extension`/`label` follow the chosen format:
 /// `.mp4` for video, the image extension for a sequence — where the picked
-/// name is the sequence's stem, and the frames land numbered beside it.
+/// name is the sequence's stem, and the frames land numbered beside it
+/// ([numbered]), so the name itself is never written.
 Future<String?> pickExportSaveLocation(
   String suggestedName, {
   String extension = 'mp4',
   String label = 'MP4 video',
+  bool numbered = false,
+  String? initialDirectory,
 }) async {
   final location = await getSaveLocation(
     acceptedTypeGroups: [
       XTypeGroup(label: label, extensions: [extension])
     ],
     suggestedName: suggestedName,
+    initialDirectory: initialDirectory,
   );
   final path = location?.path;
   if (path == null) return null;
   // The Windows dialogue hands back a typed name as it is, so the extension is
   // added here and the Destination row shows the file that will be written.
-  return path.toLowerCase().endsWith('.$extension') ? path : '$path.$extension';
+  if (path.toLowerCase().endsWith('.$extension')) return path;
+  final whole = '$path.$extension';
+  // The dialogue asked about the name as it was typed. If the name with its
+  // extension is a file already, nobody has been asked about that one, so the
+  // dialogue comes back with the whole name and asks.
+  if (numbered || !File(whole).existsSync()) return whole;
+  final file = File(whole);
+  return pickExportSaveLocation(
+    file.uri.pathSegments.last,
+    extension: extension,
+    label: label,
+    initialDirectory: file.parent.path,
+  );
 }
 
 /// The `.lumfx` effect-preset type group, mirroring the egui Effects panel's

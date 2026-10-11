@@ -2467,15 +2467,25 @@ pub fn start(
     let cancel = Arc::new(AtomicBool::new(false));
     let flag = cancel.clone();
     std::thread::spawn(move || {
-        let result = run(&doc, comp_id, &audio, &out_path, &spec, &tx, &flag);
+        let opened = AtomicBool::new(false);
+        let result = run(&doc, comp_id, &audio, &out_path, &spec, &tx, &flag, &opened);
+        // No half files, but only a file this export began. One that failed
+        // before it opened anything has written nothing, and an image
+        // sequence never writes to the name it was given, so whatever is
+        // there under that name was there before and is somebody's.
+        let unfinished = || {
+            if opened.load(Ordering::Relaxed) {
+                let _ = std::fs::remove_file(&out_path);
+            }
+        };
         let _ = match result {
             Ok(()) if flag.load(Ordering::Relaxed) => {
-                let _ = std::fs::remove_file(&out_path); // no half files
+                unfinished();
                 tx.send(ExportEvent::Failed("cancelled".into()))
             }
             Ok(()) => tx.send(ExportEvent::Done(out_path)),
             Err(e) => {
-                let _ = std::fs::remove_file(&out_path);
+                unfinished();
                 tx.send(ExportEvent::Failed(e))
             }
         };
@@ -2633,6 +2643,7 @@ pub fn audio_samples_through(frame_count: usize, fps: f64, rate: u32) -> usize {
     ((frame_count as f64 / fps) * f64::from(rate)).round() as usize
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run(
     doc: &Arc<Document>,
     comp_id: Uuid,
@@ -2641,6 +2652,9 @@ fn run(
     spec: &ExportSpec,
     tx: &Sender<ExportEvent>,
     cancel: &AtomicBool,
+    // Raised just before the output file is opened, which is the first moment
+    // there is anything of this export's at `out_path`.
+    opened: &AtomicBool,
 ) -> Result<(), String> {
     // The render settings that change the document do it on this export's own
     // throwaway snapshot, never on the project (docs/06 §7.2).
@@ -2702,6 +2716,7 @@ fn run(
     // Sound with no picture needs no compositor and no graphics card at all:
     // the mix is already made, and there is nothing to render.
     if let ExportFormat::Audio(format) = spec.format {
+        opened.store(true, Ordering::Relaxed);
         return run_audio_only(
             out_path,
             format,
@@ -2768,6 +2783,7 @@ fn run(
                 Some((target, peak)) => (Some(target), peak),
                 None => (None, None),
             };
+            opened.store(true, Ordering::Relaxed);
             let encoder = lumit_media::Encoder::open(
                 out_path,
                 Some(&lumit_media::encode::VideoSettings {
@@ -3235,7 +3251,16 @@ mod tests {
     ) -> Option<Result<(), String>> {
         let (tx, _rx) = channel();
         let cancel = AtomicBool::new(false);
-        match run(doc, comp, &[], path, spec, &tx, &cancel) {
+        match run(
+            doc,
+            comp,
+            &[],
+            path,
+            spec,
+            &tx,
+            &cancel,
+            &AtomicBool::new(false),
+        ) {
             Err(e) if e.starts_with("export renderer:") => {
                 lumit_gpu::no_adapter();
                 None
@@ -4430,8 +4455,17 @@ mod tests {
                         ));
                         let (tx, _rx) = channel();
                         let cancel = AtomicBool::new(false);
-                        run(&doc, comp, &[], &path, &sp, &tx, &cancel)
-                            .unwrap_or_else(|e| panic!("{ext} {rate} Hz: {e}"));
+                        run(
+                            &doc,
+                            comp,
+                            &[],
+                            &path,
+                            &sp,
+                            &tx,
+                            &cancel,
+                            &AtomicBool::new(false),
+                        )
+                        .unwrap_or_else(|e| panic!("{ext} {rate} Hz: {e}"));
 
                         let probe = lumit_media::probe::probe(&path).unwrap();
                         let audio = probe.audio.expect("it is all sound");

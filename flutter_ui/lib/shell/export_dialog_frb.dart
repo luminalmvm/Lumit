@@ -2557,6 +2557,7 @@ class _ExportDialogState extends State<_ExportDialog> {
             'export.${_format.extension}',
             extension: _format.extension,
             label: _format.pickerLabel,
+            numbered: _format.type == ExportOutputType.imageSequence,
           );
     if (path != null) _edit(() => _path = path);
   }
