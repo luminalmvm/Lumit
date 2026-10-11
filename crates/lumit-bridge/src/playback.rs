@@ -28,6 +28,38 @@ const COST_WINDOW: usize = 32;
 /// than the ring ever presents.
 pub(crate) const PREFETCH_AHEAD: u64 = 4;
 
+/// The frames whose edit points playback should ask about now, as "after this
+/// one, up to and including that one": the clips starting in there have their
+/// files opened by the decode-ahead threads
+/// ([`lumit_render::HeadlessRenderer::cut_wants`]).
+///
+/// It reaches about a second past the frame being rendered. Four frames is
+/// enough warning to decode the next frame of a file that is playing and
+/// nowhere near enough to open one that is not, which costs tens of
+/// milliseconds on a good day, so a cut to a new file used to play late.
+///
+/// `posted` is how far this run has already asked, so each edit point is
+/// asked about once. One further on than this window reaches means the
+/// playhead has gone back (a loop coming round) and the asking starts again.
+/// `None` when there is nothing new to ask.
+pub(crate) fn cut_window(
+    frame: u64,
+    posted: Option<u64>,
+    fps: f64,
+    speed: u64,
+    last: u64,
+) -> Option<(u64, u64)> {
+    let second = (fps.round().max(1.0) as u64).saturating_mul(speed);
+    let through = frame.saturating_add(second).min(last);
+    // Nearer than this the ordinary read-ahead has already posted the frames
+    // themselves.
+    let near = frame.saturating_add(PREFETCH_AHEAD * speed);
+    let after = posted
+        .filter(|p| *p <= through)
+        .map_or(near, |p| p.max(near));
+    (after < through).then_some((after, through))
+}
+
 /// The measured cost of recent renders, for the scheduler's lookahead.
 ///
 /// The impl note asks for the 95th percentile rather than the mean: lookahead

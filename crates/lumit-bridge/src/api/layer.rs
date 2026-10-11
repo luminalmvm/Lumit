@@ -1448,6 +1448,16 @@ pub struct BridgeClip {
     /// Carried so the clip's header strip draws with no bridge call; empty
     /// when the document no longer holds that source.
     pub source_name: String,
+    /// The link this clip shares with the clips that move, trim and cut with
+    /// it, a picture clip and the clip that carries its sound. `None` for a
+    /// clip on its own.
+    pub link: Option<Uuid>,
+    /// The trim into the source, in seconds of source time: the first moment
+    /// the clip shows and the moment it stops before.
+    pub source_in: BridgeRational,
+    pub source_out: BridgeRational,
+    /// Whether the clip plays a composition and not a footage item.
+    pub source_is_comp: bool,
 }
 
 /// How long a clip's source runs, which is the one thing
@@ -1458,7 +1468,7 @@ pub struct BridgeClip {
 /// `None` — a source this document no longer has, or a file that will not probe
 /// — is the honest "no reach", and that is exactly how the reach is drawn.
 #[frb(ignore)]
-fn clip_source_duration(
+pub(crate) fn clip_source_duration(
     state: &LumitBridgeState,
     doc: &lumit_core::Document,
     source: lumit_core::sequence::ClipSource,
@@ -1478,7 +1488,10 @@ fn clip_source_duration(
             }
             #[cfg(feature = "media")]
             {
-                let probed = crate::probe::ensure_probed(&_path)?;
+                // The answer already held, not a fresh look at the disk: this
+                // runs for every clip of the comp each time the read model is
+                // built.
+                let probed = crate::probe::held_or_probed(&_path)?;
                 // The only sanctioned route back from the container's
                 // floating-point duration is an explicit grid
                 // (docs/impl/rational-time.md §4) — the same millisecond grid
@@ -1544,6 +1557,10 @@ fn bridge_clip(
                 .map(|i| i.name().to_string())
                 .unwrap_or_default(),
         },
+        link: clip.link,
+        source_in: rational_of(clip.source_in),
+        source_out: rational_of(clip.source_out),
+        source_is_comp: matches!(clip.source, lumit_core::sequence::ClipSource::Comp(_)),
     }
 }
 
@@ -2726,12 +2743,17 @@ impl LayerReference {
         Ok(proj.store.snapshot())
     }
 
+    /// This layer, cloned out of the current snapshot. Only the layer: nearly
+    /// every edit starts here, and copying the whole composition to pick one
+    /// layer out of it was most of what a clip edit cost on a long cut.
     #[frb(ignore)]
     pub(crate) fn item(&self) -> Result<Layer, BridgeError> {
-        self.composition()?
-            .layers
-            .into_iter()
+        let doc = self.document()?;
+        let comp = doc.comp(self.comp_id).ok_or(BridgeError::InvalidItem)?;
+        comp.layers
+            .iter()
             .find(|l| l.id == self.layer_id)
+            .cloned()
             .ok_or(BridgeError::InvalidLayer)
     }
 
@@ -4251,18 +4273,7 @@ impl LayerReference {
         // own clock, so the row's zero comes off before either is used.
         let start = self.layer_time_of_frame(&comp, &layer, start_frame)?;
         let end = self.layer_time_of_frame(&comp, &layer, end_frame)?;
-        let mut next = clips[index].clone();
-        if end < next.place_end() {
-            next = next.trim_end(end).ok_or(BridgeError::InvalidTime)?;
-        } else if end > next.place_end() {
-            next = next.extend_end(end).ok_or(BridgeError::InvalidTime)?;
-        }
-        if start > next.place_start {
-            next = next.trim_start(start).ok_or(BridgeError::InvalidTime)?;
-        } else if start < next.place_start {
-            next = next.extend_start(start).ok_or(BridgeError::InvalidTime)?;
-        }
-        clips[index] = next;
+        clips[index] = trimmed(&clips[index], start, end).ok_or(BridgeError::InvalidTime)?;
         self.commit_clips(clips)
     }
 
@@ -4688,6 +4699,7 @@ impl LayerReference {
                 effects: Vec::new(),
                 fx: true,
                 gain_db: 0.0,
+                link: None,
                 extra: serde_json::Map::new(),
             }],
         };
@@ -4842,20 +4854,28 @@ impl LayerReference {
     /// one `Batch` and therefore one undo step, with both rows' clips and both
     /// rows' bars inside it.
     #[frb(ignore)]
-    fn clip_ops(
+    pub(crate) fn clip_ops(
         &self,
         clips: Vec<lumit_core::sequence::Clip>,
         start_offset: lumit_core::time::CompTime,
     ) -> Result<Vec<lumit_core::Op>, BridgeError> {
-        let layer = self.item()?;
+        // The bar as it stands, read where it is: the layer is not copied
+        // out, and the clips go into the op without being copied either.
+        let doc = self.document()?;
+        let comp = doc.comp(self.comp_id).ok_or(BridgeError::InvalidItem)?;
+        let layer = comp.layers.iter().find(|l| l.id == self.layer_id);
+        let was = layer
+            .map(|l| (l.in_point.0, l.out_point.0))
+            .ok_or(BridgeError::InvalidLayer)?;
+        // Clip places are in layer time; a span is in comp time, and the two
+        // differ by the layer's own zero.
+        let span = lumit_core::sequence::clips_span(&clips);
         let set_clips = lumit_core::Op::SetSequenceClips {
             comp: self.comp_id,
             layer: self.layer_id,
-            clips: clips.clone(),
+            clips,
         };
-        // Clip places are in layer time; a span is in comp time, and the two
-        // differ by the layer's own zero.
-        let Some((start, end)) = lumit_core::sequence::clips_span(&clips) else {
+        let Some((start, end)) = span else {
             return Ok(vec![set_clips]);
         };
         let offset = start_offset.0;
@@ -4863,7 +4883,7 @@ impl LayerReference {
         else {
             return Ok(vec![set_clips]);
         };
-        if in_point == layer.in_point.0 && out_point == layer.out_point.0 {
+        if (in_point, out_point) == was {
             return Ok(vec![set_clips]);
         }
         Ok(vec![
@@ -7599,7 +7619,7 @@ pub struct BridgeRevealGroups {
 /// rule a picture row keeps: `sequence::resolve` shows one clip at a time and
 /// cannot dissolve, so two clips over one frame there would simply hide one.
 #[frb(ignore)]
-fn placed(
+pub(crate) fn placed(
     clips: Vec<lumit_core::sequence::Clip>,
     dropped: Uuid,
     overlap: bool,
@@ -7609,6 +7629,30 @@ fn placed(
     } else {
         lumit_core::sequence::overwrite_with(&clips, dropped)
     }
+}
+
+/// A clip with its edges moved to `start` and `end`, both in the time its
+/// place is in: an edge moving inward crops the map there, one moving outward
+/// carries it on at the speed it was going. `None` when either edge cannot
+/// go where it was asked.
+#[frb(ignore)]
+pub(crate) fn trimmed(
+    clip: &lumit_core::sequence::Clip,
+    start: Rational,
+    end: Rational,
+) -> Option<lumit_core::sequence::Clip> {
+    let mut next = clip.clone();
+    if end < next.place_end() {
+        next = next.trim_end(end)?;
+    } else if end > next.place_end() {
+        next = next.extend_end(end)?;
+    }
+    if start > next.place_start {
+        next = next.trim_start(start)?;
+    } else if start < next.place_start {
+        next = next.extend_start(start)?;
+    }
+    Some(next)
 }
 
 /// The last source position a map reaches — what the clip asks of its source.

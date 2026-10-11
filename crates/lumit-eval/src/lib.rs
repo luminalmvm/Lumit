@@ -1674,25 +1674,52 @@ fn feed_layer(
             }
         } else if let LayerKind::Sequence { clips } = &layer.kind {
             // A Sequence layer's neighbours are whichever clip is live then,
-            // across an edit point too, and a gap is no neighbour.
+            // across an edit point too, and a gap is no neighbour. A
+            // neighbour inside a fade or a dissolve adds the gain and the
+            // other clip, and a plain one feeds what it always has.
+            use lumit_core::sequence::{Clip, ClipSource, Shown};
             h.update(b"temporal-clips/");
             let native = wants_flow(layer, &lumit_core::retime::Interpolation::Nearest);
             for o in window() {
                 h.update(&o.to_le_bytes());
-                let stamp = match lumit_core::sequence::resolve(clips, lt + f64::from(o) * comp_dt)
-                {
-                    Some((_, lumit_core::sequence::ClipSource::Footage(item), st)) => {
-                        stamper.stamp(item, st, native)
+                let at = lt + f64::from(o) * comp_dt;
+                let feed_clip = |h: &mut blake3::Hasher, clip: &Clip| {
+                    let stamp = match clip.source {
+                        ClipSource::Footage(item) => {
+                            stamper.stamp(item, clip.held_source_time(at), native)
+                        }
+                        ClipSource::Comp(_) => None,
+                    };
+                    match stamp {
+                        Some((identity, frame)) => {
+                            h.update(identity.as_bytes());
+                            h.update(&frame.to_le_bytes());
+                        }
+                        None => {
+                            h.update(b"gap");
+                        }
                     }
-                    _ => None,
                 };
-                match stamp {
-                    Some((identity, frame)) => {
-                        h.update(identity.as_bytes());
-                        h.update(&frame.to_le_bytes());
-                    }
-                    None => {
+                match lumit_core::sequence::shown_at(clips, at) {
+                    Shown::Nothing => {
                         h.update(b"gap");
+                    }
+                    Shown::One { clip, gain } => {
+                        feed_clip(h, clip);
+                        if gain < 1.0 {
+                            h.update(b"fade/");
+                            feed_f64(h, gain);
+                        }
+                    }
+                    Shown::Two {
+                        outgoing,
+                        incoming,
+                        gain,
+                    } => {
+                        feed_clip(h, outgoing);
+                        h.update(b"dissolve/");
+                        feed_f64(h, gain);
+                        feed_clip(h, incoming);
                     }
                 }
             }
@@ -2137,73 +2164,100 @@ fn feed_source(
             }
         }
         LayerKind::Sequence { clips } => {
-            // Key the active clip's resolved source (docs/04-RETIMING.md §1.3):
-            // a gap is transparent, a footage clip keys its retimed source
-            // frame, a comp clip recurses.
-            match lumit_core::sequence::resolve(clips, lt) {
-                None => {
-                    h.update(b"gap");
-                }
-                Some((_id, lumit_core::sequence::ClipSource::Footage(item), st)) => {
-                    let seq_interp = lumit_core::sequence::active_clip(clips, lt)
-                        .map(|c| {
-                            flow_effective_at(
-                                &c.interpolation,
-                                c.retime.as_ref(),
-                                item,
-                                lt,
-                                comp_fps,
-                                stamper,
-                            )
-                        })
-                        .unwrap_or(&lumit_core::retime::Interpolation::Nearest);
-                    let native = wants_flow(layer, seq_interp);
-                    let (identity, frame) = stamper.stamp(item, st, native)?;
-                    h.update(b"seq-footage/");
-                    h.update(identity.as_bytes());
-                    h.update(&frame.to_le_bytes());
-                    feed_roto(h, layer, frame, stamper);
-                    feed_planes(h, layer, frame, stamper);
-                    {
+            use lumit_core::sequence::{Clip, ClipSource, Shown};
+            // Key one clip's resolved source (docs/04-RETIMING.md §1.3): a
+            // footage clip keys its retimed source frame, a comp clip
+            // recurses.
+            let mut feed_clip = |h: &mut blake3::Hasher, clip: &Clip| -> Option<()> {
+                let st = clip.held_source_time(lt);
+                match clip.source {
+                    ClipSource::Footage(item) => {
+                        let seq_interp = flow_effective_at(
+                            &clip.interpolation,
+                            clip.retime.as_ref(),
+                            item,
+                            lt,
+                            comp_fps,
+                            stamper,
+                        );
+                        let native = wants_flow(layer, seq_interp);
+                        let (identity, frame) = stamper.stamp(item, st, native)?;
+                        h.update(b"seq-footage/");
+                        h.update(identity.as_bytes());
+                        h.update(&frame.to_le_bytes());
+                        feed_roto(h, layer, frame, stamper);
+                        feed_planes(h, layer, frame, stamper);
                         // Gated exactly as the Footage case: flow that cannot
                         // help keys as the Nearest it renders as. The
                         // clip's own retime supplied the speed, since a
                         // Sequence layer's clips each carry their own.
-                        let interpolation = seq_interp;
-                        if !matches!(interpolation, lumit_core::retime::Interpolation::Nearest) {
+                        if !matches!(seq_interp, lumit_core::retime::Interpolation::Nearest) {
                             // The sub-frame position is content under blend/flow
                             // (see the Footage case above). The flow
                             // params — conform rate included — ride along, read
                             // at the clip's layer-local time like the footage
                             // case.
-                            feed_interp(h, interpolation, lt, stamper);
+                            feed_interp(h, seq_interp, lt, stamper);
                             feed_f64(h, st);
                         }
                     }
-                }
-                Some((_id, lumit_core::sequence::ClipSource::Comp(comp), st)) => {
-                    if visited.contains(&comp) {
-                        h.update(b"cycle");
-                        return Some(());
+                    ClipSource::Comp(comp) => {
+                        if visited.contains(&comp) {
+                            h.update(b"cycle");
+                            return Some(());
+                        }
+                        let Some(nested) = doc.comp(comp) else {
+                            h.update(b"nocomp");
+                            return Some(());
+                        };
+                        // The nested comp's own name at the moment the clip
+                        // shows, as a Precomp layer folds its comp's: the
+                        // name the renderer keeps that frame's texture under,
+                        // which moves with anything inside the comp. Not the
+                        // `seq-comp/` this fed before a composition clip drew
+                        // a picture, so a frame kept from then, with the clip
+                        // missing from it, is not served under this name.
+                        h.update(b"seq-nested/");
+                        visited.push(comp);
+                        let r = comp_key_visited(
+                            doc,
+                            nested,
+                            clip.nested_time(nested, lt),
+                            quality,
+                            stamper,
+                            visited,
+                        );
+                        visited.pop();
+                        h.update(&r?.0.to_le_bytes());
                     }
-                    let Some(nested) = doc.comp(comp) else {
-                        h.update(b"nocomp");
-                        return Some(());
-                    };
-                    h.update(b"seq-comp/");
-                    visited.push(comp);
-                    let r = feed_comp(
-                        h,
-                        doc,
-                        nested,
-                        st,
-                        lumit_core::comp_graph::GraphView::DEFAULTS,
-                        quality,
-                        stamper,
-                        visited,
-                    );
-                    visited.pop();
-                    r?;
+                }
+                Some(())
+            };
+            // A gap is transparent. One whole clip is named by its own bytes
+            // and nothing else, the name it had before a picture row could
+            // fade, so every frame cached under it is still found. A fade
+            // and a dissolve are other pictures and carry the gain, and a
+            // dissolve both clips (`lumit_core::sequence::shown_at`).
+            match lumit_core::sequence::shown_at(clips, lt) {
+                Shown::Nothing => {
+                    h.update(b"gap");
+                }
+                Shown::One { clip, gain } => {
+                    if gain < 1.0 {
+                        h.update(b"seq-fade/");
+                        feed_f64(h, gain);
+                    }
+                    feed_clip(h, clip)?;
+                }
+                Shown::Two {
+                    outgoing,
+                    incoming,
+                    gain,
+                } => {
+                    h.update(b"seq-dissolve/");
+                    feed_f64(h, gain);
+                    feed_clip(h, outgoing)?;
+                    feed_clip(h, incoming)?;
                 }
             }
         }
@@ -4204,6 +4258,87 @@ mod tests {
         // Different clips → different keys; the gap differs from both.
         assert_ne!(k(1.0), k(4.0));
         assert_ne!(k(1.0), k(2.5));
+    }
+
+    /// A clip that plays a composition is named by that composition's own
+    /// frame, so an edit inside it renames the frames that show the clip.
+    #[test]
+    fn a_composition_clip_is_named_by_what_its_composition_holds() {
+        use lumit_core::sequence::{Clip, ClipSource};
+        let r = |n| Rational::new(n, 1).unwrap();
+        let scene = |words: &str| {
+            let mut held = text_layer(words, 0.0, 10.0, 0.0);
+            held.id = Uuid::from_u128(1);
+            let mut inner = comp_with(vec![held]);
+            inner.id = Uuid::from_u128(2);
+            let mut doc = Document::new();
+            doc.items.push(ProjectItem::Composition(inner));
+            let mut row = text_layer("", 0.0, 10.0, 0.0);
+            row.id = Uuid::from_u128(3);
+            let plays = ClipSource::Comp(Uuid::from_u128(2));
+            row.kind = LayerKind::Sequence {
+                clips: vec![Clip::new(plays, r(0), r(4), r(0), r(4))],
+            };
+            let mut outer = comp_with(vec![row]);
+            outer.id = Uuid::from_u128(4);
+            key(&doc, &outer, 1.0)
+        };
+        assert_eq!(scene("one"), scene("one"));
+        assert_ne!(scene("one"), scene("two"), "an edit inside the comp");
+    }
+
+    /// A moment with no fade and no overlap keeps the name it had before a
+    /// picture row could fade or dissolve. The bytes are pinned, so every
+    /// frame already cached under them is still found. A fading or dissolving
+    /// moment is named apart, by both clips and the gain.
+    #[test]
+    fn a_plain_sequence_moment_keeps_its_name_and_a_mixed_one_gets_another() {
+        use lumit_core::sequence::{Clip, ClipSource, Fade, FadeShape};
+        let doc = Document::new();
+        let r = |n| Rational::new(n, 1).unwrap();
+        let (a, b) = (Uuid::from_u128(1), Uuid::from_u128(2));
+        // Clip A on [0, 3) and clip B on [2, 5): they share [2, 3).
+        let row = |clips: Vec<Clip>| {
+            let mut l = text_layer("", 0.0, 10.0, 0.0);
+            l.id = Uuid::from_u128(3);
+            l.kind = LayerKind::Sequence { clips };
+            let mut comp = comp_with(vec![l]);
+            comp.id = Uuid::from_u128(4);
+            comp
+        };
+        let clip_a = Clip::new(ClipSource::Footage(a), r(0), r(3), r(0), r(3));
+        let clip_b = Clip::new(ClipSource::Footage(b), r(0), r(3), r(2), r(3));
+        let cut = row(vec![clip_a.clone(), clip_b.clone()]);
+        // Pinned on the code as it stood before fades reached the picture.
+        assert_eq!(
+            (key(&doc, &cut, 1.0).0, key(&doc, &cut, 4.0).0),
+            (
+                303_821_901_826_944_988_283_012_693_430_024_403_241,
+                214_093_313_630_544_915_097_010_732_135_860_045_414
+            )
+        );
+
+        // Inside the overlap the name carries the gain, which another shape
+        // moves at the same frame, and both clips.
+        let dissolving = key(&doc, &cut, 2.5);
+        let mut linear = clip_b.clone();
+        linear.fade_in.shape = FadeShape::Linear;
+        let reshaped = row(vec![clip_a.clone(), linear]);
+        assert_ne!(dissolving, key(&doc, &reshaped, 2.5), "the gain");
+        let mut other = clip_a.clone();
+        other.source = ClipSource::Footage(Uuid::from_u128(5));
+        let swapped = row(vec![other, clip_b.clone()]);
+        assert_ne!(dissolving, key(&doc, &swapped, 2.5), "the clip under");
+
+        // A fade at a lone end renames the moments inside it and no others.
+        let mut faded = clip_a.clone();
+        faded.fade_in = Fade {
+            seconds: r(1),
+            shape: FadeShape::Linear,
+        };
+        let fading = row(vec![faded, clip_b]);
+        assert_ne!(key(&doc, &fading, 0.25), key(&doc, &cut, 0.25));
+        assert_eq!(key(&doc, &fading, 1.0), key(&doc, &cut, 1.0));
     }
 
     // ---------------------------------------------------------------

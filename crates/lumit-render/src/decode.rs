@@ -104,13 +104,28 @@ pub struct CompJob {
     /// cannot measure, and it runs only where the user switched it on.
     pub shutter_flow: Option<lumit_core::retime::FlowParams>,
     /// A Sequence layer at the other times it is asked for, where the clip
-    /// live then is not this job's file. Empty for every other layer.
+    /// live then is not this job's file, and what this clip is fading over.
+    /// Empty for every other layer.
     pub cuts: Vec<Cut>,
 }
 
 /// A Sequence layer at another time, across an edit point: the clip live then
-/// as a job of its own, one whole frame of it.
+/// as a job of its own, one whole frame of it. Or at this time, inside a fade
+/// or a dissolve: the clip under this one.
 pub enum Cut {
+    /// This job's picture at this gain, crossfaded with the other clip's at
+    /// one less that or faded over nothing: a dissolve, where this job is
+    /// the incoming clip, or a fade at an end no clip overlaps
+    /// (`lumit_core::sequence::shown_at`). The two are mixed where they are
+    /// decoded (`lumit_core::pixels::dissolve_rgba`) and the result is the
+    /// layer's source, so everything downstream treats it as one clip.
+    ///
+    /// ponytail: mixed on this job's raster. A clip under it that was
+    /// decoded at another size is fitted into that raster, and a float one
+    /// of another size is left out. The upgrade is to mix every dissolve on
+    /// the card, each clip a source of its own, as one with a composition
+    /// clip in it already is (`build`'s Sequence arm).
+    Under(f64, Option<CompJob>),
     /// A neighbour of the layer's own temporal stack, by [`CompJob::temporal`]'s
     /// offset. Joins the decoded neighbours when it is the same size.
     Neighbour(i32, CompJob),
@@ -283,6 +298,119 @@ impl lumit_cache::ByteSized for CachedFrame {
     }
 }
 
+/// The most decoders one decoding thread keeps open when it has a choice.
+///
+/// Sized for a cut. Three picture rows are playing, the next clip on each is
+/// opened ahead of its edit point, and the clip each row has just left is kept
+/// so a step back across the cut costs nothing: nine. Twelve leaves room for a
+/// fourth row or a nested comp before anything is closed and opened again.
+///
+/// ponytail: a count, the same for every file. A hardware decoder holds a
+/// device and surfaces on the card and a software one holds frames in memory,
+/// and neither is weighed. The upgrade is to charge each decoder to the
+/// governor and close by its pressure, if a project of very large files ever
+/// shows twelve to be too many.
+pub const MAX_OPEN_DECODERS: usize = 12;
+
+/// The open decoders one decoding thread keeps, one per footage item.
+///
+/// The render's own pool and the read-ahead thread each hold one of these, so
+/// both open a file the same way: the frame index from the sidecar cache
+/// ([`crate::media_index`]), then the decoder.
+///
+/// **It closes the one that has gone longest unused** once
+/// [`MAX_OPEN_DECODERS`] are open and another is wanted. A long cut plays
+/// through hundreds of files, and a decoder kept for each was a file handle,
+/// a codec and (decoding on the card) a device apiece, for ever. A decoder
+/// used for this frame or the one before is never closed, whatever the count:
+/// a comp showing twenty files at once keeps twenty open and none is reopened
+/// every frame. Closing one loses nothing but the time to open it again, since
+/// a decoder opened afresh hands back the same frame.
+#[derive(Default)]
+pub struct OpenDecoders {
+    /// Each decoder beside the frame it was last used for.
+    open: HashMap<Uuid, (u64, lumit_media::VideoDecoder)>,
+    /// The frame being decoded for, counted by [`Self::next_frame`].
+    frame: u64,
+}
+
+impl OpenDecoders {
+    /// How many decoders are open.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.open.len()
+    }
+
+    /// Whether none is open.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.open.is_empty()
+    }
+
+    /// Close `item`'s decoder, if one is open: its file has changed, so the
+    /// next decode opens the new one.
+    pub fn close(&mut self, item: Uuid) {
+        self.open.remove(&item);
+    }
+
+    /// The decodes that follow are for another frame of the comp. What "used
+    /// lately" means is counted in these.
+    pub fn next_frame(&mut self) {
+        self.frame += 1;
+    }
+
+    /// The decoder for `item`, opened from `source` if it is not open already.
+    pub fn open(
+        &mut self,
+        item: Uuid,
+        source: &lumit_media::MediaSource,
+    ) -> Result<&mut lumit_media::VideoDecoder, lumit_media::MediaError> {
+        if !self.open.contains_key(&item) {
+            self.make_room();
+        }
+        let frame = self.frame;
+        let slot = match self.open.entry(item) {
+            std::collections::hash_map::Entry::Occupied(e) => e.into_mut(),
+            std::collections::hash_map::Entry::Vacant(e) => {
+                // The sidecar cache first: the index the probe wrote is the
+                // index this decoder opens with, so the first frame costs a
+                // read rather than a fresh packet scan of the file.
+                let index = crate::media_index::load_or_build_index(source)?;
+                e.insert((frame, lumit_media::VideoDecoder::open(source, index)?))
+            }
+        };
+        slot.0 = frame;
+        Ok(&mut slot.1)
+    }
+
+    /// Close the decoders that have gone longest unused until there is room
+    /// under the cap, stopping at the first that was used for this frame or
+    /// the last.
+    fn make_room(&mut self) {
+        while self.open.len() >= MAX_OPEN_DECODERS {
+            // By id where two were last used together, so which one closes
+            // never depends on the map's order.
+            let oldest = self.open.iter().map(|(id, (used, _))| (*used, *id)).min();
+            match oldest {
+                Some((used, id)) if used + 1 < self.frame => self.open.remove(&id),
+                _ => break,
+            };
+        }
+    }
+
+    /// One read-ahead decode, as the render's own decode would make it. `None`
+    /// when the file will not open or the frame will not decode: the render
+    /// tries it inline and reports the error through the path that knows how.
+    pub fn decode_want(
+        &mut self,
+        want: &crate::headless::PrefetchWant,
+    ) -> Option<lumit_media::DecodedFrame> {
+        let dec = self.open(want.item, &want.source).ok()?;
+        let frame = want.frame.min(dec.frame_count().saturating_sub(1));
+        dec.frame_rgba(frame, want.target_width).ok()
+    }
+}
+
 /// The decoders, the decoded-frame cache and the flow backend one decoding
 /// context owns.
 ///
@@ -300,7 +428,7 @@ impl lumit_cache::ByteSized for CachedFrame {
 /// source frames*, not finished comp frames — those are named and cached a level
 /// up, in [`crate::cache`].
 pub struct DecodePool {
-    decoders: HashMap<Uuid, lumit_media::VideoDecoder>,
+    decoders: OpenDecoders,
     /// The file each item was last decoded from. An item is read from one
     /// file for nearly all of its life, but not all: it is relinked, or a
     /// stand-in for it gives way to the original. One entry an item, and an
@@ -409,7 +537,7 @@ impl DecodePool {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            decoders: HashMap::new(),
+            decoders: OpenDecoders::default(),
             sources: HashMap::new(),
             frame_cache: lumit_cache::ByteLru::new(DEFAULT_DECODE_CACHE_BYTES),
             flow_engine: None,
@@ -532,7 +660,8 @@ impl DecodePool {
     }
 
     /// Drop every cached decoded frame, keeping the open decoders (Settings →
-    /// Clear cache). The decoders are cheap to keep and expensive to re-open.
+    /// Clear cache). There are few of them ([`MAX_OPEN_DECODERS`]) and each is
+    /// expensive to open again.
     pub fn clear(&mut self) {
         self.flow_cache.clear();
         self.frame_cache.clear();
@@ -550,7 +679,7 @@ impl DecodePool {
             Some(known) if *known == source.path => {}
             known => {
                 if known.is_some() {
-                    self.decoders.remove(&item);
+                    self.decoders.close(item);
                     self.clear();
                 }
                 self.sources.insert(item, source.path.clone());
@@ -563,14 +692,17 @@ impl DecodePool {
         self.settle(job.item, &job.source, job.slate);
         for cut in &job.cuts {
             match cut {
-                Cut::Neighbour(_, clip) | Cut::Moment(_, Some(clip)) => self.settle_job(clip),
-                Cut::Moment(_, None) => {}
+                Cut::Neighbour(_, clip)
+                | Cut::Moment(_, Some(clip))
+                | Cut::Under(_, Some(clip)) => self.settle_job(clip),
+                Cut::Moment(_, None) | Cut::Under(_, None) => {}
             }
         }
     }
 
     /// Decode one source frame (or synthesise the missing-footage slate).
     pub fn decode_footage(&mut self, req: &Request) -> Result<FramePixels, String> {
+        self.decoders.next_frame();
         self.settle(req.item, &req.source, req.slate.is_some());
         decode(&mut self.decoders, &mut self.frame_cache, req)
     }
@@ -610,6 +742,7 @@ impl DecodePool {
         progress: &dyn Fn(usize),
     ) -> Result<CompFrame, String> {
         self.comp_decodes += 1;
+        self.decoders.next_frame();
         for job in jobs {
             self.settle_job(job);
         }
@@ -638,7 +771,7 @@ impl DecodePool {
 }
 
 fn decode(
-    decoders: &mut HashMap<Uuid, lumit_media::VideoDecoder>,
+    decoders: &mut OpenDecoders,
     cache: &mut lumit_cache::ByteLru<FrameCacheKey, CachedFrame>,
     req: &Request,
 ) -> Result<FramePixels, String> {
@@ -721,20 +854,9 @@ fn decode(
             item: req.item,
         });
     }
-    let dec = match decoders.entry(req.item) {
-        std::collections::hash_map::Entry::Occupied(e) => e.into_mut(),
-        std::collections::hash_map::Entry::Vacant(e) => {
-            // The sidecar cache first (crate::media_index): the index the
-            // probe already wrote when the project opened is the index this
-            // decoder opens with, so the first preview frame of a session
-            // costs a read rather than a fresh packet scan of the file.
-            let index =
-                crate::media_index::load_or_build_index(&req.source).map_err(|e| e.to_string())?;
-            let dec =
-                lumit_media::VideoDecoder::open(&req.source, index).map_err(|e| e.to_string())?;
-            e.insert(dec)
-        }
-    };
+    let dec = decoders
+        .open(req.item, &req.source)
+        .map_err(|e| e.to_string())?;
     let frame = req.frame.min(dec.frame_count().saturating_sub(1));
     let out = dec
         .frame_rgba(frame, req.target_width)
@@ -1094,7 +1216,7 @@ fn moment_key(source_key: u128, offset: f64) -> u128 {
 /// draws many.
 #[allow(clippy::too_many_arguments)]
 fn combine_pair(
-    decoders: &mut HashMap<Uuid, lumit_media::VideoDecoder>,
+    decoders: &mut OpenDecoders,
     cache: &mut lumit_cache::ByteLru<FrameCacheKey, CachedFrame>,
     flow_engine: &mut Option<lumit_flow::FlowEngine>,
     synthesis: &mut Option<(u64, Result<lumit_ml::Synthesis, lumit_ml::MlError>)>,
@@ -1227,7 +1349,7 @@ fn synthesised(
 
 #[allow(clippy::too_many_arguments)] // one worker call; bundling would hide it
 fn decode_comp(
-    decoders: &mut HashMap<Uuid, lumit_media::VideoDecoder>,
+    decoders: &mut OpenDecoders,
     cache: &mut lumit_cache::ByteLru<FrameCacheKey, CachedFrame>,
     flow_engine: &mut Option<lumit_flow::FlowEngine>,
     synthesis: &mut Option<(u64, Result<lumit_ml::Synthesis, lumit_ml::MlError>)>,
@@ -1447,6 +1569,7 @@ fn decode_comp(
         // A Sequence layer across an edit point: the other clip is decoded as
         // the job it is. After the flow above, which is never measured across
         // a cut. One that fails is dropped, as any neighbour is.
+        let mut under: Option<(f64, Option<CompLayerPixels>)> = None;
         for cut in &job.cuts {
             let mut other = |other: &CompJob| {
                 decode_comp(
@@ -1481,11 +1604,14 @@ fn decode_comp(
                         shutter.push((*offset, Some(Box::new(p))));
                     }
                 }
+                Cut::Under(gain, clip) => {
+                    under = Some((*gain, clip.as_ref().and_then(&mut other)));
+                }
             }
         }
         // Blend / Flow policy: combine with the next source frame.
         let (width, height) = (px.width, px.height);
-        let rgba = combine_pair(
+        let mut rgba = combine_pair(
             decoders,
             cache,
             flow_engine,
@@ -1499,6 +1625,33 @@ fn decode_comp(
             job.blend,
             job.flow.as_ref(),
         )?;
+        // A fade or a dissolve, last, so it crossfades the pictures the two
+        // clips would each have shown alone. See [`Cut::Under`] for the fit.
+        if let Some((gain, below)) = under {
+            use lumit_core::pixels;
+            use lumit_media::PixelFormat::{LinearF32, Srgb8};
+            let below = below.filter(|p| p.format == format).and_then(|p| {
+                if (p.width, p.height) == (width, height) {
+                    Some(p.rgba)
+                } else if format == Srgb8 {
+                    Some(Arc::new(pixels::letterbox_resize(
+                        &p.rgba,
+                        p.width,
+                        p.height,
+                        width,
+                        height,
+                        pixels::Resample::Fast,
+                    )))
+                } else {
+                    None
+                }
+            });
+            let below = below.as_ref().map(|p| p.as_slice());
+            match format {
+                Srgb8 => pixels::dissolve_rgba(&mut rgba, below, gain),
+                LinearF32 => pixels::dissolve_f32(&mut rgba, below, gain),
+            }
+        }
         layers.push(CompLayerPixels {
             layer: job.layer,
             width,
@@ -1746,5 +1899,58 @@ mod tests {
             px.frame, 40,
             "a fingerprint mismatch must rebuild the index, never reuse it"
         );
+    }
+
+    /// Closing a decoder to make room is only allowed to cost time. One file
+    /// under more item ids than the cap holds: the first is closed along the
+    /// way, and opened again it hands back the very frame it gave before.
+    #[test]
+    fn a_decoder_closed_to_make_room_reopens_on_the_same_frame() {
+        let dir = tempfile::tempdir().unwrap();
+        let Some(file) = lumit_media::index::tests_support::fixture(dir.path()) else {
+            eprintln!("skipping: no ffmpeg CLI available for fixture generation");
+            return;
+        };
+        let cache = dir.path().join("media-index");
+        let want = |item: Uuid, frame: usize| crate::headless::PrefetchWant {
+            item,
+            source: lumit_media::MediaSource::file(file.clone()),
+            frame,
+            target_width: None,
+        };
+        crate::media_index::with_cache_dir(&cache, || {
+            let mut decoders = OpenDecoders::default();
+            let first = Uuid::now_v7();
+            let before = decoders.decode_want(&want(first, 7)).expect("frame 7");
+
+            // A cut's worth of other files, a frame apart.
+            for _ in 0..MAX_OPEN_DECODERS + 3 {
+                decoders.next_frame();
+                decoders
+                    .decode_want(&want(Uuid::now_v7(), 3))
+                    .expect("frame 3");
+            }
+            assert_eq!(decoders.len(), MAX_OPEN_DECODERS, "the cap holds");
+            assert!(!decoders.open.contains_key(&first), "the oldest closed");
+
+            decoders.next_frame();
+            let after = decoders
+                .decode_want(&want(first, 7))
+                .expect("frame 7 again");
+            assert_eq!((after.width, after.height), (before.width, before.height));
+            assert!(
+                after.rgba == before.rgba,
+                "a reopened decoder showed another frame"
+            );
+
+            // One frame that needs more files than the cap keeps them all:
+            // none of them is closed to open the next.
+            let mut wide = OpenDecoders::default();
+            wide.next_frame();
+            for _ in 0..MAX_OPEN_DECODERS + 4 {
+                wide.decode_want(&want(Uuid::now_v7(), 0)).expect("frame 0");
+            }
+            assert_eq!(wide.len(), MAX_OPEN_DECODERS + 4);
+        });
     }
 }

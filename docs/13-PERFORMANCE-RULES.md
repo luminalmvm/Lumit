@@ -21,6 +21,10 @@ layers (one retimed to 40% with flow), text, a four-clip Sequence layer, an adju
 layer with a LUT and curves, a glow, motion blur on two layers, a luma matte, audio with
 volume keys.
 
+The **long-form comp**, built beside it: 1080p60, 2 hours, 2,000 clips from 300 footage
+items on three picture Sequence layers and four audio-only ones, with linked picture and
+sound on the main rows, gaps, crossfades and a passage of twelve-frame cuts.
+
 ## 2. Budgets
 
 95th percentile unless stated.
@@ -44,9 +48,34 @@ volume keys.
 | B15 | Puppet warp, fully covered 1080p layer | ≤ 120 ms | ≤ 300 ms |
 | B16 | Puppet mesh build | ≤ 100 ms | ≤ 250 ms |
 | B17 | Puppet solve at 1500 vertices | ≤ 12 ms | ≤ 30 ms |
+| B18 | Long cut: comp opened cold to its first frame | ≤ 500 ms | ≤ 1500 ms |
+| B19 | Long cut: naming and planning one frame | ≤ 1 ms | ≤ 2 ms |
+| B20 | Long cut: playback across edit points, one frame | ≤ 16.7 ms | ≤ 33 ms |
+| B21 | Long cut: decoders left open | ≤ 28 | ≤ 28 |
+| B22 | Long cut: one trim committed and journalled | ≤ 16 ms | ≤ 16 ms |
+| B23 | Long cut: a ripple delete committed and journalled | ≤ 16 ms | ≤ 16 ms |
+| B24 | Long cut: the engine's side of the read model | ≤ 8 ms | ≤ 8 ms |
+| B25 | Long cut: the mix planned again after an edit | ≤ 100 ms | ≤ 250 ms |
+| B26 | Long cut: mixing one second of sound | ≤ 10 ms | ≤ 20 ms |
+| B27 | Long cut: decoded sound in memory, comp open | ≤ 64 MB | ≤ 64 MB |
+| B28 | Long cut: decoded sound in memory, a minute played | ≤ 512 MB | ≤ 512 MB |
+| B29 | Long cut: first peaks of a file never summarised | ≤ 500 ms | ≤ 1500 ms |
 
 The UI holds 60 fps during any interaction (16.6 ms is the floor) and budgets 8.3 ms a
 frame so high-refresh screens are fed. An idle editor schedules no frames.
+
+B18 to B24 are measured on the long-form comp and take their numbers from the rows above.
+B18 is B4's wait. B19 is paid by every frame, warm ones included, so it is a small part
+of B5's. B20 is B6's rate as the time one frame may take, edit points included. B21 is a
+count: twelve decoders for the render, twelve for read-ahead, and the few files a fast
+passage has open ahead of their clips. B22 and B23 are the 16 ms an edit commits in. B24
+is built on the UI thread, so it is B1.
+
+B25 to B29 are the same comp's sound. B25 is off the UI thread, and is how long after an
+edit the new mix is heard. B26 is work per second of sound, so 10 ms is one per cent of a
+core. B27 and B28 are megabytes: decoded sound is kept in two-second blocks near the
+playhead under one 512 MB budget, never a whole file. B29 is B4's wait, paid once per
+file: its peaks are then read from a file beside its frame index.
 
 **Document scale.** With 200 comps, 5,000 layers, 250,000 keyframes and 2,000 footage
 items open, B1 still holds, an edit or undo commits in 16 ms, it opens in 5 s and saves in
@@ -101,7 +130,7 @@ pressure it slows down, it never changes output.
 ## 7. CI
 
 - A frame submits one command buffer however many layers it has. A test holds that.
-- `lumit-bench` runs B3 to B7, B11 and B12 to B17 and compares each with
+- `lumit-bench` runs B3 to B7, B11 and B12 to B29 and compares each with
   `crates/lumit-bench/baselines/<os>.json`. It fails at 1.6x worse. Under 1 ms isn't
   ratio-gated. Regenerate a baseline by running the harness and committing the file.
 - The absolute budgets are only asserted under `LUMIT_REFERENCE_HW=1`.

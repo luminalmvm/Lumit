@@ -45,7 +45,7 @@ pub const NOISE_FLOOR_MS: f64 = 1.0;
 ///
 /// Asserted only under [`reference_hardware`]. Anywhere else these are what the
 /// harness is aiming at, not what it is judged by.
-pub const DESKTOP_BUDGET_MS: [(&str, f64); 12] = [
+pub const DESKTOP_BUDGET_MS: [(&str, f64); 24] = [
     ("B3", 50.0),
     ("B4", 500.0),
     ("B5", 1000.0 / 60.0),
@@ -62,6 +62,23 @@ pub const DESKTOP_BUDGET_MS: [(&str, f64); 12] = [
     ("B15", 120.0),
     ("B16", 100.0),
     ("B17", 12.0),
+    // The long cut's seven ([`crate::long`]). B21 is a count of open decoders
+    // and not a time. It is held here like the rest because a count over its
+    // ceiling is a breach in the same way.
+    ("B18", 500.0),
+    ("B19", 1.0),
+    ("B20", 1000.0 / 60.0),
+    ("B21", 28.0),
+    ("B22", 16.0),
+    ("B23", 16.0),
+    ("B24", 8.0),
+    // The long cut's sound ([`crate::long_sound`]). B27 and B28 are megabytes
+    // of decoded sound in memory and not times, held here as B21's count is.
+    ("B25", 100.0),
+    ("B26", 10.0),
+    ("B27", 64.0),
+    ("B28", 512.0),
+    ("B29", 500.0),
 ];
 
 /// A run's numbers, keyed by budget — the results file the harness writes and,

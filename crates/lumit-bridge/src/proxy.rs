@@ -10,7 +10,9 @@
 //! took minutes to return would freeze the window it was called from.
 //!
 //! One at a time. Two transcodes share one disk and halve each other, and the
-//! Project panel has one progress row to show either in.
+//! Project panel has one progress row to show either in. Asking for another
+//! while one runs puts it in a queue, which is how a folder of footage gets
+//! its proxies: each starts as the one before it lands.
 //!
 //! The one thing this does that an export does not: when the file lands, the
 //! **bridge** attaches it. `lumit_render::proxy` writes a file and knows
@@ -19,6 +21,7 @@
 //! the job remembers which project and which item it belongs to.
 
 use lumit_render::proxy::{ProxyEvent, ProxyHandle};
+use std::collections::VecDeque;
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 use uuid::Uuid;
@@ -41,6 +44,17 @@ struct Job {
     /// still lands on the item that asked for it.
     project: Uuid,
     item: Uuid,
+    /// The proxies asked for while this one runs, in the order they were
+    /// asked for.
+    waiting: VecDeque<Waiting>,
+}
+
+/// One queued proxy: what [`start`] was handed.
+struct Waiting {
+    project: Uuid,
+    item: Uuid,
+    source: PathBuf,
+    dest: PathBuf,
 }
 
 static JOB: OnceLock<Mutex<Job>> = OnceLock::new();
@@ -52,6 +66,7 @@ fn slot() -> &'static Mutex<Job> {
             handle: None,
             project: Uuid::nil(),
             item: Uuid::nil(),
+            waiting: VecDeque::new(),
         })
     })
 }
@@ -59,7 +74,8 @@ fn slot() -> &'static Mutex<Job> {
 /// Start making a proxy for `source`, writing to `dest`, on behalf of `item` in
 /// `project`.
 ///
-/// A calm refusal when one is already running: they would share a disk.
+/// When one is already running this one waits its turn, and asking twice for
+/// the same item queues it once.
 pub(crate) fn start(
     project: Uuid,
     item: Uuid,
@@ -70,15 +86,24 @@ pub(crate) fn start(
     // Drain first, so a job that finished between two polls frees the slot
     // rather than blocking the next one until somebody looks.
     let landed = drain(&mut guard);
-    if guard.handle.is_some() {
-        drop(guard);
-        attach(landed);
-        return Err("a proxy is already being made".to_owned());
-    }
     if !source.is_file() {
         drop(guard);
         attach(landed);
         return Err("that footage is not on this machine".to_owned());
+    }
+    if guard.handle.is_some() {
+        let asked = guard.item == item || guard.waiting.iter().any(|w| w.item == item);
+        if !asked {
+            guard.waiting.push_back(Waiting {
+                project,
+                item,
+                source,
+                dest,
+            });
+        }
+        drop(guard);
+        attach(landed);
+        return Ok(());
     }
     guard.handle = Some(lumit_render::proxy::start(source, dest));
     guard.state = State::Running { frame: 0, total: 0 };
@@ -102,9 +127,11 @@ pub(crate) fn poll() -> State {
     answer
 }
 
-/// Ask the transcode to stop. It leaves no half-written file behind.
+/// Ask the transcode to stop, and forget the ones waiting behind it. It
+/// leaves no half-written file behind.
 pub(crate) fn cancel() {
-    let guard = slot().lock().unwrap_or_else(|p| p.into_inner());
+    let mut guard = slot().lock().unwrap_or_else(|p| p.into_inner());
+    guard.waiting.clear();
     if let Some(handle) = &guard.handle {
         handle.cancel();
     }
@@ -138,6 +165,23 @@ fn drain(job: &mut Job) -> Option<(Uuid, Uuid, PathBuf)> {
     }
     if finished {
         job.handle = None;
+        // The next in the queue starts in its place, and the state goes
+        // straight back to running, so whoever is polling keeps polling until
+        // the last one lands. A file that has gone since it was queued is
+        // passed over.
+        //
+        // ponytail: a failure in the middle of a queue is not reported, only
+        // the last job's. Report each when the status line can list them.
+        while let Some(next) = job.waiting.pop_front() {
+            if !next.source.is_file() {
+                continue;
+            }
+            job.handle = Some(lumit_render::proxy::start(next.source, next.dest));
+            job.state = State::Running { frame: 0, total: 0 };
+            job.project = next.project;
+            job.item = next.item;
+            break;
+        }
     }
     landed
 }

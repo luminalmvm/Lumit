@@ -12,6 +12,7 @@ import 'api/cache.dart';
 import 'api/colour.dart';
 import 'api/comp_graph.dart';
 import 'api/composition.dart';
+import 'api/cut.dart';
 import 'api/effect.dart';
 import 'api/export.dart';
 import 'api/expressions.dart';
@@ -234,6 +235,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeMask dco_decode_box_autoadd_bridge_mask(dynamic raw);
+
+  @protected
+  BridgeMatchFrame dco_decode_box_autoadd_bridge_match_frame(dynamic raw);
 
   @protected
   BridgeMatte dco_decode_box_autoadd_bridge_matte(dynamic raw);
@@ -539,6 +543,12 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeCrop dco_decode_bridge_crop(dynamic raw);
 
   @protected
+  BridgeCutPaste dco_decode_bridge_cut_paste(dynamic raw);
+
+  @protected
+  BridgeCutResult dco_decode_bridge_cut_result(dynamic raw);
+
+  @protected
   BridgeDiskCacheStats dco_decode_bridge_disk_cache_stats(dynamic raw);
 
   @protected
@@ -741,6 +751,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeMaskMode dco_decode_bridge_mask_mode(dynamic raw);
+
+  @protected
+  BridgeMatchFrame dco_decode_bridge_match_frame(dynamic raw);
 
   @protected
   BridgeMatte dco_decode_bridge_matte(dynamic raw);
@@ -1521,6 +1534,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       dynamic raw);
 
   @protected
+  BridgeMatchFrame? dco_decode_opt_box_autoadd_bridge_match_frame(dynamic raw);
+
+  @protected
   BridgeMatte? dco_decode_opt_box_autoadd_bridge_matte(dynamic raw);
 
   @protected
@@ -1845,6 +1861,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeMask sse_decode_box_autoadd_bridge_mask(SseDeserializer deserializer);
+
+  @protected
+  BridgeMatchFrame sse_decode_box_autoadd_bridge_match_frame(
+      SseDeserializer deserializer);
 
   @protected
   BridgeMatte sse_decode_box_autoadd_bridge_matte(SseDeserializer deserializer);
@@ -2202,6 +2222,12 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeCrop sse_decode_bridge_crop(SseDeserializer deserializer);
 
   @protected
+  BridgeCutPaste sse_decode_bridge_cut_paste(SseDeserializer deserializer);
+
+  @protected
+  BridgeCutResult sse_decode_bridge_cut_result(SseDeserializer deserializer);
+
+  @protected
   BridgeDiskCacheStats sse_decode_bridge_disk_cache_stats(
       SseDeserializer deserializer);
 
@@ -2440,6 +2466,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeMaskMode sse_decode_bridge_mask_mode(SseDeserializer deserializer);
+
+  @protected
+  BridgeMatchFrame sse_decode_bridge_match_frame(SseDeserializer deserializer);
 
   @protected
   BridgeMatte sse_decode_bridge_matte(SseDeserializer deserializer);
@@ -3358,6 +3387,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeMatchFrame? sse_decode_opt_box_autoadd_bridge_match_frame(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeMatte? sse_decode_opt_box_autoadd_bridge_matte(
       SseDeserializer deserializer);
 
@@ -3699,6 +3732,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_box_autoadd_bridge_mask(
       BridgeMask self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_bridge_match_frame(
+      BridgeMatchFrame self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_bridge_matte(
@@ -4087,6 +4124,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   void sse_encode_bridge_crop(BridgeCrop self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_cut_paste(
+      BridgeCutPaste self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_cut_result(
+      BridgeCutResult self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_disk_cache_stats(
       BridgeDiskCacheStats self, SseSerializer serializer);
 
@@ -4352,6 +4397,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_mask_mode(
       BridgeMaskMode self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_match_frame(
+      BridgeMatchFrame self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_matte(BridgeMatte self, SseSerializer serializer);
@@ -5334,6 +5383,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_bridge_imported_project(
       BridgeImportedProject? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_bridge_match_frame(
+      BridgeMatchFrame? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_box_autoadd_bridge_matte(

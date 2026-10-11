@@ -18,11 +18,17 @@ default-run = "lumit-bench"
 # application's dependency tree. It is a workspace member (the `crates/lumit-*`
 # glob), so `cargo fmt`/`clippy`/`test` see it like any other crate.
 [dependencies]
+# The long cut's sound scenarios mix a plan and fill its blocks the way the
+# engine's own two threads do, and summarise a file's peaks.
+lumit-audio = { path = "../lumit-audio" }
 lumit-core = { path = "../lumit-core" }
 # The per-effect scenarios (B12-B14) time one pass rather than a whole comp, so
 # they build a texture and a context themselves; `no_adapter()` is also the
 # polite-skip convention the GPU oracles use.
 lumit-gpu = { path = "../lumit-gpu" }
+# The long-form scenarios commit edits the way the application does, into the
+# crash journal, and the journal is this crate's.
+lumit-project = { path = "../lumit-project" }
 lumit-render = { path = "../lumit-render" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

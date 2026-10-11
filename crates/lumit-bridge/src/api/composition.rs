@@ -2149,7 +2149,10 @@ impl CompositionReference {
     /// have quietly dropped a picture the user placed and could not get back
     /// without deleting the layer.
     #[frb(ignore)]
-    fn has_picture(state: &LumitBridgeState, footage: &lumit_core::model::FootageItem) -> bool {
+    pub(crate) fn has_picture(
+        state: &LumitBridgeState,
+        footage: &lumit_core::model::FootageItem,
+    ) -> bool {
         #[cfg(feature = "media")]
         {
             let Some(src) = FootageReference::resolve_source(state, footage) else {
@@ -2199,7 +2202,7 @@ impl CompositionReference {
     /// own when it probes, the comp's when it does not. A still takes the
     /// comp's length either way.
     #[frb(ignore)]
-    fn footage_span_and_size(
+    pub(crate) fn footage_span_and_size(
         state: &LumitBridgeState,
         footage: &lumit_core::model::FootageItem,
         comp: &lumit_core::model::Composition,

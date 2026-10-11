@@ -1261,7 +1261,7 @@
   },
   "duration": "Duration",
   "@duration": {
-    "description": "Field label: how long a composition runs."
+    "description": "Field label: how long a composition runs. Also the Project panel's Duration column heading, shown in capitals by the style, so write it sentence case."
   },
   "durationFormatNote": "Duration is HH:MM:SS:FF at the frame rate above.",
   "@durationFormatNote": {
@@ -1632,9 +1632,17 @@
   "@firstRunAutoUpdate": {
     "description": "First run: the sentence beside the automatic-updates checkbox."
   },
+  "firstRunCut": "Footage arrives on Sequence layers, and Lumit opens in the Cut workspace.",
+  "@firstRunCut": {
+    "description": "First run: what choosing Premiere Pro or Resolve habits does. Sequence layer and Cut (the workspace) are Lumit product terms."
+  },
+  "firstRunCutName": "Premiere Pro or Resolve",
+  "@firstRunCutName": {
+    "description": "First run: the name of the third card, the two editors it is for. Product names, so leave them as they are."
+  },
   "firstRunTitle": "Editing style",
   "@firstRunTitle": {
-    "description": "First-run screen: heading over its first question, whose two answers are After Effects and Vegas."
+    "description": "First-run screen: heading over its first question, whose three answers are After Effects, Vegas, and Premiere Pro or Resolve."
   },
   "firstRunVegas": "Video arrives as a Sequence layer to cut into clips, and the Retime graph shows speed as a percentage.",
   "@firstRunVegas": {
@@ -5008,6 +5016,138 @@
   "@keyPreviousEditPoint": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
+  "keyMarkIn": "Mark in",
+  "@keyMarkIn": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. An editing term: set the start of the span to take from a source, or of a span on the Cut timeline."
+  },
+  "keyMarkOut": "Mark out",
+  "@keyMarkOut": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. An editing term: set the end of the span to take from a source, or of a span on the Cut timeline."
+  },
+  "keyInsertAtThePlayhead": "Insert at the playhead",
+  "@keyInsertAtThePlayhead": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. An editing term: put the marked span of the source down at the playhead and move everything after it later to make room."
+  },
+  "keyOverwriteAtThePlayhead": "Overwrite at the playhead",
+  "@keyOverwriteAtThePlayhead": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. An editing term: put the marked span of the source down at the playhead, replacing what is there."
+  },
+  "keyRippleDelete": "Ripple delete",
+  "@keyRippleDelete": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. An editing term: delete the selected clips and close the gap they leave."
+  },
+  "keySelectClips": "Select clips",
+  "@keySelectClips": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Cut timeline shortcut."
+  },
+  "keyCutClipsWithTheRazor": "Cut clips with the razor",
+  "@keyCutClipsWithTheRazor": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Cut timeline shortcut."
+  },
+  "keyRippleTrim": "Ripple trim",
+  "@keyRippleTrim": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Cut timeline shortcut."
+  },
+  "keyRollAnEditPoint": "Roll an edit point",
+  "@keyRollAnEditPoint": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Cut timeline shortcut."
+  },
+  "keySlipAClip": "Slip a clip",
+  "@keySlipAClip": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Cut timeline shortcut."
+  },
+  "keySlideAClip": "Slide a clip",
+  "@keySlideAClip": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Cut timeline shortcut."
+  },
+  "keyRippleTrimTheStartToThePlayhead": "Ripple trim the start to the playhead",
+  "@keyRippleTrimTheStartToThePlayhead": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Cut timeline shortcut."
+  },
+  "keyRippleTrimTheEndToThePlayhead": "Ripple trim the end to the playhead",
+  "@keyRippleTrimTheEndToThePlayhead": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Cut timeline shortcut."
+  },
+  "keyTrimTheStartToThePlayhead": "Trim the start to the playhead",
+  "@keyTrimTheStartToThePlayhead": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Cut timeline shortcut."
+  },
+  "keyTrimTheEndToThePlayhead": "Trim the end to the playhead",
+  "@keyTrimTheEndToThePlayhead": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Cut timeline shortcut."
+  },
+  "keyRollThePreviousEditPointToThePlayhead": "Roll the previous edit point to the playhead",
+  "@keyRollThePreviousEditPointToThePlayhead": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Cut timeline shortcut."
+  },
+  "keyRollTheNextEditPointToThePlayhead": "Roll the next edit point to the playhead",
+  "@keyRollTheNextEditPointToThePlayhead": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Cut timeline shortcut."
+  },
+  "keyCutAtThePlayhead": "Cut at the playhead",
+  "@keyCutAtThePlayhead": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Cut timeline shortcut."
+  },
+  "keyCutEveryTrackAtThePlayhead": "Cut every track at the playhead",
+  "@keyCutEveryTrackAtThePlayhead": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Cut timeline shortcut."
+  },
+  "keyNudgeClipsOneFrameEarlier": "Nudge clips one frame earlier",
+  "@keyNudgeClipsOneFrameEarlier": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Cut timeline shortcut."
+  },
+  "keyNudgeClipsOneFrameLater": "Nudge clips one frame later",
+  "@keyNudgeClipsOneFrameLater": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Cut timeline shortcut."
+  },
+  "keyNudgeClipsFiveFramesEarlier": "Nudge clips five frames earlier",
+  "@keyNudgeClipsFiveFramesEarlier": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Cut timeline shortcut."
+  },
+  "keyNudgeClipsFiveFramesLater": "Nudge clips five frames later",
+  "@keyNudgeClipsFiveFramesLater": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Cut timeline shortcut."
+  },
+  "keyMoveClipsUpATrack": "Move clips up a track",
+  "@keyMoveClipsUpATrack": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Cut timeline shortcut."
+  },
+  "keyMoveClipsDownATrack": "Move clips down a track",
+  "@keyMoveClipsDownATrack": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Cut timeline shortcut."
+  },
+  "keySelectTheClipAtThePlayhead": "Select the clip at the playhead",
+  "@keySelectTheClipAtThePlayhead": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Cut timeline shortcut."
+  },
+  "keyTurnSnappingOnOrOff": "Turn snapping on or off",
+  "@keyTurnSnappingOnOrOff": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Cut timeline shortcut."
+  },
+  "keyTurnLinkedSelectionOnOrOff": "Turn linked selection on or off",
+  "@keyTurnLinkedSelectionOnOrOff": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Cut timeline shortcut."
+  },
+  "keyLiftTheWorkArea": "Lift the work area",
+  "@keyLiftTheWorkArea": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Cut timeline shortcut. An editing term: delete the clips inside the work area and leave the gap."
+  },
+  "keyExtractTheWorkArea": "Extract the work area",
+  "@keyExtractTheWorkArea": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Cut timeline shortcut. An editing term: delete the clips inside the work area and close the gap."
+  },
+  "keyMatchFrame": "Match frame",
+  "@keyMatchFrame": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Cut timeline shortcut. An editing term: open the source file at the frame under the playhead."
+  },
+  "keyAddTheDefaultTransition": "Add the default transition",
+  "@keyAddTheDefaultTransition": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Cut timeline shortcut. A transition is a dissolve or a crossfade between two clips."
+  },
+  "keyCutTimeline": "Cut timeline",
+  "@keyCutTimeline": {
+    "description": "Settings → Keymap: a heading saying where these shortcuts are live. The Cut timeline is the panel for editing clips end to end."
+  },
   "keyPreviousFrame": "Previous frame",
   "@keyPreviousFrame": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
@@ -6290,6 +6430,82 @@
   "panelViewer": "Viewer",
   "@panelViewer": {
     "description": "The name of the panel showing the picture."
+  },
+  "sourceTitle": "Source",
+  "@sourceTitle": {
+    "description": "Title of the Viewer's source side, where one footage item is looked at before it is placed in a composition."
+  },
+  "sourceEmptyHint": "Double-click footage in the Project panel to load it here.",
+  "@sourceEmptyHint": {
+    "description": "Empty-state line in the Viewer's source side before any footage has been loaded into it."
+  },
+  "sourcePlay": "Play this footage",
+  "@sourcePlay": {
+    "description": "Tooltip for the play button under the source picture, which plays the loaded footage item by itself."
+  },
+  "sourceStop": "Stop",
+  "@sourceStop": {
+    "description": "Tooltip for the same button under the source picture while the footage item is playing."
+  },
+  "sourceMarkIn": "In",
+  "@sourceMarkIn": {
+    "description": "Button under the source picture that marks the current frame as the start of the stretch to place. Kept to one short word."
+  },
+  "sourceMarkInTip": "Mark In at this frame",
+  "@sourceMarkInTip": {
+    "description": "Tooltip for the source side's In button."
+  },
+  "sourceMarkOut": "Out",
+  "@sourceMarkOut": {
+    "description": "Button under the source picture that marks the current frame as the end of the stretch to place. Kept to one short word."
+  },
+  "sourceMarkOutTip": "Mark Out at this frame",
+  "@sourceMarkOutTip": {
+    "description": "Tooltip for the source side's Out button."
+  },
+  "sourceInsert": "Insert",
+  "@sourceInsert": {
+    "description": "Button that places the marked stretch of the source at the playhead and moves the clips after it later."
+  },
+  "sourceInsertTip": "Place the marked stretch at the playhead and move what follows along",
+  "@sourceInsertTip": {
+    "description": "Tooltip for the source side's Insert button."
+  },
+  "sourceOverwrite": "Overwrite",
+  "@sourceOverwrite": {
+    "description": "Button that places the marked stretch of the source at the playhead, replacing whatever is there."
+  },
+  "sourceOverwriteTip": "Place the marked stretch at the playhead, over what is there",
+  "@sourceOverwriteTip": {
+    "description": "Tooltip for the source side's Overwrite button."
+  },
+  "cutRefusedOverlap": "That would move a clip onto one that stays. Lock that track or clear the space first.",
+  "@cutRefusedOverlap": {
+    "description": "Status-line notice when an edit in the Cut timeline is refused because a clip it would carry along would land on a clip that does not move."
+  },
+  "cutRefusedBeforeStart": "A clip cannot start before the composition does.",
+  "@cutRefusedBeforeStart": {
+    "description": "Status-line notice when an edit in the Cut timeline is refused because it would move a clip before the start of the composition."
+  },
+  "cutRefusedLocked": "A track this edit has to change is locked.",
+  "@cutRefusedLocked": {
+    "description": "Status-line notice when an edit in the Cut timeline is refused because it needs to change a locked track."
+  },
+  "cutRefusedLimit": "The clip has no more to give that way.",
+  "@cutRefusedLimit": {
+    "description": "Status-line notice when a trim, roll, slip or slide in the Cut timeline is refused because a clip or its neighbour would be left with no length, or would run off the start of its source."
+  },
+  "cutRefusedUncuttable": "A clip whose Retime is driven by an expression cannot be cut.",
+  "@cutRefusedUncuttable": {
+    "description": "Status-line notice when a cut in the Cut timeline is refused because the clip's Retime is an expression."
+  },
+  "cutRefusedNothing": "Nothing there to edit.",
+  "@cutRefusedNothing": {
+    "description": "Status-line notice when an edit in the Cut timeline finds nothing to act on: no clip under the razor, no gap, or no edit point."
+  },
+  "cutRefusedWrongLayer": "Picture clips go on picture tracks and sound clips on sound tracks.",
+  "@cutRefusedWrongLayer": {
+    "description": "Status-line notice when a clip in the Cut timeline is refused because it was put on the wrong kind of track."
   },
   "pasteSequenceShape": "Paste sequence shape",
   "@pasteSequenceShape": {
@@ -9425,6 +9641,104 @@
   "@workspaceRetiming": {
     "description": "The name of a panel arrangement, tuned for shaping how things move: the Easing panel down the right and a tall Timeline. 'Retiming' is the gerund of the Lumit term Retime — keep it a noun for the kind of work."
   },
+  "workspaceCut": "Cut",
+  "@workspaceCut": {
+    "description": "The name of a panel arrangement, tuned for cutting long footage into clips: the Cut timeline across the bottom. A verb used as a noun, as an editor says 'the cut'."
+  },
+  "panelCutTimeline": "Cut timeline",
+  "@panelCutTimeline": {
+    "description": "Panel title: the timeline of the Cut arrangement, one row per Sequence layer with the clips laid along it."
+  },
+  "cutToolSelect": "Select",
+  "@cutToolSelect": {
+    "description": "A tool on the Cut timeline's strip: the pointer that picks, moves and trims clips."
+  },
+  "cutToolRazor": "Razor",
+  "@cutToolRazor": {
+    "description": "A tool on the Cut timeline's strip: a click cuts a clip where the pointer is."
+  },
+  "cutToolRipple": "Ripple",
+  "@cutToolRipple": {
+    "description": "A tool on the Cut timeline's strip: trimming a clip's edge moves everything after it to close or open the room."
+  },
+  "cutToolRoll": "Roll",
+  "@cutToolRoll": {
+    "description": "A tool on the Cut timeline's strip: dragging an edit point trims one clip as the other extends."
+  },
+  "cutToolSlip": "Slip",
+  "@cutToolSlip": {
+    "description": "A tool on the Cut timeline's strip: dragging a clip changes which frames of its source it shows, without moving it."
+  },
+  "cutToolSlide": "Slide",
+  "@cutToolSlide": {
+    "description": "A tool on the Cut timeline's strip: dragging a clip moves it between its neighbours, which trim to stay against it."
+  },
+  "cutSnap": "Snap",
+  "@cutSnap": {
+    "description": "A toggle on the Cut timeline's strip: whether a dragged clip lands on the edit points, markers and playhead near it."
+  },
+  "cutLinked": "Linked",
+  "@cutLinked": {
+    "description": "A toggle on the Cut timeline's strip: whether a picture clip and the clip carrying its sound are selected and edited together."
+  },
+  "cutCloseGap": "Close gap",
+  "@cutCloseGap": {
+    "description": "Cut timeline, right-click on empty room between clips: everything after the gap moves earlier to close it."
+  },
+  "cutRippleDelete": "Ripple delete",
+  "@cutRippleDelete": {
+    "description": "Cut timeline, clip menu: remove the clip and close the room it leaves, so everything after it moves earlier."
+  },
+  "cutNoTracks": "No tracks yet. Drop footage here to make one.",
+  "@cutNoTracks": {
+    "description": "Shown across the Cut timeline's empty rows when the composition has no layers. 'Tracks' is this panel's own word for its rows."
+  },
+  "cutDragDelta": "{delta} f",
+  "@cutDragDelta": {
+    "description": "Cut timeline: the small readout pill beside the pointer while a clip is moved, trimmed, rolled, slipped or slid, saying how far it has gone in frames. The number arrives with its sign, '+12' or '-3'. Very small mono type; 'f' is the Timeline's own abbreviation for frames.",
+    "placeholders": {
+      "delta": {
+        "type": "String"
+      }
+    }
+  },
+  "cutFadeLength": "{frames} f",
+  "@cutFadeLength": {
+    "description": "Cut timeline: the small readout pill beside the pointer while a fade handle at a clip's corner is dragged, saying how long the fade now is in frames. Very small mono type; 'f' is the Timeline's own abbreviation for frames.",
+    "placeholders": {
+      "frames": {
+        "type": "String"
+      }
+    }
+  },
+  "cutAddDissolve": "Add dissolve",
+  "@cutAddDissolve": {
+    "description": "Cut timeline, clip menu: put a one-second dissolve on the edit point nearer the pointer, so the two clips overlap and the later one fades in over the earlier."
+  },
+  "cutRemoveDissolve": "Remove dissolve",
+  "@cutRemoveDissolve": {
+    "description": "Cut timeline, clip menu: take the dissolve off the edit point nearer the pointer, so the two clips meet at a plain cut again."
+  },
+  "cutFadeIn": "Fade in",
+  "@cutFadeIn": {
+    "description": "Cut timeline, clip menu: fade the clip in from transparent, or from silence, over its first second."
+  },
+  "cutFadeOut": "Fade out",
+  "@cutFadeOut": {
+    "description": "Cut timeline, clip menu: fade the clip out to transparent, or to silence, over its last second."
+  },
+  "cutRemoveFadeIn": "Remove fade in",
+  "@cutRemoveFadeIn": {
+    "description": "Cut timeline, clip menu: clear the fade at the clip's start."
+  },
+  "cutRemoveFadeOut": "Remove fade out",
+  "@cutRemoveFadeOut": {
+    "description": "Cut timeline, clip menu: clear the fade at the clip's end."
+  },
+  "cutOpenAsComposition": "Open as composition",
+  "@cutOpenAsComposition": {
+    "description": "Cut timeline, clip menu: make a composition holding the clip's footage, point the clip at it, and bring that composition to the front. A clip already playing a composition opens it."
+  },
   "blendColourBurn": "Colour burn",
   "@blendColourBurn": {
     "description": "A blend mode — the Timeline's Blend dropdown, and anywhere layers composite."
@@ -12146,6 +12460,10 @@
   "@makeProxy": {
     "description": "Project panel row menu, on a footage row: transcode a smaller copy of this item's file and attach it as its proxy."
   },
+  "makeProxies": "Make proxies",
+  "@makeProxies": {
+    "description": "Project panel row menu, on a folder row: make a proxy for every footage item in the folder, one after another."
+  },
   "useProxy": "Use proxy",
   "@useProxy": {
     "description": "Project panel row menu, on a footage row that has a proxy: a ticked entry, read from the proxy or from the original. Also names that edit in the Edit > History window."
@@ -12706,6 +13024,10 @@
   "settingsLayerNamesOnLaneBars": "Layer names on lane bars",
   "@settingsLayerNamesOnLaneBars": {
     "description": "Settings window, Timeline page: the name of one setting - whether each layer bar in the Timeline lane area is labelled with the layer name. Off by default."
+  },
+  "settingsThumbnailsOnFootageRows": "Thumbnails on footage rows",
+  "@settingsThumbnailsOnFootageRows": {
+    "description": "Settings window, Timeline page, Panels group: the name of one setting - whether each footage row in the Project panel carries a small poster frame in place of its type glyph. Off by default."
   },
   "settingsTimelineMinimap": "Minimap under the lanes",
   "@settingsTimelineMinimap": {

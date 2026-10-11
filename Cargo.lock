@@ -2063,8 +2063,10 @@ dependencies = [
 name = "lumit-bench"
 version = "0.6.0"
 dependencies = [
+ "lumit-audio",
  "lumit-core",
  "lumit-gpu",
+ "lumit-project",
  "lumit-render",
  "serde",
  "serde_json",

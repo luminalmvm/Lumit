@@ -33,6 +33,9 @@ void main() {
         effects: const [],
         fx: true,
         sourceName: 'tone',
+        sourceIn: const BridgeRational(num: 0, den: 1),
+        sourceOut: const BridgeRational(num: 1, den: 1),
+        sourceIsComp: false,
       );
 
   group('the shapes', () {

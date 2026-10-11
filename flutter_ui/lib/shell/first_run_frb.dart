@@ -3,8 +3,9 @@
 // On the very first launch — a machine with no settings file — Lumit asks how
 // the user edits and what the interface should look like: the style, the
 // colour scheme, where the toolbar stands and how much the chrome moves. The
-// After Effects answer loads the After Effects shortcuts with it. One page,
-// no steps. Every setting it writes is an ordinary row in Settings
+// After Effects answer loads the After Effects shortcuts with it, and the
+// Premiere Pro or Resolve answer opens the Cut workspace. One page, no steps.
+// Every setting it writes is an ordinary row in Settings
 // afterwards — the editing pair under Interface ▸ Editing, the look under
 // Appearance and Interface, the update tick under General ▸ Updates — so
 // nothing here is a decision anybody is stuck with.
@@ -18,6 +19,7 @@ import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/keymap.dart';
 
 import '../l10n/strings.dart';
+import '../state/dock.dart';
 import '../state/keymap.dart';
 import '../state/settings.dart';
 import '../state/workspace.dart';
@@ -25,13 +27,26 @@ import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/theme_swatches.dart';
 
+/// Where the person is coming from: the three cards of the first question.
+enum FirstRunEditor {
+  afterEffects,
+  vegas,
+
+  /// Premiere Pro or Resolve: cutting footage, in the Cut workspace.
+  cut,
+}
+
 /// What the screen comes back with: which editor, and whether Lumit should
 /// keep an eye out for new versions. The tick is on the screen rather than
 /// only in Settings because it is a decision about how Lumit behaves from now
 /// on, which is exactly what this screen is for. A null editor is Skip.
 /// [sequenceLayers] is false when the tick on the Vegas card asks for the
-/// Retime graph alone, and means nothing with the other answer.
-typedef FirstRunAnswer = ({bool? vegas, bool sequenceLayers, bool autoUpdate});
+/// Retime graph alone, and means nothing with the other answers.
+typedef FirstRunAnswer = ({
+  FirstRunEditor? editor,
+  bool sequenceLayers,
+  bool autoUpdate,
+});
 
 /// Show the screen if this machine has never answered it, and record the
 /// answer. Does nothing at all on any later launch, so callers can call it
@@ -48,7 +63,8 @@ Future<void> maybeShowFirstRunFrb(BuildContext context, Workspace workspace,
   final motion = workspace.animationLevel;
   final answer = await showLumitModal<FirstRunAnswer>(
     context: context,
-    initialSize: const Size(620, 548),
+    // Tall enough for three cards' words and every row under them.
+    initialSize: const Size(620, 600),
     minSize: const Size(520, 380),
     builder: (close) => _FirstRun(workspace: workspace, onChoose: close),
   );
@@ -56,19 +72,29 @@ Future<void> maybeShowFirstRunFrb(BuildContext context, Workspace workspace,
   // questions have been put, so they are not put again, and the defaults
   // stand — the After Effects shape, with update checks on.
   workspace.setAutoUpdate(answer?.autoUpdate ?? true);
-  final vegas = answer?.vegas;
-  if (vegas == null) {
-    workspace.setShape(shape);
-    workspace.choose(scheme);
-    workspace.interface.toolBarPosition = toolBar;
-    workspace.setAnimationLevel(motion);
-    workspace.skipFirstRun();
-  } else {
-    workspace.setEditingStyle(
-        vegas: vegas, sequenceLayers: answer!.sequenceLayers);
-    // The card says After Effects, so its keys come too: the preset the
-    // After Effects button on Settings > Shortcuts loads.
-    if (!vegas) await keymap?.loadPreset(BridgeKeymapPreset.afterEffects);
+  final editor = answer?.editor;
+  switch (editor) {
+    case null:
+      workspace.setShape(shape);
+      workspace.choose(scheme);
+      workspace.interface.toolBarPosition = toolBar;
+      workspace.setAnimationLevel(motion);
+      workspace.skipFirstRun();
+    case FirstRunEditor.afterEffects:
+      workspace.setEditingStyle(speedGraph: false, sequenceLayers: false);
+      // The card says After Effects, so its keys come too: the preset the
+      // After Effects button on Settings > Shortcuts loads.
+      await keymap?.loadPreset(BridgeKeymapPreset.afterEffects);
+    case FirstRunEditor.vegas:
+      workspace.setEditingStyle(
+          speedGraph: true, sequenceLayers: answer!.sequenceLayers);
+    case FirstRunEditor.cut:
+      // Sequence layers, the Retime graph as it is, and no keymap preset: the
+      // Cut timeline's own keys already follow an editor's habits. The
+      // arrangement is the card's other half, so it is applied here rather
+      // than left for the person to find in the workspace strip.
+      workspace.setEditingStyle(speedGraph: false, sequenceLayers: true);
+      workspace.applyWorkspacePreset(WorkspacePreset.cut);
   }
 }
 
@@ -83,7 +109,7 @@ class _FirstRun extends StatefulWidget {
 
 class _FirstRunState extends State<_FirstRun> {
   /// After Effects to begin with, which is what Lumit is with nothing set.
-  bool _vegas = false;
+  FirstRunEditor _editor = FirstRunEditor.afterEffects;
 
   /// The tick on the Vegas card: the Retime graph is all that changes, and
   /// video goes on arriving as a layer. Clear to begin with, since the two
@@ -96,8 +122,8 @@ class _FirstRunState extends State<_FirstRun> {
 
   /// Answer with both halves at once: the editor, or null for Skip, and the
   /// update tick as it stands.
-  void _answer(bool? vegas) => widget.onChoose((
-        vegas: vegas,
+  void _answer(FirstRunEditor? editor) => widget.onChoose((
+        editor: editor,
         sequenceLayers: !_retimeOnly,
         autoUpdate: _autoUpdate,
       ));
@@ -132,6 +158,10 @@ class _FirstRunState extends State<_FirstRun> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       _heading(t, l10n.firstRunTitle),
+                      // Three equal shares of the row, and every card as
+                      // tall as the tallest: each drawing is as wide as its
+                      // card and the words wrap under it, so the row takes
+                      // a narrow window by growing down, never sideways.
                       IntrinsicHeight(
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -139,31 +169,45 @@ class _FirstRunState extends State<_FirstRun> {
                             Expanded(
                               child: _Choice(
                                 id: 'first-run-ae',
-                                vegas: false,
+                                editor: FirstRunEditor.afterEffects,
                                 title: l10n.keymapAfterEffects,
                                 blurb: l10n.firstRunAfterEffects,
                                 note: l10n.firstRunAfterEffectsKeys,
-                                chosen: !_vegas,
-                                onTap: () => setState(() => _vegas = false),
+                                chosen: _editor == FirstRunEditor.afterEffects,
+                                onTap: () => setState(
+                                    () => _editor = FirstRunEditor.afterEffects),
                               ),
                             ),
                             const SizedBox(width: 10),
                             Expanded(
                               child: _Choice(
                                 id: 'first-run-vegas',
-                                vegas: true,
+                                editor: FirstRunEditor.vegas,
                                 title: l10n.firstRunVegasName,
                                 blurb: l10n.firstRunVegas,
-                                chosen: _vegas,
-                                onTap: () => setState(() => _vegas = true),
+                                chosen: _editor == FirstRunEditor.vegas,
+                                onTap: () => setState(
+                                    () => _editor = FirstRunEditor.vegas),
                                 // Ticking or clearing it is choosing Vegas:
                                 // it is a question about that answer.
                                 option: l10n.firstRunVegasRetimeOnly,
                                 optionOn: _retimeOnly,
                                 onOption: (on) => setState(() {
                                   _retimeOnly = on;
-                                  _vegas = true;
+                                  _editor = FirstRunEditor.vegas;
                                 }),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: _Choice(
+                                id: 'first-run-cut',
+                                editor: FirstRunEditor.cut,
+                                title: l10n.firstRunCutName,
+                                blurb: l10n.firstRunCut,
+                                chosen: _editor == FirstRunEditor.cut,
+                                onTap: () => setState(
+                                    () => _editor = FirstRunEditor.cut),
                               ),
                             ),
                           ],
@@ -289,7 +333,7 @@ class _FirstRunState extends State<_FirstRun> {
                     HouseButton(
                       key: const ValueKey('first-run-continue'),
                       primary: true,
-                      onPressed: () => _answer(_vegas),
+                      onPressed: () => _answer(_editor),
                       child: Text(l10n.firstRunContinue),
                     ),
                   ],
@@ -403,8 +447,8 @@ class _CardState extends State<_Card> {
 class _Choice extends StatelessWidget {
   final String id;
 
-  /// Which of the two the drawing is of.
-  final bool vegas;
+  /// Which of the three the drawing is of.
+  final FirstRunEditor editor;
   final String title;
   final String blurb;
 
@@ -421,7 +465,7 @@ class _Choice extends StatelessWidget {
 
   const _Choice({
     required this.id,
-    required this.vegas,
+    required this.editor,
     required this.title,
     required this.blurb,
     this.note,
@@ -446,7 +490,7 @@ class _Choice extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             height: _editingPicture,
-            child: CustomPaint(painter: _EditingPainter(vegas, t)),
+            child: CustomPaint(painter: _EditingPainter(editor, t)),
           ),
           const SizedBox(height: 8),
           Text(title, style: t.bodyPrimary),
@@ -481,17 +525,19 @@ class _Choice extends StatelessWidget {
 
 /// The Timeline in outline, as one way of editing has it.
 ///
-/// What differs between the two is how a layer is retimed, so that is what is
-/// drawn. After Effects: the graph open in place of the bars, with one curve
-/// rising through it from one key to the next, which is the moment of the
-/// source against time. Vegas: three tracks of clips, one of them cut in two,
-/// and one carrying its speed as a line along the clip that dips and comes
-/// back up between its points.
+/// What differs between the three is how footage is handled once it is in,
+/// so that is what is drawn. After Effects: the graph open in place of the
+/// bars, with one curve rising through it from one key to the next, which is
+/// the moment of the source against time. Vegas: three tracks of clips, one
+/// of them cut in two, and one carrying its speed as a line along the clip
+/// that dips and comes back up between its points. Premiere Pro or Resolve:
+/// rows of picture clips over rows of sound clips, with one picture clip and
+/// its sound clip lit together as the pair that moves as one.
 class _EditingPainter extends CustomPainter {
-  final bool vegas;
+  final FirstRunEditor editor;
   final LumitTheme theme;
 
-  const _EditingPainter(this.vegas, this.theme);
+  const _EditingPainter(this.editor, this.theme);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -507,9 +553,12 @@ class _EditingPainter extends CustomPainter {
     final seam = Paint()..color = t.hairlineStrong;
     final mark = Paint()..color = t.textMuted;
 
-    // The names down the left and the ruler along the top, as both have them.
+    // The names down the left and the ruler along the top, as all three have
+    // them.
     const ruler = 8.0;
-    final names = (size.width * (vegas ? 0.2 : 0.27)).roundToDouble();
+    final names = (size.width *
+            (editor == FirstRunEditor.afterEffects ? 0.27 : 0.2))
+        .roundToDouble();
     final lanes = Rect.fromLTRB(names + 1, ruler + 1, size.width, size.height);
     canvas.drawRect(
         Rect.fromLTWH(0, 0, size.width, ruler), Paint()..color = t.surface2);
@@ -519,10 +568,14 @@ class _EditingPainter extends CustomPainter {
     canvas.drawRect(Rect.fromLTWH(0, ruler, size.width, 1), seam);
     canvas.drawRect(Rect.fromLTWH(names, 0, 1, size.height), seam);
 
-    if (vegas) {
-      _tracks(canvas, t, lanes, names, lantern ? 2 : (desk ? 0 : 1));
-    } else {
-      _graph(canvas, t, lanes, names);
+    final corner = lantern ? 2.0 : (desk ? 0.0 : 1.0);
+    switch (editor) {
+      case FirstRunEditor.afterEffects:
+        _graph(canvas, t, lanes, names);
+      case FirstRunEditor.vegas:
+        _tracks(canvas, t, lanes, names, corner);
+      case FirstRunEditor.cut:
+        _cut(canvas, t, lanes, names, corner);
     }
     canvas.restore();
     canvas.drawRRect(
@@ -670,9 +723,74 @@ class _EditingPainter extends CustomPainter {
     }
   }
 
+  /// Two rows of picture clips over two rows of sound clips, a seam between
+  /// the kinds. The pair across that seam is lit: a picture clip and the
+  /// sound that came in with it, held as one.
+  void _cut(
+      Canvas canvas, LumitTheme t, Rect lanes, double names, double corner) {
+    final seam = Paint()..color = t.hairlineStrong;
+    final mark = Paint()..color = t.textMuted;
+    final clip = Paint()..color = t.surface4;
+    final held = Paint()..color = t.accent.withValues(alpha: 0.2);
+    final lit = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1
+      ..color = t.accent;
+    final radius = Radius.circular(corner);
+    final row = lanes.height / 4;
+    for (var i = 0; i < 4; i++) {
+      final track =
+          Rect.fromLTWH(lanes.left, lanes.top + row * i, lanes.width, row);
+      // The seam between picture and sound is the one drawn the whole way
+      // across, names included; the others are the lanes' own.
+      if (i > 0) {
+        canvas.drawRect(
+            Rect.fromLTRB(
+                i == 2 ? 0 : lanes.left, track.top, lanes.right, track.top + 1),
+            seam);
+      }
+      // The row's name and its switch.
+      canvas.drawRect(
+          Rect.fromLTWH(5, track.center.dy - 1, math.max(4, names - 18), 2),
+          mark);
+      canvas.drawRect(
+          Rect.fromLTWH(names - 9, track.center.dy - 2, 3.5, 3.5), mark);
+      final body = track.deflate(2);
+      final sound = i >= 2;
+      RRect piece(double from, double to) => RRect.fromRectAndRadius(
+          Rect.fromLTRB(body.left + body.width * from, body.top,
+              body.left + body.width * to, body.bottom),
+          radius);
+      // A sound clip wears a line along its middle, the flat of its wave.
+      void wave(RRect box, Paint paint) => canvas.drawRect(
+          Rect.fromLTRB(box.left + 3, box.outerRect.center.dy - 0.5,
+              box.right - 3, box.outerRect.center.dy + 0.5),
+          paint);
+      switch (i) {
+        case 0:
+          canvas.drawRRect(piece(0.03, 0.34), clip);
+          canvas.drawRRect(piece(0.36, 0.7), clip);
+        case 1 || 2:
+          // The pair: the same stretch on the lowest picture row and the
+          // first sound row, lit together.
+          final pair = piece(0.3, 0.64);
+          canvas.drawRRect(pair, held);
+          canvas.drawRRect(pair.deflate(0.5), lit);
+          if (sound) wave(pair, Paint()..color = t.accent);
+        default:
+          final first = piece(0.03, 0.42);
+          final second = piece(0.46, 0.9);
+          canvas.drawRRect(first, clip);
+          canvas.drawRRect(second, clip);
+          wave(first, mark);
+          wave(second, mark);
+      }
+    }
+  }
+
   @override
   bool shouldRepaint(_EditingPainter old) =>
-      old.vegas != vegas || old.theme != theme;
+      old.editor != editor || old.theme != theme;
 }
 
 /// One style: a drawing of the window as that style lays it out, with its

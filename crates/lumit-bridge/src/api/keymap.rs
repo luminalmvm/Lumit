@@ -44,6 +44,7 @@ pub enum BridgeKeyContext {
     Graph,
     Panels,
     Effects,
+    Cut,
 }
 
 impl From<BridgeKeyContext> for KeyContext {
@@ -57,6 +58,7 @@ impl From<BridgeKeyContext> for KeyContext {
             BridgeKeyContext::Graph => KeyContext::Graph,
             BridgeKeyContext::Panels => KeyContext::Panels,
             BridgeKeyContext::Effects => KeyContext::Effects,
+            BridgeKeyContext::Cut => KeyContext::Cut,
         }
     }
 }
@@ -72,6 +74,7 @@ impl From<KeyContext> for BridgeKeyContext {
             KeyContext::Graph => BridgeKeyContext::Graph,
             KeyContext::Panels => BridgeKeyContext::Panels,
             KeyContext::Effects => BridgeKeyContext::Effects,
+            KeyContext::Cut => BridgeKeyContext::Cut,
         }
     }
 }

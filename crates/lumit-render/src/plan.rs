@@ -557,23 +557,23 @@ pub fn collect_comp_jobs(
             LayerKind::Sequence { clips } => {
                 let flow_neighbours =
                     lumit_core::fx::stack_flow_neighbours(&layer.effects, layer.switches.fx);
-                // The job for the clip live at layer time `lt`, alone
-                // (comp-source clips + gaps are handled elsewhere/skip).
-                // `whole` asks for one real frame of it, the way a
-                // neighbour is picked: no blend partner and no flow.
-                let clip_job = |lt: f64, whole: bool| -> Option<CompJob> {
-                    let Some((_id, lumit_core::sequence::ClipSource::Footage(item), st)) =
-                        lumit_core::sequence::resolve(clips, lt)
-                    else {
+                use lumit_core::sequence::{Clip, ClipSource, Shown};
+                // The job for one clip at layer time `lt`, alone (a clip
+                // whose source is a comp has no job). `whole` asks for
+                // one real frame of it, the way a neighbour is picked: no
+                // blend partner and no flow.
+                let footage_job = |clip: &Clip, lt: f64, whole: bool| -> Option<CompJob> {
+                    let ClipSource::Footage(item) = clip.source else {
                         return None;
                     };
+                    let st = clip.held_source_time(lt);
                     // The one proxy resolution point: which file this
                     // item's pixels come from, and the probe to believe about
                     // them (always the original's — see `effective_media`).
                     let (media, probe) = crate::source::effective_media(doc, probes, item)?;
                     let (fps, nat_w, nat_h, src_frames) = probe.video()?;
                     use lumit_core::retime::Interpolation;
-                    let clip = lumit_core::sequence::active_clip(clips, lt).filter(|_| !whole);
+                    let clip = (!whole).then_some(clip);
                     // Same engagement gate as a Footage layer; the
                     // clip's own retime supplies the speed.
                     let comp_fps = comp.frame_rate.fps();
@@ -623,13 +623,96 @@ pub fn collect_comp_jobs(
                         cuts: Vec::new(),
                     })
                 };
-                let Some(mut job) = clip_job(lt, false) else {
+                let plays_comp = |clip: &Clip| matches!(clip.source, ClipSource::Comp(_));
+                // The job for what the layer shows at layer time `lt`
+                // (`lumit_core::sequence::shown_at`). One whole clip is that
+                // clip's job and nothing more. Inside a fade the job carries
+                // its gain, and inside a dissolve the incoming clip's job
+                // carries the gain and the outgoing clip's job under it.
+                let shown_job = |shown: Shown<'_>, lt: f64, whole: bool| -> Option<CompJob> {
+                    match shown {
+                        Shown::Nothing => None,
+                        Shown::One { clip, gain } => {
+                            let mut job = footage_job(clip, lt, whole)?;
+                            if gain < 1.0 {
+                                job.cuts.push(Cut::Under(gain, None));
+                            }
+                            Some(job)
+                        }
+                        // A composition has no decoded picture to mix here,
+                        // so a dissolve with one on either side is mixed
+                        // where it is drawn, and the footage clip beside it
+                        // is a plain job.
+                        Shown::Two {
+                            outgoing, incoming, ..
+                        } if plays_comp(outgoing) || plays_comp(incoming) => {
+                            footage_job(incoming, lt, whole)
+                                .or_else(|| footage_job(outgoing, lt, whole))
+                        }
+                        Shown::Two {
+                            outgoing,
+                            incoming,
+                            gain,
+                        } => {
+                            let under = footage_job(outgoing, lt, whole);
+                            // An incoming clip with no picture of its own
+                            // leaves the outgoing one as it is.
+                            let Some(mut job) = footage_job(incoming, lt, whole) else {
+                                return under;
+                            };
+                            job.cuts.push(Cut::Under(gain, under));
+                            Some(job)
+                        }
+                    }
+                };
+                let clip_job = |lt: f64, whole: bool| {
+                    shown_job(lumit_core::sequence::shown_at(clips, lt), lt, whole)
+                };
+                let shown = lumit_core::sequence::shown_at(clips, lt);
+                // A clip that plays a composition is planned as a Precomp
+                // layer's comp is: the footage inside it, at the moment the
+                // clip shows, behind the same guard against a comp inside
+                // itself. A frame of it that is already a finished texture
+                // wants no decodes, asked where the builder asks by the same
+                // name, which is at the live time.
+                //
+                // ponytail: at the frame's own time only. A temporal effect
+                // that reads this layer at another moment is not handed a
+                // composition clip's footage as it is then. The upgrade is
+                // the other moments a Precomp layer plans.
+                let (first, second) = match shown {
+                    Shown::Nothing => (None, None),
+                    Shown::One { clip, .. } => (Some(clip), None),
+                    Shown::Two {
+                        outgoing, incoming, ..
+                    } => (Some(outgoing), Some(incoming)),
+                };
+                for clip in first.into_iter().chain(second) {
+                    let ClipSource::Comp(nested_id) = clip.source else {
+                        continue;
+                    };
+                    let Some(nested) = doc
+                        .comp(nested_id)
+                        .filter(|_| !visited.contains(&nested_id))
+                    else {
+                        continue;
+                    };
+                    let st = clip.nested_time(nested, lt);
+                    if sample_times[idx] == t && held.is_some_and(|held| held(nested, st, None)) {
+                        continue;
+                    }
+                    visited.push(nested_id);
+                    collect_comp_jobs(ctx, nested, st, &[], jobs, visited, false);
+                    visited.pop();
+                }
+                let Some(mut job) = shown_job(shown, lt, false) else {
                     continue;
                 };
                 // Neighbour frames for a temporal effect stack, as a Footage
                 // layer's are, through whichever clip is live then. A clip of
                 // this job's footage is one more frame of it, and any other
-                // is a job of its own. A gap is no neighbour.
+                // is a job of its own, as is one inside a fade or a dissolve.
+                // A gap is no neighbour.
                 if lumit_core::fx::stack_is_temporal(&layer.effects, layer.switches.fx) {
                     let window = lumit_core::fx::stack_temporal_window(
                         &layer.effects,
@@ -638,7 +721,9 @@ pub fn collect_comp_jobs(
                     );
                     for o in window.into_iter().filter(|&o| o != 0) {
                         match clip_job(lt + f64::from(o) * comp_dt, true) {
-                            Some(n) if n.item == job.item => job.temporal.push((o, n.source_frame)),
+                            Some(n) if n.item == job.item && n.cuts.is_empty() => {
+                                job.temporal.push((o, n.source_frame));
+                            }
                             Some(n) => job.cuts.push(Cut::Neighbour(o, n)),
                             None => {}
                         }
@@ -1174,11 +1259,12 @@ pub fn same_decode(a: &[CompJob], b: &[CompJob]) -> bool {
 
 impl Cut {
     /// What this asks for, as numbers that compare and hash: which kind, the
-    /// offset, and the other clip's own content name.
-    fn name(&self) -> (bool, u64, Option<u128>) {
+    /// offset or the gain, and the other clip's own content name.
+    fn name(&self) -> (u8, u64, Option<u128>) {
         match self {
-            Cut::Neighbour(o, job) => (false, f64::from(*o).to_bits(), Some(job.source_key())),
-            Cut::Moment(o, job) => (true, o.to_bits(), job.as_ref().map(CompJob::source_key)),
+            Cut::Neighbour(o, job) => (0, f64::from(*o).to_bits(), Some(job.source_key())),
+            Cut::Moment(o, job) => (1, o.to_bits(), job.as_ref().map(CompJob::source_key)),
+            Cut::Under(gain, job) => (2, gain.to_bits(), job.as_ref().map(CompJob::source_key)),
         }
     }
 }
@@ -1254,9 +1340,9 @@ impl CompJob {
             feed_synthesis(&mut h, flow);
         }
         // Another clip's frame is content too, and so is a gap.
-        for (moment, offset, clip) in self.cuts.iter().map(Cut::name) {
+        for (kind, offset, clip) in self.cuts.iter().map(Cut::name) {
             h.update(b"cut/");
-            h.update(&[u8::from(moment), u8::from(clip.is_some())]);
+            h.update(&[kind, u8::from(clip.is_some())]);
             h.update(&offset.to_le_bytes());
             h.update(&clip.unwrap_or(0).to_le_bytes());
         }

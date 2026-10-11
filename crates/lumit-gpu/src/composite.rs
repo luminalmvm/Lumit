@@ -37,6 +37,13 @@ pub enum Blend {
     Normal,
     Add,
     Multiply,
+    /// The sum of two premultiplied pictures, alpha and all: one half of a
+    /// crossfade laid on the other, each at its own share of the whole. Add
+    /// sums the light and lets the alpha lie over, as a light on a surface
+    /// does. This sums both, so two opaque halves make an opaque picture. No
+    /// layer can choose it. A Sequence layer's dissolve draws with it where
+    /// a composition is one of the two clips.
+    Plus,
     /// Shader-computed via the dst snapshot (perceptual — 06 §blend domains).
     Screen,
     Overlay,
@@ -73,7 +80,10 @@ pub enum Blend {
 impl Blend {
     /// True for blends the fragment computes itself from a dst snapshot.
     fn uses_snapshot(self) -> bool {
-        !matches!(self, Blend::Normal | Blend::Add | Blend::Multiply)
+        !matches!(
+            self,
+            Blend::Normal | Blend::Add | Blend::Multiply | Blend::Plus
+        )
     }
 
     /// Shader selector (composite.wgsl blend_encoded / fs_layer_snapshot).
@@ -104,7 +114,7 @@ impl Blend {
             Blend::Saturation => 20.0,
             Blend::Colour => 21.0,
             Blend::Luminosity => 22.0,
-            Blend::Normal | Blend::Add | Blend::Multiply => -1.0,
+            Blend::Normal | Blend::Add | Blend::Multiply | Blend::Plus => -1.0,
         }
     }
 }
@@ -376,6 +386,7 @@ struct PipelineSet {
     normal: wgpu::RenderPipeline,
     add: wgpu::RenderPipeline,
     multiply: wgpu::RenderPipeline,
+    plus: wgpu::RenderPipeline,
     snapshot: wgpu::RenderPipeline,
     /// The adjustment-layer seed, as a **draw** rather than a copy (trap 1):
     /// `copy_texture_to_texture` cannot cross sample counts, and copying into
@@ -760,6 +771,15 @@ impl Compositor {
             },
             alpha: OVER,
         };
+        let plus = wgpu::BlendComponent {
+            src_factor: wgpu::BlendFactor::One,
+            dst_factor: wgpu::BlendFactor::One,
+            operation: wgpu::BlendOperation::Add,
+        };
+        let blend_plus = wgpu::BlendState {
+            color: plus,
+            alpha: plus,
+        };
         let multisample = wgpu::MultisampleState {
             count: samples,
             ..Default::default()
@@ -795,6 +815,7 @@ impl Compositor {
             normal: make("fs_layer", Some(blend), "composite-normal"),
             add: make("fs_layer", Some(blend_add), "composite-add"),
             multiply: make("fs_layer", Some(blend_multiply), "composite-multiply"),
+            plus: make("fs_layer", Some(blend_plus), "composite-plus"),
             // Snapshot blends: no fixed-function blending — the fragment
             // composites itself from the dst snapshot and writes the final value.
             snapshot: make("fs_layer_snapshot", None, "composite-snapshot"),
@@ -1250,6 +1271,7 @@ impl Compositor {
                         Blend::Normal => &pipelines.normal,
                         Blend::Add => &pipelines.add,
                         Blend::Multiply => &pipelines.multiply,
+                        Blend::Plus => &pipelines.plus,
                         _ => &pipelines.snapshot,
                     });
                     rpass.set_bind_group(0, &binds[idx], &[]);

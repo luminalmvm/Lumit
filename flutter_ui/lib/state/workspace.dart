@@ -761,16 +761,17 @@ class Workspace extends ChangeNotifier {
   /// they came from after months of work would be absurd.
   bool firstRunDone = true;
 
-  /// Take the Vegas answer, or the After Effects one, from the first-run
-  /// screen. Both settings move together here and separately in Settings — this
-  /// is the pair the screen offers, not a mode the rest of the code reads.
-  /// Marks the screen answered, so it is asked exactly once.
-  ///
-  /// [sequenceLayers] is the Vegas answer's own tick: without it the Retime
-  /// graph opens to speed and video still arrives as an ordinary layer.
-  void setEditingStyle({required bool vegas, bool sequenceLayers = true}) {
-    interface.retimeOpensToSpeed = vegas;
-    interface.videoAsSequenceLayer = vegas && sequenceLayers;
+  /// Take the first-run screen's editing answer: whether the Retime graph
+  /// opens to speed, and whether video arrives as a Sequence layer. The two
+  /// move together here and separately in Settings: each card is a pair the
+  /// screen offers, not a mode the rest of the code reads. After Effects is
+  /// neither, Vegas is both (or the speed graph alone, by its tick), and
+  /// Premiere Pro or Resolve is Sequence layers alone. Marks the screen
+  /// answered, so it is asked exactly once.
+  void setEditingStyle(
+      {required bool speedGraph, required bool sequenceLayers}) {
+    interface.retimeOpensToSpeed = speedGraph;
+    interface.videoAsSequenceLayer = sequenceLayers;
     firstRunDone = true;
     settingsChanged();
   }

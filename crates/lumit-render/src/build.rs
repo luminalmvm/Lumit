@@ -3084,7 +3084,170 @@ fn comp_walk(
             })
         });
 
+        // What a Sequence layer shows where a composition is one of the clips
+        // showing. `None` at every other moment, where the decoded pixels
+        // are the layer's source as they always were.
+        let comp_clips = match &layer.kind {
+            LayerKind::Sequence { clips } if !layer.is_adjustment() => {
+                use lumit_core::sequence::{Clip, ClipSource, Shown};
+                let plays = |c: &Clip| matches!(c.source, ClipSource::Comp(_));
+                let shown = lumit_core::sequence::shown_at(clips, lt);
+                match shown {
+                    Shown::One { clip, .. } if plays(clip) => Some(shown),
+                    Shown::Two {
+                        outgoing, incoming, ..
+                    } if plays(outgoing) || plays(incoming) => Some(shown),
+                    _ => None,
+                }
+            }
+            _ => None,
+        };
+
+        // How much of the layer's opacity a composition clip inside a fade is
+        // showing. One everywhere else.
+        let mut clip_share = 1.0f32;
         let (source, natural) = match &layer.kind {
+            // **A Sequence clip that plays a composition** draws that comp
+            // as a Precomp layer draws its own: walked at the moment the clip
+            // shows, named by its own frame key, sized as the comp is, and
+            // behind the same guard against a comp inside itself.
+            //
+            // A dissolve with such a clip is mixed on the card, since a comp
+            // has no pixels until it is rendered: the two clips become the
+            // draws of one more Nested, each at its share, the second laid
+            // on the first with `Blend::Plus`. That is the crossfade the
+            // decode worker makes of two footage clips
+            // (`lumit_core::pixels::dissolve_rgba`), and two whole pictures
+            // sum to a whole one.
+            //
+            // ponytail: a fade at a lone end is the clip's share of the
+            // layer's opacity (`clip_share`), so it comes after the layer's
+            // effects, where a footage clip fades before them. A nested
+            // picture is read back as straight alpha, so one faded ahead of
+            // the stack would be dimmed twice, as anything part transparent
+            // inside a Precomp is. The upgrade is a nested picture read as
+            // the premultiplied one it is.
+            //
+            // ponytail: the frame's own picture only. Such a clip read as a
+            // matte or as an effect's layer input, and a temporal effect's
+            // neighbours on this layer, do not see the comp. The upgrade is
+            // the roads a Precomp layer has for each.
+            LayerKind::Sequence { .. } if comp_clips.is_some() => {
+                use lumit_core::sequence::{Clip, ClipSource, Shown};
+                // One clip's picture and its natural size: its comp, or the
+                // footage the worker decoded for this layer.
+                let mut picture = |clip: &Clip| -> Option<(DrawSource, (f32, f32))> {
+                    let nested_id = match clip.source {
+                        ClipSource::Footage(_) => {
+                            let lp = pixels_by_layer.get(&layer.id)?;
+                            return Some((
+                                DrawSource::Pixels {
+                                    rgba: Arc::clone(&lp.rgba),
+                                    tex_w: lp.width,
+                                    tex_h: lp.height,
+                                    format: lp.format,
+                                    colour_space: None,
+                                },
+                                (lp.natural_w as f32, lp.natural_h as f32),
+                            ));
+                        }
+                        ClipSource::Comp(id) => id,
+                    };
+                    let nested = doc
+                        .comp(nested_id)
+                        .filter(|_| !visited.contains(&nested_id))?;
+                    let st = clip.nested_time(nested, lt);
+                    visited.push(nested_id);
+                    let nested_draws = comp_walk(
+                        doc,
+                        nested,
+                        st,
+                        clip.nested_time(nested, frame_lt),
+                        pixels_by_layer,
+                        visited,
+                        keys,
+                        false,
+                        inner,
+                        None,
+                    );
+                    visited.pop();
+                    Some((
+                        DrawSource::Nested {
+                            width: nested.width,
+                            height: nested.height,
+                            background: [0.0, 0.0, 0.0, 0.0],
+                            draws: nested_draws,
+                            camera: crate::track::camera_pose(doc, nested, st),
+                            key: keys.and_then(|k| k.nested_key_with(nested, st, None)),
+                            paint: Vec::new(),
+                            paint_time: lt,
+                        },
+                        (nested.width as f32, nested.height as f32),
+                    ))
+                };
+                // The clips showing, each with its share of the picture.
+                let (under, top) = match comp_clips {
+                    Some(Shown::One { clip, gain }) => (None, picture(clip).map(|p| (p, gain))),
+                    Some(Shown::Two {
+                        outgoing,
+                        incoming,
+                        gain,
+                    }) => (
+                        picture(outgoing).map(|p| (p, 1.0 - gain)),
+                        picture(incoming).map(|p| (p, gain)),
+                    ),
+                    _ => continue,
+                };
+                let (mut source, natural) = match (under, top) {
+                    (None, None) => continue,
+                    // One picture: it is the layer's source as it stands,
+                    // and a fade is taken where the layer is composited.
+                    (Some(((source, size), share)), None)
+                    | (None, Some(((source, size), share))) => {
+                        clip_share = share as f32;
+                        (source, size)
+                    }
+                    // A dissolve: both, each at its share and fitted about
+                    // the centre of the incoming clip's size, which is the
+                    // layer's across the overlap as it is where two footage
+                    // clips are mixed.
+                    (Some((going, away)), Some((coming, here))) => {
+                        let natural = coming.1;
+                        let part = |(source, size): (DrawSource, (f32, f32)), share: f64, blend| {
+                            let mut draw = read_draw(layer, source, size);
+                            draw.position = (natural.0 * 0.5, natural.1 * 0.5);
+                            let fit =
+                                (natural.0 / size.0.max(1.0)).min(natural.1 / size.1.max(1.0));
+                            draw.scale = (fit * 100.0, fit * 100.0);
+                            draw.opacity = (share * 100.0) as f32;
+                            draw.blend = blend;
+                            draw
+                        };
+                        let mixed = DrawSource::Nested {
+                            width: natural.0 as u32,
+                            height: natural.1 as u32,
+                            background: [0.0, 0.0, 0.0, 0.0],
+                            draws: vec![
+                                part(going, away, lumit_gpu::Blend::Normal),
+                                part(coming, here, lumit_gpu::Blend::Plus),
+                            ],
+                            camera: None,
+                            // A mix has no name of its own. Each comp
+                            // inside it keeps the one it was given above.
+                            key: None,
+                            paint: Vec::new(),
+                            paint_time: lt,
+                        };
+                        (mixed, natural)
+                    }
+                };
+                // Paint on the layer is stamped into the picture once it is
+                // rendered, as a Precomp layer's is.
+                if let DrawSource::Nested { paint, .. } = &mut source {
+                    paint.clone_from(&layer.paint);
+                }
+                (source, natural)
+            }
             // Guarded so a Precomp acting as an adjustment falls
             // through to the adjustment arm below rather than drawing its comp.
             LayerKind::Precomp { comp: nested_id } if !layer.is_adjustment() => {
@@ -3567,9 +3730,11 @@ fn comp_walk(
             DrawSource::Adjust | DrawSource::Graph(_) => None,
         };
         // Decoded neighbour frames for a temporal effect (echo), carried from
-        // the layer's decode job; empty for a plain stack.
+        // the layer's decode job; empty for a plain stack, and where a
+        // composition clip's picture is the source and not the decode.
         let neighbours: Vec<(i32, Vec<u8>, u32, u32)> = pixels_by_layer
             .get(&layer.id)
+            .filter(|_| comp_clips.is_none())
             .map(|lp| {
                 lp.temporal
                     .iter()
@@ -3582,6 +3747,7 @@ fn comp_walk(
         // `(u, v, conf)` are at the layer's decoded size).
         let flow_fields = pixels_by_layer
             .get(&layer.id)
+            .filter(|_| comp_clips.is_none())
             .map(|lp| {
                 lp.flow_fields
                     .iter()
@@ -3639,7 +3805,7 @@ fn comp_walk(
                 tr.scale_y.value_at_with_context(lt, context.clone()) as f32,
             ),
             rotation_deg: tr.rotation.value_at_with_context(lt, context.clone()) as f32,
-            opacity: tr.opacity.value_at_with_context(lt, context.clone()) as f32,
+            opacity: tr.opacity.value_at_with_context(lt, context.clone()) as f32 * clip_share,
             z: tr.position_z.value_at_with_context(lt, context.clone()) as f32,
             rotation_x_deg: tr.rotation_x.value_at_with_context(lt, context.clone()) as f32,
             rotation_y_deg: tr.rotation_y.value_at_with_context(lt, context.clone()) as f32,
@@ -3647,7 +3813,13 @@ fn comp_walk(
             matte,
             blend: blend_of(layer.blend),
             mask_cov: match &layer.kind {
-                LayerKind::Precomp { .. } if !layer.masks.is_empty() => {
+                // A comp has no pixels for a mask to be cut into, a
+                // composition clip's as much as a Precomp layer's.
+                LayerKind::Precomp { .. } | LayerKind::Sequence { .. }
+                    if !layer.masks.is_empty()
+                        && (comp_clips.is_some()
+                            || matches!(layer.kind, LayerKind::Precomp { .. })) =>
+                {
                     let (w, h) = (natural.0 as u32, natural.1 as u32);
                     Some((
                         mask_rgba(&lumit_core::mask::combined_coverage(
@@ -6407,6 +6579,8 @@ mod render_below_at_tests {
             match cut {
                 Cut::Neighbour(o, _) => lp.temporal.push((*o, neighbour())),
                 Cut::Moment(o, clip) => lp.shutter.push((*o, clip.as_ref().and_then(|_| moment()))),
+                // Mixed into the frame's own pixels where it is decoded.
+                Cut::Under(..) => {}
             }
         }
         lp

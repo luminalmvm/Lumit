@@ -35,9 +35,19 @@ composites over it.
 | **Audio layer** | An audio item, or footage's audio |
 | **Camera**, **Light** layers | 3D viewpoint and light. Only affect 3D layers |
 
-- **Clip**: an entry inside a Sequence layer, and only there. Clips on a picture layer
-  never overlap. On an audio-only Sequence layer they may, and the overlap is a crossfade.
-  A cut between clips is an **edit point**.
+- **Clip**: an entry inside a Sequence layer, and only there. Two clips may overlap, never
+  three. On a picture layer the overlap is a **dissolve**: the later clip comes in as the
+  earlier goes out, through the later clip's fade-in shape, for as long as they overlap. On
+  an audio-only layer it is a crossfade. A fade at an end nothing overlaps runs to
+  transparent, or to silence. A cut between clips is an **edit point**.
+- **Linked clips**: a picture clip and its sound clip, on two Sequence layers, that move,
+  trim and cut together while Linked is on.
+- **Ripple**: an edit that moves everything after it by the same amount. **Insert** places
+  a clip and ripples, **overwrite** places it over what is there. **Roll** moves one edit
+  point, **slip** changes which source a clip shows, **slide** moves a clip between its
+  neighbours.
+- **Lift** removes a span and leaves the gap, **extract** removes it and closes the gap.
+  **Match frame** loads a clip's footage into the source view on the frame the comp shows.
 - **Anchor point**: the point the transform pivots around. Position places it.
 - **Parenting**: a layer can follow another layer's transform. No cycles.
 - **Switches**: per-layer toggles. Visible, audible, solo, lock, shy, quality, motion blur,
@@ -119,6 +129,8 @@ Not interchangeable.
 | **Graph panel** | Draws a layer's effects as nodes and wires. Not the evaluation graph |
 | **Viewer** | Shows a comp, footage or layer. Holds one, two or four **views** |
 | **Timeline** | A comp's layers against time |
+| **Cut timeline** | The same layers as tracks of clips, for cutting |
+| **Source view** | A Viewer view of one footage item, with **In** and **Out** marks on the stretch to place |
 | **Work area** | The span used for preview and default export |
 | **Playhead** | The current time. Not *CTI* |
 | **Scopes** | Waveform, vectorscope, histogram |
@@ -157,8 +169,8 @@ Not interchangeable.
 - **To track** something through a shot is the trade's verb and stays. A track is one
   followed feature, never a timeline row.
 - **To clip** in keying and colour (clip black, clipped highlights) stays.
-- The Audio timeline panel calls its rows tracks, in its own strings and files only.
-  Everywhere else it's a Sequence layer with `audio_only` set.
+- The Audio timeline and Cut timeline panels call their rows tracks, in their own strings
+  and files only. Everywhere else it's a Sequence layer, with `audio_only` set for sound.
 - The Retime graph labels its lenses Time and Velocity. Speed stays the word for the
   quantity.
 - **Switch** means both the node and a layer's toggles.

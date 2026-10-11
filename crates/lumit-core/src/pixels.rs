@@ -438,6 +438,99 @@ pub fn blend_f32(a: &[u8], b: &[u8], t: f32) -> Vec<u8> {
     out
 }
 
+/// The sRGB curve as two tables, so a frame's worth of pixels can be mixed in
+/// linear light without a `powf` apiece: every byte's linear value, and the
+/// byte for a linear value in 4,096 steps. That many steps bring every byte
+/// back to itself, which is what leaves either end of a dissolve exact.
+fn srgb_tables() -> &'static ([f32; 256], [u8; 4096]) {
+    static TABLES: std::sync::OnceLock<([f32; 256], [u8; 4096])> = std::sync::OnceLock::new();
+    TABLES.get_or_init(|| {
+        (
+            std::array::from_fn(|v| srgb_decode(v as u8)),
+            std::array::from_fn(|i| srgb_encode(i as f32 / 4095.0)),
+        )
+    })
+}
+
+/// A Sequence layer's dissolve and its fade, in place. With a picture under
+/// it, `top` becomes the crossfade `under * (1 - gain) + top * gain`. With
+/// none, it fades to transparent: its alpha times `gain`. Both pictures are
+/// straight-alpha RGBA8 of one size, and where `under` stops short it is
+/// transparent.
+///
+/// The crossfade is made on premultiplied values in linear light, the sum the
+/// compositor makes when a composition is one of the two clips
+/// (`lumit_gpu::Blend::Plus`), so a dissolve looks the same whichever way a
+/// clip reaches the picture. Premultiplied, so a clip with transparency goes
+/// out as the other comes in and does not sit whole under it. A pair of
+/// opaque pixels takes the short road, which is every pixel of ordinary
+/// footage.
+pub fn dissolve_rgba(top: &mut [u8], under: Option<&[u8]>, gain: f64) {
+    let g = gain.clamp(0.0, 1.0) as f32;
+    // Rounded by the cast: every value here is nought or more.
+    let byte = |v: f32| (v + 0.5) as u8;
+    let Some(under) = under else {
+        for t in top.chunks_exact_mut(4) {
+            t[3] = byte(f32::from(t[3]) * g);
+        }
+        return;
+    };
+    let (linear, encoded) = srgb_tables();
+    let lin = |v: u8| linear[usize::from(v)];
+    let enc = |v: f32| encoded[((v * 4095.0 + 0.5) as usize).min(4095)];
+    let mut under = under.chunks_exact(4);
+    for t in top.chunks_exact_mut(4) {
+        let u = under.next().unwrap_or(&[0; 4]);
+        if t[3] == u8::MAX && u[3] == u8::MAX {
+            for c in 0..3 {
+                t[c] = enc(lin(t[c]) * g + lin(u[c]) * (1.0 - g));
+            }
+        } else {
+            let (coming, going) = (
+                f32::from(t[3]) / 255.0 * g,
+                f32::from(u[3]) / 255.0 * (1.0 - g),
+            );
+            let alpha = coming + going;
+            if alpha > 0.0 {
+                for c in 0..3 {
+                    t[c] = enc((lin(t[c]) * coming + lin(u[c]) * going) / alpha);
+                }
+            }
+            t[3] = byte(alpha * 255.0);
+        }
+    }
+}
+
+/// [`dissolve_rgba`] for float frames (`lumit_media::PixelFormat::LinearF32`),
+/// which are linear already, with no clamp at the top for [`blend_f32`]'s
+/// reasons.
+pub fn dissolve_f32(top: &mut [u8], under: Option<&[u8]>, gain: f64) {
+    let g = gain.clamp(0.0, 1.0) as f32;
+    for n in 0..top.len() / 16 {
+        let t = f32_px(top, n);
+        let mut out = t;
+        match under {
+            None => out[3] = t[3] * g,
+            Some(under) => {
+                // Nought where the picture under this one stops short.
+                let u = f32_px(under, n);
+                let (coming, going) = (t[3] * g, u[3] * (1.0 - g));
+                out[3] = coming + going;
+                if t[3] == 1.0 && u[3] == 1.0 {
+                    for c in 0..3 {
+                        out[c] = t[c] * g + u[c] * (1.0 - g);
+                    }
+                } else if out[3] > 0.0 {
+                    for c in 0..3 {
+                        out[c] = (t[c] * coming + u[c] * going) / out[3];
+                    }
+                }
+            }
+        }
+        set_f32_px(top, n, out);
+    }
+}
+
 /// Which source frame(s) show `source_time` seconds of footage at `fps` over
 /// `frames` frames. Nearest → `(frame, None)`. Blend → `(floor, Some((ceil,
 /// weight)))` where `weight` is how far past `floor` the moment sits (0 at the
@@ -487,6 +580,44 @@ pub fn frame_pick(
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
+
+    /// The middle of a dissolve between two flat colours is their even mix
+    /// in linear light, its ends are each picture alone, and a fade over
+    /// nothing takes the picture to transparent and leaves its colour be.
+    #[test]
+    fn a_dissolve_mixes_evenly_and_a_lone_fade_goes_to_transparent() {
+        const RED: [u8; 4] = [255, 0, 0, 255];
+        const BLUE: [u8; 4] = [0, 0, 255, 255];
+        let mixed = |top: [u8; 4], gain: f64, under: Option<&[u8]>| {
+            let mut top = top.repeat(2);
+            dissolve_rgba(&mut top, under, gain);
+            top
+        };
+        let blue = BLUE.repeat(2);
+        assert_eq!(mixed(RED, 0.0, Some(&blue)), blue, "the outgoing clip");
+        // Half the light of each: 188 is what sRGB writes for a half.
+        assert_eq!(mixed(RED, 0.5, Some(&blue)), [188, 0, 188, 255].repeat(2));
+        assert_eq!(mixed(RED, 1.0, Some(&blue)), RED.repeat(2), "the incoming");
+        // Every byte comes back as itself, so an end is the clip exactly.
+        for v in 0..=u8::MAX {
+            let grey = [v, v, v, 255];
+            assert_eq!(mixed(grey, 0.3, Some(&grey.repeat(2))), grey.repeat(2));
+        }
+        // A clip with nothing in it does not hold the other one whole under
+        // it: the outgoing clip is half gone at the middle.
+        assert_eq!(mixed([0; 4], 0.5, Some(&blue)), [0, 0, 255, 128].repeat(2));
+        assert_eq!(mixed(RED, 0.0, None), [255, 0, 0, 0].repeat(2));
+        assert_eq!(mixed(RED, 0.5, None), [255, 0, 0, 128].repeat(2));
+        assert_eq!(mixed(RED, 1.0, None), RED.repeat(2));
+
+        // The float road gives the same answers, above white too.
+        let float = |px: [f32; 4]| px.iter().flat_map(|v| v.to_le_bytes()).collect::<Vec<u8>>();
+        let mut top = float([4.0, 0.0, 0.0, 1.0]);
+        dissolve_f32(&mut top, Some(&float([0.0, 0.0, 2.0, 1.0])), 0.5);
+        assert_eq!(f32_px(&top, 0), [2.0, 0.0, 1.0, 1.0]);
+        dissolve_f32(&mut top, None, 0.25);
+        assert_eq!(f32_px(&top, 0), [2.0, 0.0, 1.0, 0.25]);
+    }
 
     #[test]
     fn blend_and_frame_pick() {

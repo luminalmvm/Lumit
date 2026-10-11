@@ -95,6 +95,38 @@ impl ActionId {
             "keyframe.interpolation" => "Set the keyframe's interpolation",
             "keyframe.speed" => "Set the keyframe's speed",
             "expression.add" => "Add an expression",
+            "cut.mark.in" => "Mark in",
+            "cut.mark.out" => "Mark out",
+            "cut.insert" => "Insert at the playhead",
+            "cut.overwrite" => "Overwrite at the playhead",
+            "cut.delete.ripple" => "Ripple delete",
+            "cut.tool.select" => "Select clips",
+            "cut.tool.razor" => "Cut clips with the razor",
+            "cut.tool.ripple" => "Ripple trim",
+            "cut.tool.roll" => "Roll an edit point",
+            "cut.tool.slip" => "Slip a clip",
+            "cut.tool.slide" => "Slide a clip",
+            "cut.trim.start.ripple" => "Ripple trim the start to the playhead",
+            "cut.trim.end.ripple" => "Ripple trim the end to the playhead",
+            "cut.trim.start" => "Trim the start to the playhead",
+            "cut.trim.end" => "Trim the end to the playhead",
+            "cut.roll.prev" => "Roll the previous edit point to the playhead",
+            "cut.roll.next" => "Roll the next edit point to the playhead",
+            "cut.add.edit" => "Cut at the playhead",
+            "cut.add.edit.all" => "Cut every track at the playhead",
+            "cut.nudge.left" => "Nudge clips one frame earlier",
+            "cut.nudge.right" => "Nudge clips one frame later",
+            "cut.nudge.left.many" => "Nudge clips five frames earlier",
+            "cut.nudge.right.many" => "Nudge clips five frames later",
+            "cut.nudge.up" => "Move clips up a track",
+            "cut.nudge.down" => "Move clips down a track",
+            "cut.select.at.playhead" => "Select the clip at the playhead",
+            "cut.snap.toggle" => "Turn snapping on or off",
+            "cut.linked.toggle" => "Turn linked selection on or off",
+            "cut.lift" => "Lift the work area",
+            "cut.extract" => "Extract the work area",
+            "cut.match.frame" => "Match frame",
+            "cut.transition.default" => "Add the default transition",
             "workarea.set.start" => "Set work-area start to the playhead",
             "workarea.set.end" => "Set work-area end to the playhead",
             "marker.add" => "Add a marker at the playhead",
@@ -248,12 +280,15 @@ pub enum KeyContext {
     /// Panel focus/search shortcuts (docs/07 §15 "Panels").
     Panels,
     Effects,
+    /// The Cut workspace's timeline, where the editor's own letters shadow
+    /// the app-wide ones.
+    Cut,
 }
 
 impl KeyContext {
     /// Every context, in the order Settings → Keymap lists them: the ones live
     /// everywhere first, then the panels roughly as the workspace reads.
-    pub const ALL: [KeyContext; 8] = [
+    pub const ALL: [KeyContext; 9] = [
         KeyContext::Global,
         KeyContext::Tools,
         KeyContext::Project,
@@ -262,6 +297,7 @@ impl KeyContext {
         KeyContext::Graph,
         KeyContext::Panels,
         KeyContext::Effects,
+        KeyContext::Cut,
     ];
 
     /// The heading Settings → Keymap puts above this context's table. Sentence
@@ -279,6 +315,7 @@ impl KeyContext {
             KeyContext::Graph => "Graph editor",
             KeyContext::Panels => "Panels",
             KeyContext::Effects => "Effect controls",
+            KeyContext::Cut => "Cut timeline",
         }
     }
 }
@@ -780,7 +817,7 @@ fn row(context: KeyContext, chord: &str, action: &str) -> Option<Binding> {
 /// it to Cmd on macOS. Ships conflict-free (proven in tests).
 #[must_use]
 pub fn default_keymap() -> Keymap {
-    use KeyContext::{Effects, Global, Graph, Panels, Project, Timeline, Tools, Viewer};
+    use KeyContext::{Cut, Effects, Global, Graph, Panels, Project, Timeline, Tools, Viewer};
     let rows = [
         // --- Global: transport, navigation, app-wide commands ---
         row(Global, "Space", "playback.toggle"),
@@ -1021,6 +1058,52 @@ pub fn default_keymap() -> Keymap {
         row(Panels, "Mod+4", "panel.toggle.audio"),
         row(Panels, "Mod+6", "panel.toggle.text"),
         row(Panels, "Mod+7", "panel.toggle.paragraph"),
+        // --- Cut timeline ---
+        // An editor's own keys, the ones Premiere uses. I, O and the two
+        // punctuation keys are spoken for app-wide, by the layer's in and out
+        // points and the keyframe steps, so they are bound here and shadow
+        // those inside the Cut timeline and nowhere else, the way `L` does
+        // in the Timeline.
+        row(Cut, "I", "cut.mark.in"),
+        row(Cut, "O", "cut.mark.out"),
+        row(Cut, ",", "cut.insert"),
+        row(Cut, ".", "cut.overwrite"),
+        row(Cut, "Shift+Delete", "cut.delete.ripple"),
+        // The tools, the trims to the playhead and the nudges, on the
+        // letters editors already have under their fingers. Each shadows an
+        // app-wide key inside the Cut timeline alone.
+        row(Cut, "V", "cut.tool.select"),
+        row(Cut, "C", "cut.tool.razor"),
+        row(Cut, "B", "cut.tool.ripple"),
+        row(Cut, "N", "cut.tool.roll"),
+        row(Cut, "Y", "cut.tool.slip"),
+        row(Cut, "U", "cut.tool.slide"),
+        row(Cut, "Q", "cut.trim.start.ripple"),
+        row(Cut, "W", "cut.trim.end.ripple"),
+        row(Cut, "Alt+Q", "cut.trim.start"),
+        row(Cut, "Alt+W", "cut.trim.end"),
+        row(Cut, "Shift+Q", "cut.roll.prev"),
+        row(Cut, "Shift+W", "cut.roll.next"),
+        row(Cut, "Mod+K", "cut.add.edit"),
+        row(Cut, "Mod+Shift+K", "cut.add.edit.all"),
+        row(Cut, "Alt+ArrowLeft", "cut.nudge.left"),
+        row(Cut, "Alt+ArrowRight", "cut.nudge.right"),
+        row(Cut, "Alt+Shift+ArrowLeft", "cut.nudge.left.many"),
+        row(Cut, "Alt+Shift+ArrowRight", "cut.nudge.right.many"),
+        row(Cut, "Alt+ArrowUp", "cut.nudge.up"),
+        row(Cut, "Alt+ArrowDown", "cut.nudge.down"),
+        row(Cut, "D", "cut.select.at.playhead"),
+        row(Cut, "S", "cut.snap.toggle"),
+        row(Cut, "Shift+L", "cut.linked.toggle"),
+        row(Cut, ";", "cut.lift"),
+        row(Cut, "'", "cut.extract"),
+        row(Cut, "F", "cut.match.frame"),
+        row(Cut, "Mod+D", "cut.transition.default"),
+        row(Cut, "=", "timeline.zoom.in"),
+        row(Cut, "-", "timeline.zoom.out"),
+        row(Cut, "\\", "timeline.zoom.fit"),
+        row(Cut, "ArrowUp", "edit.point.prev"),
+        row(Cut, "ArrowDown", "edit.point.next"),
     ];
     let mut bindings: Vec<Binding> = rows.into_iter().flatten().collect();
     // Alt+Shift+1…9 switch workspace.
@@ -1237,8 +1320,8 @@ mod tests {
     }
 
     /// `L` reveals a layer's Audio in the Timeline and shuttles forward
-    /// everywhere else — the one shadow the default ships with, and it
-    /// is deliberate.
+    /// everywhere else. That and the Cut timeline's editing keys are the
+    /// shadows the default ships with, and they are deliberate.
     #[test]
     fn the_default_gives_the_timeline_l_and_leaves_the_shuttle_elsewhere() {
         let km = default_keymap();
@@ -1261,8 +1344,8 @@ mod tests {
                 .iter()
                 .map(|s| s.chord.to_string())
                 .collect::<Vec<_>>(),
-            vec!["L".to_string()],
-            "one deliberate shadow, and it is named in the docs"
+            ["L", "I", "O", ",", ".", "B", "N", "Mod+K", "Mod+Shift+K"],
+            "the deliberate shadows, and no others"
         );
     }
 

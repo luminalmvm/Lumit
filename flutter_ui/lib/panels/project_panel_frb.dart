@@ -60,6 +60,7 @@ import 'package:provider/provider.dart';
 
 import '../l10n/strings.dart';
 import '../state/file_dialogs.dart';
+import '../state/timecode.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'project_chrome_frb.dart';
@@ -389,6 +390,12 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   /// picture to give). Cleared — and every image disposed — with the epoch.
   final Map<String, ui.Image?> _thumbs = {};
 
+  /// Whether the rows wear those poster frames too (Settings, **Thumbnails on
+  /// footage rows**). Read once per build; the rows are handed the picture
+  /// out of [_thumbs], which the walk fills for every drawn row anyway, so
+  /// the switch costs nothing at the bridge that the card was not paying.
+  bool _thumbnails = false;
+
   /// The frames the pointer has landed on while scrubbing the card's poster
   /// frame, by frame number — and which item they are of.
   ///
@@ -558,6 +565,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
       ProjectColumn.items => _childCounts[id] ?? -1,
       ProjectColumn.size => _cellNumber(cells().size),
       ProjectColumn.fps => _cellNumber(cells().fps),
+      ProjectColumn.duration => projectClockSeconds(cells().duration),
       ProjectColumn.path => (cells().path ?? '').toLowerCase(),
     };
   }
@@ -635,6 +643,11 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     final state = Provider.of<LumitState>(context);
     final roots = state.project?.getItems() ?? const <ItemReference>[];
     final cols = ProjectColumns.forWidth(width, widths: _columnWidths);
+    // Listened to, so flipping the switch in Settings redraws the rows.
+    _thumbnails = Provider.of<LumitUiState>(context)
+        .workspace
+        .interface
+        .projectThumbnails;
 
     if (roots.isEmpty) {
       return Column(
@@ -895,6 +908,8 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
         loneSelection: lone,
         columns: cols,
         cells: _cellsFor(item, id, missing),
+        thumbnails: _thumbnails,
+        thumb: _thumbnails ? _thumbs[id] : null,
         selectedFootage: () => _selectedFootage,
         onSelect: (modifier) => _select(id, modifier),
         onStartRename: () => setState(() => _renamingId = id),
@@ -1098,14 +1113,25 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
         final path = _paths[id] ??= _pathOf(field0);
         if (missing) {
           return ProjectCells(
-              size: projectNoValue, fps: projectNoValue, path: path);
+              size: projectNoValue,
+              fps: projectNoValue,
+              duration: projectNoValue,
+              path: path);
         }
+        // Blank until the probe the preview card already asks for has
+        // answered: the length comes out of that same cache, so no row ever
+        // probes on its own account.
         final info = _mediaInfo[id];
         if (info == null) return ProjectCells(path: path);
+        final seconds = info.duration.den == 0
+            ? 0.0
+            : info.duration.num / info.duration.den;
         if (info.videoCodec == null) {
           // A sound file's cells, as the mockup writes them: the rate where a
           // picture would state its size, and the channel layout — shortened
           // to fit the FPS column — where a picture would state its rate.
+          // Its length counts milliseconds, as the card's does: sound has
+          // no frames worth counting.
           if (info.audioCodec == null) return ProjectCells(path: path);
           return ProjectCells(
             size: projectSampleRateText(info.sampleRate),
@@ -1114,15 +1140,22 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
               2 => l10n.audioStereoShort,
               final n => l10n.audioChannels(n),
             },
+            duration: timecodeOfSecondsMs(seconds),
             path: path,
           );
         }
+        final fps = info.fpsDen == 0 ? 0.0 : info.fpsNum / info.fpsDen;
         return ProjectCells(
           size: '${info.width}×${info.height}',
           // A still has no rate to state. It probes with a video
           // stream of one frame, so a number *is* there — and printing it
-          // would say the picture runs when it does not.
+          // would say the picture runs when it does not. Its length is left
+          // blank for the same reason.
           fps: info.isStill ? null : projectRateText(info.fpsNum, info.fpsDen),
+          duration: info.isStill
+              ? null
+              : timecodeOfRate(
+                  (seconds * fps).round(), info.fpsNum, info.fpsDen),
           path: path,
         );
       case ItemReference_Composition(:final field0):
@@ -1131,6 +1164,8 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
           return ProjectCells(
             size: '${s.width}×${s.height}',
             fps: projectRateText(s.fpsNum, s.fpsDen),
+            duration: timecodeOfRate(
+                field0.durationFrames().toInt(), s.fpsNum, s.fpsDen),
           );
         }();
       case ItemReference_Folder():
