@@ -510,7 +510,8 @@ fn own_address_space() -> Option<u64> {
 #[cfg(not(unix))]
 fn cap_own_memory() {}
 
-#[cfg(all(test, target_os = "macos"))]
+#[cfg(test)]
+#[cfg(target_os = "macos")]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
