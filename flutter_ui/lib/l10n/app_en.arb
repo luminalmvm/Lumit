@@ -16226,10 +16226,6 @@
   "@profileAddTitle": {
     "description": "Title of the small window that asks what a new profile is called."
   },
-  "profileAddHint": "Starts with your current settings.",
-  "@profileAddHint": {
-    "description": "Quiet line in the New profile window, under the name field."
-  },
   "profileAddConfirm": "Add",
   "@profileAddConfirm": {
     "description": "The filled button in the New profile window."
@@ -16555,7 +16551,7 @@
   "@proThanksHeadline": {
     "description": "Large heading in the Lumit Pro window once the account has Pro."
   },
-  "proThanksBody": "Thank you. Relay sharing and sync are on.",
+  "proThanksBody": "Thank you.",
   "@proThanksBody": {
     "description": "Line under the heading once the account has Pro."
   },
@@ -16589,10 +16585,6 @@
   "@proNotOnSale": {
     "description": "Line in the Lumit Pro window when a subscription cannot be bought yet."
   },
-  "proSmallPrint": "Cancel any time. Payments are handled by Paddle.",
-  "@proSmallPrint": {
-    "description": "Quiet line at the foot of the Lumit Pro window. Paddle is the company that takes payments; do not translate its name."
-  },
   "proClose": "Done",
   "@proClose": {
     "description": "Button that closes the Lumit Pro window once the account has Pro."
@@ -16605,17 +16597,9 @@
   "@settingsAccountProfiles": {
     "description": "Group heading on the Account page of Settings: the profiles on this machine."
   },
-  "settingsAccountProfilesHint": "Each profile has its own settings.",
-  "@settingsAccountProfilesHint": {
-    "description": "Quiet line under the profile list in Settings."
-  },
   "settingsAccountGroup": "Lumit account",
   "@settingsAccountGroup": {
     "description": "Group heading on the Account page of Settings."
-  },
-  "settingsAccountSignedOut": "Not signed in. Settings stay on this machine.",
-  "@settingsAccountSignedOut": {
-    "description": "Line on the Account page of Settings, under a profile that is not signed in."
   },
   "settingsAccountPlanFree": "Free",
   "@settingsAccountPlanFree": {
@@ -16644,10 +16628,6 @@
   "settingsSyncOn": "Keep this profile in sync",
   "@settingsSyncOn": {
     "description": "Checkbox on the Account page of Settings: keep this profile's settings on Lumit's server and in step across machines."
-  },
-  "settingsSyncHint": "Cache, audio device, and recent projects stay on each machine.",
-  "@settingsSyncHint": {
-    "description": "Quiet line under the sync checkbox in Settings."
   },
   "settingsSyncNeedsPro": "Sync is part of Lumit Pro.",
   "@settingsSyncNeedsPro": {

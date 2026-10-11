@@ -127,11 +127,10 @@ class AccountSettings extends StatelessWidget {
       settingsRow(
         t,
         '',
-        l10n.settingsAccountProfilesHint,
+        '',
         _button(t, 'profile-add', l10n.profileAdd, () async {
           final name = await askProfileName(context,
               title: l10n.profileAddTitle,
-              hint: l10n.profileAddHint,
               confirm: l10n.profileAddConfirm);
           if (name != null) await profiles.switchTo(profiles.add(name));
         }),
@@ -148,7 +147,6 @@ class AccountSettings extends StatelessWidget {
           l10n.profileLocal,
           _button(t, 'sign-in', l10n.profileSignIn,
               () => unawaited(showSignIn(context))),
-          description: l10n.settingsAccountSignedOut,
         ),
       ];
     }
@@ -229,7 +227,7 @@ class AccountSettings extends StatelessWidget {
         t,
         l10n.settingsSyncOn,
         toggle('on', current.sync, profiles.setSync),
-        description: pro ? l10n.settingsSyncHint : l10n.settingsSyncNeedsPro,
+        description: pro ? '' : l10n.settingsSyncNeedsPro,
       ),
       if (current.sync)
         for (final group in ProfileGroup.values)
