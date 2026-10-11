@@ -13,7 +13,6 @@ import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:provider/provider.dart';
 import '../icons/icons.dart';
 import '../l10n/strings.dart';
-import '../state/comp_time.dart';
 import '../state/timeline_columns.dart';
 import '../theme/theme.dart';
 import '../state/layer_bounds.dart' show shapeContentsRect;
@@ -328,9 +327,6 @@ class _StrokeValueRowState extends State<StrokeValueRow> {
 
   void _commitStatic(num v) => _write(BridgeScalar.static_(v.toDouble()));
 
-  void _commitKeyed(double v) =>
-      _write(scalarWithValueAt(_scalar, v, widget.comp, widget.playheadFrame));
-
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
@@ -387,15 +383,14 @@ class _StrokeValueRowState extends State<StrokeValueRow> {
     }
     // Animated: the field shows what the curve reads at the playhead, and an
     // edit writes the key there.
-    return KeyedValueField(
+    return PlayheadKeyedField(
       fieldKey: key,
-      value:
-          sampledScalar(scalar, timeOfFrame(widget.comp, widget.playheadFrame)),
+      scalar: scalar,
+      comp: widget.comp,
       min: 0,
       max: 100,
-      decimals: 1,
       suffix: '%',
-      onCommit: _commitKeyed,
+      onWrite: _write,
     );
   }
 }
@@ -460,9 +455,6 @@ class _AnimatorValueRowState extends State<AnimatorValueRow> {
 
   void _commitStatic(num v) => _write(BridgeScalar.static_(v.toDouble()));
 
-  void _commitKeyed(double v) =>
-      _write(scalarWithValueAt(_scalar, v, widget.comp, widget.playheadFrame));
-
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
@@ -512,14 +504,13 @@ class _AnimatorValueRowState extends State<AnimatorValueRow> {
     }
     // Animated: the field shows what the curve reads at the playhead, and an
     // edit writes the key there.
-    return KeyedValueField(
+    return PlayheadKeyedField(
       fieldKey: key,
-      value:
-          sampledScalar(scalar, timeOfFrame(widget.comp, widget.playheadFrame)),
+      scalar: scalar,
+      comp: widget.comp,
       min: -100000,
       max: 100000,
-      decimals: 1,
-      onCommit: _commitKeyed,
+      onWrite: _write,
     );
   }
 }
@@ -656,9 +647,6 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
 
   void _commitStatic(num v) => _write(BridgeScalar.static_(v.toDouble()));
 
-  void _commitKeyed(double v) =>
-      _write(scalarWithValueAt(_scalar, v, widget.comp, widget.playheadFrame));
-
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
@@ -732,15 +720,14 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
     }
     // Animated: the field shows what the curve reads at the playhead, and an
     // edit writes the key there.
-    return KeyedValueField(
+    return PlayheadKeyedField(
       fieldKey: key,
-      value:
-          sampledScalar(scalar, timeOfFrame(widget.comp, widget.playheadFrame)),
+      scalar: scalar,
+      comp: widget.comp,
       min: _min,
       max: _max,
-      decimals: 1,
       suffix: _suffix,
-      onCommit: _commitKeyed,
+      onWrite: _write,
     );
   }
 }

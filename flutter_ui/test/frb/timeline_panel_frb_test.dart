@@ -712,6 +712,27 @@ void main() {
       expect(layer.getShapeContents().single.trimEnd,
           const BridgeScalar.static_(40));
 
+      // Keyed, an edit after the playhead moves adds a key there and leaves
+      // the first one alone.
+      await tester.tap(find.byKey(
+          ValueKey<String>('kf-stopwatch-tl-shape-trimEnd-${item.id}')));
+      await tester.pumpAndSettle();
+      p.uiState.scrubTo(60);
+      await tester.pumpAndSettle();
+      await tester.tap(field);
+      await tester.pumpAndSettle();
+      await tester.enterText(field, '80');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(
+          switch (layer.getShapeContents().single.trimEnd) {
+            BridgeScalar_Keyframed(:final field0) => [
+                for (final k in field0) k.value
+              ],
+            _ => null,
+          },
+          [40, 80]);
+
       // This item has no outline, so it has no dashes to set.
       expect(find.text('Dash'), findsNothing);
 
