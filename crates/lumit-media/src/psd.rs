@@ -10,8 +10,10 @@
 //! layer sits where it sat in Photoshop with no transform at all.
 //!
 //! A layer mask and a clipping mask are baked into the alpha, since both are
-//! part of what the layer looks like. A solid colour fill layer has no pixels
-//! in the file, so its picture is made here from its colour.
+//! part of what the layer looks like. A vector mask is too when the file holds
+//! a drawn copy of it, as Photoshop's own do, and is handed over as an outline
+//! when it does not. A solid colour fill layer has no pixels in the file, so
+//! its picture is made here from its colour.
 //!
 //! Read: 8 and 16 bit, RGB and greyscale, every compression Photoshop writes.
 //! An 8 bit layer comes back as sRGB bytes and a 16 bit one as linear floats.
@@ -86,6 +88,28 @@ struct Mask {
     /// What the mask is outside its own rectangle: 0 or 255.
     default: u8,
     disabled: bool,
+    /// Photoshop drew this from the layer's vector mask.
+    rendered: bool,
+}
+
+/// A layer's vector mask: an outline that shows the layer inside it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct VectorMask {
+    /// The layer shows outside the outline instead.
+    pub inverted: bool,
+    pub paths: Vec<VectorPath>,
+}
+
+/// One subpath of a vector mask.
+#[derive(Debug, Clone, PartialEq)]
+pub struct VectorPath {
+    /// How it joins the subpaths before it, by Photoshop's own number: 0 is
+    /// exclude, 1 is add, 2 is subtract and 3 is intersect.
+    pub operation: i16,
+    /// Each knot as the handle before it, the point and the handle after it.
+    /// A point is `(x, y)` as fractions of the document's width and height,
+    /// and may lie outside the document.
+    pub knots: Vec<[(f64, f64); 3]>,
 }
 
 /// One value out of a Photoshop descriptor. A switch is a number, 0 or 1.
@@ -101,6 +125,9 @@ pub struct PsdLayer {
     pub name: String,
     /// 0 to 255.
     pub opacity: u8,
+    /// Photoshop's Fill, 0 to 255: an opacity for the layer's own picture
+    /// that leaves its layer styles alone. 255 when the file does not say.
+    pub fill_opacity: u8,
     pub visible: bool,
     /// Photoshop's four-letter blend key, such as `norm` or `mul `. A group
     /// with no blend of its own says `pass`.
@@ -112,6 +139,7 @@ pub struct PsdLayer {
     channels: Vec<Channel>,
     mask: Option<Mask>,
     vector_mask: bool,
+    outline: Option<VectorMask>,
     adjustment: bool,
     /// What the record's fill, layer style and adjustment blocks hold, by
     /// path.
@@ -146,6 +174,15 @@ impl PsdLayer {
     pub fn has_mask(&self) -> bool {
         self.mask
             .is_some_and(|m| !m.disabled && (m.default != 255 || !m.rect.is_empty()))
+    }
+
+    /// The layer's vector mask, when it is switched on and [`read_layer`] has
+    /// not already baked it in. Photoshop writes a drawn copy of a vector mask
+    /// as the layer mask, and a layer that has one is read with it applied.
+    #[must_use]
+    pub fn vector_mask(&self) -> Option<&VectorMask> {
+        let outline = self.outline.as_ref();
+        outline.filter(|_| !self.mask.is_some_and(|m| m.rendered))
     }
 
     /// A number or a switch from the record's fill or layer styles, by
@@ -634,14 +671,15 @@ fn layer_record<R: Read + Seek>(
 
     let mask_len = r.u32()?;
     let mask_end = r.block(u64::from(mask_len))?;
-    let mask = if mask_len >= 18 {
+    let mut mask = if mask_len >= 18 {
         let rect = r.rect()?;
         let default = r.u8()?;
-        let disabled = r.u8()? & 0x02 != 0;
+        let flags = r.u8()?;
         Some(Mask {
             rect,
             default,
-            disabled,
+            disabled: flags & 0x02 != 0,
+            rendered: flags & 0x08 != 0,
         })
     } else {
         None
@@ -663,6 +701,8 @@ fn layer_record<R: Read + Seek>(
 
     let mut section = Section::Layer;
     let mut vector_mask = false;
+    let mut outline = None;
+    let mut fill_opacity = 255;
     let mut adjustment = false;
     let mut notes = Vec::new();
     while at + 12 <= extra_end {
@@ -702,7 +742,20 @@ fn layer_record<R: Read + Seek>(
                     blend = r.array()?;
                 }
             }
-            b"vmsk" | b"vsms" => vector_mask = true,
+            b"iOpa" if len >= 1 => fill_opacity = r.u8()?,
+            b"vmsk" | b"vsms" => {
+                vector_mask = true;
+                // A mask that will not read is left off, never the document.
+                if let Ok((shape, disabled)) = vector_outline(r, end) {
+                    let knots: usize = shape.paths.iter().map(|path| path.knots.len()).sum();
+                    budget.take_bytes((knots * std::mem::size_of::<[(f64, f64); 3]>()) as u64)?;
+                    // A drawn copy of a mask that is switched off is off too.
+                    if let Some(mask) = mask.as_mut().filter(|m| disabled && m.rendered) {
+                        mask.disabled = true;
+                    }
+                    outline = (!disabled).then_some(shape);
+                }
+            }
             b"SoCo" | b"lfx2" | b"CgEd" | b"blwh" | b"vibA" => {
                 // A block that will not read costs the layer its fill, its
                 // styles or its adjustment, never the document.
@@ -758,6 +811,7 @@ fn layer_record<R: Read + Seek>(
     Ok(PsdLayer {
         name,
         opacity,
+        fill_opacity,
         visible: flags & 0x02 == 0,
         blend,
         clipped,
@@ -766,9 +820,74 @@ fn layer_record<R: Read + Seek>(
         channels,
         mask,
         vector_mask,
+        outline,
         adjustment,
         notes,
     })
+}
+
+/// How many knots and subpaths one vector mask may hold. A traced drawing
+/// runs to a few thousand.
+const MAX_KNOTS: u64 = 1 << 16;
+
+/// The outline in a `vmsk` block ending at `end`, and whether the mask is
+/// switched off.
+///
+/// The block is a list of 26 byte records: what each one is, then what it
+/// holds. How many there are is how many fit in the block, and a subpath is
+/// the knots that follow its own record, however many it says to expect.
+fn vector_outline<R: Read + Seek>(
+    r: &mut Reader<R>,
+    end: u64,
+) -> Result<(VectorMask, bool), MediaError> {
+    // A version, then the switches.
+    r.u32()?;
+    let flags = r.u32()?;
+    let mut budget = Budget::new(Limits {
+        items: MAX_KNOTS,
+        ..LIMITS
+    });
+    let mut paths: Vec<VectorPath> = Vec::new();
+    while r.pos()? + 26 <= end {
+        let selector = r.u16()?;
+        let body = r.array::<24>()?;
+        match selector {
+            // A subpath starts, closed or open. Photoshop fills an open one
+            // as if it were closed.
+            0 | 3 => {
+                budget.take_items(1)?;
+                paths.push(VectorPath {
+                    operation: i16::from_be_bytes([body[2], body[3]]),
+                    knots: Vec::new(),
+                });
+            }
+            // A knot: three points, each down then across, as 8.24 fixed
+            // point fractions of the document.
+            1 | 2 | 4 | 5 => {
+                let Some(path) = paths.last_mut() else {
+                    continue;
+                };
+                budget.take_items(1)?;
+                let mut words = body.chunks_exact(4).map(|word| {
+                    let fixed = i32::from_be_bytes([word[0], word[1], word[2], word[3]]);
+                    f64::from(fixed) / f64::from(1 << 24)
+                });
+                let mut point = || {
+                    let (y, x) = (words.next().unwrap_or(0.0), words.next().unwrap_or(0.0));
+                    (x, y)
+                };
+                path.knots.push([point(), point(), point()]);
+            }
+            // The fill rule, the clipboard's place and the first fill.
+            _ => {}
+        }
+    }
+    paths.retain(|path| !path.knots.is_empty());
+    let mask = VectorMask {
+        inverted: flags & 0x01 != 0,
+        paths,
+    };
+    Ok((mask, flags & 0x04 != 0))
 }
 
 /// Roughly what one kept descriptor value costs in memory.
@@ -1179,6 +1298,9 @@ pub mod fixture {
         pub section: Option<u32>,
         /// A layer mask: its rectangle, its default colour and its samples.
         pub mask: Option<([i32; 4], u8, Vec<u8>)>,
+        /// The layer mask's flags. 8 says Photoshop drew it from the layer's
+        /// vector mask.
+        pub mask_flags: u8,
         pub packing: Packing,
         /// Further tagged blocks, by key, such as the ones [`described`] makes.
         pub blocks: Vec<([u8; 4], Vec<u8>)>,
@@ -1228,6 +1350,27 @@ pub mod fixture {
         }
     }
 
+    /// A vector mask (`vmsk`) block: one subpath through `corners`, each
+    /// `(x, y)` as fractions of the document.
+    #[must_use]
+    pub fn vector_mask(corners: &[(f64, f64)]) -> ([u8; 4], Vec<u8>) {
+        // A version, no switches, then a closed subpath that is added.
+        let mut body = [3u32.to_be_bytes(), 0u32.to_be_bytes()].concat();
+        body.extend_from_slice(&[0, 0, 0, corners.len() as u8, 0, 1]);
+        body.resize(body.len() + 20, 0);
+        for (x, y) in corners {
+            // A knot with both handles on the point, each down then across.
+            body.extend_from_slice(&1u16.to_be_bytes());
+            for _ in 0..3 {
+                for part in [y, x] {
+                    let fixed = (part * f64::from(1 << 24)).round() as i32;
+                    body.extend_from_slice(&fixed.to_be_bytes());
+                }
+            }
+        }
+        (*b"vmsk", body)
+    }
+
     /// A fill (`SoCo`) or layer styles (`lfx2`) block holding `items`.
     #[must_use]
     pub fn described(key: [u8; 4], items: &[(&'static str, Value)]) -> ([u8; 4], Vec<u8>) {
@@ -1265,6 +1408,7 @@ pub mod fixture {
                 clipped: false,
                 section: None,
                 mask: None,
+                mask_flags: 0,
                 packing: Packing::Raw,
                 blocks: Vec::new(),
             }
@@ -1387,7 +1531,7 @@ pub mod fixture {
                     for edge in rect {
                         extra.extend_from_slice(&edge.to_be_bytes());
                     }
-                    extra.extend_from_slice(&[*default, 0, 0, 0]);
+                    extra.extend_from_slice(&[*default, layer.mask_flags, 0, 0]);
                 }
                 None => extra.extend_from_slice(&0u32.to_be_bytes()),
             }
@@ -1480,7 +1624,7 @@ pub mod fixture {
 mod tests {
     use std::io::Cursor;
 
-    use super::fixture::{described, document, Layer, Packing, Value};
+    use super::fixture::{described, document, vector_mask, Layer, Packing, Value};
     use super::*;
 
     const RED: [u8; 4] = [255, 0, 0, 255];
@@ -1649,6 +1793,21 @@ mod tests {
         let frame = pixels(&bytes, 0);
         assert_eq!(px(&frame, 0, 1), [255; 4]);
         assert_eq!(px(&frame, 1, 1)[3], 0);
+
+        // A vector mask is handed over as its outline. One Photoshop has
+        // drawn into the layer mask is baked in above with it, and handing it
+        // over as well would mask the layer twice.
+        let mut shaped = Layer::solid("Shaped", [0, 0, 3, 4], RED);
+        shaped.blocks = vec![vector_mask(&[(0.0, 0.0), (0.5, 0.0), (0.5, 1.0)])];
+        shaped.mask = Some(([0, 0, 3, 1], 0, vec![255; 3]));
+        let outline = |layer: &Layer| {
+            let doc = structure(&document(4, 3, 8, std::slice::from_ref(layer))).unwrap();
+            doc.layers[0].vector_mask().cloned()
+        };
+        let knots = outline(&shaped).unwrap().paths[0].knots.clone();
+        assert_eq!(knots[1], [(0.5, 0.0); 3]);
+        shaped.mask_flags = 0x08;
+        assert_eq!(outline(&shaped), None);
     }
 
     #[test]

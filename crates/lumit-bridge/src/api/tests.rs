@@ -8971,13 +8971,18 @@ fn an_addon_installs_lists_and_removes_and_is_refused_honestly() {
 #[test]
 fn a_photoshop_document_imports_as_a_comp_of_its_layers_in_one_undo_step() {
     use lumit_core::model::{BlendMode, EffectValue, LayerKind};
-    use lumit_media::psd::fixture::{described, document, Layer, Value};
+    use lumit_media::psd::fixture::{described, document, vector_mask, Layer, Value};
 
     let dir = tempfile::tempdir().expect("temp dir");
     let path = dir.path().join("poster.psd");
     let mut hat = Layer::solid("Hat", [8, 8, 16, 16], [0, 0, 255, 255]);
     hat.opacity = 128;
     hat.blend = *b"mul ";
+    // At half Fill as well, behind a vector mask over the document's left
+    // half that the file has not drawn into the layer.
+    let half = [128, 0, 0, 0];
+    let left = [(0.0, 0.0), (0.5, 0.0), (0.5, 1.0), (0.0, 1.0)];
+    hat.blocks = vec![(*b"iOpa", half.to_vec()), vector_mask(&left)];
     let mut props = Layer::group("Props", true);
     props.visible = false;
     // A drop shadow lit from 120 degrees, which is Photoshop's own default.
@@ -8989,7 +8994,10 @@ fn a_photoshop_document_imports_as_a_comp_of_its_layers_in_one_undo_step() {
         ("Opct", Value::Number(40.0)),
         ("lagl", Value::Number(120.0)),
     ]);
-    title.blocks = vec![described(*b"lfx2", &[("DrSh", shadow)])];
+    title.blocks = vec![
+        described(*b"lfx2", &[("DrSh", shadow)]),
+        (*b"iOpa", half.to_vec()),
+    ];
     // Threshold at 128 of 255, with a mask over the left half.
     let mut threshold = Layer::solid("Threshold", [0, 0, 0, 0], [0; 4]);
     threshold.blocks = vec![(*b"thrs", vec![0, 128, 0, 0])];
@@ -9097,8 +9105,19 @@ fn a_photoshop_document_imports_as_a_comp_of_its_layers_in_one_undo_step() {
 
     let hat = &comp.layers[6];
     assert_eq!(hat.blend, BlendMode::Multiply);
+    // Fill is one more opacity on a layer with no style: 128 of 255, twice.
     let opacity = hat.transform.opacity.value_at(0.0);
-    assert!((opacity - 50.2).abs() < 0.1, "128 of 255 is {opacity}");
+    assert!((opacity - 25.2).abs() < 0.1, "a quarter is {opacity}");
+    // Its vector mask is a mask on the layer, in the document's pixels.
+    let [mask] = hat.masks.as_slice() else {
+        panic!("the vector mask comes across");
+    };
+    let corners: Vec<(f64, f64)> = mask.path.vertices.iter().map(|v| v.pos).collect();
+    assert_eq!(
+        corners,
+        [(0.0, 0.0), (16.0, 0.0), (16.0, 32.0), (0.0, 32.0)]
+    );
+    assert!(mask.path.closed && !mask.inverted);
     assert!(!hat.switches.visible, "a hidden group hides its members");
     assert!(comp.layers[0].switches.visible);
 
@@ -9133,6 +9152,13 @@ fn a_photoshop_document_imports_as_a_comp_of_its_layers_in_one_undo_step() {
         panic!("the title wears one style");
     };
     assert_eq!(shadow.effect.match_name, "style_drop_shadow");
+    // Fill would fade the shadow with the picture, so a layer that wears a
+    // style keeps its opacity.
+    let opacity = comp.layers[0].transform.opacity.value_at(0.0);
+    assert!(
+        (opacity - 100.0).abs() < 0.1,
+        "the title stays at {opacity}"
+    );
     let row = |id: &str| match shadow.params.iter().find(|p| p.id == id) {
         Some(param) => match &param.value {
             EffectValue::Float(value) => value.value_at(0.0),
