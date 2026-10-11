@@ -36,10 +36,10 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="generator" content={Astro.generator} />
   </head>
-  <body class="antialiased">
+  <body class="antialiased md:flex md:min-h-dvh md:flex-col">
     <div class="page-glow" aria-hidden="true"></div>
     <Header />
-    <main>
+    <main class="md:flex-1">
       <slot />
     </main>
     <Footer />
