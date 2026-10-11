@@ -1033,6 +1033,7 @@ pub(crate) fn adopt(
     let (_relinked, missing) = lumit_project::resolve_all_media(&mut doc, media_root, &[]);
     // What is still missing may be something another person sent before.
     crate::footage::restore(&mut doc);
+    crate::packing::settle(&doc);
     // The last moment to stop: from here the project that was open is closed.
     if crate::packing::cancelled() {
         return Ok(None);

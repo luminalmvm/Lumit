@@ -579,7 +579,8 @@ fn already_there(out: &Path, file: &HeldFile, main: (&str, &Fingerprint)) -> boo
 
 /// Point every packed item of a just-opened `doc` at a file to read: the one
 /// on disk when it is still the one that was packed, otherwise a copy read
-/// out of the archive into `dest_root`. Returns how many items read a copy.
+/// out of the archive into `dest_root`. Returns how many items read a copy,
+/// and the items still on the packed list that it could not place.
 ///
 /// `archives` are tried in order. The project's own file comes first, and an
 /// autosave is followed by the project it was written beside
@@ -588,14 +589,15 @@ fn already_there(out: &Path, file: &HeldFile, main: (&str, &Fingerprint)) -> boo
 ///
 /// Call it before [`crate::resolve_all_media`], which leaves an item this has
 /// placed alone. An item it cannot place is left as it was for the resolver
-/// and the relink slate.
+/// and the relink slate, and comes off the packed list when no archive holds
+/// it.
 pub fn restore_packed(
     doc: &mut Document,
     archives: &[PathBuf],
     project_dir: &Path,
     dest_root: &Path,
     progress: Progress<'_>,
-) -> Result<usize, ProjectError> {
+) -> Result<(usize, Vec<Uuid>), ProjectError> {
     // Which items need the archive's copy, and of which folder.
     let mut wanted: Vec<(Uuid, PackedMedia)> = Vec::new();
     for (id, media) in doc.packed.clone() {
@@ -621,10 +623,11 @@ pub fn restore_packed(
         }
     }
     if wanted.is_empty() {
-        return Ok(0);
+        return Ok((0, Vec::new()));
     }
 
     let (mut zips, held) = open_archives(archives);
+    let mut unplaced = Vec::new();
     let folders: HashSet<&str> = wanted
         .iter()
         .filter_map(|(_, media)| split_entry(&media.entry).map(|(folder, _)| folder))
@@ -639,6 +642,7 @@ pub fn restore_packed(
     let mut restored = 0;
     for (id, media) in &wanted {
         let Some((folder, name)) = split_entry(&media.entry) else {
+            doc.packed.remove(id);
             continue;
         };
         let dest_dir = dest_root.join(folder);
@@ -657,7 +661,10 @@ pub fn restore_packed(
                     Err(ProjectError::Cancelled) => return Err(ProjectError::Cancelled),
                     // A full disk or a damaged entry: this item is missing,
                     // and the rest of the project still opens.
-                    Err(_) => continue,
+                    Err(_) => {
+                        unplaced.push(*id);
+                        continue;
+                    }
                 }
             }
         }
@@ -677,9 +684,18 @@ pub fn restore_packed(
                     }
                 }
             }
+        } else if !held.contains_key(folder) {
+            // The list is the file's own word. An item no archive holds was
+            // never packed, and left on the list the next save would pack
+            // whatever file its path names on this machine. One an archive
+            // holds stays on it even when the copy would not read out, or
+            // that save would leave its bytes behind.
+            doc.packed.remove(id);
+        } else {
+            unplaced.push(*id);
         }
     }
-    Ok(restored)
+    Ok((restored, unplaced))
 }
 
 /// Put back the path each effect's file had before an open pointed its
@@ -1149,7 +1165,7 @@ mod tests {
             &mut |_, _| true,
         )
         .unwrap();
-        assert_eq!(restored, 4);
+        assert_eq!(restored, (4, Vec::new()));
         let ProjectItem::Footage(f) = opened.item(id).unwrap() else {
             panic!("the footage item");
         };
@@ -1267,7 +1283,7 @@ mod tests {
             id,
             PackedMedia {
                 entry: "media/../../escaped.mov".into(),
-                fingerprint,
+                fingerprint: fingerprint.clone(),
                 original: None,
                 extra: serde_json::Map::new(),
             },
@@ -1282,8 +1298,32 @@ mod tests {
         let cache = dir.path().join("a").join("b").join("cache");
         let restored =
             restore_packed(&mut doc, &[lum], dir.path(), &cache, &mut |_, _| true).unwrap();
-        assert_eq!(restored, 0);
+        assert_eq!(restored.0, 0);
         assert!(!dir.path().join("a").join("escaped.mov").exists());
         assert!(!dir.path().join("a").join("b").join("escaped.mov").exists());
+
+        // The packed list is the file's own word as well. An item no archive
+        // holds comes off it, or the next save would pack whatever its path
+        // names. One whose folder an archive holds stays on it, and is named
+        // as not placed, so a save carries those bytes and reads no path.
+        let lum = dir.path().join("listed.lum");
+        let mut zip = ZipWriter::new(File::create(&lum).unwrap());
+        zip.start_file("media/held/other.mov", stored).unwrap();
+        zip.write_all(b"another picture").unwrap();
+        zip.finish().unwrap();
+        for (folder, stays) in [("gone", false), ("held", true)] {
+            let entry = PackedMedia {
+                entry: format!("media/{folder}/clip.mov"),
+                fingerprint: fingerprint.clone(),
+                original: None,
+                extra: serde_json::Map::new(),
+            };
+            doc.packed.insert(id, entry);
+            let archive = std::slice::from_ref(&lum);
+            let (_, unplaced) =
+                restore_packed(&mut doc, archive, dir.path(), &cache, &mut |_, _| true).unwrap();
+            assert_eq!(doc.packed.contains_key(&id), stays, "{folder}");
+            assert_eq!(unplaced == [id], stays, "{folder}");
+        }
     }
 }

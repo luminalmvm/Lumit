@@ -1108,6 +1108,9 @@ impl ProjectReference {
         // The file as it was just written: under a new name it is a new file,
         // and one saved with the switch off is no longer vouched for.
         crate::packing::note_auto_pack(document.id, &target, auto_pack);
+        if all {
+            crate::packing::trust(document.id);
+        }
         // The claim follows the project to the file it is now saved as. A
         // new file is claimed here, now it has a name on disk to claim by.
         let claim = crate::claim::take(&target).ok().flatten().or(claim);

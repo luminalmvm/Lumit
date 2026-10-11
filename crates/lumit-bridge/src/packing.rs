@@ -27,6 +27,32 @@ static CANCEL: AtomicBool = AtomicBool::new(false);
 /// holding a folder costs one small handle. One entry a document opened.
 static HELD: Mutex<BTreeMap<Uuid, File>> = Mutex::new(BTreeMap::new());
 
+/// The packed items an open could not place, by document, each with the path
+/// it was left reading from. A file says for itself which items it packs and
+/// where each one is, so until somebody here points such an item at a file,
+/// or packs the project, an ordinary save does not read that path. One entry
+/// a document opened, replaced when it is opened again.
+static UNPLACED: Mutex<BTreeMap<Uuid, BTreeMap<Uuid, String>>> = Mutex::new(BTreeMap::new());
+
+/// Where each of those items of `doc` reads from as the open leaves it. The
+/// resolver runs after [`restore`] and may move one, which is no more this
+/// machine's choice than where the file put it.
+pub(crate) fn settle(doc: &Document) {
+    if let Ok(mut all) = UNPLACED.lock() {
+        for (id, path) in all.get_mut(&doc.id).into_iter().flatten() {
+            *path = doc.packed_path(*id).unwrap_or_default().to_owned();
+        }
+    }
+}
+
+/// The project has been packed on purpose, so every path in it was read by
+/// this machine's own choice.
+pub(crate) fn trust(document: Uuid) {
+    if let Ok(mut all) = UNPLACED.lock() {
+        all.remove(&document);
+    }
+}
+
 /// A job that can be stopped is starting: forget any earlier cancel.
 pub(crate) fn begin() {
     CANCEL.store(false, Ordering::Release);
@@ -84,9 +110,19 @@ pub(crate) fn note_auto_pack(document: Uuid, path: &Path, on: bool) {
 /// colour config and the files effects read are offered by the same rule. An
 /// item whose file is not on disk offers nothing.
 pub(crate) fn sources(doc: &Document, project_dir: &Path, all: bool) -> Vec<PackSource> {
+    // An item the open could not place, still where the open left it, is not
+    // read from disk unless everything is. What an archive holds of it is
+    // carried over as it is.
+    let unplaced = UNPLACED.lock().ok();
+    let unplaced = unplaced.and_then(|all| all.get(&doc.id).cloned());
+    let unplaced = unplaced.unwrap_or_default();
+    let distrusted = |id: Uuid| {
+        let left = unplaced.get(&id).map(String::as_str);
+        !all && left.is_some() && left == doc.packed_path(id)
+    };
     // The file a reference names, when it is wanted and on disk.
     let file = |id: Uuid, media: &MediaRef| {
-        if !all && !doc.packed.contains_key(&id) {
+        if !all && !doc.packed.contains_key(&id) || distrusted(id) {
             return None;
         }
         let path = if media.absolute_path.is_empty() {
@@ -135,7 +171,7 @@ pub(crate) fn sources(doc: &Document, project_dir: &Path, all: bool) -> Vec<Pack
     });
     // A file an effect reads, such as a LUT's cube, is a path and nothing else.
     let effects = doc.effect_files().filter_map(|(id, path)| {
-        let wanted = all || doc.packed.contains_key(&id);
+        let wanted = (all || doc.packed.contains_key(&id)) && !distrusted(id);
         (wanted && Path::new(path).is_file()).then(|| PackSource {
             item: id,
             files: vec![PathBuf::from(path)],
@@ -208,6 +244,7 @@ pub(crate) fn restore(
             all.insert(doc.id, held);
         }
     }
+    trust(doc.id);
     if doc.packed.is_empty() {
         return;
     }
@@ -217,5 +254,11 @@ pub(crate) fn restore(
         }
         !cancelled()
     };
-    let _ = lumit_project::restore_packed(doc, &archives(archive), project_dir, &dest, &mut copied);
+    let restored =
+        lumit_project::restore_packed(doc, &archives(archive), project_dir, &dest, &mut copied);
+    if let (Ok((_, unplaced)), Ok(mut all)) = (restored, UNPLACED.lock()) {
+        let unplaced = unplaced.into_iter().map(|id| (id, String::new()));
+        all.insert(doc.id, unplaced.collect());
+    }
+    settle(doc);
 }
