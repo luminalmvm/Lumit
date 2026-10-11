@@ -230,10 +230,6 @@
   "@duration": {
     "description": "Field label: how long a composition runs."
   },
-  "easeBezier": "Bézier",
-  "@easeBezier": {
-    "description": "Keyframe easing with adjustable handles. Named after the curve — keep it recognisable."
-  },
   "easeLinear": "Linear",
   "@easeLinear": {
     "description": "Keyframe easing: a straight line between two keys."
@@ -253,10 +249,6 @@
   "exportAction": "Exportar",
   "@exportAction": {
     "description": "Button that starts the export."
-  },
-  "exportAudioBitRate": "Taxa de bits de áudio",
-  "@exportAudioBitRate": {
-    "description": "Export dialogue: how many bits per second the sound is given."
   },
   "exportBitRate": "Taxa de bits",
   "@exportBitRate": {
@@ -284,10 +276,6 @@
         "type": "String"
       }
     }
-  },
-  "exportFromFrame": "De quadro",
-  "@exportFromFrame": {
-    "description": "Export dialogue: the first frame to write."
   },
   "exportPreparing": "Preparando {encoder}",
   "@exportPreparing": {
@@ -630,10 +618,6 @@
   "fxColourOverlay": "Sobreposição de cor",
   "@fxColourOverlay": {
     "description": "Name of the Colour overlay layer style: one flat colour painted across the layer."
-  },
-  "fxConsoleKey": "Ctrl+Espaço",
-  "@fxConsoleKey": {
-    "description": "The keyboard shortcut named at the right of the FX console popover’s search row — the key that opened it. Keep as the key combination."
   },
   "fxConsolePresets": "Predefinições",
   "@fxConsolePresets": {

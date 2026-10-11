@@ -312,15 +312,6 @@
       }
     }
   },
-  "aeMaskModeUnavailable": "der Maskenmodus {aeMode} ist noch nicht umgesetzt — als Addieren importiert",
-  "@aeMaskModeUnavailable": {
-    "description": "Import report row reason, lower case. Add is one of Lumit's mask combine modes.",
-    "placeholders": {
-      "aeMode": {
-        "type": "String"
-      }
-    }
-  },
   "aeMaskRotoBezierFlattened": "die Kurven einer RotoBezier-Maske berechnet After Effects — als ihr Polygon importiert",
   "@aeMaskRotoBezierFlattened": {
     "description": "Import report row reason, lower case. RotoBezier is an After Effects mask option; leave the name as written."
@@ -669,10 +660,6 @@
   "@clipPasteShape": {
     "description": "Context-menu item: apply a copied speed curve here."
   },
-  "clipRamp": "Rampe",
-  "@clipRamp": {
-    "description": "Shown on a Sequence clip in place of a speed percentage when the speed changes over the clip. Lower case on purpose — it sits where a number would."
-  },
   "clipResetSpeed": "Geschwindigkeit zurücksetzen",
   "@clipResetSpeed": {
     "description": "Context-menu item: put a clip back to playing at its normal speed."
@@ -944,14 +931,6 @@
   "@duration": {
     "description": "Field label: how long a composition runs."
   },
-  "durationFormatNote": "Die Dauer ist HH:MM:SS:FF bei der Bildrate oben.",
-  "@durationFormatNote": {
-    "description": "Note under the duration field. HH:MM:SS:FF is a timecode and stays as it is."
-  },
-  "easeBezier": "Bezier",
-  "@easeBezier": {
-    "description": "Keyframe easing with adjustable handles. Named after the curve — keep it recognisable."
-  },
   "easeCurve": "Kurve",
   "@easeCurve": {
     "description": "Ease popover: the label on the row that picks which easing shape to apply, by name (Easy ease, Slow start, and so on)."
@@ -1097,10 +1076,6 @@
   "@exportAudioAuto": {
     "description": "Export dialog, Audio row: include the composition's sound when it has any. The alternative is Off."
   },
-  "exportAudioBitRate": "Audio-Bitrate",
-  "@exportAudioBitRate": {
-    "description": "Export dialogue: how many bits per second the sound is given."
-  },
   "exportAudioMono": "Mono",
   "@exportAudioMono": {
     "description": "Export dialog, Audio section, channel-layout list: one channel, the composition's stereo mix folded down. Beside exportAudioStereo."
@@ -1108,14 +1083,6 @@
   "exportAudioOff": "Aus",
   "@exportAudioOff": {
     "description": "Export dialog: audio: no sound is written."
-  },
-  "exportAudioOn": "An",
-  "@exportAudioOn": {
-    "description": "Export dialog: audio: sound is written with the picture."
-  },
-  "exportAudioReading": "48,000 kHz · Stereo",
-  "@exportAudioReading": {
-    "description": "Export dialog: a factual reading of the sound format every export is mixed to. The number is not translated."
   },
   "exportAudioStereo": "Stereo",
   "@exportAudioStereo": {
@@ -1200,10 +1167,6 @@
   "exportColourStated": "Die Datei nennt diesen Raum in ihrem eigenen Header.",
   "@exportColourStated": {
     "description": "Export dialog, Colour section, factual line under the rows: shown when the chosen format can tag the colour space it was written in, so the file says what it is. One sentence."
-  },
-  "exportComposition": "Komposition exportieren",
-  "@exportComposition": {
-    "description": "Title of the export dialogue. Lumit says 'export' for writing a file, never 'render'."
   },
   "exportCrop": "Beschnitt",
   "@exportCrop": {
@@ -1311,10 +1274,6 @@
       }
     }
   },
-  "exportFromFrame": "Ab Frame",
-  "@exportFromFrame": {
-    "description": "Export dialogue: the first frame to write."
-  },
   "exportGroupAudio": "Audio",
   "@exportGroupAudio": {
     "description": "Export dialog: the group naming the sound written with the picture."
@@ -1355,10 +1314,6 @@
         "type": "String"
       }
     }
-  },
-  "exportIncludeAudio": "Audio einschließen",
-  "@exportIncludeAudio": {
-    "description": "Export dialogue: whether sound is written alongside the picture."
   },
   "exportLockAspect": "Seitenverhältnis sperren",
   "@exportLockAspect": {
@@ -1632,10 +1587,6 @@
       }
     }
   },
-  "exportToFrame": "Bis Frame",
-  "@exportToFrame": {
-    "description": "Export dialogue: the last frame to write."
-  },
   "exportType": "Typ",
   "@exportType": {
     "description": "Export dialog: row label: what kind of thing is written — a video, or one image per frame."
@@ -1663,15 +1614,6 @@
   "exportWriteTo": "Schreiben nach",
   "@exportWriteTo": {
     "description": "Export dialogue: the file the export is written to."
-  },
-  "exportWritten": "Geschrieben nach {file}",
-  "@exportWritten": {
-    "description": "Export dialogue: shown when the export finished. {file} is a file name.",
-    "placeholders": {
-      "file": {
-        "type": "String"
-      }
-    }
   },
   "exportedTo": "Exportiert nach {path}",
   "@exportedTo": {
@@ -5208,15 +5150,6 @@
       }
     }
   },
-  "keymapClashPanelCount": "{count, plural, =1{Ein Tastenkürzel bedeutet in einem Bedienfeld etwas anderes} other{{count} Tastenkürzel bedeuten in einem Bedienfeld etwas anderes}}",
-  "@keymapClashPanelCount": {
-    "description": "Note in the keymap table: a panel takes a chord over from its app-wide meaning. {count} is how many chords do.",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "keymapExported": "Tastaturbelegung exportiert.",
   "@keymapExported": {
     "description": "Shown after a keymap file has been written."
@@ -5248,24 +5181,6 @@
   "keymapPressAShortcut": "Tastenkürzel drücken…",
   "@keymapPressAShortcut": {
     "description": "Shown in a keymap row while it is waiting for the user to press keys."
-  },
-  "keymapShadowLine": "{chord} — {action} in the {context}, {shadowed} elsewhere",
-  "@keymapShadowLine": {
-    "description": "One line under the keymap's panel note: which chord, what it does in which panel, and what it does everywhere else. {chord} is the key combination, {action} and {shadowed} are command names, {context} is a panel name.",
-    "placeholders": {
-      "chord": {
-        "type": "String"
-      },
-      "action": {
-        "type": "String"
-      },
-      "context": {
-        "type": "String"
-      },
-      "shadowed": {
-        "type": "String"
-      }
-    }
   },
   "keysPasteAtPlayhead": "Am Abspielkopf einfügen",
   "@keysPasteAtPlayhead": {
@@ -6408,10 +6323,6 @@
       }
     }
   },
-  "projectColourNoConfig": "Keine Konfiguration: Die eigene Farbverarbeitung von Lumit ist in Kraft.",
-  "@projectColourNoConfig": {
-    "description": "Project settings, Colour group: the line under the configuration row when the project names no configuration file, which is every project until somebody chooses one."
-  },
   "projectColourNotInForce": "Nicht in Kraft: {reason}. Stattdessen wird die eingebaute Farbverarbeitung verwendet.",
   "@projectColourNotInForce": {
     "description": "Project settings, Colour group: the line under the configuration row when the file is named but cannot be used. The reason is one of the ocio* sentences above, which all begin in lower case.",
@@ -6704,10 +6615,6 @@
   "@searchSettings": {
     "description": "Placeholder in the search box in the Settings window's title strip; it hides the setting rows that do not match."
   },
-  "searchShortcuts": "Tastenkürzel durchsuchen",
-  "@searchShortcuts": {
-    "description": "Placeholder in the keymap table's search box."
-  },
   "selectACompositionFirst": "Wählen Sie eine Komposition im Projekt-Bedienfeld.",
   "@selectACompositionFirst": {
     "description": "Empty-state line in a panel that needs a composition before it can show anything."
@@ -6784,10 +6691,6 @@
   "@settingsAutosaveKeep": {
     "description": "Settings window, Autosave: the name of the row whose number is how many rotating copies are kept beside the project before the oldest is discarded."
   },
-  "settingsAutosaveOff": "Automatisches Speichern ist aus — nur das Absturzjournal schützt ungespeicherte Arbeit.",
-  "@settingsAutosaveOff": {
-    "description": "Settings window, Autosave: the line under the interval row when the interval is zero. Zero is a real choice, not an error, so this reports it calmly. The crash journal is Lumit's running record of edits, which recovery replays."
-  },
   "settingsBudget": "Budget",
   "@settingsBudget": {
     "description": "Settings window: the name of a row setting how much a cache may hold."
@@ -6806,10 +6709,6 @@
   },
   "settingsCompact": "Kompakt",
   "@settingsCompact": {
-    "description": "Settings window: the name of one setting."
-  },
-  "settingsCorners": "Ecken",
-  "@settingsCorners": {
     "description": "Settings window: the name of one setting."
   },
   "settingsCustomColours": "Eigene Farben",
@@ -6924,10 +6823,6 @@
   "@settingsGroupRendering": {
     "description": "Project settings: heading over a group of rows."
   },
-  "settingsGroupScopes": "Scopes",
-  "@settingsGroupScopes": {
-    "description": "Settings window: heading over a group of rows."
-  },
   "settingsGroupSpareCopies": "Sicherungskopien",
   "@settingsGroupSpareCopies": {
     "description": "Settings window, Autosave: the heading over the settings that decide how often a spare copy of the project is written and how many are kept."
@@ -6956,215 +6851,13 @@
   "@settingsHeldByTheGraphicsDriver": {
     "description": "Settings window: the name of one setting."
   },
-  "settingsHelpAntiAliasing": "Glättet die Kanten gedrehter und skalierter Ebenen. Wird im Projekt gespeichert und gilt für Vorschau und Export gleichermaßen.",
-  "@settingsHelpAntiAliasing": {
-    "description": "Project settings: the sentence under Anti-aliasing."
-  },
-  "settingsHelpAntiAliasingInUse": "Diese Grafikkarte bietet die Einstellung oben nicht, daher verwendet Lumit die höchste, die sie bietet. Das Projekt bleibt unverändert.",
-  "@settingsHelpAntiAliasingInUse": {
-    "description": "Project settings: the sentence under 'In use on this machine'."
-  },
-  "settingsHelpAutomaticUpdates": "Beim Start nach einer neuen Version von Lumit suchen, höchstens einmal am Tag. Es wird nichts heruntergeladen, bevor Sie es verlangen.",
-  "@settingsHelpAutomaticUpdates": {
-    "description": "Settings window: the sentence under the settingsAutomaticUpdates setting."
-  },
-  "settingsHelpCacheBudget": "Wie viel Arbeitsspeicher fertige Frames belegen dürfen, von den {total} dieses Rechners.",
-  "@settingsHelpCacheBudget": {
-    "description": "Settings window: the sentence under the memory cache Budget. {total} is a size, e.g. '32 GB'.",
-    "placeholders": {
-      "total": {
-        "type": "String"
-      }
-    }
-  },
-  "settingsHelpCacheInUse": "{hits} von {requests} Frames kamen aus dem Cache; {decodes} wurden dekodiert.",
-  "@settingsHelpCacheInUse": {
-    "description": "Settings window: the sentence under the memory cache's In use row. All three are whole numbers.",
-    "placeholders": {
-      "hits": {
-        "type": "String"
-      },
-      "requests": {
-        "type": "String"
-      },
-      "decodes": {
-        "type": "String"
-      }
-    }
-  },
-  "settingsHelpChromeLabels": "Ob Schaltflächen, Registerkarten und Schalter ihr Wort oder das Zeichen zeigen, das dafür steht. Der Hovertext nennt immer das Wort, wofür Sie sich auch entscheiden, und alles, was Sie selbst eingegeben haben, wird nie in ein Bild verwandelt.",
-  "@settingsHelpChromeLabels": {
-    "description": "Explanatory line under the Chrome labels row in Settings."
-  },
-  "settingsHelpColourScheme": "Die Palette, aus der jedes Bedienfeld zeichnet.",
-  "@settingsHelpColourScheme": {
-    "description": "Settings window: the sentence under the settingsColourScheme setting."
-  },
-  "settingsHelpCompact": "Zeichnet Zeilen etwas enger, sodass mehr vom Ebenenstapel und mehr Parameter auf den Bildschirm passen. Sonst ändert sich nichts.",
-  "@settingsHelpCompact": {
-    "description": "Settings window: the sentence under the settingsCompact setting."
-  },
-  "settingsHelpCorners": "Wie abgerundet Bedienelemente und Bedienfelder sind.",
-  "@settingsHelpCorners": {
-    "description": "Settings window: the sentence under the settingsCorners setting."
-  },
-  "settingsHelpCustomColours": "Von diesem Schema ausgehen und jede Farbe selbst festlegen.",
-  "@settingsHelpCustomColours": {
-    "description": "Settings window: the sentence under the Custom colours setting, when no custom theme exists yet."
-  },
-  "settingsHelpDiskBudget": "Wie viel Speicherplatz abgelegte Frames belegen dürfen. Sie überdauern das Schließen von Lumit, sodass ein Projekt warm wieder öffnet.",
-  "@settingsHelpDiskBudget": {
-    "description": "Settings window: the sentence under the disk cache Budget."
-  },
-  "settingsHelpEditingTheme": "Die Farben von {theme} bearbeiten.",
-  "@settingsHelpEditingTheme": {
-    "description": "Settings window: the sentence under Custom colours when a custom theme is in use. {theme} is the theme's name, which the user chose.",
-    "placeholders": {
-      "theme": {
-        "type": "String"
-      }
-    }
-  },
-  "settingsHelpFramesWaitingToBeWritten": "Die Schreibwarteschlange zum Festplatten-Cache, die auf acht Frames begrenzt ist.",
-  "@settingsHelpFramesWaitingToBeWritten": {
-    "description": "Settings window: the sentence under the settingsFramesWaitingToBeWritten setting."
-  },
-  "settingsHelpGraphicsMemoryReserved": "Was der Treiber dafür vom System genommen hat und wie viel davon in Verwendung ist. Die Lücke ist Speicher, den Lumit freigegeben und der Treiber nicht zurückgegeben hat.",
-  "@settingsHelpGraphicsMemoryReserved": {
-    "description": "Settings window: the sentence under the settingsGraphicsMemoryReserved setting."
-  },
-  "settingsHelpHeldByTheGraphicsDriver": "Bilder und Puffer, die der Treiber noch für Lumit hält. Eine Handvoll ist normal — die Frames auf der Karte, die gerade entstehenden. Tausende bedeuten Bilder, mit denen die Engine fertig war und die nie zerstört wurden; auf einem Mac liegt dieser Speicher innerhalb der Summe oben.",
-  "@settingsHelpHeldByTheGraphicsDriver": {
-    "description": "Settings window: the sentence under the settingsHeldByTheGraphicsDriver setting."
-  },
-  "settingsHelpInUse": "Frames, die auf der Karte liegen und ohne Zusammensetzen gezeigt werden können.",
-  "@settingsHelpInUse": {
-    "description": "Settings window: the sentence under the settingsInUse setting."
-  },
-  "settingsHelpInUse2": "Frames auf der Festplatte, einen Schritt vom Abspielen entfernt.",
-  "@settingsHelpInUse2": {
-    "description": "Settings window: the sentence under the settingsInUse setting."
-  },
-  "settingsHelpInterfaceScale": "Wie groß jedes Bedienfeld zeichnet, für einen dichten oder einen weit entfernten Bildschirm.",
-  "@settingsHelpInterfaceScale": {
-    "description": "Settings window: the sentence under the settingsInterfaceScale setting."
-  },
-  "settingsHelpLanguage": "In welcher Sprache Lumit geschrieben ist. Übersetzungen kommen von Freiwilligen, daher kann eine neue Sprache anfangs teilweise englisch sein.",
-  "@settingsHelpLanguage": {
-    "description": "Settings window: the sentence under the Language setting."
-  },
-  "settingsHelpMotion": "Wie stark Bedienelemente animieren, wenn sie sich ändern.",
-  "@settingsHelpMotion": {
-    "description": "Settings window: the sentence under the settingsMotion setting."
-  },
-  "settingsHelpNotHeldByAnyCache": "Der Prozess, abzüglich jedes Speichers oben, der in ihm liegt — was auf diesem Rechner die Frames auf der Karte einschließt. Eine große Zahl hier ist kein Cache, den man verkleinern sollte: Es ist Speicher, den nichts in diesem Fenster zählt, und er ist eine Meldung wert.",
-  "@settingsHelpNotHeldByAnyCache": {
-    "description": "Settings window: the sentence under the settingsNotHeldByAnyCache setting."
-  },
   "settingsHelpNowhereToPark": "Nirgends: Dieser Rechner hat keinen Ordner, in den Lumit schreiben darf.",
   "@settingsHelpNowhereToPark": {
     "description": "Settings window: shown where the disk cache folder would be, when there is none."
   },
-  "settingsHelpOpenMediaDecoders": "Einer je verwendetem Footage-Element. Jeder hält eigene Puffer, die kein Budget hier abdeckt.",
-  "@settingsHelpOpenMediaDecoders": {
-    "description": "Settings window: the sentence under the settingsOpenMediaDecoders setting."
-  },
-  "settingsHelpPanelLayout": "Jedes Bedienfeld auf seinen Standardplatz und seine Standardgröße zurücksetzen.",
-  "@settingsHelpPanelLayout": {
-    "description": "Settings window: the sentence under the settingsPanelLayout setting."
-  },
-  "settingsHelpPasteLayersAtTheirOriginal": "Eine eingefügte Ebene behält den Timecode, bei dem sie kopiert wurde, statt am Abspielkopf zu beginnen. Zum Nachbauen desselben Moments in einer zweiten Komposition; für das alltägliche „hier einfügen“ lassen Sie es aus. Effekte werden immer mit ihrem ersten Keyframe am Abspielkopf eingefügt, wie auch immer dies eingestellt ist.",
-  "@settingsHelpPasteLayersAtTheirOriginal": {
-    "description": "Settings window: the sentence under the settingsPasteLayersAtTheirOriginal setting."
-  },
-  "settingsHelpPlayheadStaysWherePlaybackStopped": "Den Abspielkopf auf dem Frame stehen lassen, der beim Anhalten zu sehen war, statt ihn dorthin zurückzusetzen, wo die Wiedergabe begann. Das Ziehen am Lineal während der Wiedergabe hält immer an und folgt dem Zeiger, wie auch immer dies eingestellt ist.",
-  "@settingsHelpPlayheadStaysWherePlaybackStopped": {
-    "description": "Settings window: the sentence under the settingsPlayheadStaysWherePlaybackStopped setting."
-  },
-  "settingsHelpQualityTier": "Worauf sich die Echtzeitsteuerung eingependelt hat.",
-  "@settingsHelpQualityTier": {
-    "description": "Settings window: the sentence under the settingsQualityTier setting."
-  },
-  "settingsHelpRetimeOpensToVelocity": "Der Retime-Graph öffnet mit der Abspielgeschwindigkeit in Prozent — ein Punkt je Keyframe, nach oben gezogen zum Beschleunigen und unter null zum Rückwärtsspielen — statt mit dem Moment der Quelle, der zu sehen ist.",
-  "@settingsHelpRetimeOpensToVelocity": {
-    "description": "Settings window: the sentence under the settingsRetimeOpensToVelocity setting."
-  },
-  "settingsHelpRetimeValuesInSeconds": "Die Retime-Zeile zeigt den gerade abgespielten Moment der Quelle als Sekundenzahl statt als Timecode in derselben Form HH:MM:SS:FF wie jede andere Zeit im Editor. Sekunden können eine Position zwischen zwei Frames angeben, ein Timecode nicht.",
-  "@settingsHelpRetimeValuesInSeconds": {
-    "description": "Settings window: the sentence under the settingsRetimeValuesInSeconds setting."
-  },
-  "settingsHelpScopeEverywhere": "Jedes Projekt, dem kein eigener Ort gegeben wurde.",
-  "@settingsHelpScopeEverywhere": {
-    "description": "Settings window: the sentence under Applies to, when the setting is this machine's default."
-  },
-  "settingsHelpScopeThisProject": "Wird in diesem Projekt gespeichert und wandert daher mit einer Kopie davon mit.",
-  "@settingsHelpScopeThisProject": {
-    "description": "Settings window: the sentence under Applies to, when the setting is stored in the project."
-  },
-  "settingsHelpSmoothThePictureWhenZoomed": "Aus bleibt ein über 1:1 vergrößertes Pixel ein Quadrat — genau das, wofür man hineinzoomt. An wird das Bild zwischen den Pixeln geglättet: weicher und angenehmer für das Auge, wenn der Zoom dem Bildaufbau dient und nicht der Prüfung.",
-  "@settingsHelpSmoothThePictureWhenZoomed": {
-    "description": "Settings window: the sentence under the settingsSmoothThePictureWhenZoomed setting."
-  },
-  "settingsHelpShowTheToneMapButton": "Setzt die Tone-Map-Schaltfläche in die Viewer-Leiste. Tone Mapping faltet ein Bild, das heller ist als der Bildschirm zeigen kann, in das zurück, was er zeigen kann, sodass die Details dort oben beim Arbeiten sichtbar sind — es ist eine Art zu schauen und erreicht nie einen Export. Aus, solange Sie es nicht verlangen.",
-  "@settingsHelpShowTheToneMapButton": {
-    "description": "Settings window: the sentence under the settingsShowTheToneMapButton setting. \"Up there\" means detail brighter than the display can show."
-  },
-  "settingsHelpSurroundTakesThemeColours": "Aus ist die Fläche um das Bild ein neutrales Grau — eine Farbkorrektur lässt sich nicht gegen eine getönte Umgebung beurteilen. An passt sie sich dem Rest der Oberfläche an.",
-  "@settingsHelpSurroundTakesThemeColours": {
-    "description": "Settings window: the sentence under the settingsSurroundTakesThemeColours setting."
-  },
-  "settingsHelpThisProcess": "Was das System sagt, das Lumit insgesamt belegt — die Zahl, die Aktivitätsanzeige und Task-Manager zeigen.",
-  "@settingsHelpThisProcess": {
-    "description": "Settings window: the sentence under the settingsThisProcess setting."
-  },
-  "settingsHelpTransformInEffectControls": "Wiederholt die Transformationszeilen der Ebene über ihren Effekten. Die Zeitleiste zeigt sie bereits, wenn eine Ebene aufgeklappt ist.",
-  "@settingsHelpTransformInEffectControls": {
-    "description": "Settings window: the sentence under the settingsTransformInEffectControls setting."
-  },
-  "settingsHelpShapeEasesInAPopup": "The graph editor's Easing button opens the shape editor in a small floating box instead of the Easing panel. The box closes whenever you click outside it — and choosing different keyframes is a click outside — so one drawn shape can only be tried on the selection that was live when it opened. Turn it on to save the screen space.",
-  "@settingsHelpShapeEasesInAPopup": {
-    "description": "Settings window: the sentence under the settingsShapeEasesInAPopup setting."
-  },
-  "settingsHelpUseThemeColours": "Off, a scope reads on the standard near-black graticule whatever the chrome — which is how a signal is measured. On, it takes the theme's colours instead.",
-  "@settingsHelpUseThemeColours": {
-    "description": "Settings window: the sentence under the settingsUseThemeColours setting."
-  },
-  "settingsHelpVideoArrivesAsASequence": "Video und Bildsequenzen, die einer Komposition hinzugefügt werden, werden zu einer Sequenzebene, die sich auf ihrer eigenen Zeile in Clips schneiden lässt. Standbilder werden nie eingepackt.",
-  "@settingsHelpVideoArrivesAsASequence": {
-    "description": "Settings window: the sentence under the settingsVideoArrivesAsASequence setting."
-  },
-  "settingsHelpVramBudget": "Wie viel Videospeicher fertige Frames belegen dürfen, von den {total} auf der Karte.",
-  "@settingsHelpVramBudget": {
-    "description": "Settings window: the sentence under the graphics-card cache Budget. {total} is a size.",
-    "placeholders": {
-      "total": {
-        "type": "String"
-      }
-    }
-  },
-  "settingsHelpWaveformsRiseFromTheBottom": "Eine Wellenform steht auf dem Boden ihrer Zeile, statt um die Stille zentriert zu sein; jede Säule reicht so weit hinauf, wie der Ton nach beiden Seiten ausschlug. Die eine Hälfte einer zentrierten Welle ist das Spiegelbild der anderen, also verwendet dies die ganze Zeile auf die Hälfte, die etwas sagt — nützlich in einer niedrigen Zeile. Gilt für die einzelne Welle wie für den Frequenzstapel.",
-  "@settingsHelpWaveformsRiseFromTheBottom": {
-    "description": "Settings window: the sentence under the settingsWaveformsRiseFromTheBottom setting."
-  },
-  "settingsHelpWaveformsShowTheFrequencyStack": "Die Wellenform einer Ebene wird als drei gestapelte Wellen gezeichnet — Bass, Mitten und Höhen — statt als eine. Eine laute Passage ist auf einer einzelnen Welle ein massiver Block, gleich welches Instrument spielt; der Stapel zeigt die Bassdrum getrennt von den Hi-Hats, sodass ein Schnitt auf das eine oder das andere gesetzt werden kann. Aus für eine einzelne schlichte Welle.",
-  "@settingsHelpWaveformsShowTheFrequencyStack": {
-    "description": "Settings window: the sentence under the settingsWaveformsShowTheFrequencyStack setting."
-  },
-  "settingsHelpWhenTheMachineCannotKeep": "Adaptiv hält die Zeit und weicht das Bild auf; jedes Frame behält das Bild und nimmt sich die Zeit, die es braucht.",
-  "@settingsHelpWhenTheMachineCannotKeep": {
-    "description": "Settings window: the sentence under the settingsWhenTheMachineCannotKeep setting."
-  },
-  "settingsHelpYourThemes": "Duplicate one to change it without losing the original, or send one to somebody as a file.",
-  "@settingsHelpYourThemes": {
-    "description": "Settings window: the sentence under the Your themes heading."
-  },
   "settingsInUse": "In Verwendung",
   "@settingsInUse": {
     "description": "Settings window: the name of a row showing how full a cache is."
-  },
-  "settingsInterfaceScale": "Oberflächenskalierung",
-  "@settingsInterfaceScale": {
-    "description": "Settings window: the name of one setting."
   },
   "settingsKeymapFile": "Datei der Tastaturbelegung",
   "@settingsKeymapFile": {
@@ -7246,14 +6939,6 @@
   "@settingsPageInterface": {
     "description": "Settings window: name of a page in the sidebar."
   },
-  "settingsPageKeymap": "Tastaturbelegung",
-  "@settingsPageKeymap": {
-    "description": "Settings window: name of a page in the sidebar. A keymap is the whole set of keyboard shortcuts."
-  },
-  "settingsPagePerformance": "Leistung",
-  "@settingsPagePerformance": {
-    "description": "Settings window: name of a page in the sidebar."
-  },
   "settingsPagePreviewAndCache": "Vorschau und Cache",
   "@settingsPagePreviewAndCache": {
     "description": "Settings window: name of a page in the sidebar — playback quality and the three frame caches."
@@ -7318,10 +7003,6 @@
   "@settingsSurround": {
     "description": "Settings window, Appearance: the name of the row choosing the colour of the area around the picture in the Viewer."
   },
-  "settingsSurroundTakesThemeColours": "Surround takes theme colours",
-  "@settingsSurroundTakesThemeColours": {
-    "description": "Settings window: the name of one setting."
-  },
   "settingsThisProcess": "Dieser Prozess",
   "@settingsThisProcess": {
     "description": "Settings window: the name of one setting."
@@ -7340,10 +7021,6 @@
   },
   "settingsTransformInEffectControls": "Transformation in den Effekteinstellungen",
   "@settingsTransformInEffectControls": {
-    "description": "Settings window: the name of one setting."
-  },
-  "settingsUseThemeColours": "Use theme colours",
-  "@settingsUseThemeColours": {
     "description": "Settings window: the name of one setting."
   },
   "settingsUsedMbIn": "{megabytes} MB in {entries}",
@@ -7369,14 +7046,6 @@
   "settingsViewerBars": "Viewer-Leisten",
   "@settingsViewerBars": {
     "description": "Settings window, Appearance: the name of the row choosing how the Viewer's chrome is arranged round the picture — split between a strip above and a bar below, or gathered into one strip at the top or at the bottom."
-  },
-  "settingsWaveformFrequencyStack": "Frequenzstapel der Wellenform",
-  "@settingsWaveformFrequencyStack": {
-    "description": "Settings window: the name of one setting."
-  },
-  "settingsWaveformsFromBottom": "Wellenformen von unten",
-  "@settingsWaveformsFromBottom": {
-    "description": "Settings window: the name of one setting."
   },
   "settingsWelcomeOnLaunch": "Willkommensbildschirm beim Start",
   "@settingsWelcomeOnLaunch": {
@@ -7654,10 +7323,6 @@
   "@switchAudible": {
     "description": "Layer switch: the layer's sound plays."
   },
-  "switchEffects": "Effekte",
-  "@switchEffects": {
-    "description": "Layer switch: whether this layer's effects are applied."
-  },
   "switchEffectsBypassed": "Effekte übersprungen",
   "@switchEffectsBypassed": {
     "description": "Layer switch, when the effects are being skipped."
@@ -7665,10 +7330,6 @@
   "switchEffectsOn": "Effekte an",
   "@switchEffectsOn": {
     "description": "Layer switch, when the effects are being applied."
-  },
-  "switchFlow": "Flow",
-  "@switchFlow": {
-    "description": "Layer switch: collapse a pre-composition's transformations. Flow is a Lumit term."
   },
   "switchGuide": "Hilfsebene",
   "@switchGuide": {
@@ -8061,10 +7722,6 @@
   "@tipEnable": {
     "description": "Tooltip on the checkbox that switches an effect on. One or two words."
   },
-  "tipExportAfterV1": "Nach v1",
-  "@tipExportAfterV1": {
-    "description": "Export dialog: why the Colour section's colour-management row is disabled. Shown on hover."
-  },
   "tipExportColourManagedBy": "Projekteinstellungen",
   "@tipExportColourManagedBy": {
     "description": "Export dialog, Colour section: the hover reason on the Managed by row, which shows the project's colour configuration but does not change it. File and Project settings are the menu and the window of those names."
@@ -8163,14 +7820,6 @@
   "@tipMissingOnly": {
     "description": "Tooltip on the Project panel's filter when it is off. One or two words."
   },
-  "tipMoreInGroup": "Halten",
-  "@tipMoreInGroup": {
-    "description": "Tooltip suffix on a toolbar button that hides other tools behind a press-and-hold. One or two words."
-  },
-  "tipMovePanel": "Bedienfeld verschieben",
-  "@tipMovePanel": {
-    "description": "Tooltip on a panel's drag handle. One or two words."
-  },
   "tipNotBuiltYet": "Nicht umgesetzt",
   "@tipNotBuiltYet": {
     "description": "Tooltip suffix on a tool that can be selected but does nothing yet. One or two words."
@@ -8182,10 +7831,6 @@
   "tipOutlineWidth": "Konturstärke",
   "@tipOutlineWidth": {
     "description": "Tooltip. Keep it to the control's name — one or two words."
-  },
-  "tipPanelLayout": "Bedienfeld-Anordnung",
-  "@tipPanelLayout": {
-    "description": "Tooltip on the workspace preset buttons. One or two words."
   },
   "tipParent": "Übergeordnet",
   "@tipParent": {
@@ -8220,14 +7865,6 @@
   "tipPlayheadTime": "Zeit des Abspielkopfs",
   "@tipPlayheadTime": {
     "description": "Tooltip on the Timeline's time readout. One or two words."
-  },
-  "tipPreviewResolution": "Vorschauauflösung",
-  "@tipPreviewResolution": {
-    "description": "Tooltip on the Viewer bar's resolution dropdown (Full, Half, Quarter). One or two words."
-  },
-  "tipPreviewResolutionAdaptive": "Adaptiv wählt",
-  "@tipPreviewResolutionAdaptive": {
-    "description": "Tooltip on the Viewer bar's resolution dropdown while it is disabled because adaptive playback picks the resolution automatically."
   },
   "tipProperties": "Eigenschaften",
   "@tipProperties": {

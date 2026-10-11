@@ -188,10 +188,6 @@
   "@clipPasteShape": {
     "description": "Context-menu item: apply a copied speed curve here."
   },
-  "clipRamp": "ramp",
-  "@clipRamp": {
-    "description": "Shown on a Sequence clip in place of a speed percentage when the speed changes over the clip. Lower case on purpose — it sits where a number would."
-  },
   "clipResetSpeed": "Reset speed",
   "@clipResetSpeed": {
     "description": "Context-menu item: put a clip back to playing at its normal speed."
@@ -1267,14 +1263,6 @@
   "@duration": {
     "description": "Field label: how long a composition runs."
   },
-  "durationFormatNote": "Duration is HH:MM:SS:FF at the frame rate above.",
-  "@durationFormatNote": {
-    "description": "Note under the duration field. HH:MM:SS:FF is a timecode and stays as it is."
-  },
-  "easeBezier": "Bezier",
-  "@easeBezier": {
-    "description": "Keyframe easing with adjustable handles. Named after the curve — keep it recognisable."
-  },
   "easeCustom": "Easing…",
   "@easeCustom": {
     "description": "Button opening the easing editor, where a curve is shaped and applied to the selected keyframes. The ellipsis marks that it opens something."
@@ -1415,10 +1403,6 @@
   "@exportAction": {
     "description": "Button that starts the export."
   },
-  "exportAudioBitRate": "Audio bit rate",
-  "@exportAudioBitRate": {
-    "description": "Export dialogue: how many bits per second the sound is given."
-  },
   "exportBitRate": "Bit rate",
   "@exportBitRate": {
     "description": "Export dialogue: how many bits per second the video is given."
@@ -1430,10 +1414,6 @@
   "exportCancelled": "Export cancelled",
   "@exportCancelled": {
     "description": "Bottom strip, when the user stopped an export."
-  },
-  "exportComposition": "Export composition",
-  "@exportComposition": {
-    "description": "Title of the export dialogue. Lumit says 'export' for writing a file, never 'render'."
   },
   "exportFailed": "Export failed: {error}",
   "@exportFailed": {
@@ -1463,10 +1443,6 @@
       }
     }
   },
-  "exportFromFrame": "From frame",
-  "@exportFromFrame": {
-    "description": "Export dialogue: the first frame to write."
-  },
   "exportImageSequenceNote": "One numbered {extension} per frame, beside the chosen name.",
   "@exportImageSequenceNote": {
     "description": "Export dialogue: note under the file name when the format writes a still per frame. {extension} is a file extension in capitals, e.g. 'PNG'.",
@@ -1475,10 +1451,6 @@
         "type": "String"
       }
     }
-  },
-  "exportIncludeAudio": "Include audio",
-  "@exportIncludeAudio": {
-    "description": "Export dialogue: whether sound is written alongside the picture."
   },
   "exportNotChosen": "Not chosen",
   "@exportNotChosen": {
@@ -1497,22 +1469,9 @@
   "@exportPreset": {
     "description": "Export dialogue: a saved set of encoder options."
   },
-  "exportToFrame": "To frame",
-  "@exportToFrame": {
-    "description": "Export dialogue: the last frame to write."
-  },
   "exportWriteTo": "Write to",
   "@exportWriteTo": {
     "description": "Export dialogue: the file the export is written to."
-  },
-  "exportWritten": "Written to {file}",
-  "@exportWritten": {
-    "description": "Export dialogue: shown when the export finished. {file} is a file name.",
-    "placeholders": {
-      "file": {
-        "type": "String"
-      }
-    }
   },
   "exportedTo": "Exported to {path}",
   "@exportedTo": {
@@ -3179,10 +3138,6 @@
   "fxConsoleHint": "Search effects and compositions",
   "@fxConsoleHint": {
     "description": "Placeholder in the FX console’s search field."
-  },
-  "fxConsoleKey": "Ctrl+Space",
-  "@fxConsoleKey": {
-    "description": "The keyboard shortcut named at the right of the FX console popover’s search row — the key that opened it. Keep as the key combination."
   },
   "fxConsolePresets": "Presets",
   "@fxConsolePresets": {
@@ -5302,15 +5257,6 @@
       }
     }
   },
-  "keymapClashPanelCount": "{count, plural, =1{One shortcut means something else in one panel} other{{count} shortcuts mean something else in one panel}}",
-  "@keymapClashPanelCount": {
-    "description": "Note in the keymap table: a panel takes a chord over from its app-wide meaning. {count} is how many chords do.",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "keymapDrag": "Dragging",
   "@keymapDrag": {
     "description": "Heading at the bottom of the Shortcuts page, over the rows that choose which modifier key changes what a drag does."
@@ -5358,24 +5304,6 @@
   "keymapPressAShortcut": "Press a shortcut…",
   "@keymapPressAShortcut": {
     "description": "Shown in a keymap row while it is waiting for the user to press keys."
-  },
-  "keymapShadowLine": "{chord} — {action} in the {context}, {shadowed} elsewhere",
-  "@keymapShadowLine": {
-    "description": "One line under the keymap's panel note: which chord, what it does in which panel, and what it does everywhere else. {chord} is the key combination, {action} and {shadowed} are command names, {context} is a panel name.",
-    "placeholders": {
-      "chord": {
-        "type": "String"
-      },
-      "action": {
-        "type": "String"
-      },
-      "context": {
-        "type": "String"
-      },
-      "shadowed": {
-        "type": "String"
-      }
-    }
   },
   "keymapWheel": "Scroll wheel",
   "@keymapWheel": {
@@ -6717,10 +6645,6 @@
   "@searchProject": {
     "description": "Placeholder in the Project panel's search box."
   },
-  "searchShortcuts": "Search shortcuts",
-  "@searchShortcuts": {
-    "description": "Placeholder in the keymap table's search box."
-  },
   "searchTracks": "Search tracks",
   "@searchTracks": {
     "description": "Placeholder in the Audio timeline panel's search box, which narrows the list to the tracks whose names carry what is typed. The Audio timeline is the one place a row is called a track."
@@ -6779,10 +6703,6 @@
   },
   "settingsCompact": "Compact",
   "@settingsCompact": {
-    "description": "Settings window: the name of one setting."
-  },
-  "settingsCorners": "Corners",
-  "@settingsCorners": {
     "description": "Settings window: the name of one setting."
   },
   "settingsCustomColours": "Custom colours",
@@ -6899,10 +6819,6 @@
   "@settingsGroupRendering": {
     "description": "Project settings: heading over a group of rows."
   },
-  "settingsGroupScopes": "Scopes",
-  "@settingsGroupScopes": {
-    "description": "Settings window: heading over a group of rows."
-  },
   "settingsGroupTheme": "Theme",
   "@settingsGroupTheme": {
     "description": "Settings window: heading over a group of rows."
@@ -6923,219 +6839,13 @@
   "@settingsHeldByTheGraphicsDriver": {
     "description": "Settings window: the name of one setting."
   },
-  "settingsHelpAntiAliasing": "Smooths the edges of rotated and scaled layers. Saved in the project, and the same for the preview and the export.",
-  "@settingsHelpAntiAliasing": {
-    "description": "Project settings: the sentence under Anti-aliasing."
-  },
-  "settingsHelpAntiAliasingInUse": "This graphics card does not offer the setting above, so Lumit is using the highest it does. The project is unchanged.",
-  "@settingsHelpAntiAliasingInUse": {
-    "description": "Project settings: the sentence under 'In use on this machine'."
-  },
-  "settingsHelpColourDepth": "How much room each colour has. 8 keeps nothing brighter than white, so glows have nothing to bloom from. 16 and 32 both hold the full range; 32 adds the precision a depth pass needs, at twice the memory. Saved in the project.",
-  "@settingsHelpColourDepth": {
-    "description": "Project settings: the sentence under Colour depth."
-  },
-  "settingsHelpColourDepthInUse": "This graphics card cannot work at the depth above, so Lumit is using 16 bpc. The project is unchanged.",
-  "@settingsHelpColourDepthInUse": {
-    "description": "Project settings: the sentence under the colour depth's 'In use on this machine'."
-  },
-  "settingsHelpAutomaticUpdates": "Look for a new version of Lumit when it starts, at most once a day. Nothing is downloaded until you ask for it.",
-  "@settingsHelpAutomaticUpdates": {
-    "description": "Settings window: the sentence under the settingsAutomaticUpdates setting."
-  },
-  "settingsHelpCacheBudget": "How much memory finished frames may hold, of the {total} this machine has.",
-  "@settingsHelpCacheBudget": {
-    "description": "Settings window: the sentence under the memory cache Budget. {total} is a size, e.g. '32 GB'.",
-    "placeholders": {
-      "total": {
-        "type": "String"
-      }
-    }
-  },
-  "settingsHelpCacheInUse": "{hits} of {requests} frames were served from the cache; {decodes} were decoded.",
-  "@settingsHelpCacheInUse": {
-    "description": "Settings window: the sentence under the memory cache's In use row. All three are whole numbers.",
-    "placeholders": {
-      "hits": {
-        "type": "String"
-      },
-      "requests": {
-        "type": "String"
-      },
-      "decodes": {
-        "type": "String"
-      }
-    }
-  },
-  "settingsHelpColourScheme": "The palette every panel draws from.",
-  "@settingsHelpColourScheme": {
-    "description": "Settings window: the sentence under the settingsColourScheme setting."
-  },
-  "settingsHelpCompact": "Draw rows a little tighter, so more of a layer stack and more parameters fit on screen. Nothing else changes.",
-  "@settingsHelpCompact": {
-    "description": "Settings window: the sentence under the settingsCompact setting."
-  },
-  "settingsHelpCorners": "How rounded controls and panels are.",
-  "@settingsHelpCorners": {
-    "description": "Settings window: the sentence under the settingsCorners setting."
-  },
-  "settingsHelpCustomColours": "Start from this scheme and set any colour yourself.",
-  "@settingsHelpCustomColours": {
-    "description": "Settings window: the sentence under the Custom colours setting, when no custom theme exists yet."
-  },
-  "settingsHelpDiskBudget": "How much disk space parked frames may take. These survive closing Lumit, so a project reopens warm.",
-  "@settingsHelpDiskBudget": {
-    "description": "Settings window: the sentence under the disk cache Budget."
-  },
-  "settingsHelpEditingTheme": "Edit the colours of {theme}.",
-  "@settingsHelpEditingTheme": {
-    "description": "Settings window: the sentence under Custom colours when a custom theme is in use. {theme} is the theme's name, which the user chose.",
-    "placeholders": {
-      "theme": {
-        "type": "String"
-      }
-    }
-  },
-  "settingsHelpFramesWaitingToBeWritten": "The write-behind queue to the disk cache, which is bounded at eight frames.",
-  "@settingsHelpFramesWaitingToBeWritten": {
-    "description": "Settings window: the sentence under the settingsFramesWaitingToBeWritten setting."
-  },
-  "settingsHelpGraphicsMemoryReserved": "What the driver has taken from the system for those, and how much of it is in use. The gap is memory Lumit has released and the driver has not handed back.",
-  "@settingsHelpGraphicsMemoryReserved": {
-    "description": "Settings window: the sentence under the settingsGraphicsMemoryReserved setting."
-  },
-  "settingsHelpHeldByTheGraphicsDriver": "Pictures and buffers the driver still has for Lumit. A handful is normal — the frames on the card, the ones being made. Thousands means pictures the engine finished with were never destroyed, and on a Mac that memory is inside the total above.",
-  "@settingsHelpHeldByTheGraphicsDriver": {
-    "description": "Settings window: the sentence under the settingsHeldByTheGraphicsDriver setting."
-  },
-  "settingsHelpInUse": "Frames held on the card, ready to show without compositing.",
-  "@settingsHelpInUse": {
-    "description": "Settings window: the sentence under the settingsInUse setting."
-  },
-  "settingsHelpInUse2": "Frames on disk, one promotion away from playing.",
-  "@settingsHelpInUse2": {
-    "description": "Settings window: the sentence under the settingsInUse setting."
-  },
-  "settingsHelpInterfaceScale": "How large every panel draws, for a dense or a distant screen.",
-  "@settingsHelpInterfaceScale": {
-    "description": "Settings window: the sentence under the settingsInterfaceScale setting."
-  },
-  "settingsHelpLanguage": "What Lumit is written in. Translations come from volunteers, so a new language may be part English at first.",
-  "@settingsHelpLanguage": {
-    "description": "Settings window: the sentence under the Language setting."
-  },
-  "settingsHelpMotion": "How much controls animate as they change.",
-  "@settingsHelpMotion": {
-    "description": "Settings window: the sentence under the settingsMotion setting."
-  },
-  "settingsHelpNotHeldByAnyCache": "The process, less every store above that is inside it — which on this machine includes the frames on the card. A large number here is not a cache to shrink: it is memory nothing in this window is counting, and it is worth reporting.",
-  "@settingsHelpNotHeldByAnyCache": {
-    "description": "Settings window: the sentence under the settingsNotHeldByAnyCache setting."
-  },
   "settingsHelpNowhereToPark": "Nowhere: this machine has no folder Lumit may write to.",
   "@settingsHelpNowhereToPark": {
     "description": "Settings window: shown where the disk cache folder would be, when there is none."
   },
-  "settingsHelpOpenMediaDecoders": "One per footage item in play. Each holds buffers of its own that no budget here covers.",
-  "@settingsHelpOpenMediaDecoders": {
-    "description": "Settings window: the sentence under the settingsOpenMediaDecoders setting."
-  },
-  "settingsHelpPanelLayout": "Return every panel to its default place and size.",
-  "@settingsHelpPanelLayout": {
-    "description": "Settings window: the sentence under the settingsPanelLayout setting."
-  },
-  "settingsHelpPasteLayersAtTheirOriginal": "A pasted layer keeps the timecode it was copied at, instead of starting at the playhead. For rebuilding the same moment in a second composition; leave it off for the everyday \"put one here\". Effects always paste with their first keyframe at the playhead, whichever way this is set.",
-  "@settingsHelpPasteLayersAtTheirOriginal": {
-    "description": "Settings window: the sentence under the settingsPasteLayersAtTheirOriginal setting."
-  },
-  "settingsHelpPlayheadStaysWherePlaybackStopped": "Leave the playhead on the frame that was on screen when playback stopped, instead of putting it back where playing started. Dragging the ruler while playing always stops and follows the pointer, whichever way this is set.",
-  "@settingsHelpPlayheadStaysWherePlaybackStopped": {
-    "description": "Settings window: the sentence under the settingsPlayheadStaysWherePlaybackStopped setting."
-  },
-  "settingsHelpQualityTier": "What the realtime controller has settled on.",
-  "@settingsHelpQualityTier": {
-    "description": "Settings window: the sentence under the settingsQualityTier setting."
-  },
-  "settingsHelpRetimeOpensToVelocity": "The Retime graph opens showing playback speed per cent — one point per keyframe, dragged up to speed up and below zero to reverse — instead of which moment of the source is showing.",
-  "@settingsHelpRetimeOpensToVelocity": {
-    "description": "Settings window: the sentence under the settingsRetimeOpensToVelocity setting."
-  },
-  "settingsHelpRetimeValuesInSeconds": "The Retime row shows which moment of the source is playing as a number of seconds, instead of as a timecode in the same HH:MM:SS:FF form as every other time in the editor. Seconds can say a position between two frames; a timecode cannot.",
-  "@settingsHelpRetimeValuesInSeconds": {
-    "description": "Settings window: the sentence under the settingsRetimeValuesInSeconds setting."
-  },
-  "settingsHelpScopeEverywhere": "Every project that has not been given a place of its own.",
-  "@settingsHelpScopeEverywhere": {
-    "description": "Settings window: the sentence under Applies to, when the setting is this machine's default."
-  },
-  "settingsHelpScopeThisProject": "Saved inside this project, so it travels with a copy of it.",
-  "@settingsHelpScopeThisProject": {
-    "description": "Settings window: the sentence under Applies to, when the setting is stored in the project."
-  },
-  "settingsHelpSmoothThePictureWhenZoomed": "Off, a pixel magnified past 1:1 stays a square, which is what you zoom in to see. On, the picture is blended between pixels — softer, and easier on the eye when the zoom is for framing rather than for inspecting.",
-  "@settingsHelpSmoothThePictureWhenZoomed": {
-    "description": "Settings window: the sentence under the settingsSmoothThePictureWhenZoomed setting."
-  },
-  "settingsHelpShowTheToneMapButton": "Put the tone map button on the Viewer bar. Tone mapping folds a picture brighter than the screen can show back into what it can, so the detail up there can be seen while you work — it is a way of looking, and it never reaches an export. Off unless you ask for it.",
-  "@settingsHelpShowTheToneMapButton": {
-    "description": "Settings window: the sentence under the settingsShowTheToneMapButton setting. \"Up there\" means detail brighter than the display can show."
-  },
-  "settingsHelpSurroundTakesThemeColours": "Off, the area around the picture is a neutral grey — a grade cannot be judged against a tinted surround. On, it matches the rest of the shell.",
-  "@settingsHelpSurroundTakesThemeColours": {
-    "description": "Settings window: the sentence under the settingsSurroundTakesThemeColours setting."
-  },
-  "settingsHelpThisProcess": "What the system says Lumit is holding, all in — the number Activity Monitor and Task Manager show.",
-  "@settingsHelpThisProcess": {
-    "description": "Settings window: the sentence under the settingsThisProcess setting."
-  },
-  "settingsHelpTransformInEffectControls": "Repeat the layer's Transform rows above its effects. The Timeline already shows them when a layer is twirled open.",
-  "@settingsHelpTransformInEffectControls": {
-    "description": "Settings window: the sentence under the settingsTransformInEffectControls setting."
-  },
-  "settingsHelpShapeEasesInAPopup": "The graph editor's Easing button opens the shape editor in a small floating box instead of the Easing panel. The box closes whenever you click outside it — and choosing different keyframes is a click outside — so one drawn shape can only be tried on the selection that was live when it opened. Turn it on to save the screen space.",
-  "@settingsHelpShapeEasesInAPopup": {
-    "description": "Settings window: the sentence under the settingsShapeEasesInAPopup setting."
-  },
-  "settingsHelpUseThemeColours": "Off, a scope reads on the standard near-black graticule whatever the chrome — which is how a signal is measured. On, it takes the theme's colours instead.",
-  "@settingsHelpUseThemeColours": {
-    "description": "Settings window: the sentence under the settingsUseThemeColours setting."
-  },
-  "settingsHelpVideoArrivesAsASequence": "Video and image sequences added to a composition become a Sequence layer, which can be cut into clips on its own row. Still images are never wrapped.",
-  "@settingsHelpVideoArrivesAsASequence": {
-    "description": "Settings window: the sentence under the settingsVideoArrivesAsASequence setting."
-  },
-  "settingsHelpVramBudget": "How much video memory finished frames may hold, of the {total} on the card.",
-  "@settingsHelpVramBudget": {
-    "description": "Settings window: the sentence under the graphics-card cache Budget. {total} is a size.",
-    "placeholders": {
-      "total": {
-        "type": "String"
-      }
-    }
-  },
-  "settingsHelpWaveformsRiseFromTheBottom": "A waveform stands on the floor of its row instead of being centred about silence, each column reaching up by how far the sound swung either way. Half of a centred wave is a mirror of the other half, so this spends the whole row on the half that says something — useful in a short row. Applies to the single wave and the frequency stack alike.",
-  "@settingsHelpWaveformsRiseFromTheBottom": {
-    "description": "Settings window: the sentence under the settingsWaveformsFromBottom setting."
-  },
-  "settingsHelpWaveformsShowTheFrequencyStack": "A layer's waveform draws as three stacked waves — bass, middle and treble — instead of one. A loud passage is a solid block on a single wave whichever instrument is playing; the stack shows the kick apart from the hats, so a cut can be aimed at either. Turn it off for one plain wave.",
-  "@settingsHelpWaveformsShowTheFrequencyStack": {
-    "description": "Settings window: the sentence under the settingsWaveformFrequencyStack setting."
-  },
-  "settingsHelpWhenTheMachineCannotKeep": "Adaptive keeps time and softens the picture; every frame keeps the picture and takes the time it needs.",
-  "@settingsHelpWhenTheMachineCannotKeep": {
-    "description": "Settings window: the sentence under the settingsWhenTheMachineCannotKeep setting."
-  },
-  "settingsHelpYourThemes": "Duplicate one to change it without losing the original, or send one to somebody as a file.",
-  "@settingsHelpYourThemes": {
-    "description": "Settings window: the sentence under the Your themes heading."
-  },
   "settingsInUse": "In use",
   "@settingsInUse": {
     "description": "Settings window: the name of a row showing how full a cache is."
-  },
-  "settingsInterfaceScale": "Interface scale",
-  "@settingsInterfaceScale": {
-    "description": "Settings window: the name of one setting."
   },
   "settingsLanguage": "Language",
   "@settingsLanguage": {
@@ -7193,14 +6903,6 @@
   "@settingsPageInterface": {
     "description": "Settings window: name of a page in the sidebar."
   },
-  "settingsPageKeymap": "Keymap",
-  "@settingsPageKeymap": {
-    "description": "Settings window: name of a page in the sidebar. A keymap is the whole set of keyboard shortcuts."
-  },
-  "settingsPagePerformance": "Performance",
-  "@settingsPagePerformance": {
-    "description": "Settings window: name of a page in the sidebar."
-  },
   "settingsPanelLayout": "Panel layout",
   "@settingsPanelLayout": {
     "description": "Settings window: the name of one setting."
@@ -7237,10 +6939,6 @@
   "@settingsSmoothThePictureWhenZoomed": {
     "description": "Settings window: the name of one setting."
   },
-  "settingsSurroundTakesThemeColours": "Surround takes theme colours",
-  "@settingsSurroundTakesThemeColours": {
-    "description": "Settings window: the name of one setting."
-  },
   "settingsThisProcess": "This process",
   "@settingsThisProcess": {
     "description": "Settings window: the name of one setting."
@@ -7259,10 +6957,6 @@
   },
   "settingsTransformInEffectControls": "Transform in Effect controls",
   "@settingsTransformInEffectControls": {
-    "description": "Settings window: the name of one setting."
-  },
-  "settingsUseThemeColours": "Use theme colours",
-  "@settingsUseThemeColours": {
     "description": "Settings window: the name of one setting."
   },
   "settingsUsedMbIn": "{megabytes} MB in {entries}",
@@ -7288,14 +6982,6 @@
   "settingsViewerBars": "Viewer bars",
   "@settingsViewerBars": {
     "description": "Settings window, Appearance: the name of the row choosing how the Viewer's chrome is arranged round the picture — split between a strip above and a bar below, or gathered into one strip at the top or at the bottom."
-  },
-  "settingsWaveformFrequencyStack": "Waveform frequency stack",
-  "@settingsWaveformFrequencyStack": {
-    "description": "Settings window: the name of one setting."
-  },
-  "settingsWaveformsFromBottom": "Waveforms from the bottom",
-  "@settingsWaveformsFromBottom": {
-    "description": "Settings window: the name of one setting."
   },
   "settingsWelcomeOnLaunch": "Welcome screen on launch",
   "@settingsWelcomeOnLaunch": {
@@ -7385,10 +7071,6 @@
   "@switchAudible": {
     "description": "Layer switch: the layer's sound plays."
   },
-  "switchEffects": "Effects",
-  "@switchEffects": {
-    "description": "Layer switch: whether this layer's effects are applied."
-  },
   "switchEffectsBypassed": "Effects bypassed",
   "@switchEffectsBypassed": {
     "description": "Layer switch, when the effects are being skipped."
@@ -7396,10 +7078,6 @@
   "switchEffectsOn": "Effects on",
   "@switchEffectsOn": {
     "description": "Layer switch, when the effects are being applied."
-  },
-  "switchFlow": "Flow",
-  "@switchFlow": {
-    "description": "Layer switch: collapse a pre-composition's transformations. Flow is a Lumit term."
   },
   "switchHidden": "Hidden",
   "@switchHidden": {
@@ -7967,14 +7645,6 @@
   "@tipMissingOnly": {
     "description": "Tooltip on the Project panel's filter when it is off. One or two words."
   },
-  "tipMoreInGroup": "Hold",
-  "@tipMoreInGroup": {
-    "description": "Tooltip suffix on a toolbar button that hides other tools behind a press-and-hold. One or two words."
-  },
-  "tipMovePanel": "Move panel",
-  "@tipMovePanel": {
-    "description": "Tooltip on a panel's drag handle. One or two words."
-  },
   "tipNotBuiltYet": "Not built",
   "@tipNotBuiltYet": {
     "description": "Tooltip suffix on a tool that can be selected but does nothing yet. One or two words."
@@ -7986,10 +7656,6 @@
   "tipOutlineWidth": "Outline width",
   "@tipOutlineWidth": {
     "description": "Tooltip. Keep it to the control's name — one or two words."
-  },
-  "tipPanelLayout": "Panel layout",
-  "@tipPanelLayout": {
-    "description": "Tooltip on the workspace preset buttons. One or two words."
   },
   "tipParent": "Parent",
   "@tipParent": {
@@ -8024,14 +7690,6 @@
   "tipPlayheadTime": "Playhead time",
   "@tipPlayheadTime": {
     "description": "Tooltip on the Timeline's time readout. One or two words."
-  },
-  "tipPreviewResolution": "Preview resolution",
-  "@tipPreviewResolution": {
-    "description": "Tooltip on the Viewer bar's resolution dropdown (Full, Half, Quarter). One or two words."
-  },
-  "tipPreviewResolutionAdaptive": "Adaptive picks",
-  "@tipPreviewResolutionAdaptive": {
-    "description": "Tooltip on the Viewer bar's resolution dropdown while it is disabled because adaptive playback picks the resolution automatically."
   },
   "tipProperties": "Properties",
   "@tipProperties": {
@@ -8186,10 +7844,6 @@
   "tipViewerSnapshotTake": "Take snapshot",
   "@tipViewerSnapshotTake": {
     "description": "Tooltip on the Viewer bar's take-snapshot button, which shows a camera icon and no words. It keeps a copy of the picture on screen to compare against later. One or two words."
-  },
-  "tipViewerToneMap": "Tone mapping",
-  "@tipViewerToneMap": {
-    "description": "Tooltip on the Viewer's tone-map toggle, which has an icon and no label, so this names it. Tone mapping rolls off detail brighter than the display can show; it is a preview, which the colour badge beside it says by reading \"Preview only\" while it is on."
   },
   "tipViewerView": "3D view",
   "@tipViewerView": {
@@ -8712,10 +8366,6 @@
   "strokeEnd": "End",
   "@strokeEnd": {
     "description": "Timeline row under a paint stroke: how far along the stroke's own length the mark ends, as a percentage."
-  },
-  "toolNoOptions": "No options",
-  "@toolNoOptions": {
-    "description": "Toolbar options strip, muted label shown while the armed tool has no options of its own."
   },
   "toolOptions": "Tool options",
   "@toolOptions": {
@@ -10522,15 +10172,6 @@
       }
     }
   },
-  "aeMaskModeUnavailable": "mask mode {aeMode} is not built yet — imported as Add",
-  "@aeMaskModeUnavailable": {
-    "description": "Import report row reason, lower case. Add is one of Lumit's mask combine modes.",
-    "placeholders": {
-      "aeMode": {
-        "type": "String"
-      }
-    }
-  },
   "aeMaskFeatherAxesDiffer": "feather {x} × {y} has one width in Lumit — imported at their average",
   "@aeMaskFeatherAxesDiffer": {
     "description": "Import report row reason, lower case. After Effects softens a mask edge by different amounts horizontally and vertically.",
@@ -11024,10 +10665,6 @@
   "@settingsAutosaveKeep": {
     "description": "Settings window, Autosave: the name of the row whose number is how many rotating copies are kept beside the project before the oldest is discarded."
   },
-  "settingsAutosaveOff": "Autosave is off — only the crash journal is protecting unsaved work.",
-  "@settingsAutosaveOff": {
-    "description": "Settings window, Autosave: the line under the interval row when the interval is zero. Zero is a real choice, not an error, so this reports it calmly. The crash journal is Lumit's running record of edits, which recovery replays."
-  },
   "settingsPagePreviewAndCache": "Preview and cache",
   "@settingsPagePreviewAndCache": {
     "description": "Settings window: name of a page in the sidebar — playback quality and the three frame caches."
@@ -11386,17 +11023,9 @@
       }
     }
   },
-  "exportAudioOn": "On",
-  "@exportAudioOn": {
-    "description": "Export dialog: audio: sound is written with the picture."
-  },
   "exportAudioOff": "Off",
   "@exportAudioOff": {
     "description": "Export dialog: audio: no sound is written."
-  },
-  "exportAudioReading": "48.000 kHz · Stereo",
-  "@exportAudioReading": {
-    "description": "Export dialog: a factual reading of the sound format every export is mixed to. The number is not translated."
   },
   "exportSummary": "{frames} frames · {seconds} s · {width}×{height} · {fps} fps",
   "@exportSummary": {
@@ -11874,10 +11503,6 @@
   "metadataCreated": "Created",
   "@metadataCreated": {
     "description": "Export dialog, Metadata section: the creation time written into the file."
-  },
-  "tipExportAfterV1": "After v1",
-  "@tipExportAfterV1": {
-    "description": "Export dialog: why the Colour section's colour-management row is disabled. Shown on hover."
   },
   "workspaceNodes": "Nodes",
   "@workspaceNodes": {
@@ -12627,10 +12252,6 @@
   "@projectColourConfig": {
     "description": "Project settings, Colour group: the row naming the OpenColorIO configuration file this project uses."
   },
-  "projectColourNoConfig": "No configuration: Lumit's own colour handling is in use.",
-  "@projectColourNoConfig": {
-    "description": "Project settings, Colour group: the line under the configuration row when the project names no configuration file, which is every project until somebody chooses one."
-  },
   "projectColourLoaded": "Loaded: {spaces} colour spaces, {displays} displays.",
   "@projectColourLoaded": {
     "description": "Project settings, Colour group: the line under the configuration row when the file was read and is in use. A display is a monitor the configuration knows how to show pictures on; both blanks are counts.",
@@ -12778,10 +12399,6 @@
   "settingsChromeLabels": "Chrome labels",
   "@settingsChromeLabels": {
     "description": "Settings row title, on the Appearance page's Interface section. Chooses whether buttons, tabs and toggles show their word or the icon that stands for it."
-  },
-  "settingsHelpChromeLabels": "Whether buttons, tabs and toggles show their word or the glyph that stands for it. Hover text always says the word, whichever you choose, and anything you typed yourself is never turned into a picture.",
-  "@settingsHelpChromeLabels": {
-    "description": "Explanatory line under the Chrome labels row in Settings."
   },
   "chromeLabelsWords": "Words",
   "@chromeLabelsWords": {
@@ -14399,14 +14016,6 @@
   "@settingsAddonsRuntime": {
     "description": "Settings window, Addons: the name of the runtime row, used until the installed runtime names itself."
   },
-  "settingsAddonsStateMissing": "Not installed.",
-  "@settingsAddonsStateMissing": {
-    "description": "Settings window, Addons: the line under the runtime row when nothing is installed. A statement, not a complaint."
-  },
-  "settingsAddonsStatePresent": "Installed, and nothing has asked for it yet.",
-  "@settingsAddonsStatePresent": {
-    "description": "Settings window, Addons: the line under the runtime row when the files are there but the library has not been loaded since Lumit started."
-  },
   "settingsAddonsStateLoaded": "Loaded, running on {provider}, version {version}.",
   "@settingsAddonsStateLoaded": {
     "description": "Settings window, Addons: the line under the runtime row once the library has loaded. The provider is the accelerator it runs on, such as DirectML, CoreML or CPU.",
@@ -14454,14 +14063,6 @@
   "settingsAddonsCheck": "Check for addons",
   "@settingsAddonsCheck": {
     "description": "Settings window, Addons: the button that fetches the list of addons. Nothing is fetched until it is pressed."
-  },
-  "settingsAddonsNotChecked": "Nothing has been asked for yet.",
-  "@settingsAddonsNotChecked": {
-    "description": "Settings window, Addons: the line under the catalogue row before the list has been fetched."
-  },
-  "settingsAddonsAllInstalled": "Everything the catalogue offers is installed.",
-  "@settingsAddonsAllInstalled": {
-    "description": "Settings window, Addons: the line under the catalogue row when there is nothing left to fetch."
   },
   "settingsAddonsNoneInstalled": "No addons are installed.",
   "@settingsAddonsNoneInstalled": {
@@ -15792,7 +15393,7 @@
   "@exportFootageStandIns": {
     "description": "Option in the export dialogue's Missing footage list. Exports from the small copies as they are, which is draft quality."
   },
-  "exportFootageCount": "{count, plural, =1{1 clip in this composition is not on this computer.} other{{count} clips in this composition are not on this computer.}}",
+  "exportFootageCount": "{count, plural, =1{1 footage item in this composition is not on this computer.} other{{count} footage items in this composition are not on this computer.}}",
   "@exportFootageCount": {
     "description": "Line under the Missing footage row in the export dialogue.",
     "placeholders": {
