@@ -12,7 +12,6 @@ import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:provider/provider.dart';
 import '../icons/icons.dart';
 import '../l10n/strings.dart';
-import '../state/comp_time.dart';
 import '../state/timeline_columns.dart';
 import '../widgets/controls.dart';
 import 'package:lumit_flutter/state/preview_throttle.dart';
@@ -468,11 +467,6 @@ class _MaskValueRowState extends State<MaskValueRow> {
   /// A still value: the number typed or dragged becomes the value.
   void _commitStatic(num v) => _write(BridgeScalar.static_(v.toDouble()));
 
-  /// An animated one: the edit lands on the key under the playhead, or plants
-  /// one there — never flattening the curve (docs/07 §4.3).
-  void _commitKeyed(double v) =>
-      _write(scalarWithValueAt(_scalar, v, widget.comp, widget.playheadFrame));
-
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
@@ -565,15 +559,15 @@ class _MaskValueRowState extends State<MaskValueRow> {
     // Animated: the field shows what the curve reads at the playhead, and an
     // edit writes the key there. No live preview mid-drag — staging a keyed
     // value through the static preview would lie about the curve.
-    return KeyedValueField(
+    return PlayheadKeyedField(
       fieldKey: key,
-      value:
-          sampledScalar(scalar, timeOfFrame(widget.comp, widget.playheadFrame)),
+      scalar: scalar,
+      comp: widget.comp,
       min: min,
       max: max,
       decimals: _decimals,
       suffix: _suffix,
-      onCommit: _commitKeyed,
+      onWrite: _write,
     );
   }
 }

@@ -647,6 +647,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeGovernorReport dco_decode_bridge_governor_report(dynamic raw);
 
   @protected
+  BridgeGradientStop dco_decode_bridge_gradient_stop(dynamic raw);
+
+  @protected
   BridgeGraphEdge dco_decode_bridge_graph_edge(dynamic raw);
 
   @protected
@@ -1261,6 +1264,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeFootageLack> dco_decode_list_bridge_footage_lack(dynamic raw);
+
+  @protected
+  List<BridgeGradientStop> dco_decode_list_bridge_gradient_stop(dynamic raw);
 
   @protected
   List<BridgeGraphEdge> dco_decode_list_bridge_graph_edge(dynamic raw);
@@ -2375,6 +2381,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeGradientStop sse_decode_bridge_gradient_stop(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeGraphEdge sse_decode_bridge_graph_edge(SseDeserializer deserializer);
 
   @protected
@@ -3074,6 +3084,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeFootageLack> sse_decode_list_bridge_footage_lack(
+      SseDeserializer deserializer);
+
+  @protected
+  List<BridgeGradientStop> sse_decode_list_bridge_gradient_stop(
       SseDeserializer deserializer);
 
   @protected
@@ -4316,6 +4330,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeGovernorReport self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_gradient_stop(
+      BridgeGradientStop self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_graph_edge(
       BridgeGraphEdge self, SseSerializer serializer);
 
@@ -5095,6 +5113,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_list_bridge_footage_lack(
       List<BridgeFootageLack> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_bridge_gradient_stop(
+      List<BridgeGradientStop> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_bridge_graph_edge(

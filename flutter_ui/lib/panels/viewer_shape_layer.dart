@@ -444,6 +444,9 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
             gradientStartY: const BridgeScalar.static_(0),
             gradientEndX: const BridgeScalar.static_(0),
             gradientEndY: const BridgeScalar.static_(0),
+            gradientStartOpacity: const BridgeScalar.static_(100),
+            gradientEndOpacity: const BridgeScalar.static_(100),
+            gradientStops: const [],
             // On the path itself, until somebody offsets it.
             combine: 0,
             pathKeys: const [],

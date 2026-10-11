@@ -3088,6 +3088,9 @@ fn shape_item(name: &str, x: f64, y: f64, side: f64) -> crate::api::layer::Bridg
         gradient_start_y: BridgeScalar::Static(0.0),
         gradient_end_x: BridgeScalar::Static(0.0),
         gradient_end_y: BridgeScalar::Static(0.0),
+        gradient_start_opacity: BridgeScalar::Static(100.0),
+        gradient_end_opacity: BridgeScalar::Static(100.0),
+        gradient_stops: Vec::new(),
         combine: 0,
         path_keys: Vec::new(),
         offset_amount: BridgeScalar::Static(0.0),
@@ -3169,9 +3172,29 @@ fn a_shapes_trim_round_trips_and_is_clamped() {
             interp_out: BridgeSideInterp::Linear,
         },
     ]);
+    // A gradient's stops keep the order they were made in, held to the ramp.
+    let stop = |position: f64, opacity: f64| crate::api::layer::BridgeGradientStop {
+        position: BridgeScalar::Static(position),
+        colour: crate::api::assets::BridgeColourRgba {
+            r: 0.0,
+            g: 1.0,
+            b: 0.0,
+            a: 1.0,
+        },
+        opacity: BridgeScalar::Static(opacity),
+    };
+    contents[0].gradient = 1;
+    contents[0].gradient_end_opacity = BridgeScalar::Static(-20.0);
+    contents[0].gradient_stops = vec![stop(140.0, 30.0), stop(25.0, 250.0)];
     shape.set_shape_contents(contents, None).expect("set");
 
     let got = &shape.get_shape_contents().expect("contents")[0];
+    assert_eq!(got.gradient_end_opacity, BridgeScalar::Static(0.0));
+    assert_eq!(
+        got.gradient_stops,
+        vec![stop(100.0, 30.0), stop(25.0, 100.0)],
+        "in the order they came, and held inside the ramp"
+    );
     assert_eq!(
         got.trim_start,
         BridgeScalar::Static(0.0),

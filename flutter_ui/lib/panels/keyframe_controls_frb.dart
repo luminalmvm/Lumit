@@ -237,6 +237,51 @@ class _KeyedValueFieldState extends State<KeyedValueField> {
       );
 }
 
+/// A [KeyedValueField] for one scalar that follows the playhead for itself.
+///
+/// The Timeline does not rebuild when the playhead moves, so a row that reads
+/// the frame it was built with shows the wrong value and writes its edit onto
+/// the key it last stood on.
+class PlayheadKeyedField extends StatelessWidget {
+  final Key fieldKey;
+  final BridgeScalar scalar;
+  final CompositionReference comp;
+  final double min;
+  final double max;
+  final int decimals;
+  final String? suffix;
+
+  /// The scalar with the edit keyed at the playhead.
+  final ValueChanged<BridgeScalar> onWrite;
+
+  const PlayheadKeyedField({
+    super.key,
+    required this.fieldKey,
+    required this.scalar,
+    required this.comp,
+    required this.min,
+    required this.max,
+    required this.onWrite,
+    this.decimals = 1,
+    this.suffix,
+  });
+
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<int>(
+        valueListenable:
+            Provider.of<LumitUiState>(context, listen: false).playheadFrame,
+        builder: (context, frame, _) => KeyedValueField(
+          fieldKey: fieldKey,
+          value: sampledScalar(scalar, timeOfFrame(comp, frame)),
+          min: min,
+          max: max,
+          decimals: decimals,
+          suffix: suffix,
+          onCommit: (v) => onWrite(scalarWithValueAt(scalar, v, comp, frame)),
+        ),
+      );
+}
+
 /// The stopwatch a property row draws under [t]: the square-bodied one in
 /// Desk, where everything is square, and the round one in Studio and Lantern.
 String stopwatchGlyph(LumitTheme t) => t.shape == ThemeShape.desk

@@ -661,6 +661,9 @@ void main() {
             gradientStartY: const BridgeScalar.static_(0),
             gradientEndX: const BridgeScalar.static_(0),
             gradientEndY: const BridgeScalar.static_(0),
+            gradientStartOpacity: const BridgeScalar.static_(100),
+            gradientEndOpacity: const BridgeScalar.static_(100),
+            gradientStops: const [],
             combine: 0,
             pathKeys: const [],
             offsetAmount: const BridgeScalar.static_(0),
@@ -712,6 +715,27 @@ void main() {
       expect(layer.getShapeContents().single.trimEnd,
           const BridgeScalar.static_(40));
 
+      // Keyed, an edit after the playhead moves adds a key there and leaves
+      // the first one alone.
+      await tester.tap(find.byKey(
+          ValueKey<String>('kf-stopwatch-tl-shape-trimEnd-${item.id}')));
+      await tester.pumpAndSettle();
+      p.uiState.scrubTo(60);
+      await tester.pumpAndSettle();
+      await tester.tap(field);
+      await tester.pumpAndSettle();
+      await tester.enterText(field, '80');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(
+          switch (layer.getShapeContents().single.trimEnd) {
+            BridgeScalar_Keyframed(:final field0) => [
+                for (final k in field0) k.value
+              ],
+            _ => null,
+          },
+          [40, 80]);
+
       // This item has no outline, so it has no dashes to set.
       expect(find.text('Dash'), findsNothing);
 
@@ -726,6 +750,40 @@ void main() {
       await tester.pumpAndSettle();
       expect(layer.getShapeContents().single.offsetAmount,
           const BridgeScalar.static_(-4));
+
+      // A gradient stop keyed on its own row keeps its keys when the editor
+      // writes the stops back with another one added.
+      await tester
+          .tap(find.byKey(ValueKey<String>('tl-shape-gradient-${item.id}')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Linear').last);
+      await tester.pumpAndSettle();
+      final ramp =
+          find.byKey(ValueKey<String>('tl-shape-gradientStops-${item.id}'));
+      const bar = ValueKey<String>('grad-ramp');
+      await tester.ensureVisible(ramp);
+      await tester.tap(ramp);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(bar));
+      await tester.pumpAndSettle();
+      closeLumitPopups();
+      await tester.pumpAndSettle();
+      final stopwatch = find.byKey(ValueKey<String>(
+          'kf-stopwatch-tl-shape-gradientStopPosition-${item.id}-0'));
+      await tester.ensureVisible(stopwatch);
+      await tester.tap(stopwatch);
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(ramp);
+      await tester.tap(ramp);
+      await tester.pumpAndSettle();
+      final box = tester.getRect(find.byKey(bar));
+      await tester.tapAt(Offset(box.left + box.width * 0.2, box.center.dy));
+      await tester.pumpAndSettle();
+      closeLumitPopups();
+      await tester.pumpAndSettle();
+      final stops = layer.getShapeContents().single.gradientStops;
+      expect(stops, hasLength(2));
+      expect(stops.first.position, isA<BridgeScalar_Keyframed>());
     });
 
     /// Dropping footage with nothing open offers to make the composition it

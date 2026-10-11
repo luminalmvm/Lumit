@@ -19959,6 +19959,19 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  BridgeGradientStop dco_decode_bridge_gradient_stop(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return BridgeGradientStop(
+      position: dco_decode_bridge_scalar(arr[0]),
+      colour: dco_decode_bridge_colour_rgba(arr[1]),
+      opacity: dco_decode_bridge_scalar(arr[2]),
+    );
+  }
+
+  @protected
   BridgeGraphEdge dco_decode_bridge_graph_edge(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -21499,8 +21512,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeShapeItem dco_decode_bridge_shape_item(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 32)
-      throw Exception('unexpected arr length: expect 32 but see ${arr.length}');
+    if (arr.length != 35)
+      throw Exception('unexpected arr length: expect 35 but see ${arr.length}');
     return BridgeShapeItem(
       id: dco_decode_Uuid(arr[0]),
       name: dco_decode_String(arr[1]),
@@ -21521,19 +21534,22 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       gradientStartY: dco_decode_bridge_scalar(arr[16]),
       gradientEndX: dco_decode_bridge_scalar(arr[17]),
       gradientEndY: dco_decode_bridge_scalar(arr[18]),
-      combine: dco_decode_u_32(arr[19]),
-      pathKeys: dco_decode_list_bridge_keyframe(arr[20]),
-      offsetAmount: dco_decode_bridge_scalar(arr[21]),
-      repeatCopies: dco_decode_bridge_scalar(arr[22]),
-      repeatOffset: dco_decode_bridge_scalar(arr[23]),
-      repeatAnchorX: dco_decode_bridge_scalar(arr[24]),
-      repeatAnchorY: dco_decode_bridge_scalar(arr[25]),
-      repeatPositionX: dco_decode_bridge_scalar(arr[26]),
-      repeatPositionY: dco_decode_bridge_scalar(arr[27]),
-      repeatRotation: dco_decode_bridge_scalar(arr[28]),
-      repeatScale: dco_decode_bridge_scalar(arr[29]),
-      repeatStartOpacity: dco_decode_bridge_scalar(arr[30]),
-      repeatEndOpacity: dco_decode_bridge_scalar(arr[31]),
+      gradientStartOpacity: dco_decode_bridge_scalar(arr[19]),
+      gradientEndOpacity: dco_decode_bridge_scalar(arr[20]),
+      gradientStops: dco_decode_list_bridge_gradient_stop(arr[21]),
+      combine: dco_decode_u_32(arr[22]),
+      pathKeys: dco_decode_list_bridge_keyframe(arr[23]),
+      offsetAmount: dco_decode_bridge_scalar(arr[24]),
+      repeatCopies: dco_decode_bridge_scalar(arr[25]),
+      repeatOffset: dco_decode_bridge_scalar(arr[26]),
+      repeatAnchorX: dco_decode_bridge_scalar(arr[27]),
+      repeatAnchorY: dco_decode_bridge_scalar(arr[28]),
+      repeatPositionX: dco_decode_bridge_scalar(arr[29]),
+      repeatPositionY: dco_decode_bridge_scalar(arr[30]),
+      repeatRotation: dco_decode_bridge_scalar(arr[31]),
+      repeatScale: dco_decode_bridge_scalar(arr[32]),
+      repeatStartOpacity: dco_decode_bridge_scalar(arr[33]),
+      repeatEndOpacity: dco_decode_bridge_scalar(arr[34]),
     );
   }
 
@@ -22593,6 +22609,12 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   List<BridgeFootageLack> dco_decode_list_bridge_footage_lack(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_bridge_footage_lack).toList();
+  }
+
+  @protected
+  List<BridgeGradientStop> dco_decode_list_bridge_gradient_stop(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_bridge_gradient_stop).toList();
   }
 
   @protected
@@ -25568,6 +25590,17 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  BridgeGradientStop sse_decode_bridge_gradient_stop(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_position = sse_decode_bridge_scalar(deserializer);
+    var var_colour = sse_decode_bridge_colour_rgba(deserializer);
+    var var_opacity = sse_decode_bridge_scalar(deserializer);
+    return BridgeGradientStop(
+        position: var_position, colour: var_colour, opacity: var_opacity);
+  }
+
+  @protected
   BridgeGraphEdge sse_decode_bridge_graph_edge(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_from = sse_decode_bridge_output_ref(deserializer);
@@ -27165,6 +27198,9 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_gradientStartY = sse_decode_bridge_scalar(deserializer);
     var var_gradientEndX = sse_decode_bridge_scalar(deserializer);
     var var_gradientEndY = sse_decode_bridge_scalar(deserializer);
+    var var_gradientStartOpacity = sse_decode_bridge_scalar(deserializer);
+    var var_gradientEndOpacity = sse_decode_bridge_scalar(deserializer);
+    var var_gradientStops = sse_decode_list_bridge_gradient_stop(deserializer);
     var var_combine = sse_decode_u_32(deserializer);
     var var_pathKeys = sse_decode_list_bridge_keyframe(deserializer);
     var var_offsetAmount = sse_decode_bridge_scalar(deserializer);
@@ -27198,6 +27234,9 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         gradientStartY: var_gradientStartY,
         gradientEndX: var_gradientEndX,
         gradientEndY: var_gradientEndY,
+        gradientStartOpacity: var_gradientStartOpacity,
+        gradientEndOpacity: var_gradientEndOpacity,
+        gradientStops: var_gradientStops,
         combine: var_combine,
         pathKeys: var_pathKeys,
         offsetAmount: var_offsetAmount,
@@ -28482,6 +28521,19 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var ans_ = <BridgeFootageLack>[];
     for (var idx_ = 0; idx_ < len_; ++idx_) {
       ans_.add(sse_decode_bridge_footage_lack(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<BridgeGradientStop> sse_decode_list_bridge_gradient_stop(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <BridgeGradientStop>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_bridge_gradient_stop(deserializer));
     }
     return ans_;
   }
@@ -31842,6 +31894,15 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  void sse_encode_bridge_gradient_stop(
+      BridgeGradientStop self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_bridge_scalar(self.position, serializer);
+    sse_encode_bridge_colour_rgba(self.colour, serializer);
+    sse_encode_bridge_scalar(self.opacity, serializer);
+  }
+
+  @protected
   void sse_encode_bridge_graph_edge(
       BridgeGraphEdge self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -33101,6 +33162,9 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_bridge_scalar(self.gradientStartY, serializer);
     sse_encode_bridge_scalar(self.gradientEndX, serializer);
     sse_encode_bridge_scalar(self.gradientEndY, serializer);
+    sse_encode_bridge_scalar(self.gradientStartOpacity, serializer);
+    sse_encode_bridge_scalar(self.gradientEndOpacity, serializer);
+    sse_encode_list_bridge_gradient_stop(self.gradientStops, serializer);
     sse_encode_u_32(self.combine, serializer);
     sse_encode_list_bridge_keyframe(self.pathKeys, serializer);
     sse_encode_bridge_scalar(self.offsetAmount, serializer);
@@ -34083,6 +34147,16 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
       sse_encode_bridge_footage_lack(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_bridge_gradient_stop(
+      List<BridgeGradientStop> self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_bridge_gradient_stop(item, serializer);
     }
   }
 
