@@ -9,7 +9,8 @@ updated: October 2026
 Lumit is an editor that runs on your computer. Your projects and footage stay there. This
 page covers the two things that do talk to a server of ours: a Lumit account, and Lumit Pro.
 
-If you never sign in, we hold nothing about you.
+If you never sign in, we hold nothing about you. Lumit is run by Mackenzie Reed, who is
+responsible for what is kept.
 
 ## What we keep
 

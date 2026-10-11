@@ -70,10 +70,9 @@ markup. The page is still fully usable with JavaScript disabled.
 ## Lumit Pro
 
 Pro is bought inside Lumit, and paid for on `/pro/checkout`, where Paddle's script draws
-its form over the page. The page takes Paddle's client-side token from the build, so the
-`lumit` Worker's build needs two variables: `PUBLIC_PADDLE_TOKEN`, and
-`PUBLIC_PADDLE_ENV=sandbox` while it is the sandbox's token. Without the token the page
-only points people back to Lumit. The two prices on `/pro` are written into the page, in
+its form over the page. Paddle's public client-side token is written into the page. To
+test against the sandbox, build with `PUBLIC_PADDLE_TOKEN` set to the sandbox's token and
+`PUBLIC_PADDLE_ENV=sandbox`. The two prices on `/pro` are written into the page, in
 dollars.
 
 ## Release notes
