@@ -42,7 +42,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1776614159;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -782108129;
 
 // Section: executor
 
@@ -18424,6 +18424,40 @@ fn wire__crate__api__track__set_camera_solve_link_impl(
         },
     )
 }
+fn wire__crate__api__shell__set_discord_status_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "set_discord_status",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_show = <bool>::sse_decode(&mut deserializer);
+            let api_project = <Option<String>>::sse_decode(&mut deserializer);
+            let api_comp = <Option<String>>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let output_ok = Result::<_, ()>::Ok({
+                    crate::api::shell::set_discord_status(api_show, api_project, api_comp);
+                })?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
 fn wire__crate__api__cache__set_disk_cache_budget_impl(
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -26687,8 +26721,8 @@ fn pde_ffi_dispatcher_primary_impl(
             data_len,
         ),
         516 => wire__crate__api__effect__rescan_plugins_impl(port, ptr, rust_vec_len, data_len),
-        553 => wire__crate__api__assets__text_font_faces_impl(port, ptr, rust_vec_len, data_len),
-        554 => wire__crate__api__assets__text_font_families_impl(port, ptr, rust_vec_len, data_len),
+        554 => wire__crate__api__assets__text_font_faces_impl(port, ptr, rust_vec_len, data_len),
+        555 => wire__crate__api__assets__text_font_families_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -27191,31 +27225,32 @@ fn pde_ffi_dispatcher_sync_impl(
 531 => wire__crate__api__shell__set_autosave_impl(ptr, rust_vec_len, data_len),
 532 => wire__crate__api__cache__set_cache_budget_impl(ptr, rust_vec_len, data_len),
 533 => wire__crate__api__track__set_camera_solve_link_impl(ptr, rust_vec_len, data_len),
-534 => wire__crate__api__cache__set_disk_cache_budget_impl(ptr, rust_vec_len, data_len),
-535 => wire__crate__api__cache__set_disk_cache_location_impl(ptr, rust_vec_len, data_len),
-536 => wire__crate__api__shell__set_full_res_drag_previews_impl(ptr, rust_vec_len, data_len),
-537 => wire__crate__api__shell__set_hardware_decode_impl(ptr, rust_vec_len, data_len),
-538 => wire__crate__api__effect__set_plugin_enabled_impl(ptr, rust_vec_len, data_len),
-539 => wire__crate__api__cache__set_render_profiling_impl(ptr, rust_vec_len, data_len),
-540 => wire__crate__api__cache__set_vram_cache_budget_impl(ptr, rust_vec_len, data_len),
-541 => wire__crate__api__effect__shader_graph_view_impl(ptr, rust_vec_len, data_len),
-542 => wire__crate__api__share__share_cloud_door_impl(ptr, rust_vec_len, data_len),
-543 => wire__crate__api__share__share_cloud_relay_impl(ptr, rust_vec_len, data_len),
-544 => wire__crate__api__share__share_default_port_impl(ptr, rust_vec_len, data_len),
-545 => wire__crate__api__share__share_link_in_impl(ptr, rust_vec_len, data_len),
-546 => wire__crate__api__share__share_link_locked_impl(ptr, rust_vec_len, data_len),
-547 => wire__crate__api__share__share_relay_port_impl(ptr, rust_vec_len, data_len),
-548 => wire__crate__api__share__share_set_footage_impl(ptr, rust_vec_len, data_len),
-549 => wire__crate__api__share__share_set_limits_impl(ptr, rust_vec_len, data_len),
-550 => wire__crate__api__solid__solid_reference_get_definition_impl(ptr, rust_vec_len, data_len),
-551 => wire__crate__api__solid__solid_reference_set_definition_impl(ptr, rust_vec_len, data_len),
-552 => wire__crate__api__system__system_memory_bytes_impl(ptr, rust_vec_len, data_len),
-555 => wire__crate__api__system__thaw_cursor_impl(ptr, rust_vec_len, data_len),
-556 => wire__crate__api__track__track_status_impl(ptr, rust_vec_len, data_len),
-557 => wire__crate__api__track__tracked_points_impl(ptr, rust_vec_len, data_len),
-558 => wire__crate__api__system__video_memory_bytes_impl(ptr, rust_vec_len, data_len),
-559 => wire__crate__api__cache__viewer_transport_impl(ptr, rust_vec_len, data_len),
-560 => wire__crate__api__cache__vram_cache_stats_impl(ptr, rust_vec_len, data_len),
+534 => wire__crate__api__shell__set_discord_status_impl(ptr, rust_vec_len, data_len),
+535 => wire__crate__api__cache__set_disk_cache_budget_impl(ptr, rust_vec_len, data_len),
+536 => wire__crate__api__cache__set_disk_cache_location_impl(ptr, rust_vec_len, data_len),
+537 => wire__crate__api__shell__set_full_res_drag_previews_impl(ptr, rust_vec_len, data_len),
+538 => wire__crate__api__shell__set_hardware_decode_impl(ptr, rust_vec_len, data_len),
+539 => wire__crate__api__effect__set_plugin_enabled_impl(ptr, rust_vec_len, data_len),
+540 => wire__crate__api__cache__set_render_profiling_impl(ptr, rust_vec_len, data_len),
+541 => wire__crate__api__cache__set_vram_cache_budget_impl(ptr, rust_vec_len, data_len),
+542 => wire__crate__api__effect__shader_graph_view_impl(ptr, rust_vec_len, data_len),
+543 => wire__crate__api__share__share_cloud_door_impl(ptr, rust_vec_len, data_len),
+544 => wire__crate__api__share__share_cloud_relay_impl(ptr, rust_vec_len, data_len),
+545 => wire__crate__api__share__share_default_port_impl(ptr, rust_vec_len, data_len),
+546 => wire__crate__api__share__share_link_in_impl(ptr, rust_vec_len, data_len),
+547 => wire__crate__api__share__share_link_locked_impl(ptr, rust_vec_len, data_len),
+548 => wire__crate__api__share__share_relay_port_impl(ptr, rust_vec_len, data_len),
+549 => wire__crate__api__share__share_set_footage_impl(ptr, rust_vec_len, data_len),
+550 => wire__crate__api__share__share_set_limits_impl(ptr, rust_vec_len, data_len),
+551 => wire__crate__api__solid__solid_reference_get_definition_impl(ptr, rust_vec_len, data_len),
+552 => wire__crate__api__solid__solid_reference_set_definition_impl(ptr, rust_vec_len, data_len),
+553 => wire__crate__api__system__system_memory_bytes_impl(ptr, rust_vec_len, data_len),
+556 => wire__crate__api__system__thaw_cursor_impl(ptr, rust_vec_len, data_len),
+557 => wire__crate__api__track__track_status_impl(ptr, rust_vec_len, data_len),
+558 => wire__crate__api__track__tracked_points_impl(ptr, rust_vec_len, data_len),
+559 => wire__crate__api__system__video_memory_bytes_impl(ptr, rust_vec_len, data_len),
+560 => wire__crate__api__cache__viewer_transport_impl(ptr, rust_vec_len, data_len),
+561 => wire__crate__api__cache__vram_cache_stats_impl(ptr, rust_vec_len, data_len),
                         _ => unreachable!(),
                     }
 }

@@ -207,6 +207,17 @@ enum ToolBarPosition {
   left,
 }
 
+/// What Lumit puts in the person's Discord status.
+enum DiscordStatus {
+  off,
+
+  /// That Lumit is open, and for how long.
+  app,
+
+  /// The project and the composition as well.
+  names,
+}
+
 /// Which room Lantern's cards stand in.
 enum LanternRoom {
   /// The style's own room, which is the night room for every scheme. A dark

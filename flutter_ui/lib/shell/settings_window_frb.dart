@@ -844,6 +844,8 @@ class _SettingsWindowState extends State<_SettingsWindow> {
     switch (_page) {
       case SettingsPage.general:
         workspace.setAutoUpdate(true);
+        workspace.setDiscordStatus(DiscordStatus.app);
+        ui.pushDiscordStatus();
         ui.setLanguage(null);
       case SettingsPage.account:
         // Nothing here has a shipped value to go back to.
@@ -1010,6 +1012,25 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                 small: true,
                 onPressed: () => setState(ui.resetLayout),
                 child: Text(l10n.menuResetWorkspace, style: t.small),
+              ),
+            ),
+            _row(
+              t,
+              l10n.settingsDiscordStatus,
+              _dropdown<DiscordStatus>(
+                key: 'settings-discord-status',
+                value: ui.workspace.discordStatus,
+                options: DiscordStatus.values,
+                width: _ddWide,
+                label: (status) => switch (status) {
+                  DiscordStatus.off => l10n.off,
+                  DiscordStatus.app => l10n.settingsDiscordStatusApp,
+                  DiscordStatus.names => l10n.settingsDiscordStatusNames,
+                },
+                onChanged: (status) => setState(() {
+                  ui.workspace.setDiscordStatus(status);
+                  ui.pushDiscordStatus();
+                }),
               ),
             ),
           ],

@@ -16192,6 +16192,18 @@
       }
     }
   },
+  "settingsDiscordStatus": "Discord status",
+  "@settingsDiscordStatus": {
+    "description": "Settings window: the name of the row that chooses what Lumit shows in the person's Discord status. The choices are Off, settingsDiscordStatusApp and settingsDiscordStatusNames."
+  },
+  "settingsDiscordStatusApp": "Lumit only",
+  "@settingsDiscordStatusApp": {
+    "description": "Settings window: a choice for settingsDiscordStatus. Discord shows that Lumit is open and nothing about the work."
+  },
+  "settingsDiscordStatusNames": "Project and composition",
+  "@settingsDiscordStatusNames": {
+    "description": "Settings window: a choice for settingsDiscordStatus. Discord also shows the names of the open project and composition."
+  },
   "settingsGroupSharing": "Shared projects",
   "@settingsGroupSharing": {
     "description": "Section heading on the General page of Settings."

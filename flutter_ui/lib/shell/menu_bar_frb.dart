@@ -2295,6 +2295,7 @@ Future<void> saveProjectFrb(
     // and the title bar carries the name.
     ui.rememberSession();
     app.refreshWindowTitle();
+    ui.pushDiscordStatus();
     // The welcome screen's picture of this project, taken *after* the save and
     // never in front of it: the save is done, the notice is posted, and taking
     // the picture happens on its own time. The fronted composition at the

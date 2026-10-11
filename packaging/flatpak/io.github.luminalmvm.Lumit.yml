@@ -29,6 +29,10 @@ finish-args:
   - --device=dri
   # Covers PipeWire as well as PulseAudio.
   - --socket=pulseaudio
+  # Discord's socket, for the Discord status. The second is the Flatpak
+  # Discord's, which keeps its own a folder down.
+  - --filesystem=xdg-run/discord-ipc-0
+  - --filesystem=xdg-run/app/com.discordapp.Discord:create
   # Where footage may be read from.
   #
   # In plain terms: a video editor reads footage from wherever the user keeps

@@ -739,6 +739,10 @@ class Workspace extends ChangeNotifier {
   /// anybody a surprise few hundred megabytes.
   bool autoUpdate = true;
 
+  /// What Discord shows while Lumit is open. Names are a choice and not the
+  /// default, since a project's name can be somebody else's secret.
+  DiscordStatus discordStatus = DiscordStatus.app;
+
   /// Whether the welcome screen opens on launch.
   ///
   /// On by default. Off is for somebody who always starts from the same
@@ -1221,6 +1225,11 @@ class Workspace extends ChangeNotifier {
   /// be a poor joke.
   void setAutoUpdate(bool on) {
     autoUpdate = on;
+    settingsChanged();
+  }
+
+  void setDiscordStatus(DiscordStatus status) {
+    discordStatus = status;
     settingsChanged();
   }
 
@@ -1728,6 +1737,7 @@ class Workspace extends ChangeNotifier {
         'first_run_done': firstRunDone,
         'tour_done': tourDone,
         'auto_update': autoUpdate,
+        'discord_status': discordStatus.name,
         'show_welcome_on_launch': showWelcomeOnLaunch,
         'last_update_check_ms': lastUpdateCheckMs,
         'keymap': keymapJson,
@@ -1821,6 +1831,9 @@ class Workspace extends ChangeNotifier {
     // for; the default is on, and an existing user gets the same offer a new
     // one does.
     autoUpdate = j['auto_update'] as bool? ?? true;
+    // By name. Absent, or a name no build wrote, is the shipped default.
+    discordStatus = DiscordStatus.values.asNameMap()[j['discord_status']] ??
+        DiscordStatus.app;
     // Absent means a settings file written before the screen could be turned
     // off, and the answer for those is the same as for a new user: show it.
     showWelcomeOnLaunch = j['show_welcome_on_launch'] as bool? ?? true;
