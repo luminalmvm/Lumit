@@ -12,6 +12,11 @@ param([string]$Version)
 $ErrorActionPreference = 'Stop'
 $root = Resolve-Path "$PSScriptRoot\..\.."
 
+# A build never clears its output folder, and the installer takes everything
+# in it. A library left beside the exe by a build from before they moved to
+# lib\ would be packaged, and Windows loads the one beside the exe first.
+Remove-Item "$root\flutter_ui\build\windows\x64\runner\Release\*.dll" -ErrorAction SilentlyContinue
+
 Push-Location "$root\flutter_ui"
 try {
     flutter build windows --release
