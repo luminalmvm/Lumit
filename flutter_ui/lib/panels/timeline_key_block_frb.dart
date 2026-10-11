@@ -261,10 +261,15 @@ class _KeyBlockOverlayState extends State<KeyBlockOverlay> {
                 ),
               ),
             ),
-            // No handles on a block whose keys all sit on one frame. There is
-            // nothing to stretch, and the two would stand on the keys and take
-            // the drag that moves them.
-            if (block.last > block.first) ...[
+            // No handles on a block too narrow to hold them apart: one whose
+            // keys all sit on one frame, or sit so close at this zoom that the
+            // two would cover it between them. They would stand on the keys
+            // and take the drag that moves them, and the ground between that
+            // moves the block is gone by then too. Measured where the block
+            // stood before the gesture, so a handle does not go from under
+            // the hand that is stretching with it.
+            if (widget.axis.xOf(block.last) - widget.axis.xOf(block.first) >
+                _blockHandleGrab) ...[
               _handle(t, x: left, top: boxTop, bottom: boxBottom, start: true),
               _handle(t,
                   x: right, top: boxTop, bottom: boxBottom, start: false),

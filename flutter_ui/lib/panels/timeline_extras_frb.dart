@@ -3281,8 +3281,12 @@ List<BridgeMarker> markersWithFrb(
       label: label,
       // A marker being **moved** keeps the span and the colour it was
       // carrying; a marker being made is a plain moment, which is what every
-      // new cue is.
-      durationFrames: moved?.durationFrames,
+      // new cue is. The span stops at the end of the composition, as it
+      // does wherever else a region is written.
+      durationFrames: moved?.durationFrames == null
+          ? null
+          : min(moved!.durationFrames!,
+              max(1, comp.durationFrames() - frame)),
       colour: moved?.colour,
       // Read-only across the seam: the engine's merge decides what stays a
       // beat, so what is written here is never read back.
