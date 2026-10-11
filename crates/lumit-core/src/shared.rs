@@ -439,6 +439,22 @@ fn fit(doc: &mut Document, op: &Op) -> Result<(Op, Op), OpError> {
 /// else has since shortened names a place that no longer exists. Refusing it
 /// would lose the layer and every edit made to it, so it lands at the end.
 pub fn land(doc: &mut Document, op: &Op, was: Option<&Op>) -> Result<(Op, Op), OpError> {
+    if !matches!(op, Op::Batch { .. }) {
+        return land_on(doc, op, was);
+    }
+    // One copy to work on for the whole batch, however batches sit inside
+    // it. A failure anywhere drops the copy and the document is untouched. A
+    // copy for each batch inside would be the whole document again for every
+    // one of them, and a peer chooses how many there are.
+    let mut scratch = doc.clone();
+    let landed = land_on(&mut scratch, op, was)?;
+    *doc = scratch;
+    Ok(landed)
+}
+
+/// [`land`] on a document that is the caller's to throw away if this fails
+/// part-way through a batch.
+fn land_on(doc: &mut Document, op: &Op, was: Option<&Op>) -> Result<(Op, Op), OpError> {
     if let Op::Batch { ops } = op {
         // A batch's inverse runs backwards, so its last member answers the
         // first.
@@ -446,17 +462,15 @@ pub fn land(doc: &mut Document, op: &Op, was: Option<&Op>) -> Result<(Op, Op), O
             Some(Op::Batch { ops: was }) if was.len() == ops.len() => Some(was.iter().rev()),
             _ => None,
         };
-        let mut scratch = doc.clone();
         let mut landed = Vec::with_capacity(ops.len());
         let mut inverses = Vec::with_capacity(ops.len());
         for member in ops {
             let old = olds.as_mut().and_then(Iterator::next);
-            let (op, inverse) = land(&mut scratch, member, old)?;
+            let (op, inverse) = land_on(doc, member, old)?;
             landed.push(op);
             inverses.push(inverse);
         }
         inverses.reverse();
-        *doc = scratch;
         return Ok((Op::Batch { ops: landed }, Op::Batch { ops: inverses }));
     }
     let (applied, now) = fit(doc, op)?;

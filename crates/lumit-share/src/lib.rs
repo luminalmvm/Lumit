@@ -29,7 +29,7 @@ mod wire;
 pub use bulk::{Footage, Held, Limits, News, Wanted};
 pub use guest::{join, resume, Guest, Joining, Resuming};
 pub use host::{host, Host};
-pub use invite::{key_from, key_text, lock_of, Invite, LINK, LINK_SCHEME, MAX_ADDRESSES};
+pub use invite::{key_from, key_text, Invite, Lock, LINK, LINK_SCHEME, MAX_ADDRESSES};
 pub use kept::forget;
 pub use lumit_core::shared::Conflict;
 
@@ -175,10 +175,10 @@ pub enum Relayed {
 }
 
 /// The name of the room a host with this invite keeps at a relay. Both ends
-/// work it out from the secret, and the relay cannot work the secret out
-/// from it.
-pub(crate) fn room(key: &[u8; 32]) -> String {
-    let name = blake3::derive_key("lumit-share 2026 relay room", key);
+/// work it out from the link's own secret ([`Invite::link`]), and the relay
+/// cannot work the secret out from it.
+pub(crate) fn room(link: &[u8; 32]) -> String {
+    let name = blake3::derive_key("lumit-share 2026 relay room", link);
     hex::encode(&name[..16])
 }
 
@@ -353,6 +353,15 @@ impl Sharing {
         }
     }
 
+    /// Stop taking `wanted`, and tell whoever is sending it, so a fetch that
+    /// was cancelled stops at both ends.
+    pub fn unwant(&self, wanted: &Wanted) {
+        match self {
+            Sharing::Host(host) => host.unwant(wanted),
+            Sharing::Guest(guest) => guest.unwant(wanted),
+        }
+    }
+
     /// Say `body` to the person numbered `to`. It reaches them as an
     /// [`Event::Note`], or not at all if they have gone.
     pub fn note(&self, to: u32, body: serde_json::Value) {
@@ -518,7 +527,7 @@ mod tests {
         assert!(join(invite, "Other", None).is_err());
         assert_eq!(host.people().len(), 2);
         until("the guest still here has the new invite", || {
-            guest.key() == host.key()
+            guest.key() == (host.key(), host.key())
         });
 
         // The connection drops, with an edit on it that the host took and
@@ -876,7 +885,7 @@ mod tests {
     #[test]
     fn a_password_is_asked_for_as_well_as_the_link() {
         let hosted = Arc::new(DocumentStore::new(Document::new()));
-        let lock = Some(lock_of("correct horse"));
+        let lock = Some(Lock::new("correct horse").unwrap());
         let host = host(hosted, "Host", LOOPBACK, 0, None, lock, None, quiet()).unwrap();
         let link = || {
             let written = host.invite("127.0.0.1").to_string();
@@ -907,7 +916,7 @@ mod tests {
         assert!(join(old.unlocked("correct horse"), "Other", None).is_err());
         let new = link().unlocked("correct horse");
         until("the guest still here has the new key", || {
-            guest.key() == new.key
+            guest.key() == (new.key, new.link)
         });
         assert!(join(new, "Other", None).is_ok());
     }

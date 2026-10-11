@@ -5,7 +5,7 @@
 //! greeted it, and a writer.
 
 use crate::bulk::{self, Footage, Held, Limits, Wanted};
-use crate::invite::locked_key;
+use crate::invite::{locked_key, Lock};
 use crate::kept::{HostLog, Pair};
 use crate::local::{place, sane};
 use crate::reach::{self, Closed};
@@ -19,7 +19,7 @@ use lumit_core::{Document, DocumentStore};
 use parking_lot::Mutex;
 use std::net::{IpAddr, Ipv6Addr, Shutdown, TcpListener, TcpStream};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{sync_channel, Receiver as Done, SyncSender};
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
@@ -33,6 +33,24 @@ pub(crate) const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// connect before proving they hold the invite, so this is what a flood of
 /// strangers is held to.
 const GREETING_ROOM: usize = 8;
+
+/// How many of those may come from one address, so one machine cannot take
+/// every place.
+const GREETING_EACH: usize = 3;
+
+/// How long a caller that failed to say hello keeps its place.
+const GUESS_PAUSE: Duration = Duration::from_secs(1);
+
+/// One caller still saying hello.
+struct Greeter {
+    id: u64,
+    /// Where it came from, for a caller on this machine's own port.
+    from: Option<IpAddr>,
+    /// Its connection, to close when it takes longer than a hello does.
+    /// `None` while it is still being fetched from the relay.
+    socket: Option<TcpStream>,
+    since: Instant,
+}
 
 /// How often the accepting thread looks for a caller, tidies up, and sends on
 /// what the host is looking at.
@@ -57,7 +75,7 @@ struct Seats {
     key: [u8; 32],
     /// What the host's password comes to, if it set one. It outlives the
     /// invite's secret, so the same password opens the next invite too.
-    lock: Option<[u8; 32]>,
+    lock: Option<Lock>,
     people: Vec<Person>,
     links: Vec<Link>,
     /// The last edit taken from each guest, by the token it says hello with,
@@ -75,6 +93,15 @@ impl Seats {
         self.lock
             .map_or(self.key, |lock| locked_key(&self.key, &lock))
     }
+
+    /// The invite as it stands, by these ways to the host.
+    fn invite(&self, addresses: Vec<String>, relays: Vec<String>) -> Invite {
+        Invite {
+            locked: self.lock.is_some(),
+            salt: self.lock.map_or([0; 16], |lock| lock.salt()),
+            ..Invite::open(addresses, relays, self.key)
+        }
+    }
 }
 
 struct Hub {
@@ -84,10 +111,14 @@ struct Hub {
     root: Option<PathBuf>,
     events: Events,
     stop: AtomicBool,
-    greeting: AtomicUsize,
+    /// The callers part-way through saying hello, and the number the next
+    /// one is known by.
+    greeters: Mutex<Vec<Greeter>>,
+    callers: AtomicU64,
     seats: Mutex<Seats>,
-    /// What the host is looking at, if the guests have not been told yet.
-    looking: Mutex<Option<Presence>>,
+    /// What each person is looking at, the host as 0, where the others have
+    /// not been told yet. The latest from each, sent on once a beat.
+    looking: Mutex<Vec<(u32, Presence)>>,
     names: Names,
     /// Every edit since the project was last saved, kept on disk. Taken in
     /// the tap, so nothing that holds it calls the store.
@@ -173,7 +204,7 @@ pub fn host(
     address: IpAddr,
     port: u16,
     key: Option<[u8; 32]>,
-    lock: Option<[u8; 32]>,
+    lock: Option<Lock>,
     root: Option<PathBuf>,
     events: Events,
 ) -> Result<Host, ShareError> {
@@ -196,7 +227,8 @@ pub fn host(
         root,
         events,
         stop: AtomicBool::new(false),
-        greeting: AtomicUsize::new(0),
+        greeters: Mutex::new(Vec::new()),
+        callers: AtomicU64::new(0),
         seats: Mutex::new(Seats {
             key,
             lock,
@@ -211,7 +243,7 @@ pub fn host(
             next: 1,
             changed: false,
         }),
-        looking: Mutex::new(None),
+        looking: Mutex::new(Vec::new()),
         names: Names::default(),
         log: Mutex::new(log),
         reach: Mutex::new(Reach::Off),
@@ -260,12 +292,8 @@ impl Host {
     /// else.
     #[must_use]
     pub fn invite(&self, address: &str) -> Invite {
-        Invite {
-            addresses: vec![self.at(address)],
-            relays: Vec::new(),
-            key: self.key(),
-            locked: self.lock().is_some(),
-        }
+        let seats = self.hub.seats.lock();
+        seats.invite(vec![self.at(address)], Vec::new())
     }
 
     /// The invite to hand out when nobody has said where the guest is: every
@@ -295,12 +323,8 @@ impl Host {
         // A relay that is not answering just now may be by the time the
         // guest tries it.
         let relay = self.hub.relay.lock().clone();
-        Invite {
-            addresses,
-            relays: relay.into_iter().map(|(relay, _)| relay).collect(),
-            key: self.key(),
-            locked: self.lock().is_some(),
-        }
+        let relays = relay.into_iter().map(|(relay, _)| relay).collect();
+        self.hub.seats.lock().invite(addresses, relays)
     }
 
     /// The port it is listening on.
@@ -318,7 +342,7 @@ impl Host {
     /// What this host's password comes to, if it set one, to share the same
     /// project by again later without asking for the password again.
     #[must_use]
-    pub fn lock(&self) -> Option<[u8; 32]> {
+    pub fn lock(&self) -> Option<Lock> {
         self.hub.seats.lock().lock
     }
 
@@ -377,6 +401,16 @@ impl Host {
             Ok(_) => *reaching = Some(gone),
             Err(_) => *self.hub.reach.lock() = Reach::Refused,
         }
+    }
+
+    /// For a share that is not asking the router for anything: take back a
+    /// port an earlier run left open for good and never got to close.
+    /// Answers at once, and does nothing where no run left one.
+    pub fn reach_back(&self) {
+        let hub = self.hub.clone();
+        let _ = thread::Builder::new()
+            .name("lumit-share-reach".into())
+            .spawn(move || reach::take_back(&hub.stop));
     }
 
     /// Whether people outside this network can get in.
@@ -443,6 +477,14 @@ impl Host {
         }
     }
 
+    /// Stop taking `wanted`, and tell whoever is sending it.
+    pub fn unwant(&self, wanted: &Wanted) {
+        let bulk = self.hub.bulk.lock().clone();
+        if let Some(bulk) = bulk {
+            bulk.unwant(wanted);
+        }
+    }
+
     /// Say `body` to the guest numbered `to`.
     pub fn note(&self, to: u32, body: serde_json::Value) {
         self.hub.pass(0, to, body);
@@ -451,7 +493,7 @@ impl Host {
     /// Latest wins: the accepting thread sends it on its next beat, so a
     /// playhead that moves every frame is not a message every frame.
     pub fn set_presence(&self, presence: Presence) {
-        *self.hub.looking.lock() = Some(presence);
+        self.hub.look(0, presence);
     }
 
     /// Take one guest out of the project. They are told, and their Lumit
@@ -475,8 +517,8 @@ impl Host {
         seats.key = key;
         // The guests still here hold the key the channel opens with, which
         // has the password in it already.
-        let key = seats.channel();
-        if let Ok(bytes) = encode(&Message::Invite { key }, &self.hub.names) {
+        let (key, link) = (seats.channel(), seats.key);
+        if let Ok(bytes) = encode(&Message::Invite { key, link }, &self.hub.names) {
             Hub::send_each(&mut seats, |_| bytes.clone());
         }
     }
@@ -540,6 +582,9 @@ impl Hub {
             (self.events)(Event::Reach(reach));
         };
         let mapping = match reach::open(self.port, &self.stop) {
+            // Sharing ended while the router was being asked. Nothing was
+            // open before, and nothing is left open or said to be.
+            Ok((mapping, _)) if self.stop.load(Ordering::Relaxed) => return mapping.close(),
             Ok((mapping, address)) => {
                 said(Reach::Open {
                     address: address.to_string(),
@@ -579,10 +624,11 @@ impl Hub {
             }
         };
         while !self.stop.load(Ordering::Relaxed) {
-            let key = self.seats.lock().channel();
+            // The link's own secret, and never the key a password has gone
+            // into: the name is said in the clear.
+            let key = self.seats.lock().key;
             let name = room(&key);
-            let current =
-                || !self.stop.load(Ordering::Relaxed) && self.seats.lock().channel() == key;
+            let current = || !self.stop.load(Ordering::Relaxed) && self.seats.lock().key == key;
             // Lumit's own relay with no door to it open is as good as one
             // that does not answer.
             let at = dialled(relay);
@@ -594,7 +640,7 @@ impl Hub {
                     said(Relayed::Open);
                     while current() {
                         match kept.guest(BEAT) {
-                            Ok(Some(guest)) => self.take(at, &name, guest),
+                            Ok(Some(guest)) => self.take(at, &name, kept.token(), guest),
                             Ok(None) => {}
                             Err(_) => break,
                         }
@@ -611,26 +657,82 @@ impl Hub {
     }
 
     /// Take a guest waiting at the relay and seat it like any other caller.
-    fn take(self: &Arc<Self>, relay: &str, name: &str, guest: u64) {
-        if self.greeting.fetch_add(1, Ordering::Relaxed) >= GREETING_ROOM {
-            self.greeting.fetch_sub(1, Ordering::Relaxed);
+    fn take(self: &Arc<Self>, relay: &str, name: &str, token: &str, guest: u64) {
+        let Some(id) = self.greet(None, None) else {
             return;
-        }
+        };
         let (hub, relay, name) = (self.clone(), relay.to_owned(), name.to_owned());
+        let token = token.to_owned();
         let spawned = thread::Builder::new()
             .name("lumit-share-guest".into())
             .spawn(
-                move || match lumit_relay::take(relay.as_str(), &name, guest) {
+                move || match lumit_relay::take(relay.as_str(), &name, &token, guest) {
                     Ok(socket) => {
-                        let _ = hub.seat(socket);
+                        hub.arrived(id, &socket);
+                        let _ = hub.seat(socket, id);
                     }
-                    Err(_) => {
-                        hub.greeting.fetch_sub(1, Ordering::Relaxed);
-                    }
+                    Err(_) => hub.greeted(id),
                 },
             );
         if spawned.is_err() {
-            self.greeting.fetch_sub(1, Ordering::Relaxed);
+            self.greeted(id);
+        }
+    }
+
+    /// Give a caller a place among those saying hello. `None` when there is
+    /// no room: too many are at it already, or too many from its address.
+    fn greet(&self, from: Option<IpAddr>, socket: Option<TcpStream>) -> Option<u64> {
+        let mut greeters = self.greeters.lock();
+        let same = greeters
+            .iter()
+            .filter(|greeter| from.is_some() && greeter.from == from)
+            .count();
+        if greeters.len() >= GREETING_ROOM || same >= GREETING_EACH {
+            return None;
+        }
+        let id = self.callers.fetch_add(1, Ordering::Relaxed);
+        greeters.push(Greeter {
+            id,
+            from,
+            socket,
+            since: Instant::now(),
+        });
+        Some(id)
+    }
+
+    /// A caller fetched from the relay is here, and its hello starts now.
+    fn arrived(&self, id: u64, socket: &TcpStream) {
+        if let Some(greeter) = self.greeters.lock().iter_mut().find(|g| g.id == id) {
+            greeter.socket = socket.try_clone().ok();
+            greeter.since = Instant::now();
+        }
+    }
+
+    /// A caller has finished saying hello, well or badly.
+    fn greeted(&self, id: u64) {
+        self.greeters.lock().retain(|greeter| greeter.id != id);
+    }
+
+    /// Close the connection of every caller that has taken longer over its
+    /// hello than a hello takes. Each read has a wait of its own, but a
+    /// caller that sends a byte at a time never runs one out, and would keep
+    /// its place for as long as it liked.
+    fn hurry(&self) {
+        for greeter in self.greeters.lock().iter() {
+            if greeter.since.elapsed() > wire::GREETING {
+                if let Some(socket) = &greeter.socket {
+                    let _ = socket.shutdown(Shutdown::Both);
+                }
+            }
+        }
+    }
+
+    /// Note what `peer` is looking at, to be sent on at the next beat.
+    fn look(&self, peer: u32, presence: Presence) {
+        let mut looking = self.looking.lock();
+        match looking.iter_mut().find(|(who, _)| *who == peer) {
+            Some(slot) => slot.1 = presence,
+            None => looking.push((peer, presence)),
         }
     }
 
@@ -736,36 +838,40 @@ impl Hub {
         while !self.stop.load(Ordering::Relaxed) {
             let callers = listeners.iter().filter_map(|l| l.accept().ok());
             let mut quiet = true;
-            for (socket, _) in callers {
+            for (socket, from) in callers {
                 quiet = false;
-                if self.greeting.fetch_add(1, Ordering::Relaxed) >= GREETING_ROOM {
-                    self.greeting.fetch_sub(1, Ordering::Relaxed);
+                let held = socket.try_clone().ok();
+                let Some(id) = held.and_then(|held| self.greet(Some(from.ip()), Some(held))) else {
                     continue;
-                }
+                };
                 let hub = self.clone();
                 let spawned = thread::Builder::new()
                     .name("lumit-share-guest".into())
                     .spawn(move || {
-                        let _ = hub.seat(socket);
+                        let _ = hub.seat(socket, id);
                     });
                 if spawned.is_err() {
-                    self.greeting.fetch_sub(1, Ordering::Relaxed);
+                    self.greeted(id);
                 }
             }
+            // Every pass and not only a quiet one, so a run of callers cannot
+            // hold any of it off.
+            self.hurry();
+            let looking = std::mem::take(&mut *self.looking.lock());
+            for (peer, presence) in looking {
+                self.presence(peer, presence);
+            }
+            self.tidy();
             if quiet {
-                let looking = self.looking.lock().take();
-                if let Some(presence) = looking {
-                    self.presence(0, presence);
-                }
-                self.tidy();
                 thread::sleep(BEAT);
             }
         }
     }
 
     /// Greet one caller and, if it holds the invite and runs this version,
-    /// seat it and read from it until it goes.
-    fn seat(self: &Arc<Self>, socket: TcpStream) -> Result<(), ShareError> {
+    /// seat it and read from it until it goes. `greeter` is its place among
+    /// those saying hello ([`Self::greet`]).
+    fn seat(self: &Arc<Self>, socket: TcpStream, greeter: u64) -> Result<(), ShareError> {
         // The invite as it stands. A caller still saying hello when it is
         // replaced is not seated.
         let (key, channel) = {
@@ -779,7 +885,13 @@ impl Hub {
             let hello = decode(&receiver.recv(1 << 16)?, &self.names, None)?;
             Ok::<_, ShareError>((sender, receiver, hello))
         })();
-        self.greeting.fetch_sub(1, Ordering::Relaxed);
+        // A caller that did not hold the invite, or its password, keeps its
+        // place a moment longer. With a password set each such call is a
+        // guess at it, and this is what makes guessing slow.
+        if greeted.is_err() {
+            thread::sleep(GUESS_PAUSE);
+        }
+        self.greeted(greeter);
         let (mut sender, mut receiver, hello) = greeted?;
         let (protocol, version, schema, name, token) = match hello {
             Message::Hello {
@@ -913,7 +1025,14 @@ impl Hub {
             let Ok(bytes) = receiver.recv(wire::EDIT_LIMIT) else {
                 break;
             };
-            match decode(&bytes, &self.names, self.root.as_deref()) {
+            let message = decode(&bytes, &self.names, self.root.as_deref());
+            // Only an edit is ever large. Anything else that size is not
+            // something this program sends, and it would be queued for other
+            // people as it is.
+            if bytes.len() > wire::NOTE_LIMIT && !matches!(message, Ok(Message::Submit { .. })) {
+                break;
+            }
+            match message {
                 Ok(Message::Submit { id, mut op, was }) => {
                     place(&mut op, &self.store.snapshot(), self.root.as_deref());
                     let tag = RemoteTag { peer, id };
@@ -936,7 +1055,10 @@ impl Hub {
                         break;
                     }
                 }
-                Ok(Message::Presence { presence, .. }) => self.presence(peer, presence),
+                // Kept until the next beat, where the latest is sent on: a
+                // guest decides how often it says this, and each time is a
+                // message for everyone else.
+                Ok(Message::Presence { presence, .. }) => self.look(peer, presence.tidied()),
                 Ok(Message::Holds { items, .. }) => self.hold(peer, items),
                 Ok(Message::Note { to, body, .. }) => self.pass(peer, to, body),
                 Ok(Message::Ping) => {}

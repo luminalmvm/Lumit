@@ -9,6 +9,8 @@ import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/share.dart';
 
+import 'preview_throttle.dart';
+
 /// Why a guest was turned away or sharing ended, as a sentence to show.
 String shareEndingText(BridgeShareEnding reason) => switch (reason) {
       BridgeShareEnding_Closed() => l10n.shareEndedClosed,
@@ -76,7 +78,10 @@ class ShareState extends ChangeNotifier {
   /// person has not answered: the job, who asked, and the composition.
   final List<({String job, int from, String comp})> exportAsks = [];
 
-  void footageChanged() => footage.value++;
+  void footageChanged() {
+    _readTransfers();
+    footage.value++;
+  }
 
   void exportAsked(String job, int from, String comp) {
     exportAsks.add((job: job, from: from, comp: comp));
@@ -92,11 +97,17 @@ class ShareState extends ChangeNotifier {
   }
 
   /// Every footage transfer in flight, to and from this computer.
-  List<BridgeShareTransfer> transfers() {
+  /// As they stood when the footage last changed. Read there and held, so a
+  /// window that lists them asks the engine nothing as it is drawn.
+  List<BridgeShareTransfer> transfers() => _transfers;
+
+  List<BridgeShareTransfer> _transfers = const [];
+
+  void _readTransfers() {
     try {
-      return _project?.shareTransfers() ?? const [];
+      _transfers = _project?.shareTransfers() ?? const [];
     } catch (_) {
-      return const [];
+      _transfers = const [];
     }
   }
 
@@ -199,6 +210,7 @@ class ShareState extends ChangeNotifier {
         ? project.shareRelayed()
         : BridgeShareRelayed.off;
     _sent = null;
+    _readTransfers();
     _noteRoster();
     // A guest's copy opened again brings the conflicts it was closed with.
     held = project.shareConflicts().length;
@@ -209,6 +221,7 @@ class ShareState extends ChangeNotifier {
   /// Sharing is over, or the project it was for has gone.
   void end() {
     if (!active) return;
+    _pointing.cancel();
     role = ShareRole.none;
     port = null;
     _project = null;
@@ -218,6 +231,7 @@ class ShareState extends ChangeNotifier {
     reach = const BridgeShareReach.off();
     relayed = BridgeShareRelayed.off;
     exportAsks.clear();
+    _transfers = const [];
     footage.value++;
     _noteRoster();
     notifyListeners();
@@ -268,6 +282,12 @@ class ShareState extends ChangeNotifier {
     if (conflicts != null) held = conflicts;
     roster.value++;
     notifyListeners();
+    // Back with the host, which has forgotten what this person was looking
+    // at: said again, though nothing here has changed since it was last said.
+    if (!now) {
+      _sent = null;
+      _send();
+    }
   }
 
   /// Take the guest the list knows as [person] out of the project. For the
@@ -373,8 +393,14 @@ class ShareState extends ChangeNotifier {
   void point(double? x, double? y) {
     _x = x;
     _y = y;
-    _send();
+    // A pointer crossing the Viewer is a new place for every pixel, and each
+    // telling carries everything else this person has in hand as well. The
+    // first goes at once and the newest of the rest a little later.
+    if (_project != null) _pointing.request(_send);
   }
+
+  final PreviewThrottle _pointing =
+      PreviewThrottle(interval: const Duration(milliseconds: 50));
 
   void _send() {
     final project = _project;

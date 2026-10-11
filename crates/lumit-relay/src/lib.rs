@@ -14,7 +14,8 @@
 //! waiting. The host makes a second connection to take that guest, and from
 //! then on the relay copies bytes between those two until either goes. Each
 //! connection starts with one line of text saying which of the three it is,
-//! and is answered with one.
+//! and is answered with one. A host's answer carries a word only it is told,
+//! which it gives back to take a guest, so nobody else can take one.
 //!
 //! This is both ends of that: [`serve`] is the relay, and [`Room`], [`take`]
 //! and [`join`] are what a host and a guest say to one. Threads: the relay
@@ -22,8 +23,9 @@
 //! one for each host, and two for each guest being passed on.
 
 use std::collections::HashMap;
+use std::hash::{BuildHasher, Hasher};
 use std::io::{self, ErrorKind, Read, Write};
-use std::net::{Shutdown, TcpListener, TcpStream, ToSocketAddrs};
+use std::net::{IpAddr, Shutdown, TcpListener, TcpStream, ToSocketAddrs};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
@@ -33,7 +35,7 @@ use std::time::{Duration, Instant};
 pub const DEFAULT_PORT: u16 = 47857;
 
 /// Raised whenever a line changes shape.
-const PROTOCOL: u32 = 1;
+const PROTOCOL: u32 = 2;
 
 /// What every first line starts with.
 const CALL: &str = "LUMIT-RELAY";
@@ -72,9 +74,24 @@ pub fn is_room(room: &str) -> bool {
 /// what follows the last line on a connection belongs to somebody else.
 /// `line` holds what has come of it so far, which is how a wait that ran out
 /// part-way through one is picked up again.
-fn read_line(mut socket: &TcpStream, line: &mut Vec<u8>) -> io::Result<String> {
+///
+/// `by` is when the whole line has to be in, for a caller nothing is known
+/// of yet. The connection's own wait is for each byte, and a stranger that
+/// sends one at a time would never run it out.
+fn read_line(
+    mut socket: &TcpStream,
+    line: &mut Vec<u8>,
+    by: Option<Instant>,
+) -> io::Result<String> {
     let mut byte = [0u8; 1];
     loop {
+        if let Some(by) = by {
+            let left = by.saturating_duration_since(Instant::now());
+            if left.is_zero() {
+                return Err(ErrorKind::TimedOut.into());
+            }
+            socket.set_read_timeout(Some(left))?;
+        }
         if socket.read(&mut byte)? == 0 {
             return Err(ErrorKind::UnexpectedEof.into());
         }
@@ -111,12 +128,15 @@ fn dial(relay: impl ToSocketAddrs) -> io::Result<TcpStream> {
     Err(last)
 }
 
-/// Connect, say `line`, and hear the relay agree.
-fn call(relay: impl ToSocketAddrs, line: &str) -> io::Result<TcpStream> {
+/// Connect, say `line`, and hear the relay agree. Also answers what it said
+/// after agreeing, which is something only for a host.
+fn call(relay: impl ToSocketAddrs, line: &str) -> io::Result<(TcpStream, String)> {
     let socket = dial(relay)?;
     say(&socket, &format!("{CALL} {PROTOCOL} {line}"))?;
-    match read_line(&socket, &mut Vec::new())?.as_str() {
-        "OK" => Ok(socket),
+    let answer = read_line(&socket, &mut Vec::new(), None)?;
+    let mut words = answer.split(' ');
+    match words.next() {
+        Some("OK") => Ok((socket, words.next().unwrap_or_default().to_owned())),
         _ => Err(ErrorKind::ConnectionRefused.into()),
     }
 }
@@ -126,18 +146,28 @@ pub struct Room {
     control: TcpStream,
     line: Vec<u8>,
     said: Instant,
+    /// What the relay said to this host alone when the room opened.
+    token: String,
 }
 
 impl Room {
     /// Open `room` at `relay`. Refused when the relay is full, or the room
     /// is already somebody's.
     pub fn open(relay: impl ToSocketAddrs, room: &str) -> io::Result<Room> {
-        let control = call(relay, &format!("HOST {room}"))?;
+        let (control, token) = call(relay, &format!("HOST {room}"))?;
         Ok(Room {
             control,
             line: Vec::new(),
             said: Instant::now(),
+            token,
         })
+    }
+
+    /// The word that shows a connection is this room's host, to [`take`] a
+    /// guest with.
+    #[must_use]
+    pub fn token(&self) -> &str {
+        &self.token
     }
 
     /// Wait up to `wait` for a guest, and answer the number to [`take`] it
@@ -150,7 +180,7 @@ impl Room {
             self.said = Instant::now();
         }
         self.control.set_read_timeout(Some(wait))?;
-        match read_line(&self.control, &mut self.line) {
+        match read_line(&self.control, &mut self.line, None) {
             Ok(line) => Ok(line.strip_prefix("GUEST ").and_then(|n| n.parse().ok())),
             Err(e) if matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => Ok(None),
             Err(e) => Err(e),
@@ -158,16 +188,22 @@ impl Room {
     }
 }
 
-/// As the host of `room`, take the guest the relay numbered `guest`. What
-/// comes back is a connection to that guest.
-pub fn take(relay: impl ToSocketAddrs, room: &str, guest: u64) -> io::Result<TcpStream> {
-    call(relay, &format!("TAKE {room} {guest}"))
+/// As the host of `room`, take the guest the relay numbered `guest`. `token`
+/// is the room's own ([`Room::token`]). What comes back is a connection to
+/// that guest.
+pub fn take(
+    relay: impl ToSocketAddrs,
+    room: &str,
+    token: &str,
+    guest: u64,
+) -> io::Result<TcpStream> {
+    call(relay, &format!("TAKE {room} {token} {guest}")).map(|(socket, _)| socket)
 }
 
 /// As a guest, ask for the host of `room`. What comes back is a connection
 /// to that host, once it has taken this guest.
 pub fn join(relay: impl ToSocketAddrs, room: &str) -> io::Result<TcpStream> {
-    call(relay, &format!("JOIN {room}"))
+    call(relay, &format!("JOIN {room}")).map(|(socket, _)| socket)
 }
 
 /// How much a relay takes on. What keeps a flood of strangers to a known
@@ -208,6 +244,9 @@ struct Hosted {
     /// Which connection opened the room, so that one closing does not take
     /// away a room opened again since.
     opening: u64,
+    /// Where its host called from, and the word only that host was told.
+    from: IpAddr,
+    token: String,
     control: TcpStream,
     waiting: Vec<Waiting>,
     next: u64,
@@ -220,6 +259,19 @@ struct Relay {
     rooms: Mutex<HashMap<String, Hosted>>,
     openings: AtomicUsize,
     connections: AtomicUsize,
+    /// How many connections each address has being greeted or passed on.
+    /// Bounded by [`Limits::connections`], and an address goes with its last.
+    callers: Mutex<HashMap<IpAddr, usize>>,
+}
+
+/// A word nobody outside this process can guess, without a source of
+/// randomness of this crate's own: the standard library seeds every hasher it
+/// makes from the system's.
+fn secret() -> String {
+    let word = std::collections::hash_map::RandomState::new()
+        .build_hasher()
+        .finish();
+    format!("{word:016x}")
 }
 
 impl Relay {
@@ -230,11 +282,12 @@ impl Relay {
     }
 
     /// A connection has said its first line. Do what it asked.
-    fn greet(&self, socket: TcpStream) -> io::Result<()> {
+    fn greet(&self, socket: TcpStream, from: IpAddr) -> io::Result<()> {
         socket.set_nodelay(true)?;
-        socket.set_read_timeout(Some(PATIENCE))?;
         socket.set_write_timeout(Some(PATIENCE))?;
-        let line = read_line(&socket, &mut Vec::new())?;
+        let by = Instant::now() + PATIENCE;
+        let line = read_line(&socket, &mut Vec::new(), Some(by))?;
+        socket.set_read_timeout(Some(PATIENCE))?;
         let mut words = line.split(' ');
         let called = words.next() == Some(CALL);
         if !called || words.next() != Some(PROTOCOL.to_string().as_str()) {
@@ -245,27 +298,39 @@ impl Relay {
             return say(&socket, "NO");
         }
         match what {
-            Some("HOST") => self.host(socket, room),
+            Some("HOST") => self.host(socket, room, from),
             Some("JOIN") => self.park(socket, room),
-            Some("TAKE") => match words.next().and_then(|n| n.parse().ok()) {
-                Some(guest) => self.pass(socket, room, guest),
-                None => say(&socket, "NO"),
-            },
+            Some("TAKE") => {
+                let token = words.next().unwrap_or_default();
+                match words.next().and_then(|n| n.parse().ok()) {
+                    Some(guest) => self.pass(socket, room, token, guest),
+                    None => say(&socket, "NO"),
+                }
+            }
             _ => say(&socket, "NO"),
         }
     }
 
     /// Keep a room for a host until it goes quiet or goes.
-    fn host(&self, socket: TcpStream, room: &str) -> io::Result<()> {
+    fn host(&self, socket: TcpStream, room: &str, from: IpAddr) -> io::Result<()> {
         let opening = self.openings.fetch_add(1, Ordering::Relaxed) as u64;
+        let token = secret();
         {
             let mut rooms = self.rooms();
-            if rooms.len() >= self.limits.rooms || rooms.contains_key(room) {
+            // A room costs nothing to ask for, so one address is held to a
+            // share of them and cannot take the lot.
+            let theirs = rooms.values().filter(|hosted| hosted.from == from).count();
+            if rooms.len() >= self.limits.rooms
+                || theirs >= each(self.limits.rooms)
+                || rooms.contains_key(room)
+            {
                 drop(rooms);
                 return say(&socket, "BUSY");
             }
             let hosted = Hosted {
                 opening,
+                from,
+                token: token.clone(),
                 control: socket.try_clone()?,
                 waiting: Vec::new(),
                 next: 1,
@@ -273,10 +338,10 @@ impl Relay {
             rooms.insert(room.to_owned(), hosted);
         }
         let kept = (|| {
-            say(&socket, "OK")?;
+            say(&socket, &format!("OK {token}"))?;
             socket.set_read_timeout(Some(QUIET))?;
             let mut line = Vec::new();
-            while read_line(&socket, &mut line)? == "PING" {
+            while read_line(&socket, &mut line, None)? == "PING" {
                 // A guest nobody took has been waiting on a host that is
                 // not going to.
                 if let Some(hosted) = self.rooms().get_mut(room) {
@@ -323,10 +388,12 @@ impl Relay {
 
     /// Join a host's second connection to the guest it asked for, and copy
     /// between them until either goes.
-    fn pass(&self, host: TcpStream, room: &str, guest: u64) -> io::Result<()> {
+    fn pass(&self, host: TcpStream, room: &str, token: &str, guest: u64) -> io::Result<()> {
         let waiting = {
             let mut rooms = self.rooms();
-            let hosted = rooms.get_mut(room);
+            // Only by the host's own word. A room's name is said in the
+            // clear by everyone who comes to it.
+            let hosted = rooms.get_mut(room).filter(|hosted| hosted.token == token);
             hosted.and_then(|hosted| {
                 let at = hosted.waiting.iter().position(|w| w.number == guest)?;
                 Some(hosted.waiting.remove(at))
@@ -348,6 +415,12 @@ impl Relay {
         let _ = back.join();
         Ok(())
     }
+}
+
+/// One address's share of something the relay has `all` of: a sixteenth, and
+/// never fewer than two, so a host and a guest behind one router both fit.
+fn each(all: usize) -> usize {
+    (all / 16).max(2)
 }
 
 /// How much passes each way at full speed before a [`Limits::rate`] holds:
@@ -391,15 +464,37 @@ pub fn serve(listeners: &[TcpListener], limits: Limits, stop: &AtomicBool) -> io
         rooms: Mutex::new(HashMap::new()),
         openings: AtomicUsize::new(0),
         connections: AtomicUsize::new(0),
+        callers: Mutex::new(HashMap::new()),
     });
+    // One caller fewer from `from`.
+    let gone = |relay: &Relay, from: IpAddr| {
+        relay.connections.fetch_sub(1, Ordering::Relaxed);
+        let mut callers = relay.callers.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Some(count) = callers.get_mut(&from) {
+            *count -= 1;
+            if *count == 0 {
+                callers.remove(&from);
+            }
+        }
+    };
     while !stop.load(Ordering::Relaxed) {
-        let Some((socket, _)) = listeners.iter().find_map(|l| l.accept().ok()) else {
+        let Some((socket, from)) = listeners.iter().find_map(|l| l.accept().ok()) else {
             thread::sleep(BEAT);
             continue;
         };
-        if relay.connections.fetch_add(1, Ordering::Relaxed) >= limits.connections {
-            relay.connections.fetch_sub(1, Ordering::Relaxed);
-            continue;
+        let from = from.ip();
+        // Room for it at all, and within its own address's share, so one
+        // machine cannot take every place.
+        {
+            let mut callers = relay.callers.lock().unwrap_or_else(PoisonError::into_inner);
+            let theirs = callers.get(&from).copied().unwrap_or(0);
+            if relay.connections.load(Ordering::Relaxed) >= limits.connections
+                || theirs >= each(limits.connections)
+            {
+                continue;
+            }
+            relay.connections.fetch_add(1, Ordering::Relaxed);
+            callers.insert(from, theirs + 1);
         }
         let greeting = relay.clone();
         let spawned = thread::Builder::new()
@@ -407,12 +502,12 @@ pub fn serve(listeners: &[TcpListener], limits: Limits, stop: &AtomicBool) -> io
             .spawn(move || {
                 // An accepted socket takes after its listener on Windows.
                 if socket.set_nonblocking(false).is_ok() {
-                    let _ = greeting.greet(socket);
+                    let _ = greeting.greet(socket, from);
                 }
-                greeting.connections.fetch_sub(1, Ordering::Relaxed);
+                gone(&greeting, from);
             });
         if spawned.is_err() {
-            relay.connections.fetch_sub(1, Ordering::Relaxed);
+            gone(&relay, from);
         }
     }
     // Every host is let go of, and the guests waiting on one with it. Two

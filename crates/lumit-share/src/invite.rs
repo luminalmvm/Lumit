@@ -23,12 +23,73 @@ pub const MAX_ADDRESSES: usize = 8;
 /// Raised when what a link packs changes shape.
 const PACKED: u8 = 1;
 
-/// What a link starts with instead when the host set a password.
-const PACKED_LOCKED: u8 = 2;
+/// What a link starts with instead when the host set a password. 2 was a
+/// password with no salt, which no build reads any more.
+const PACKED_LOCKED: u8 = 3;
+
+/// What a guest's own copy of such a link starts with once the password has
+/// been given: the key the channel opens with, and the link's own secret.
+const PACKED_OPENED: u8 = 4;
 
 /// How many times a password is hashed over, so that trying one costs
 /// something for anyone working through a list of them.
-const STRETCH: usize = 1 << 16;
+// ponytail: a fast hash many times over, not one that is hard on memory. A
+// list of passwords is still tried quickly on a graphics card by someone who
+// holds the link and has overheard a guest joining. Argon2id is the upgrade,
+// and a new dependency.
+const STRETCH: usize = 1 << 18;
+
+/// What a host keeps of a password, and never the password: what it comes to
+/// with a salt of its own, so the work of trying a list of passwords against
+/// one host is no use against another.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct Lock {
+    salt: [u8; 16],
+    key: [u8; 32],
+}
+
+impl Lock {
+    /// The lock for a password being set now.
+    pub fn new(password: &str) -> Result<Lock, ShareError> {
+        let mut salt = [0u8; 16];
+        getrandom::fill(&mut salt).map_err(|e| ShareError::NoRandomness(e.to_string()))?;
+        Ok(Lock::with(password, salt))
+    }
+
+    /// Slow on purpose.
+    fn with(password: &str, salt: [u8; 16]) -> Lock {
+        let mut hasher = blake3::Hasher::new_derive_key("lumit-share 2026 password");
+        hasher.update(&salt);
+        hasher.update(password.as_bytes());
+        let mut key = *hasher.finalize().as_bytes();
+        for _ in 0..STRETCH {
+            key = *blake3::hash(&key).as_bytes();
+        }
+        Lock { salt, key }
+    }
+
+    /// As it is written, for a host to keep beside its invite's secret.
+    #[must_use]
+    pub fn text(&self) -> String {
+        format!("{}{}", hex::encode(self.salt), hex::encode(self.key))
+    }
+
+    /// The lock [`Self::text`] wrote, or `None` for anything else.
+    #[must_use]
+    pub fn from_text(text: &str) -> Option<Lock> {
+        let mut bytes = [0u8; 48];
+        hex::decode_to_slice(text.trim(), &mut bytes).ok()?;
+        let (salt, key) = bytes.split_at(16);
+        Some(Lock {
+            salt: salt.try_into().ok()?,
+            key: key.try_into().ok()?,
+        })
+    }
+
+    pub(crate) fn salt(&self) -> [u8; 16] {
+        self.salt
+    }
+}
 
 /// What a guest needs to reach a host: where it may be, and the secret that
 /// lets it in and keys the channel.
@@ -56,38 +117,49 @@ pub struct Invite {
     /// The key the channel is opened with. For a [`Self::locked`] invite it
     /// is not that yet, and [`Self::unlocked`] makes it so.
     pub key: [u8; 32],
+    /// The link's own secret. The same as `key` unless the host set a
+    /// password. It is what the host's room at a relay is named from, and
+    /// never the key the password has gone into: a room's name is said in
+    /// the clear, and a name made from the password as well would let
+    /// anyone holding a leaked link try passwords against the relay.
+    pub link: [u8; 32],
     /// The host set a password, which the guest has to give as well as
     /// holding the link. A link that leaks is then not enough to join by.
     pub locked: bool,
-}
-
-/// What a password comes to, which is what a host keeps of one. Slow on
-/// purpose.
-#[must_use]
-pub fn lock_of(password: &str) -> [u8; 32] {
-    let mut lock = blake3::derive_key("lumit-share 2026 password", password.as_bytes());
-    for _ in 0..STRETCH {
-        lock = *blake3::hash(&lock).as_bytes();
-    }
-    lock
+    /// What the host's password is hashed with, for a locked invite.
+    pub salt: [u8; 16],
 }
 
 /// The key the channel is opened with when the host set a password: the
 /// link's secret and the password's, neither enough without the other.
 #[must_use]
-pub fn locked_key(link: &[u8; 32], lock: &[u8; 32]) -> [u8; 32] {
-    *blake3::keyed_hash(link, lock).as_bytes()
+pub(crate) fn locked_key(link: &[u8; 32], lock: &Lock) -> [u8; 32] {
+    *blake3::keyed_hash(link, &lock.key).as_bytes()
 }
 
 impl Invite {
+    /// An invite with no password, whose one secret is `key`.
+    #[must_use]
+    pub fn open(addresses: Vec<String>, relays: Vec<String>, key: [u8; 32]) -> Invite {
+        Invite {
+            addresses,
+            relays,
+            key,
+            link: key,
+            locked: false,
+            salt: [0; 16],
+        }
+    }
+
     /// This invite with its password given, ready to join by. One that
     /// needed none comes back as it was. A wrong password is not found out
     /// here: the host does not answer to it.
     #[must_use]
     pub fn unlocked(mut self, password: &str) -> Invite {
         if self.locked {
-            self.key = locked_key(&self.key, &lock_of(password));
+            self.key = locked_key(&self.link, &Lock::with(password, self.salt));
             self.locked = false;
+            self.salt = [0; 16];
         }
         self
     }
@@ -165,6 +237,12 @@ fn pack(address: &str, relay: bool, into: &mut Vec<u8>) -> Option<()> {
         at.port()
     } else {
         let (name, port) = address.rsplit_once(':')?;
+        // Only what reading the link back will take. One name it would not
+        // is left out here, where otherwise it would spoil the whole link
+        // for everyone it was sent to.
+        if !name.chars().all(plain) {
+            return None;
+        }
         let length = u8::try_from(name.len()).ok().filter(|n| *n > 0)?;
         let port = port.parse().ok()?;
         into.push(relay);
@@ -176,6 +254,11 @@ fn pack(address: &str, relay: bool, into: &mut Vec<u8>) -> Option<()> {
     Some(())
 }
 
+/// Whether `c` can be part of a name that is looked up.
+fn plain(c: char) -> bool {
+    c.is_ascii_alphanumeric() || c == '.' || c == '-'
+}
+
 /// Take `n` bytes off the front of `bytes`.
 fn take<'a>(bytes: &mut &'a [u8], n: usize) -> Option<&'a [u8]> {
     let (front, rest) = bytes.split_at_checked(n)?;
@@ -184,12 +267,20 @@ fn take<'a>(bytes: &mut &'a [u8], n: usize) -> Option<&'a [u8]> {
 }
 
 fn unpack(mut bytes: &[u8]) -> Option<Invite> {
-    let locked = match take(&mut bytes, 1)? {
-        [PACKED] => false,
-        [PACKED_LOCKED] => true,
-        _ => return None,
+    let kind = take(&mut bytes, 1)?[0];
+    if ![PACKED, PACKED_LOCKED, PACKED_OPENED].contains(&kind) {
+        return None;
+    }
+    let locked = kind == PACKED_LOCKED;
+    let key: [u8; 32] = take(&mut bytes, 32)?.try_into().ok()?;
+    let salt = match locked {
+        true => take(&mut bytes, 16)?.try_into().ok()?,
+        false => [0; 16],
     };
-    let key = take(&mut bytes, 32)?.try_into().ok()?;
+    let link = match kind {
+        PACKED_OPENED => take(&mut bytes, 32)?.try_into().ok()?,
+        _ => key,
+    };
     let (mut addresses, mut relays) = (Vec::new(), Vec::new());
     while !bytes.is_empty() && addresses.len() + relays.len() < MAX_ADDRESSES {
         let kind = take(&mut bytes, 1)?[0];
@@ -206,7 +297,6 @@ fn unpack(mut bytes: &[u8]) -> Option<Invite> {
                 let length = usize::from(take(&mut bytes, 1)?[0]);
                 let name = std::str::from_utf8(take(&mut bytes, length)?).ok()?;
                 // A name is looked up, so it is only what a name can be.
-                let plain = |c: char| c.is_ascii_alphanumeric() || c == '.' || c == '-';
                 if name.is_empty() || !name.chars().all(plain) {
                     return None;
                 }
@@ -229,15 +319,28 @@ fn unpack(mut bytes: &[u8]) -> Option<Invite> {
         addresses,
         relays,
         key,
+        link,
         locked,
+        salt,
     })
 }
 
 impl fmt::Display for Invite {
     /// The link. An address that is not `host:port` is left out of it.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut packed = vec![if self.locked { PACKED_LOCKED } else { PACKED }];
-        packed.extend_from_slice(&self.key);
+        let mut packed = Vec::new();
+        if self.locked {
+            packed.push(PACKED_LOCKED);
+            packed.extend_from_slice(&self.link);
+            packed.extend_from_slice(&self.salt);
+        } else if self.key != self.link {
+            packed.push(PACKED_OPENED);
+            packed.extend_from_slice(&self.key);
+            packed.extend_from_slice(&self.link);
+        } else {
+            packed.push(PACKED);
+            packed.extend_from_slice(&self.key);
+        }
         let direct = self.addresses.iter().map(|address| (address, false));
         let relayed = self.relays.iter().map(|address| (address, true));
         for (address, relay) in direct.chain(relayed).take(MAX_ADDRESSES) {
@@ -269,12 +372,7 @@ impl FromStr for Invite {
         if address.is_empty() {
             return Err(ShareError::BadInvite);
         }
-        Ok(Invite {
-            addresses: vec![address.to_owned()],
-            relays: Vec::new(),
-            key,
-            locked: false,
-        })
+        Ok(Invite::open(vec![address.to_owned()], Vec::new(), key))
     }
 }
 
@@ -297,7 +395,9 @@ mod tests {
             ],
             relays: vec!["relay.example.org:47857".into()],
             locked: true,
+            salt: [9; 16],
             key: std::array::from_fn(|n| n as u8 * 7),
+            link: std::array::from_fn(|n| n as u8 * 7),
         };
         let link = invite.to_string();
         let packed = link.strip_prefix(LINK).unwrap();
@@ -325,5 +425,22 @@ mod tests {
         for bad in ["", "lumitlab.com/join", cut, named.as_str(), LINK] {
             assert!(bad.parse::<Invite>().is_err(), "{bad}");
         }
+
+        // With its password given, the key changes and the link's own secret
+        // is kept beside it, which is what a guest's copy holds.
+        let opened = invite.clone().unlocked("correct horse");
+        assert!(opened.key != invite.key && opened.link == invite.link);
+        assert!(opened.to_string().parse::<Invite>().unwrap() == opened);
+        // A name reading the link back would refuse is left out of it, and
+        // the rest of the link still reads.
+        let odd = Invite {
+            addresses: vec![
+                "203.0.113.5:40000:47856".into(),
+                "192.168.1.20:47856".into(),
+            ],
+            ..invite.clone()
+        };
+        let read: Invite = odd.to_string().parse().unwrap();
+        assert_eq!(read.addresses, ["192.168.1.20:47856"]);
     }
 }

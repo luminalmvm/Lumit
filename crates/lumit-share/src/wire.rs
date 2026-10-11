@@ -16,7 +16,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 /// Raised whenever a message changes shape.
-pub(crate) const PROTOCOL: u32 = 4;
+pub(crate) const PROTOCOL: u32 = 5;
 
 /// Noise with no long-term keys, both ends proving they hold the invite's
 /// secret before anything else is said.
@@ -31,6 +31,11 @@ pub(crate) const DOCUMENT_LIMIT: u32 = 512 << 20;
 
 /// The longest message a host reads from a guest, which is one edit.
 pub(crate) const EDIT_LIMIT: u32 = 64 << 20;
+
+/// The longest thing a host takes from a guest that is not an edit. Those are
+/// passed on to other people, and a queue of them is counted in messages, so
+/// each has to be small.
+pub(crate) const NOTE_LIMIT: usize = 4 << 20;
 
 /// How long either end has to finish the handshake and say hello.
 pub(crate) const GREETING: Duration = Duration::from_secs(10);
@@ -111,9 +116,11 @@ pub(crate) enum Message {
     /// The host has taken this guest out of the project.
     Removed,
     /// The host has replaced the invite, having taken someone out. A guest
-    /// finds its host by this secret from now on.
+    /// finds its host by these from now on: the key the channel opens with,
+    /// and the link's own secret, which names the room at a relay.
     Invite {
         key: [u8; 32],
+        link: [u8; 32],
     },
     /// Which footage `peer` has the original of. A guest says its own and
     /// the host tells everyone each person's.

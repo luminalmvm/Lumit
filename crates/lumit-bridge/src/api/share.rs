@@ -519,7 +519,7 @@ pub fn share_link_locked(text: String) -> bool {
 fn kept_text(host: &lumit_share::Host) -> String {
     let key = lumit_share::key_text(&host.key());
     match host.lock() {
-        Some(lock) => format!("{key}.{}", lumit_share::key_text(&lock)),
+        Some(lock) => format!("{key}.{}", lock.text()),
         None => key,
     }
 }
@@ -881,24 +881,26 @@ impl ProjectReference {
             let root = state.path.as_deref().and_then(Path::parent);
             (state.store.clone(), root.map(Path::to_path_buf))
         };
+        // A key that does not read as one is as good as none. What a
+        // password came to last time follows it after a full stop. Worked
+        // out before the registry is taken: a password is slow to hash on
+        // purpose, and everything else that asks about sharing waits on that.
+        let kept = key
+            .as_deref()
+            .map(|kept| kept.split_once('.').unwrap_or((kept, "")));
+        let key = kept.and_then(|(key, _)| lumit_share::key_from(key));
+        let lock = match password.filter(|password| !password.is_empty()) {
+            Some(password) => lumit_share::Lock::new(&password).ok(),
+            None => key
+                .and(kept)
+                .and_then(|(_, lock)| lumit_share::Lock::from_text(lock)),
+        };
         let mut shared = SHARED.lock().map_err(|_| BridgeError::WriteFailed)?;
         if shared.contains_key(&self.id) {
             return Ok(BridgeShareStarted::Failed);
         }
         let sink = Arc::new(events);
         let events = events_for(self.id, store.clone(), sink.clone());
-        // A key that does not read as one is as good as none. What a
-        // password came to last time follows it after a full stop.
-        let kept = key
-            .as_deref()
-            .map(|kept| kept.split_once('.').unwrap_or((kept, "")));
-        let key = kept.and_then(|(key, _)| lumit_share::key_from(key));
-        let lock = match password.filter(|password| !password.is_empty()) {
-            Some(password) => Some(lumit_share::lock_of(&password)),
-            None => key
-                .and(kept)
-                .and_then(|(_, lock)| lumit_share::key_from(lock)),
-        };
         Ok(
             match lumit_share::host(store.clone(), &name, LISTEN, port, key, lock, root, events) {
                 Ok(host) => {
@@ -907,6 +909,8 @@ impl ProjectReference {
                     // A test never asks the machine's real router anything.
                     if outside && !cfg!(test) {
                         host.reach_out();
+                    } else if !cfg!(test) {
+                        host.reach_back();
                     }
                     if let Some(relay) = relay.as_deref().map(at_relay) {
                         host.relay_through(&relay);
@@ -1048,12 +1052,13 @@ impl ProjectReference {
         invite: String,
         password: Option<String>,
     ) -> Result<bool, BridgeError> {
-        let shared = SHARED.lock().map_err(|_| BridgeError::ReadFailed)?;
-        let Some(Sharing::Guest(guest)) = shared.get(&self.id) else {
-            return Ok(false);
-        };
+        // The password is hashed before the registry is taken, as in `share`.
         let invite = invite.parse::<Invite>().ok();
         let Some(invite) = invite.and_then(|invite| unlocked(invite, password.as_deref())) else {
+            return Ok(false);
+        };
+        let shared = SHARED.lock().map_err(|_| BridgeError::ReadFailed)?;
+        let Some(Sharing::Guest(guest)) = shared.get(&self.id) else {
             return Ok(false);
         };
         guest.reinvite(invite);

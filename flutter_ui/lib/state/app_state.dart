@@ -222,6 +222,9 @@ class LumitState extends ChangeNotifier {
       String? footage}) async {
     // One at a time, for [openProject]'s reason.
     if (opening.value) return null;
+    // Joining puts the open project away, like every other way out of one.
+    if (unsavedNeedsAsking && !await askBeforeLeaving()) return null;
+    if (opening.value) return null;
     opening.value = true;
     _openProgressWatch?.cancel();
     _openProgressWatch = null;

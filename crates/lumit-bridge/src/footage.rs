@@ -95,7 +95,14 @@ fn kept_under(root: Option<&Path>) -> Option<PathBuf> {
 /// The folder files sent for `footage` are kept in. Named by the file's
 /// fingerprint, so a file used by two projects is fetched once.
 fn folder(root: Option<&Path>, footage: &FootageItem) -> Option<PathBuf> {
-    let key = match &footage.media.fingerprint {
+    // The fingerprint comes with the item from another machine, and this is
+    // a folder name made of it. Only what a hash is made of is let through,
+    // so nothing in it can name a place outside the folder.
+    let hex = |print: &&lumit_core::model::Fingerprint| {
+        !print.head_tail_hash.is_empty()
+            && print.head_tail_hash.bytes().all(|b| b.is_ascii_hexdigit())
+    };
+    let key = match footage.media.fingerprint.as_ref().filter(hex) {
         Some(print) => {
             let hash: String = print.head_tail_hash.chars().take(32).collect();
             format!("{hash}-{}", print.size)
@@ -267,6 +274,19 @@ fn moves(_: &FootageItem, _: &Path) -> bool {
     false
 }
 
+/// How many frames the moving picture at `path` has.
+#[cfg(feature = "media")]
+fn frames_of(path: &Path) -> Option<u64> {
+    let source = lumit_media::MediaSource::file(path.to_path_buf());
+    let index = lumit_render::media_index::load_or_build_index(&source).ok()?;
+    Some(index.frame_count() as u64)
+}
+
+#[cfg(not(feature = "media"))]
+fn frames_of(_: &Path) -> Option<u64> {
+    None
+}
+
 #[cfg(not(feature = "media"))]
 fn encode(_: &Path, _: &Path, _: Option<&[(usize, usize)]>, _: &AtomicBool) -> bool {
     false
@@ -373,6 +393,10 @@ pub(crate) struct Carrier {
 /// The most exports that can be waiting on this person's answer.
 const ASKS: usize = 4;
 
+/// The most taken for a file somebody else made: a stand-in, a run of
+/// frames, an export.
+const MOST_MADE: u64 = 64 << 30;
+
 impl Footage for Carrier {
     fn make(&self, wanted: &Wanted, stop: &AtomicBool) -> Option<PathBuf> {
         if let Wanted::Export { job } = wanted {
@@ -381,10 +405,22 @@ impl Footage for Carrier {
         let doc = self.store.snapshot();
         let item = footage(&doc, wanted.item()?)?;
         let give = GIVE.load(Ordering::Relaxed);
+        // Only ever the file the item is of. Anyone in the project can add an
+        // item by any name, and a file of that name beside the project is
+        // found for it. Its fingerprint is what they could not have made up
+        // without holding the file already. An item with none was brought in
+        // on this machine and not saved yet: one that came from someone else
+        // with none is never pointed at a file here (`lumit-share`'s `find`).
+        let own = |path: &Path| {
+            item.media.fingerprint.as_ref().is_none_or(|print| {
+                lumit_project::fingerprint_path(path)
+                    .is_ok_and(|found| found.likely_same_content(print))
+            })
+        };
         match (wanted, here(item)) {
             // What someone else sent is passed on whoever asks.
             (Wanted::StandIn { .. }, Here::StandIn(path)) => Some(path),
-            (Wanted::StandIn { .. }, Here::Original(path)) if give => {
+            (Wanted::StandIn { .. }, Here::Original(path)) if give && own(&path) => {
                 if !moves(item, &path) {
                     return (item.sequence.is_none()).then_some(path);
                 }
@@ -399,12 +435,38 @@ impl Footage for Carrier {
                 let Here::Original(path) = state else {
                     return None;
                 };
+                // A run that starts inside the clip, and no other: each one
+                // asked for is an encode, and the numbers are the asker's. It
+                // may run past the end, as a layer longer than its clip does.
+                let within = *count > 0 && frames_of(&path).is_some_and(|frames| *first < frames);
                 let runs = runs_of(*first, *count);
-                (give && moves(item, &path) && encode(&path, &dest, Some(&runs), stop))
-                    .then_some(dest)
+                (give
+                    && own(&path)
+                    && within
+                    && moves(item, &path)
+                    && encode(&path, &dest, Some(&runs), stop))
+                .then_some(dest)
             }
-            (Wanted::Original { .. }, Here::Original(path)) if give => Some(path),
+            (Wanted::Original { .. }, Here::Original(path)) if give && own(&path) => Some(path),
             _ => None,
+        }
+    }
+
+    fn most(&self, wanted: &Wanted) -> u64 {
+        let doc = self.store.snapshot();
+        let size = wanted
+            .item()
+            .and_then(|item| footage(&doc, item))
+            .and_then(|item| item.media.fingerprint.as_ref())
+            .map(|print| print.size);
+        match (wanted, size) {
+            // The file itself is as big as the item says it is.
+            (Wanted::Original { .. }, Some(size)) => size,
+            (Wanted::Original { .. }, None) => 0,
+            // An encode has no size to hold it to but a ceiling.
+            // ponytail: one flat ceiling. Work it out from the frames asked
+            // for and the encode's rate if a disk is ever filled under it.
+            _ => MOST_MADE,
         }
     }
 
@@ -607,6 +669,18 @@ impl Carrier {
                 // of it here was only ever theirs.
                 if let (Wanted::Export { job }, true) = (&wanted, done >= total && sending) {
                     let sent = self.made.lock().ok().and_then(|mut made| made.remove(job));
+                    if let Some(path) = sent {
+                        let _ = std::fs::remove_file(path);
+                    }
+                }
+                // So is a run of frames cut for someone's export. It is made
+                // again if it is asked for again.
+                if let (Wanted::Part { item, first, count }, true) =
+                    (&wanted, done >= total && sending)
+                {
+                    let doc = self.store.snapshot();
+                    let sent = footage(&doc, *item)
+                        .and_then(|f| parts_path(self.root.as_deref(), f, &[(*first, *count)]));
                     if let Some(path) = sent {
                         let _ = std::fs::remove_file(path);
                     }
@@ -846,6 +920,11 @@ impl Carrier {
         // Wait for them all, saying how far along the bytes are.
         loop {
             if self.stop.load(Ordering::Relaxed) || self.cancel_fetch.load(Ordering::Relaxed) {
+                // Told to whoever is sending, so the fetch stops at their
+                // end too and not only the waiting here.
+                for wanted in &wants {
+                    self.sharing(|sharing| sharing.unwant(wanted));
+                }
                 return None;
             }
             let now = self.store.snapshot();

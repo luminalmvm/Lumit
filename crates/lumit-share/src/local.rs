@@ -7,12 +7,35 @@ use lumit_project::{comp_size_is_sane, resolve_all_media, resolve_media, Resolve
 use std::path::Path;
 use uuid::Uuid;
 
-/// Whether this machine will hold an edit from a peer. The one thing checked
-/// is the one thing opening a file checks: a composition's size, which every
-/// raster made for it is multiplied by.
-pub(crate) fn sane(op: &Op) -> bool {
+/// More edits than this in one batch and it is not one a person made: the
+/// largest real one is a paste of a few thousand layers.
+const MAX_BATCHED: usize = 100_000;
+
+/// How many edits `op` is, batches opened out, counted no further than `room`.
+fn weight(op: &Op, room: usize) -> usize {
     match op {
-        Op::Batch { ops } => ops.iter().all(sane),
+        Op::Batch { ops } => ops.iter().fold(1, |so_far, op| {
+            if so_far > room {
+                so_far
+            } else {
+                so_far + weight(op, room - so_far)
+            }
+        }),
+        _ => 1,
+    }
+}
+
+/// Whether this machine will hold an edit from a peer. What opening a file
+/// checks is checked here: a composition's size, which every raster made for
+/// it is multiplied by. And how many edits it is, since each is work done
+/// while everyone else's edits wait.
+pub(crate) fn sane(op: &Op) -> bool {
+    weight(op, MAX_BATCHED) <= MAX_BATCHED && sized(op)
+}
+
+fn sized(op: &Op) -> bool {
+    match op {
+        Op::Batch { ops } => ops.iter().all(sized),
         Op::AddItem { item, .. } => match &**item {
             ProjectItem::Composition(comp) => comp_size_is_sane(comp.width, comp.height),
             _ => true,
@@ -67,6 +90,12 @@ fn find(media: &mut MediaRef, had: Option<&MediaRef>, root: Option<&Path>) {
             return;
         }
     }
+    // A name with no fingerprint beside it is not enough. Whatever this
+    // machine holds the original of it will send to whoever asks, and a peer
+    // that could name any file kept beside the project would be sent it.
+    if media.fingerprint.is_none() {
+        return;
+    }
     if let Some(root) = root {
         if let Resolved::Found { path, .. } = resolve_media(media, root, &[]) {
             media.absolute_path = path.to_string_lossy().into_owned();
@@ -96,6 +125,15 @@ pub(crate) fn settle(doc: &mut Document, have: Option<&Document>, root: Option<&
     }
     if let Some(root) = root {
         resolve_all_media(doc, root, &[]);
+    }
+    // The same rule as [`find`]: what the host named without a fingerprint
+    // is not this machine's file on the strength of its name.
+    for item in &mut doc.items {
+        if let ProjectItem::Footage(footage) = item {
+            if footage.media.fingerprint.is_none() {
+                footage.media.absolute_path.clear();
+            }
+        }
     }
 }
 
