@@ -59,6 +59,10 @@ param(
     [string]$Sweep,
     [ValidateSet('studio', 'desk', 'lantern')]
     [string]$Shape = 'studio',
+    # A colour scheme by its name in LumitColorScheme, such as vellumLight.
+    # Left out, the style's own scheme stands.
+    [ValidatePattern('^[A-Za-z]*$')]
+    [string]$Scheme,
     [string]$Out,
     [switch]$NoCrop
 )
@@ -93,6 +97,7 @@ try {
 
 $env:LUMIT_SHOTS = '1'
 $env:LUMIT_SHOTS_SHAPE = $Shape
+if ($Scheme) { $env:LUMIT_SHOTS_SCHEME = $Scheme }
 if ($Out) {
     # A sweep writes a picture the moment it has one and does not create the
     # folder first, so an -Out that does not exist yet takes the app down
@@ -110,6 +115,7 @@ try {
     Pop-Location
     Remove-Item Env:\LUMIT_SHOTS, Env:\LUMIT_SHOTS_SHAPE -ErrorAction SilentlyContinue
     Remove-Item Env:\LUMIT_SHOTS_OUT, Env:\LUMIT_SHOTS_NOCROP -ErrorAction SilentlyContinue
+    Remove-Item Env:\LUMIT_SHOTS_SCHEME -ErrorAction SilentlyContinue
 }
 
 $where = if ($Out) { $Out } else { "$repo\web-docs\src\assets\shots" }

@@ -372,6 +372,14 @@ class InterfaceSettings {
   /// few pixels to the left. Turning it on gives the labels back, unchanged.
   bool layerNamesOnBars;
 
+  /// Whether each footage row in the Project panel carries its poster frame
+  /// in place of the type glyph.
+  ///
+  /// Off by default: the approved drawing is a tight list of names with the
+  /// picture on the preview card, and that is what a new user sees. On is for
+  /// cutting, where a folder of clips is told apart by what is in them.
+  bool projectThumbnails;
+
   /// Whether the minimap of the bars is drawn under the Timeline's lanes.
   ///
   /// Null follows the style: Lantern draws it, Studio and Desk do not.
@@ -483,6 +491,7 @@ class InterfaceSettings {
     this.showToneMap = false,
     this.easingInPopup = false,
     this.layerNamesOnBars = false,
+    this.projectThumbnails = false,
     this.timelineMinimap,
     this.compact = false,
     this.viewerBars = ViewerBars.auto,
@@ -516,6 +525,7 @@ class InterfaceSettings {
         'show_tone_map': showToneMap,
         'easing_in_popup': easingInPopup,
         'layer_names_on_bars': layerNamesOnBars,
+        'project_thumbnails': projectThumbnails,
         'timeline_minimap': timelineMinimap,
         'compact': compact,
         'viewer_bars': viewerBars.name,
@@ -593,6 +603,9 @@ class InterfaceSettings {
         // ruling on what the editor should look like, and the labels are one
         // click away for anyone who wants them back.
         layerNamesOnBars: j['layer_names_on_bars'] as bool? ?? false,
+        // Absent means off: the glyph is what every file written before this
+        // field existed was drawing.
+        projectThumbnails: j['project_thumbnails'] as bool? ?? false,
         timelineMinimap: j['timeline_minimap'] as bool?,
         // Absent means off, which is the roomy default — and every settings
         // file written before this field existed was written by a build that

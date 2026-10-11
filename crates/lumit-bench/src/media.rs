@@ -154,6 +154,73 @@ pub fn generate(dir: &Path) -> Result<RefMedia, String> {
     Ok(media)
 }
 
+/// How many footage items the long-form comp draws on (docs/13 §1).
+pub const LONG_ITEMS: usize = 300;
+
+/// How long each of the long-form comp's files runs, in seconds. A clip can
+/// be no longer than its source, so this is the longest clip the comp holds.
+pub const LONG_FILE_S: i64 = 30;
+
+/// The long-form comp's footage: [`LONG_ITEMS`] files, picture and sound.
+#[derive(Debug, Clone)]
+pub struct LongMedia {
+    /// One path per footage item, in item order.
+    pub files: Vec<PathBuf>,
+    /// The encoded files the others are copies of. The scenarios warm the
+    /// renderer on these, so no file of the comp itself is opened early.
+    pub bases: Vec<PathBuf>,
+}
+
+/// Generate (or reuse) the long-form comp's media in `dir`.
+///
+/// Three files are encoded, each 1080p60 H.264 with a tone beside it, and the
+/// [`LONG_ITEMS`] names are copies of those three in turn. Encoding three
+/// hundred files would take longer than every scenario put together, and what
+/// a long cut stresses is how many files there are, not what is in them.
+///
+/// A name is a hard link where the file system allows one and a plain copy
+/// where it does not. Either way the engine sees three hundred separate
+/// paths, and the directory stays the size of the three.
+pub fn generate_long(dir: &Path) -> Result<LongMedia, String> {
+    std::fs::create_dir_all(dir).map_err(|e| format!("lumit-bench media dir: {e}"))?;
+    let bases: Vec<PathBuf> = ["a", "b", "c"]
+        .iter()
+        .map(|n| dir.join(format!("long_base_{n}.mp4")))
+        .collect();
+    let files: Vec<PathBuf> = (0..LONG_ITEMS)
+        .map(|i| dir.join(format!("long_{i:03}.mp4")))
+        .collect();
+    if !bases.iter().all(|p| present(p)) {
+        let bin = ffmpeg_bin().ok_or_else(|| "no ffmpeg on PATH".to_string())?;
+        let picture = format!("testsrc2=duration={LONG_FILE_S}:size=1920x1080:rate=60");
+        // A hue and a pitch apiece, so a cut between two files is seen and
+        // heard as one.
+        for (i, base) in bases.iter().enumerate() {
+            let tone = format!(
+                "sine=frequency={}:duration={LONG_FILE_S}:sample_rate=48000",
+                220 * (i + 1)
+            );
+            let hue = format!("hue=h={}", 120 * i);
+            encode(
+                bin,
+                base,
+                &["-f", "lavfi", "-i", &picture, "-f", "lavfi", "-i", &tone],
+                &["-vf", &hue, "-c:a", "aac", "-b:a", "128k"],
+            )?;
+        }
+    }
+    for (i, file) in files.iter().enumerate() {
+        if present(file) {
+            continue;
+        }
+        let base = &bases[i % bases.len()];
+        if std::fs::hard_link(base, file).is_err() {
+            std::fs::copy(base, file).map_err(|e| format!("writing {}: {e}", file.display()))?;
+        }
+    }
+    Ok(LongMedia { files, bases })
+}
+
 /// Whether a generated file is already there and worth keeping.
 fn present(path: &Path) -> bool {
     std::fs::metadata(path)

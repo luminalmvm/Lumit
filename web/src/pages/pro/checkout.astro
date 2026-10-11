@@ -3,9 +3,10 @@ import Base from "../../layouts/Base.astro";
 
 // Where Lumit sends someone to pay. Paddle's own script draws the checkout
 // over this page for the payment named in the address, so this site never
-// sees a card. The token is a public one, set when the site is built:
-// PUBLIC_PADDLE_TOKEN, and PUBLIC_PADDLE_ENV=sandbox while testing.
-const TOKEN = import.meta.env.PUBLIC_PADDLE_TOKEN ?? "";
+// sees a card. The token is a public one, made to be read by every browser.
+// A build can swap in the sandbox's with PUBLIC_PADDLE_TOKEN and
+// PUBLIC_PADDLE_ENV=sandbox while testing.
+const TOKEN = import.meta.env.PUBLIC_PADDLE_TOKEN ?? "live_bf1fc1df61f5f25cceeb3cf27ad";
 const SANDBOX = import.meta.env.PUBLIC_PADDLE_ENV === "sandbox";
 ---
 

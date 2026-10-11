@@ -114,7 +114,8 @@ const double _widthForFooterLabels = 380;
 /// Timeline header's own treatment — a 1×10 `hairline_strong` rule centred in
 /// the gap — and it stands at every column boundary, because it is what says
 /// where one column ends and the next begins. What varies is whether it
-/// resizes: beside a fixed-width column (items, fps, path) it is a plain rule
+/// resizes: beside a fixed-width column (items, fps, duration, path) it is a
+/// plain rule
 /// with no drag and no resize cursor, and beside a column with a width of its
 /// own it is a handle.
 ///
@@ -206,6 +207,7 @@ Widget projectColumnHeader(
             items: t.kickerCase(l10n.projectColumnItems),
             size: t.kickerCase(l10n.projectColumnSize),
             fps: t.kickerCase(l10n.unitFps),
+            duration: t.kickerCase(l10n.duration),
             path: t.kickerCase(l10n.projectColumnPath),
             style: t.kicker,
             // The heading is as quiet as its column: Path is context, not a

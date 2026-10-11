@@ -10,6 +10,8 @@ Lumit the editor is free software under the [GPLv3](https://github.com/luminalmv
 and these terms change nothing about that. They cover what runs on our servers: a Lumit
 account, and Lumit Pro.
 
+Lumit and Lumit Pro are made and run by Mackenzie Reed, which is who "we" means on this page.
+
 ## Your account
 
 - An account is optional. Lumit works without one.

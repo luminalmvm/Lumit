@@ -77,7 +77,9 @@ void main() {
           reason: 'the seam widened the column it follows');
       expect(heading('Size'), projectSizeColumn,
           reason: 'and left the columns between alone');
-      expect(heading('Path'), projectPathColumn + 128 - 40,
+      // 560 less the arrangement every column asks for at its starting
+      // width (512) is 48 of slack, and all of it was Path's.
+      expect(heading('Path'), projectPathColumn + 48 - 40,
           reason: 'Path gave up exactly what Name took, since it holds the '
               'panel\'s slack');
 

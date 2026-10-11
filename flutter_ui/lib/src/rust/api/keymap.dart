@@ -245,6 +245,7 @@ enum BridgeKeyContext {
   graph,
   panels,
   effects,
+  cut,
   ;
 }
 

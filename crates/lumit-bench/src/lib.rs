@@ -24,6 +24,10 @@
 //!   B6, B7 and B11, plus [`scenarios::particulate`] for Particulate's own
 //!   three *per-effect* numbers (B12–B14), which need no comp and no media.
 //!   B1/B2 and B8–B10 stay manual or real-window.
+//! - [`long_comp`] builds the second composition docs/13 §1 describes, a
+//!   two-hour cut of two thousand clips, and [`long`] times what a long cut
+//!   costs around the drawing: B18 to B24. [`long_sound`] asks the same of
+//!   its sound: B25 to B29.
 //! - [`baseline`] is the gate — the checked-in numbers a run is compared with,
 //!   per operating system, and the factor that separates a regression from a
 //!   noisy runner.
@@ -40,11 +44,17 @@
 
 pub mod baseline;
 pub mod comp;
+pub mod long;
+pub mod long_comp;
+pub mod long_sound;
 pub mod media;
 pub mod ofx;
 pub mod scenarios;
 
 pub use baseline::Baseline;
 pub use comp::{reference_comp, LAYER_COUNT};
+pub use long::LongHarness;
+pub use long_comp::long_comp;
+pub use long_sound::SoundHarness;
 pub use media::RefMedia;
 pub use scenarios::{Harness, Measurement};

@@ -257,6 +257,13 @@ Future<void> showProjectMenuFrb({
           // have no media reference for a stand-in to stand in for — and the
           // last two only once there is a proxy, so the menu never lists a
           // word that would do nothing.
+          // A folder offers the one that makes sense for everything in it.
+          if (item is ItemReference_Folder)
+            MenuRow(
+              key: const ValueKey('project-menu-make-proxies'),
+              onPressed: () => close(_ProjectMenuAction.makeProxy),
+              child: Text(l10n.makeProxies),
+            ),
           if (isFootage) ...[
             MenuRow(
               key: const ValueKey('project-menu-set-proxy'),
@@ -521,28 +528,46 @@ Future<void> showProjectMenuFrb({
         }
       }
     case _ProjectMenuAction.makeProxy:
-      // **The one command here that stays singular**: the engine runs
-      // one transcode at a time by design, so starting four would be three
-      // refusals and a notice apiece. The clicked row's, and only that.
-      if (item case ItemReference_Footage(:final field0)) {
-        // The engine's own refusals — one transcode at a time, and nothing to
-        // read from on this machine — reach the status line as its notice,
-        // rather than as an exception out of a menu handler.
-        try {
-          field0.makeProxy();
-        } catch (e) {
-          if (context.mounted) {
-            Provider.of<LumitState>(context, listen: false)
-                .postNotice(l10n.proxyFailed('$e'), error: true);
-          }
-          return;
+      // Every picked footage item, and everything inside a picked folder. The
+      // engine runs one transcode at a time and queues the rest, so each
+      // starts as the one before it lands.
+      final wanted = <FootageReference>[];
+      void gather(ItemReference from) {
+        switch (from) {
+          case ItemReference_Footage(:final field0):
+            wanted.add(field0);
+          case ItemReference_Folder(:final field0):
+            try {
+              field0.getChildren().forEach(gather);
+            } catch (_) {
+              // The folder went away under the menu.
+            }
+          default:
         }
-        // The transcode reports on the status line, where every other piece of
-        // background work does; this is the start signal that gets the strip
-        // polling. The finished file attaches itself on the poll that sees it
-        // land, and the item scope of that op is what brings this panel back.
-        proxyJobChanged.value++;
       }
+      acts.forEach(gather);
+      var started = false;
+      Object? refused;
+      for (final footage in wanted) {
+        // The engine's own refusal, nothing to read from on this machine,
+        // reaches the status line as its notice rather than as an exception
+        // out of a menu handler. One missing file does not stop the rest.
+        try {
+          footage.makeProxy();
+          started = true;
+        } catch (e) {
+          refused = e;
+        }
+      }
+      if (refused != null && !started && context.mounted) {
+        Provider.of<LumitState>(context, listen: false)
+            .postNotice(l10n.proxyFailed('$refused'), error: true);
+      }
+      // The transcode reports on the status line, where every other piece of
+      // background work does; this is the start signal that gets the strip
+      // polling. Each finished file attaches itself on the poll that sees it
+      // land, and the item scope of that op is what brings this panel back.
+      if (started) proxyJobChanged.value++;
     case _ProjectMenuAction.useProxy:
       // The clicked row's new state, for every picked footage item that has a
       // proxy to read from; one that has none is passed over rather than

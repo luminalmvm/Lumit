@@ -395,6 +395,11 @@ pub fn mix_fingerprint(doc: &Arc<Document>, comp: &Composition) -> u64 {
             )
             .as_bytes(),
         );
+        // The fade of a clip a nested comp plays through. Fed only where
+        // there is one, so every other mix keeps the fingerprint it had.
+        for fade in job.carriers.iter().filter_map(|c| c.fade.as_ref()) {
+            h.update(format!("{fade:?}").as_bytes());
+        }
     }
     let mut first = [0u8; 8];
     first.copy_from_slice(&h.finalize().as_bytes()[..8]);

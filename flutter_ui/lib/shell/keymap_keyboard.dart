@@ -87,6 +87,7 @@ const _onePanel = {
   BridgeKeyContext.viewer,
   BridgeKeyContext.graph,
   BridgeKeyContext.effects,
+  BridgeKeyContext.cut,
 };
 
 /// What is printed on a cap. A modifier reads the way a chord spells it here,

@@ -52,6 +52,8 @@ use uuid::Uuid;
 /// | B3, B4 | the latency of one action, 95th percentile |
 /// | B5, B6, B7 | milliseconds per frame (60 fps = 16.7, 24 fps = 41.7) |
 /// | B11 | the whole work-area fill, start to finish |
+/// | B18, B19, B20, B22, B23, B24 | the latency of one action on the long comp |
+/// | B21 | **not a time**: how many decoders are open, carried in this field so one gate covers it |
 #[derive(Debug, Clone, Copy, serde::Serialize)]
 pub struct Measurement {
     /// The budget's name in docs/13 §2 — `"B3"` and so on.
@@ -86,7 +88,7 @@ const FULL: Quality = Quality {
 
 /// The scrub draft: decode capped hard so a frame comes back fast, which is
 /// precisely B3's "possibly degraded frame" (see [`lumit_render::plan`]).
-const SCRUB: Quality = Quality {
+pub(crate) const SCRUB: Quality = Quality {
     draft: true,
     auto_res: true,
     display_scale: 0.5,
@@ -109,7 +111,7 @@ const SCRUB: Quality = Quality {
 /// laptop) on a machine where the app itself plays the same comp at a sustained
 /// 60, or the reverse. Then the bench is no longer describing playback, and the
 /// fix is to lift the controller into an engine crate and drive it from here.
-const HALF: Quality = Quality {
+pub(crate) const HALF: Quality = Quality {
     draft: false,
     auto_res: true,
     display_scale: 0.5,
@@ -146,7 +148,7 @@ pub fn span_fraction() -> u64 {
 }
 
 /// `count` scaled by [`span_fraction`], never below one frame.
-fn span_scaled(count: u64) -> u64 {
+pub(crate) fn span_scaled(count: u64) -> u64 {
     (count * span_fraction() / 100).max(1)
 }
 /// A second of playback, which is what B6 and B7 report the rate of.
@@ -191,7 +193,11 @@ impl Harness {
     /// A renderer with nothing in it — see the module note on what cold means.
     fn cold(&self) -> Result<HeadlessRenderer, String> {
         let mut r = HeadlessRenderer::new()?;
-        r.presync_items(&self.doc, self.comp);
+        // Named, so the files the first frame shows are probed before any
+        // clock starts. A probe is paid once per file however long the editor
+        // runs, and no budget here is about that.
+        let (start, _) = self.work_area();
+        let _ = r.frame_key(&self.doc, self.comp, start as u64, FULL);
         Ok(r)
     }
 
@@ -711,13 +717,13 @@ pub mod puppet {
 }
 
 /// Milliseconds since `t`, as a float.
-fn elapsed_ms(t: Instant) -> f64 {
+pub(crate) fn elapsed_ms(t: Instant) -> f64 {
     t.elapsed().as_secs_f64() * 1000.0
 }
 
 /// The `i`th scrub target: a stride coprime with the work area's length, so a
 /// run of samples visits a different frame every time and never lands twice.
-fn scatter(i: usize, start: usize, end: usize) -> u64 {
+pub(crate) fn scatter(i: usize, start: usize, end: usize) -> u64 {
     let span = end.saturating_sub(start).max(1);
     (start + (i.wrapping_mul(617) % span)) as u64
 }
@@ -725,7 +731,7 @@ fn scatter(i: usize, start: usize, end: usize) -> u64 {
 /// The 95th percentile docs/13 §2 states its latencies at — nearest-rank, so a
 /// handful of samples gives the worst of them rather than an interpolation
 /// between two numbers that were never measured.
-fn p95(ms: &mut [f64]) -> f64 {
+pub(crate) fn p95(ms: &mut [f64]) -> f64 {
     if ms.is_empty() {
         return 0.0;
     }

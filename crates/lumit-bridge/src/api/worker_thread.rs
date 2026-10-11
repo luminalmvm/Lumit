@@ -46,7 +46,7 @@ pub struct WorkerState {
     /// posts the source decodes coming frames will need, and files the results
     /// into the renderer's cache, so decode runs alongside compositing rather
     /// than before it.
-    prefetcher: crate::prefetch::Prefetcher,
+    prefetcher: lumit_render::Prefetcher,
     /// Which Viewer view the worker is serving (docs/impl/multi-viewer.md
     /// §2.1). Latched by every request that says what a view is showing, and
     /// read by the publish paths, the look and the shared-texture pool, so a
@@ -187,10 +187,8 @@ struct DiskWant {
 
 /// Name one frame through the worker's memo: computed at most once per
 /// document revision however many consumers ask, served as a lookup after
-/// that. [`lumit_render::HeadlessRenderer::presync_items`] must have run for
-/// this document **and this composition** first — it probes what that comp can
-/// show, and an unprobed source makes the frame unnameable (`None`), never
-/// wrongly named.
+/// that. A file the frame shows is probed the first time a name asks about
+/// it, so the first name across an edit point costs that file's probe.
 #[frb(ignore)]
 fn frame_name(
     state: &mut WorkerState,
@@ -755,8 +753,6 @@ fn publish_cache_bar(state: &mut WorkerState, stream: &mut WorkerResponseStream)
     } else {
         BAR_REFINE_PER_TURN
     };
-    // Every name below is of this one snapshot: probe it once, so the memo's
-    // misses are hashes and nothing else (see `frame_name`).
     // The config the document names, before a single frame is named under
     // it: the colour choice folds into every frame's key (§5.5), so a
     // name worked out against a stale config would be one the render is
@@ -764,7 +760,6 @@ fn publish_cache_bar(state: &mut WorkerState, stream: &mut WorkerResponseStream)
     // and a hash comparison — and the reason a config edited on disk
     // retires the frames it made.
     state.renderer.sync_colour(&document);
-    state.renderer.presync_items(&document, comp_id);
 
     // Naming one frame needs the renderer, the document and the three tiers; the
     // walk over frames needs none of them. Split so the walk can be tested
@@ -1556,8 +1551,8 @@ fn idle_fill(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
     // costs nothing here — and by the time the fill comes round again they have
     // arrived and gone onto the card, which is what makes a re-opened project
     // warm up by *reading* rather than by rendering everything a second time.
-    // The walk's names are all of this one snapshot: probe it once, then
-    // each name is computed at most once per edit (see `frame_name`).
+    // The walk's names are all of this one snapshot, and each is computed at
+    // most once per edit (see `frame_name`).
     // The config the document names, before a single frame is named under
     // it: the colour choice folds into every frame's key (§5.5), so a
     // name worked out against a stale config would be one the render is
@@ -1565,7 +1560,6 @@ fn idle_fill(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
     // and a hash comparison — and the reason a config edited on disk
     // retires the frames it made.
     state.renderer.sync_colour(&document);
-    state.renderer.presync_items(&document, comp_ref.id);
     for frame in crate::playback::fill_order(anchor, first, last).take(reach) {
         // Naming the frame is what tells the fill whether there is anything to
         // do — and under content keying the name is the same one every tier files
@@ -1834,6 +1828,9 @@ struct Playback {
     /// watermark, not a set: playback frames only move one way in a run, so
     /// "post everything from here to there once" is the whole bookkeeping.
     prefetched_to: Option<u64>,
+    /// How far ahead this run has asked about edit points
+    /// ([`crate::playback::cut_window`]).
+    cut_ahead_to: Option<u64>,
     /// The mix waiting for the sound to be started, once the picture has
     /// banked enough to start with it (the pre-roll,
     /// [`Self::pre_roll_done`]). `None` once the sound has been started, or
@@ -2710,7 +2707,7 @@ fn worker_loop(
         project,
         renderer,
         playback: None,
-        prefetcher: crate::prefetch::Prefetcher::default(),
+        prefetcher: lumit_render::Prefetcher::default(),
         last_shown: None,
         // The first view a frontend asks for. It sends the real look as soon
         // as its Viewer is up; until then this is the renderer's own default,
@@ -3042,9 +3039,6 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
             // BGRA on the Windows shared-texture path (ANGLE only opens BGRA
             // surfaces); RGBA everywhere else.
             let bgra = zero_copy_wants_bgra();
-            // Every name asked for below — the disk grace, the look-ahead —
-            // is of this one snapshot: probe it once, so the memo's misses
-            // are hashes and nothing else (see `frame_name`).
             // The config the document names, before a single frame is named under
             // it: the colour choice folds into every frame's key (§5.5), so a
             // name worked out against a stale config would be one the render is
@@ -3052,7 +3046,6 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
             // and a hash comparison — and the reason a config edited on disk
             // retires the frames it made.
             state.renderer.sync_colour(&document);
-            state.renderer.presync_items(&document, comp_id);
             // Every-frame only: when the NEXT frame's bytes are on their way
             // up from disk, hold the composite a bounded moment — the copy is
             // far cheaper than making the frame again, and every-frame
@@ -3131,9 +3124,7 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
                     let wants = state
                         .renderer
                         .prefetch_wants(&document, comp_id, future, quality);
-                    for want in wants {
-                        state.prefetcher.request(want);
-                    }
+                    state.prefetcher.request(wants);
                     // And climb the tiers for the coming frames at the same
                     // time: a frame held in memory goes up to the card now, a
                     // parked one is asked for now — a read off disk takes a
@@ -3180,6 +3171,30 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
                 }
                 if let Some(&edge) = coming.last() {
                     playback.prefetched_to = Some(edge);
+                }
+                // And a second ahead, the clips about to start: their files
+                // are opened now, so the cut does not wait for it. Forward
+                // only, a reverse leg crosses its edit points as it always
+                // did.
+                if !playback.reverse {
+                    let fps = document.comp(comp_id).map_or(60.0, |c| c.frame_rate.fps());
+                    let window = crate::playback::cut_window(
+                        frame,
+                        playback.cut_ahead_to,
+                        fps,
+                        speed,
+                        playback.last,
+                    );
+                    if let Some((after, through)) = window {
+                        let wants = state
+                            .renderer
+                            .cut_wants(&document, comp_id, after, through, quality);
+                        // Kept open until the clips have started, which is
+                        // this many rendered frames away at most.
+                        let frames_ahead = (through - frame) / speed.max(1);
+                        state.prefetcher.request_ahead(wants, frames_ahead);
+                        playback.cut_ahead_to = Some(through);
+                    }
                 }
                 let started = std::time::Instant::now();
                 let rendered = prepare_frame(
@@ -3378,7 +3393,6 @@ fn start_playback(req: PlayRequest, state: &mut WorkerState) -> Result<(), Bridg
     // and a hash comparison — and the reason a config edited on disk
     // retires the frames it made.
     state.renderer.sync_colour(&document);
-    state.renderer.presync_items(&document, comp_id);
     // The engine clamps the shuttle: a speed of zero would never leave `from`.
     let speed = req.speed.clamp(1, 8) as usize;
     // The stretch the leg is about to play, nearest first.
@@ -3454,6 +3468,7 @@ fn start_playback(req: PlayRequest, state: &mut WorkerState) -> Result<(), Bridg
         ring: std::collections::VecDeque::new(),
         costs: crate::playback::CostWindow::default(),
         prefetched_to: None,
+        cut_ahead_to: None,
         audio_held_for_picture: false,
         on_time_run: 0,
         skipped: 0,
@@ -4457,10 +4472,8 @@ fn sample_pixels(
             // **The frame the Viewer is showing, wherever it is being kept.**
             // The dropper reads what is on screen, so the ladder is the same
             // one `trace_scope` walks, and in the same order — and naming the
-            // frame here is what makes the rest of it honest. `frame_key`
-            // probes; `frame_key_presynced` below does not, and is only
-            // correct after something has. Nothing had, so a banked frame was
-            // judged against a `None` name, thrown away as stale, and the
+            // frame here is what makes the rest of it honest. A banked frame
+            // judged against a `None` name was thrown away as stale, and the
             // picture composited a second time for every window read.
             let quality = quality_for(req.scale);
             let name = state
@@ -5396,7 +5409,7 @@ mod tests {
             project,
             renderer,
             playback: None,
-            prefetcher: crate::prefetch::Prefetcher::default(),
+            prefetcher: lumit_render::Prefetcher::default(),
             last_shown: None,
             view_id: std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0)),
             looks: std::collections::HashMap::new(),
@@ -5745,6 +5758,7 @@ mod tests {
             ring: std::collections::VecDeque::new(),
             costs: crate::playback::CostWindow::default(),
             prefetched_to: None,
+            cut_ahead_to: None,
             audio_held_for_picture: false,
             on_time_run: 0,
             pending_audio: None,

@@ -51,6 +51,12 @@ enum Panel {
   /// and twirls, so the two tables can be open together.
   audioTimeline,
 
+  /// The Cut timeline: the fronted comp arranged for cutting long footage.
+  /// Every row is a Sequence layer, picture rows above a heavier line and
+  /// audio-only rows below it, with the clips painted along each. A view over
+  /// the same document the Timeline shows, as the Audio timeline is.
+  cutTimeline,
+
   /// The font, size, spacing and outline of a text layer's letters, or of the
   /// next text the Type tool makes when no text layer is selected.
   text,
@@ -81,6 +87,7 @@ enum Panel {
         Panel.mixer => l10n.panelMixer,
         Panel.audio => l10n.panelAudio,
         Panel.audioTimeline => l10n.panelAudioTimeline,
+        Panel.cutTimeline => l10n.panelCutTimeline,
         Panel.text => l10n.panelText,
         Panel.paragraph => l10n.panelParagraph,
         Panel.expressions => l10n.panelExpressions,
@@ -396,7 +403,11 @@ enum WorkspacePreset {
   nodes,
   colour,
   audio,
-  retiming;
+  retiming,
+
+  /// Last, so the strip's slots and chords of the six before it stay where
+  /// they were.
+  cut;
 
   String get title => switch (this) {
         WorkspacePreset.edit => l10n.workspaceEdit,
@@ -405,6 +416,7 @@ enum WorkspacePreset {
         WorkspacePreset.colour => l10n.workspaceColour,
         WorkspacePreset.audio => l10n.workspaceAudio,
         WorkspacePreset.retiming => l10n.workspaceRetiming,
+        WorkspacePreset.cut => l10n.workspaceCut,
       };
 }
 
@@ -547,6 +559,30 @@ DockSplit presetLayout(WorkspacePreset preset) => switch (preset) {
             DockPane(Panel.timeline),
           ],
           [0.55, 0.45],
+        ),
+      // Cut: Project and Effect controls tabbed down the left, the Viewer
+      // taking the rest of the top band (the Source view is a second view
+      // inside it, so one pane serves), and the **Cut timeline** across the
+      // bottom at the Audio arrangement's proportions. The Project column is
+      // a little wider than elsewhere, so its Duration column has room on a
+      // 1920 screen.
+      WorkspacePreset.cut => DockSplit(
+          DockAxis.vertical,
+          [
+            DockSplit(
+              DockAxis.horizontal,
+              [
+                DockTabs([
+                  DockPane(Panel.project),
+                  DockPane(Panel.effectControls),
+                ]),
+                DockPane(Panel.viewer),
+              ],
+              [0.24, 0.76],
+            ),
+            DockPane(Panel.cutTimeline),
+          ],
+          [0.53, 0.47],
         ),
     };
 

@@ -27,7 +27,7 @@ One process, plus a sandbox process per third-party plugin bundle.
 | Decode | One per active stream, never on the pool, because a long-GOP seek would stall it |
 | IO | Disk cache, journal, export files |
 | Analysis | Camera tracking, one at a time |
-| Audio pair | The cpal callback (lock-free reads only) and a thread that fills its ring ahead |
+| Audio pair | The cpal callback (lock-free reads only) and a thread that fills ahead of it: decodes the two-second blocks of sound the playhead is coming to |
 | GPU submit | The only thread that submits to the wgpu queue |
 | Share | While a project is shared: one accepting, and a reader and a writer per connection. The readers apply other people's edits. A host that asked its router to open the port has one more keeping it open |
 
@@ -38,7 +38,12 @@ cache.
 
 **Playback** is decode, evaluate, present over bounded queues 2 to 4 frames deep. The audio
 clock is master: the frame shown is a function of the samples played. If evaluation falls
-behind, frames drop. Audio never waits.
+behind, frames drop. Audio never waits. A clip about to start has its file opened about a
+second before its edit point, since opening one takes longer than those queues are deep.
+Sound is never held whole: each file's is decoded in blocks under one byte budget, least
+recently wanted dropped first. A block the callback reaches before it is decoded plays as
+silence and is counted. An export waits for its blocks instead and reads every file from
+the top, so its samples do not depend on what was played.
 
 ## 3. The document
 
@@ -68,8 +73,9 @@ Layers in the UI, a graph underneath. On each edit the affected comp recompiles:
 1. A layer becomes source, then effects, then masks and matte, then transform, then a blend
    over everything below. Adjustment layers apply to the composite so far. A Precomp is
    the nested comp behind one boundary node.
-2. A Sequence layer becomes a switch: for a given time exactly one clip is live, so its
-   subgraph is emitted.
+2. A Sequence layer becomes a switch: for a given time one clip is live and its subgraph
+   is emitted, a clip that plays a comp as a Precomp's is, or two where clips overlap,
+   crossfaded into one source by the incoming clip's fade.
 3. Retime isn't a pixel node. It changes the time asked of the nodes above it. Frame
    interpolation adds a node only when the source time falls between frames.
 
@@ -95,7 +101,10 @@ invalidating. An effect that reads other frames declares them so their hashes fo
 ## 6. Media
 
 `lumit-media` wraps FFmpeg behind a `MediaSource` trait. Decode never runs on the worker
-pool. Proxy level is part of the cache key.
+pool. Proxy level is part of the cache key. A file is probed when a frame first needs it,
+or a moment before during playback, not when its comp opens. The render keeps at most
+twelve decoders open and playback's read-ahead twelve more, a thread each. Both close the
+one unused longest, never one a current frame uses.
 
 ## 7. Plugins and expressions
 

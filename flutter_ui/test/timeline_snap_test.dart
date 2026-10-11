@@ -73,6 +73,9 @@ void main() {
               effects: const [],
               fx: true,
               sourceName: 'Take 3.wav',
+              sourceIn: const BridgeRational(num: 0, den: 1),
+              sourceOut: const BridgeRational(num: 1, den: 1),
+              sourceIsComp: false,
             ),
           ],
           transform: BridgeTransform(

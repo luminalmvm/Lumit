@@ -1,0 +1,159 @@
+---
+title: Cutting
+description: Cut footage on tracks of clips in the Cut workspace.
+sidebar:
+  order: 8.5
+---
+
+import Shot from "../../../components/Shot.astro";
+
+The **Cut** workspace arranges Lumit for cutting footage: a **source view** beside the
+composition in the Viewer, and the **Cut timeline** across the bottom.
+
+<Shot file="cut-workspace.png" caption="The Cut workspace: the Project panel, the source view beside the composition, and the Cut timeline." eager/>
+
+The Cut timeline shows the open composition. Each track is a layer of that composition, and
+the same composition opens in the [Timeline](/panels/timeline/) and the Audio timeline.
+
+## Tracks
+
+<Shot file="cut-timeline.png" caption="Picture tracks above the line and sound tracks below, with two dissolves and a fade out." />
+
+- A picture track is a [Sequence layer](/use/sequence-layers/). Picture tracks stand above
+  the dividing line, and the top one wins the picture.
+- A sound track is an audio-only Sequence layer. Sound tracks stand below the line.
+- Any other layer draws as one plain bar on a track of its own.
+
+## The source view
+
+Double-click footage in the [Project panel](/panels/project/) to load it into the source
+view. Drag along the strip under the picture to move through it.
+
+| Control | What it does |
+| --- | --- |
+| **Play** | Plays the footage from the frame shown, with its sound. |
+| **In**, `I` | Marks the frame shown as the start of the stretch to place. |
+| **Out**, `O` | Marks the frame shown as its end. |
+| **Insert**, `,` | Places the marked stretch at the playhead and moves everything after it later. |
+| **Overwrite**, `.` | Places the marked stretch at the playhead, over what is there. |
+
+With no marks set, the whole item is placed. The clip lands on the selected picture track,
+or the lowest one, or a new track when the composition has none. The playhead moves to the
+end of the placed clip.
+
+`I` and `O` mark the source while the source view has the keyboard. With the Cut timeline
+active they set the start and end of the work area at the playhead.
+
+Footage dragged from the Project panel onto a track makes a clip where it is dropped.
+Dropped on empty ground it makes a new track. Several files dropped together land one after
+another. A still takes five seconds.
+
+A clip placed past the end of the composition lengthens the composition to fit.
+
+`F` loads the footage of the clip under the playhead into the source view, on the frame the
+composition is showing. Double-clicking a clip does the same and marks the clip's own
+stretch.
+
+## Linked clips
+
+Footage with picture and sound is placed as two **linked clips**: the picture on a picture
+track, its sound on a sound track. While **Linked** is on they select, move, trim and cut
+together. `Alt`+click selects one alone. `Shift`+`L` turns **Linked** on and off.
+
+A picture track made in the Cut workspace has its audible switch off, and its sound is
+heard from the linked clips. Footage placed on a picture track whose audible switch is on
+makes a picture clip only.
+
+## Tools
+
+A tap of a tool's key arms it. Holding the key arms it for one gesture and goes back to the
+tool before on release.
+
+| Tool | Key | What a drag does |
+| --- | --- | --- |
+| **Select** | `V` | Moves clips in time and between tracks. An edge trims. A drag over empty ground selects every clip it crosses. `Alt`+drag leaves the clips and moves copies. |
+| **Razor** | `C` | A click cuts the clip under the pointer. `Shift`+click cuts every track. |
+| **Ripple** | `B` | An edge trims, and everything after the clip follows. |
+| **Roll** | `N` | An edit point moves: one clip trims as the next extends. |
+| **Slip** | `Y` | The clip shows earlier or later source, keeping its place and length. |
+| **Slide** | `U` | The clip moves between its neighbours, which trim and extend to meet it. |
+
+Pressing `B` during an edge drag with **Select** turns the ripple on for that drag, and
+releasing it turns it off.
+
+While an edge is dragged the clip draws a faint outline of its whole source, and a readout
+beside the pointer counts the frames moved.
+
+**Snap** holds a dragged edge to edit points, the playhead and markers. `S` turns it on and
+off, and `Ctrl` suspends it. `Esc` abandons a drag.
+
+## Editing at the playhead
+
+| Key | What it does |
+| --- | --- |
+| `Q`, `W` | Removes the clip's start, or its end, up to the playhead and closes the cut. With nothing selected it acts across every track, to the nearest edit point. |
+| `Alt`+`Q`, `Alt`+`W` | The same, leaving the gap. |
+| `Shift`+`Q`, `Shift`+`W` | Rolls the previous, or the next, edit point to the playhead. |
+| `Ctrl`+`K` | Cuts the selected clips' tracks at the playhead, or every track with nothing selected. |
+| `Ctrl`+`Shift`+`K` | Cuts every track at the playhead. |
+| `D` | Selects the clip under the playhead. |
+| `↑`, `↓` | Moves the playhead to the previous or the next edit point. |
+| `Alt`+`←`, `Alt`+`→` | Moves the selected clips one frame. With `Shift`, five. |
+| `Alt`+`↑`, `Alt`+`↓` | Moves the selected clips up or down a track. |
+
+## Removing and copying
+
+- `Delete` removes the selected clips and leaves a gap. `Shift`+`Delete` removes them and
+  closes it.
+- Right-click a gap for **Close gap**.
+- `;` lifts the work area: everything inside it is removed and the gap is left. `'` extracts
+  it: the gap is closed.
+- `Ctrl`+`C` copies the selected clips, `Ctrl`+`X` cuts them, and `Ctrl`+`V` pastes at the
+  playhead, onto the selected track when there is one. The playhead moves to the end of what
+  was pasted.
+
+## Fades and dissolves
+
+Two picture clips that overlap on a track **dissolve** across the overlap. Two sound clips
+that overlap crossfade.
+
+- `Ctrl`+`D` puts a one-second dissolve on the edit point nearest the playhead. Each clip is
+  extended into its own source to make the overlap, as far as its media allows.
+- Drag either edge of a dissolve to lengthen or shorten it.
+- A clip's menu offers **Fade in** and **Fade out**, which bring a picture clip up from or
+  down to transparent, and a sound clip from or to silence.
+- With **Select**, drag the handle at a clip's top corner to set the length of its fade.
+  Dragged back to the corner, the fade is removed.
+- A dissolve between two clips with no spare media at the cut is **refused**.
+
+## Clips as compositions
+
+**Open as composition** on a clip's menu turns the clip's footage into a composition and
+opens it. The clip plays that composition from then on, showing what it showed. Its linked
+sound clip is left as it was.
+
+Double-clicking a clip that already plays a composition opens the composition.
+
+## What a ripple moves
+
+A ripple moves the clips after the edit on every unlocked Sequence layer, and the other
+layers that start after it. A clip that straddles the point stays where it is.
+
+A ripple that would move a clip onto one that stays is **refused**, and the status line says
+so. Lock the track holding that clip, or clear the space.
+
+## View
+
+`=` and `-` zoom about the playhead. `\` fits the whole composition, and again returns to
+the zoom before. During playback the view pages along when the playhead leaves it.
+
+:::note[Not built yet]
+Multicam, captions, and EDL, XML or AAF interchange. Trimming with `J`, `K` and `L`. A
+retimed clip is silent.
+:::
+
+## Related
+
+- [Sequence layers](/use/sequence-layers/)
+- [Workspaces and panels](/use/workspaces/)
+- [Proxies](/use/proxies/)

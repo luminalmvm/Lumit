@@ -11,6 +11,8 @@
 //! rule here is a plain deterministic test.
 
 use crate::meter;
+use crate::stream::Source;
+use std::sync::Arc;
 
 /// Master safety ceiling: −0.3 dBFS as a linear sample amplitude
 /// (`10^(−0.3/20) = 0.966050…`). docs/09-AUDIO.md §3.1 asks for a hard safety
@@ -162,26 +164,35 @@ pub fn mix_stereo_at(sources: &[PlacedAudio], total_frames: usize, master_gain: 
 pub fn sum_stereo(sources: &[PlacedAudio], total_frames: usize) -> Vec<f32> {
     let mut out = vec![0.0f32; total_frames * 2];
     for src in sources {
-        if (src.gain == [0.0, 0.0] && src.envelope.is_none()) || src.samples.is_empty() {
-            continue;
-        }
-        let src_frames = src.samples.len() / 2;
-        // The output frame range this source covers, clipped to the strip.
-        let out_start = src.start_frame.max(0);
-        let out_end = (src.start_frame + src_frames as i64).min(total_frames as i64);
-        if out_end <= out_start {
-            continue;
-        }
-        for out_f in out_start..out_end {
-            // The matching source frame (out_f - start_frame >= 0 here).
-            let src_f = (out_f - src.start_frame) as usize;
-            let g = src.envelope.as_ref().map_or(src.gain, |e| e.gain_at(src_f));
-            let o = out_f as usize * 2;
-            out[o] += src.samples[src_f * 2] * g[0];
-            out[o + 1] += src.samples[src_f * 2 + 1] * g[1];
-        }
+        add_placed(&mut out, src);
     }
     out
+}
+
+/// Add one placed source into a strip being summed: [`sum_stereo`]'s own step,
+/// on its own so a mix of thousands of sources can read each one, add it and
+/// let it go instead of holding them all until the sum. Sources added in the
+/// same order give the same samples as the one call.
+pub fn add_placed(out: &mut [f32], src: &PlacedAudio) {
+    let total_frames = out.len() / 2;
+    if (src.gain == [0.0, 0.0] && src.envelope.is_none()) || src.samples.is_empty() {
+        return;
+    }
+    let src_frames = src.samples.len() / 2;
+    // The output frame range this source covers, clipped to the strip.
+    let out_start = src.start_frame.max(0);
+    let out_end = (src.start_frame + src_frames as i64).min(total_frames as i64);
+    if out_end <= out_start {
+        return;
+    }
+    for out_f in out_start..out_end {
+        // The matching source frame (out_f - start_frame >= 0 here).
+        let src_f = (out_f - src.start_frame) as usize;
+        let g = src.envelope.as_ref().map_or(src.gain, |e| e.gain_at(src_f));
+        let o = out_f as usize * 2;
+        out[o] += src.samples[src_f * 2] * g[0];
+        out[o + 1] += src.samples[src_f * 2 + 1] * g[1];
+    }
 }
 
 /// Fold an interleaved stereo buffer down to one channel.
@@ -237,13 +248,16 @@ pub fn place_on_timeline(
     Some((out_start, src_start, len))
 }
 
-/// One placed clip in a live [`MixPlan`]: a shared decoded buffer, where it
-/// lands on the comp strip, which slice of it plays, and its gain. The same
+/// One placed clip in a live [`MixPlan`]: a shared source, where it lands on
+/// the comp strip, which stretch of it plays, and its gain. The same
 /// placement triple [`place_on_timeline`] produces.
 #[derive(Clone)]
 pub struct PlacedClip {
-    pub buffer: std::sync::Arc<lumit_media::AudioBuffer>,
-    /// Output frame where `samples[src_start]` lands (may be negative).
+    /// The sound: a file read in blocks, or a buffer already in memory
+    /// ([`crate::stream`]).
+    pub source: Arc<Source>,
+    /// Output frame where the source's frame `src_start` lands (may be
+    /// negative).
     pub start_frame: i64,
     pub src_start: usize,
     pub len: usize,
@@ -267,18 +281,23 @@ pub struct PlacedClip {
 /// something with no mixer to draw.
 pub const NO_METER: u8 = u8::MAX;
 
+/// How long a block a waiting caller has just had decoded stays safe from
+/// being dropped for another, in milliseconds: long enough to be read.
+const WARM_HOLD_MS: u64 = 2_000;
+
 /// How many frames of a bucket [`MixPlan::peaks`] reads at most before it
 /// starts striding: enough that a column's level is honest, few enough that
 /// four thousand columns over a long comp stay a short walk.
 pub const PEAK_SAMPLES_PER_BUCKET: usize = 256;
 
 /// A comp's audio as a *plan* rather than a baked buffer: the placed clips
-/// and the strip length. The realtime callback sums the covering clips per
-/// frame ([`MixPlan::frame_at`]) — a handful of multiply-adds — so editing
-/// audio (solo, mute, move, trim) is a plan swap, heard on the next
-/// callback, instead of a whole-comp re-bake. This is the live half of the
-/// docs/09 §2 lazy-decode direction; decoded buffers are shared `Arc`s from
-/// the byte-budgeted cache.
+/// and the strip length. The realtime callback sums the clips sounding in
+/// each buffer it is asked for ([`MixPlan::mix_into`]), so editing audio
+/// (solo, mute, move, trim) is a plan swap, heard on the next callback,
+/// instead of a whole-comp re-bake. The clips' sound is not in the plan: each
+/// names a [`Source`], whose blocks come and go under the pool's budget
+/// ([`crate::stream`]), so a plan for a two-hour cut is a few hundred
+/// kilobytes whatever it plays.
 #[derive(Clone)]
 pub struct MixPlan {
     pub clips: Vec<PlacedClip>,
@@ -334,9 +353,16 @@ impl MixPlan {
             }
             let stride = ((to - from) / PEAK_SAMPLES_PER_BUCKET).max(1);
             let (mut lo, mut hi, mut sq, mut n) = (0.0f32, 0.0f32, 0.0f64, 0u32);
+            // The clips sounding in this bucket, found once for the bucket
+            // and not once per frame read from it.
+            let sounding: Vec<&PlacedClip> = self
+                .clips
+                .iter()
+                .filter(|c| Self::sounding(c, from, to).is_some())
+                .collect();
             let mut i = from;
             while i < to {
-                let (l, r) = self.frame_at(i);
+                let (l, r) = self.frame_of(i, sounding.iter().copied());
                 lo = lo.min(l.min(r));
                 hi = hi.max(l.max(r));
                 sq += f64::from(l * l + r * r) * 0.5;
@@ -352,24 +378,139 @@ impl MixPlan {
         out
     }
 
+    /// [`Self::peaks`] for a window too wide to read sample by sample: every
+    /// file clip's part of each bucket comes from that file's own peak
+    /// pyramid, asked of `pyramid_of`, and the parts are put together.
+    ///
+    /// # In plain terms
+    ///
+    /// Two hours of mix across a row two thousand columns wide is three and a
+    /// half seconds a column. Reading that off the samples would mean having
+    /// every file of the cut decoded, which is the thing a long cut cannot
+    /// do. Each file already has a summary of itself at every zoom, so the
+    /// row asks those: a clip's swing in a column is its file's swing over
+    /// the same stretch, scaled by the clip's gain.
+    ///
+    /// Where one clip sounds in a column, which is most columns of a cut,
+    /// that is the mix. Where two overlap it is an upper bound on the swing
+    /// (the two extremes need not have fallen on the same sample) and the
+    /// energies are added as if the two were unrelated sound, which is what
+    /// two different shots are. A picture of how loud the mix is, not a
+    /// measurement of it: [`Self::peaks`] reads the samples, and the caller
+    /// asks that one as soon as the window is narrow enough to.
+    ///
+    /// A clip with no pyramid (a baked rack's output, a file that will not
+    /// summarise) is read from whatever of it is in memory.
+    #[must_use]
+    pub fn peaks_wide(
+        &self,
+        rate: u32,
+        start_s: f64,
+        end_s: f64,
+        buckets: usize,
+        pyramid_of: &mut dyn FnMut(&std::path::Path) -> Option<Arc<crate::peaks::PeakPyramid>>,
+    ) -> Vec<f32> {
+        let mut out = vec![0.0f32; buckets * 3];
+        if buckets == 0 || rate == 0 || end_s <= start_s {
+            return out;
+        }
+        let rate_f = f64::from(rate);
+        let step_s = (end_s - start_s) / buckets as f64;
+        // Each bucket's low, high and mean square, summed over its clips.
+        let mut sums = vec![(0.0f32, 0.0f32, 0.0f64); buckets];
+        for clip in &self.clips {
+            let c0 = clip.start_frame as f64 / rate_f;
+            let c1 = c0 + clip.len as f64 / rate_f;
+            let (from_s, to_s) = (
+                c0.max(start_s),
+                c1.min(end_s).min(self.total_frames as f64 / rate_f),
+            );
+            if to_s <= from_s {
+                continue;
+            }
+            let pyramid = clip.source.path().and_then(&mut *pyramid_of);
+            let first = ((from_s - start_s) / step_s).floor().max(0.0) as usize;
+            let last = (((to_s - start_s) / step_s).ceil().max(0.0) as usize).min(buckets);
+            for (b, sum) in sums.iter_mut().enumerate().take(last).skip(first) {
+                let b0 = start_s + step_s * b as f64;
+                let (a, z) = (b0.max(from_s), (b0 + step_s).min(to_s));
+                if z <= a {
+                    continue;
+                }
+                // The clip's frames under this bucket, and its gain half way.
+                let at = ((a - c0) * rate_f) as usize;
+                let count = (((z - a) * rate_f) as usize).max(1);
+                let g = clip
+                    .envelope
+                    .as_ref()
+                    .map_or(clip.gain, |e| e.gain_at(at + count / 2));
+                let (lo, hi, rms) = match &pyramid {
+                    Some(pyramid) => {
+                        let s0 = (clip.src_start + at) as f64 / rate_f;
+                        let w = pyramid.window(crate::peaks::Band::Full, s0, s0 + (z - a));
+                        // The pyramid is of the two sides' mean.
+                        let gm = 0.5 * (g[0] + g[1]);
+                        (w.min * gm, w.max * gm, w.rms * gm)
+                    }
+                    None => {
+                        let stride = (count / PEAK_SAMPLES_PER_BUCKET).max(1);
+                        let (mut lo, mut hi, mut sq, mut n) = (0.0f32, 0.0f32, 0.0f64, 0u32);
+                        for i in (at..at + count).step_by(stride) {
+                            let Some((l, r)) = clip.source.frame(clip.src_start + i) else {
+                                continue;
+                            };
+                            let (l, r) = (l * g[0], r * g[1]);
+                            lo = lo.min(l.min(r));
+                            hi = hi.max(l.max(r));
+                            sq += f64::from(l * l + r * r) * 0.5;
+                            n += 1;
+                        }
+                        let rms = if n == 0 {
+                            0.0
+                        } else {
+                            (sq / f64::from(n)).sqrt() as f32
+                        };
+                        (lo, hi, rms)
+                    }
+                };
+                sum.0 += lo;
+                sum.1 += hi;
+                // Weighted by how much of the bucket the clip covers.
+                sum.2 += f64::from(rms * rms) * ((z - a) / step_s);
+            }
+        }
+        for (b, (lo, hi, sq)) in sums.into_iter().enumerate() {
+            let held = |v: f32| (v * self.master_gain).clamp(-MASTER_CEILING, MASTER_CEILING);
+            out[b * 3] = held(lo);
+            out[b * 3 + 1] = held(hi);
+            out[b * 3 + 2] = held(sq.sqrt() as f32);
+        }
+        out
+    }
+
     /// The `(left, right)` of output frame `i`: every covering clip summed,
     /// through the master fader, clamped to ±[`MASTER_CEILING`] like the baked
-    /// mix. Allocation-free and lock-free — callback-safe. O(clips) per frame,
-    /// fine at layer counts.
+    /// mix. A frame whose block is not in memory reads as silence.
+    ///
+    /// The plain statement of what the mix is, one frame at a time and every
+    /// clip asked: what [`Self::mix_into`] is held against, and what the
+    /// readers that want a frame here and there use. Not for the callback.
     #[must_use]
     pub fn frame_at(&self, i: usize) -> (f32, f32) {
+        self.frame_of(i, self.clips.iter())
+    }
+
+    /// [`Self::frame_at`] over the clips the caller has already narrowed to.
+    fn frame_of<'a>(&self, i: usize, clips: impl Iterator<Item = &'a PlacedClip>) -> (f32, f32) {
         let (mut l, mut r) = (0.0f32, 0.0f32);
-        for clip in &self.clips {
+        for clip in clips {
             let Ok(idx) = usize::try_from(i as i64 - clip.start_frame) else {
                 continue; // this clip starts later
             };
             if idx >= clip.len {
                 continue; // this clip has ended
             }
-            let s = (clip.src_start + idx) * 2;
-            if let (Some(&sl), Some(&sr)) =
-                (clip.buffer.samples.get(s), clip.buffer.samples.get(s + 1))
-            {
+            if let Some((sl, sr)) = clip.source.frame(clip.src_start + idx) {
                 let g = clip.envelope.as_ref().map_or(clip.gain, |e| e.gain_at(idx));
                 l += sl * g[0];
                 r += sr * g[1];
@@ -381,47 +522,134 @@ impl MixPlan {
         )
     }
 
-    /// The `(left, right)` of output frame `i`, as [`Self::frame_at`], with
-    /// each clip's own contribution folded into its strip's accumulator and
-    /// the limited output into [`crate::meter::MASTER`].
+    /// The stretch of `clip` sounding in output frames `[from, to)`: how far
+    /// into the stretch asked for it begins, the placed frame it begins at,
+    /// and how many frames.
+    fn sounding(clip: &PlacedClip, from: usize, to: usize) -> Option<(usize, usize, usize)> {
+        let a = (from as i64).max(clip.start_frame);
+        let b = (to as i64).min(clip.start_frame.saturating_add(clip.len as i64));
+        (b > a).then(|| {
+            (
+                (a - from as i64) as usize,
+                (a - clip.start_frame) as usize,
+                (b - a) as usize,
+            )
+        })
+    }
+
+    /// **The callback's mix.** Output frames `start..` into `out` (interleaved
+    /// stereo, overwritten), each the frame [`Self::frame_at`] answers, with
+    /// every clip's own contribution folded into its strip's accumulator and
+    /// the limited output into [`crate::meter::MASTER`] when `acc` is given.
+    /// Answers how many frames of some clip were due and not in memory, which
+    /// were mixed as silence.
     ///
-    /// The metering is the same arithmetic the bars need and none that they
-    /// do not: two compares and two multiply-adds per clip per frame, on the
-    /// callback's own stack. Nothing is published until the buffer is done,
-    /// so a frame of sound costs no atomic traffic at all.
+    /// Allocation-free and lock-free. The clips are asked once per call, not
+    /// once per frame: each is tested against the whole stretch and only the
+    /// ones sounding in it are read, in the plan's order, so the sum is the
+    /// same sum in the same order as the frame-at-a-time one. It keeps no
+    /// place between calls, so a seek or a swapped plan needs nothing told.
     ///
     /// A strip reads **pre-master**, which is what a strip's bar means: it
     /// says how loud that layer is, not how loud the fader has left it. The
     /// master slot reads what the device is actually handed.
-    #[must_use]
-    pub fn frame_metered(&self, i: usize, acc: &mut [meter::MeterAcc; meter::SLOTS]) -> (f32, f32) {
-        let (mut l, mut r) = (0.0f32, 0.0f32);
+    // ponytail: every clip is tested per call, which is 2,000 compares a
+    // buffer for a long cut and nothing beside the mixing. An index of clips
+    // by start is the upgrade if a plan ever holds hundreds of thousands.
+    pub fn mix_into(
+        &self,
+        start: usize,
+        out: &mut [f32],
+        mut acc: Option<&mut [meter::MeterAcc; meter::SLOTS]>,
+    ) -> usize {
+        out.fill(0.0);
+        let frames = out.len() / 2;
+        let mut missed = 0usize;
         for clip in &self.clips {
-            let Ok(idx) = usize::try_from(i as i64 - clip.start_frame) else {
+            let Some((at, first, count)) = Self::sounding(clip, start, start + frames) else {
                 continue;
             };
-            if idx >= clip.len {
-                continue;
-            }
-            let s = (clip.src_start + idx) * 2;
-            if let (Some(&sl), Some(&sr)) =
-                (clip.buffer.samples.get(s), clip.buffer.samples.get(s + 1))
-            {
-                let g = clip.envelope.as_ref().map_or(clip.gain, |e| e.gain_at(idx));
-                let (cl, cr) = (sl * g[0], sr * g[1]);
-                if let Some(strip) = acc.get_mut(clip.meter as usize) {
-                    strip.add(cl, cr, MASTER_CEILING);
-                }
-                l += cl;
-                r += cr;
+            let mut strip = acc
+                .as_deref_mut()
+                .and_then(|acc| acc.get_mut(clip.meter as usize));
+            missed += clip
+                .source
+                .read_runs(clip.src_start + first, count, |into, run| {
+                    let Some(dst) = out.get_mut((at + into) * 2..) else {
+                        return;
+                    };
+                    for (k, (s, o)) in run.chunks_exact(2).zip(dst.chunks_exact_mut(2)).enumerate()
+                    {
+                        let g = clip
+                            .envelope
+                            .as_ref()
+                            .map_or(clip.gain, |e| e.gain_at(first + into + k));
+                        let (cl, cr) = (s[0] * g[0], s[1] * g[1]);
+                        if let Some(strip) = strip.as_deref_mut() {
+                            strip.add(cl, cr, MASTER_CEILING);
+                        }
+                        o[0] += cl;
+                        o[1] += cr;
+                    }
+                });
+        }
+        for frame in out.chunks_exact_mut(2) {
+            frame[0] = (frame[0] * self.master_gain).clamp(-MASTER_CEILING, MASTER_CEILING);
+            frame[1] = (frame[1] * self.master_gain).clamp(-MASTER_CEILING, MASTER_CEILING);
+            if let Some(acc) = acc.as_deref_mut() {
+                acc[meter::MASTER].add(frame[0], frame[1], MASTER_CEILING);
             }
         }
-        let (l, r) = (
-            (l * self.master_gain).clamp(-MASTER_CEILING, MASTER_CEILING),
-            (r * self.master_gain).clamp(-MASTER_CEILING, MASTER_CEILING),
-        );
-        acc[meter::MASTER].add(l, r, MASTER_CEILING);
-        (l, r)
+        missed
+    }
+
+    /// **One step of filling ahead.** Mark every block sounding in output
+    /// frames `[from, to)` as wanted until `until` (on
+    /// [`crate::stream::now`]'s clock) and decode the one that is due soonest
+    /// and not in memory. `false` when there was nothing to decode: the
+    /// stretch is ready to play.
+    ///
+    /// One block a call, so the thread that fills ahead looks at the playhead
+    /// again between blocks and a seek is answered by the next decode, not
+    /// after a queue of them. Waits for the decode; never called from the
+    /// callback.
+    pub fn fill_step(&self, from: usize, to: usize, until: u64) -> bool {
+        let mut next: Option<(usize, &Arc<Source>, usize)> = None;
+        for clip in &self.clips {
+            let Some((at, first, count)) = Self::sounding(clip, from, to) else {
+                continue;
+            };
+            if let Some((block, into)) = clip.source.want(clip.src_start + first, count, until) {
+                if next.as_ref().is_none_or(|n| at + into < n.0) {
+                    next = Some((at + into, &clip.source, block));
+                }
+            }
+        }
+        match next {
+            Some((_, source, block)) => {
+                let _ = source.block(block, false, until);
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Decode everything sounding in `[from, to)` that is not in memory, and
+    /// wait for it: a scrub about to sound, a stretch about to be summarised.
+    pub fn warm(&self, from: usize, to: usize) {
+        let until = crate::stream::now().saturating_add(WARM_HOLD_MS);
+        while self.fill_step(from, to, until) {}
+    }
+
+    /// How many frames of file sound the plan places, every clip counted: what
+    /// the whole plan would hold if all of it were in memory at once.
+    #[must_use]
+    pub fn file_frames(&self) -> usize {
+        self.clips
+            .iter()
+            .filter(|c| c.source.is_file())
+            .map(|c| c.len)
+            .sum()
     }
 
     /// Timeline waveform peaks straight off the plan — no whole-comp buffer
@@ -587,10 +815,10 @@ mod tests {
         }
         let plan = MixPlan {
             clips: vec![PlacedClip {
-                buffer: Arc::new(lumit_media::AudioBuffer {
+                source: Source::whole(Arc::new(lumit_media::AudioBuffer {
                     rate: 48_000,
                     samples: src,
-                }),
+                })),
                 start_frame: 0,
                 src_start: 0,
                 len: 4,
@@ -622,7 +850,7 @@ mod tests {
         samples.extend(std::iter::repeat_n(0.0f32, 100));
         let plan = MixPlan {
             clips: vec![PlacedClip {
-                buffer: Arc::new(lumit_media::AudioBuffer { rate, samples }),
+                source: Source::whole(Arc::new(lumit_media::AudioBuffer { rate, samples })),
                 start_frame: 0,
                 src_start: 0,
                 len: 100,
@@ -649,10 +877,10 @@ mod tests {
             total_frames: 30_000,
             clips: vec![PlacedClip {
                 len: 30_000,
-                buffer: Arc::new(lumit_media::AudioBuffer {
+                source: Source::whole(Arc::new(lumit_media::AudioBuffer {
                     rate,
                     samples: vec![0.5f32; 60_000],
-                }),
+                })),
                 ..plan.clips[0].clone()
             }],
             master_gain: 1.0,
@@ -715,7 +943,7 @@ mod tests {
         let plan = MixPlan {
             clips: vec![
                 PlacedClip {
-                    buffer: a,
+                    source: Source::whole(a),
                     start_frame: 0,
                     src_start: 0,
                     len: 6,
@@ -724,7 +952,7 @@ mod tests {
                     meter: 0,
                 },
                 PlacedClip {
-                    buffer: b,
+                    source: Source::whole(b),
                     start_frame: 4,
                     src_start: 0,
                     len: 4,
@@ -754,7 +982,7 @@ mod tests {
         });
         let trimmed = MixPlan {
             clips: vec![PlacedClip {
-                buffer: c,
+                source: Source::whole(c),
                 start_frame: 0,
                 src_start: 3,
                 len: 2,
@@ -774,8 +1002,8 @@ mod tests {
         assert!((peaks[0].1 - 0.4).abs() < 1e-6);
     }
 
-    /// Metering is an observation, never a change: `frame_metered` returns
-    /// exactly what `frame_at` does, each clip's own contribution lands on
+    /// Metering is an observation, never a change: `mix_into` with meters
+    /// returns exactly what `frame_at` does, each clip's own contribution lands on
     /// its own strip **before** the sum, and the master slot reads the
     /// limited output — which is what makes a strip's bar say how loud that
     /// layer is rather than how loud the mix ended up.
@@ -789,7 +1017,7 @@ mod tests {
             })
         };
         let clip = |v: f32, strip: u8| PlacedClip {
-            buffer: buf(v),
+            source: Source::whole(buf(v)),
             start_frame: 0,
             src_start: 0,
             len: 4,
@@ -805,9 +1033,11 @@ mod tests {
             master_gain: 1.0,
         };
         let mut acc = [meter::MeterAcc::default(); meter::SLOTS];
+        let mut out = [0.0f32; 8];
+        assert_eq!(plan.mix_into(0, &mut out, Some(&mut acc)), 0);
         for i in 0..4 {
             assert_eq!(
-                plan.frame_metered(i, &mut acc),
+                (out[i * 2], out[i * 2 + 1]),
                 plan.frame_at(i),
                 "frame {i}: metering must not change the sound"
             );
@@ -835,8 +1065,9 @@ mod tests {
             master_gain: 1.0,
         };
         let mut acc = [meter::MeterAcc::default(); meter::SLOTS];
-        let (l, _) = unmetered.frame_metered(0, &mut acc);
-        assert!((l - 0.6).abs() < 1e-6);
+        let mut out = [0.0f32; 2];
+        unmetered.mix_into(0, &mut out, Some(&mut acc));
+        assert!((out[0] - 0.6).abs() < 1e-6);
         let meters = meter::Meters::default();
         meters.publish(&acc);
         assert_eq!(meters.read(0), meter::MeterReading::default());
@@ -883,10 +1114,10 @@ mod tests {
         let plan = MixPlan {
             clips: vec![
                 PlacedClip {
-                    buffer: Arc::new(lumit_media::AudioBuffer {
+                    source: Source::whole(Arc::new(lumit_media::AudioBuffer {
                         rate: 48_000,
                         samples: src.clone(),
-                    }),
+                    })),
                     start_frame: 0,
                     src_start: 0,
                     len: 4,
@@ -895,10 +1126,10 @@ mod tests {
                     meter: 0,
                 },
                 PlacedClip {
-                    buffer: Arc::new(lumit_media::AudioBuffer {
+                    source: Source::whole(Arc::new(lumit_media::AudioBuffer {
                         rate: 48_000,
                         samples: src.clone(),
-                    }),
+                    })),
                     start_frame: 0,
                     src_start: 0,
                     len: 4,
@@ -911,8 +1142,10 @@ mod tests {
             master_gain: half,
         };
         let mut acc = [meter::MeterAcc::default(); meter::SLOTS];
+        let mut out = [0.0f32; 8];
+        plan.mix_into(0, &mut out, Some(&mut acc));
         for i in 0..4 {
-            let (l, r) = plan.frame_metered(i, &mut acc);
+            let (l, r) = (out[i * 2], out[i * 2 + 1]);
             assert!(
                 (l - faded[i * 2]).abs() < 1e-6 && (r - faded[i * 2 + 1]).abs() < 1e-6,
                 "frame {i}: the live plan and the baked mix disagree about the master"
@@ -963,5 +1196,136 @@ mod tests {
         assert!(out_pos.iter().all(|v| (v - MASTER_CEILING).abs() < 1e-6));
         assert!(out_neg.iter().all(|v| (v + MASTER_CEILING).abs() < 1e-6));
         assert!(out_pos.iter().all(|v| *v < 1.0));
+    }
+
+    /// **The callback's mix is the frame-at-a-time mix**, sample for sample:
+    /// the plan is asked once per buffer where it used to be asked once per
+    /// frame, and that must not change a single sample of what is heard.
+    ///
+    /// The plan has everything a cut has. A clip that starts before the comp
+    /// does, a gap, two clips crossfading under their own envelopes, a hot
+    /// overlap the ceiling has to hold, and a file read in blocks, twice over
+    /// and across a block's seam. It is read whole, then in stretches of odd
+    /// lengths from an odd place, which is what a seek leaves the callback
+    /// doing.
+    #[test]
+    fn the_buffer_mix_is_the_frame_mix_over_gaps_overlaps_and_a_seek() {
+        use crate::stream::tests::{ramp_wav, Scratch};
+        const RATE: u32 = 8_000;
+        let dir = Scratch::new("mix");
+        let path = ramp_wav(&dir.0, "ramp.wav", RATE, 5);
+        let pool = crate::stream::Pool::new(64 * 1024 * 1024);
+        let file = pool.source(&path, RATE);
+        let block = crate::stream::BLOCK_SECONDS * RATE as usize;
+
+        let wave = |frames: usize, step: f32| {
+            Source::whole(Arc::new(lumit_media::AudioBuffer {
+                rate: RATE,
+                samples: (0..frames)
+                    .flat_map(|n| {
+                        let v = (n as f32 * step).sin();
+                        [v * 0.8, -v * 0.6]
+                    })
+                    .collect(),
+            }))
+        };
+        let ramp = |points: Vec<[f32; 2]>| Some(Arc::new(GainEnvelope { stride: 16, points }));
+        let clip =
+            |source: &Arc<Source>, start_frame: i64, src_start: usize, len: usize| PlacedClip {
+                source: Arc::clone(source),
+                start_frame,
+                src_start,
+                len,
+                gain: [1.0, 1.0],
+                envelope: None,
+                meter: 0,
+            };
+        let (a, b) = (wave(300, 0.05), wave(300, 0.11));
+        let plan = MixPlan {
+            clips: vec![
+                // Starts before the comp does.
+                clip(&a, -20, 0, 100),
+                // A gap, then two clips crossing under opposed ramps.
+                PlacedClip {
+                    envelope: ramp(vec![[1.0, 0.9], [0.7, 0.6], [0.2, 0.1], [0.0, 0.0]]),
+                    ..clip(&a, 200, 30, 48)
+                },
+                PlacedClip {
+                    envelope: ramp(vec![[0.0, 0.0], [0.3, 0.4], [0.8, 0.9], [1.0, 1.0]]),
+                    meter: 1,
+                    ..clip(&b, 216, 10, 48)
+                },
+                // Two loud clips at once: over the ceiling.
+                PlacedClip {
+                    gain: [1.5, 1.5],
+                    ..clip(&a, 300, 100, 60)
+                },
+                PlacedClip {
+                    gain: [1.5, 1.5],
+                    meter: NO_METER,
+                    ..clip(&b, 310, 100, 60)
+                },
+                // The file, across the seam between its first two blocks, and
+                // the same file again a little later and overlapping.
+                PlacedClip {
+                    gain: [0.9, 0.7],
+                    meter: 2,
+                    ..clip(&file, 400, block - 30, 80)
+                },
+                clip(&file, 440, 2 * block - 10, 90),
+            ],
+            total_frames: 560,
+            master_gain: 0.9,
+        };
+        let frames_of = |plan: &MixPlan| -> Vec<(f32, f32)> {
+            (0..plan.total_frames).map(|i| plan.frame_at(i)).collect()
+        };
+
+        // Before anything of the file is decoded: its clips are silence, and
+        // the callback's mix says how much of them was due.
+        let mut out = vec![1.0f32; plan.total_frames * 2];
+        let missed = plan.mix_into(0, &mut out, None);
+        assert_eq!(missed, 80 + 90, "every frame of both file clips was due");
+        let cold = frames_of(&plan);
+        assert!(out.chunks_exact(2).map(|f| (f[0], f[1])).eq(cold.clone()));
+        assert_eq!(cold[450], (0.0, 0.0));
+
+        // Filled, as the thread that fills ahead leaves it.
+        plan.warm(0, plan.total_frames);
+        let want = frames_of(&plan);
+        assert_ne!(want[450], (0.0, 0.0), "the file sounds once it is there");
+        assert_eq!(plan.mix_into(0, &mut out, None), 0);
+        assert!(out.chunks_exact(2).map(|f| (f[0], f[1])).eq(want.clone()));
+        assert!(
+            want.iter().any(|f| f.0 == MASTER_CEILING),
+            "the hot overlap reached the ceiling, so the limiter is in this"
+        );
+
+        // From an odd place in stretches of odd lengths.
+        let mut at = 137;
+        for len in [1usize, 7, 64, 3, 250, 99] {
+            let len = len.min(plan.total_frames - at);
+            let mut out = vec![0.0f32; len * 2];
+            let mut acc = [meter::MeterAcc::default(); meter::SLOTS];
+            plan.mix_into(at, &mut out, Some(&mut acc));
+            assert!(
+                out.chunks_exact(2)
+                    .map(|f| (f[0], f[1]))
+                    .eq(want[at..at + len].iter().copied()),
+                "{len} frames from {at}"
+            );
+            at += len;
+        }
+
+        // And the blocks are the file: the same plan over the file decoded
+        // whole is the same sound.
+        let whole = Source::whole(Arc::new(
+            lumit_media::audio::decode_all(&path, RATE).unwrap(),
+        ));
+        let mut over_whole = plan.clone();
+        for c in over_whole.clips.iter_mut().filter(|c| c.source.is_file()) {
+            c.source = Arc::clone(&whole);
+        }
+        assert!(frames_of(&over_whole) == want);
     }
 }
