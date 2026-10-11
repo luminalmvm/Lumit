@@ -30,12 +30,18 @@ import 'package:provider/provider.dart';
 /// then 'Lumit - `<file name>`' without the extension — the same convention as
 /// every editor's title bar.
 String windowTitleFor(String? path) {
-  if (path == null || path.isEmpty) return 'Lumit';
-  var name = path.split(RegExp(r'[/\\]')).last;
-  if (name.toLowerCase().endsWith('.lum')) {
-    name = name.substring(0, name.length - 4);
-  }
-  return 'Lumit - $name';
+  final name = projectNameFor(path);
+  return name == null ? 'Lumit' : 'Lumit - $name';
+}
+
+/// The project's file name without the extension, or null until it has a home
+/// on disk.
+String? projectNameFor(String? path) {
+  if (path == null || path.isEmpty) return null;
+  final name = path.split(RegExp(r'[/\\]')).last;
+  return name.toLowerCase().endsWith('.lum')
+      ? name.substring(0, name.length - 4)
+      : name;
 }
 
 /// The `.lum` file a double-click or `lumit myproject.lum` asked us to open:

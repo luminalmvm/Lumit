@@ -42,7 +42,11 @@ import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:lumit_flutter/src/rust/api/shell.dart'
-    show setAutosave, setFullResDragPreviews, setHardwareDecode;
+    show
+        setAutosave,
+        setDiscordStatus,
+        setFullResDragPreviews,
+        setHardwareDecode;
 import 'package:lumit_flutter/src/rust/api/state.dart';
 import 'package:lumit_flutter/src/rust/api/streams.dart'
     show BridgeStreamsArrival;
@@ -142,6 +146,26 @@ class LumitUiState extends ChangeNotifier {
           minutes: workspace.autosaveMinutes, keep: workspace.autosaveKeep);
     } catch (_) {
       // No engine to tell, in a test that has none.
+    }
+    pushDiscordStatus();
+  }
+
+  /// Tell Discord what Lumit is open on, as far as Settings allows. Called
+  /// where the project's path or the fronted comp can have changed.
+  void pushDiscordStatus() {
+    // Never under `flutter test`, or a test run turns up in the status of
+    // whoever started it.
+    if (Platform.environment.containsKey('FLUTTER_TEST')) return;
+    final status = workspace.discordStatus;
+    final names = status == DiscordStatus.names;
+    try {
+      setDiscordStatus(
+        show_: status != DiscordStatus.off,
+        project: names ? projectNameFor(_app.project?.path()) : null,
+        comp: names ? _selectedComp?.getSettings().name : null,
+      );
+    } catch (_) {
+      // The comp has gone under the call. The status keeps what it had.
     }
   }
 
@@ -2112,6 +2136,7 @@ class LumitUiState extends ChangeNotifier {
     // with no store behind it, so "off" has to be said as plainly as "on".
     setFullResDragPreviews(fullRes: perf.fullResDragPreviews);
     setHardwareDecode(on_: perf.hardwareDecode);
+    pushDiscordStatus();
     // Which output Lumit is heard through. Same arrangement as the budgets: the
     // engine holds the live choice with no store behind it, so the settings
     // file carries it and hands it back here. Null means the system default,
@@ -2474,6 +2499,7 @@ class LumitUiState extends ChangeNotifier {
     // exactly one view, for whatever the Viewer is showing.
     pushViewerLook();
     rememberSession();
+    pushDiscordStatus();
     _look();
     notifyListeners();
   }

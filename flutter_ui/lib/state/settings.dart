@@ -207,6 +207,17 @@ enum ToolBarPosition {
   left,
 }
 
+/// What Lumit puts in the person's Discord status.
+enum DiscordStatus {
+  off,
+
+  /// That Lumit is open, and for how long.
+  app,
+
+  /// The project and the composition as well.
+  names,
+}
+
 /// What a file with more than one audio stream becomes when it is added to a
 /// composition. The engine's `BridgeStreamsArrival`, kept as an enum of the
 /// settings file's own so that file does not depend on a generated name.

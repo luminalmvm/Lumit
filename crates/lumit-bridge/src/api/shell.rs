@@ -111,6 +111,17 @@ pub fn set_hardware_decode(on: bool) {
     let _ = on;
 }
 
+/// What Discord shows under the person's name while Lumit is open.
+///
+/// `show` off takes Lumit out of their status. On, it says Lumit is open, and
+/// names the project and the composition when it is given them. The setting is
+/// held the way the drag setting above is, and the frontend calls this again
+/// whenever either name changes.
+#[frb(sync)]
+pub fn set_discord_status(show: bool, project: Option<String>, comp: Option<String>) {
+    crate::presence::set(show.then_some(crate::presence::Status { project, comp }));
+}
+
 /// One rotating autosave beside a project.
 #[frb(non_opaque)]
 #[derive(Debug, Clone, PartialEq, Eq)]

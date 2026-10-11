@@ -51,6 +51,16 @@ void setFullResDragPreviews({required bool fullRes}) => BridgeLib.instance.api
 void setHardwareDecode({required bool on_}) =>
     BridgeLib.instance.api.crateApiShellSetHardwareDecode(on_: on_);
 
+/// What Discord shows under the person's name while Lumit is open.
+///
+/// `show` off takes Lumit out of their status. On, it says Lumit is open, and
+/// names the project and the composition when it is given them. The setting is
+/// held the way the drag setting above is, and the frontend calls this again
+/// whenever either name changes.
+void setDiscordStatus({required bool show_, String? project, String? comp}) =>
+    BridgeLib.instance.api.crateApiShellSetDiscordStatus(
+        show_: show_, project: project, comp: comp);
+
 /// How often Lumit writes a rotating copy of every open project, and how many
 /// copies it keeps (docs/10-FILE-FORMAT.md §4).
 ///
