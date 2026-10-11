@@ -121,8 +121,11 @@ instead:
 ```sh
 # Arch / Artix: sudo pacman -S pkgconf clang18 llvm18
 mkdir -p ~/ffmpeg8
-curl -fsSL https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n8.1-latest-linux64-gpl-shared-8.1.tar.xz \
-  | tar -xJ -C ~/ffmpeg8 --strip-components=1
+# The same dated build CI uses, checked against the same hash
+f=ffmpeg-n8.1.2-50-g1a748fe2cd-linux64-gpl-shared-8.1.tar.xz
+curl -fsSLO https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-08-31-13-27/$f
+echo "35dc428bf78d3f8a4447a68707338ecf9560ebcc7459967974f9ff5b1f84be24  $f" | sha256sum -c -
+tar -xJf $f -C ~/ffmpeg8 --strip-components=1
 # The .pc files carry the prefix of the machine that built them
 sed -i "s|^prefix=.*|prefix=$HOME/ffmpeg8|" ~/ffmpeg8/lib/pkgconfig/*.pc
 export PKG_CONFIG_PATH="$HOME/ffmpeg8/lib/pkgconfig:$PKG_CONFIG_PATH"
