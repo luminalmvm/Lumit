@@ -1963,6 +1963,14 @@ fn a_plugins_memory_reaches_its_render() {
     assert_eq!(resolve(&inst)[0].1, Value::Int(0));
     def.apply_cpu_at(inst.id, 0.0, &mut rgba, 2, 2, Params::EMPTY);
     assert_eq!(recorded().get("vendorBlob"), None);
+
+    // A state out of a file that claims far more than it holds, here one
+    // name a million million bytes long, is read as no memory at all. It is
+    // not given the room first.
+    inst.set_plugin_state(&[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0]);
+    resolve(&inst);
+    def.apply_cpu_at(inst.id, 0.0, &mut rgba, 2, 2, Params::EMPTY);
+    assert_eq!(recorded().get("vendorBlob"), None);
 }
 
 /// **The plugin is told its frame, and handed the frames either side.** The

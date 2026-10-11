@@ -352,7 +352,10 @@ impl OfxEffectDef {
             }
             memory.set(name, value.clone());
         }
-        if memory.is_empty() && after.controls == Controls::default() {
+        // Nothing to keep only when the controls stand as the plugin described
+        // them. A row it described as hidden and has since shown is a change,
+        // though it leaves nothing hidden.
+        if memory.is_empty() && self.rows_of(&after.controls) == self.described {
             return None;
         }
         let mut bytes = bincode::serialize(&memory).ok()?;
@@ -453,9 +456,19 @@ fn read_component(slot: &PropValue, route: &ValueRoute) -> Option<Value> {
         (PropValue::Double(channels), param_types::RGB | param_types::RGBA) => {
             // An RGB has no fourth channel, and reads as opaque.
             let at = |index: usize| channels.get(index).copied().unwrap_or(1.0) as f32;
-            Some(Value::Colour([at(0), at(1), at(2), at(3)]))
+            let colour = [at(0), at(1), at(2), at(3)];
+            colour
+                .iter()
+                .all(|channel| channel.is_finite())
+                .then_some(Value::Colour(colour))
         }
-        (PropValue::Double(values), _) => Some(Value::Float(*values.get(route.component)? as f32)),
+        // A plugin can hand back anything, a "no limit" far past what a row
+        // holds included. A number that is not one never becomes a row: it
+        // would save as nothing, and the project would not open again.
+        (PropValue::Double(values), _) => {
+            let value = *values.get(route.component)? as f32;
+            value.is_finite().then_some(Value::Float(value))
+        }
         (PropValue::Int(values), param_types::BOOLEAN) => Some(Value::Bool(*values.first()? != 0)),
         (PropValue::Int(values), param_types::CHOICE) => {
             Some(Value::Choice(u32::try_from(*values.first()?).unwrap_or(0)))
@@ -495,10 +508,22 @@ struct Kept {
 }
 
 /// Read a plugin state back: the memory, then the controls if they are there.
+///
+/// The bytes come out of a project file, so nothing in them is believed about
+/// its own size: a length longer than the bytes there are is refused before
+/// anything is made to hold it.
 fn unpack(bytes: &[u8]) -> Option<Kept> {
+    use bincode::Options;
+    // What `bincode::serialize` writes, read back with a ceiling.
+    let reader = || {
+        bincode::DefaultOptions::new()
+            .with_fixint_encoding()
+            .allow_trailing_bytes()
+            .with_limit(bytes.len() as u64)
+    };
     let mut rest = bytes;
-    let memory = bincode::deserialize_from(&mut rest).ok()?;
-    let controls = bincode::deserialize_from(&mut rest).ok();
+    let memory = reader().deserialize_from(&mut rest).ok()?;
+    let controls = reader().deserialize_from(&mut rest).ok();
     Some(Kept { memory, controls })
 }
 
@@ -1004,7 +1029,21 @@ impl SharedBroker {
         }
         self.broker.try_lock_for(self.patience)
     }
+
+    /// [`Self::lock`] for an edit, which is made on the interface's thread and
+    /// so waits a moment for a frame in flight and no longer.
+    fn lock_briefly(&self) -> Option<parking_lot::MutexGuard<'_, Broker>> {
+        if self.pressing.load(Ordering::Acquire) {
+            return None;
+        }
+        self.broker.try_lock_for(SETTLE_PATIENCE.min(self.patience))
+    }
 }
+
+/// How long an edit waits for the plugin to finish the frame it is drawing.
+/// Past it the edit lands as it is and the plugin hears of it at its next
+/// render.
+const SETTLE_PATIENCE: Duration = Duration::from_millis(250);
 
 /// What a render answers while the bundle's plugin is in its own window.
 const BUSY: &str = "the plugin is busy in its own window";
@@ -1162,16 +1201,17 @@ impl PluginHost for BrokerHost {
         answer.map_err(|error| error.to_string())
     }
 
-    // ponytail: this is on the edit, so the edit waits for a render in flight,
-    // up to the render deadline for one that hangs. Settle on a thread and
-    // fold the answer into the same undo step if that wait ever shows.
+    // ponytail: this is on the edit. It no longer waits out a render in flight,
+    // but a plugin that hangs in its own answer still holds the edit up to the
+    // render deadline. Settle on a thread and fold the answer into the same
+    // undo step if that ever shows.
     fn settle(
         &self,
         instance: Uuid,
         made_with: &ParamSnapshot,
         handed: &ParamSnapshot,
     ) -> Result<Settled, String> {
-        let mut broker = self.broker.lock().ok_or_else(|| BUSY.to_owned())?;
+        let mut broker = self.broker.lock_briefly().ok_or_else(|| BUSY.to_owned())?;
         let id = self
             .instance_of(&mut broker, instance, made_with)
             .ok_or_else(|| "the plugin would not make an instance".to_owned())?;
