@@ -38,6 +38,11 @@ pub struct LumitBridgeState {
     /// and a `Mutex` rather than a bare handle so recovery can re-arm it when
     /// the document changes identity.
     pub journal: SharedJournal,
+    /// Whether this machine switched on packing every save for this project.
+    /// The document's own switch counts only while this is set, since a file
+    /// or another person in a shared project can set that one
+    /// (`lumit_project::auto_pack_note`).
+    pub(crate) auto_pack_here: bool,
     pub sender: Option<Sender<WorkerRequest>>,
     /// The project's OCIO config as the *seam* holds it: the parse and
     /// the baked output-space tables the colour reads answer from.
@@ -776,6 +781,7 @@ impl LumitBridgeState {
             path: None,
             media: MediaCache::default(),
             journal: Arc::clone(&journal),
+            auto_pack_here: false,
             sender: None,
             colour: Mutex::new(lumit_render::colour::ColourState::default()),
         };
@@ -941,6 +947,18 @@ pub(crate) fn adopt(
 ) -> Result<(ProjectReference, Vec<String>), BridgeError> {
     let id = Uuid::now_v7();
 
+    // A file that says every save packs is believed only when this machine
+    // switched that on for it. Any other opens with it off, which is not an
+    // edit, and it can be switched on again by hand. A document that came
+    // from somebody else in a shared project is left as they have it, and is
+    // not believed either.
+    let auto_pack_here = saved_at
+        .as_deref()
+        .is_some_and(|path| doc.auto_pack && crate::packing::auto_packs(doc.id, path));
+    if saved_at.is_some() {
+        doc.auto_pack = auto_pack_here;
+    }
+
     // Packed footage first, so the resolver finds those items already placed
     // and does not go looking for files that were never sent.
     if let Some(archive) = saved_at.as_deref() {
@@ -1012,6 +1030,7 @@ pub(crate) fn adopt(
         path: saved_at,
         media: MediaCache::default(),
         journal: Arc::clone(&journal),
+        auto_pack_here,
         sender: None,
         colour: Mutex::new(lumit_render::colour::ColourState::default()),
     };

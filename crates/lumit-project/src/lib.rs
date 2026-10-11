@@ -701,17 +701,43 @@ pub fn journal_path_for(doc_id: Uuid, project: Option<&Path>) -> Option<PathBuf>
 pub fn journal_in(cache: &Path, doc_id: Uuid, project: Option<&Path>) -> PathBuf {
     let name = match project {
         None => "ops.jsonl".to_owned(),
-        Some(project) => {
-            // The file as the disk names it, so two spellings of one path are
-            // one journal. Case is folded for the same reason, which costs two
-            // files that differ only by case sharing one.
-            let named = fs::canonicalize(project).unwrap_or_else(|_| project.to_path_buf());
-            let key = blake3::hash(named.to_string_lossy().to_lowercase().as_bytes());
-            let key = key.to_hex();
-            format!("ops-{}.jsonl", key.get(..16).unwrap_or("0"))
-        }
+        Some(project) => format!("ops-{}.jsonl", path_key(project)),
     };
     cache.join(doc_id.to_string()).join("journal").join(name)
+}
+
+/// A short name for where `project` is on disk.
+fn path_key(project: &Path) -> String {
+    // The file as the disk names it, so two spellings of one path are one
+    // name. Case is folded for the same reason, which costs two files that
+    // differ only by case sharing one.
+    let named = fs::canonicalize(project).unwrap_or_else(|_| project.to_path_buf());
+    let key = blake3::hash(named.to_string_lossy().to_lowercase().as_bytes());
+    let key = key.to_hex();
+    key.get(..16).unwrap_or("0").to_owned()
+}
+
+/// The note this machine keeps when it has switched on packing every save
+/// for the document `doc_id` saved as `project`.
+///
+/// **In plain terms.** A `.lum` says for itself whether every save packs its
+/// footage, and the files its effects read go in with it. A file from somebody
+/// else can arrive saying so, with an effect pointed at something private on
+/// this machine, and the next save would put that in the file. So the file's
+/// word counts only when this note is here, and the note is only ever written
+/// by a choice made on this machine. It is named the way a journal is, since
+/// a copy of the file somewhere else is another file.
+///
+/// The local data folder, and not the cache: the cache can be deleted at any
+/// time, and this is something somebody chose.
+pub fn auto_pack_note(doc_id: Uuid, project: &Path) -> Option<PathBuf> {
+    let name = format!("{doc_id}-{}", path_key(project));
+    Some(
+        project_dirs()?
+            .data_local_dir()
+            .join("auto-pack")
+            .join(name),
+    )
 }
 
 /// Where a shared project keeps what closing Lumit must not lose: a host's

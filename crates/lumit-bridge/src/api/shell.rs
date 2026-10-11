@@ -284,6 +284,10 @@ impl ProjectReference {
             }
             replayed += 1;
         }
+        // The switch for packing every save, as an open leaves it: believed
+        // only when this machine switched it on for this file.
+        let auto_pack_here = doc.auto_pack && crate::packing::auto_packs(doc.id, &path);
+        doc.auto_pack = auto_pack_here;
         // Packed footage whose file has gone is read from the copy the open
         // made. Nothing is copied here unless that copy has been deleted.
         let dir = path.parent().unwrap_or_else(|| std::path::Path::new(""));
@@ -302,6 +306,7 @@ impl ProjectReference {
             *journal = crate::api::state::journal_file(doc.id, Some(&path));
         }
         state.store.replace_document(doc);
+        state.auto_pack_here = auto_pack_here;
         state.path = Some(path);
         state.media.clear();
 

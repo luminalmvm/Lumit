@@ -328,10 +328,36 @@ fn a_packed_project_keeps_its_footage_when_the_original_goes() {
         b"not really a movie"
     );
     assert_eq!(project.pack_state().expect("state").packed, 0);
-    let (doc, _) = lumit_project::open(&lum).expect("opens");
+    let (mut doc, _) = lumit_project::open(&lum).expect("opens");
     assert!(doc.packed.is_empty(), "the file no longer carries it");
-
     project.close().expect("closed");
+
+    // A file from somebody else can arrive saying that every save packs. It
+    // is not believed: it opens with that off, and a save packs nothing. Once
+    // it is switched on here, a save packs. Opened the way a recovery opens
+    // one, which leaves the projects other tests have open alone.
+    doc.auto_pack = true;
+    let sent = dir.path().join("sent.lum");
+    lumit_project::save(&doc, &sent).expect("written");
+    let open = || {
+        let opened = LumitBridgeState::new_project(None).expect("a new project");
+        let name = sent.to_string_lossy().into_owned();
+        opened.restore_journal(name).expect("opens");
+        opened
+    };
+    let packed = || lumit_project::open(&sent).expect("opens").0.packed.len();
+    let received = open();
+    assert!(!received.pack_state().expect("state").auto_pack);
+    received.save(String::new()).expect("saved");
+    assert_eq!(packed(), 0, "nothing went into the file");
+    received.set_auto_pack(true).expect("switched on");
+    received.save(String::new()).expect("saved");
+    assert_eq!(packed(), 1);
+    received.close().expect("closed");
+    // And this machine's own choice is still there the next time.
+    let again = open();
+    assert!(again.pack_state().expect("state").auto_pack);
+    again.close().expect("closed");
 }
 
 /// A placed clip must land in the composition; the span/size fallbacks are what

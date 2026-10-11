@@ -652,6 +652,9 @@ class ProjectReference {
   /// Set whether every save packs the project's footage. An ordinary op, so
   /// it is undoable and travels in the `.lum`. Nothing is packed until the
   /// next save.
+  ///
+  /// This is also what makes the switch this machine's own choice, which is
+  /// the only way it counts (`lumit_project::auto_pack_note`).
   void setAutoPack({required bool autoPack}) =>
       BridgeLib.instance.api.crateApiProjectProjectReferenceSetAutoPack(
           that: this, autoPack: autoPack);

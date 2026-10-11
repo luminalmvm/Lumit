@@ -58,6 +58,26 @@ pub(crate) fn progress(mut report: impl FnMut(f64)) -> impl FnMut(u64, u64) -> b
     }
 }
 
+/// Whether this machine switched on packing every save for `document` saved
+/// at `path`. The file's own switch counts only when it did
+/// (`lumit_project::auto_pack_note`).
+pub(crate) fn auto_packs(document: Uuid, path: &Path) -> bool {
+    lumit_project::auto_pack_note(document, path).is_some_and(|note| note.is_file())
+}
+
+/// Keep the note that says so, or take it away.
+pub(crate) fn note_auto_pack(document: Uuid, path: &Path, on: bool) {
+    let Some(note) = lumit_project::auto_pack_note(document, path) else {
+        return;
+    };
+    if !on {
+        let _ = std::fs::remove_file(note);
+    } else if let Some(dir) = note.parent() {
+        let _ = std::fs::create_dir_all(dir);
+        let _ = std::fs::write(note, []);
+    }
+}
+
 /// The files a save offers for packing: every footage item's when `all`,
 /// otherwise only those of the items the project already packs. Proxies, the
 /// colour config and the files effects read are offered by the same rule. An

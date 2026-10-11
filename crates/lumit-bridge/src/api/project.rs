@@ -761,21 +761,33 @@ impl ProjectReference {
         Ok(BridgePackState {
             footage: count,
             packed,
-            auto_pack: doc.auto_pack,
+            auto_pack: doc.auto_pack && state.auto_pack_here,
         })
     }
 
     /// Set whether every save packs the project's footage. An ordinary op, so
     /// it is undoable and travels in the `.lum`. Nothing is packed until the
     /// next save.
+    ///
+    /// This is also what makes the switch this machine's own choice, which is
+    /// the only way it counts (`lumit_project::auto_pack_note`).
     #[frb(sync)]
     pub fn set_auto_pack(&self, auto_pack: bool) -> Result<(), BridgeError> {
         let state = self.state()?;
-        let state = state.write().map_err(|_| BridgeError::WriteFailed)?;
-        state
-            .store
-            .commit(Op::SetAutoPack { auto_pack })
-            .map_err(BridgeError::OpError)?;
+        let saved = {
+            let mut state = state.write().map_err(|_| BridgeError::WriteFailed)?;
+            state
+                .store
+                .commit(Op::SetAutoPack { auto_pack })
+                .map_err(BridgeError::OpError)?;
+            state.auto_pack_here = auto_pack;
+            let document = state.store.snapshot().id;
+            state.path.clone().map(|path| (document, path))
+        };
+        // A project with no file yet is noted by the save that gives it one.
+        if let Some((document, path)) = saved {
+            crate::packing::note_auto_pack(document, &path, auto_pack);
+        }
         Ok(())
     }
 
@@ -872,7 +884,7 @@ impl ProjectReference {
         // it, and so does a guest's whose host is away. Asked before this
         // project's own lock, the order the share registry is always taken in.
         let hosted = crate::api::share::saving(self.id);
-        let (document, target, revision, previous, journalled) = {
+        let (document, target, revision, previous, journalled, auto_pack_here) = {
             let state = project.read().map_err(|_| BridgeError::ReadFailed)?;
             // How much of the journal the file is about to hold. An edit takes
             // this project's lock, so none lands between this and the document.
@@ -906,7 +918,14 @@ impl ProjectReference {
                     .store
                     .frozen(|document| (document, state.store.revision())),
             };
-            (document, target, revision, state.path.clone(), journalled)
+            (
+                document,
+                target,
+                revision,
+                state.path.clone(),
+                journalled,
+                state.auto_pack_here,
+            )
         };
 
         // Everything from here is outside the lock.
@@ -918,7 +937,10 @@ impl ProjectReference {
                 Some(lumit_core::model::ProjectItem::Footage(_))
             )
         };
-        let all = pack_all || doc.auto_pack;
+        // The document's switch counts only as this machine's own choice. A
+        // file, or another person in a shared project, can set it too.
+        let auto_pack = doc.auto_pack && auto_pack_here;
+        let all = pack_all || auto_pack;
         let mut result = BridgePackResult {
             path: String::new(),
             cancelled: false,
@@ -975,6 +997,9 @@ impl ProjectReference {
         };
 
         result.path = target.to_string_lossy().into_owned();
+        // The file as it was just written: under a new name it is a new file,
+        // and one saved with the switch off is no longer vouched for.
+        crate::packing::note_auto_pack(document.id, &target, auto_pack);
         // A host keeps its edits since the last save, and that is now.
         crate::api::share::saved(self.id, document.id, hosted.map(|(_, _, mark)| mark));
         let mut state = project.write().map_err(|_| BridgeError::WriteFailed)?;
