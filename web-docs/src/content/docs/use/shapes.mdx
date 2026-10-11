@@ -31,11 +31,29 @@ own **Fill** row.
 ## Gradient fills
 
 A shape group's first rows are **Fill**, the colour inside its path, and **Gradient**,
-which is Flat, Linear or Radial. Choose a ramp and three more rows appear: the
-**Gradient colour** it ends at, and the two points that aim it.
+which is Flat, Linear or Radial. Choose a ramp and its rows appear: the **Gradient colour**
+it ends at, **Gradient stops**, an opacity for each end, and the two points that aim it.
 
 Linear ramps along the line between the points; radial ramps outwards from the first,
-with the second on the outer edge. The points are animatable; the two colours are not.
+with the second on the outer edge.
+
+**Gradient start opacity** is how opaque the Fill end is and **Gradient end opacity** how
+opaque the Gradient colour end is, as a percentage. The ramp fades evenly between them, and
+an end at 0 is clear.
+
+The points and the two opacities are animatable; the colours are not.
+
+### Gradient stops
+
+Click the ramp on the **Gradient stops** row to open its editor. The handles at either end
+are the Fill and the Gradient colour.
+
+- Click the ramp to add a stop between them.
+- Drag a stop to move it. Drag it away from the ramp, or press **Remove**, to take it off.
+- **Colour**, **Opacity** and **Position** set the selected stop.
+
+Two stops at the same position make a hard edge. A gradient holds up to 16 stops between
+its ends, and they are not animatable.
 
 ## Combine two shapes
 

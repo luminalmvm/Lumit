@@ -197,6 +197,11 @@ final class FoldShapeRow extends LayerFoldRow {
 /// original is, and the step every copy is one more of. [offsetPath] is
 /// first because it applies first: it makes the outline the rest work on.
 enum ShapeValue {
+  /// How opaque each end of the ramp is. First, so the two rows sit straight
+  /// under the colours they fade.
+  gradientStartOpacity,
+  gradientEndOpacity,
+
   /// The **shape itself**. It has no number, so its row carries the
   /// stopwatch and its diamonds and nothing else; its keys are whole paths.
   path,
@@ -235,9 +240,11 @@ bool isDashValue(ShapeValue value) => switch (value) {
 /// a slider dragged to its end asks for a frame that arrives.
 const double maxShapeCopies = 100;
 
-/// Which of a shape item's numbers aim its **gradient** — shown only
+/// Which of a shape item's numbers aim or fade its **gradient** — shown only
 /// where there is a ramp to aim.
 bool isGradientValue(ShapeValue value) => switch (value) {
+      ShapeValue.gradientStartOpacity ||
+      ShapeValue.gradientEndOpacity ||
       ShapeValue.gradientStartX ||
       ShapeValue.gradientStartY ||
       ShapeValue.gradientEndX ||
@@ -251,6 +258,8 @@ bool isGradientValue(ShapeValue value) => switch (value) {
 /// repeater on and so is always there to find.
 bool isRepeatStepValue(ShapeValue value) => switch (value) {
       ShapeValue.path ||
+      ShapeValue.gradientStartOpacity ||
+      ShapeValue.gradientEndOpacity ||
       ShapeValue.gradientStartX ||
       ShapeValue.gradientStartY ||
       ShapeValue.gradientEndX ||
@@ -295,6 +304,9 @@ enum ShapePaint {
 
   /// The colour the ramp ends at.
   gradientColour,
+
+  /// The ramp itself, which opens the editor for the stops along it.
+  gradientStops,
 }
 
 /// A shape item's fill colour, its gradient choice, or its gradient's second
@@ -312,6 +324,7 @@ String shapePaintLabel(ShapePaint which) => switch (which) {
       ShapePaint.fill => l10n.shapeFill,
       ShapePaint.gradient => l10n.shapeGradient,
       ShapePaint.gradientColour => l10n.shapeGradientColour,
+      ShapePaint.gradientStops => l10n.shapeGradientStops,
     };
 
 /// One of a shape item's numbers on a row of its own under it. A row
@@ -1056,6 +1069,8 @@ BridgeStroke strokeWithScalar(
 /// channel, exactly as [maskValueLabel] is.
 String shapeValueLabel(ShapeValue value) => switch (value) {
       ShapeValue.path => l10n.shapePath,
+      ShapeValue.gradientStartOpacity => l10n.shapeGradientStartOpacity,
+      ShapeValue.gradientEndOpacity => l10n.shapeGradientEndOpacity,
       ShapeValue.gradientStartX => l10n.shapeGradientStartX,
       ShapeValue.gradientStartY => l10n.shapeGradientStartY,
       ShapeValue.gradientEndX => l10n.shapeGradientEndX,
@@ -1092,6 +1107,8 @@ BridgeScalar shapeScalarOf(BridgeShapeItem item, ShapeValue value) =>
       // The shape is not a number and asks for the still zero nobody reads,
       // exactly as a mask's path row does.
       ShapeValue.path => const BridgeScalar.static_(0),
+      ShapeValue.gradientStartOpacity => item.gradientStartOpacity,
+      ShapeValue.gradientEndOpacity => item.gradientEndOpacity,
       ShapeValue.gradientStartX => item.gradientStartX,
       ShapeValue.gradientStartY => item.gradientStartY,
       ShapeValue.gradientEndX => item.gradientEndX,
@@ -1135,6 +1152,9 @@ BridgeShapeItem shapeItemWith(
   BridgeScalar? gradientStartY,
   BridgeScalar? gradientEndX,
   BridgeScalar? gradientEndY,
+  BridgeScalar? gradientStartOpacity,
+  BridgeScalar? gradientEndOpacity,
+  List<BridgeGradientStop>? gradientStops,
   int? combine,
 }) {
   BridgeScalar at(ShapeValue which, BridgeScalar was) =>
@@ -1158,6 +1178,11 @@ BridgeShapeItem shapeItemWith(
         gradientEndX ?? at(ShapeValue.gradientEndX, item.gradientEndX),
     gradientEndY:
         gradientEndY ?? at(ShapeValue.gradientEndY, item.gradientEndY),
+    gradientStartOpacity: gradientStartOpacity ??
+        at(ShapeValue.gradientStartOpacity, item.gradientStartOpacity),
+    gradientEndOpacity: gradientEndOpacity ??
+        at(ShapeValue.gradientEndOpacity, item.gradientEndOpacity),
+    gradientStops: gradientStops ?? item.gradientStops,
     combine: combine ?? item.combine,
     pathKeys: item.pathKeys,
     offsetAmount: at(ShapeValue.offsetPath, item.offsetAmount),
@@ -1847,6 +1872,8 @@ List<LayerFoldRow> layerFoldRows({
           if (item.gradient != 0) {
             rows.add(
                 FoldShapePaintRow(item, ShapePaint.gradientColour, depth: 3));
+            rows.add(
+                FoldShapePaintRow(item, ShapePaint.gradientStops, depth: 3));
           }
         }
         // Its numbers sit under it, the way a stroke's trim sits under the
@@ -1861,8 +1888,8 @@ List<LayerFoldRow> layerFoldRows({
           // than one copy to step between, so Copies is the row that opens
           // them.
           if (isRepeatStepValue(value) && !isRepeated(item)) continue;
-          // The gradient's two points aim a ramp; with no ramp there is
-          // nothing for them to aim.
+          // The gradient's two points aim a ramp and its two opacities fade
+          // one; with no ramp there is nothing for them to work on.
           if (isGradientValue(value) && item.gradient == 0) continue;
           rows.add(FoldShapeValueRow(item, value, depth: 3));
         }

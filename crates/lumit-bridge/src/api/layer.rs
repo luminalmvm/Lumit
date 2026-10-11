@@ -156,6 +156,16 @@ pub struct BridgeVertex {
     pub tan_out_y: f64,
 }
 
+/// A colour part way along a shape's gradient: where it sits as a per cent of
+/// the ramp, and how opaque it is, 0..100.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BridgeGradientStop {
+    pub position: f64,
+    pub colour: crate::api::assets::BridgeColourRgba,
+    pub opacity: f64,
+}
+
 impl BridgeVertex {
     /// One engine vertex, read across the seam.
     #[frb(ignore)]
@@ -219,12 +229,19 @@ pub struct BridgeShapeItem {
     /// from it linearly to `gradient_colour` and 2 ramps radially, the end
     /// point sitting on the outer edge. The two points are in layer pixels —
     /// the art's own coordinates — and animate; what a ramp *is* does not.
+    /// Each end has an opacity of its own, 0..100, and the ramp fades evenly
+    /// from `gradient_start_opacity` to `gradient_end_opacity`.
     pub gradient: u32,
     pub gradient_colour: Option<crate::api::assets::BridgeColourRgba>,
     pub gradient_start_x: BridgeScalar,
     pub gradient_start_y: BridgeScalar,
     pub gradient_end_x: BridgeScalar,
     pub gradient_end_y: BridgeScalar,
+    pub gradient_start_opacity: BridgeScalar,
+    pub gradient_end_opacity: BridgeScalar,
+    /// The colours the ramp passes through between its two ends, sorted by
+    /// position. Empty is the plain two-colour ramp.
+    pub gradient_stops: Vec<BridgeGradientStop>,
     /// **A boolean combine**: how this item joins the item **before**
     /// it in the list — 0 draws it on its own, 1 unions, 2 subtracts this one
     /// from that one, 3 keeps only what both cover, 4 keeps only what one of
@@ -291,6 +308,17 @@ impl BridgeShapeItem {
             gradient_start_y: BridgeScalar::read_at(&item.gradient_start_y, offset),
             gradient_end_x: BridgeScalar::read_at(&item.gradient_end_x, offset),
             gradient_end_y: BridgeScalar::read_at(&item.gradient_end_y, offset),
+            gradient_start_opacity: BridgeScalar::read_at(&item.gradient_start_opacity, offset),
+            gradient_end_opacity: BridgeScalar::read_at(&item.gradient_end_opacity, offset),
+            gradient_stops: item
+                .gradient_stops
+                .iter()
+                .map(|s| BridgeGradientStop {
+                    position: s.position,
+                    colour: crate::api::assets::colour_of(s.colour),
+                    opacity: s.opacity,
+                })
+                .collect(),
             combine: item.combine,
             path_keys: item
                 .path_keys
@@ -376,6 +404,30 @@ impl BridgeShapeItem {
             )?,
             gradient_end_x: clamped_property(&self.gradient_end_x, offset, -100_000.0, 100_000.0)?,
             gradient_end_y: clamped_property(&self.gradient_end_y, offset, -100_000.0, 100_000.0)?,
+            gradient_start_opacity: clamped_property(
+                &self.gradient_start_opacity,
+                offset,
+                0.0,
+                100.0,
+            )?,
+            gradient_end_opacity: clamped_property(&self.gradient_end_opacity, offset, 0.0, 100.0)?,
+            gradient_stops: {
+                // Held inside the ramp and kept in order, so the list the
+                // frontend reads back is the one the engine draws.
+                let mut stops: Vec<lumit_core::shape::GradientStop> = self
+                    .gradient_stops
+                    .iter()
+                    .filter(|s| s.position.is_finite() && s.opacity.is_finite())
+                    .take(lumit_core::shape::MAX_GRADIENT_STOPS)
+                    .map(|s| lumit_core::shape::GradientStop {
+                        position: s.position.clamp(0.0, 100.0),
+                        colour: crate::api::assets::linear_of(s.colour),
+                        opacity: s.opacity.clamp(0.0, 100.0),
+                    })
+                    .collect();
+                stops.sort_by(|a, b| a.position.total_cmp(&b.position));
+                stops
+            },
             // Five readings and no sixth: a number naming none of them draws
             // the art on its own, which is the answer that shows something.
             combine: if self.combine <= 4 { self.combine } else { 0 },

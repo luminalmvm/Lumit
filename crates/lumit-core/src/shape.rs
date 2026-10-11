@@ -159,6 +159,26 @@ pub struct ShapeItem {
         skip_serializing_if = "crate::paint::is_static_zero"
     )]
     pub gradient_end_y: Property,
+    /// How opaque each end of the ramp is, per cent, with everything between
+    /// fading evenly from one to the other. Colour and opacity ramp separately
+    /// as After Effects does, so a red fading into a clear blue is a half-clear
+    /// purple half way along.
+    #[serde(
+        default = "crate::paint::full",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "crate::paint::is_static_full"
+    )]
+    pub gradient_start_opacity: Property,
+    #[serde(
+        default = "crate::paint::full",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "crate::paint::is_static_full"
+    )]
+    pub gradient_end_opacity: Property,
+    /// The colours the ramp passes through between its two ends, in any
+    /// order. Empty is the plain two-colour ramp, and is absent from the file.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub gradient_stops: Vec<GradientStop>,
     /// **A morphing path**: the shapes this item's path is keyed to,
     /// in the layer's own time. Empty is the still [`path`](Self::path) above,
     /// which is what every shape is until somebody keys its shape, and is
@@ -284,6 +304,23 @@ fn full_opacity() -> f64 {
     100.0
 }
 
+/// A colour part way along a gradient, between the fill at its start and the
+/// gradient colour at its end.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GradientStop {
+    /// How far along the ramp it sits, per cent. Two stops at one place make
+    /// a hard edge.
+    pub position: f64,
+    pub colour: LinearColour,
+    /// 0..100, like the two ends.
+    #[serde(default = "full_opacity")]
+    pub opacity: f64,
+}
+
+/// The most stops a gradient carries between its two ends. Past what a ramp
+/// needs, and it keeps a wild number out of the document.
+pub const MAX_GRADIENT_STOPS: usize = 16;
+
 /// serde default for [`ShapeItem::repeat_copies`]: one copy, which is no
 /// repeater at all.
 fn one() -> Property {
@@ -335,6 +372,9 @@ impl ShapeItem {
             gradient_start_y: Property::zero(),
             gradient_end_x: Property::zero(),
             gradient_end_y: Property::zero(),
+            gradient_start_opacity: crate::paint::full(),
+            gradient_end_opacity: crate::paint::full(),
+            gradient_stops: Vec::new(),
             path_keys: Vec::new(),
             combine: 0,
             offset_amount: Property::zero(),
@@ -461,14 +501,51 @@ impl ShapeItem {
         // reading degenerate at exactly the same point — the Gradient effect's
         // rule, and for the same reason.
         let len2 = (axis.0 * axis.0 + axis.1 * axis.1).max(1e-6);
+        // Each end's opacity goes into its colour's alpha, so the table fades
+        // as it mixes.
+        let faded = |p: &Property| (p.value_at(t).clamp(0.0, 100.0) / 100.0) as f32;
+        let from_alpha = from.0[3] * faded(&self.gradient_start_opacity);
+        let to_alpha = to.0[3] * faded(&self.gradient_end_opacity);
+        // The ramp's colours in order: the fill, the stops between, then the
+        // gradient colour.
+        let mut between: Vec<&GradientStop> = self
+            .gradient_stops
+            .iter()
+            .filter(|s| s.position.is_finite())
+            .take(MAX_GRADIENT_STOPS)
+            .collect();
+        between.sort_by(|a, b| a.position.total_cmp(&b.position));
+        let mut points = Vec::with_capacity(between.len() + 2);
+        points.push((0.0f32, [from.0[0], from.0[1], from.0[2], from_alpha]));
+        for stop in between {
+            let c = stop.colour.0;
+            let alpha = c[3] * (stop.opacity.clamp(0.0, 100.0) / 100.0) as f32;
+            let at = (stop.position.clamp(0.0, 100.0) / 100.0) as f32;
+            points.push((at, [c[0], c[1], c[2], alpha]));
+        }
+        points.push((1.0, [to.0[0], to.0[1], to.0[2], to_alpha]));
         let mut lut = [[0u8; 4]; RAMP_STEPS];
+        let mut piece = 0;
         for (i, cell) in lut.iter_mut().enumerate() {
             let u = i as f32 / (RAMP_STEPS - 1) as f32;
+            // The piece of the ramp this step falls in. Stepping past a stop
+            // as soon as it is reached is what makes two at one place an edge.
+            while piece + 2 < points.len() && u >= points[piece + 1].0 {
+                piece += 1;
+            }
+            let (a_at, a) = points[piece];
+            let (b_at, b) = points[piece + 1];
+            let span = b_at - a_at;
+            let v = if span > 0.0 {
+                ((u - a_at) / span).clamp(0.0, 1.0)
+            } else {
+                1.0
+            };
             let mix = crate::model::LinearColour([
-                from.0[0] + (to.0[0] - from.0[0]) * u,
-                from.0[1] + (to.0[1] - from.0[1]) * u,
-                from.0[2] + (to.0[2] - from.0[2]) * u,
-                from.0[3] + (to.0[3] - from.0[3]) * u,
+                a[0] + (b[0] - a[0]) * v,
+                a[1] + (b[1] - a[1]) * v,
+                a[2] + (b[2] - a[2]) * v,
+                a[3] + (b[3] - a[3]) * v,
             ]);
             *cell = crate::pixels::solid_rgba(mix);
         }
@@ -1742,6 +1819,66 @@ mod tests {
                 "the far colour at the edge ({x}, {y})"
             );
         }
+    }
+
+    /// An end faded to nothing is clear there, and the colour stays the same
+    /// on the way.
+    #[test]
+    fn a_gradient_end_fades_to_clear() {
+        let mut it = item(square(0.0, 0.0, 20.0));
+        it.fill = Some(LinearColour([1.0, 0.0, 0.0, 1.0]));
+        it.gradient = 1;
+        it.gradient_colour = Some(LinearColour([1.0, 0.0, 0.0, 1.0]));
+        it.gradient_start_x = Property::fixed(0.0);
+        it.gradient_end_x = Property::fixed(20.0);
+        it.gradient_end_opacity = Property::fixed(0.0);
+        let rgba = rasterise_contents(&[it.clone()], 20, 20, 0.0, 0.0, 20.0, 20.0, 0.0);
+
+        assert!(alpha_at(&rgba, 20, 0, 10) > 240, "solid at the start");
+        assert!(alpha_at(&rgba, 20, 19, 10) < 15, "clear at the end");
+        let middle = alpha_at(&rgba, 20, 10, 10);
+        assert!((100..160).contains(&middle), "half way between: {middle}");
+        assert!(rgb_at(&rgba, 20, 10, 10)[0] > 200, "and still the colour");
+
+        // The other end fades the same way, so the ramp can run clear to solid.
+        it.gradient_end_opacity = Property::fixed(100.0);
+        it.gradient_start_opacity = Property::fixed(0.0);
+        let rgba = rasterise_contents(&[it], 20, 20, 0.0, 0.0, 20.0, 20.0, 0.0);
+        assert!(alpha_at(&rgba, 20, 0, 10) < 15, "clear at the start");
+        assert!(alpha_at(&rgba, 20, 19, 10) > 240, "solid at the end");
+    }
+
+    /// A stop between the ends is the colour at its own place, and the ramp
+    /// runs to it and away from it.
+    #[test]
+    fn a_gradient_passes_through_the_stops_between_its_ends() {
+        let mut it = item(square(0.0, 0.0, 20.0));
+        it.fill = Some(LinearColour([1.0, 0.0, 0.0, 1.0]));
+        it.gradient = 1;
+        it.gradient_colour = Some(LinearColour([0.0, 0.0, 1.0, 1.0]));
+        it.gradient_start_x = Property::fixed(0.0);
+        it.gradient_end_x = Property::fixed(20.0);
+        it.gradient_stops = vec![GradientStop {
+            position: 50.0,
+            colour: LinearColour([0.0, 1.0, 0.0, 1.0]),
+            opacity: 0.0,
+        }];
+        let rgba = rasterise_contents(&[it.clone()], 20, 20, 0.0, 0.0, 20.0, 20.0, 0.0);
+        assert!(rgb_at(&rgba, 20, 0, 10)[0] > 200, "the fill at the start");
+        assert!(
+            rgb_at(&rgba, 20, 19, 10)[2] > 200,
+            "the far colour at the end"
+        );
+        assert!(alpha_at(&rgba, 20, 10, 10) < 40, "and clear at the stop");
+
+        // Solid, the stop is its own colour where it sits.
+        it.gradient_stops[0].opacity = 100.0;
+        let rgba = rasterise_contents(&[it], 20, 20, 0.0, 0.0, 20.0, 20.0, 0.0);
+        let middle = rgb_at(&rgba, 20, 10, 10);
+        assert!(
+            middle[1] > 200 && middle[0] < 120 && middle[2] < 120,
+            "green in the middle: {middle:?}"
+        );
     }
 
     /// The outline pushed out of the path: art where the path is not, filled

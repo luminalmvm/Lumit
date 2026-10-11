@@ -13,6 +13,7 @@ import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:provider/provider.dart';
 import '../icons/icons.dart';
 import '../l10n/strings.dart';
+import '../state/comp_time.dart';
 import '../state/timeline_columns.dart';
 import '../theme/theme.dart';
 import '../state/layer_bounds.dart' show shapeContentsRect;
@@ -20,6 +21,7 @@ import '../widgets/colour_picker.dart';
 import '../widgets/controls.dart';
 import 'text_animator_rows_frb.dart';
 import 'package:lumit_flutter/state/preview_throttle.dart';
+import 'gradient_stops_popover.dart';
 import 'keyframe_controls_frb.dart';
 import 'layer_fold_frb.dart';
 import 'timeline_mask_rows_frb.dart';
@@ -570,6 +572,10 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
         ShapeValue.gradientEndX ||
         ShapeValue.gradientEndY =>
           (-10000, 10000, ' px'),
+        // How opaque each end of the ramp is.
+        ShapeValue.gradientStartOpacity ||
+        ShapeValue.gradientEndOpacity =>
+          (0, 100, '%'),
         ShapeValue.trimStart || ShapeValue.trimEnd => (0, 100, '%'),
         ShapeValue.trimOffset => (-3600, 3600, '°'),
         ShapeValue.dash || ShapeValue.gap => (0, 1000, ' px'),
@@ -732,6 +738,36 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
   }
 }
 
+/// A gradient drawn small, as the button that opens its editor.
+class _RampChip extends StatelessWidget {
+  final GradientRamp ramp;
+
+  /// Called with where the editor should open, in window coordinates.
+  final ValueChanged<Offset> onOpen;
+
+  const _RampChip({super.key, required this.ramp, required this.onOpen});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {
+        final box = context.findRenderObject();
+        if (box is! RenderBox) return;
+        onOpen(box.localToGlobal(Offset(0, box.size.height + 4)));
+      },
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: CustomPaint(
+          size: const Size(96, 18),
+          painter: GradientRampPainter(ramp: ramp, theme: t),
+        ),
+      ),
+    );
+  }
+}
+
 /// A shape item's fill colour, its gradient choice, or the gradient's second
 /// colour. None of the three is a number, so this row carries a swatch
 /// or a dropdown where the others carry a value field — and no stopwatch,
@@ -808,6 +844,83 @@ class ShapePaintRow extends StatelessWidget {
     );
   }
 
+  /// An end's opacity as one number: its own, or what it reads at the
+  /// playhead when it is keyed.
+  double _opacityNow(BridgeScalar opacity, LumitUiState ui) {
+    if (opacity is BridgeScalar_Static) return opacity.field0;
+    final comp = ui.selectedComp;
+    if (comp == null) return 100;
+    return sampledScalar(opacity, timeOfFrame(comp, ui.playheadFrame.value));
+  }
+
+  /// The gradient as its editor holds it.
+  GradientRamp _rampOf(BridgeShapeItem i, LumitUiState ui) => GradientRamp(
+        startColour: i.fill ?? _defaultEnd,
+        startOpacity: _opacityNow(i.gradientStartOpacity, ui),
+        endColour: i.gradientColour ?? _defaultEnd,
+        endOpacity: _opacityNow(i.gradientEndOpacity, ui),
+        between: i.gradientStops,
+      );
+
+  /// [i] with the editor's ramp written into it. A keyed end takes a key at
+  /// the playhead, and one an expression drives is left to the expression.
+  BridgeShapeItem _withRamp(
+      BridgeShapeItem i, GradientRamp ramp, LumitUiState ui) {
+    BridgeScalar opacity(BridgeScalar was, double to) {
+      if (was is BridgeScalar_Static) return BridgeScalar.static_(to);
+      final comp = ui.selectedComp;
+      if (was is! BridgeScalar_Keyframed || comp == null) return was;
+      if ((_opacityNow(was, ui) - to).abs() < 0.05) return was;
+      return scalarWithValueAt(was, to, comp, ui.playheadFrame.value);
+    }
+
+    return shapeItemWith(
+      i,
+      fill: ramp.startColour,
+      gradientColour: ramp.endColour,
+      gradientStartOpacity: opacity(i.gradientStartOpacity, ramp.startOpacity),
+      gradientEndOpacity: opacity(i.gradientEndOpacity, ramp.endOpacity),
+      gradientStops: ramp.between,
+    );
+  }
+
+  /// Open the gradient editor under the ramp. A drag in it previews, and
+  /// letting go writes the whole list back as one step.
+  void _editStops(BuildContext context, Offset at) {
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    final throttle = PreviewThrottle();
+    List<BridgeShapeItem> contents(GradientRamp ramp) => [
+          for (final other in layer.getShapeContents())
+            if (other.id == item.id) _withRamp(other, ramp, ui) else other,
+        ];
+    showGradientStopsPopover(
+      context: context,
+      position: at,
+      ramp: _rampOf(item, ui),
+      onPreview: (ramp) => throttle.request(() {
+        try {
+          ui.selectedComp?.renderFrameWithShapePreview(
+            frame: BigInt.from(ui.playheadFrame.value),
+            scale: ui.viewerScale,
+            layer: layer,
+            contents: contents(ramp),
+          );
+        } catch (_) {
+          // A preview is a courtesy; the drag carries on without it.
+        }
+      }),
+      onCommit: (ramp) {
+        throttle.cancel();
+        try {
+          layer.setShapeContents(contents: contents(ramp), at: null);
+          onChanged();
+        } catch (_) {
+          // The item or its layer went away while the editor was open.
+        }
+      },
+    ).whenComplete(throttle.cancel);
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
@@ -872,6 +985,12 @@ class ShapePaintRow extends StatelessWidget {
                   scale: ColourScale.unit,
                   onPicked: (p) => _write((i) => shapeItemWith(i,
                       gradientColour: _picked(p, i.gradientColour?.a ?? 1))),
+                ),
+              ShapePaint.gradientStops => _RampChip(
+                  key: ValueKey<String>(key),
+                  ramp: _rampOf(
+                      item, Provider.of<LumitUiState>(context, listen: false)),
+                  onOpen: (at) => _editStops(context, at),
                 ),
             },
           ),

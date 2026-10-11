@@ -21084,6 +21084,20 @@ impl SseDecode for crate::api::cache::BridgeGovernorReport {
     }
 }
 
+impl SseDecode for crate::api::layer::BridgeGradientStop {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_position = <f64>::sse_decode(deserializer);
+        let mut var_colour = <crate::api::assets::BridgeColourRgba>::sse_decode(deserializer);
+        let mut var_opacity = <f64>::sse_decode(deserializer);
+        return crate::api::layer::BridgeGradientStop {
+            position: var_position,
+            colour: var_colour,
+            opacity: var_opacity,
+        };
+    }
+}
+
 impl SseDecode for crate::api::graph::BridgeGraphEdge {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -23154,6 +23168,12 @@ impl SseDecode for crate::api::layer::BridgeShapeItem {
         let mut var_gradientStartY = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_gradientEndX = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_gradientEndY = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_gradientStartOpacity =
+            <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_gradientEndOpacity =
+            <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_gradientStops =
+            <Vec<crate::api::layer::BridgeGradientStop>>::sse_decode(deserializer);
         let mut var_combine = <u32>::sse_decode(deserializer);
         let mut var_pathKeys = <Vec<crate::api::effect::BridgeKeyframe>>::sse_decode(deserializer);
         let mut var_offsetAmount = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
@@ -23188,6 +23208,9 @@ impl SseDecode for crate::api::layer::BridgeShapeItem {
             gradient_start_y: var_gradientStartY,
             gradient_end_x: var_gradientEndX,
             gradient_end_y: var_gradientEndY,
+            gradient_start_opacity: var_gradientStartOpacity,
+            gradient_end_opacity: var_gradientEndOpacity,
+            gradient_stops: var_gradientStops,
             combine: var_combine,
             path_keys: var_pathKeys,
             offset_amount: var_offsetAmount,
@@ -24717,6 +24740,20 @@ impl SseDecode for Vec<crate::api::share::BridgeFootageLack> {
         let mut ans_ = Vec::with_capacity(len_ as usize);
         for idx_ in 0..len_ {
             ans_.push(<crate::api::share::BridgeFootageLack>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::api::layer::BridgeGradientStop> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::layer::BridgeGradientStop>::sse_decode(
                 deserializer,
             ));
         }
@@ -29381,6 +29418,28 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::cache::BridgeGovernorReport>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeGradientStop {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.position.into_into_dart().into_dart(),
+            self.colour.into_into_dart().into_dart(),
+            self.opacity.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::layer::BridgeGradientStop
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::layer::BridgeGradientStop>
+    for crate::api::layer::BridgeGradientStop
+{
+    fn into_into_dart(self) -> crate::api::layer::BridgeGradientStop {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::graph::BridgeGraphEdge {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -32164,6 +32223,9 @@ impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeShapeItem {
             self.gradient_start_y.into_into_dart().into_dart(),
             self.gradient_end_x.into_into_dart().into_dart(),
             self.gradient_end_y.into_into_dart().into_dart(),
+            self.gradient_start_opacity.into_into_dart().into_dart(),
+            self.gradient_end_opacity.into_into_dart().into_dart(),
+            self.gradient_stops.into_into_dart().into_dart(),
             self.combine.into_into_dart().into_dart(),
             self.path_keys.into_into_dart().into_dart(),
             self.offset_amount.into_into_dart().into_dart(),
@@ -35096,6 +35158,15 @@ impl SseEncode for crate::api::cache::BridgeGovernorReport {
     }
 }
 
+impl SseEncode for crate::api::layer::BridgeGradientStop {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <f64>::sse_encode(self.position, serializer);
+        <crate::api::assets::BridgeColourRgba>::sse_encode(self.colour, serializer);
+        <f64>::sse_encode(self.opacity, serializer);
+    }
+}
+
 impl SseEncode for crate::api::graph::BridgeGraphEdge {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -36717,6 +36788,9 @@ impl SseEncode for crate::api::layer::BridgeShapeItem {
         <crate::api::effect::BridgeScalar>::sse_encode(self.gradient_start_y, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.gradient_end_x, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.gradient_end_y, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.gradient_start_opacity, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.gradient_end_opacity, serializer);
+        <Vec<crate::api::layer::BridgeGradientStop>>::sse_encode(self.gradient_stops, serializer);
         <u32>::sse_encode(self.combine, serializer);
         <Vec<crate::api::effect::BridgeKeyframe>>::sse_encode(self.path_keys, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.offset_amount, serializer);
@@ -37903,6 +37977,16 @@ impl SseEncode for Vec<crate::api::share::BridgeFootageLack> {
         <i32>::sse_encode(self.len() as _, serializer);
         for item in self {
             <crate::api::share::BridgeFootageLack>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::api::layer::BridgeGradientStop> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::layer::BridgeGradientStop>::sse_encode(item, serializer);
         }
     }
 }

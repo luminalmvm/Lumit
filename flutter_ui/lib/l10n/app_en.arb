@@ -8813,6 +8813,10 @@
   "@shapeGradientColour": {
     "description": "Timeline row under a shape layer's art: the colour at the far end of its gradient fill."
   },
+  "shapeGradientEndOpacity": "Gradient end opacity",
+  "@shapeGradientEndOpacity": {
+    "description": "Timeline row under a shape layer's art: how opaque the far end of its gradient fill is, as a percentage."
+  },
   "shapeGradientEndX": "Gradient end x",
   "@shapeGradientEndX": {
     "description": "Timeline row under a shape layer's art: the x the gradient ends at, in pixels."
@@ -8833,6 +8837,10 @@
   "@shapeGradientRadial": {
     "description": "One choice on a shape layer's Gradient row: the fill ramps outwards from a point."
   },
+  "shapeGradientStartOpacity": "Gradient start opacity",
+  "@shapeGradientStartOpacity": {
+    "description": "Timeline row under a shape layer's art: how opaque its gradient fill is where it starts, as a percentage."
+  },
   "shapeGradientStartX": "Gradient start x",
   "@shapeGradientStartX": {
     "description": "Timeline row under a shape layer's art: the x the gradient starts at, in pixels."
@@ -8840,6 +8848,26 @@
   "shapeGradientStartY": "Gradient start y",
   "@shapeGradientStartY": {
     "description": "Timeline row under a shape layer's art: the y the gradient starts at, in pixels."
+  },
+  "shapeGradientStopColour": "Colour",
+  "@shapeGradientStopColour": {
+    "description": "Gradient editor: label over the colour of the selected stop."
+  },
+  "shapeGradientStopOpacity": "Opacity",
+  "@shapeGradientStopOpacity": {
+    "description": "Gradient editor: label over how opaque the selected stop is, as a percentage."
+  },
+  "shapeGradientStopPosition": "Position",
+  "@shapeGradientStopPosition": {
+    "description": "Gradient editor: label over how far along the gradient the selected stop sits, as a percentage."
+  },
+  "shapeGradientStopRemove": "Remove",
+  "@shapeGradientStopRemove": {
+    "description": "Gradient editor: button that takes the selected stop off the gradient."
+  },
+  "shapeGradientStops": "Gradient stops",
+  "@shapeGradientStops": {
+    "description": "Timeline row under a shape layer's art, and the title of the editor it opens: the colours along its gradient fill."
   },
   "shapeOffsetPath": "Offset path",
   "@shapeOffsetPath": {
