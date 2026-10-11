@@ -966,4 +966,29 @@ mod tests {
         assert_eq!(thread_cap(0, 0), 0);
         assert_eq!(thread_cap(-1, -1), 0);
     }
+
+    // A file cut short, as a download that stopped or an export that crashed
+    // leaves one: its start reads as media and the rest is not there.
+    #[test]
+    fn video_decoder_open_on_truncated_file_errors_not_panics() {
+        let dir = tempfile::tempdir().unwrap();
+        let Some(file) = fixture(dir.path()) else {
+            eprintln!("skipping: no ffmpeg CLI available");
+            return;
+        };
+        let truncated = crate::index::tests_support::truncated_copy(&file, dir.path(), 200);
+        let index = FrameIndex {
+            timebase_num: 1,
+            timebase_den: 30,
+            entries: Vec::new(),
+            vfr: false,
+            median_delta: 0,
+            fingerprint: crate::Fingerprint {
+                size: 0,
+                mtime_unix: 0,
+                content_hash: String::new(),
+            },
+        };
+        assert!(VideoDecoder::open(&truncated, index).is_err());
+    }
 }

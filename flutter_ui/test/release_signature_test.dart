@@ -149,4 +149,18 @@ void main() {
     expect(updateSigningKey, isEmpty);
     expect(releaseSigningIsEnforced, isFalse);
   });
+
+  test('a manifest somebody else signed is refused', () async {
+    final bytes = manifestFor();
+    final impostor = await Ed25519().newKeyPair();
+    final signature = await Ed25519().sign(bytes, keyPair: impostor);
+
+    final (manifest, trust) = await verifyManifestWithKey(
+      bytes,
+      base64.encode(signature.bytes),
+      publicKeyBase64,
+    );
+    expect(trust, ReleaseTrust.badSignature);
+    expect(manifest, isNull);
+  });
 }

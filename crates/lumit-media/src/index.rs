@@ -700,4 +700,19 @@ mod tests {
             index
         );
     }
+
+    // A file cut short, as a download that stopped or an export that crashed
+    // leaves one: its start reads as media and the rest is not there.
+    #[test]
+    fn build_frame_index_on_truncated_file_errors_not_panics() {
+        let dir = tempfile::tempdir().unwrap();
+        let Some(file) = fixture(dir.path()) else {
+            eprintln!("skipping: no ffmpeg CLI available for fixture generation");
+            return;
+        };
+        // Cut well before the moov atom (written at the end by default for
+        // this muxer), so stream info can never be recovered.
+        let truncated = tests_support::truncated_copy(&file, dir.path(), 200);
+        assert!(build_frame_index(&truncated).is_err());
+    }
 }
