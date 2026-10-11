@@ -117,6 +117,8 @@ void main() {
       expect(done, isTrue, reason: 'the shell takes the window');
       expect(p.state.opening.value, isTrue,
           reason: 'and the document is already being read behind it');
+      // Let the open end, so the timer that offers its Cancel is not left.
+      await settleFrb(tester, until: () => !p.state.opening.value);
     });
 
     // --- The picture on a row ---------------------------------------------

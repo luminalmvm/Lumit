@@ -20,7 +20,7 @@ import 'solid.dart';
 part 'state.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `adopt`, `discard_unsaved_journal`, `forget_streams_except`, `handle_change_callback`, `journal_file`, `journal_for`, `op_scope`, `phase_fraction`, `report_phase`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<LumitBridgeState>>
 abstract class LumitBridgeState implements RustOpaqueInterface {
@@ -40,6 +40,8 @@ abstract class LumitBridgeState implements RustOpaqueInterface {
   /// import **always completes** (docs/11 §9), and what could not be carried
   /// across is in the report rather than in an error.
   ///
+  /// `None` as well when [`cancel_import`] stopped it.
+  ///
   /// The project it leaves open has **no path**: an import is not a file, and
   /// the first save must ask where to put it.
   ///
@@ -49,9 +51,12 @@ abstract class LumitBridgeState implements RustOpaqueInterface {
   /// frozen for as long as it takes.
   static Future<BridgeImportedProject?> importAeBundle(
           {required String path,
-          RustStreamSink<ScopedChange>? onChangeStream}) =>
+          RustStreamSink<ScopedChange>? onChangeStream,
+          RustStreamSink<OpenProgress>? onProgressStream}) =>
       BridgeLib.instance.api.crateApiStateLumitBridgeStateImportAeBundle(
-          path: path, onChangeStream: onChangeStream);
+          path: path,
+          onChangeStream: onChangeStream,
+          onProgressStream: onProgressStream);
 
   static ProjectReference newProject(
           {RustStreamSink<ScopedChange>? onChangeStream}) =>
@@ -73,7 +78,10 @@ abstract class LumitBridgeState implements RustOpaqueInterface {
   /// project, closed while its host was away. It opens as it was left and
   /// carries on looking for the host, and [`ProjectReference::share_guest`]
   /// says so.
-  static Future<ProjectReference?> openProject(
+  ///
+  /// Not opened as well when [`crate::api::import::cancel_import`] stopped
+  /// it, which leaves whatever was open as it was.
+  static Future<BridgeOpened> openProject(
           {required String path,
           RustStreamSink<ScopedChange>? onChangeStream,
           RustStreamSink<OpenProgress>? onProgressStream,
@@ -259,6 +267,27 @@ class BridgeLayerTiming {
           layer == other.layer &&
           ms == other.ms &&
           effects == other.effects;
+}
+
+@freezed
+sealed class BridgeOpened with _$BridgeOpened {
+  const BridgeOpened._();
+
+  const factory BridgeOpened.opened({
+    required ProjectReference project,
+  }) = BridgeOpened_Opened;
+
+  /// The file would not open, or the open was cancelled. Whatever was open
+  /// stays.
+  const factory BridgeOpened.notOpened() = BridgeOpened_NotOpened;
+
+  /// Another Lumit window has this project open, so it was not opened here
+  /// as well: two windows on one file would write the same crash journal.
+  /// `focused` says whether that window was brought forward, which only
+  /// Windows does.
+  const factory BridgeOpened.openElsewhere({
+    required bool focused,
+  }) = BridgeOpened_OpenElsewhere;
 }
 
 /// Where the Viewer cuts a layer's effect stack short — the "at effect" chip's

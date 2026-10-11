@@ -312,15 +312,6 @@
       }
     }
   },
-  "aeMaskModeUnavailable": "遮色片模式 {aeMode} 尚未實現 — 已按「相加」匯入",
-  "@aeMaskModeUnavailable": {
-    "description": "Import report row reason, lower case. Add is one of Lumit's mask combine modes.",
-    "placeholders": {
-      "aeMode": {
-        "type": "String"
-      }
-    }
-  },
   "aeMaskRotoBezierFlattened": "RotoBezier 遮色片的曲線由 After Effects 計算 — 已按它的多邊形匯入",
   "@aeMaskRotoBezierFlattened": {
     "description": "Import report row reason, lower case. RotoBezier is an After Effects mask option; leave the name as written."
@@ -679,10 +670,6 @@
   "@clipPasteShape": {
     "description": "Context-menu item: apply a copied speed curve here."
   },
-  "clipRamp": "ramp",
-  "@clipRamp": {
-    "description": "Shown on a Sequence clip in place of a speed percentage when the speed changes over the clip. Lower case on purpose — it sits where a number would."
-  },
   "clipResetSpeed": "重置速度",
   "@clipResetSpeed": {
     "description": "Context-menu item: put a clip back to playing at its normal speed."
@@ -946,14 +933,6 @@
   "@duration": {
     "description": "Field label: how long a composition runs."
   },
-  "durationFormatNote": "持續時間為上方影格速率下的 HH:MM:SS:FF。",
-  "@durationFormatNote": {
-    "description": "Note under the duration field. HH:MM:SS:FF is a timecode and stays as it is."
-  },
-  "easeBezier": "貝塞爾",
-  "@easeBezier": {
-    "description": "Keyframe easing with adjustable handles. Named after the curve — keep it recognisable."
-  },
   "easeBlockTitle": "緩動",
   "@easeBlockTitle": {
     "description": "Title of the Ease popover, which shapes the movement between the selected keyframes. Drawn in capitals; one word."
@@ -1115,10 +1094,6 @@
   "@exportAudioAuto": {
     "description": "Export dialog, Audio row: include the composition's sound when it has any. The alternative is Off."
   },
-  "exportAudioBitRate": "音訊位速率",
-  "@exportAudioBitRate": {
-    "description": "Export dialogue: how many bits per second the sound is given."
-  },
   "exportAudioMono": "單聲道",
   "@exportAudioMono": {
     "description": "Export dialog, Audio section, channel-layout list: one channel, the composition's stereo mix folded down. Beside exportAudioStereo."
@@ -1126,14 +1101,6 @@
   "exportAudioOff": "關",
   "@exportAudioOff": {
     "description": "Export dialog: audio: no sound is written."
-  },
-  "exportAudioOn": "開",
-  "@exportAudioOn": {
-    "description": "Export dialog: audio: sound is written with the picture."
-  },
-  "exportAudioReading": "48.000 kHz · 立體聲",
-  "@exportAudioReading": {
-    "description": "Export dialog: a factual reading of the sound format every export is mixed to. The number is not translated."
   },
   "exportAudioStereo": "立體聲",
   "@exportAudioStereo": {
@@ -1214,10 +1181,6 @@
   "exportColourStated": "該檔案會在自己的頭資訊中聲明此空間。",
   "@exportColourStated": {
     "description": "Export dialog, Colour section, factual line under the rows: shown when the chosen format can tag the colour space it was written in, so the file says what it is. One sentence."
-  },
-  "exportComposition": "匯出合成",
-  "@exportComposition": {
-    "description": "Title of the export dialogue. Lumit says 'export' for writing a file, never 'render'."
   },
   "exportCrop": "裁剪",
   "@exportCrop": {
@@ -1325,10 +1288,6 @@
       }
     }
   },
-  "exportFromFrame": "起始影格",
-  "@exportFromFrame": {
-    "description": "Export dialogue: the first frame to write."
-  },
   "exportGroupAudio": "音訊",
   "@exportGroupAudio": {
     "description": "Export dialog: the group naming the sound written with the picture."
@@ -1369,10 +1328,6 @@
         "type": "String"
       }
     }
-  },
-  "exportIncludeAudio": "包含音訊",
-  "@exportIncludeAudio": {
-    "description": "Export dialogue: whether sound is written alongside the picture."
   },
   "exportLockAspect": "鎖定長寬比",
   "@exportLockAspect": {
@@ -1637,10 +1592,6 @@
       }
     }
   },
-  "exportToFrame": "結束影格",
-  "@exportToFrame": {
-    "description": "Export dialogue: the last frame to write."
-  },
   "exportType": "類型",
   "@exportType": {
     "description": "Export dialog: row label: what kind of thing is written — a video, or one image per frame."
@@ -1668,15 +1619,6 @@
   "exportWriteTo": "寫入到",
   "@exportWriteTo": {
     "description": "Export dialogue: the file the export is written to."
-  },
-  "exportWritten": "已寫入 {file}",
-  "@exportWritten": {
-    "description": "Export dialogue: shown when the export finished. {file} is a file name.",
-    "placeholders": {
-      "file": {
-        "type": "String"
-      }
-    }
   },
   "exportedTo": "Exported to {path}",
   "@exportedTo": {
@@ -5377,15 +5319,6 @@
       }
     }
   },
-  "keymapClashPanelCount": "{count, plural, =1{1 個快速鍵在某個面板中含義不同} other{{count} 個快速鍵在某個面板中含義不同}}",
-  "@keymapClashPanelCount": {
-    "description": "Note in the keymap table: a panel takes a chord over from its app-wide meaning. {count} is how many chords do.",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "keymapExported": "快速鍵映射已匯出。",
   "@keymapExported": {
     "description": "Shown after a keymap file has been written."
@@ -5417,24 +5350,6 @@
   "keymapPressAShortcut": "請按下快速鍵…",
   "@keymapPressAShortcut": {
     "description": "Shown in a keymap row while it is waiting for the user to press keys."
-  },
-  "keymapShadowLine": "{chord} — 在{context}中為{action}，在其他位置為{shadowed}",
-  "@keymapShadowLine": {
-    "description": "One line under the keymap's panel note: which chord, what it does in which panel, and what it does everywhere else. {chord} is the key combination, {action} and {shadowed} are command names, {context} is a panel name.",
-    "placeholders": {
-      "chord": {
-        "type": "String"
-      },
-      "action": {
-        "type": "String"
-      },
-      "context": {
-        "type": "String"
-      },
-      "shadowed": {
-        "type": "String"
-      }
-    }
   },
   "keysEase": "緩動",
   "@keysEase": {
@@ -6606,10 +6521,6 @@
       }
     }
   },
-  "projectColourNoConfig": "沒有配置：正在使用 Lumit 自己的顏色處理。",
-  "@projectColourNoConfig": {
-    "description": "Project settings, Colour group: the line under the configuration row when the project names no configuration file, which is every project until somebody chooses one."
-  },
   "projectColourNotInForce": "未生效：{reason}。正在改用內置的顏色處理。",
   "@projectColourNotInForce": {
     "description": "Project settings, Colour group: the line under the configuration row when the file is named but cannot be used. The reason is one of the ocio* sentences above, which all begin in lower case.",
@@ -6910,10 +6821,6 @@
   "@searchSettings": {
     "description": "Placeholder in the search box in the Settings window's title strip; it hides the setting rows that do not match."
   },
-  "searchShortcuts": "搜尋快速鍵",
-  "@searchShortcuts": {
-    "description": "Placeholder in the keymap table's search box."
-  },
   "selectACompositionFirst": "請在專案面板中選擇一個合成。",
   "@selectACompositionFirst": {
     "description": "Empty-state line in a panel that needs a composition before it can show anything."
@@ -6986,10 +6893,6 @@
   "@settingsAutosaveKeep": {
     "description": "Settings window, Autosave: the name of the row whose number is how many rotating copies are kept beside the project before the oldest is discarded."
   },
-  "settingsAutosaveOff": "自動儲存已關閉 — 只有崩潰日誌在保護未儲存的工作。",
-  "@settingsAutosaveOff": {
-    "description": "Settings window, Autosave: the line under the interval row when the interval is zero. Zero is a real choice, not an error, so this reports it calmly. The crash journal is Lumit's running record of edits, which recovery replays."
-  },
   "settingsBudget": "容量上限",
   "@settingsBudget": {
     "description": "Settings window: the name of a row setting how much a cache may hold."
@@ -7008,10 +6911,6 @@
   },
   "settingsCompact": "緊湊",
   "@settingsCompact": {
-    "description": "Settings window: the name of one setting."
-  },
-  "settingsCorners": "邊角",
-  "@settingsCorners": {
     "description": "Settings window: the name of one setting."
   },
   "settingsCustomColours": "自訂顏色",
@@ -7118,10 +7017,6 @@
   "@settingsGroupRendering": {
     "description": "Project settings: heading over a group of rows."
   },
-  "settingsGroupScopes": "示波器",
-  "@settingsGroupScopes": {
-    "description": "Settings window: heading over a group of rows."
-  },
   "settingsGroupSpareCopies": "備份副本",
   "@settingsGroupSpareCopies": {
     "description": "Settings window, Autosave: the heading over the settings that decide how often a spare copy of the project is written and how many are kept."
@@ -7150,215 +7045,13 @@
   "@settingsHeldByTheGraphicsDriver": {
     "description": "Settings window: the name of one setting."
   },
-  "settingsHelpAntiAliasing": "平滑旋轉和縮放後圖層的邊緣。儲存在專案中，預覽與匯出使用相同設定。",
-  "@settingsHelpAntiAliasing": {
-    "description": "Project settings: the sentence under Anti-aliasing."
-  },
-  "settingsHelpAntiAliasingInUse": "此顯示卡不提供上面的設定，因此 Lumit 使用它所支援的最高檔。專案未被更改。",
-  "@settingsHelpAntiAliasingInUse": {
-    "description": "Project settings: the sentence under 'In use on this machine'."
-  },
-  "settingsHelpAutomaticUpdates": "在 Lumit 啟動時查找新版本，每天最多一次。在你要求之前不會下載任何內容。",
-  "@settingsHelpAutomaticUpdates": {
-    "description": "Settings window: the sentence under the settingsAutomaticUpdates setting."
-  },
-  "settingsHelpCacheBudget": "已完成的影格最多可佔用多少記憶體，本機共有 {total}。",
-  "@settingsHelpCacheBudget": {
-    "description": "Settings window: the sentence under the memory cache Budget. {total} is a size, e.g. '32 GB'.",
-    "placeholders": {
-      "total": {
-        "type": "String"
-      }
-    }
-  },
-  "settingsHelpCacheInUse": "{requests} 影格中有 {hits} 影格來自快取；{decodes} 影格經過解碼。",
-  "@settingsHelpCacheInUse": {
-    "description": "Settings window: the sentence under the memory cache's In use row. All three are whole numbers.",
-    "placeholders": {
-      "hits": {
-        "type": "String"
-      },
-      "requests": {
-        "type": "String"
-      },
-      "decodes": {
-        "type": "String"
-      }
-    }
-  },
-  "settingsHelpChromeLabels": "按鈕、標籤頁和開關顯示文字還是代表它的圖示。無論你選擇哪種，懸停提示始終顯示文字，而你自己輸入的內容永遠不會變成圖示。",
-  "@settingsHelpChromeLabels": {
-    "description": "Explanatory line under the Chrome labels row in Settings."
-  },
-  "settingsHelpColourScheme": "每個面板取色的調色板。",
-  "@settingsHelpColourScheme": {
-    "description": "Settings window: the sentence under the settingsColourScheme setting."
-  },
-  "settingsHelpCompact": "行距略微收緊，螢幕上可以容納更多圖層和參數。其他一切不變。",
-  "@settingsHelpCompact": {
-    "description": "Settings window: the sentence under the settingsCompact setting."
-  },
-  "settingsHelpCorners": "控制項和面板的圓角程度。",
-  "@settingsHelpCorners": {
-    "description": "Settings window: the sentence under the settingsCorners setting."
-  },
-  "settingsHelpCustomColours": "以此方案為起點，自行設定任意顏色。",
-  "@settingsHelpCustomColours": {
-    "description": "Settings window: the sentence under the Custom colours setting, when no custom theme exists yet."
-  },
-  "settingsHelpDiskBudget": "存放的影格最多可佔用多少磁碟空間。它們在關閉 Lumit 後仍然保留，因此重新開啟專案時快取仍在。",
-  "@settingsHelpDiskBudget": {
-    "description": "Settings window: the sentence under the disk cache Budget."
-  },
-  "settingsHelpEditingTheme": "編輯 {theme} 的顏色。",
-  "@settingsHelpEditingTheme": {
-    "description": "Settings window: the sentence under Custom colours when a custom theme is in use. {theme} is the theme's name, which the user chose.",
-    "placeholders": {
-      "theme": {
-        "type": "String"
-      }
-    }
-  },
-  "settingsHelpFramesWaitingToBeWritten": "寫入磁碟快取的後台佇列，上限為八影格。",
-  "@settingsHelpFramesWaitingToBeWritten": {
-    "description": "Settings window: the sentence under the settingsFramesWaitingToBeWritten setting."
-  },
-  "settingsHelpGraphicsMemoryReserved": "驅動為此從系統中取用了多少，其中又有多少正在使用。兩者之差是 Lumit 已釋放而驅動尚未交還的記憶體。",
-  "@settingsHelpGraphicsMemoryReserved": {
-    "description": "Settings window: the sentence under the settingsGraphicsMemoryReserved setting."
-  },
-  "settingsHelpHeldByTheGraphicsDriver": "驅動仍為 Lumit 保留的圖像和緩衝區。少量是正常的 — 顯示卡上的影格，以及正在生成的影格。成千上萬則意味著引擎用完的圖像從未被銷毀，而在 Mac 上這部分記憶體包含在上面的總量之內。",
-  "@settingsHelpHeldByTheGraphicsDriver": {
-    "description": "Settings window: the sentence under the settingsHeldByTheGraphicsDriver setting."
-  },
-  "settingsHelpInUse": "儲存在顯示卡上、無需合成即可顯示的影格。",
-  "@settingsHelpInUse": {
-    "description": "Settings window: the sentence under the settingsInUse setting."
-  },
-  "settingsHelpInUse2": "磁碟上的影格，只需一次提升即可播放。",
-  "@settingsHelpInUse2": {
-    "description": "Settings window: the sentence under the settingsInUse setting."
-  },
-  "settingsHelpInterfaceScale": "每個面板的繪製大小，適配高密度或較遠的螢幕。",
-  "@settingsHelpInterfaceScale": {
-    "description": "Settings window: the sentence under the settingsInterfaceScale setting."
-  },
-  "settingsHelpLanguage": "Lumit 使用的語言。翻譯來自志願者，因此新語言起初可能有部分內容仍是英文。",
-  "@settingsHelpLanguage": {
-    "description": "Settings window: the sentence under the Language setting."
-  },
-  "settingsHelpMotion": "控制項變化時的動畫程度。",
-  "@settingsHelpMotion": {
-    "description": "Settings window: the sentence under the settingsMotion setting."
-  },
-  "settingsHelpNotHeldByAnyCache": "處理程序的佔用，減去上面每一項存儲 — 在本機上這包括顯示卡上的影格。這裡數值大並不是需要縮小的快取：它是本視窗沒有計入的記憶體，值得報告。",
-  "@settingsHelpNotHeldByAnyCache": {
-    "description": "Settings window: the sentence under the settingsNotHeldByAnyCache setting."
-  },
   "settingsHelpNowhereToPark": "無處存放：本機沒有 Lumit 可以寫入的資料夾。",
   "@settingsHelpNowhereToPark": {
     "description": "Settings window: shown where the disk cache folder would be, when there is none."
   },
-  "settingsHelpOpenMediaDecoders": "每個正在播放的素材項目一個。每個解碼器都持有自己的緩衝區，不受此處任何容量上限限制。",
-  "@settingsHelpOpenMediaDecoders": {
-    "description": "Settings window: the sentence under the settingsOpenMediaDecoders setting."
-  },
-  "settingsHelpPanelLayout": "將每個面板恢復到預設位置和大小。",
-  "@settingsHelpPanelLayout": {
-    "description": "Settings window: the sentence under the settingsPanelLayout setting."
-  },
-  "settingsHelpPasteLayersAtTheirOriginal": "貼上的圖層保留複製時的時間碼，而不是從時間指示器開始。適合在第二個合成中重建同一時刻；日常的「放到這裡」請關閉它。無論如何設定，效果始終以其第一個關鍵影格對齊時間指示器貼上。",
-  "@settingsHelpPasteLayersAtTheirOriginal": {
-    "description": "Settings window: the sentence under the settingsPasteLayersAtTheirOriginal setting."
-  },
-  "settingsHelpPlayheadStaysWherePlaybackStopped": "播放停止時把時間指示器留在螢幕上的那一影格，而不是放回開始播放的位置。無論如何設定，播放時拖曳標尺始終會停止播放並跟隨指針。",
-  "@settingsHelpPlayheadStaysWherePlaybackStopped": {
-    "description": "Settings window: the sentence under the settingsPlayheadStaysWherePlaybackStopped setting."
-  },
-  "settingsHelpQualityTier": "實時控制器最終選定的檔位。",
-  "@settingsHelpQualityTier": {
-    "description": "Settings window: the sentence under the settingsQualityTier setting."
-  },
-  "settingsHelpRetimeOpensToVelocity": "Retime 圖表開啟時顯示播放速度百分比 — 每個關鍵影格一個點，向上拖曳加速，低於零則倒放 — 而不是顯示正在播放的是源素材的哪一刻。",
-  "@settingsHelpRetimeOpensToVelocity": {
-    "description": "Settings window: the sentence under the settingsRetimeOpensToVelocity setting."
-  },
-  "settingsHelpRetimeValuesInSeconds": "Retime 行以秒數顯示正在播放的是源素材的哪一刻，而不是與編輯器中其他時間一樣的 HH:MM:SS:FF 時間碼。秒可以表示兩影格之間的位置，時間碼不能。",
-  "@settingsHelpRetimeValuesInSeconds": {
-    "description": "Settings window: the sentence under the settingsRetimeValuesInSeconds setting."
-  },
-  "settingsHelpScopeEverywhere": "每個尚未單獨設定的專案。",
-  "@settingsHelpScopeEverywhere": {
-    "description": "Settings window: the sentence under Applies to, when the setting is this machine's default."
-  },
-  "settingsHelpScopeThisProject": "儲存在此專案中，因此會隨專案副本一起攜帶。",
-  "@settingsHelpScopeThisProject": {
-    "description": "Settings window: the sentence under Applies to, when the setting is stored in the project."
-  },
-  "settingsHelpSmoothThePictureWhenZoomed": "關閉時，放大超過 1:1 的像素仍是方塊，這正是放大想看到的。開啟時，畫面在像素之間混合 — 更柔和，在為構圖而非檢查而放大時更舒服。",
-  "@settingsHelpSmoothThePictureWhenZoomed": {
-    "description": "Settings window: the sentence under the settingsSmoothThePictureWhenZoomed setting."
-  },
-  "settingsHelpShowTheToneMapButton": "在檢視器欄上放置色調映射按鈕。色調映射把比螢幕所能顯示更亮的畫面折回可顯示的範圍，讓你在工作時也能看到那部分細節 — 它只是一種查看方式，永遠不會進入匯出。除非你要求，否則關閉。",
-  "@settingsHelpShowTheToneMapButton": {
-    "description": "Settings window: the sentence under the settingsShowTheToneMapButton setting. \"Up there\" means detail brighter than the display can show."
-  },
-  "settingsHelpSurroundTakesThemeColours": "關閉時，畫面周圍是中性灰 — 調色不能在帶色調的環境中判斷。開啟時，它與介面其餘部分一致。",
-  "@settingsHelpSurroundTakesThemeColours": {
-    "description": "Settings window: the sentence under the settingsSurroundTakesThemeColours setting."
-  },
-  "settingsHelpThisProcess": "系統所報告的 Lumit 佔用總量 — 也就是活動監視器和任務管理器顯示的數字。",
-  "@settingsHelpThisProcess": {
-    "description": "Settings window: the sentence under the settingsThisProcess setting."
-  },
-  "settingsHelpTransformInEffectControls": "在圖層的效果之上重複顯示它的變換行。展開圖層時，時間軸中已經會顯示它們。",
-  "@settingsHelpTransformInEffectControls": {
-    "description": "Settings window: the sentence under the settingsTransformInEffectControls setting."
-  },
-  "settingsHelpShapeEasesInAPopup": "圖表編輯器的緩動按鈕會在一個浮動小窗中開啟形狀編輯器，而不是在緩動面板中。點擊窗外它就會關閉 — 而選擇其他關鍵影格就是一次窗外點擊 — 因此一次繪製的形狀只能用於開啟時選中的那些關鍵影格。開啟它可以節省螢幕空間。",
-  "@settingsHelpShapeEasesInAPopup": {
-    "description": "Settings window: the sentence under the settingsShapeEasesInAPopup setting."
-  },
-  "settingsHelpUseThemeColours": "關閉時，無論介面如何，示波器都在標準的近黑刻度上讀數 — 信號本就該這樣測量。開啟時，它改用主題的顏色。",
-  "@settingsHelpUseThemeColours": {
-    "description": "Settings window: the sentence under the settingsUseThemeColours setting."
-  },
-  "settingsHelpVideoArrivesAsASequence": "新增到合成中的視訊和圖像序列會成為序列圖層，可以在自己的行上剪成片段。靜態圖像永遠不會被包裝。",
-  "@settingsHelpVideoArrivesAsASequence": {
-    "description": "Settings window: the sentence under the settingsVideoArrivesAsASequence setting."
-  },
-  "settingsHelpVramBudget": "已完成的影格最多可佔用多少顯示記憶體，顯示卡共有 {total}。",
-  "@settingsHelpVramBudget": {
-    "description": "Settings window: the sentence under the graphics-card cache Budget. {total} is a size.",
-    "placeholders": {
-      "total": {
-        "type": "String"
-      }
-    }
-  },
-  "settingsHelpWaveformsRiseFromTheBottom": "波形立在行的底部，而不是以靜音為中心，每一列按聲音向兩側擺動的幅度向上延伸。居中波形的一半是另一半的鏡像，因此這樣把整行都用在有意義的那一半上 — 在窄行中很有用。對單條波形和頻率分層同樣適用。",
-  "@settingsHelpWaveformsRiseFromTheBottom": {
-    "description": "Settings window: the sentence under the settingsWaveformsRiseFromTheBottom setting."
-  },
-  "settingsHelpWaveformsShowTheFrequencyStack": "圖層的波形繪製為三條堆疊的波形 — 低頻、中頻和高頻 — 而不是一條。無論哪種樂器在演奏，響亮的段落在單條波形上都是一整塊；分層則把底鼓和踩鑔分開顯示，便於把剪輯點對準其中之一。關閉它可得到一條普通波形。",
-  "@settingsHelpWaveformsShowTheFrequencyStack": {
-    "description": "Settings window: the sentence under the settingsWaveformsShowTheFrequencyStack setting."
-  },
-  "settingsHelpWhenTheMachineCannotKeep": "自適應會保持時間並柔化畫面；每一影格則保持畫面並花費所需的時間。",
-  "@settingsHelpWhenTheMachineCannotKeep": {
-    "description": "Settings window: the sentence under the settingsWhenTheMachineCannotKeep setting."
-  },
-  "settingsHelpYourThemes": "複製一個以便在不影響原件的情況下修改，或把一個作為檔案發給別人。",
-  "@settingsHelpYourThemes": {
-    "description": "Settings window: the sentence under the Your themes heading."
-  },
   "settingsInUse": "使用中",
   "@settingsInUse": {
     "description": "Settings window: the name of a row showing how full a cache is."
-  },
-  "settingsInterfaceScale": "介面縮放",
-  "@settingsInterfaceScale": {
-    "description": "Settings window: the name of one setting."
   },
   "settingsKeymapFile": "快速鍵映射檔案",
   "@settingsKeymapFile": {
@@ -7440,14 +7133,6 @@
   "@settingsPageInterface": {
     "description": "Settings window: name of a page in the sidebar."
   },
-  "settingsPageKeymap": "快速鍵映射",
-  "@settingsPageKeymap": {
-    "description": "Settings window: name of a page in the sidebar. A keymap is the whole set of keyboard shortcuts."
-  },
-  "settingsPagePerformance": "效能",
-  "@settingsPagePerformance": {
-    "description": "Settings window: name of a page in the sidebar."
-  },
   "settingsPagePreviewAndCache": "預覽與快取",
   "@settingsPagePreviewAndCache": {
     "description": "Settings window: name of a page in the sidebar — playback quality and the three frame caches."
@@ -7516,10 +7201,6 @@
   "@settingsSurround": {
     "description": "Settings window, Appearance: the name of the row choosing the colour of the area around the picture in the Viewer."
   },
-  "settingsSurroundTakesThemeColours": "畫面周圍使用主題顏色",
-  "@settingsSurroundTakesThemeColours": {
-    "description": "Settings window: the name of one setting."
-  },
   "settingsThisProcess": "此處理程序",
   "@settingsThisProcess": {
     "description": "Settings window: the name of one setting."
@@ -7538,10 +7219,6 @@
   },
   "settingsTransformInEffectControls": "在效果控制中顯示變換",
   "@settingsTransformInEffectControls": {
-    "description": "Settings window: the name of one setting."
-  },
-  "settingsUseThemeColours": "使用主題顏色",
-  "@settingsUseThemeColours": {
     "description": "Settings window: the name of one setting."
   },
   "settingsUsedMbIn": "{megabytes} MB，分布在 {entries} 影格中",
@@ -7567,14 +7244,6 @@
   "settingsViewerBars": "檢視器欄",
   "@settingsViewerBars": {
     "description": "Settings window, Appearance: the name of the row choosing how the Viewer's chrome is arranged round the picture — split between a strip above and a bar below, or gathered into one strip at the top or at the bottom."
-  },
-  "settingsWaveformFrequencyStack": "波形頻率分層",
-  "@settingsWaveformFrequencyStack": {
-    "description": "Settings window: the name of one setting."
-  },
-  "settingsWaveformsFromBottom": "波形從底部開始",
-  "@settingsWaveformsFromBottom": {
-    "description": "Settings window: the name of one setting."
   },
   "settingsWelcomeOnLaunch": "啟動時顯示歡迎螢幕",
   "@settingsWelcomeOnLaunch": {
@@ -7844,10 +7513,6 @@
   "@switchAudible": {
     "description": "Layer switch: the layer's sound plays."
   },
-  "switchEffects": "效果",
-  "@switchEffects": {
-    "description": "Layer switch: whether this layer's effects are applied."
-  },
   "switchEffectsBypassed": "已跳過效果",
   "@switchEffectsBypassed": {
     "description": "Layer switch, when the effects are being skipped."
@@ -7855,10 +7520,6 @@
   "switchEffectsOn": "效果已開啟",
   "@switchEffectsOn": {
     "description": "Layer switch, when the effects are being applied."
-  },
-  "switchFlow": "Flow",
-  "@switchFlow": {
-    "description": "Layer switch: collapse a pre-composition's transformations. Flow is a Lumit term."
   },
   "switchGuide": "引導層",
   "@switchGuide": {
@@ -8261,10 +7922,6 @@
   "@tipEnable": {
     "description": "Tooltip on the checkbox that switches an effect on. One or two words."
   },
-  "tipExportAfterV1": "v1 之後",
-  "@tipExportAfterV1": {
-    "description": "Export dialog: why the Colour section's colour-management row is disabled. Shown on hover."
-  },
   "tipExportColourManagedBy": "專案設定",
   "@tipExportColourManagedBy": {
     "description": "Export dialog, Colour section: the hover reason on the Managed by row, which shows the project's colour configuration but does not change it. File and Project settings are the menu and the window of those names."
@@ -8371,14 +8028,6 @@
   "@tipMissingOnly": {
     "description": "Tooltip on the Project panel's filter when it is off. One or two words."
   },
-  "tipMoreInGroup": "長按",
-  "@tipMoreInGroup": {
-    "description": "Tooltip suffix on a toolbar button that hides other tools behind a press-and-hold. One or two words."
-  },
-  "tipMovePanel": "移動面板",
-  "@tipMovePanel": {
-    "description": "Tooltip on a panel's drag handle. One or two words."
-  },
   "tipNotBuiltYet": "尚未實現",
   "@tipNotBuiltYet": {
     "description": "Tooltip suffix on a tool that can be selected but does nothing yet. One or two words."
@@ -8390,10 +8039,6 @@
   "tipOutlineWidth": "輪廓寬度",
   "@tipOutlineWidth": {
     "description": "Tooltip. Keep it to the control's name — one or two words."
-  },
-  "tipPanelLayout": "面板布局",
-  "@tipPanelLayout": {
-    "description": "Tooltip on the workspace preset buttons. One or two words."
   },
   "tipParent": "父級",
   "@tipParent": {
@@ -8432,14 +8077,6 @@
   "tipPlayheadTime": "時間指示器時間",
   "@tipPlayheadTime": {
     "description": "Tooltip on the Timeline's time readout. One or two words."
-  },
-  "tipPreviewResolution": "預覽解析度",
-  "@tipPreviewResolution": {
-    "description": "Tooltip on the Viewer bar's resolution dropdown (Full, Half, Quarter). One or two words."
-  },
-  "tipPreviewResolutionAdaptive": "由自適應選擇",
-  "@tipPreviewResolutionAdaptive": {
-    "description": "Tooltip on the Viewer bar's resolution dropdown while it is disabled because adaptive playback picks the resolution automatically."
   },
   "tipProperties": "屬性",
   "@tipProperties": {
@@ -8655,10 +8292,6 @@
   "tipViewerSnapshotTake": "拍攝快照",
   "@tipViewerSnapshotTake": {
     "description": "Tooltip on the Viewer bar's take-snapshot button, which shows a camera icon and no words. It keeps a copy of the picture on screen to compare against later. One or two words."
-  },
-  "tipViewerToneMap": "色調映射",
-  "@tipViewerToneMap": {
-    "description": "Tooltip on the Viewer's tone-map toggle, which has an icon and no label, so this names it. Tone mapping rolls off detail brighter than the display can show; it is a preview, which the colour badge beside it says by reading \"Preview only\" while it is on."
   },
   "tipZoomIn": "放大",
   "@tipZoomIn": {

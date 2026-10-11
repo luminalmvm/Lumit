@@ -270,7 +270,10 @@ void main() {
       );
 
       await choose(tester, 'File', 'Import footage…');
-      await tester.pump();
+      // The files are read off the interface's thread.
+      await settleFrb(tester,
+          until: () =>
+              allItems(p.state).whereType<ItemReference_Footage>().length >= 2);
 
       final names = allItems(p.state)
           .whereType<ItemReference_Footage>()

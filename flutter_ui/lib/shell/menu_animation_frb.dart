@@ -489,7 +489,7 @@ MenuEntry applyAnimationPresetRow(LumitState app, LumitUiState ui) {
             if (path == null) return;
             final String text;
             try {
-              text = readEffectPreset(path: path);
+              text = await readEffectPreset(path: path);
             } catch (_) {
               return;
             }

@@ -171,9 +171,12 @@ impl Program {
     }
 }
 
-/// How deeply brackets, blocks and functions may nest. The parser calls
-/// itself once per level, so without a ceiling a line of ten thousand opening
-/// brackets is a stack overflow rather than a refusal.
+/// How deep the tree may go: brackets, blocks and functions as they nest, and
+/// each link of a chain such as `a + b + c` or `a.b.c`, which hangs one under
+/// the other. The parser calls itself once per level and so does everything
+/// that walks the tree afterwards, so without a ceiling a line of ten thousand
+/// opening brackets, or of ten thousand `+ 1`, is a stack overflow rather than
+/// a refusal.
 const MAX_DEPTH: u32 = 120;
 
 #[derive(Default)]
@@ -789,6 +792,13 @@ impl<'n> Parser<'n> {
     }
 
     fn binary(&mut self, floor: u8) -> Result<Expr, String> {
+        let held = self.depth;
+        let expr = self.binary_inner(floor);
+        self.depth = held;
+        expr
+    }
+
+    fn binary_inner(&mut self, floor: u8) -> Result<Expr, String> {
         let mut left = self.unary()?;
         loop {
             let Tok::Punct(p) = *self.peek() else {
@@ -801,6 +811,7 @@ impl<'n> Parser<'n> {
                 return Ok(left);
             }
             self.at += 1;
+            self.deeper()?;
             // `**` groups to the right, everything else to the left.
             let right = self.binary(if p == "**" { strength - 1 } else { strength })?;
             left = match op {
@@ -886,8 +897,16 @@ impl<'n> Parser<'n> {
     }
 
     fn postfix(&mut self) -> Result<Expr, String> {
+        let held = self.depth;
+        let expr = self.postfix_inner();
+        self.depth = held;
+        expr
+    }
+
+    fn postfix_inner(&mut self) -> Result<Expr, String> {
         let mut expr = self.primary()?;
         loop {
+            self.deeper()?;
             if self.eat(".") {
                 expr = Expr::Member {
                     object: Box::new(expr),

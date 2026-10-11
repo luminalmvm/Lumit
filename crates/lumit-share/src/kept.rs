@@ -26,7 +26,7 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, Instant, SystemTime};
 use uuid::Uuid;
 
 /// An edit and what it replaced where it was made.
@@ -103,6 +103,9 @@ fn pairs(lines: impl Iterator<Item = std::io::Result<String>>) -> Vec<Pair> {
         .collect()
 }
 
+/// The longest a kept edit waits to be synced to the disk.
+const SYNC_EVERY: Duration = Duration::from_secs(1);
+
 /// A host's edits since its project was last saved.
 ///
 /// Bounded by the edits between two saves, as the crash journal is.
@@ -111,6 +114,8 @@ pub(crate) struct HostLog {
     file: Option<File>,
     /// How many edits the file holds.
     count: usize,
+    /// When the file was last synced to the disk.
+    synced: Instant,
 }
 
 impl HostLog {
@@ -135,6 +140,7 @@ impl HostLog {
         let log = HostLog {
             path,
             file: None,
+            synced: Instant::now(),
             count: held.len(),
         };
         Some((log, held))
@@ -154,9 +160,15 @@ impl HostLog {
             .is_some_and(|(file, line)| file.write_all(line.as_bytes()).is_ok());
         if written {
             self.count += 1;
-            // Synced the way the crash journal is, so a power cut keeps it.
-            if let Some(file) = &self.file {
-                let _ = file.sync_data();
+            // Synced so a power cut keeps it, but no more than once a second.
+            // This runs inside the edit, on the interface's thread while the
+            // store is held, and the crash journal has already synced the
+            // same edit once.
+            if self.synced.elapsed() >= SYNC_EVERY {
+                self.synced = Instant::now();
+                if let Some(file) = &self.file {
+                    let _ = file.sync_data();
+                }
             }
         }
     }

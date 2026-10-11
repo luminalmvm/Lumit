@@ -144,9 +144,14 @@ type Opened = (TcpStream, Sender, Receiver);
 
 /// `relay` is for an address that is a relay's, where the host is asked for
 /// by the room it keeps there.
-fn open(at: SocketAddr, relay: bool, key: &[u8; 32]) -> Result<Opened, ShareError> {
+fn open(
+    at: SocketAddr,
+    relay: bool,
+    key: &[u8; 32],
+    link: &[u8; 32],
+) -> Result<Opened, ShareError> {
     let socket = if relay {
-        lumit_relay::join(at, &room(key))?
+        lumit_relay::join(at, &room(link))?
     } else {
         TcpStream::connect_timeout(&at, wire::GREETING)?
     };
@@ -177,13 +182,13 @@ fn reach(invite: &Invite) -> Result<Opened, ShareError> {
         }
     }
     if let [(only, relay)] = places[..] {
-        return open(only, relay, &invite.key).map_err(|_| ShareError::Unreachable);
+        return open(only, relay, &invite.key, &invite.link).map_err(|_| ShareError::Unreachable);
     }
     // Room for every answer, so a try that loses has nowhere to wait and
     // goes, closing its connection as it does.
     let (found, answers) = sync_channel(places.len());
     for (at, relay) in places {
-        let (found, key) = (found.clone(), invite.key);
+        let (found, key, link) = (found.clone(), invite.key, invite.link);
         let _ = thread::Builder::new()
             .name("lumit-share-reach".into())
             .spawn(move || {
@@ -192,7 +197,7 @@ fn reach(invite: &Invite) -> Result<Opened, ShareError> {
                 if relay {
                     thread::sleep(HEAD_START);
                 }
-                if let Ok(opened) = open(at, relay, &key) {
+                if let Ok(opened) = open(at, relay, &key, &link) {
                     let _ = found.try_send(opened);
                 }
             });
@@ -440,6 +445,14 @@ impl Guest {
         }
     }
 
+    /// Stop taking `wanted`, and tell the host.
+    pub fn unwant(&self, wanted: &Wanted) {
+        let bulk = self.inner.bulk.lock().clone();
+        if let Some(bulk) = bulk {
+            bulk.unwant(wanted);
+        }
+    }
+
     /// Say `body` to the person numbered `to`, by way of the host.
     pub fn note(&self, to: u32, body: serde_json::Value) {
         let from = self.me();
@@ -502,8 +515,9 @@ impl Guest {
 
     /// The secret this guest finds its host by.
     #[cfg(test)]
-    pub(crate) fn key(&self) -> [u8; 32] {
-        self.inner.seat.invite.lock().key
+    pub(crate) fn key(&self) -> ([u8; 32], [u8; 32]) {
+        let invite = self.inner.seat.invite.lock();
+        (invite.key, invite.link)
     }
 
     /// Whether this guest is without its host just now.
@@ -942,7 +956,10 @@ impl Inner {
                     }
                 }
                 Ok(Message::Note { from, body, .. }) => (self.events)(Event::Note { from, body }),
-                Ok(Message::Invite { key }) => self.seat.invite.lock().key = key,
+                Ok(Message::Invite { key, link }) => {
+                    let mut invite = self.seat.invite.lock();
+                    (invite.key, invite.link) = (key, link);
+                }
                 Ok(Message::Closed) => return Some(Ending::Closed),
                 Ok(Message::Removed) => return Some(Ending::Removed),
                 _ => break,

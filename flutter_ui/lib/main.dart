@@ -80,7 +80,7 @@ Future<void> _start(List<String> args) async {
   // degraded-but-alive behaviour as a failed File → Open.
   final fromArgs = projectPathFromArgs(args) ??
       (probeProjectPath.isEmpty ? null : probeProjectPath);
-  if (fromArgs != null) state.openProject(fromArgs);
+  if (fromArgs != null) state.openProject(fromArgs, launch: true);
   // An invite link clicked in a browser starts Lumit with the link, and the
   // Shared project window opens on it once there is a window to open it in.
   state.launchInvite = inviteFromArgs(args);

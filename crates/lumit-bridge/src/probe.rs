@@ -247,7 +247,7 @@ fn unqueue(src: &MediaSource) {
     }
 }
 
-/// A source layer is probed as the file it lives in: the layer is read at the
+/// A file layer is probed as the file it lives in: the layer is read at the
 /// document's own size, so every layer of one file shares one answer.
 #[cfg(feature = "media")]
 fn whole_file(mut src: MediaSource) -> MediaSource {

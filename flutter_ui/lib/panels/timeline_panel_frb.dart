@@ -3208,6 +3208,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     _liveResize.dispose();
     _rowSelection.dispose();
     _laneKeys.dispose();
+    _laneMarquee.dispose();
+    _markerPreview.dispose();
     _vOutline.dispose();
     _vLane.dispose();
     _hLane.dispose();

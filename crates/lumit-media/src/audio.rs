@@ -1087,6 +1087,21 @@ mod tests {
         ));
     }
 
+    // A file cut short, as a download that stopped or an export that crashed
+    // leaves one: its start reads as media and the rest is not there.
+    #[test]
+    fn decode_all_on_truncated_file_errors_not_panics() {
+        let dir = tempfile::tempdir().unwrap();
+        let Some(file) = audio_fixture(dir.path()) else {
+            eprintln!("skipping: no ffmpeg CLI available");
+            return;
+        };
+        let truncated = crate::index::tests_support::truncated_copy(&file, dir.path(), 200);
+        // A cut-short m4a should fail cleanly; the important assertion is
+        // that decode_all returns rather than panicking either way.
+        let _ = decode_all(&truncated, 48_000);
+    }
+
     /// **Each audio stream of a file is its own sound, and several are their
     /// sum.** A file with a low tone on its first stream and a high one on its
     /// second: the second read on its own is the high tone and none of the

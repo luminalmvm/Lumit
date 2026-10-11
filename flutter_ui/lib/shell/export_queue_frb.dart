@@ -111,7 +111,19 @@ class _ExportQueueState extends State<_ExportQueue> {
 
   void _refresh() {
     if (!mounted) return;
-    setState(() => _items = (widget.list ?? exportQueueList)());
+    setState(() {
+      _items = (widget.list ?? exportQueueList)();
+      // A row that started exporting while it was in hand has lost the
+      // gesture that would have ended the drag, so its mark is taken down
+      // here.
+      final marked = _items.where((i) => i.id == _markedId).firstOrNull;
+      if (_markedId != null &&
+          marked?.state is! BridgeExportQueueState_Waiting) {
+        _markedId = null;
+        _markedFrom = 0;
+        _markedTo = null;
+      }
+    });
   }
 
   @override
@@ -276,14 +288,14 @@ class _ExportQueueState extends State<_ExportQueue> {
                 dragStartBehavior: DragStartBehavior.down,
                 onVerticalDragStart: (d) => setState(() {
                   _markedId = item.id;
-                  _markedFrom = d.globalPosition.dy;
+                  _markedFrom = d.localPosition.dy;
                   _markedTo = index;
                 }),
                 onVerticalDragUpdate: (d) {
                   final at = _items.indexWhere((i) => i.id == _markedId);
                   if (at < 0) return;
                   // The place whose row the pointer is past the middle of.
-                  final travel = d.globalPosition.dy - _markedFrom;
+                  final travel = d.localPosition.dy - _markedFrom;
                   final next = (at + (travel / exportQueueRow).round())
                       .clamp(0, _items.length - 1);
                   if (next != _markedTo) setState(() => _markedTo = next);

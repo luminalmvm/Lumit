@@ -72,9 +72,14 @@ mixin TextTargetState<T extends StatefulWidget> on State<T> {
       if (entry.info.kind != BridgeLayerKind.text) continue;
       if (!selected.contains(entry.layer.internallayerId)) continue;
       try {
-        final read = entry.layer.getText();
-        if (read == null) continue;
-        document ??= read;
+        // The first one's document is the one shown, and the only one read:
+        // this runs on every build, and a drag with thirty layers selected
+        // was thirty reads across the bridge for each move of the pointer.
+        if (document == null) {
+          final read = entry.layer.getText();
+          if (read == null) continue;
+          document = read;
+        }
         name ??= entry.info.name;
         layers.add(entry.layer);
       } catch (_) {

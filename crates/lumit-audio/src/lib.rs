@@ -619,6 +619,9 @@ fn fill_scrub(shared: &Shared, scrub: &mut Scrub, out: &mut [f32], channels: usi
         // The burst being heard, then the one fading out under it, each mixed
         // for as much of this stretch as it has left and added in.
         for burst in [&mut scrub.now, &mut scrub.was] {
+            // No further than the mix runs. Shortened and not stopped, so a
+            // burst that reaches the end fades into it and does not click.
+            burst.left = burst.left.min(plan.total_frames.saturating_sub(burst.at));
             let frames = (chunk.len() / channels)
                 .min(burst.left)
                 .min(plan.total_frames.saturating_sub(burst.at));

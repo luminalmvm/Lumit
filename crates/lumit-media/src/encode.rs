@@ -514,7 +514,10 @@ impl ImageSequenceEncoder {
         depth: BitDepth,
         colour: ColourTags,
     ) -> Result<Self, MediaError> {
-        let pattern = sequence_pattern(path);
+        // image2 reads every `%` in the name as a field of its own, a folder's
+        // included, so the ones that are only part of the path are doubled.
+        let literal = path.to_str().ok_or(MediaError::BadPath)?.replace('%', "%%");
+        let pattern = sequence_pattern(Path::new(&literal));
         let cpath = CString::new(pattern.to_str().ok_or(MediaError::BadPath)?)
             .map_err(|_| MediaError::BadPath)?;
         let mut output = AVFormatContextOutput::create(&cpath).map_err(at("opening the file"))?;

@@ -688,6 +688,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeImportRow dco_decode_bridge_import_row(dynamic raw);
 
   @protected
+  BridgeImported dco_decode_bridge_imported(dynamic raw);
+
+  @protected
   BridgeImportedProject dco_decode_bridge_imported_project(dynamic raw);
 
   @protected
@@ -797,6 +800,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeNodeRef dco_decode_bridge_node_ref(dynamic raw);
+
+  @protected
+  BridgeOpened dco_decode_bridge_opened(dynamic raw);
 
   @protected
   BridgeOutputRef dco_decode_bridge_output_ref(dynamic raw);
@@ -2416,6 +2422,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeImportRow sse_decode_bridge_import_row(SseDeserializer deserializer);
 
   @protected
+  BridgeImported sse_decode_bridge_imported(SseDeserializer deserializer);
+
+  @protected
   BridgeImportedProject sse_decode_bridge_imported_project(
       SseDeserializer deserializer);
 
@@ -2537,6 +2546,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeNodeRef sse_decode_bridge_node_ref(SseDeserializer deserializer);
+
+  @protected
+  BridgeOpened sse_decode_bridge_opened(SseDeserializer deserializer);
 
   @protected
   BridgeOutputRef sse_decode_bridge_output_ref(SseDeserializer deserializer);
@@ -4357,6 +4369,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeImportRow self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_imported(
+      BridgeImported self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_imported_project(
       BridgeImportedProject self, SseSerializer serializer);
 
@@ -4498,6 +4514,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   void sse_encode_bridge_node_ref(BridgeNodeRef self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_opened(BridgeOpened self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_output_ref(

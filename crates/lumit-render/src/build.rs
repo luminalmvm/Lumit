@@ -1268,6 +1268,12 @@ struct Walk<'a> {
     /// that graph (docs/impl/node-graph-comp.md §5.3). Empty on every other
     /// walk, which is a graph on its own defaults.
     values: &'a [(String, lumit_core::model::EffectValue)],
+    /// This walk is a comp built again at another moment, for a temporal
+    /// effect further up to read as its neighbour. A neighbour carries no
+    /// neighbours of its own, so nothing in it builds any: otherwise an Echo
+    /// over a Precomp that holds an Echo builds the whole of the inside once
+    /// for every frame of both windows, only to throw it away.
+    rebuild: bool,
 }
 
 impl Walk<'static> {
@@ -1275,6 +1281,7 @@ impl Walk<'static> {
     const PLAIN: Walk<'static> = Walk {
         clone: lumit_core::fx::drivers::NO_CLONE,
         values: &[],
+        rebuild: false,
     };
 }
 
@@ -1332,6 +1339,7 @@ pub fn late_clone_pictures(
         Walk {
             clone: spec.clone,
             values: &[],
+            rebuild: false,
         },
         Some(&mut probe),
     );
@@ -1367,6 +1375,7 @@ fn comp_walk(
     let inner = Walk {
         clone: clone_number,
         values: &[],
+        rebuild: with.rebuild,
     };
     // A nested frame's name says nothing of which copy it is, so a numbered
     // copy is never named and never served from the nested store.
@@ -1375,6 +1384,12 @@ fn comp_walk(
     // where the planner fetched it.
     let at_moment = pixels_at_moment(doc, comp, t_comp, frame_t, pixels_by_layer);
     let pixels_by_layer = at_moment.as_ref().unwrap_or(pixels_by_layer);
+    // A Sequence layer in a gap now draws nothing, and may still be in the
+    // map for a clip it shows a frame away. `fetched` keeps it, for the
+    // neighbours a temporal effect on an adjustment layer builds.
+    let fetched = pixels_by_layer;
+    let shown = without_gaps(comp, fetched);
+    let pixels_by_layer = shown.as_ref().unwrap_or(fetched);
     let in_span = |l: &lumit_core::model::Layer| {
         t_comp >= l.in_point.0.to_f64() && t_comp < l.out_point.0.to_f64()
     };
@@ -2276,6 +2291,7 @@ fn comp_walk(
                         Walk {
                             clone: p.clone.unwrap_or(clone_number),
                             values: &[],
+                            rebuild: with.rebuild,
                         },
                         Some(&mut probe),
                     );
@@ -3386,6 +3402,8 @@ fn comp_walk(
                 let dt = 1.0 / comp.frame_rate.fps().max(1.0);
                 flow_below = crate::plan::rebuild_offsets(layer, lt, dt)
                     .into_iter()
+                    // None inside a walk that is itself a neighbour.
+                    .filter(|_| !with.rebuild)
                     .map(|(offset, measure)| {
                         // The neighbour's own layer time, then the Retime
                         // map (§5.6): a retimed Precomp measures its
@@ -3398,6 +3416,15 @@ fn comp_walk(
                                 layer.start_offset.0,
                             ),
                         );
+                        // Under the same Input values the frame itself is
+                        // built under, read at the neighbour's moment. On
+                        // the graph's defaults the neighbour was another
+                        // picture, and the difference read as motion.
+                        let values = nested
+                            .graph
+                            .as_ref()
+                            .filter(|_| layer.graph_inputs.is_some())
+                            .map_or_else(Vec::new, |graph| graph_values(layer, graph, nt));
                         let mut neighbour = comp_walk(
                             doc,
                             nested,
@@ -3407,7 +3434,11 @@ fn comp_walk(
                             visited,
                             None,
                             false,
-                            inner,
+                            Walk {
+                                rebuild: true,
+                                values: &values,
+                                ..inner
+                            },
                             None,
                         );
                         strip_temporal_inputs(&mut neighbour);
@@ -3640,17 +3671,21 @@ fn comp_walk(
                     // below-stack again at each neighbour time. Empty unless
                     // one of those effects is live, which is the whole cost
                     // gate — nothing else on an adjustment layer builds it.
-                    flow_below: adjustment_flow_below(
-                        doc,
-                        comp,
-                        layer,
-                        idx,
-                        t_comp,
-                        frame_t,
-                        pixels_by_layer,
-                        visited,
-                        clone_number,
-                    ),
+                    flow_below: if with.rebuild {
+                        Vec::new()
+                    } else {
+                        adjustment_flow_below(
+                            doc,
+                            comp,
+                            layer,
+                            idx,
+                            t_comp,
+                            frame_t,
+                            fetched,
+                            visited,
+                            clone_number,
+                        )
+                    },
                 });
                 continue;
             }
@@ -4715,6 +4750,7 @@ impl GraphLower<'_> {
                         Walk {
                             clone: self.clone,
                             values: &[],
+                            rebuild: false,
                         },
                         None,
                     ),
@@ -5014,7 +5050,11 @@ fn below_draws_cloned(
         visited,
         None,
         false,
-        Walk { clone, values: &[] },
+        Walk {
+            clone,
+            values: &[],
+            rebuild: true,
+        },
         None,
     );
     strip_temporal_inputs(&mut draws);
@@ -5251,7 +5291,7 @@ fn adjustment_flow_below(
                 doc,
                 comp,
                 below,
-                t_comp + f64::from(offset) * dt,
+                lumit_core::time::frames_on(t_comp, offset, dt),
                 frame_t,
                 None,
                 pixels_by_layer,
@@ -5334,6 +5374,29 @@ fn pixels_at_moment<'a>(
     out
 }
 
+/// `pixels_by_layer` without the Sequence layers of `comp` that are in a gap
+/// at the frame's own time. The planner fetches such a layer for the clip it
+/// shows at another moment, and files the frame's own moment as a gap
+/// ([`crate::decode::Cut::Moment`]). `None` when there are none, which is
+/// nearly always, so nothing is copied.
+fn without_gaps<'a>(
+    comp: &lumit_core::model::Composition,
+    pixels_by_layer: &std::collections::HashMap<uuid::Uuid, &'a CompLayerPixels>,
+) -> Option<std::collections::HashMap<uuid::Uuid, &'a CompLayerPixels>> {
+    let mut out = None;
+    for layer in &comp.layers {
+        let in_gap = pixels_by_layer.get(&layer.id).is_some_and(|lp| {
+            let mut moments = lp.shutter.iter();
+            moments.any(|(offset, clip)| *offset == 0.0 && clip.is_none())
+        });
+        if in_gap {
+            let out = out.get_or_insert_with(|| pixels_by_layer.clone());
+            out.remove(&layer.id);
+        }
+    }
+    out
+}
+
 /// Every box of the node graphs `effects` apply, graphs nested in them
 /// included, each with one frame of its own comp in seconds. A graph's Read
 /// of footage is filed under its box. `seen` stops a graph that applies
@@ -5375,10 +5438,9 @@ fn strip_temporal_inputs(draws: &mut [CompLayerDraw]) {
     for d in draws.iter_mut() {
         d.neighbours = Vec::new();
         d.flow_fields = Vec::new();
-        // The composite measurement (§3.2) is temporal too, and dropping
-        // it here is what bounds the work: without this, an adjustment inside a
-        // neighbour render would build its own neighbours, and a stack of them
-        // would multiply a frame's cost by two to the depth.
+        // The composite measurement (§3.2) is temporal too. A walk that is a
+        // rebuild never builds one (`Walk::rebuild`), which is what bounds the
+        // work. This is for a draw that came from anywhere else.
         d.flow_below = Vec::new();
         if let DrawSource::Nested { draws: inner, .. } = &mut d.source {
             strip_temporal_inputs(inner);
@@ -6843,6 +6905,60 @@ mod render_below_at_tests {
         let mut adjust = flow_adjustment(&[]);
         adjust.effects = vec![previous_frame_effect()];
         let plain = comp_with(10, vec![footage.clone()]);
+        // The frame before a cut: a shot that starts on the next frame is not
+        // on screen yet, and is planned all the same, for the frame the
+        // plugin reads ahead. Without it that frame is drawn with a hole
+        // where the next shot is.
+        let mut next = footage.clone();
+        next.id = Uuid::now_v7();
+        next.in_point = lumit_core::time::CompTime(Rational::new(6, 10).unwrap());
+        let cut = comp_with(10, vec![adjust.clone(), next.clone(), footage.clone()]);
+        let jobs = crate::plan_comp_frame(&doc, &cut, 0.5, crate::Quality::default(), &probes);
+        assert!(
+            jobs.iter().any(|j| j.layer == next.id),
+            "the shot after the cut is planned for the neighbour it is in"
+        );
+        // The same for a Sequence layer in a gap now whose clip starts on the
+        // next frame. The clip is fetched for that frame and drawn in it, and
+        // nothing of it is drawn in this one or in the gap a frame back.
+        let LayerKind::Footage { item } = footage.kind else {
+            panic!("a footage layer");
+        };
+        let at = |n, d| Rational::new(n, d).unwrap();
+        let mut gap = footage.clone();
+        gap.id = Uuid::now_v7();
+        gap.kind = LayerKind::Sequence {
+            clips: vec![lumit_core::sequence::Clip::new(
+                lumit_core::sequence::ClipSource::Footage(item),
+                at(0, 1),
+                at(94, 10),
+                at(6, 10),
+                at(94, 10),
+            )],
+        };
+        let gap_id = gap.id;
+        let cut = comp_with(10, vec![adjust.clone(), gap]);
+        let jobs = crate::plan_comp_frame(&doc, &cut, 0.5, crate::Quality::default(), &probes);
+        let lp = decoded(jobs.first().expect("the clip after the gap is planned"));
+        let pixels: HashMap<Uuid, &CompLayerPixels> = [(gap_id, &lp)].into_iter().collect();
+        let mut v = vec![cut.id];
+        let draws = build_comp_draws(
+            &std::sync::Arc::new(doc.clone()),
+            &cut,
+            0.5,
+            &pixels,
+            &mut v,
+        );
+        assert_eq!(draws.len(), 1, "a layer in a gap draws nothing");
+        assert_eq!(
+            draws[0]
+                .flow_below
+                .iter()
+                .map(|(o, below, ..)| (*o, below.len()))
+                .collect::<Vec<_>>(),
+            vec![(-1, 0), (1, 1)],
+            "the clip after the gap is in the neighbour it starts in"
+        );
         let comp = comp_with(10, vec![adjust, footage]);
 
         let jobs = crate::plan_comp_frame(&doc, &comp, 0.5, crate::Quality::default(), &probes);

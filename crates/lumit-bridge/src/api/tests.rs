@@ -328,10 +328,36 @@ fn a_packed_project_keeps_its_footage_when_the_original_goes() {
         b"not really a movie"
     );
     assert_eq!(project.pack_state().expect("state").packed, 0);
-    let (doc, _) = lumit_project::open(&lum).expect("opens");
+    let (mut doc, _) = lumit_project::open(&lum).expect("opens");
     assert!(doc.packed.is_empty(), "the file no longer carries it");
-
     project.close().expect("closed");
+
+    // A file from somebody else can arrive saying that every save packs. It
+    // is not believed: it opens with that off, and a save packs nothing. Once
+    // it is switched on here, a save packs. Opened the way a recovery opens
+    // one, which leaves the projects other tests have open alone.
+    doc.auto_pack = true;
+    let sent = dir.path().join("sent.lum");
+    lumit_project::save(&doc, &sent).expect("written");
+    let open = || {
+        let opened = LumitBridgeState::new_project(None).expect("a new project");
+        let name = sent.to_string_lossy().into_owned();
+        opened.restore_journal(name, None).expect("opens");
+        opened
+    };
+    let packed = || lumit_project::open(&sent).expect("opens").0.packed.len();
+    let received = open();
+    assert!(!received.pack_state().expect("state").auto_pack);
+    received.save(String::new()).expect("saved");
+    assert_eq!(packed(), 0, "nothing went into the file");
+    received.set_auto_pack(true).expect("switched on");
+    received.save(String::new()).expect("saved");
+    assert_eq!(packed(), 1);
+    received.close().expect("closed");
+    // And this machine's own choice is still there the next time.
+    let again = open();
+    assert!(again.pack_state().expect("state").auto_pack);
+    again.close().expect("closed");
 }
 
 /// A placed clip must land in the composition; the span/size fallbacks are what
@@ -2362,6 +2388,19 @@ fn precompose_packs_the_chosen_layers_and_leaves_one_precomp_behind() {
     assert_eq!(back[0].layer_id, top.layer_id);
     assert_eq!(back[1].layer_id, middle.layer_id);
     assert_eq!(back[2].layer_id, bottom.layer_id);
+
+    // Leaving its attributes behind, one layer's Precomp layer stands where
+    // the layer stood, under its id: a child, a matte or an effect's layer
+    // row that pointed at the layer goes on pointing at something.
+    let left = comp
+        .precompose(vec![top.layer_id], String::new(), true, false, None)
+        .expect("precomposed");
+    assert_eq!(left.layer_id, top.layer_id);
+    let Some(ItemReference::Composition(inner)) = left.get_source_item().expect("source") else {
+        panic!("a Precomp layer's source is a composition");
+    };
+    let inside = inner.get_layers().expect("layers");
+    assert!(inside.len() == 1 && inside[0].layer_id != top.layer_id);
 }
 
 /// Converting the mix to a precomp, the two-level pack
@@ -2746,7 +2785,7 @@ fn restoring_replaces_the_document_and_keeps_the_change_observer() {
         .new_composition("Unsaved".into(), None)
         .expect("comp");
     let recovered = project
-        .restore_journal(target.to_string_lossy().into_owned())
+        .restore_journal(target.to_string_lossy().into_owned(), None)
         .expect("restored");
     assert!(recovered.replayed <= recovered.found);
 
@@ -2854,13 +2893,13 @@ fn every_commit_is_journalled_and_a_save_clears_it() {
     let _journals = crate::api::state::journals_in(journals.path());
     let project = LumitBridgeState::new_project(None).expect("a new project");
 
-    let journal = {
+    let armed = || {
         let state = project.state().expect("state");
         let state = state.read().expect("read");
         let handle = state.journal.lock().expect("journal");
         handle.clone()
     };
-    let Some(journal) = journal else {
+    let Some(journal) = armed() else {
         // No home for a journal on this platform; nothing to assert.
         return;
     };
@@ -2892,6 +2931,11 @@ fn every_commit_is_journalled_and_a_save_clears_it() {
         journal.read().expect("journal read").is_empty(),
         "the journal is cleared by a save"
     );
+    // From the save on the journal is that file's own. Save As keeps the
+    // document's id, and a copy must never be offered its original's edits.
+    let unsaved = journal;
+    let journal = armed().expect("still journalled");
+    assert!(!journal.same_as(&unsaved));
 
     // An edit after the save is journalled again, or a crash from here would
     // lose everything since the save.
@@ -2901,6 +2945,18 @@ fn every_commit_is_journalled_and_a_save_clears_it() {
     assert_eq!(journal.read().expect("journal read").len(), 1);
     // Nothing has closed the project, so this is what a crash leaves behind.
     assert!(journal.ended_badly());
+
+    // Saved under another name, the edits since go with the document, and
+    // the file it was is left with nothing to be offered.
+    project
+        .new_composition("Unsaved".into(), None)
+        .expect("an edit");
+    let copy = dir.join("copy.lum");
+    project
+        .save(copy.to_string_lossy().into_owned())
+        .expect("saved as");
+    assert!(!journal.ended_badly(), "the first file has no journal now");
+    assert!(!armed().expect("journalled").same_as(&journal));
 
     std::fs::remove_dir_all(&dir).ok();
 }
@@ -2936,7 +2992,7 @@ fn closing_a_saved_project_keeps_its_journal() {
     project.new_composition("Saved".into(), None).expect("comp");
     project.save(target.clone()).expect("saved");
     // Recovery reopens the file, so the edit below lands on what was saved.
-    project.restore_journal(target).expect("restored");
+    project.restore_journal(target, None).expect("restored");
     project
         .new_composition("Unsaved".into(), None)
         .expect("an edit");
@@ -9233,19 +9289,75 @@ fn an_addon_installs_lists_and_removes_and_is_refused_honestly() {
     lumit_ml::store::with_dir(None);
 }
 
+// An import stopped part way leaves the project as it was, with nothing to
+// undo, however many of its files had been read by then.
+#[cfg(feature = "media")]
+#[test]
+fn a_cancelled_import_leaves_the_project_as_it_was() {
+    use lumit_media::psd::fixture::{document, Layer};
+
+    let dir = tempfile::tempdir().expect("temp dir");
+    let layers = [
+        Layer::solid("Background", [0, 0, 32, 32], [255, 0, 0, 255]),
+        Layer::solid("Hat", [8, 8, 16, 16], [0, 0, 255, 255]),
+    ];
+    let paths: Vec<String> = ["one.psd", "two.psd"]
+        .into_iter()
+        .map(|name| {
+            let path = dir.path().join(name);
+            std::fs::write(&path, document(32, 32, 8, &layers)).expect("the fixture writes");
+            path.to_string_lossy().into_owned()
+        })
+        .collect();
+
+    let project = LumitBridgeState::new_project(None).expect("a new project");
+    let snapshot = || {
+        let state = project.state().expect("state");
+        let state = state.read().expect("read");
+        state.store.snapshot()
+    };
+    let before = snapshot();
+
+    // Stopped once the first file has been read, and again at the last ask.
+    for stop_at in [1, 2] {
+        let ended = project
+            .import_while(paths.clone(), &mut |read, _| read < stop_at)
+            .expect("a cancel is not an error");
+        assert!(ended.cancelled);
+        assert!(
+            std::sync::Arc::ptr_eq(&before, &snapshot()),
+            "nothing was committed"
+        );
+        assert!(!project.history().expect("history").can_undo);
+    }
+
+    let ended = project
+        .import_while(paths, &mut |_, _| true)
+        .expect("the files import");
+    assert!(!ended.cancelled);
+    project.undo().expect("one import, one step");
+    assert_eq!(snapshot().items.len(), before.items.len());
+    assert!(!project.history().expect("history").can_undo);
+}
+
 // A Photoshop document comes in as a comp of its layers and a folder of layer
 // items, in one undo step, and anything else is left to the footage import.
 #[cfg(feature = "media")]
 #[test]
 fn a_photoshop_document_imports_as_a_comp_of_its_layers_in_one_undo_step() {
     use lumit_core::model::{BlendMode, EffectValue, LayerKind};
-    use lumit_media::psd::fixture::{described, document, Layer, Value};
+    use lumit_media::psd::fixture::{described, document, vector_mask, Layer, Value};
 
     let dir = tempfile::tempdir().expect("temp dir");
     let path = dir.path().join("poster.psd");
     let mut hat = Layer::solid("Hat", [8, 8, 16, 16], [0, 0, 255, 255]);
     hat.opacity = 128;
     hat.blend = *b"mul ";
+    // At half Fill as well, behind a vector mask over the document's left
+    // half that the file has not drawn into the layer.
+    let half = [128, 0, 0, 0];
+    let left = [(0.0, 0.0), (0.5, 0.0), (0.5, 1.0), (0.0, 1.0)];
+    hat.blocks = vec![(*b"iOpa", half.to_vec()), vector_mask(&left)];
     let mut props = Layer::group("Props", true);
     props.visible = false;
     // A drop shadow lit from 120 degrees, which is Photoshop's own default.
@@ -9257,7 +9369,10 @@ fn a_photoshop_document_imports_as_a_comp_of_its_layers_in_one_undo_step() {
         ("Opct", Value::Number(40.0)),
         ("lagl", Value::Number(120.0)),
     ]);
-    title.blocks = vec![described(*b"lfx2", &[("DrSh", shadow)])];
+    title.blocks = vec![
+        described(*b"lfx2", &[("DrSh", shadow)]),
+        (*b"iOpa", half.to_vec()),
+    ];
     // Threshold at 128 of 255, with a mask over the left half.
     let mut threshold = Layer::solid("Threshold", [0, 0, 0, 0], [0; 4]);
     threshold.blocks = vec![(*b"thrs", vec![0, 128, 0, 0])];
@@ -9365,8 +9480,19 @@ fn a_photoshop_document_imports_as_a_comp_of_its_layers_in_one_undo_step() {
 
     let hat = &comp.layers[6];
     assert_eq!(hat.blend, BlendMode::Multiply);
+    // Fill is one more opacity on a layer with no style: 128 of 255, twice.
     let opacity = hat.transform.opacity.value_at(0.0);
-    assert!((opacity - 50.2).abs() < 0.1, "128 of 255 is {opacity}");
+    assert!((opacity - 25.2).abs() < 0.1, "a quarter is {opacity}");
+    // Its vector mask is a mask on the layer, in the document's pixels.
+    let [mask] = hat.masks.as_slice() else {
+        panic!("the vector mask comes across");
+    };
+    let corners: Vec<(f64, f64)> = mask.path.vertices.iter().map(|v| v.pos).collect();
+    assert_eq!(
+        corners,
+        [(0.0, 0.0), (16.0, 0.0), (16.0, 32.0), (0.0, 32.0)]
+    );
+    assert!(mask.path.closed && !mask.inverted);
     assert!(!hat.switches.visible, "a hidden group hides its members");
     assert!(comp.layers[0].switches.visible);
 
@@ -9401,6 +9527,13 @@ fn a_photoshop_document_imports_as_a_comp_of_its_layers_in_one_undo_step() {
         panic!("the title wears one style");
     };
     assert_eq!(shadow.effect.match_name, "style_drop_shadow");
+    // Fill would fade the shadow with the picture, so a layer that wears a
+    // style keeps its opacity.
+    let opacity = comp.layers[0].transform.opacity.value_at(0.0);
+    assert!(
+        (opacity - 100.0).abs() < 0.1,
+        "the title stays at {opacity}"
+    );
     let row = |id: &str| match shadow.params.iter().find(|p| p.id == id) {
         Some(param) => match &param.value {
             EffectValue::Float(value) => value.value_at(0.0),

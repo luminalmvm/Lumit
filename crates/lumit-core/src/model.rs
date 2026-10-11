@@ -260,7 +260,7 @@ pub struct FootageItem {
     /// Set when this item reads one layer of a layered image file (a
     /// Photoshop document) rather than the file's flattened picture: the
     /// layer's place in the file's own list, bottom first
-    /// (docs/01-GLOSSARY.md: Source layer).
+    /// (docs/01-GLOSSARY.md: File layer).
     // ponytail: an index, so reordering the layers in Photoshop re-points
     // it. The file's own layer ids are the upgrade.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -3670,6 +3670,22 @@ impl Document {
                 (paths.iter().enumerate()).map(move |(n, path)| (id(n), path.as_str()))
             })
         })
+    }
+
+    /// [`Self::effect_files`], to point each path somewhere else.
+    pub fn effect_file_paths_mut(&mut self) -> impl Iterator<Item = &mut String> {
+        let comps = self.items.iter_mut().filter_map(|item| match item {
+            ProjectItem::Composition(c) => Some(c),
+            _ => None,
+        });
+        comps
+            .flat_map(Composition::effects_mut)
+            .flat_map(|fx| fx.params.iter_mut())
+            .filter_map(|param| match &mut param.value {
+                EffectValue::File(file) => Some(file.paths.iter_mut()),
+                _ => None,
+            })
+            .flatten()
     }
 
     /// Where the file behind a packed id is read from: the path
