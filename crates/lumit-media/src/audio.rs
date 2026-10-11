@@ -45,6 +45,97 @@ pub fn decode_all(path: &Path, target_rate: u32) -> Result<AudioBuffer, MediaErr
     })
 }
 
+/// Decode all of `sound`, resampled to stereo f32 at `target_rate`: what
+/// [`decode_all`] is for a file's first stream, for whichever streams `sound`
+/// names.
+pub fn decode_sound(sound: &SoundSource, target_rate: u32) -> Result<AudioBuffer, MediaError> {
+    if sound.is_first() {
+        return decode_all(&sound.path, target_rate);
+    }
+    let mut reader = SoundReader::open(sound, target_rate)?;
+    let mut samples = Vec::new();
+    loop {
+        let at = (samples.len() / 2) as u64;
+        let (chunk, _) = reader.read(at, DECODE_FRAMES, true)?;
+        if chunk.is_empty() {
+            break;
+        }
+        samples.extend_from_slice(&chunk);
+    }
+    Ok(AudioBuffer {
+        rate: target_rate,
+        samples,
+    })
+}
+
+/// How many frames [`decode_sound`] asks its reader for at a time.
+const DECODE_FRAMES: usize = 1 << 16;
+
+/// The most streams one [`SoundSource`] names. A file with more than a
+/// handful is rare, and a list read from a project file is not trusted to be
+/// short.
+pub const MAX_STREAMS: usize = 32;
+
+/// One sound to decode: a file, and which of its audio streams.
+///
+/// # In plain terms
+///
+/// A file can carry several sounds side by side. A screen recording often
+/// has the game on one stream and the microphone on another, and a camera
+/// file may have a stream for each microphone. A `SoundSource` names the ones
+/// wanted by their place among the file's audio streams, counted from nought
+/// in the order the file lists them. More than one is those streams added
+/// together, sample for sample, as two layers playing at once would be.
+///
+/// Everything that keeps decoded sound keeps it under one of these, so two
+/// layers playing the same stream of a file share it and two playing
+/// different streams never answer for each other.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct SoundSource {
+    pub path: PathBuf,
+    /// Ascending, no stream twice, never empty.
+    streams: Vec<u32>,
+}
+
+impl SoundSource {
+    /// The file's first audio stream, which is all a file with one has.
+    #[must_use]
+    pub fn file(path: impl Into<PathBuf>) -> Self {
+        Self {
+            path: path.into(),
+            streams: vec![0],
+        }
+    }
+
+    /// These streams of the file, mixed. An empty list is the first stream.
+    #[must_use]
+    pub fn streams_of(path: impl Into<PathBuf>, streams: &[u32]) -> Self {
+        let mut streams = streams.to_vec();
+        streams.sort_unstable();
+        streams.dedup();
+        streams.truncate(MAX_STREAMS);
+        if streams.is_empty() {
+            streams.push(0);
+        }
+        Self {
+            path: path.into(),
+            streams,
+        }
+    }
+
+    /// The streams read, by their place among the file's audio streams.
+    #[must_use]
+    pub fn streams(&self) -> &[u32] {
+        &self.streams
+    }
+
+    /// Whether this is the file's first audio stream and nothing else.
+    #[must_use]
+    pub fn is_first(&self) -> bool {
+        self.streams == [0]
+    }
+}
+
 /// How far ahead of where a reader stands a wanted frame may be and still be
 /// reached by decoding on and throwing the sound between away, in seconds.
 /// Landing costs [`LANDING_SECONDS`] of decode, so anything nearer than that
@@ -86,6 +177,8 @@ pub struct AudioReader {
     input: AVFormatContextInput,
     decoder: AVCodecContext,
     swr: SwrContext,
+    /// Which of the file's audio streams this is, counted from nought.
+    stream: u32,
     stream_index: i32,
     /// The rate the decoder said it hands out when it was opened, which is
     /// what the resampler was told.
@@ -137,12 +230,22 @@ struct Landing {
 impl AudioReader {
     /// Open `path`'s first audio stream for decoding at `target_rate`.
     pub fn open(path: &Path, target_rate: u32) -> Result<Self, MediaError> {
+        Self::open_stream(path, 0, target_rate)
+    }
+
+    /// Open one of `path`'s audio streams for decoding at `target_rate`: the
+    /// one at place `stream` among them, counted from nought in the file's
+    /// own order. [`MediaError::NoStreams`] when the file has not got that
+    /// many.
+    pub fn open_stream(path: &Path, stream: u32, target_rate: u32) -> Result<Self, MediaError> {
+        let ordinal = stream;
         let mut input = crate::probe::open_input(&crate::MediaSource::file(path))?;
         let (stream_index, par, time_base, lands, lossless, hint) = {
             let stream = input
                 .streams()
                 .iter()
-                .find(|s| s.codecpar().codec_type == ffi::AVMEDIA_TYPE_AUDIO)
+                .filter(|s| s.codecpar().codec_type == ffi::AVMEDIA_TYPE_AUDIO)
+                .nth(ordinal as usize)
                 .ok_or(MediaError::NoStreams)?;
             let par = stream.codecpar().clone();
             let time_base = (
@@ -183,6 +286,7 @@ impl AudioReader {
             input,
             decoder,
             swr,
+            stream: ordinal,
             stream_index,
             in_rate,
             time_base,
@@ -427,7 +531,7 @@ impl AudioReader {
     /// file may still be landed in afterwards; a landing that failed its check
     /// says it may not.
     fn restart(&mut self, keep: bool) -> Result<(), MediaError> {
-        let mut fresh = Self::open(&self.path, self.rate)?;
+        let mut fresh = Self::open_stream(&self.path, self.stream, self.rate)?;
         fresh.lands = self.lands && keep;
         fresh.total = self.total;
         *self = fresh;
@@ -561,6 +665,104 @@ impl AudioReader {
         self.ready.resize(at + floats, 0.0);
         byte_to_f32(&bytes[drop * 8..], &mut self.ready[at..]);
         Ok(())
+    }
+}
+
+/// A [`SoundSource`] decoded a stretch at a time: one [`AudioReader`] to a
+/// stream, read side by side and added together.
+///
+/// It answers what a reader answers, for the streams as one sound. A stretch
+/// read on its own is still the stretch a decode of the whole holds, because
+/// each stream's reader keeps that promise and a sum of equal parts is equal.
+/// The sound is as long as its longest stream, and a shorter one is silence
+/// past its end.
+pub struct SoundReader {
+    readers: Vec<AudioReader>,
+}
+
+impl SoundReader {
+    /// Open `sound` for decoding at `target_rate`. A stream the file has not
+    /// got is left out, as silence: a layer set to streams one and three of a
+    /// file since swapped for one with two still plays the first. With none
+    /// of them there it is [`MediaError::NoStreams`].
+    pub fn open(sound: &SoundSource, target_rate: u32) -> Result<Self, MediaError> {
+        let mut readers = Vec::with_capacity(sound.streams().len());
+        for &stream in sound.streams() {
+            match AudioReader::open_stream(&sound.path, stream, target_rate) {
+                Ok(reader) => readers.push(reader),
+                Err(MediaError::NoStreams) => {}
+                Err(error) => return Err(error),
+            }
+        }
+        if readers.is_empty() {
+            return Err(MediaError::NoStreams);
+        }
+        Ok(Self { readers })
+    }
+
+    /// As [`AudioReader::reaches`], for the reader with furthest to go.
+    #[must_use]
+    pub fn reaches(&self, start: u64, exact: bool) -> Option<u64> {
+        let mut furthest = 0;
+        for reader in &self.readers {
+            furthest = furthest.max(reader.reaches(start, exact)?);
+        }
+        Some(furthest)
+    }
+
+    /// The sound's length in output frames, once every stream's is known.
+    #[must_use]
+    pub fn total(&self) -> Option<u64> {
+        let mut longest = 0;
+        for reader in &self.readers {
+            longest = longest.max(reader.total()?);
+        }
+        Some(longest)
+    }
+
+    /// Tell a fresh reader the length another reader of the same sound found.
+    /// Only a sound of one stream can use it: the length of several is the
+    /// longest of them, which says nothing of the others.
+    pub fn set_total(&mut self, total: u64) {
+        if let [only] = self.readers.as_mut_slice() {
+            only.set_total(total);
+        }
+    }
+
+    /// As [`AudioReader::read`], the streams added together. Exact when every
+    /// stream's part is.
+    pub fn read(
+        &mut self,
+        start: u64,
+        frames: usize,
+        exact: bool,
+    ) -> Result<(Vec<f32>, bool), MediaError> {
+        let mut sum: Vec<f32> = Vec::new();
+        let mut all_exact = true;
+        for (i, reader) in self.readers.iter_mut().enumerate() {
+            let (part, part_exact) = reader.read(start, frames, exact)?;
+            all_exact &= part_exact;
+            if i == 0 {
+                sum = part;
+                continue;
+            }
+            if part.len() > sum.len() {
+                sum.resize(part.len(), 0.0);
+            }
+            for (into, sample) in sum.iter_mut().zip(&part) {
+                *into += sample;
+            }
+        }
+        Ok((sum, all_exact))
+    }
+
+    /// As [`AudioReader::length`]: the longest stream's.
+    pub fn length(&mut self) -> Result<u64, MediaError> {
+        let mut longest = 0;
+        for reader in &mut self.readers {
+            longest = longest.max(reader.length()?);
+        }
+        Ok(longest)
     }
 }
 
@@ -881,6 +1083,55 @@ mod tests {
         };
         assert!(matches!(
             decode_all(&file, 48_000),
+            Err(MediaError::NoStreams)
+        ));
+    }
+
+    /// **Each audio stream of a file is its own sound, and several are their
+    /// sum.** A file with a low tone on its first stream and a high one on its
+    /// second: the second read on its own is the high tone and none of the
+    /// low, both together are the two added, and a stream the file has not
+    /// got is silence beside one it has and an error alone.
+    #[test]
+    fn a_files_audio_streams_are_read_apart_and_together() {
+        let dir = tempfile::tempdir().unwrap();
+        let Some(file) = crate::index::tests_support::two_audio_streams(dir.path()) else {
+            eprintln!("skipping: no ffmpeg CLI available for fixture generation");
+            return;
+        };
+        const RATE: u32 = 48_000;
+        let first = decode_all(&file, RATE).unwrap();
+        let second = decode_sound(&SoundSource::streams_of(&file, &[1]), RATE).unwrap();
+        let both = decode_sound(&SoundSource::streams_of(&file, &[1, 0]), RATE).unwrap();
+        assert_eq!(first.frames(), 3 * RATE as usize);
+        assert_eq!(second.frames(), 4 * RATE as usize);
+        assert_eq!(both.frames(), second.frames(), "as long as the longest");
+
+        // How many times a second the wave crosses nought going up, which is
+        // its pitch.
+        let pitch = |samples: &[f32]| {
+            let left: Vec<f32> = samples.iter().step_by(2).copied().collect();
+            let rises = left.windows(2).filter(|w| w[0] < 0.0 && w[1] >= 0.0);
+            rises.count() as f64 / (left.len() as f64 / f64::from(RATE))
+        };
+        assert!((pitch(&first.samples) - 220.0).abs() < 2.0);
+        assert!((pitch(&second.samples) - 1760.0).abs() < 2.0);
+        for (i, sum) in both.samples.iter().enumerate() {
+            let apart = first.samples.get(i).copied().unwrap_or(0.0) + second.samples[i];
+            assert!((sum - apart).abs() < 1e-6, "sample {i}");
+        }
+
+        // A stretch of the sum read on its own is the stretch the whole holds.
+        let mut reader = SoundReader::open(&SoundSource::streams_of(&file, &[0, 1]), RATE).unwrap();
+        let from = 2 * RATE as usize + 321;
+        let (got, exact) = reader.read(from as u64, RATE as usize * 2, true).unwrap();
+        assert!(exact && got == both.samples[from * 2..]);
+        assert_eq!(reader.length().unwrap(), both.frames() as u64);
+
+        let missing = SoundSource::streams_of(&file, &[0, 7]);
+        assert!(decode_sound(&missing, RATE).unwrap().samples == first.samples);
+        assert!(matches!(
+            decode_sound(&SoundSource::streams_of(&file, &[7]), RATE),
             Err(MediaError::NoStreams)
         ));
     }

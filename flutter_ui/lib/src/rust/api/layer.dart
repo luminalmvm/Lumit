@@ -20,6 +20,7 @@ import 'retime.dart';
 import 'roto.dart';
 import 'solid.dart';
 import 'state.dart';
+import 'streams.dart';
 part 'layer.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_clip`, `bridge_kind`, `bridge_switches`, `clamped_property`, `clip_ops`, `clip_source_duration`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit_puppet`, `commit_shape_items`, `commit`, `comp_time`, `composition`, `core`, `core`, `core`, `core`, `core`, `document`, `edit_shape_item`, `empty`, `empty`, `exr_path`, `graph_inputs_for`, `instance_home`, `is_graph_inputs`, `item`, `layer_time_of_frame`, `leaving`, `map_end_value`, `motion_path_of`, `of`, `of`, `of`, `of`, `placed_graph_of`, `placed`, `project`, `rational_of`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_layer_info`, `read_layer`, `read`, `read`, `read`, `reanchored_span`, `reload_extract_channels`, `retime_or_identity`, `seed_extract_channels`, `source_length`, `transform_ops`, `trimmed`, `unretime_op`, `with_effects`, `with_instances`, `write_at`, `write_at`, `write_at`, `write_at`, `write_fade`, `write_item_over`, `write_item`, `write_layer`, `write_over`, `write`, `write`, `write`, `write`
@@ -2351,6 +2352,18 @@ class LayerReference {
           endSeconds: endSeconds,
           columns: columns);
 
+  /// The audio streams this layer has to choose from and the ones it
+  /// sounds.
+  ///
+  /// A Footage layer answers for its file. A Sequence layer keeps the choice
+  /// on each clip, so it answers for its clips together: the file's streams
+  /// and every place any clip sounds where the clips are all of one file,
+  /// and no list where they are of several. Any other kind sounds no file.
+  BridgeAudioStreams audioStreams() =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceAudioStreams(
+        that: this,
+      );
+
   /// This camera's evaluated placement at `frame`: the eye, the effective
   /// rotation with a two-node camera's aim already in it, and the zoom, with
   /// a solve link followed (docs/impl/camera.md §2). What the camera tools
@@ -2435,6 +2448,12 @@ class LayerReference {
           startSeconds: startSeconds,
           endSeconds: endSeconds,
           columns: columns);
+
+  /// The audio streams one clip of this Sequence layer has to choose from
+  /// and the ones it sounds. Nothing for a clip of a composition.
+  BridgeAudioStreams clipAudioStreams({required UuidValue clip}) =>
+      BridgeLib.instance.api
+          .crateApiLayerLayerReferenceClipAudioStreams(that: this, clip: clip);
 
   /// A thumbnail of the **first frame this clip shows**.
   ///
@@ -3057,6 +3076,25 @@ class LayerReference {
   void loadPreset({required String text}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceLoadPreset(that: this, text: text);
 
+  /// **Merge audio streams**, the way back from a split: this row sounds
+  /// the streams mixed and the rows split off beside it go.
+  ///
+  /// The rows folded are the Audio layers of the same file that start it at
+  /// the same moment, so no sound moves in time. What each carried of its
+  /// own, a Volume ride or an effect, goes with it: the row kept is heard
+  /// through its own. Asked of a split-off row while the layer with the
+  /// picture is sounding beside it, that layer is the one kept. A layer with
+  /// nothing split off beside it is set to every stream its file has.
+  ///
+  /// A Sequence layer is merged clip by clip
+  /// ([`CompositionReference::cut_merge_audio_streams`]).
+  ///
+  /// One undo step. `false` when it changes nothing.
+  bool mergeAudioStreams() =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceMergeAudioStreams(
+        that: this,
+      );
+
   /// This layer's **motion path** (docs/07 §2.4), or `None` while its
   /// Position is still — see [`motion_path_of`].
   ///
@@ -3359,6 +3397,15 @@ class LayerReference {
   void setAdjustment({required bool on_}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceSetAdjustment(that: this, on_: on_);
 
+  /// Choose which audio streams this layer sounds, mixed. One undo step.
+  ///
+  /// On a Sequence layer every footage clip takes the choice. An empty
+  /// list is the first stream, which is what a layer sounds until it is
+  /// told otherwise. [`BridgeError::NotFootage`] on a layer that sounds no
+  /// file of its own.
+  void setAudioStreams({required List<int> streams}) => BridgeLib.instance.api
+      .crateApiLayerLayerReferenceSetAudioStreams(that: this, streams: streams);
+
   /// Set how one two-axis property is shown and edited: combined on
   /// one row, linked (Scale), or separated onto a row per axis.
   ///
@@ -3390,6 +3437,13 @@ class LayerReference {
   /// every other curve-capable value.
   void setCameraZoom({required BridgeScalar zoom}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceSetCameraZoom(that: this, zoom: zoom);
+
+  /// Choose which audio streams one clip of this Sequence layer sounds,
+  /// mixed. One undo step.
+  void setClipAudioStreams(
+          {required UuidValue clip, required List<int> streams}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSetClipAudioStreams(
+          that: this, clip: clip, streams: streams);
 
   /// Set the fade at one end of a clip, or at both
   /// (docs/impl/audio-timeline.md §3).
@@ -3822,6 +3876,27 @@ class LayerReference {
   LayerReference splitAt({required PlatformInt64 frame}) =>
       BridgeLib.instance.api
           .crateApiLayerLayerReferenceSplitAt(that: this, frame: frame);
+
+  /// **Split audio streams**: give every audio stream this layer sounds a
+  /// row of its own.
+  ///
+  /// **In plain terms.** A recording with the game on one stream and the
+  /// microphone on another arrives as one row that sounds the first. Split,
+  /// it is a row to a stream: this layer keeps the picture and the first
+  /// stream, and each of the others is an Audio layer directly below with
+  /// the same span, Volume and effects, named for what the file calls the
+  /// stream. Each can then be turned down, cut or muted by itself.
+  ///
+  /// A layer that sounds several streams mixed is split into those. A
+  /// Sequence layer is split clip by clip, each stream a linked clip on a
+  /// sound row ([`CompositionReference::cut_split_audio_streams`]).
+  ///
+  /// One undo step. `false` when the layer sounds one stream and there is
+  /// nothing to split.
+  bool splitAudioStreams() =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSplitAudioStreams(
+        that: this,
+      );
 
   /// **Stretch** the layer (docs/04 §11.2): play it at `speed_percent` of the
   /// rate it plays at now, and give it the length that implies — 50% is half

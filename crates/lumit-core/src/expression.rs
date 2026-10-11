@@ -755,6 +755,7 @@ mod tests {
             volume_db: crate::anim::Property::zero(),
             pan: crate::anim::Property::zero(),
             audio_only: false,
+            audio_streams: Default::default(),
             adjustment: false,
             retime: None,
             blend: Default::default(),

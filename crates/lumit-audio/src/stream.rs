@@ -28,16 +28,17 @@
 //! baked rack's output is and what the tests mix. It reads the same way and
 //! is never dropped.
 
-use lumit_media::audio::AudioReader;
+use lumit_media::audio::SoundReader;
 use lumit_media::AudioBuffer;
+pub use lumit_media::SoundSource;
 use parking_lot::{Mutex, RwLock};
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, OnceLock, Weak};
 
 /// How long one block is, in seconds. Whole seconds, because a reader lands
-/// on a whole second (see [`AudioReader`]) and a block that starts on one is
+/// on a whole second (see [`lumit_media::audio::AudioReader`]) and a block that starts on one is
 /// decoded with no walk to it. Two of them is 768 KB at 48 kHz: small enough
 /// that the budget is spent near the playhead, big enough that a playing clip
 /// asks for a block every two seconds and not every few milliseconds.
@@ -69,7 +70,7 @@ const KEPT_SOURCES: usize = 1024;
 pub struct Block {
     pub samples: Vec<f32>,
     /// Whether these are the very samples a decode of the whole file holds
-    /// here, or the same sound a landing decoded (see [`AudioReader::read`]).
+    /// here, or the same sound a landing decoded (see [`SoundReader::read`]).
     pub exact: bool,
 }
 
@@ -91,9 +92,9 @@ impl Slot {
     }
 }
 
-/// A file's blocks.
+/// A file's blocks: those of the streams of it one [`SoundSource`] names.
 struct File {
-    path: PathBuf,
+    sound: SoundSource,
     pool: Weak<Pool>,
     /// Names this source among the pool's open readers.
     id: u64,
@@ -175,11 +176,12 @@ impl Source {
         matches!(self.kind, Kind::File(_))
     }
 
-    /// The file this source reads, for one that reads a file.
+    /// The file this source reads and which of its audio streams, for one
+    /// that reads a file.
     #[must_use]
-    pub fn path(&self) -> Option<&Path> {
+    pub fn sound(&self) -> Option<&SoundSource> {
         match &self.kind {
-            Kind::File(file) => Some(&file.path),
+            Kind::File(file) => Some(&file.sound),
             Kind::Whole(_) => None,
         }
     }
@@ -307,7 +309,7 @@ impl Source {
     ///
     /// `exact` is an export's ask: every sample the one a decode of the whole
     /// file holds there, whatever that costs. Without it a block a landing
-    /// decoded will do (see [`AudioReader::read`]).
+    /// decoded will do (see [`SoundReader::read`]).
     #[must_use]
     pub fn read(self: &Arc<Self>, start: usize, frames: usize, exact: bool) -> Vec<f32> {
         match &self.kind {
@@ -449,16 +451,17 @@ pub fn pool() -> &'static Arc<Pool> {
 
 struct OpenReader {
     source: u64,
-    reader: AudioReader,
+    reader: SoundReader,
     used: u64,
 }
 
 #[derive(Default)]
 struct PoolState {
-    /// Every file anybody has asked for, by path and rate. Compacted when it
-    /// passes [`KEPT_SOURCES`]: a source nothing else holds and that holds no
-    /// block is forgotten, and made again for nothing if it is asked for.
-    sources: HashMap<(PathBuf, u32), Arc<Source>>,
+    /// Every sound anybody has asked for, by file, streams and rate.
+    /// Compacted when it passes [`KEPT_SOURCES`]: a source nothing else holds
+    /// and that holds no block is forgotten, and made again for nothing if it
+    /// is asked for.
+    sources: HashMap<(SoundSource, u32), Arc<Source>>,
     /// The blocks in memory, for choosing which to drop.
     held: Vec<(Arc<Source>, usize)>,
     readers: Vec<OpenReader>,
@@ -482,18 +485,19 @@ impl Pool {
         })
     }
 
-    /// The sound of `path` at `rate`, the same [`Source`] for every asker so
-    /// two clips of one file share its blocks. Opens nothing: a file that is
-    /// missing or silent is found out when a block of it is first wanted.
+    /// `sound` at `rate`, the same [`Source`] for every asker so two clips of
+    /// one file share its blocks. Two that play different streams of it do
+    /// not: each is a sound of its own. Opens nothing: a file that is missing
+    /// or silent is found out when a block of it is first wanted.
     ///
     /// ponytail: keyed by path, so a file replaced on disk under a running
     /// Lumit keeps the blocks already decoded from the old one until they are
     /// dropped. Key by the file's fingerprint if overwriting a clip in place
     /// has to be heard at once.
     #[must_use]
-    pub fn source(self: &Arc<Self>, path: &Path, rate: u32) -> Arc<Source> {
+    pub fn source(self: &Arc<Self>, sound: &SoundSource, rate: u32) -> Arc<Source> {
         let mut state = self.state.lock();
-        if let Some(source) = state.sources.get(&(path.to_path_buf(), rate)) {
+        if let Some(source) = state.sources.get(&(sound.clone(), rate)) {
             return Arc::clone(source);
         }
         if state.sources.len() >= KEPT_SOURCES {
@@ -507,7 +511,7 @@ impl Pool {
         let source = Arc::new(Source {
             rate,
             kind: Kind::File(Box::new(File {
-                path: path.to_path_buf(),
+                sound: sound.clone(),
                 pool: Arc::downgrade(self),
                 id: state.next_id,
                 block_frames: BLOCK_SECONDS * rate as usize,
@@ -518,8 +522,15 @@ impl Pool {
         });
         state
             .sources
-            .insert((path.to_path_buf(), rate), Arc::clone(&source));
+            .insert((sound.clone(), rate), Arc::clone(&source));
         source
+    }
+
+    /// The first audio stream of the file at `path`, at `rate`: what
+    /// [`Self::source`] answers for a file with one.
+    #[must_use]
+    pub fn file(self: &Arc<Self>, path: &Path, rate: u32) -> Arc<Source> {
+        self.source(&SoundSource::file(path), rate)
     }
 
     /// How many bytes of decoded blocks are in memory now.
@@ -532,7 +543,7 @@ impl Pool {
     /// else one that reaches it by decoding on, else any when a landing will
     /// do, else a fresh one. `None` when the file will not open, which marks
     /// it failed.
-    fn reader(&self, file: &File, rate: u32, start: u64, exact: bool) -> Option<AudioReader> {
+    fn reader(&self, file: &File, rate: u32, start: u64, exact: bool) -> Option<SoundReader> {
         let taken = {
             let mut state = self.state.lock();
             let of_file = |r: &OpenReader| r.source == file.id;
@@ -565,7 +576,7 @@ impl Pool {
             return taken;
         }
         // Opened with nothing held: it is a file access and an FFmpeg call.
-        match AudioReader::open(&file.path, rate) {
+        match SoundReader::open(&file.sound, rate) {
             Ok(mut reader) => {
                 if let Some(total) = file.total() {
                     reader.set_total(total as u64);
@@ -579,7 +590,7 @@ impl Pool {
         }
     }
 
-    fn put_back(&self, source: u64, reader: AudioReader) {
+    fn put_back(&self, source: u64, reader: SoundReader) {
         let mut state = self.state.lock();
         state.readers.push(OpenReader {
             source,
@@ -671,6 +682,7 @@ impl Pool {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 pub(crate) mod tests {
     use super::*;
+    use std::path::PathBuf;
 
     /// A folder of this test's own under the system's temporary one, removed
     /// when the guard goes.
@@ -734,8 +746,8 @@ pub(crate) mod tests {
 
         // Room for three blocks of the eleven the file has.
         let pool = Pool::new(block_bytes * 3);
-        let source = pool.source(&path, RATE);
-        assert!(Arc::ptr_eq(&source, &pool.source(&path, RATE)));
+        let source = pool.file(&path, RATE);
+        assert!(Arc::ptr_eq(&source, &pool.file(&path, RATE)));
         assert_eq!(source.frames(), None, "nothing is opened to make a source");
 
         // The callback's read of a block that is not there: all of it missed,
@@ -776,7 +788,7 @@ pub(crate) mod tests {
         assert!(run_of == whole.samples[at * 2..]);
 
         // A file that is not one is silence that nothing waits for.
-        let gone = pool.source(Path::new("/definitely/not/a/file.wav"), RATE);
+        let gone = pool.file(Path::new("/definitely/not/a/file.wav"), RATE);
         assert!(gone.block(0, false, now()).is_none());
         assert_eq!(gone.read_runs(0, 100, |_, _| {}), 0);
         assert!(gone.read(0, 100, true).is_empty());

@@ -505,7 +505,8 @@ Future<void> showProjectMenuFrb({
       onFindMissing();
     case _ProjectMenuAction.addAudioOnly:
       if (item case ItemReference_Footage(:final field0)) {
-        openComp?.addAudioLayer(footage: field0);
+        openComp?.addAudioLayer(
+            footage: field0, arrival: ui.streamsArrival);
         onLocalEdit();
       }
     case _ProjectMenuAction.setProxy:

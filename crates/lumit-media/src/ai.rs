@@ -111,6 +111,7 @@ pub fn probe(path: &Path) -> Result<MediaProbe, MediaError> {
             codec: "ai".into(),
         }),
         audio: None,
+        more_audio: Vec::new(),
     })
 }
 

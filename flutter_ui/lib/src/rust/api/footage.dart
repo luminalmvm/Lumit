@@ -11,6 +11,7 @@ import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 import 'package:uuid/uuid.dart';
 import 'share.dart';
 import 'state.dart';
+import 'streams.dart';
 part 'footage.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `attach_proxy`, `media_ref_at`, `project`, `resolve_path`, `resolve_source`, `source_path`, `stored_path`
@@ -60,6 +61,11 @@ class BridgeMediaInfo {
   final int channels;
   final int sampleRate;
 
+  /// How many audio streams the file carries. The codec, channels and rate
+  /// above are the first one's, which is the one a layer sounds until it is
+  /// told another ([`FootageReference::audio_streams`] lists them all).
+  final int audioStreams;
+
   /// Whether the picture is a **still** rather than something that runs.
   /// A still probes with a video stream too — one frame of it — so
   /// the question is whether the stream lasts, and the engine
@@ -82,6 +88,7 @@ class BridgeMediaInfo {
     this.audioCodec,
     required this.channels,
     required this.sampleRate,
+    required this.audioStreams,
     required this.isStill,
   });
 
@@ -96,6 +103,7 @@ class BridgeMediaInfo {
       audioCodec.hashCode ^
       channels.hashCode ^
       sampleRate.hashCode ^
+      audioStreams.hashCode ^
       isStill.hashCode;
 
   @override
@@ -112,6 +120,7 @@ class BridgeMediaInfo {
           audioCodec == other.audioCodec &&
           channels == other.channels &&
           sampleRate == other.sampleRate &&
+          audioStreams == other.audioStreams &&
           isStill == other.isStill;
 }
 
@@ -218,6 +227,13 @@ class FootageReference {
     required this.internalid,
   });
 
+  /// Every audio stream this item's file carries, in the file's own order.
+  /// Empty for a file with no sound and for one that will not open.
+  List<BridgeAudioStream> audioStreams() =>
+      BridgeLib.instance.api.crateApiFootageFootageReferenceAudioStreams(
+        that: this,
+      );
+
   /// Detach this item's proxy. The file on disk is left alone — a proxy took
   /// minutes to make, and forgetting it in the project is not a reason to
   /// delete it.
@@ -286,14 +302,20 @@ class FootageReference {
   ///
   /// A build with no decoder can open nothing, so it says so and the button
   /// never appears.
-  bool previewAudio() =>
+  ///
+  /// **A file with several audio streams is heard as it would be placed.**
+  /// `arrival` is the setting *Several audio streams arrive as*: left out
+  /// or the first stream, the preview is the first stream; mixed or a layer
+  /// each, it is every stream together, which is what the layers it would
+  /// become sound like.
+  bool previewAudio({BridgeStreamsArrival? arrival}) =>
       BridgeLib.instance.api.crateApiFootageFootageReferencePreviewAudio(
-        that: this,
-      );
+          that: this, arrival: arrival);
 
-  bool previewAudioFrom({required double startSeconds}) =>
+  bool previewAudioFrom(
+          {required double startSeconds, BridgeStreamsArrival? arrival}) =>
       BridgeLib.instance.api.crateApiFootageFootageReferencePreviewAudioFrom(
-          that: this, startSeconds: startSeconds);
+          that: this, startSeconds: startSeconds, arrival: arrival);
 
   /// Where MAKE-PROXY would write this item's proxy: beside the original,
   /// with `_proxy` before a `.mov` extension.

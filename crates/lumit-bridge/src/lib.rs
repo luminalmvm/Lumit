@@ -99,6 +99,7 @@ mod proxy;
 mod realtime;
 mod render;
 mod scratch;
+mod streams;
 
 pub mod api;
 

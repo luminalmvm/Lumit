@@ -26,6 +26,8 @@ import 'package:lumit_flutter/src/rust/api/effect.dart' show BridgeRational;
 import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:lumit_flutter/src/rust/api/keymap.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/streams.dart'
+    show BridgeAudioStreams;
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart' show UuidValue;
 
@@ -50,6 +52,7 @@ import '../widgets/marquee.dart' show MarqueeBox;
 import '../widgets/smooth_zoom.dart';
 import '../widgets/time_readout.dart';
 import '../widgets/zoom_anchored_scroll.dart';
+import 'audio_streams_menu_frb.dart';
 import 'cut_timeline_lane.dart';
 import 'cut_timeline_tracks.dart';
 import 'graph_maths.dart' show rationalSeconds;
@@ -1875,6 +1878,12 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     final across = cutClipAcross(track, clip, endEdge: endEdge) != null;
     final dissolved = across && cutEdgeOverlaps(track, clip, endEdge: endEdge);
     final second = _secondFrames(ui);
+    // The audio streams of the clip's file, for the rows that choose among
+    // them. The item was probed when it was placed, so this opens nothing.
+    BridgeAudioStreams? streams;
+    try {
+      streams = track.entry.layer.clipAudioStreams(clip: clip.id);
+    } catch (_) {}
     MenuRow transition(void Function(void) close, String key, String label,
             {required bool endEdge, required int frames}) =>
         MenuRow(
@@ -1922,6 +1931,45 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
           },
           child: Text(l10n.cutOpenAsComposition),
         ),
+        // A file with several audio streams: which of them this clip plays,
+        // a linked clip to each on a track of its own, and back onto one.
+        // The list is for a clip that is heard. A picture clip on a silent
+        // track has its sound on the clip linked to it, and the two commands
+        // under the list follow the link there.
+        if (streams != null && streams.streams.length > 1) ...[
+          if (track.entry.info.switches.audible)
+            audioStreamsSubmenu(
+              key: const ValueKey('ctl-menu-audio-streams'),
+              closeParent: () => close(null),
+              streams: streams,
+              onChoose: (places) {
+                try {
+                  track.entry.layer
+                      .setClipAudioStreams(clip: clip.id, streams: places);
+                } catch (_) {}
+                if (!mounted) return;
+                Provider.of<LumitState>(context, listen: false)
+                    .notifyDocumentChanged();
+                _afterWrite();
+              },
+            ),
+          MenuRow(
+            key: const ValueKey('ctl-menu-split-streams'),
+            onPressed: () {
+              close(null);
+              _streams(comp, split: true);
+            },
+            child: Text(l10n.menuSplitAudioStreams),
+          ),
+          MenuRow(
+            key: const ValueKey('ctl-menu-merge-streams'),
+            onPressed: () {
+              close(null);
+              _streams(comp, split: false);
+            },
+            child: Text(l10n.menuMergeAudioStreams),
+          ),
+        ],
         MenuRow(
           key: const ValueKey('ctl-menu-delete'),
           onPressed: () {
@@ -1940,6 +1988,26 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
         ),
       ],
     );
+  }
+
+  /// Split or merge the audio streams of the selected clips. The engine
+  /// follows each clip's link, so asking it of a picture clip reaches the
+  /// clip that carries its sound.
+  void _streams(CompositionReference comp, {required bool split}) {
+    final clips = _selectedIds();
+    final result = _cut(() => split
+        ? comp.cutSplitAudioStreams(clips: clips)
+        : comp.cutMergeAudioStreams(clips: clips));
+    if (!mounted) return;
+    if (result == BridgeCutResult.nothing) {
+      // The Cut panel's own word for "nothing there" is about clips and
+      // gaps. This one is about streams.
+      Provider.of<LumitState>(context, listen: false).postNotice(split
+          ? l10n.audioStreamsNothingToSplit
+          : l10n.audioStreamsNothingToMerge);
+      return;
+    }
+    _afterCut(result);
   }
 
   /// Where [global] falls on the lanes' own scrolled content.
@@ -1986,6 +2054,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
             atFrame: frame,
             insert: false,
             linked: _linked,
+            arrival: ui.streamsArrival,
           ));
       _afterCut(result);
       if (result != BridgeCutResult.done) return;

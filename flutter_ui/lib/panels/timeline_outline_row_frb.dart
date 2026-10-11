@@ -12,6 +12,8 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
+import 'package:lumit_flutter/src/rust/api/streams.dart'
+    show BridgeAudioStreams;
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import '../icons/icons.dart';
@@ -25,6 +27,7 @@ import '../state/timeline_columns.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/layer_picker.dart';
+import 'audio_streams_menu_frb.dart';
 import 'timeline_extras_frb.dart';
 import 'sequence_view_frb.dart';
 import 'timeline_timings.dart';
@@ -1194,6 +1197,16 @@ class _OutlineRowState extends State<OutlineRow> {
     // order and existence are held still until it is unlocked.
     final locked = widget.entry.info.switches.locked;
     final lit = widget.entry.info.switches.acceptsLights;
+    // The audio streams of the layer's file, for the rows that choose among
+    // them. Asked here, on the press, and only of a row that sounds: the
+    // engine reads the probe made of the file when it was imported.
+    BridgeAudioStreams? streams;
+    if (widget.hasAudio && !locked) {
+      try {
+        streams = widget.entry.layer.audioStreams();
+      } catch (_) {}
+    }
+    final several = streams?.several ?? false;
     final picked = await showMenuAt<String>(
       context: context,
       position: position,
@@ -1251,6 +1264,31 @@ class _OutlineRowState extends State<OutlineRow> {
                 key: const ValueKey('tl-row-detach-audio'),
                 onPressed: () => close('detach-audio'),
                 child: Text(l10n.menuDetachAudio)),
+          // **A file with several audio streams**: which of them this row
+          // plays, each onto a row of its own, and back onto one. Only on a
+          // row whose file has more than one, where they mean something.
+          if (streams != null && streams.streams.length > 1)
+            audioStreamsSubmenu(
+              key: const ValueKey('tl-row-audio-streams'),
+              closeParent: () => close(null),
+              streams: streams,
+              onChoose: (places) {
+                try {
+                  widget.entry.layer.setAudioStreams(streams: places);
+                } catch (_) {}
+                widget.onChanged();
+              },
+            ),
+          if (several) ...[
+            MenuRow(
+                key: const ValueKey('tl-row-split-streams'),
+                onPressed: () => close('split-streams'),
+                child: Text(l10n.menuSplitAudioStreams)),
+            MenuRow(
+                key: const ValueKey('tl-row-merge-streams'),
+                onPressed: () => close('merge-streams'),
+                child: Text(l10n.menuMergeAudioStreams)),
+          ],
           // **Retime's own commands** (docs/04 §12.1), on the layers that have
           // a Retime to command. A Sequence layer's maps belong to its clips
           // and are commanded from the clips' own menu in the sequence
@@ -1404,6 +1442,24 @@ class _OutlineRowState extends State<OutlineRow> {
         if (refused && mounted) {
           Provider.of<LumitState>(this.context, listen: false)
               .postNotice(l10n.detachAudioNoSound);
+        }
+      case 'split-streams' || 'merge-streams':
+        // One line for the whole batch where nothing changed, as Detach
+        // audio says one.
+        final split = picked == 'split-streams';
+        var changed = false;
+        for (final target in targets) {
+          if (target.info.switches.locked) continue;
+          try {
+            changed |= split
+                ? target.layer.splitAudioStreams()
+                : target.layer.mergeAudioStreams();
+          } catch (_) {}
+        }
+        if (!changed && mounted) {
+          Provider.of<LumitState>(this.context, listen: false).postNotice(split
+              ? l10n.audioStreamsNothingToSplit
+              : l10n.audioStreamsNothingToMerge);
         }
       case 'retime':
         for (final target in targets) {
