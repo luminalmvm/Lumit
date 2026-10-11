@@ -218,7 +218,11 @@ fn gaussian_blur_carries_its_radius_and_its_keyframes() {
         "pixels are pixels: nothing to report"
     );
     assert!(ran.dropped("Blur Dimensions"));
-    assert!(ran.dropped("Repeat Edge Pixels"));
+    assert!(!ran.dropped("Repeat Edge Pixels"));
+    assert!(matches!(
+        ran.inst.param("repeat_edge_pixels"),
+        Some(EffectValue::Bool(true))
+    ));
 }
 
 // ---------------------------------------------------------------------------

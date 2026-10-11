@@ -1131,7 +1131,9 @@ fn the_report_counts_what_it_says_and_names_its_placeholder() {
             // camera and its point of interest cross over whole.
             // One more for the 3D card's Casts Shadows.
             // One fewer since the text layer's styling carries.
-            adjusted: 57,
+            // Two fewer since the Gaussian blur gained Repeat edge pixels:
+            // the fixture's two blurs carry theirs.
+            adjusted: 55,
             placeholders: 1,
             skipped: 1,
         }
