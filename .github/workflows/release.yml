@@ -338,8 +338,14 @@ jobs:
       # Gated on the secret, exactly as the macOS signing identity is: without
       # it the release still publishes, and an application with no pinned key
       # does not ask for a manifest. Setting the secret and pinning the key are
-      # the two halves of one change and should land together —
-      # docs/impl/release-signing.md has both commands.
+      # the two halves of one change and should land together. The key is
+      # Ed25519, made once on a machine that is not a runner:
+      #
+      #   openssl genpkey -algorithm ed25519 -out lumit-release-key.pem
+      #   openssl pkey -in lumit-release-key.pem -pubout -outform DER | tail -c 32 | base64 -w0
+      #
+      # The file's contents are the secret. The line the second command prints
+      # is what `updateSigningKey` pins.
       - name: Sign the release manifest
         env:
           RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
@@ -398,8 +404,8 @@ jobs:
           # comparison catches it before a release every updater refuses.
           # `updateSigningKey` is base64 of the raw 32-byte public key, which
           # is the last 32 bytes of the DER SubjectPublicKeyInfo. Skipped while
-          # the pin is empty, which is the tree as it stands (see
-          # docs/impl/release-signing.md for the two commands that set it).
+          # the pin is empty, which is the tree as it stands (the two commands
+          # that set it are in the comment above this step).
           pinned="$(sed -n "s/^const String updateSigningKey = '\(.*\)';\$/\1/p" \
             flutter_ui/lib/state/release_signature.dart)"
           derived="$(openssl pkey -in "$RUNNER_TEMP/release-key.pem" -pubout -outform DER \

@@ -53,7 +53,7 @@ builds both architectures and Homebrew only has FFmpeg for yours.
 Ubuntu 26.04 is the only release here whose own FFmpeg is 8, so there it's the FFmpeg
 dev packages, `pkg-config`, `libclang-18-dev` and the desktop libraries. Debian 13 and
 older Ubuntu are on 7 and Arch is on 9, so they unpack the BtbN 8.1 tarball instead. The
-commands for both are in the README's Linux section, and are what `ci.yml` runs. Set
+commands for both are in the README's Linux section. Set
 `LIBCLANG_PATH` to LLVM 18's `lib` either way (on Arch, install `clang18 llvm18`).
 
 ### Commands

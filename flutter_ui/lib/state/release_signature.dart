@@ -29,7 +29,8 @@
 // nothing — the updater falls back to the digest check, which is where it was
 // before. The moment a key is pinned, a signed manifest becomes compulsory and
 // an update that has none is refused. That is the whole of the switch, and the
-// steps to throw it are in `docs/impl/release-signing.md`.
+// steps to throw it are in the comment above the signing step of
+// `.github/workflows/release.yml`.
 //
 // **Nothing here reads the network or the disk.** It is given bytes and answers
 // yes or no, which is what lets the updater's tests drive the whole sequence.
@@ -41,8 +42,9 @@ import 'package:cryptography/cryptography.dart';
 
 /// The public half of the release signing key, base64, raw 32 bytes.
 ///
-/// Empty until somebody generates the pair and pins it here. See
-/// `docs/impl/release-signing.md` §"Signing a release" for how, in two commands.
+/// Empty until somebody generates the pair and pins it here. The two
+/// commands are in the comment above the signing step of
+/// `.github/workflows/release.yml`.
 ///
 /// This is a **public** key: it is meant to be read, copied and published. The
 /// private half never goes near this repository or the release runner's
