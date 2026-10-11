@@ -11,6 +11,13 @@ import 'dart:io';
 Directory lumitCacheDir({String? platform, Map<String, String>? env}) {
   final os = platform ?? Platform.operatingSystem;
   final vars = env ?? Platform.environment;
+  // `LUMIT_USER_DIRS` moves every folder of Lumit's under one, as it does in
+  // the engine, so a test run's fault log lands with the rest of what it
+  // wrote and not in the real cache.
+  final moved = vars['LUMIT_USER_DIRS'];
+  if (moved != null && moved.isNotEmpty) {
+    return Directory(os == 'windows' ? '$moved\\cache' : moved);
+  }
   String? base;
   switch (os) {
     case 'windows':

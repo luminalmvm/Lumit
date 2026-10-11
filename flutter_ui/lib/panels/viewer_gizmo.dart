@@ -1157,8 +1157,11 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   /// pointer's own, kept to the axis it has gone furthest along while Shift is
   /// held, then pulled onto the nearest line within the magnet's reach.
   ({Offset delta, double? x, double? y}) get _move {
-    // Shift is the same lock it is on the anchor: one screen axis.
-    final locked = HardwareKeyboard.instance.isShiftPressed;
+    // Shift is the same lock it is on the anchor: one screen axis. As it
+    // stood when the pointer last moved, which is the move that was drawn:
+    // read as the button comes up, letting go of Shift a moment before the
+    // mouse dropped the layer off the axis it had been shown on.
+    final locked = _axisLocked;
     final delta = _drag == _GizmoDrag.move && locked
         ? constrainToAxis(_delta)
         : _delta;
@@ -1541,10 +1544,14 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     });
   }
 
+  /// Whether Shift was held at the pointer's last move ([_move]).
+  bool _axisLocked = false;
+
   void _onPanUpdate(DragUpdateDetails details) {
     setState(() {
       _pointer = details.localPosition;
       _delta += details.delta;
+      _axisLocked = HardwareKeyboard.instance.isShiftPressed;
     });
     switch (_drag) {
       case _GizmoDrag.move:

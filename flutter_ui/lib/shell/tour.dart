@@ -10,6 +10,7 @@
 // of pointing at nothing.
 
 import 'dart:math' as math;
+import 'dart:ui' show AppExitResponse;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
@@ -369,11 +370,24 @@ class _TourState extends State<_Tour> with SingleTickerProviderStateMixin {
       _end();
       return true;
     });
+    // Closing the window with a step's scene up: the window goes back as it
+    // was found first. A scene rearranges the panels, and an arrangement is
+    // saved as it is made, so it would otherwise be the one Lumit opens in
+    // from then on.
+    _quitting = AppLifecycleListener(onExitRequested: () async {
+      _takeDown();
+      _scene?.leave();
+      _scene = null;
+      return AppExitResponse.exit;
+    });
     WidgetsBinding.instance.addPostFrameCallback(_follow);
   }
 
+  AppLifecycleListener? _quitting;
+
   @override
   void dispose() {
+    _quitting?.dispose();
     markModalUnmounted();
     _escapeRelease?.call();
     _move.dispose();

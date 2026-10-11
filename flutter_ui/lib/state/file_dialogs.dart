@@ -281,7 +281,13 @@ Future<String?> pickExpressionsSaveLocation() async {
     acceptedTypeGroups: [_expressionsGroup()],
     suggestedName: 'expressions.lumexpressions',
   );
-  return location?.path;
+  final path = location?.path;
+  if (path == null) return null;
+  // The Windows dialogue hands back a typed name as it is, and Import only
+  // lists files that end this way.
+  return path.toLowerCase().endsWith('.lumexpressions')
+      ? path
+      : '$path.lumexpressions';
 }
 
 /// The After Effects import's own type group: the project file itself,

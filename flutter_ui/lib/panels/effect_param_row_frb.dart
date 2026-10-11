@@ -765,7 +765,10 @@ class EffectParamRowFrb extends StatelessWidget {
                     key: ValueKey<String>('fx-choice-$id-${param.id}'),
                     value: index,
                     options: [for (var i = 0; i < options.length; i++) i],
-                    label: (i) => engineLabel(options[i]),
+                    // A plugin can leave a list it relists empty, and the
+                    // value still asks for its label.
+                    label: (i) =>
+                        i < options.length ? engineLabel(options[i]) : '',
                     onChanged: (i) => _set(BridgeEffectValue.choice(i)),
                   ),
           );
@@ -2231,6 +2234,9 @@ class EffectSchemaMemo {
       _effects = null;
       _parameters.clear();
       _groups.clear();
+      // And the point pairs, which were read as none for a plugin the scan
+      // had not reached and would stay none until Lumit was started again.
+      _pairSchema.clear();
     }
   }
 

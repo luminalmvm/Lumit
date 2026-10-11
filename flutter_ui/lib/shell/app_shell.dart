@@ -45,6 +45,7 @@ import 'package:lumit_flutter/state/share.dart';
 import 'package:lumit_flutter/state/ui_state.dart';
 import 'package:lumit_flutter/state/viewer_views.dart';
 import 'package:lumit_flutter/theme/motion.dart';
+import 'package:lumit_flutter/theme/theme.dart' show AnimationLevel;
 import 'package:lumit_flutter/widgets/escape_ladder.dart';
 import 'package:lumit_flutter/widgets/controls.dart';
 import 'package:lumit_flutter/widgets/ui_scale.dart';
@@ -93,7 +94,10 @@ class LumitAppNew extends StatelessWidget {
             listenable: uiState,
             builder: (context, _) => ThemeScope(
               theme: uiState.theme,
-              animationLevel: uiState.workspace.animationLevel,
+              // The system's own "no animations" setting outranks Lumit's.
+              animationLevel: MediaQuery.disableAnimationsOf(context)
+                  ? AnimationLevel.none
+                  : uiState.workspace.animationLevel,
               showTooltips: uiState.workspace.interface.showTooltips,
               child: Directionality(
                 textDirection: TextDirection.ltr,
