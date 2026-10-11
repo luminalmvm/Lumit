@@ -26,6 +26,7 @@ import '../shell/stretch_dialog_frb.dart';
 import '../state/timeline_columns.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import '../widgets/layer_picker.dart';
 import 'audio_streams_menu_frb.dart';
 import 'timeline_extras_frb.dart';
 import 'sequence_view_frb.dart';
@@ -93,6 +94,14 @@ class OutlineRow extends StatefulWidget {
   /// read model, so offering them costs nothing.
   final List<BridgeLayerEntry> layers;
 
+  /// Every layer in the comp, hidden rows included, which is what the parent
+  /// and matte pickers list and number from.
+  final List<BridgeLayerEntry> stack;
+
+  /// The layer's number: its place in the whole comp, counted from 1. It
+  /// isn't [index], which is only the row's slot among the rows on screen.
+  final int number;
+
   /// The column groups in their current order, and their current widths
   /// (docs/07 §4.2).
   final List<TimelineGroup> groupOrder;
@@ -146,6 +155,8 @@ class OutlineRow extends StatefulWidget {
     required this.entry,
     this.onOpenSequence,
     required this.layers,
+    required this.stack,
+    required this.number,
     required this.groupOrder,
     required this.widths,
     required this.matteToggles,
@@ -624,8 +635,8 @@ class _OutlineRowState extends State<OutlineRow> {
         // is how the mockup's rows read and how they are indexed aloud.
         SizedBox(
           width: numberCellWidth,
-          child: Text('${index + 1}',
-              style: t.mono.copyWith(fontSize: 10, color: t.textMuted)),
+          child: Text('${widget.number}',
+              style: layerNumberStyle(t, 10)),
         ),
         const SizedBox(width: identityGap),
         LumitTooltip(
@@ -804,11 +815,15 @@ class _OutlineRowState extends State<OutlineRow> {
     return Row(
       children: [
         LumitTooltip(
-          message: l10n.tipMatte,
+          message: switch (layerNumber(widget.stack, info.matte?.layer)) {
+            final at? => l10n.tipMatteLayer(
+                numberedLayer(at, widget.stack[at - 1].info.name)),
+            null => l10n.tipMatte,
+          },
           child: MattePickerFrb(
             layer: layer,
             info: info,
-            all: widget.layers,
+            all: widget.stack,
             width: matteWidth,
             toggleRoom: widget.matteToggles,
             resting: _resting,
@@ -827,11 +842,15 @@ class _OutlineRowState extends State<OutlineRow> {
   /// Group 5: the parent picker, alone in a cluster of its own so the bottom
   /// bar's Parent toggle hides it and nothing else.
   Widget _parentCell(BridgeLayerInfo info, double width) => LumitTooltip(
-        message: l10n.tipParent,
+        message: switch (layerNumber(widget.stack, info.parent)) {
+          final at? => l10n.tipParentLayer(
+              numberedLayer(at, widget.stack[at - 1].info.name)),
+          null => l10n.tipParent,
+        },
         child: ParentPickerFrb(
           layer: layer,
           info: info,
-          all: widget.layers,
+          all: widget.stack,
           width: width,
           resting: _resting,
           onChanged: widget.onChanged,

@@ -8206,6 +8206,15 @@
   "@tipMatte": {
     "description": "Tooltip on the matte cell. One or two words."
   },
+  "tipMatteLayer": "Matte: {layer}",
+  "@tipMatteLayer": {
+    "description": "Tooltip on the matte cell once a matte is set, so a name the cell cuts short can be read in full. {layer} is the matte layer's number and name, such as '39. Wipe to ink'.",
+    "placeholders": {
+      "layer": {
+        "type": "String"
+      }
+    }
+  },
   "tipMeasureRenderTimes": "Measure times",
   "@tipMeasureRenderTimes": {
     "description": "Tooltip on the hourglass in the bottom strip, when measuring is off. One or two words."
@@ -8268,6 +8277,15 @@
   "tipParent": "Parent",
   "@tipParent": {
     "description": "Tooltip on the parent cell. One or two words."
+  },
+  "tipParentLayer": "Parent: {layer}",
+  "@tipParentLayer": {
+    "description": "Tooltip on the parent cell once a parent is set, so a name the cell cuts short can be read in full. {layer} is the parent layer's number and name, such as '51. Hero title'.",
+    "placeholders": {
+      "layer": {
+        "type": "String"
+      }
+    }
   },
   "tipPickFocalPoint": "Focal point",
   "@tipPickFocalPoint": {

@@ -47,6 +47,7 @@ import '../widgets/angle_dial.dart';
 import '../widgets/colour_picker.dart';
 import '../widgets/controls.dart';
 import '../widgets/curve_editor.dart';
+import '../widgets/layer_picker.dart';
 import 'fx_section.dart';
 import 'graph_editor_frb.dart';
 import 'graph_panel.dart' show portColour;
@@ -1458,55 +1459,37 @@ class EffectParamRowFrb extends StatelessWidget {
   /// without either crossing the bridge on a rebuild or probing a
   /// container with FFmpeg while drawing a row.
   Widget _layerPicker(BuildContext context, UuidValue id, UuidValue? current) {
-    final chosen = current?.toString();
     final sound = param.id == 'audio';
-    final empty = l10n.none;
-    // The layer the effect is on says so, so "everything below" is readable
-    // on an adjustment layer rather than an unexplained self-reference.
-    String named(String name, UuidValue layerId) =>
-        layerId == ownerLayerId ? l10n.thisLayerSuffix(name) : name;
     return SizedBox(
       // With riders beside it the picker is only as wide as its name, so a
       // short one leaves its room to them. Alone it keeps the column's width.
       width: riders.isEmpty ? effectCellWidth + 40 : null,
-      child: BareLazyDropdown<UuidValue?>(
+      child: LayerPicker(
         key: ValueKey<String>('fx-layer-$id-${param.id}'),
-        // Named from the read model when it can be, so the closed button
-        // costs nothing; a reference to a layer since deleted says so.
-        label: chosen == null
-            ? empty
-            : (ownerLayers
-                    .where((l) => l.layer.internallayerId == current)
-                    .map((l) => named(l.info.name, l.layer.internallayerId))
-                    .firstOrNull ??
-                l10n.missingLayer),
-        options: () => [
-          (null, empty),
-          // **Numbered as the composition numbers them** (item 6.13): the
-          // entry reads "3. Sky", the layer's own place in the stack, so a
-          // list of layers that share a name is still a list of different
-          // layers. The number is the position, not part of the name — so it
-          // counts every layer, including the ones this picker does not
-          // offer, and it is data rather than a phrase (no arb entry).
-          for (var i = 0; i < ownerLayers.length; i++)
-            // A layer-valued parameter samples a *picture*, so a layer with
-            // none (a camera, an audio-only clip) is not offered.
-            //
-            // The layer the effect is ON is always offered, picture or not:
-            // picking it does not re-render that layer, it reads
-            // the effect's own input at its point in the stack. That is the
-            // whole point on an **adjustment layer** — which has no picture
-            // of its own, and whose input is the composite of everything
-            // below it. A Lens flare added to one starts here.
-            if (sound ||
-                ownerLayers[i].layer.internallayerId == ownerLayerId ||
-                ownerLayers[i].layer.hasPicture())
-              (
-                ownerLayers[i].layer.internallayerId,
-                '${i + 1}. '
-                    '${named(ownerLayers[i].info.name, ownerLayers[i].layer.internallayerId)}'
-              ),
-        ],
+        layers: ownerLayers,
+        value: current,
+        empty: l10n.none,
+        // A reference to a layer since deleted says so.
+        missing: l10n.missingLayer,
+        // The layer the effect is on says so, so "everything below" is
+        // readable on an adjustment layer rather than an unexplained
+        // self-reference.
+        name: (l) => l.layer.internallayerId == ownerLayerId
+            ? l10n.thisLayerSuffix(l.info.name)
+            : l.info.name,
+        // A layer-valued parameter samples a *picture*, so a layer with
+        // none (a camera, an audio-only clip) is not offered.
+        //
+        // The layer the effect is ON is always offered, picture or not:
+        // picking it does not re-render that layer, it reads
+        // the effect's own input at its point in the stack. That is the
+        // whole point on an **adjustment layer** — which has no picture
+        // of its own, and whose input is the composite of everything
+        // below it. A Lens flare added to one starts here.
+        offered: (l) =>
+            sound ||
+            l.layer.internallayerId == ownerLayerId ||
+            l.layer.hasPicture(),
         onChanged: (picked) => _set(BridgeEffectValue.layer(picked)),
       ),
     );
