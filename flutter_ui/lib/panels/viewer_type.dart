@@ -167,7 +167,17 @@ TextSelection wordAround(String text, int at) {
   // when the click was past the end of the line.
   final i = at.clamp(0, text.length - 1);
   final kind = classOf(i);
-  if (kind == 2) return TextSelection(baseOffset: i, extentOffset: i + 1);
+  if (kind == 2) {
+    // A character outside the basic plane, an emoji for one, is two code
+    // units here. Half of one is no character at all, and typing over it
+    // leaves the other half behind.
+    bool high(int at) => (text.codeUnitAt(at) & 0xFC00) == 0xD800;
+    bool low(int at) => (text.codeUnitAt(at) & 0xFC00) == 0xDC00;
+    var (from, to) = (i, i + 1);
+    if (low(i) && i > 0 && high(i - 1)) from--;
+    if (high(i) && to < text.length && low(to)) to++;
+    return TextSelection(baseOffset: from, extentOffset: to);
+  }
   var start = i;
   var end = i + 1;
   while (start > 0 && classOf(start - 1) == kind) {
@@ -345,11 +355,12 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
   /// first is what makes the next `Ctrl+Z` undo the thing the user means — the
   /// line they just typed, and after that the layer itself.
   ///
-  /// **Shift+Enter** starts a new line, and the keys that move by line are
-  /// answered here from the engine's layout.
+  /// **Shift+Enter** starts a new line. The keys that move by line are
+  /// answered from the engine's layout in [_onLineKey], on the way to the
+  /// field and not here: a handler here cannot keep a key from the field, and
+  /// the field would move its own caret after the engine's had been placed.
   bool _onKey(KeyEvent event) {
     if (!_editingNow || event is KeyUpEvent) return false;
-    if (_moveByLine(event)) return true;
     if (event is! KeyDownEvent) return false;
     final keys = HardwareKeyboard.instance;
     final enter = event.logicalKey == LogicalKeyboardKey.enter ||
@@ -413,6 +424,13 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
         ? selection.extendTo(TextPosition(offset: offset))
         : TextSelection.collapsed(offset: offset);
     return true;
+  }
+
+  /// Up, Down, Home and End, taken before the hidden field sees them. The
+  /// field is one pixel wide, so its own idea of a line is one character.
+  KeyEventResult _onLineKey(FocusNode node, KeyEvent event) {
+    if (!_editingNow || event is KeyUpEvent) return KeyEventResult.ignored;
+    return _moveByLine(event) ? KeyEventResult.handled : KeyEventResult.ignored;
   }
 
   @override
@@ -532,7 +550,11 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
     final vertical = widget.tool == ToolMode.typeVertical;
     final t = ThemeScope.of(context).theme;
     final box = _editingNow ? _editingBox : null;
-    final block = _block;
+    // The layer's document, read across the bridge once for this build.
+    final document = _document;
+    final block = document == null
+        ? null
+        : measuredText(document, text: _controller.text);
     final text = _controller.text;
     final selection = _controller.selection;
     final valid = selection.isValid;
@@ -551,7 +573,11 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
       child: TextFieldTapRegion(
         child: DrawnPointerRegion(
           cursor: vertical ? SystemMouseCursors.none : SystemMouseCursors.text,
-          onPointer: (at) => setState(() => _pointer = at),
+          // Only the drawn beam of vertical type follows the pointer, so
+          // only that asks for a rebuild as it moves.
+          onPointer: (at) => vertical
+              ? setState(() => _pointer = at)
+              : _pointer = at,
           child: RawGestureDetector(
             behavior: HitTestBehavior.opaque,
             gestures: {
@@ -613,26 +639,31 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
                     // window opens beside the words.
                     child: Opacity(
                       opacity: 0,
-                      child: EditableText(
-                        controller: _controller,
-                        focusNode: _focus,
-                        style: TextStyle(
-                            fontSize: (_document?.size ?? 72) * viewScale),
-                        cursorColor: widget.accent,
-                        backgroundCursorColor: widget.accent,
-                        // Several lines, so a pasted break is kept. Enter
-                        // still ends the edit, and Shift+Enter is what breaks
-                        // a line ([_onKey]).
-                        maxLines: null,
-                        textInputAction: TextInputAction.done,
-                        // A desktop field selects all its text when it takes
-                        // focus, which would throw away the caret a click
-                        // just placed.
-                        selectAllOnFocus: false,
-                        onSubmitted: (_) => _finish(),
-                        // A press outside the picture ends the edit; a press
-                        // on it never reaches here (the tap region above).
-                        onTapOutside: (_) => _finish(),
+                      child: Focus(
+                        canRequestFocus: false,
+                        skipTraversal: true,
+                        onKeyEvent: _onLineKey,
+                        child: EditableText(
+                          controller: _controller,
+                          focusNode: _focus,
+                          style: TextStyle(
+                              fontSize: (document?.size ?? 72) * viewScale),
+                          cursorColor: widget.accent,
+                          backgroundCursorColor: widget.accent,
+                          // Several lines, so a pasted break is kept. Enter
+                          // still ends the edit, and Shift+Enter is what breaks
+                          // a line ([_onKey]).
+                          maxLines: null,
+                          textInputAction: TextInputAction.done,
+                          // A desktop field selects all its text when it takes
+                          // focus, which would throw away the caret a click
+                          // just placed.
+                          selectAllOnFocus: false,
+                          onSubmitted: (_) => _finish(),
+                          // A press outside the picture ends the edit; a press
+                          // on it never reaches here (the tap region above).
+                          onTapOutside: (_) => _finish(),
+                        ),
                       ),
                     ),
                   ),
