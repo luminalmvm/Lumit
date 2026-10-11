@@ -321,10 +321,12 @@ class _ProWindowState extends State<_ProWindow>
         const SizedBox(height: 10),
         note(error, warning: true),
       ],
-      const SizedBox(height: 12),
-      Text(preview ? l10n.proPreviewNote : l10n.proSmallPrint,
-          textAlign: TextAlign.center,
-          style: t.caption.copyWith(color: t.textMuted, height: 1.4)),
+      if (preview) ...[
+        const SizedBox(height: 12),
+        Text(l10n.proPreviewNote,
+            textAlign: TextAlign.center,
+            style: t.caption.copyWith(color: t.textMuted, height: 1.4)),
+      ],
     ];
   }
 

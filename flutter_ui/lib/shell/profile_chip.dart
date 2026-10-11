@@ -283,7 +283,6 @@ class _ProfileCard extends StatelessWidget {
                   onPressed: () => _leave((context) async {
                     final name = await askProfileName(context,
                         title: l10n.profileAddTitle,
-                        hint: l10n.profileAddHint,
                         confirm: l10n.profileAddConfirm);
                     if (name == null) return;
                     await profiles.switchTo(profiles.add(name));
@@ -577,7 +576,6 @@ Future<String?> askProfileName(
   BuildContext context, {
   required String title,
   String suggested = '',
-  String? hint,
   required String confirm,
 }) async {
   final controller = TextEditingController(text: suggested);
@@ -603,10 +601,6 @@ Future<String?> askProfileName(
                 hint: l10n.signInName,
                 onSubmitted: close,
               ),
-              if (hint != null) ...[
-                const SizedBox(height: 6),
-                Text(hint, style: t.small.copyWith(color: t.textMuted)),
-              ],
               const SizedBox(height: 12),
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
