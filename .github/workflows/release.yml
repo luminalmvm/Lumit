@@ -28,16 +28,14 @@ on:
   # on. The version cannot come from a branch name, so it is typed in. By
   # default it is a rehearsal that leaves the installers as run artefacts and
   # creates no release; with `publish` ticked it creates the GitHub release
-  # and its tag at the built commit, exactly as a tag push does, but the
-  # Discord announcement below stays for a tag push alone, so a release can
-  # go out and be announced by hand.
+  # and its tag at the built commit, exactly as a tag push does.
   workflow_dispatch:
     inputs:
       version:
         description: "Version to build, with or without the leading v"
         required: true
       publish:
-        description: "Create the GitHub release and its tag (no Discord announcement)"
+        description: "Create the GitHub release and its tag"
         type: boolean
         default: false
 
@@ -441,25 +439,3 @@ jobs:
             --target "$GITHUB_SHA" \
             --title "Lumit $tag" \
             --generate-notes $prerelease $before
-
-  announce:
-    name: Discord announcement
-    needs: publish
-    # Only a plain vX.Y.Z tag is announced. A suffixed one (v0.2.0-rc1) is a
-    # pre-release, and a dry run of the pipeline should not tell the community
-    # a release has happened.
-    if: ${{ github.ref_type == 'tag' && !contains(github.ref_name, '-') }}
-    runs-on: ubuntu-latest
-    env:
-      # A step's `if` cannot read the `secrets` context, only `env`. Without the
-      # secret — on a fork, or before it is set — the release still succeeds and
-      # simply goes unannounced.
-      DISCORD_RELEASE_WEBHOOK: ${{ secrets.DISCORD_RELEASE_WEBHOOK }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Post the release notes to Discord
-        if: env.DISCORD_RELEASE_WEBHOOK != ''
-        run: node scripts/discord-release.mjs "${GITHUB_REF_NAME#v}"
-      - name: Say why nothing was posted
-        if: env.DISCORD_RELEASE_WEBHOOK == ''
-        run: echo "::warning::DISCORD_RELEASE_WEBHOOK is not set, so this release was not announced in Discord."
