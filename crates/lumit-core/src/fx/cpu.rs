@@ -6387,6 +6387,19 @@ pub struct DropShadowParams {
     pub inner: bool,
 }
 
+impl DropShadowParams {
+    /// How far the shadow falls outside the picture, raster pixels across and
+    /// down: its offset and the Softness round it. Nothing for an inner
+    /// style, which never leaves the shape.
+    #[must_use]
+    pub fn spread(&self) -> [f32; 2] {
+        if self.inner || self.opacity <= 0.0 || self.mix <= 0.0 {
+            return [0.0, 0.0];
+        }
+        self.offset.map(|o| o.abs() + self.softness_px)
+    }
+}
+
 /// The [`DropShadowParams::spread_scale`] a Spread per cent asks for.
 ///
 /// One expression, host-side, so the CPU reference and the WGSL kernel cannot

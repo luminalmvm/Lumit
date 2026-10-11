@@ -135,4 +135,8 @@ impl EffectDef for DropShadowDef {
     fn apply_cpu(&self, rgba: &mut [f32], w: u32, h: u32, p: Params<'_>) {
         cpu::drop_shadow(rgba, w, h, &DropShadow::read(p).packed());
     }
+
+    fn spread_px(&self, p: Params<'_>) -> [f32; 2] {
+        DropShadow::read(p).packed().spread()
+    }
 }

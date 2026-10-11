@@ -128,14 +128,11 @@ fn style(name: &str, edits: &[(&str, f64)]) -> EffectInstance {
 /// square, dressed with `styles`.
 ///
 /// The wrapping comp is not decoration. A style runs on the layer's own raster,
-/// and a solid's raster is the solid — a 24 × 24 texture with no empty ground
-/// anywhere on it, so a shadow thrown ten pixels down-right would land entirely
-/// off the edge and the test would be measuring the raster's bounds rather than
-/// the style. (Nothing pads a `FullFrame` effect's raster today; the Drop shadow
-/// *effect* has always behaved the same way, and the note names the shared
-/// padding path as the place that changes when one arrives.) Wrapping the square
-/// in a full-size comp gives the layer a 64 × 64 raster with real geometry on
-/// it, which is how a layer like this is authored anyway.
+/// and a solid's raster is the solid, a 24 × 24 texture with no empty ground on
+/// it. An outer style is given room round a raster like that to fall into.
+/// Wrapping the square in a full-size comp gives the layer a 64 × 64 raster with
+/// real geometry on it, so these tests read the style itself and not the room,
+/// and it is how a layer like this is authored anyway.
 fn project(styles: Vec<EffectInstance>) -> (Arc<Document>, Uuid) {
     let def = Uuid::now_v7();
     let mut doc = Document::new();
@@ -394,6 +391,9 @@ fn cpu_and_gpu_agree_on_every_shipped_style() {
             None,
             None,
         );
+        // An outer style is given room round the picture to fall into, which
+        // the reference's one buffer cannot hold, so it is cut back off first.
+        let out = lumit_gpu::fx::fit_centred(&ctx, out, w, h);
         let gpu = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
         let mut cpu = source.clone();
         lumit_core::fx::cpu::apply_stack(&mut cpu, w, h, &ops);
