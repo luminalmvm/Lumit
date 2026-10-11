@@ -5,6 +5,7 @@
 import 'dart:async';
 import 'dart:io' show Directory, File, exit;
 
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
@@ -80,6 +81,40 @@ String? inviteFromArgs(List<String> args) {
     }
   }
   return null;
+}
+
+/// The macOS runner's end of this is `OpenRequests` in AppDelegate.swift.
+const _openRequests = MethodChannel('lumit/open');
+
+/// What macOS has asked Lumit to open and nobody has taken yet: a project
+/// double-clicked in Finder as its path, an invite link clicked in a browser
+/// as it was written. macOS hands these over as events and never as
+/// arguments, so they are read as arguments once they are here, by
+/// [projectPathFromArgs] and [inviteFromArgs]. Empty on every other system.
+Future<List<String>> takeOpenRequests() async {
+  if (defaultTargetPlatform != TargetPlatform.macOS) return const [];
+  try {
+    return await _openRequests.invokeListMethod<String>('take') ?? const [];
+  } catch (_) {
+    // No runner to ask, as in a widget test.
+    return const [];
+  }
+}
+
+/// Hand [open] whatever macOS asks Lumit to open from here on. A click that
+/// finds Lumit running comes to it there, where another system would start a
+/// second one.
+void listenForOpenRequests(void Function(List<String> asked) open) {
+  if (defaultTargetPlatform != TargetPlatform.macOS) return;
+  Future<void> take() async {
+    final asked = await takeOpenRequests();
+    if (asked.isNotEmpty) open(asked);
+  }
+
+  // The runner says only that there is something, and it is taken.
+  _openRequests.setMethodCallHandler((_) => take());
+  // Once now as well, for a request that came after start-up took its own.
+  take();
 }
 
 class LumitState extends ChangeNotifier {
