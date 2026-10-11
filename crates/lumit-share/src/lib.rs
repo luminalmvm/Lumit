@@ -5,11 +5,11 @@
 //! sends the edits it makes. Footage never travels: each machine finds its own
 //! copy by fingerprint.
 //!
-//! Nothing here is run by Lumit's makers. The host listens on its own machine
-//! and the guests reach it directly: on its network, through its router, or
-//! over a VPN. Where none of those lets a guest in, both can meet at a relay
-//! one of them has the address of, which passes on what they say without
-//! being able to read it.
+//! The host listens on its own machine and the guests reach it directly: on
+//! its network, through its router, or over a VPN. Where none of those lets a
+//! guest in, both can meet at a relay, which passes on what they say without
+//! being able to read it. That is one somebody runs and gives the address
+//! of, or Lumit's own ([`CLOUD_RELAY`]), the one thing here its makers run.
 //!
 //! Threads: sharing runs its own and none is the UI thread. The host has one
 //! that accepts, a reader and a writer per guest, one that keeps its
@@ -36,6 +36,7 @@ pub use lumit_core::shared::Conflict;
 use lumit_core::CompTime;
 use serde::{Deserialize, Serialize};
 use std::net::{IpAddr, UdpSocket};
+use std::sync::atomic::{AtomicU16, Ordering};
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -45,6 +46,33 @@ pub const DEFAULT_PORT: u16 = 47856;
 
 /// The port a relay listens on unless its owner picked another.
 pub const RELAY_PORT: u16 = lumit_relay::DEFAULT_PORT;
+
+/// Lumit's own relay, as an invite names it. Nothing dials it as it is
+/// written: it is reached through a door the interface keeps on this
+/// machine, which says the same lines to it over a connection any network
+/// lets out.
+pub const CLOUD_RELAY: &str = "cloud.lumitlab.com:443";
+
+/// The port that door listens on, on this machine. 0 while there is none.
+static CLOUD_DOOR: AtomicU16 = AtomicU16::new(0);
+
+/// Say which port the door to [`CLOUD_RELAY`] is on, or that it has shut.
+pub fn set_cloud_door(port: Option<u16>) {
+    CLOUD_DOOR.store(port.unwrap_or(0), Ordering::Relaxed);
+}
+
+/// Where `relay` is dialled: as it is written, or at the door when it is
+/// Lumit's own. `None` for Lumit's own while no door is open, which leaves
+/// it untried.
+pub(crate) fn dialled(relay: &str) -> Option<String> {
+    if relay != CLOUD_RELAY {
+        return Some(relay.to_owned());
+    }
+    match CLOUD_DOOR.load(Ordering::Relaxed) {
+        0 => None,
+        port => Some(format!("127.0.0.1:{port}")),
+    }
+}
 
 /// The most people in one shared project, the host included.
 pub const MAX_PEOPLE: usize = 16;

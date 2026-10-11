@@ -1,0 +1,41 @@
+---
+import Base from "../layouts/Base.astro";
+---
+
+{/*
+  Where a browser is left after signing in to Lumit with Discord or Google.
+  The sign-in itself has already gone back to Lumit by the time this page is
+  shown, so there is nothing here but the news.
+*/}
+<Base title="Signed in - Lumit" description="You are signed in to Lumit.">
+  <section class="pt-14 pb-24 sm:pt-20 sm:pb-32">
+    <div class="wrap">
+      <div class="sec-rule"><p class="kicker pl-3">Lumit account</p></div>
+
+      <div id="in-ok">
+        <h1 class="sec-title mt-7">You are signed in.</h1>
+        <p class="lede mt-4">You can close this tab and go back to Lumit.</p>
+      </div>
+
+      <div id="in-failed" hidden>
+        <h1 class="sec-title mt-7">That sign-in didn't go through.</h1>
+        <p class="lede mt-4" id="in-why">
+          Go back to Lumit and try again. Nothing has been changed.
+        </p>
+      </div>
+    </div>
+  </section>
+</Base>
+
+<script is:inline>
+  (() => {
+    const error = new URLSearchParams(location.search).get("error");
+    if (!error) return;
+    document.getElementById("in-ok").hidden = true;
+    document.getElementById("in-failed").hidden = false;
+    if (error === "unverified_email") {
+      document.getElementById("in-why").textContent =
+        "That account's email hasn't been confirmed with them, so it can't be used to sign in. Confirm it there, then try again in Lumit.";
+    }
+  })();
+</script>

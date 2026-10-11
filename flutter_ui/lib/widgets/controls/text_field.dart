@@ -102,6 +102,10 @@ class HouseTextField extends StatefulWidget {
 
   final bool topAlign;
 
+  /// Draw dots in place of what is typed, for a password. The text itself is
+  /// untouched, and is kept out of the system's autofill and suggestions.
+  final bool obscure;
+
   const HouseTextField({
     super.key,
     required this.controller,
@@ -124,6 +128,7 @@ class HouseTextField extends StatefulWidget {
     this.leading,
     this.leadingInteractive = false,
     this.textAlign = TextAlign.start,
+    this.obscure = false,
   });
 
   @override
@@ -384,6 +389,9 @@ class _HouseTextFieldState extends State<HouseTextField>
                     // what makes Enter a newline instead of a submission.
                     maxLines: widget.multiline ? null : 1,
                     expands: widget.multiline,
+                    obscureText: widget.obscure,
+                    enableSuggestions: !widget.obscure,
+                    autocorrect: !widget.obscure,
                     keyboardType: widget.multiline
                         ? TextInputType.multiline
                         : TextInputType.text,

@@ -83,6 +83,7 @@ import 'export_dialog_frb.dart'
         exportTokenDate;
 import 'keymap_keyboard.dart';
 import 'menu_bar_frb.dart';
+import 'settings_account.dart';
 import 'settings_rows.dart';
 import 'theme_editor_frb.dart';
 import 'theme_name_dialog.dart';
@@ -153,6 +154,7 @@ const double _gutterEnds = 8;
 /// One page in the sidebar.
 enum SettingsPage {
   general,
+  account,
   appearance,
   timeline,
   viewer,
@@ -168,6 +170,7 @@ enum SettingsPage {
   /// change after that.
   String get label => switch (this) {
         SettingsPage.general => l10n.settingsPageGeneral,
+        SettingsPage.account => l10n.settingsAccount,
         SettingsPage.appearance => l10n.settingsPageAppearance,
         SettingsPage.timeline => l10n.panelTimeline,
         SettingsPage.viewer => l10n.panelViewer,
@@ -687,6 +690,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   List<Widget> _sectionsOf(SettingsPage page, LumitTheme t, LumitUiState ui) =>
       switch (page) {
         SettingsPage.general => _general(t, ui),
+        SettingsPage.account => _accountPage(ui),
         SettingsPage.appearance => _appearance(t, ui),
         SettingsPage.timeline => _timeline(t, ui),
         SettingsPage.viewer => _viewer(t, ui),
@@ -697,6 +701,16 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         SettingsPage.previewAndCache => _performance(t, ui),
         SettingsPage.shortcuts => _keymap(t, ui),
       };
+
+  /// The Account page, which draws and redraws itself. Asked only what its
+  /// rows are called, it says and draws nothing.
+  List<Widget> _accountPage(LumitUiState ui) {
+    if (_names != null) {
+      accountSettingsRows().forEach(_matches);
+      return const [];
+    }
+    return [AccountSettings(ui: ui, matches: _matches)];
+  }
 
   /// What a search found: each page's surviving rows, live as they are on the
   /// page, under a band with the page's name. Pressing the band goes to the
@@ -831,6 +845,9 @@ class _SettingsWindowState extends State<_SettingsWindow> {
       case SettingsPage.general:
         workspace.setAutoUpdate(true);
         ui.setLanguage(null);
+      case SettingsPage.account:
+        // Nothing here has a shipped value to go back to.
+        break;
       case SettingsPage.appearance:
         workspace.setScheme(LumitColorScheme.dark);
         workspace.setAccent(null);

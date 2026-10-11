@@ -882,6 +882,16 @@ class Workspace extends ChangeNotifier {
     save();
   }
 
+  /// Whether a shared project keeps a room at Lumit's own relay, for an
+  /// account with Lumit Pro that has typed no relay of its own. On until the
+  /// person says otherwise, for the reason [shareOutside] is.
+  bool shareCloud = true;
+
+  void setShareCloud(bool on) {
+    shareCloud = on;
+    save();
+  }
+
   /// The relay a shared project keeps a room at, as `host` or `host:port`,
   /// or null for none. Somebody's own server, which Lumit only uses once it
   /// has been typed here.
@@ -1725,6 +1735,7 @@ class Workspace extends ChangeNotifier {
         'share_name': shareName,
         'share_router': shareOutside,
         'share_relay': shareRelay,
+        'share_cloud': shareCloud,
         'share_up_limit': shareUpLimit,
         'share_down_limit': shareDownLimit,
         'share_give': shareGive,
@@ -1828,6 +1839,7 @@ class Workspace extends ChangeNotifier {
     shareOutside = outside is bool ? outside : true;
     final relay = j['share_relay'];
     shareRelay = relay is String && relay.isNotEmpty ? relay : null;
+    shareCloud = j['share_cloud'] is! bool || j['share_cloud'] as bool;
     final (up, down) = (j['share_up_limit'], j['share_down_limit']);
     shareUpLimit = up is int ? up.clamp(0, 10000000) : 0;
     shareDownLimit = down is int ? down.clamp(0, 10000000) : 0;

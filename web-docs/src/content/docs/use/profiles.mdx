@@ -1,0 +1,83 @@
+---
+title: Profiles and accounts
+description: Profiles on one machine, a Lumit account, Lumit Pro, and settings sync.
+sidebar:
+  order: 19.7
+---
+
+import Shot from "../../../components/Shot.astro";
+
+A **profile** is one person's settings: appearance, shortcuts, panel layout, preferences,
+and saved easings, expressions and effect presets. A machine can hold several.
+
+<Shot file="profile-card.png" caption="The profile card, opened from the left of the bottom strip." eager/>
+
+## Profiles
+
+The profile button is at the left of the bottom strip. It opens the **profile card**.
+
+- A click on a profile in the card switches to it.
+- **Add profile…** makes a profile from a name. It starts with the settings in force.
+- **Settings ▸ Account** renames and removes profiles. The profile in use is not removed.
+
+A profile does not hold the cache settings, the audio device, recent projects, or where
+windows were left. Those stay with the machine.
+
+## Lumit account
+
+An account is optional. **Sign in** in the profile card opens the sign-in window, which
+takes an email and a password, or a Discord or Google account. A Discord or Google sign-in
+finishes in the browser.
+
+- **Create an account** asks for a name, an email, and a password of at least 10
+  characters, and emails a six-digit code that confirms the address.
+- **Forgot password?** emails a code and takes a new password.
+
+The password is not sent to Lumit's server. Each profile signs in separately.
+
+**Settings ▸ Account ▸ Delete account…** deletes the account, its synced settings, and any
+subscription.
+
+## Lumit Pro
+
+Lumit Pro is a subscription on a Lumit account. It adds:
+
+- Shared projects through Lumit's relay. See [Relays](/use/projects/#relays).
+- [Sync](#sync).
+
+**See what is in Pro** in the profile card opens the **Lumit Pro** window. **Get Lumit Pro**
+opens the payment page in the browser, and the window changes when the payment completes.
+**Manage subscription** opens the page that changes or cancels it.
+
+## Sync
+
+With Lumit Pro, a signed-in profile is also kept on Lumit's server. Signing in on another
+machine brings its settings. A change is sent a few seconds after it is made and reaches
+the other machines within two minutes.
+
+The first time a profile syncs on a machine, the settings on the server replace its own.
+After that, changes to different settings on two machines are both kept. Where two machines
+changed the same setting, the one that syncs last is kept.
+
+**Settings ▸ Account ▸ Keep this profile in sync** turns sync off for the profile. Under it
+is a switch for each kind of setting.
+
+| Kind | What it holds |
+| --- | --- |
+| **Appearance and themes** | Theme, accent, shape, and custom themes. |
+| **Shortcuts** | The whole keymap. |
+| **Panel layout and workspaces** | The arrangement in force and saved workspaces. |
+| **Preferences** | The options on the other Settings pages, apart from interface scale. |
+| **Easings, expressions and favourites** | Saved easings and expressions, favourite effects, and recent colours. |
+| **Effect presets** | The files in the presets folder. |
+
+:::note[Not synced]
+Interface scale, cache budgets and location, the audio device, and recent projects. Effect
+presets are left out while they come to more than 900 KB together.
+:::
+
+## Related
+
+- [Projects](/use/projects/)
+- [Settings](/use/settings/)
+- [Workspaces and panels](/use/workspaces/)

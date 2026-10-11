@@ -375,6 +375,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   SolidReference dco_decode_box_autoadd_solid_reference(dynamic raw);
 
   @protected
+  int dco_decode_box_autoadd_u_16(dynamic raw);
+
+  @protected
   int dco_decode_box_autoadd_u_32(dynamic raw);
 
   @protected
@@ -1619,6 +1622,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   ProjectReference? dco_decode_opt_box_autoadd_project_reference(dynamic raw);
 
   @protected
+  int? dco_decode_opt_box_autoadd_u_16(dynamic raw);
+
+  @protected
   int? dco_decode_opt_box_autoadd_u_32(dynamic raw);
 
   @protected
@@ -2027,6 +2033,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   SolidReference sse_decode_box_autoadd_solid_reference(
       SseDeserializer deserializer);
+
+  @protected
+  int sse_decode_box_autoadd_u_16(SseDeserializer deserializer);
 
   @protected
   int sse_decode_box_autoadd_u_32(SseDeserializer deserializer);
@@ -3481,6 +3490,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  int? sse_decode_opt_box_autoadd_u_16(SseDeserializer deserializer);
+
+  @protected
   int? sse_decode_opt_box_autoadd_u_32(SseDeserializer deserializer);
 
   @protected
@@ -3895,6 +3907,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_box_autoadd_solid_reference(
       SolidReference self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_u_16(int self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_u_32(int self, SseSerializer serializer);
@@ -5471,6 +5486,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_project_reference(
       ProjectReference? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_u_16(int? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_box_autoadd_u_32(int? self, SseSerializer serializer);

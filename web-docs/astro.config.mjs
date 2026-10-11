@@ -165,7 +165,12 @@ r.addEventListener("input",set);set()})})`,
                     },
                     {
                       label: "The application",
-                      items: ["use/preview", "use/settings", "use/workspaces"],
+                      items: [
+                        "use/preview",
+                        "use/settings",
+                        "use/workspaces",
+                        "use/profiles",
+                      ],
                     },
                   ],
                 },

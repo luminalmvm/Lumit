@@ -13,7 +13,7 @@ everything the Rust build needs, as `flutter run` builds the engine too. Set up
 FFmpeg and LLVM first, from "Building from source" in the
 [top-level README](../README.md). On Windows it's the same VS 2022 C++ tools
 the Rust build uses, on macOS it's Xcode 26 or newer, and on Linux it's
-`clang cmake ninja-build libgtk-3-dev libgles-dev` as well.
+`clang cmake ninja-build libgtk-3-dev libgles-dev libwebkit2gtk-4.1-dev` as well.
 
 ```
 flutter run -d windows                # launch, or -d macos, -d linux

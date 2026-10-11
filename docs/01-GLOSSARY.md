@@ -14,7 +14,7 @@ its entry here first. AE and Vegas names are noted only to help people arriving 
 | **Audio item** | An asset pointing at an audio file |
 | **Packed project** | A `.lum` that also carries its footage files inside it. The verbs are **pack** and **unpack** |
 | **Shared project** | A project several people edit at once. The **host** shares it and owns the file, the **guests** join with an **invite**, which is written as an **invite link** |
-| **Relay** | Somebody's own server that passes a shared project's edits between a host and guests who cannot reach each other. It cannot read them |
+| **Relay** | A server that passes a shared project's edits between a host and guests who cannot reach each other. It cannot read them. Somebody's own, or **Lumit's relay**, which comes with Lumit Pro |
 | **Folder** | A group in the Project panel. Not *bin* |
 | **Composition (comp)** | Resolution, frame rate, duration, background, and a layer stack or a node graph |
 | **Node graph** | A comp whose picture is made by nodes and wires instead of layers |
@@ -123,6 +123,9 @@ Not interchangeable.
 |---|---|
 | **Panel** | A dockable piece of UI |
 | **Workspace** | A saved panel layout |
+| **Profile** | One person's settings on a machine: appearance, shortcuts, layout, preferences and what they have saved. Never anything about the machine |
+| **Account** | A Lumit account, which a profile can be signed in to. Optional |
+| **Lumit Pro** | The paid plan on an account: Lumit's relay, and **sync**, which keeps a profile the same on every machine |
 | **Graph panel** | Draws a layer's effects as nodes and wires. Not the evaluation graph |
 | **Viewer** | Shows a comp, footage or layer. Holds one, two or four **views** |
 | **Timeline** | A comp's layers against time |

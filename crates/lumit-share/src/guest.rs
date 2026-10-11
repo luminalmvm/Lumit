@@ -10,7 +10,8 @@ use crate::kept::{Finding, Kept, Pair};
 use crate::local::{carry, place, sane, sane_document, settle};
 use crate::wire::{self, decode, encode, Message, Names, Out, Receiver, Sender};
 use crate::{
-    room, Conflict, Ending, Event, Events, Invite, Person, Presence, ShareError, MAX_ADDRESSES,
+    dialled, room, Conflict, Ending, Event, Events, Invite, Person, Presence, ShareError,
+    MAX_ADDRESSES,
 };
 use lumit_core::shared::land;
 use lumit_core::store::{Moved, RemoteTag, Tap};
@@ -160,8 +161,14 @@ fn open(at: SocketAddr, relay: bool, key: &[u8; 32]) -> Result<Opened, ShareErro
 /// A relay is asked for the host a moment later than the host itself.
 fn reach(invite: &Invite) -> Result<Opened, ShareError> {
     let mut places: Vec<(SocketAddr, bool)> = Vec::new();
-    let direct = invite.addresses.iter().map(|address| (address, false));
-    let relayed = invite.relays.iter().map(|address| (address, true));
+    let direct = invite
+        .addresses
+        .iter()
+        .map(|address| (address.clone(), false));
+    let relayed = invite
+        .relays
+        .iter()
+        .filter_map(|address| Some((dialled(address)?, true)));
     for (address, relay) in direct.chain(relayed).take(MAX_ADDRESSES) {
         for at in address.to_socket_addrs().into_iter().flatten() {
             if places.len() < MAX_ADDRESSES && !places.contains(&(at, relay)) {

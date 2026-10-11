@@ -10,6 +10,7 @@
 //
 // The frame is the dialog pattern's: title strip, body, footer.
 
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:typed_data' show Float32List;
 import 'dart:ui' show PointMode;
@@ -30,6 +31,7 @@ import '../state/workspace.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'dialog_frame.dart';
+import 'pro_window.dart';
 
 /// The width both take, the column their labels sit in, and how tall the list
 /// of conflicts grows before it scrolls.
@@ -117,6 +119,7 @@ class _ShareDialog extends StatefulWidget {
 }
 
 class _ShareDialogState extends State<_ShareDialog> {
+  late final LumitUiState _ui;
   late final Workspace _prefs;
   late final TextEditingController _name;
   late final TextEditingController _port;
@@ -181,7 +184,8 @@ class _ShareDialogState extends State<_ShareDialog> {
   @override
   void initState() {
     super.initState();
-    _prefs = context.read<LumitUiState>().workspace;
+    _ui = context.read<LumitUiState>();
+    _prefs = _ui.workspace;
     _defaultPort = shareDefaultPort();
     int? keptPort;
     try {
@@ -291,14 +295,23 @@ class _ShareDialogState extends State<_ShareDialog> {
     if (link != _link && mounted) setState(() => _link = link);
   }
 
-  void _start() {
+  Future<void> _start() async {
     // Anything that is not a port number asks for the usual one.
     final asked =
         (int.tryParse(_port.text.trim()) ?? _defaultPort).clamp(0, 65535);
-    final relay = _relay.text.trim();
+    var relay = _relay.text.trim();
     if (relay != (_prefs.shareRelay ?? '')) {
       _prefs.setShareRelay(relay.isEmpty ? null : relay);
     }
+    // With no relay of the person's own, an account with Pro uses Lumit's,
+    // which is reached through a door that has to be open first.
+    if (relay.isEmpty &&
+        _prefs.shareCloud &&
+        _ui.account.pro &&
+        await _ui.relayDoor.open()) {
+      relay = shareCloudRelay();
+    }
+    if (!mounted) return;
     final started = widget.app.startSharing(
         name: _nameNow(),
         port: asked,
@@ -336,6 +349,9 @@ class _ShareDialogState extends State<_ShareDialog> {
       _error = null;
     });
     final password = _needsPassword ? _passwordNow() : null;
+    // The host may be at Lumit's relay, which a guest needs no account for
+    // but does need the door to.
+    await _ui.relayDoor.open();
     final outcome = await widget.app.joinShared(
         invite: _joinInvite.text.trim(),
         name: _nameNow(),
@@ -735,6 +751,7 @@ class _ShareDialogState extends State<_ShareDialog> {
             _keptPassword ? l10n.sharePasswordKept : l10n.sharePasswordNone,
             _start),
         _line(t, l10n.sharePasswordHint),
+        _cloudRow(t),
         _advancedFold(t),
         if (_advanced) ...[
           const SizedBox(height: 4),
@@ -775,6 +792,46 @@ class _ShareDialogState extends State<_ShareDialog> {
         ],
         if (_error case final error?) _line(t, error, warning: true),
       ];
+
+  /// Lumit's own relay: a tick for an account with Pro, and for anyone else
+  /// what Pro would do here and the way to it.
+  Widget _cloudRow(LumitTheme t) => ListenableBuilder(
+        listenable: _ui.account,
+        builder: (context, _) => dialogRow(
+          t,
+          l10n.shareCloud,
+          _ui.account.pro
+              ? Row(
+                  children: [
+                    HouseCheckbox(
+                      key: const ValueKey('share-cloud'),
+                      value: _prefs.shareCloud,
+                      onChanged: (on) =>
+                          setState(() => _prefs.setShareCloud(on)),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                        child: Text(l10n.shareCloudUse, style: t.small)),
+                  ],
+                )
+              : Row(
+                  children: [
+                    Expanded(
+                      child: Text(l10n.shareCloudPro,
+                          style: t.small.copyWith(color: t.textMuted)),
+                    ),
+                    const SizedBox(width: 8),
+                    HouseButton(
+                      key: const ValueKey('share-cloud-pro'),
+                      small: true,
+                      onPressed: () => unawaited(showProWindow(context)),
+                      child: Text(l10n.shareCloudSee, style: t.small),
+                    ),
+                  ],
+                ),
+          labelColumn: _labelColumn,
+        ),
+      );
 
   /// Joining somebody else's: their link, and where the footage is here.
   List<Widget> _joinRows(LumitTheme t) => [
