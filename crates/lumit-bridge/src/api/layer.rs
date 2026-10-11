@@ -6863,6 +6863,9 @@ impl LayerReference {
         // flare's Matte source, whose natural reading is "the lights in this
         // picture" — and on an adjustment layer, the composite below.
         lumit_core::fx::point_self_layer_params_at(&mut instance, self.layer_id);
+        // A blur or a glow on a shape or a line of text starts with Repeat
+        // edge pixels off, so it spreads out of the art as it lands.
+        lumit_core::fx::spread_on_art(&mut instance, &self.item()?.kind);
         // An Extract channels lands knowing what its layer's file holds, for
         // the same reason: the useful state is a fact about where it was
         // dropped, and making the user press Reload before the effect can do
