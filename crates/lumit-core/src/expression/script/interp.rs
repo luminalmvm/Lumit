@@ -5,7 +5,7 @@
 //! [`super::ae`]. The two meet at [`Host`]: a value this file carries about
 //! without looking inside.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use super::ae::{Ae, Host};
@@ -14,10 +14,66 @@ use super::parse::{Binary, Expr, Function, Logical, Pattern, Program, Stmt, Sym,
 // What one evaluation may spend. A property is read for every frame, twice,
 // so an expression that loops for ever or builds something enormous has to
 // stop on its own: there is nobody watching a render thread.
+//
+// A step is roughly one thing done. Work that is bigger than that is charged
+// by its size ([`Interp::spend`]): a list by its items, text by its length. So
+// the one budget bounds the time a run takes and the memory it holds as well.
 const MAX_STEPS: u32 = 2_000_000;
 const MAX_CALL_DEPTH: u32 = 64;
 pub(super) const MAX_ITEMS: usize = 16_384;
 const MAX_TEXT_BYTES: usize = 1 << 20;
+/// How far a list inside a list is followed when it is read as text or as a
+/// number. A list can hold itself, so this is also what stops that going
+/// round for ever.
+const MAX_LIST_DEPTH: u32 = 16;
+
+thread_local! {
+    // The budget belongs to the whole evaluation, not to one interpreter. An
+    // expression that reads another expression's property starts a second
+    // interpreter inside the first, and a budget each would multiply: twenty
+    // layers that each follow the one before would be a million full runs.
+    static RUNNING: Cell<u32> = const { Cell::new(0) };
+    static SPENT: Cell<u32> = const { Cell::new(0) };
+    static LIMIT: Cell<u32> = const { Cell::new(MAX_STEPS) };
+}
+
+/// Held for as long as an evaluation runs on this thread. The first one in
+/// starts the count again, the ones inside it carry on from where it is.
+pub(super) struct Running;
+
+impl Running {
+    pub(super) fn begin() -> Running {
+        RUNNING.with(|running| {
+            if running.get() == 0 {
+                SPENT.with(|spent| spent.set(0));
+            }
+            running.set(running.get() + 1);
+        });
+        Running
+    }
+}
+
+impl Drop for Running {
+    fn drop(&mut self) {
+        RUNNING.with(|running| running.set(running.get().saturating_sub(1)));
+    }
+}
+
+/// Run `work` with every evaluation inside it sharing one budget of `steps`.
+/// For the interface's own thread, which must never wait as long as a render
+/// may.
+pub(crate) fn sparingly<T>(steps: u32, work: impl FnOnce() -> T) -> T {
+    let before = LIMIT.with(|limit| limit.replace(steps.min(MAX_STEPS)));
+    let running = Running::begin();
+    let done = work();
+    drop(running);
+    LIMIT.with(|limit| limit.set(before));
+    done
+}
+
+fn spent_out() -> bool {
+    SPENT.with(Cell::get) > LIMIT.with(Cell::get)
+}
 
 #[derive(Clone)]
 pub(super) enum Value {
@@ -128,7 +184,6 @@ enum Flow {
 pub(super) struct Interp<'a> {
     program: &'a Program,
     pub(super) ae: Ae<'a>,
-    steps: u32,
     calls: u32,
     /// The value of the last expression statement that ran, which is what an
     /// expression answers with.
@@ -163,7 +218,6 @@ impl<'a> Interp<'a> {
         Interp {
             program,
             ae,
-            steps: 0,
             calls: 0,
             last: Value::Undefined,
             scopes: vec![root.clone()],
@@ -189,8 +243,14 @@ impl<'a> Interp<'a> {
     }
 
     fn step(&mut self) -> Res<()> {
-        self.steps += 1;
-        if self.steps > MAX_STEPS {
+        self.spend(1)
+    }
+
+    /// Charge `work` steps at once: for something whose cost is its size.
+    fn spend(&mut self, work: usize) -> Res<()> {
+        let work = u32::try_from(work).unwrap_or(u32::MAX);
+        SPENT.with(|spent| spent.set(spent.get().saturating_add(work)));
+        if spent_out() {
             return fail("the expression ran for too long");
         }
         Ok(())
@@ -200,6 +260,8 @@ impl<'a> Interp<'a> {
         if items.len() > MAX_ITEMS {
             return fail("a list too long to hold");
         }
+        // Every list made is kept until the run ends, so each is paid for.
+        self.spend(items.len())?;
         let value = Value::Array(Rc::new(RefCell::new(items)));
         self.heap.push(value.clone());
         Ok(value)
@@ -215,10 +277,11 @@ impl<'a> Interp<'a> {
         value
     }
 
-    fn string(text: String) -> Res<Value> {
+    fn string(&mut self, text: String) -> Res<Value> {
         if text.len() > MAX_TEXT_BYTES {
             return fail("text too long to hold");
         }
+        self.spend(text.len() / 16)?;
         Ok(Value::Str(Rc::from(text.as_str())))
     }
 
@@ -432,7 +495,7 @@ impl<'a> Interp<'a> {
                 if let (Err(abort), Some(handler)) = (&done, handler) {
                     // Running out of steps is not something to catch: a loop
                     // that never ends inside a `try` would carry on for ever.
-                    if self.steps <= MAX_STEPS {
+                    if !spent_out() {
                         let caught = match abort {
                             Abort::Throw(value) => value.clone(),
                             Abort::Error(why) => {
@@ -531,7 +594,7 @@ impl<'a> Interp<'a> {
                         }
                     }
                 }
-                Self::string(out)?
+                self.string(out)?
             }
             Expr::Unary(op, operand) => {
                 // `typeof` of a name nobody defined is an answer, not an error.
@@ -682,6 +745,8 @@ impl<'a> Interp<'a> {
                         if i >= MAX_ITEMS {
                             return fail("a list too long to hold");
                         }
+                        let grown = (i + 1).saturating_sub(items.borrow().len());
+                        self.spend(grown)?;
                         let mut items = items.borrow_mut();
                         if i >= items.len() {
                             items.resize(i + 1, Value::Undefined);
@@ -719,10 +784,10 @@ impl<'a> Interp<'a> {
     pub(super) fn call(&mut self, callee: Value, args: Vec<Value>) -> Res<Value> {
         match callee {
             Value::Func(closure) => {
-                self.calls += 1;
-                if self.calls > MAX_CALL_DEPTH {
+                if self.calls >= MAX_CALL_DEPTH {
                     return fail("functions call each other too deeply");
                 }
+                self.calls += 1;
                 let scope = Env::new(Some(closure.env.clone()), true);
                 let mut args = args.into_iter();
                 for param in &closure.func.params {
@@ -771,7 +836,10 @@ impl<'a> Interp<'a> {
                 return fail(format!("'{name}' was read on something that is not there"))
             }
             Value::Array(items) if &**name == "length" => Value::Num(items.borrow().len() as f64),
-            Value::Str(text) if &**name == "length" => Value::Num(text.chars().count() as f64),
+            Value::Str(text) if &**name == "length" => {
+                self.spend(text.len() / 64)?;
+                Value::Num(text.chars().count() as f64)
+            }
             Value::Object(fields) => fields
                 .borrow()
                 .iter()
@@ -799,6 +867,7 @@ impl<'a> Interp<'a> {
                 }
             }
             (Value::Str(text), Value::Num(n)) if *n >= 0.0 => {
+                self.spend(text.len() / 64)?;
                 text.chars().nth(*n as usize).map_or(Value::Undefined, |c| {
                     Value::Str(Rc::from(c.to_string().as_str()))
                 })
@@ -847,25 +916,9 @@ impl<'a> Interp<'a> {
     /// A value as the words it prints as. Properties have been made plain by
     /// the caller.
     pub(super) fn text(&self, value: &Value) -> String {
-        match value {
-            Value::Undefined => "undefined".into(),
-            Value::Null => "null".into(),
-            Value::Bool(b) => b.to_string(),
-            Value::Num(n) => number_text(*n),
-            Value::Str(s) => s.to_string(),
-            Value::Array(items) => items
-                .borrow()
-                .iter()
-                .map(|item| match item {
-                    Value::Undefined | Value::Null => String::new(),
-                    other => self.text(other),
-                })
-                .collect::<Vec<_>>()
-                .join(","),
-            Value::Object(_) => "[object Object]".into(),
-            Value::Func(_) | Value::Bound(_) => "function".into(),
-            Value::Host(_) => "[object]".into(),
-        }
+        let mut out = String::new();
+        write_text(value, 0, &mut out);
+        out
     }
 
     /// The numbers in a value: one for a number, each item for a list.
@@ -960,7 +1013,7 @@ impl<'a> Interp<'a> {
         Ok(match op {
             Binary::Add => {
                 if matches!(a, Value::Str(_)) || matches!(b, Value::Str(_)) {
-                    Self::string(format!("{}{}", self.text(a), self.text(b)))?
+                    self.string(format!("{}{}", self.text(a), self.text(b)))?
                 } else {
                     // A number added to a list joins its first item.
                     self.spread(a, b, |x, y| x + y, true)?
@@ -1017,9 +1070,9 @@ impl<'a> Interp<'a> {
                         Some(digits) => self.number(digits)?.clamp(0.0, 20.0) as usize,
                         None => 0,
                     };
-                    Self::string(format!("{n:.digits$}"))
+                    self.string(format!("{n:.digits$}"))
                 }
-                "toString" => Self::string(number_text(n)),
+                "toString" => self.string(number_text(n)),
                 _ => fail(format!("a number has no '{name}'")),
             },
             _ => fail(format!("'{name}' is not a function")),
@@ -1091,6 +1144,10 @@ impl<'a> Interp<'a> {
         // A copy to walk, so a callback that changes the list it is being
         // called over cannot pull it out from under the loop.
         let list = || items.borrow().clone();
+        // Everything but the two that only touch the end walks the list.
+        if !matches!(name, "push" | "pop") {
+            self.spend(items.borrow().len() / 8)?;
+        }
         let first = args.first().cloned().unwrap_or(Value::Undefined);
         Ok(match name {
             "push" => {
@@ -1155,7 +1212,7 @@ impl<'a> Interp<'a> {
                         other => self.text(&other),
                     });
                 }
-                Self::string(parts.join(&glue))?
+                self.string(parts.join(&glue))?
             }
             "reverse" => {
                 items.borrow_mut().reverse();
@@ -1244,7 +1301,7 @@ impl<'a> Interp<'a> {
             }
             "toString" => {
                 let items = Value::Array(items.clone());
-                Self::string(self.text(&items))?
+                self.string(self.text(&items))?
             }
             _ => return fail(format!("a list has no '{name}'")),
         })
@@ -1275,6 +1332,7 @@ impl<'a> Interp<'a> {
             None => None,
         };
         let needle = first.clone().unwrap_or_default();
+        self.spend(text.len() / 64)?;
         let chars: Vec<char> = text.chars().collect();
         let char_index = |byte: Option<usize>| {
             byte.map_or(-1.0, |byte| {
@@ -1282,9 +1340,9 @@ impl<'a> Interp<'a> {
             })
         };
         Ok(match name {
-            "toUpperCase" => Self::string(text.to_uppercase())?,
-            "toLowerCase" => Self::string(text.to_lowercase())?,
-            "trim" => Self::string(text.trim().to_string())?,
+            "toUpperCase" => self.string(text.to_uppercase())?,
+            "toLowerCase" => self.string(text.to_lowercase())?,
+            "trim" => self.string(text.trim().to_string())?,
             "toString" => Value::Str(text.clone()),
             "indexOf" => Value::Num(char_index(text.find(&needle))),
             "lastIndexOf" => Value::Num(char_index(text.rfind(&needle))),
@@ -1298,7 +1356,7 @@ impl<'a> Interp<'a> {
                 } else {
                     None
                 };
-                Self::string(c.map(char::to_string).unwrap_or_default())?
+                self.string(c.map(char::to_string).unwrap_or_default())?
             }
             "charCodeAt" => {
                 let i = self.arg(&args, 0)?;
@@ -1311,7 +1369,7 @@ impl<'a> Interp<'a> {
             }
             "slice" | "substring" => {
                 let (from, to) = self.range(&args, chars.len())?;
-                Self::string(chars.get(from..to).unwrap_or_default().iter().collect())?
+                self.string(chars.get(from..to).unwrap_or_default().iter().collect())?
             }
             "substr" => {
                 let (from, _) = self.range(&args, chars.len())?;
@@ -1319,7 +1377,7 @@ impl<'a> Interp<'a> {
                     Some(count) => self.number(count)?.max(0.0) as usize,
                     None => chars.len(),
                 };
-                Self::string(chars.iter().skip(from).take(count).collect())?
+                self.string(chars.iter().skip(from).take(count).collect())?
             }
             "split" => {
                 let parts: Vec<Value> = match &first {
@@ -1343,14 +1401,14 @@ impl<'a> Interp<'a> {
                     }
                     None => "undefined".into(),
                 };
-                Self::string(text.replacen(&needle, &with, 1))?
+                self.string(text.replacen(&needle, &with, 1))?
             }
             "repeat" => {
                 let count = self.arg(&args, 0)?.max(0.0) as usize;
                 if text.len().saturating_mul(count) > MAX_TEXT_BYTES {
                     return fail("text too long to hold");
                 }
-                Self::string(text.repeat(count))?
+                self.string(text.repeat(count))?
             }
             "padStart" | "padEnd" => {
                 let width = self.arg(&args, 0)?.clamp(0.0, 4096.0) as usize;
@@ -1366,9 +1424,9 @@ impl<'a> Interp<'a> {
                 if fill.is_empty() {
                     Value::Str(text.clone())
                 } else if name == "padStart" {
-                    Self::string(format!("{pad}{text}"))?
+                    self.string(format!("{pad}{text}"))?
                 } else {
-                    Self::string(format!("{text}{pad}"))?
+                    self.string(format!("{text}{pad}"))?
                 }
             }
             _ => return fail(format!("text has no '{name}'")),
@@ -1379,6 +1437,10 @@ impl<'a> Interp<'a> {
 /// A value as a number, the way JavaScript's arithmetic reads it. Properties
 /// have been made plain by the caller.
 pub(super) fn to_number(value: &Value) -> f64 {
+    number_at(value, 0)
+}
+
+fn number_at(value: &Value, depth: u32) -> f64 {
     match value {
         Value::Num(n) => *n,
         Value::Bool(b) => f64::from(u8::from(*b)),
@@ -1391,12 +1453,46 @@ pub(super) fn to_number(value: &Value) -> f64 {
                 s.parse().unwrap_or(f64::NAN)
             }
         }
-        Value::Array(items) => match items.borrow().as_slice() {
+        Value::Array(items) if depth < MAX_LIST_DEPTH => match items.borrow().as_slice() {
             [] => 0.0,
-            [one] => to_number(one),
+            [one] => number_at(one, depth + 1),
             _ => f64::NAN,
         },
         _ => f64::NAN,
+    }
+}
+
+/// [`Interp::text`], written into `out`. It stops once `out` is longer than
+/// any text may be, so a list of lists of lists is not built in full first,
+/// and a list past [`MAX_LIST_DEPTH`] reads as nothing, as one that holds
+/// itself does in JavaScript.
+fn write_text(value: &Value, depth: u32, out: &mut String) {
+    if out.len() > MAX_TEXT_BYTES {
+        return;
+    }
+    match value {
+        Value::Undefined => out.push_str("undefined"),
+        Value::Null => out.push_str("null"),
+        Value::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
+        Value::Num(n) => out.push_str(&number_text(*n)),
+        Value::Str(s) => out.push_str(s),
+        Value::Array(items) if depth < MAX_LIST_DEPTH => {
+            for (i, item) in items.borrow().iter().enumerate() {
+                if out.len() > MAX_TEXT_BYTES {
+                    return;
+                }
+                if i > 0 {
+                    out.push(',');
+                }
+                if !matches!(item, Value::Undefined | Value::Null) {
+                    write_text(item, depth + 1, out);
+                }
+            }
+        }
+        Value::Array(_) => {}
+        Value::Object(_) => out.push_str("[object Object]"),
+        Value::Func(_) | Value::Bound(_) => out.push_str("function"),
+        Value::Host(_) => out.push_str("[object]"),
     }
 }
 

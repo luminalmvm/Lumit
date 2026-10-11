@@ -153,6 +153,27 @@ fn a_runaway_expression_stops() {
     assert!(compile(&format!("{}1{}", "[".repeat(5000), "]".repeat(5000))).is_err());
     // A list that holds itself is still let go when the run ends.
     assert_eq!(num("var a = []; a.push(a); a.length"), 1.0);
+    // A long chain is as deep a tree as nested brackets, and is refused too.
+    assert!(compile(&format!("1{}", "+1".repeat(60_000))).is_err());
+    assert!(compile(&format!("time{}", ".b".repeat(60_000))).is_err());
+    assert_eq!(num(&format!("1{}", "+1".repeat(50))), 51.0);
+    // A list that holds itself, or sits a long way inside others, reads as
+    // text and as a number without going round for ever.
+    assert_eq!(
+        text("var a = [1]; a.push(a); a + ''"),
+        "1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,"
+    );
+    assert!(num("var a = []; a[0] = a; +a").is_nan());
+    assert!(answer("var a = 0; for (var i = 0; i < 50000; i++) a = [a]; a").is_ok());
+    // Lists and text are paid for by their size, so making them in a loop
+    // stops long before the memory does.
+    assert!(answer("var a = []; a[16383] = 0; while (true) a * 2").is_err());
+    assert!(answer("var s = 'x'.repeat(1000000); while (true) s.charAt(0)").is_err());
+    // Going too deep once does not use the depth up for the calls after it.
+    assert_eq!(
+        num("function f() { return f() } var n = 0; for (var i = 0; i < 70; i++) { try { f() } catch (e) { n++ } } function g() { return 1 } n + g()"),
+        71.0
+    );
 
     for refused in ["new Date()", "1 +", "'open", "a = ", "{ 1", "/* open"] {
         assert!(compile(refused).is_err(), "{refused}");

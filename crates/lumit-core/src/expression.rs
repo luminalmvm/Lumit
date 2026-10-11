@@ -117,6 +117,16 @@ impl ExpressionContext {
 fn make_engine() -> Engine {
     let mut engine = Engine::new();
 
+    // An expression is a sum, not a program. Out of the box Rhai lets `eval`
+    // run any text as a whole script, and a script can `import` a file by its
+    // path, a network path included, and print to the console. An expression
+    // comes in with a project or an import, so none of that is left on.
+    engine.set_max_modules(0);
+    engine.set_module_resolver(rhai::module_resolvers::DummyModuleResolver::new());
+    engine.disable_symbol("eval");
+    engine.on_print(|_| {});
+    engine.on_debug(|_, _, _| {});
+
     engine.set_max_operations(MAX_EXPRESSION_OPERATIONS);
     engine.set_max_string_size(MAX_EXPRESSION_STRING_BYTES);
     engine.set_max_array_size(MAX_EXPRESSION_ARRAY_ITEMS);
@@ -214,27 +224,31 @@ fn eval_dynamic(
 
 const MAXIMUM_DEPTH: u32 = 100;
 
+/// A JavaScript text read into a program, or why it does not read.
+type Read = Result<Rc<script::Program>, Rc<str>>;
+
 thread_local! {
-    /// JavaScript programs already read, by their text. `None` is a text that
-    /// does not read, remembered so it is not tried again on every frame.
+    /// JavaScript programs already read, by their text. A text that does not
+    /// read is remembered with why, so it is not tried again on every frame.
     ///
     /// Reading a text is most of the cost of running a short one, and the same
     /// few are run for every frame, so each is read once per thread.
-    static PROGRAMS: RefCell<HashMap<String, Option<Rc<script::Program>>>> =
-        RefCell::new(HashMap::new());
+    static PROGRAMS: RefCell<HashMap<String, Read>> = RefCell::new(HashMap::new());
 }
 
 /// More texts than this in one thread's cache and it is emptied: somebody is
 /// typing, and every keystroke is a new text.
 const MAX_CACHED_PROGRAMS: usize = 512;
 
-/// The JavaScript program for `expression`, read once per thread, or `None`
-/// when the text does not read as JavaScript.
-fn program_for(expression: &str) -> Option<Rc<script::Program>> {
+/// The JavaScript program for `expression`, read once per thread, or why the
+/// text does not read as JavaScript.
+fn program_for(expression: &str) -> Read {
     if let Some(found) = PROGRAMS.with(|programs| programs.borrow().get(expression).cloned()) {
         return found;
     }
-    let program = script::compile(expression).ok().map(Rc::new);
+    let program = script::compile(expression)
+        .map(Rc::new)
+        .map_err(|why| Rc::from(why.as_str()));
     PROGRAMS.with(|programs| {
         let mut programs = programs.borrow_mut();
         if programs.len() >= MAX_CACHED_PROGRAMS {
@@ -252,13 +266,7 @@ fn run_javascript(
     slot: Slot,
     vars: &[(&str, f64)],
 ) -> Result<script::Answer, String> {
-    let Some(program) = program_for(expression) else {
-        // Read again for the sentence: the cache keeps the program, not why
-        // there is none, and this is the road an editor takes, not a frame.
-        return Err(script::compile(expression)
-            .err()
-            .unwrap_or_else(|| "the expression does not read".into()));
-    };
+    let program = program_for(expression).map_err(|why| why.to_string())?;
     let detached;
     let context = match context {
         Some(context) => context,
@@ -375,7 +383,22 @@ pub fn is_runnable(expression: &str) -> bool {
 /// run as [`is_runnable`] has, because nearly every one reads its layer and
 /// there is none yet.
 pub fn is_javascript(expression: &str) -> bool {
-    program_for(expression).is_some_and(|program| script::names_known(&program))
+    program_for(expression).is_ok_and(|program| script::names_known(&program))
+}
+
+/// What a JavaScript expression may spend when it is run from the interface's
+/// own thread, which is what a Rhai one may spend anywhere. A render gives it
+/// twenty times this, on a thread nobody is waiting on.
+pub const INTERFACE_STEPS: u32 = MAX_EXPRESSION_OPERATIONS as u32;
+
+/// Run `work` with every JavaScript expression inside it sharing one budget of
+/// `steps`, however many it runs and however many properties they read.
+///
+/// **In plain terms.** The panels sample an expression to show its number and
+/// its curve, on the thread that draws the window. A loop that never ends
+/// would otherwise freeze it for as long as a render lets the same loop run.
+pub fn within_steps<T>(steps: u32, work: impl FnOnce() -> T) -> T {
+    script::sparingly(steps, work)
 }
 
 /// Run a Rhai expression for the one number a property wants. `-1` when it
@@ -454,8 +477,11 @@ pub fn evaluate_range(
     end: f64,
     samples: i64,
 ) -> Vec<f64> {
+    // A curve is a few hundred samples. More than a screen is wide draws
+    // nothing new, and the number comes from outside.
+    let samples = samples.clamp(0, 8192);
     if language == Language::JavaScript {
-        if program_for(expression).is_none() {
+        if program_for(expression).is_err() {
             return Vec::new();
         }
         let slot = context.map_or_else(Slot::default, |context| slot_on_layer(context, expression));
@@ -1161,6 +1187,11 @@ mod tests {
             driven("wiggle(0, 0)", Slot::new(&[100.0], 0, 1), 0.3),
             100.0
         );
+
+        // Its own property read by name is that property before the
+        // expression, not the expression run again: the rig's rotation holds
+        // 30 under an expression of its own.
+        assert_eq!(driven("rotation + 1", Slot::new(&[30.0], 0, 1), 0.0), 31.0);
 
         // A broken expression leaves the property where it was.
         assert_eq!(

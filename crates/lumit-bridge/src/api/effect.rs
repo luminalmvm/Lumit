@@ -659,7 +659,9 @@ fn sample_at(scalar: BridgeScalar, seconds: f64) -> f64 {
             lumit_core::anim::evaluate(&keys, seconds).unwrap_or(0.0)
         }
         BridgeScalar::Expression(expr, language) => {
-            lumit_core::expression::evaluate_in(language.read(), &expr, None)
+            lumit_core::expression::within_steps(lumit_core::expression::INTERFACE_STEPS, || {
+                lumit_core::expression::evaluate_in(language.read(), &expr, None)
+            })
         }
     }
 }
@@ -690,20 +692,20 @@ pub fn sample_scalar_with_context(
                 return 0.0;
             };
 
-            lumit_core::expression::evaluate_in(
-                language.read(),
-                &expr,
-                Some(Arc::new(ExpressionContext {
-                    document: doc.clone(),
-                    comp: Some(layer.comp_id),
-                    layer: Some(layer.layer_id),
-                    comp_time: Rational::new(time.num, time.den)
-                        .unwrap_or(Rational::ZERO)
-                        .to_f64(),
-                    current_depth: 0,
-                    inputs: None,
-                })),
-            )
+            let context = Arc::new(ExpressionContext {
+                document: doc.clone(),
+                comp: Some(layer.comp_id),
+                layer: Some(layer.layer_id),
+                comp_time: Rational::new(time.num, time.den)
+                    .unwrap_or(Rational::ZERO)
+                    .to_f64(),
+                current_depth: 0,
+                inputs: None,
+            });
+            // This runs on the interface's thread, for every row on screen.
+            lumit_core::expression::within_steps(lumit_core::expression::INTERFACE_STEPS, || {
+                lumit_core::expression::evaluate_in(language.read(), &expr, Some(context))
+            })
         }
     }
 }
@@ -745,20 +747,28 @@ pub fn sample_scalar_range_with_context(
                 .unwrap_or(Rational::ZERO)
                 .to_f64();
 
-            lumit_core::expression::evaluate_range(
-                language.read(),
-                &expr,
-                Some(&ExpressionContext {
-                    document: doc.clone(),
-                    comp: Some(layer.comp_id),
-                    layer: Some(layer.layer_id),
-                    comp_time: 0.0, // this time will be overwritten internally,
-                    current_depth: 0,
-                    inputs: None,
-                }),
-                start,
-                end,
-                samples,
+            let context = ExpressionContext {
+                document: doc.clone(),
+                comp: Some(layer.comp_id),
+                layer: Some(layer.layer_id),
+                comp_time: 0.0, // this time will be overwritten internally,
+                current_depth: 0,
+                inputs: None,
+            };
+            // The whole curve shares what one frame of a render may spend, so
+            // a loop that never ends costs one repaint a fixed amount.
+            lumit_core::expression::within_steps(
+                lumit_core::expression::INTERFACE_STEPS.saturating_mul(20),
+                || {
+                    lumit_core::expression::evaluate_range(
+                        language.read(),
+                        &expr,
+                        Some(&context),
+                        start,
+                        end,
+                        samples,
+                    )
+                },
             )
         }
         // Only an expression needs sampling by evaluation. A static value is
