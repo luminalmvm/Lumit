@@ -31,13 +31,11 @@ const PACKED_LOCKED: u8 = 3;
 /// been given: the key the channel opens with, and the link's own secret.
 const PACKED_OPENED: u8 = 4;
 
-/// How many times a password is hashed over, so that trying one costs
-/// something for anyone working through a list of them.
-// ponytail: a fast hash many times over, not one that is hard on memory. A
-// list of passwords is still tried quickly on a graphics card by someone who
-// holds the link and has overheard a guest joining. Argon2id is the upgrade,
-// and a new dependency.
-const STRETCH: usize = 1 << 18;
+/// What Argon2id spends on a password: 64 MiB of memory, gone over three
+/// times, on one thread. Trying a list of them costs that for every guess.
+const MEMORY_KIB: u32 = 64 << 10;
+const PASSES: u32 = 3;
+const LANES: u32 = 1;
 
 /// What a host keeps of a password, and never the password: what it comes to
 /// with a salt of its own, so the work of trying a list of passwords against
@@ -53,19 +51,20 @@ impl Lock {
     pub fn new(password: &str) -> Result<Lock, ShareError> {
         let mut salt = [0u8; 16];
         getrandom::fill(&mut salt).map_err(|e| ShareError::NoRandomness(e.to_string()))?;
-        Ok(Lock::with(password, salt))
+        Lock::with(password, salt).ok_or(ShareError::Password)
     }
 
-    /// Slow on purpose.
-    fn with(password: &str, salt: [u8; 16]) -> Lock {
-        let mut hasher = blake3::Hasher::new_derive_key("lumit-share 2026 password");
-        hasher.update(&salt);
-        hasher.update(password.as_bytes());
-        let mut key = *hasher.finalize().as_bytes();
-        for _ in 0..STRETCH {
-            key = *blake3::hash(&key).as_bytes();
-        }
-        Lock { salt, key }
+    /// Slow on purpose. `None` when the password will not hash, which with
+    /// the costs above is one too long to be one.
+    fn with(password: &str, salt: [u8; 16]) -> Option<Lock> {
+        let params = argon2::Params::new(MEMORY_KIB, PASSES, LANES, Some(32)).ok()?;
+        let hasher =
+            argon2::Argon2::new(argon2::Algorithm::Argon2id, argon2::Version::V0x13, params);
+        let mut key = [0u8; 32];
+        hasher
+            .hash_password_into(password.as_bytes(), &salt, &mut key)
+            .ok()?;
+        Some(Lock { salt, key })
     }
 
     /// As it is written, for a host to keep beside its invite's secret.
@@ -153,11 +152,13 @@ impl Invite {
 
     /// This invite with its password given, ready to join by. One that
     /// needed none comes back as it was. A wrong password is not found out
-    /// here: the host does not answer to it.
+    /// here: the host does not answer to it. One that will not hash leaves
+    /// the invite locked.
     #[must_use]
     pub fn unlocked(mut self, password: &str) -> Invite {
-        if self.locked {
-            self.key = locked_key(&self.link, &Lock::with(password, self.salt));
+        let lock = self.locked.then(|| Lock::with(password, self.salt));
+        if let Some(lock) = lock.flatten() {
+            self.key = locked_key(&self.link, &lock);
             self.locked = false;
             self.salt = [0; 16];
         }

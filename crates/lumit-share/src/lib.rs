@@ -250,6 +250,8 @@ pub enum ShareError {
     Unsafe,
     #[error("no randomness for the invite: {0}")]
     NoRandomness(String),
+    #[error("that password could not be used")]
+    Password,
 }
 
 /// This machine's address on its network, for the host to hand out. A guess:

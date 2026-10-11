@@ -8,6 +8,11 @@ license = "GPL-3.0-only"
 publish = false
 
 [dependencies]
+# What a password to a shared project is hashed with, so that trying a list
+# of them costs memory as well as time. RustCrypto's own, pure Rust, MIT or
+# Apache-2.0, maintained. Only the hash is built, without the password file
+# format its default features bring.
+argon2 = { version = "0.5", default-features = false, features = ["alloc"] }
 lumit-core = { path = "../lumit-core" }
 # Finding this machine's own copy of footage a peer names.
 lumit-project = { path = "../lumit-project" }
