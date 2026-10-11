@@ -5733,6 +5733,56 @@
   "@menuDetachAudio": {
     "description": "Menu item, in Layer > Audio and on a layer's right-click menu in the Timeline: put the layer's sound on an audio-only row of its own directly below, and mute the original row."
   },
+  "menuAudioStreams": "Audio streams",
+  "@menuAudioStreams": {
+    "description": "Submenu on the right-click menu of a layer in the Timeline and of a clip in the Cut and Audio timelines, offered when the file has more than one audio stream (a recording with the game on one and the microphone on another). It lists the streams, ticked where the layer plays them."
+  },
+  "audioStreamNumbered": "Stream {number}",
+  "@audioStreamNumbered": {
+    "description": "One row of the Audio streams submenu: an audio stream of the file, by its number counted from 1, where the file gives the stream no name.",
+    "placeholders": {
+      "number": {
+        "type": "int"
+      }
+    }
+  },
+  "audioStreamNamed": "Stream {number} · {name}",
+  "@audioStreamNamed": {
+    "description": "One row of the Audio streams submenu: an audio stream of the file, by its number counted from 1 and the name the file gives it, such as Microphone. The name is the file's own and is not translated.",
+    "placeholders": {
+      "number": {
+        "type": "int"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "menuSplitAudioStreams": "Split audio streams",
+  "@menuSplitAudioStreams": {
+    "description": "Menu item, in Layer > Audio and on the right-click menu of a layer or clip: give each audio stream of the file a row of its own, so each can be turned down or muted by itself."
+  },
+  "menuMergeAudioStreams": "Merge audio streams",
+  "@menuMergeAudioStreams": {
+    "description": "Menu item, in Layer > Audio and on the right-click menu of a layer or clip: the way back from Split audio streams. One row plays the streams mixed and the rows split off beside it are removed."
+  },
+  "audioStreamsNothingToSplit": "No audio streams to split.",
+  "@audioStreamsNothingToSplit": {
+    "description": "One line in the status bar at the bottom of the window, after Split audio streams was asked of a layer or clip that plays a single audio stream, so there is nothing to split. Calm, not an error."
+  },
+  "audioStreamsNothingToMerge": "No audio streams to merge.",
+  "@audioStreamsNothingToMerge": {
+    "description": "One line in the status bar at the bottom of the window, after Merge audio streams was asked of a layer or clip that already plays every audio stream its file has. Calm, not an error."
+  },
+  "projectAudioStreamCount": "{count} audio streams",
+  "@projectAudioStreamCount": {
+    "description": "A fact about a footage item in the Project panel's preview card, shown only when the file has more than one audio stream. It sits in a line of facts after the sound's rate and channels.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "menuDetectBeats": "Detect beats",
   "@menuDetectBeats": {
     "description": "Menu item."
@@ -7195,6 +7245,22 @@
   "@settingsVideoArrivesAsASequence": {
     "description": "Settings window: the name of one setting."
   },
+  "settingsSeveralAudioStreamsArriveAs": "Several audio streams arrive as",
+  "@settingsSeveralAudioStreamsArriveAs": {
+    "description": "Settings window, Timeline, Editing: the name of the row choosing what a file with more than one audio stream becomes when it is added to a composition. The three choices follow it in a dropdown."
+  },
+  "streamsArrivalFirst": "The first stream",
+  "@streamsArrivalFirst": {
+    "description": "A choice for the setting Several audio streams arrive as: the layer plays the file's first audio stream and no other."
+  },
+  "streamsArrivalMixed": "One layer, mixed",
+  "@streamsArrivalMixed": {
+    "description": "A choice for the setting Several audio streams arrive as: one layer plays every audio stream of the file mixed together."
+  },
+  "streamsArrivalSplit": "A layer each",
+  "@streamsArrivalSplit": {
+    "description": "A choice for the setting Several audio streams arrive as: every audio stream of the file gets a layer of its own."
+  },
   "settingsViewerBars": "Viewer bars",
   "@settingsViewerBars": {
     "description": "Settings window, Appearance: the name of the row choosing how the Viewer's chrome is arranged round the picture — split between a strip above and a bar below, or gathered into one strip at the top or at the bottom."
@@ -7826,6 +7892,15 @@
   "@tipMatte": {
     "description": "Tooltip on the matte cell. One or two words."
   },
+  "tipMatteLayer": "Matte: {layer}",
+  "@tipMatteLayer": {
+    "description": "Tooltip on the matte cell once a matte is set, so a name the cell cuts short can be read in full. {layer} is the matte layer's number and name, such as '39. Wipe to ink'.",
+    "placeholders": {
+      "layer": {
+        "type": "String"
+      }
+    }
+  },
   "tipMeasureRenderTimes": "Measure times",
   "@tipMeasureRenderTimes": {
     "description": "Tooltip on the hourglass in the bottom strip, when measuring is off. One or two words."
@@ -7876,6 +7951,15 @@
   "tipParent": "Parent",
   "@tipParent": {
     "description": "Tooltip on the parent cell. One or two words."
+  },
+  "tipParentLayer": "Parent: {layer}",
+  "@tipParentLayer": {
+    "description": "Tooltip on the parent cell once a parent is set, so a name the cell cuts short can be read in full. {layer} is the parent layer's number and name, such as '51. Hero title'.",
+    "placeholders": {
+      "layer": {
+        "type": "String"
+      }
+    }
   },
   "tipPickFocalPoint": "Focal point",
   "@tipPickFocalPoint": {
@@ -13573,6 +13657,10 @@
   },
   "histEditPan": "Edit pan",
   "@histEditPan": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histSetAudioStreams": "Set audio streams",
+  "@histSetAudioStreams": {
     "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
   },
   "histMoveMasterFader": "Move master fader",

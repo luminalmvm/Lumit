@@ -1240,6 +1240,39 @@ List<MenuSection> lumitMenus(
                       })
                     : null,
               ),
+              // A file with several audio streams: each onto a row of its
+              // own, and back onto one. Offered on any layer and answered in
+              // the status line where there is nothing to do, as Detach is.
+              // Which streams a layer plays is chosen on its own right-click
+              // menu, which can read the file's streams when it is opened.
+              MenuEntry(
+                l10n.menuSplitAudioStreams,
+                onLayer((l) {
+                  var split = false;
+                  try {
+                    split = l.splitAudioStreams();
+                  } catch (_) {}
+                  if (split) {
+                    app.notifyDocumentChanged();
+                  } else {
+                    app.postNotice(l10n.audioStreamsNothingToSplit);
+                  }
+                }),
+              ),
+              MenuEntry(
+                l10n.menuMergeAudioStreams,
+                onLayer((l) {
+                  var merged = false;
+                  try {
+                    merged = l.mergeAudioStreams();
+                  } catch (_) {}
+                  if (merged) {
+                    app.notifyDocumentChanged();
+                  } else {
+                    app.postNotice(l10n.audioStreamsNothingToMerge);
+                  }
+                }),
+              ),
             ]),
             // The selected layer's Retime. In the menu as well as on the keyboard
             // (a command whose only route is a chord has no route the day

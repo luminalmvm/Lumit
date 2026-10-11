@@ -161,8 +161,9 @@ Set<SwitchCell> switchCellsFor(double width) =>
 Set<ModeCell> modeCellsFor(double width) =>
     cellsFor(ModeCell.values, modeHideOrder, width);
 
-/// The compose group's cells — **the mockup's own dropdown widths**:
-/// 84 for the matte and blend faces, 64 for the parent's. They were 118 / 112 /
+/// The compose group's cells — **the mockup's own dropdown width**: 84 for
+/// the matte and blend faces. The parent's is the matte's 84 too, since both
+/// name a layer by its number and its name. They were 118 / 112 /
 /// 96, which left every picker sitting in slack it never used; a dropdown is
 /// as wide as the word it holds plus its inset, and the column is as wide as
 /// the dropdown plus the group's normal gaps. The seam still drags, so a
@@ -179,12 +180,12 @@ Set<ModeCell> modeCellsFor(double width) =>
 /// and it is the cheaper one.
 ///
 /// The face itself is the mockup's 84 either way: it never swells to fill the
-/// toggles' room, which would put a third dropdown width in a row that draws
-/// two.
+/// toggles' room, which would put a second dropdown width in a row that draws
+/// one.
 const double matteToggleWidth = 28;
 const double matteFaceWidth = 84;
 const double blendCellWidth = 84;
-const double parentCellWidth = 64;
+const double parentCellWidth = matteFaceWidth;
 
 /// The compose group at rest — a comp with no matte set anywhere in view. The
 /// panel adds [matteToggleWidth] to whatever width this group is at (dragged
@@ -194,8 +195,7 @@ const double parentCellWidth = 64;
 /// bottom bar's Parent toggle can hide it on its own.
 const double composeGroupWidth = matteFaceWidth + cellGap + blendCellWidth;
 
-/// The parent group: the mockup's own 64 for its dropdown face, and nothing
-/// else in the cluster.
+/// The parent group: its dropdown face, and nothing else in the cluster.
 const double parentGroupWidth = parentCellWidth;
 
 /// The render-time cell: wide enough for "1234 ms" and its switch, and no
@@ -296,11 +296,23 @@ double snapGroupWidth(TimelineGroup group, double width) {
   return (settled - home).abs() <= snapGrab ? home : settled;
 }
 
+/// The widths a group started at before [columnsVersion]. A store from then
+/// holding one of these never had that seam dragged, so the group opens at
+/// the width it starts at now.
+const Map<TimelineGroup, double> formerGroupWidths = {
+  TimelineGroup.parent: 64,
+};
+
+/// Written with the stored columns, so widths kept by an older Lumit can be
+/// told apart from ones kept by this one.
+const int columnsVersion = 2;
+
 /// The columns as the workspace store keeps them. By name, so a group added
 /// or dropped later does not shuffle the rest.
 Map<String, dynamic> columnsToJson(List<TimelineGroup> order,
         Map<TimelineGroup, double> widths, Set<TimelineGroup> hidden) =>
     {
+      'version': columnsVersion,
       'order': [for (final group in order) group.name],
       'widths': {for (final e in widths.entries) e.key.name: e.value},
       'hidden': [for (final group in hidden) group.name],
@@ -321,14 +333,21 @@ Map<String, dynamic> columnsToJson(List<TimelineGroup> order,
             if (byName[name] case final group?) group,
       ];
   final widths = j?['widths'];
+  final version = j?['version'];
+  final current = version is num && version >= columnsVersion;
+  // A width a group no longer starts at, kept by an older Lumit.
+  bool former(TimelineGroup group, num width) =>
+      !current && formerGroupWidths[group] == width.toDouble();
   return (
     // A group the file does not name takes its default place after the rest.
     order: {...named(j?['order']), ...defaultGroupOrder}.toList(),
     widths: {
       for (final e in defaultGroupWidths.entries)
-        e.key: widths is Map && widths[e.key.name] is num
-            ? snapGroupWidth(e.key, (widths[e.key.name] as num).toDouble())
-            : e.value,
+        e.key: switch (widths is Map ? widths[e.key.name] : null) {
+          final num stored when !former(e.key, stored) =>
+            snapGroupWidth(e.key, stored.toDouble()),
+          _ => e.value,
+        },
     },
     // The Layer column cannot be switched off.
     hidden: named(j?['hidden']).toSet()..remove(TimelineGroup.identity),

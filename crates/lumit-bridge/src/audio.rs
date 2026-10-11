@@ -127,6 +127,10 @@ struct AudioState {
     /// file was still decoding when a comp started playing is dropped rather
     /// than stamped over the comp's mix.
     wanted_preview: Option<Uuid>,
+    /// What the preview in the engine reads, where one is: the file and the
+    /// streams of it. A press that asks for other streams of the same file
+    /// is another preview, not a seek in this one.
+    loaded_preview: Option<lumit_media::SoundSource>,
     /// The comp waiting for the worker, with the document to build it from —
     /// the snapshot is captured at request time so a later edit cannot change
     /// what a queued prepare is about to mix.
@@ -172,6 +176,7 @@ impl AudioState {
             pending_start: None,
             worker_busy: false,
             wanted_preview: None,
+            loaded_preview: None,
             pending_prepare: None,
             jobs: AudioJobsBuilder::new(),
             bakes: lumit_render::export::RackBakes::default(),
@@ -207,7 +212,7 @@ pub(crate) fn jobs_signature(jobs: &[AudioJob], duration_s: f64, master_db: f64)
     duration_s.to_bits().hash(&mut h);
     master_db.to_bits().hash(&mut h);
     for j in jobs {
-        j.path.hash(&mut h);
+        j.sound.hash(&mut h);
         j.in_s.to_bits().hash(&mut h);
         j.out_s.to_bits().hash(&mut h);
         j.offset_s.to_bits().hash(&mut h);
@@ -603,7 +608,7 @@ fn prepare_once(comp: Uuid, doc: &Arc<lumit_core::Document>) {
     let pool = lumit_audio::stream::pool();
     let (plan, strips) = lumit_render::export::live_plan(
         &jobs,
-        &|job| Some(pool.source(&job.path, rate)),
+        &|job| Some(pool.source(&job.sound, rate)),
         rate,
         duration_s,
         master_db,
@@ -687,6 +692,8 @@ pub(crate) fn play(comp: Uuid, start: f64, doc: Arc<lumit_core::Document>) {
 /// composition behind it: the Project panel's preview button (docs/07 §3.1)
 /// from the top, and the Source viewer from wherever its playhead is.
 ///
+/// `sound` is the file and which of its audio streams are heard, mixed.
+///
 /// [`clock`] then reads **the file's own time**, seconds from the top of the
 /// file, and so starts at `start_s` and not at zero. A start past the end of
 /// the file is held to the end, and one that is not a number is the top.
@@ -699,7 +706,7 @@ pub(crate) fn play(comp: Uuid, start: f64, doc: Arc<lumit_core::Document>) {
 ///
 /// Returns at once: the file is opened on its own thread, so a slow disk does
 /// not hold the press.
-pub(crate) fn preview(item: Uuid, path: std::path::PathBuf, start_s: f64) {
+pub(crate) fn preview(item: Uuid, sound: lumit_media::SoundSource, start_s: f64) {
     // `max` answers zero for a start that is not a number.
     let start_s = start_s.max(0.0);
     {
@@ -710,7 +717,7 @@ pub(crate) fn preview(item: Uuid, path: std::path::PathBuf, start_s: f64) {
         st.wanted_preview = Some(item);
         // This file's preview is already in the engine: a second press is a
         // seek, not a second look at the file.
-        if st.loaded_comp == Some(item) {
+        if st.loaded_comp == Some(item) && st.loaded_preview.as_ref() == Some(&sound) {
             st.playing = true;
             let length = st
                 .loaded_plan
@@ -729,7 +736,7 @@ pub(crate) fn preview(item: Uuid, path: std::path::PathBuf, start_s: f64) {
 
         // The same source a comp's mix reads: previewing a clip and then
         // dropping it in a comp decodes each block of it once.
-        let source = lumit_audio::stream::pool().source(&path, rate);
+        let source = lumit_audio::stream::pool().source(&sound, rate);
         // How long the preview is, is how long the file is. Finding that
         // reads the end of the file and not the whole of it.
         let frames = source.frames_exactly();
@@ -741,7 +748,7 @@ pub(crate) fn preview(item: Uuid, path: std::path::PathBuf, start_s: f64) {
         let jobs = vec![AudioJob {
             item,
             layer: item,
-            path,
+            sound: sound.clone(),
             in_s: 0.0,
             out_s: duration_s,
             offset_s: 0.0,
@@ -781,6 +788,7 @@ pub(crate) fn preview(item: Uuid, path: std::path::PathBuf, start_s: f64) {
             play: true,
         });
         st.loaded_comp = Some(item);
+        st.loaded_preview = Some(sound);
         // No signature: a preview is not a comp, so no edit can arrive that
         // would want to be recognised as the same mix.
         st.loaded_sig = None;
@@ -997,8 +1005,8 @@ fn mix_peaks_of(plan: &MixPlan, rate: u32, start_s: f64, end_s: f64, buckets: us
         plan.warm(from, to.min(plan.total_frames));
         return plan.peaks(rate, start_s, end_s, buckets);
     }
-    plan.peaks_wide(rate, start_s, end_s, buckets, &mut |path| {
-        crate::peaks::pyramid_for(path)
+    plan.peaks_wide(rate, start_s, end_s, buckets, &mut |sound| {
+        crate::peaks::pyramid_for(sound)
     })
 }
 
@@ -1046,7 +1054,6 @@ pub(crate) fn clock() -> (f64, bool, bool) {
 mod tests {
     use super::*;
     use lumit_core::anim::Property;
-    use std::path::PathBuf;
 
     /// Tests that write the one shared audio state take this first, so two of
     /// them never see each other's half-set state.
@@ -1063,7 +1070,7 @@ mod tests {
             item,
             layer: item, // one job, one strip: the test's own layer identity
             clip: None,
-            path: PathBuf::from(path),
+            sound: lumit_media::SoundSource::file(path),
             in_s,
             out_s,
             offset_s,

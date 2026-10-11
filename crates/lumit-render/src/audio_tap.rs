@@ -35,12 +35,11 @@
 //! labelled no-op a dangling matte gives.
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
 
 use lumit_core::model::{Composition, Document, LayerKind, ProjectItem};
-use lumit_media::AudioBuffer;
+use lumit_media::{AudioBuffer, SoundSource};
 use uuid::Uuid;
 
 /// The rate the tap decodes at, in hertz.
@@ -59,13 +58,13 @@ const CACHE_BUDGET_BYTES: usize = 256 * 1024 * 1024;
 /// file that would not decode).
 type Entry = (u64, Option<Arc<AudioBuffer>>);
 
-/// Decoded tracks by file, shared across every render in the process — the
-/// preview's, the export's and the thumbnailer's alike, because what a file
-/// sounds like is a fact about the file.
+/// Decoded tracks by file and the streams of it read, shared across every
+/// render in the process — the preview's, the export's and the thumbnailer's
+/// alike, because what a file sounds like is a fact about the file.
 ///
 /// A failed decode is remembered as `None`, so a missing file is not reopened
 /// once per driver per frame.
-static DECODED: LazyLock<Mutex<HashMap<PathBuf, Entry>>> =
+static DECODED: LazyLock<Mutex<HashMap<SoundSource, Entry>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
 /// Ticks once per read, so entries can be ordered by how recently they were
@@ -84,27 +83,27 @@ fn entry_bytes(buffer: &Option<Arc<AudioBuffer>>) -> usize {
 /// Ordering is by last read, so a comp whose two long tracks drive two
 /// parameters keeps whichever it is reading and evicts the one it left behind,
 /// rather than clearing everything and re-decoding both every frame.
-fn evict_to_budget(cache: &mut HashMap<PathBuf, Entry>, budget: usize) {
+fn evict_to_budget(cache: &mut HashMap<SoundSource, Entry>, budget: usize) {
     let mut total: usize = cache.values().map(|(_, b)| entry_bytes(b)).sum();
     if total <= budget {
         return;
     }
-    let mut oldest_first: Vec<(u64, PathBuf)> = cache
+    let mut oldest_first: Vec<(u64, SoundSource)> = cache
         .iter()
-        .map(|(path, (touched, _))| (*touched, path.clone()))
+        .map(|(sound, (touched, _))| (*touched, sound.clone()))
         .collect();
-    oldest_first.sort_unstable();
-    for (_, path) in oldest_first {
+    oldest_first.sort_unstable_by_key(|(touched, _)| *touched);
+    for (_, sound) in oldest_first {
         if total <= budget {
             return;
         }
-        if let Some((_, buffer)) = cache.remove(&path) {
+        if let Some((_, buffer)) = cache.remove(&sound) {
             total -= entry_bytes(&buffer);
         }
     }
 }
 
-/// The decoded track at `path`, from the cache or by decoding it now.
+/// The decoded track of `sound`, from the cache or by decoding it now.
 ///
 /// ponytail: the decode happens on whichever thread asked, so the first frame
 /// that reads a driven parameter waits for the whole file — the same trade the
@@ -113,23 +112,23 @@ fn evict_to_budget(cache: &mut HashMap<PathBuf, Entry>, budget: usize) {
 /// for more than a second on an ordinary track (a few minutes of stereo), hand
 /// `decoded` to the decode-ahead worker so the wait happens before the frame is
 /// asked for.
-fn decoded(path: &Path) -> Option<Arc<AudioBuffer>> {
+fn decoded(sound: &SoundSource) -> Option<Arc<AudioBuffer>> {
     // The lock is never held across the decode (14-ENGINEERING-RULES §5): FFmpeg
     // is FFI and takes as long as the file is long. Two threads racing the same
     // new file decode it twice and agree on the answer, which is cheaper than
     // holding a global lock for a second.
     if let Ok(mut cache) = DECODED.lock() {
-        if let Some((touched, hit)) = cache.get_mut(path) {
+        if let Some((touched, hit)) = cache.get_mut(sound) {
             *touched = TOUCH.fetch_add(1, Ordering::Relaxed);
             return hit.clone();
         }
     }
-    let decoded = lumit_media::audio::decode_all(path, TAP_RATE)
+    let decoded = lumit_media::audio::decode_sound(sound, TAP_RATE)
         .ok()
         .map(Arc::new);
     if let Ok(mut cache) = DECODED.lock() {
         let touched = TOUCH.fetch_add(1, Ordering::Relaxed);
-        cache.insert(path.to_path_buf(), (touched, decoded.clone()));
+        cache.insert(sound.clone(), (touched, decoded.clone()));
         evict_to_budget(&mut cache, CACHE_BUDGET_BYTES);
     }
     decoded
@@ -186,7 +185,7 @@ impl<'a> DocumentAudio<'a> {
 
     /// The file `layer` plays, if it is a footage layer whose item is still in
     /// the project.
-    fn path_of(&self, layer: Uuid) -> Option<PathBuf> {
+    fn sound_of(&self, layer: Uuid) -> Option<SoundSource> {
         let layer = self.comp.layers.iter().find(|l| l.id == layer)?;
         let LayerKind::Footage { item } = &layer.kind else {
             return None;
@@ -194,7 +193,10 @@ impl<'a> DocumentAudio<'a> {
         let ProjectItem::Footage(f) = self.doc.item(*item)? else {
             return None;
         };
-        Some(crate::headless::footage_path(f))
+        Some(SoundSource::streams_of(
+            crate::headless::footage_path(f),
+            layer.audio_streams.places(),
+        ))
     }
 }
 
@@ -209,7 +211,7 @@ impl lumit_core::fx::AudioTap for DocumentAudio<'_> {
     /// the part that exists, which is what makes the first and last frames of a
     /// clip read a real level rather than nothing.
     fn samples(&self, layer: Uuid, from: f64, to: f64, out: &mut Vec<f32>) -> Option<f64> {
-        let buffer = decoded(&self.path_of(layer)?)?;
+        let buffer = decoded(&self.sound_of(layer)?)?;
         let rate = f64::from(buffer.rate);
         if rate <= 0.0 || !from.is_finite() || !to.is_finite() {
             return None;
@@ -295,7 +297,7 @@ impl lumit_core::fx::AudioTap for DocumentAudio<'_> {
             .filter(|job| {
                 layer.is_none_or(|id| job.layer == id) && clip.is_none_or(|id| job.clip == Some(id))
             })
-            .filter_map(|job| Some((decoded(&job.path)?, job)))
+            .filter_map(|job| Some((decoded(&job.sound)?, job)))
             .collect();
         let placed: Vec<lumit_audio::mix::PlacedAudio<'_>> = decoded
             .iter()
@@ -368,7 +370,14 @@ pub fn mix_fingerprint(doc: &Arc<Document>, comp: &Composition) -> u64 {
     let mut h = blake3::Hasher::new();
     h.update(&comp.master_volume_db.to_bits().to_le_bytes());
     for job in &jobs {
-        h.update(job.path.to_string_lossy().as_bytes());
+        h.update(job.sound.path.to_string_lossy().as_bytes());
+        // Only where a layer has chosen its streams, so every key made
+        // before one could is the key it still makes.
+        if !job.sound.is_first() {
+            for stream in job.sound.streams() {
+                h.update(&stream.to_le_bytes());
+            }
+        }
         h.update(job.layer.as_bytes());
         if let Some(clip) = job.clip {
             h.update(clip.as_bytes());
@@ -411,6 +420,7 @@ pub fn mix_fingerprint(doc: &Arc<Document>, comp: &Composition) -> u64 {
 mod tests {
     use super::*;
     use lumit_core::fx::AudioTap;
+    use std::path::{Path, PathBuf};
 
     /// A document with one footage layer pointing at `path`: the document, its
     /// composition's id, and the layer's id.
@@ -459,6 +469,7 @@ mod tests {
             volume_db: lumit_core::anim::Property::zero(),
             pan: lumit_core::anim::Property::zero(),
             audio_only: true,
+            audio_streams: Default::default(),
             adjustment: false,
             retime: None,
             interpolation: Default::default(),
@@ -526,23 +537,24 @@ mod tests {
         let one_track = entry_bytes(&track(1));
         let budget = one_track + one_track / 2;
 
-        let mut cache: HashMap<PathBuf, Entry> = HashMap::new();
-        cache.insert(PathBuf::from("a.wav"), (0, track(1)));
-        cache.insert(PathBuf::from("b.wav"), (1, track(1)));
+        let file = |name: &str| SoundSource::file(name);
+        let mut cache: HashMap<SoundSource, Entry> = HashMap::new();
+        cache.insert(file("a.wav"), (0, track(1)));
+        cache.insert(file("b.wav"), (1, track(1)));
         evict_to_budget(&mut cache, budget);
         assert_eq!(
             cache.keys().collect::<Vec<_>>(),
-            vec![&PathBuf::from("b.wav")],
+            vec![&file("b.wav")],
             "the track read last is the one kept"
         );
 
         // Reading a again makes b the older of the two, and the next eviction
         // reverses — which is the alternation, not the thrash.
-        cache.insert(PathBuf::from("a.wav"), (2, track(1)));
+        cache.insert(file("a.wav"), (2, track(1)));
         evict_to_budget(&mut cache, budget);
         assert_eq!(
             cache.keys().collect::<Vec<_>>(),
-            vec![&PathBuf::from("a.wav")],
+            vec![&file("a.wav")],
             "and the one left behind is the one dropped"
         );
 

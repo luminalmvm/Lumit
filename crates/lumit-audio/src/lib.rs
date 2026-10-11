@@ -845,7 +845,7 @@ mod tests {
         let frames = whole.frames();
         let shared = Shared::new(Some(Arc::new(mix::MixPlan {
             clips: vec![mix::PlacedClip {
-                source: pool.source(&path, RATE),
+                source: pool.file(&path, RATE),
                 start_frame: 0,
                 src_start: 0,
                 len: frames,

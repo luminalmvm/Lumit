@@ -1,8 +1,8 @@
 ---
 // The foot of every page: the mark and the line it stands for on the left,
 // every destination on the site in three groups beside it. On a wide window a
-// group is its name with its links in two columns to the right of it, so the
-// whole foot is as deep as half the longest group.
+// group is its name with its links in two columns below it, so the whole foot
+// is about as deep as half the longest group.
 const columns = [
   {
     h: "Lumit",
@@ -92,19 +92,11 @@ const columns = [
       grid-template-columns: repeat(3, auto);
     }
   }
-  /* Wide enough for it: a group's name stands to the left of its links, and
-     the links fill two columns downwards. The name is a line shorter than a
-     link, so it is given a link's line to sit level with the first one. */
+  /* Wide enough for it: a group's links fill two columns downwards under its
+     name, the first of them straight below it. */
   @media (min-width: 1280px) {
     .groups {
       column-gap: 52px;
-    }
-    .group {
-      flex-direction: row;
-      gap: 20px;
-    }
-    .group .kicker {
-      height: 22.5px;
     }
     .links {
       display: grid;

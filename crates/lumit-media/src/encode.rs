@@ -680,6 +680,9 @@ pub struct Encoder {
     output: AVFormatContextOutput,
     video: Option<VideoTrack>,
     audio: Option<AudioTrack>,
+    /// The audio streams after the first, in a file opened to carry several
+    /// ([`Self::open_with_sound`]). Empty for every export.
+    more_audio: Vec<AudioTrack>,
     finished: bool,
 }
 
@@ -701,6 +704,21 @@ impl Encoder {
         audio: Option<&AudioSettings>,
         metadata: &Metadata,
     ) -> Result<Self, MediaError> {
+        Self::open_with_sound(path, video, audio, 0, metadata)
+    }
+
+    /// As [`Self::open`], with `more_sound` further audio streams after the
+    /// first, each opened as `audio` says. For a file that has to carry what
+    /// a recording with several audio streams carries: a comp's export is one
+    /// mix and never asks. Each stream is written by its place
+    /// ([`Self::write_audio_stream`]), and none is added without a first.
+    pub fn open_with_sound(
+        path: &Path,
+        video: Option<&VideoSettings>,
+        audio: Option<&AudioSettings>,
+        more_sound: usize,
+        metadata: &Metadata,
+    ) -> Result<Self, MediaError> {
         if video.is_none() && audio.is_none() {
             return Err(MediaError::Ffmpeg(
                 "an export must carry a video or an audio stream".into(),
@@ -719,6 +737,12 @@ impl Encoder {
             Some(a) => Some(open_audio(&mut output, a, global_header)?),
             None => None,
         };
+        let mut more_audio = Vec::new();
+        if let Some(a) = audio {
+            for _ in 0..more_sound {
+                more_audio.push(open_audio(&mut output, a, global_header)?);
+            }
+        }
 
         set_container_metadata(&mut output, metadata);
 
@@ -739,6 +763,7 @@ impl Encoder {
             output,
             video: video_track,
             audio: audio_track,
+            more_audio,
             finished: false,
         })
     }
@@ -828,6 +853,29 @@ impl Encoder {
         pump_audio(track, output, false)
     }
 
+    /// As [`Self::write_audio`], for the audio stream at place `stream`
+    /// counted from nought: the first, or one of those
+    /// [`Self::open_with_sound`] added after it.
+    pub fn write_audio_stream(
+        &mut self,
+        stream: usize,
+        interleaved: &[f32],
+    ) -> Result<(), MediaError> {
+        let Some(after_first) = stream.checked_sub(1) else {
+            return self.write_audio(interleaved);
+        };
+        let Self {
+            output, more_audio, ..
+        } = self;
+        let Some(track) = more_audio.get_mut(after_first) else {
+            return Err(MediaError::Ffmpeg(
+                "this file was opened without that audio stream".into(),
+            ));
+        };
+        track.pending.extend_from_slice(interleaved);
+        pump_audio(track, output, false)
+    }
+
     /// Flush both encoders and write the container trailer. Must be called
     /// exactly once; calling again is a no-op.
     pub fn finish(&mut self) -> Result<(), MediaError> {
@@ -839,13 +887,14 @@ impl Encoder {
             output,
             video,
             audio,
+            more_audio,
             ..
         } = self;
         if let Some(track) = video.as_mut() {
             track.ctx.send_frame(None)?;
             drain_packets(&mut track.ctx, output, 0, true)?;
         }
-        if let Some(track) = audio.as_mut() {
+        for track in audio.iter_mut().chain(more_audio) {
             pump_audio(track, output, true)?;
             track.ctx.send_frame(None)?;
             drain_packets(&mut track.ctx, output, track.stream_index, true)?;

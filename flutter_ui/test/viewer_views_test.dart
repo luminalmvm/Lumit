@@ -165,6 +165,7 @@ void main() {
           duration: BridgeRational(num: seconds, den: den),
           channels: 0,
           sampleRate: 0,
+          audioStreams: 0,
           isStill: false,
         );
 

@@ -32,6 +32,14 @@ pub struct AudioInfo {
     pub sample_rate: i32,
     pub channels: i32,
     pub codec: String,
+    /// What the file calls this stream, where it calls it anything: the
+    /// track name a recorder was given, such as "Microphone".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// The stream's language as the file writes it (`eng`, `deu`), where it
+    /// says one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -39,10 +47,22 @@ pub struct MediaProbe {
     pub duration_seconds: f64,
     pub container: String,
     pub video: Option<VideoInfo>,
+    /// The file's first audio stream, which is the one a layer sounds unless
+    /// it is told another.
     pub audio: Option<AudioInfo>,
+    /// Every audio stream after the first, in the file's own order. Empty for
+    /// nearly every file. A stream's place in [`Self::audio_streams`] is what
+    /// `crate::audio::SoundSource` names it by.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub more_audio: Vec<AudioInfo>,
 }
 
 impl MediaProbe {
+    /// Every audio stream the file carries, the first one first.
+    pub fn audio_streams(&self) -> impl Iterator<Item = &AudioInfo> {
+        self.audio.iter().chain(&self.more_audio)
+    }
+
     /// Whether this file carries a picture at all — a video stream, still image
     /// or otherwise. A music file answers false.
     #[must_use]
@@ -120,6 +140,7 @@ pub fn probe(src: impl Into<MediaSource>) -> Result<MediaProbe, MediaError> {
 
     let mut video = None;
     let mut audio = None;
+    let mut more_audio = Vec::new();
     for stream in input.streams() {
         let par = stream.codecpar();
         match par.codec_type {
@@ -144,12 +165,28 @@ pub fn probe(src: impl Into<MediaSource>) -> Result<MediaProbe, MediaError> {
                     codec: codec_name(par.codec_id),
                 });
             }
-            t if t == ffi::AVMEDIA_TYPE_AUDIO && audio.is_none() => {
-                audio = Some(AudioInfo {
+            t if t == ffi::AVMEDIA_TYPE_AUDIO => {
+                let tags = stream.metadata();
+                let tag = |key: &std::ffi::CStr| {
+                    let entry = tags.as_ref()?.get(key, None, 0)?;
+                    let value = entry.value().to_string_lossy().trim().to_string();
+                    (!value.is_empty()).then_some(value)
+                };
+                let info = AudioInfo {
                     sample_rate: par.sample_rate,
                     channels: par.ch_layout.nb_channels,
                     codec: codec_name(par.codec_id),
-                });
+                    // Matroska calls a track's name its title and QuickTime
+                    // and MP4 call it its name.
+                    title: tag(c"title").or_else(|| tag(c"name")),
+                    // `und` is the file saying it does not know.
+                    language: tag(c"language").filter(|l| l != "und"),
+                };
+                if audio.is_none() {
+                    audio = Some(info);
+                } else if more_audio.len() + 1 < crate::audio::MAX_STREAMS {
+                    more_audio.push(info);
+                }
             }
             _ => {}
         }
@@ -163,6 +200,7 @@ pub fn probe(src: impl Into<MediaSource>) -> Result<MediaProbe, MediaError> {
         container,
         video,
         audio,
+        more_audio,
     })
 }
 
@@ -182,6 +220,7 @@ mod tests {
             container: "test".into(),
             video,
             audio,
+            more_audio: Vec::new(),
         }
     }
 
@@ -223,7 +262,29 @@ mod tests {
             sample_rate: 48_000,
             channels: 2,
             codec: "aac".into(),
+            title: None,
+            language: None,
         }
+    }
+
+    /// A file's audio streams are listed in the file's own order with what it
+    /// calls them, which is the order a `SoundSource` counts them in.
+    #[test]
+    fn every_audio_stream_is_listed_with_its_name() {
+        let dir = tempfile::tempdir().unwrap();
+        let Some(file) = crate::index::tests_support::two_audio_streams(dir.path()) else {
+            eprintln!("skipping: no ffmpeg CLI available for fixture generation");
+            return;
+        };
+        let p = probe(&file).unwrap();
+        let named: Vec<_> = p
+            .audio_streams()
+            .map(|a| (a.title.as_deref(), a.language.as_deref()))
+            .collect();
+        assert_eq!(
+            named,
+            [(Some("Game"), None), (Some("Microphone"), Some("eng"))]
+        );
     }
 
     /// Regression (tester report): an audio file with embedded cover art

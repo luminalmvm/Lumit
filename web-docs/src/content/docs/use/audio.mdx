@@ -32,6 +32,45 @@ There are several options in **Edit ▸ Settings ▸ Interface** for how to disp
 | **Waveform frequency stack** | Splits the waveform into low, mid, and high frequency bands. |
 | **Waveforms from the bottom** | Draws the waveform from the bottom of the row instead of centred. |
 
+## Audio streams
+
+A file can carry several **audio streams**, such as a screen recording with the game on
+one and the microphone on another. A layer plays the first stream until it is set to
+others. The Project panel's preview card states how many streams a file has.
+
+Right-click a layer in the Timeline, or a clip in the Cut timeline or the Audio timeline.
+The commands appear when the file has more than one stream.
+
+| Command | What it does |
+| --- | --- |
+| **Audio streams** | Lists the file's streams. The layer plays the ticked ones, mixed. |
+| **Split audio streams** | Gives each stream a row of its own. |
+| **Merge audio streams** | Puts the streams back on one row, mixed. |
+
+**Split audio streams** and **Merge audio streams** are also in **Layer ▸ Audio**.
+
+- A split Footage layer keeps its picture and its first stream. Each other stream becomes
+  an Audio layer directly below, with the same span, Volume and effects.
+- A split clip keeps its first stream. Each other stream becomes a
+  [linked clip](/use/cutting/#linked-clips) on an audio-only Sequence layer.
+- A split row is named after its stream where the file names it, and after its number
+  otherwise.
+- Merging removes the Audio layers of the same file that start at the same time, along
+  with their own Volume keyframes and effects. Locked layers stay.
+- Merging a layer that was never split sets it to every stream of its file.
+
+**Edit ▸ Settings ▸ Timeline ▸ Several audio streams arrive as** sets what such a file
+becomes when it is placed in a composition.
+
+| Choice | What is placed |
+| --- | --- |
+| **The first stream** | One layer playing the first stream. |
+| **One layer, mixed** | One layer playing every stream. |
+| **A layer each** | A layer for each stream. |
+
+The source view and the Project panel's preview follow the same setting. They play the
+first stream, or every stream mixed for either of the other two choices.
+
 ## Scrubbing
 
 Hold `Ctrl` and drag along the Timeline ruler to hear the composition as the playhead

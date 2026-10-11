@@ -57,6 +57,10 @@ pub struct BridgeMediaInfo {
     /// sound — the panel says nothing rather than "0 channels".
     pub channels: u32,
     pub sample_rate: u32,
+    /// How many audio streams the file carries. The codec, channels and rate
+    /// above are the first one's, which is the one a layer sounds until it is
+    /// told another ([`FootageReference::audio_streams`] lists them all).
+    pub audio_streams: u32,
     /// Whether the picture is a **still** rather than something that runs.
     /// A still probes with a video stream too — one frame of it — so
     /// the question is whether the stream lasts, and the engine
@@ -539,9 +543,18 @@ impl FootageReference {
     ///
     /// A build with no decoder can open nothing, so it says so and the button
     /// never appears.
+    ///
+    /// **A file with several audio streams is heard as it would be placed.**
+    /// `arrival` is the setting *Several audio streams arrive as*: left out
+    /// or the first stream, the preview is the first stream; mixed or a layer
+    /// each, it is every stream together, which is what the layers it would
+    /// become sound like.
     #[frb(sync)]
-    pub fn preview_audio(&self) -> Result<bool, BridgeError> {
-        self.preview_audio_from(0.0)
+    pub fn preview_audio(
+        &self,
+        arrival: Option<crate::api::streams::BridgeStreamsArrival>,
+    ) -> Result<bool, BridgeError> {
+        self.preview_audio_from(0.0, arrival)
     }
 
     /// [`Self::preview_audio`] from `start_seconds` into the file, which is
@@ -553,14 +566,22 @@ impl FootageReference {
     /// the top.
     #[cfg(not(feature = "media"))]
     #[frb(sync)]
-    pub fn preview_audio_from(&self, start_seconds: f64) -> Result<bool, BridgeError> {
-        let _ = start_seconds;
+    pub fn preview_audio_from(
+        &self,
+        start_seconds: f64,
+        arrival: Option<crate::api::streams::BridgeStreamsArrival>,
+    ) -> Result<bool, BridgeError> {
+        let _ = (start_seconds, arrival);
         Ok(false)
     }
 
     #[cfg(feature = "media")]
     #[frb(sync)]
-    pub fn preview_audio_from(&self, start_seconds: f64) -> Result<bool, BridgeError> {
+    pub fn preview_audio_from(
+        &self,
+        start_seconds: f64,
+        arrival: Option<crate::api::streams::BridgeStreamsArrival>,
+    ) -> Result<bool, BridgeError> {
         let project = self.project()?;
         let proj = project.read().map_err(|_| BridgeError::ReadFailed)?;
         let doc = proj.store.snapshot();
@@ -570,10 +591,19 @@ impl FootageReference {
         let Some(src) = Self::resolve_source(&proj, footage) else {
             return Ok(false);
         };
+        // Every stream the file would be placed with, heard together.
+        let arrival = arrival.unwrap_or(crate::api::streams::BridgeStreamsArrival::First);
+        let count = crate::streams::of_item(&proj, footage).len();
+        let places: Vec<u32> = arrival
+            .sounds(count)
+            .iter()
+            .flat_map(|plays| plays.places().to_vec())
+            .collect();
+        let sound = lumit_media::SoundSource::streams_of(src.path, &places);
         // The lock goes before the decode does: `preview` spawns and returns,
         // so nothing slow happens under the project guard (docs/14 §1).
         drop(proj);
-        crate::audio::preview(self.id, src.path, start_seconds);
+        crate::audio::preview(self.id, sound, start_seconds);
         Ok(true)
     }
 
@@ -686,6 +716,7 @@ impl FootageReference {
                 .as_ref()
                 .and_then(|a| u32::try_from(a.sample_rate).ok())
                 .unwrap_or(0),
+            audio_streams: info.audio_streams().count() as u32,
             // Has a picture, but it does not run.
             is_still: info.has_picture() && !info.runs_as_video(),
         }))

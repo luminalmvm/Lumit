@@ -375,7 +375,7 @@ fn footage_places_into_a_composition_even_when_the_media_is_missing() {
 
     // The fixture's media has an empty absolute path and an unsaved project, so
     // it cannot resolve — the comp's own duration and size are used.
-    comp.add_footage_layer(footage, false, None)
+    comp.add_footage_layer(footage, false, None, None)
         .expect("placed");
 
     let layers = comp.get_layers().expect("layers");
@@ -1635,7 +1635,7 @@ fn detaching_audio_leaves_the_comp_sounding_exactly_as_it_did() {
         .expect("imported");
     let inner = add_comp(&project, "Music");
     inner
-        .add_footage_layer(&footage, false, None)
+        .add_footage_layer(&footage, false, None, None)
         .expect("the sound is placed");
     if !inner.get_layers().expect("layers")[0]
         .has_audio()
@@ -2193,7 +2193,7 @@ fn a_footage_layer_converts_to_a_sequence_layer_in_one_step() {
     let footage = project
         .import_footage("C:/clips/shot.mov".into())
         .expect("imported");
-    comp.add_footage_layer(&footage, false, None)
+    comp.add_footage_layer(&footage, false, None, None)
         .expect("placed");
     let layer = comp.get_layers().expect("layers").remove(0);
 
@@ -2236,7 +2236,7 @@ fn the_razor_cuts_and_deletes_without_moving_the_other_clips() {
     let footage = project
         .import_footage("C:/clips/shot.mov".into())
         .expect("imported");
-    comp.add_footage_layer(&footage, false, None)
+    comp.add_footage_layer(&footage, false, None, None)
         .expect("placed");
     let layer = comp.get_layers().expect("layers").remove(0);
     layer.convert_to_sequenced().expect("converted");
@@ -2421,7 +2421,8 @@ fn precompose_sound_mix_nests_a_comp_per_row_and_clears_the_mark() {
 
     // A bare Audio layer, trimmed a second in and slid half a second back,
     // faded up with the Audio panel's own command, which is Volume keys.
-    comp.add_audio_layer(&footage).expect("a bare Audio layer");
+    comp.add_audio_layer(&footage, None)
+        .expect("a bare Audio layer");
     let plain = comp.get_layers().expect("layers").remove(0);
     plain.rename("Voice".into()).expect("named");
     let span = plain.get_span().expect("span");
@@ -2438,7 +2439,8 @@ fn precompose_sound_mix_nests_a_comp_per_row_and_clears_the_mark() {
 
     // A row of two clips that overlap, so the join is a crossfade nothing
     // but the row's own clip list can see, and a rack of its own.
-    comp.add_audio_layer(&footage).expect("one to make a row");
+    comp.add_audio_layer(&footage, None)
+        .expect("one to make a row");
     let row = comp.get_layers().expect("layers").remove(0);
     row.convert_to_sequenced().expect("a row of clips");
     let row = comp.get_layers().expect("layers").remove(0);
@@ -2623,7 +2625,8 @@ fn the_packed_mix_plays_the_same_samples() {
     let footage = project
         .import_footage(song.to_string_lossy().into_owned())
         .expect("imported");
-    comp.add_audio_layer(&footage).expect("a bare Audio layer");
+    comp.add_audio_layer(&footage, None)
+        .expect("a bare Audio layer");
     let plain = comp.get_layers().expect("layers").remove(0);
     if !plain.has_audio().expect("asked") {
         // No decoder in this build, or none that reads the fixture: there is
@@ -2642,7 +2645,8 @@ fn the_packed_mix_plays_the_same_samples() {
         .fade_in(0.5, BridgeFadeShape::Ease)
         .expect("faded up from silence");
 
-    comp.add_audio_layer(&footage).expect("one to make a row");
+    comp.add_audio_layer(&footage, None)
+        .expect("one to make a row");
     let row = comp.get_layers().expect("layers").remove(0);
     row.convert_to_sequenced().expect("a row of clips");
     let row = comp.get_layers().expect("layers").remove(0);
@@ -2664,7 +2668,7 @@ fn the_packed_mix_plays_the_same_samples() {
         for job in &jobs {
             if let std::collections::hash_map::Entry::Vacant(slot) = decoded.entry(job.item) {
                 slot.insert(Arc::new(
-                    lumit_media::audio::decode_all(&job.path, RATE).expect("decoded"),
+                    lumit_media::audio::decode_sound(&job.sound, RATE).expect("decoded"),
                 ));
             }
         }
@@ -4074,7 +4078,7 @@ fn sequenced_layer() -> (ProjectReference, CompositionReference, LayerReference)
     let footage = project
         .import_footage("C:/clips/shot.mov".into())
         .expect("imported");
-    comp.add_footage_layer(&footage, false, None)
+    comp.add_footage_layer(&footage, false, None, None)
         .expect("placed");
     let layer = comp.get_layers().expect("layers").remove(0);
     layer.convert_to_sequenced().expect("sequenced");
@@ -4096,7 +4100,7 @@ fn audio_row() -> (
     let footage = project
         .import_footage("C:/clips/music.wav".into())
         .expect("imported");
-    comp.add_audio_layer(&footage).expect("placed");
+    comp.add_audio_layer(&footage, None).expect("placed");
     let layer = comp.get_layers().expect("layers").remove(0);
     layer.convert_to_sequenced().expect("a row of clips");
     let layer = comp.get_layers().expect("layers").remove(0);
@@ -4137,7 +4141,7 @@ fn conversion_places_the_clip_at_the_layers_in_point() {
     let footage = project
         .import_footage("C:/clips/music.wav".into())
         .expect("imported");
-    comp.add_audio_layer(&footage).expect("placed");
+    comp.add_audio_layer(&footage, None).expect("placed");
     let layer = comp.get_layers().expect("layers").remove(0);
 
     // A non-zero in point and a non-zero start offset, the state a trimmed
@@ -4200,7 +4204,7 @@ fn offset_audio_row() -> (ProjectReference, CompositionReference, LayerReference
     let footage = project
         .import_footage("C:/clips/music.wav".into())
         .expect("imported");
-    comp.add_audio_layer(&footage).expect("placed");
+    comp.add_audio_layer(&footage, None).expect("placed");
     let layer = comp.get_layers().expect("layers").remove(0);
     let span = layer.get_span().expect("span");
     layer
@@ -4320,7 +4324,7 @@ fn a_linked_ripple_delete_closes_both_layers_in_one_step() {
         .expect("imported");
     let span = |n: i64| BridgeRational { num: n, den: 1 };
     let place = |target: Option<LayerReference>, at: i64| {
-        let done = comp.cut_place(target, &footage, span(0), span(2), at, false, true);
+        let done = comp.cut_place(target, &footage, span(0), span(2), at, false, true, None);
         assert_eq!(done.expect("placed"), BridgeCutResult::Done);
     };
 
@@ -4406,7 +4410,7 @@ fn cut_row(clips: i64) -> (ProjectReference, CompositionReference, LayerReferenc
         .expect("imported");
     let span = |n: i64| BridgeRational { num: n, den: 1 };
     let place = |target: Option<LayerReference>, at: i64| {
-        let done = comp.cut_place(target, &footage, span(1), span(3), at, false, true);
+        let done = comp.cut_place(target, &footage, span(1), span(3), at, false, true, None);
         assert_eq!(done.expect("placed"), BridgeCutResult::Done);
     };
     place(None, 0);
@@ -4508,7 +4512,7 @@ fn a_paste_links_the_copies_to_each_other_and_answers_where_they_end() {
             other => panic!("a footage clip, not {other:?}"),
         },
     };
-    comp.add_audio_layer(&footage).expect("placed");
+    comp.add_audio_layer(&footage, None).expect("placed");
     let below = comp.get_layers().expect("layers").remove(0);
     below.convert_to_sequenced().expect("a row of clips");
     let sound = row_clips(&below)[0].id;
@@ -4744,7 +4748,7 @@ fn a_sequence_shape_copies_onto_another_layer() {
     // Converted rather than auto-wrapped: this path's media does not exist,
     // so the wrap rule correctly declines it (a file it cannot read is not
     // known to run).
-    comp.add_footage_layer(&other_footage, false, None)
+    comp.add_footage_layer(&other_footage, false, None, None)
         .expect("placed");
     comp.get_layers()
         .expect("layers")
@@ -4787,7 +4791,7 @@ fn footage_layer() -> (ProjectReference, CompositionReference, LayerReference) {
     let footage = project
         .import_footage("C:/clips/shot.mov".into())
         .expect("imported");
-    comp.add_footage_layer(&footage, false, None)
+    comp.add_footage_layer(&footage, false, None, None)
         .expect("placed");
     let layer = comp.get_layers().expect("layers").remove(0);
     (project, comp, layer)
@@ -4995,7 +4999,7 @@ fn a_placed_layer_is_the_same_whether_the_probe_was_warm_or_not() {
 
     // Cold: whatever the import queued may still be in flight, so this
     // placement is the one that has to stand on the synchronous fallback.
-    comp.add_footage_layer(&footage, false, None)
+    comp.add_footage_layer(&footage, false, None, None)
         .expect("placed cold");
     let cold = comp.get_layers().expect("layers")[0]
         .get_info()
@@ -5004,7 +5008,7 @@ fn a_placed_layer_is_the_same_whether_the_probe_was_warm_or_not() {
     // Warm: the answer is certainly held now, so this placement is a look-up.
     let probed = crate::probe::ensure_probed(&clip).expect("the fixture probes");
     assert!(probed.video.is_some(), "the fixture has a picture");
-    comp.add_footage_layer(&footage, false, None)
+    comp.add_footage_layer(&footage, false, None, None)
         .expect("placed warm");
     let warm = comp.get_layers().expect("layers")[0]
         .get_info()
@@ -5078,7 +5082,7 @@ fn a_layer_named_as_the_beat_source_is_heard_through_a_solo() {
     let footage = project
         .import_footage(clicks.to_string_lossy().into_owned())
         .expect("imported");
-    comp.add_footage_layer(&footage, false, None)
+    comp.add_footage_layer(&footage, false, None, None)
         .expect("placed");
     let music_row = comp.get_layers().expect("layers").remove(0);
     if !music_row.has_audio().expect("asked") {
@@ -6285,7 +6289,7 @@ fn a_tracked_layer() -> (
     let footage = project
         .import_footage("C:/clips/tracked.mov".into())
         .expect("imported");
-    comp.add_footage_layer(&footage, false, None)
+    comp.add_footage_layer(&footage, false, None, None)
         .expect("placed");
     let layer = comp.get_layers().expect("layers").remove(0);
     layer
@@ -7394,7 +7398,7 @@ fn a_planar_tracked_layer() -> (
     let footage = project
         .import_footage("C:/clips/planar.mov".into())
         .expect("imported");
-    comp.add_footage_layer(&footage, false, None)
+    comp.add_footage_layer(&footage, false, None, None)
         .expect("placed");
     comp.add_solid_layer(None).expect("a layer to pin");
     let layers = comp.get_layers().expect("layers");
@@ -9812,4 +9816,223 @@ fn a_transform_expression_keeps_its_language_through_undo() {
     project.redo().expect("redone");
     assert_eq!(read(), typed);
     assert_eq!(shown(), 34.0);
+}
+
+/// A recording with two audio streams, imported into a fresh project with a
+/// composition to place it in. `None` on a machine with no ffmpeg to make it.
+#[cfg(feature = "media")]
+fn two_stream_recording(
+    dir: &std::path::Path,
+) -> Option<(ProjectReference, CompositionReference, FootageReference)> {
+    let clip = lumit_media::index::tests_support::two_audio_streams(dir)?;
+    let project = LumitBridgeState::new_project(None).expect("a new project");
+    let comp = project.new_composition("Scene".into(), None).expect("comp");
+    let footage = project
+        .import_footage(clip.to_string_lossy().into_owned())
+        .expect("imported");
+    Some((project, comp, footage))
+}
+
+/// The comp's mix as an export hears it, over the four seconds the recording
+/// lasts.
+#[cfg(feature = "media")]
+fn mix_of(project: &ProjectReference, comp: &CompositionReference) -> Vec<f32> {
+    lumit_render::export::mixdown(&audible_jobs(project, comp), 48_000, 4.0)
+}
+
+/// The furthest apart two mixes are at any sample.
+#[cfg(feature = "media")]
+fn apart(a: &[f32], b: &[f32]) -> f32 {
+    assert_eq!(a.len(), b.len());
+    a.iter()
+        .zip(b)
+        .map(|(a, b)| (a - b).abs())
+        .fold(0.0, f32::max)
+}
+
+/// **Split and merged, a recording's audio streams sound the same.** A layer
+/// of a file with two streams sounds the first. Split, it is two rows and
+/// both are heard. Merged, it is one row again sounding the two mixed, which
+/// is the sound the two rows made. Each is one undo step.
+#[test]
+#[cfg(feature = "media")]
+fn audio_streams_split_onto_rows_and_merge_back_sounding_the_same() {
+    use crate::api::layer::BridgeLayerKind;
+    let dir = tempfile::tempdir().expect("temp dir");
+    let Some((project, comp, footage)) = two_stream_recording(dir.path()) else {
+        return; // no ffmpeg on this machine
+    };
+    comp.add_footage_layer(&footage, false, None, None)
+        .expect("placed");
+    let layer = comp.get_layers().expect("layers").remove(0);
+
+    let has = layer.audio_streams().expect("asked");
+    let titles: Vec<_> = has.streams.iter().map(|s| s.title.as_deref()).collect();
+    assert_eq!(titles, [Some("Game"), Some("Microphone")]);
+    assert_eq!((has.chosen.as_slice(), has.several), (&[0][..], true));
+    let first_alone = mix_of(&project, &comp);
+
+    assert!(layer.split_audio_streams().expect("split"));
+    let rows = comp.get_layers().expect("layers");
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[1].get_kind().expect("kind"), BridgeLayerKind::Audio);
+    assert!(rows[1].get_name().expect("name").ends_with("Microphone"));
+    assert_eq!(rows[1].audio_streams().expect("asked").chosen, [1]);
+    assert!(!layer.split_audio_streams().expect("asked again"));
+    let split = mix_of(&project, &comp);
+    assert!(
+        apart(&split, &first_alone) > 0.05,
+        "the second stream is heard"
+    );
+    // What plays is what exports: the plan the engine is handed for these
+    // rows, read through the pool it plays from.
+    let jobs = audible_jobs(&project, &comp);
+    let pool = lumit_audio::stream::pool();
+    let (plan, _strips) = lumit_render::export::live_plan(
+        &jobs,
+        &|job| Some(pool.source(&job.sound, 48_000)),
+        48_000,
+        4.0,
+        0.0,
+        &mut lumit_render::export::RackBakes::default(),
+    );
+    plan.warm(0, plan.total_frames);
+    let played: Vec<f32> = (0..plan.total_frames)
+        .flat_map(|i| {
+            let (l, r) = plan.frame_at(i);
+            [l, r]
+        })
+        .collect();
+    assert!(apart(&played, &split) < 1e-5, "playback is the export");
+
+    project.undo().expect("undone");
+    assert_eq!(comp.get_layers().expect("layers").len(), 1);
+    assert!(apart(&mix_of(&project, &comp), &first_alone) == 0.0);
+    project.redo().expect("redone");
+
+    // Asked of the row that was split off, it is the picture's row that stays.
+    let off = comp.get_layers().expect("layers").remove(1);
+    assert!(off.merge_audio_streams().expect("merged"));
+    let rows = comp.get_layers().expect("layers");
+    assert_eq!(rows.len(), 1);
+    assert!(rows[0].equals(&layer));
+    assert_eq!(layer.audio_streams().expect("asked").chosen, [0, 1]);
+    assert!(
+        apart(&mix_of(&project, &comp), &split) < 1e-5,
+        "one row of both is the two rows"
+    );
+    assert!(!layer.merge_audio_streams().expect("asked again"));
+
+    // And a row can be told one stream by itself.
+    layer.set_audio_streams(vec![1]).expect("chosen");
+    let second_alone = mix_of(&project, &comp);
+    assert!(apart(&second_alone, &first_alone) > 0.05);
+    assert!(apart(&second_alone, &split) > 0.05);
+}
+
+/// A file with several audio streams arrives as the setting says: the first
+/// stream, every stream on the one layer, or a layer to each, and as clips
+/// linked to the picture where video arrives as a Sequence layer.
+#[test]
+#[cfg(feature = "media")]
+fn a_recording_arrives_with_its_streams_as_the_setting_says() {
+    use crate::api::layer::BridgeLayerKind;
+    use crate::api::streams::BridgeStreamsArrival;
+    let dir = tempfile::tempdir().expect("temp dir");
+    let Some((project, comp, footage)) = two_stream_recording(dir.path()) else {
+        return; // no ffmpeg on this machine
+    };
+    let chosen = |layer: &LayerReference| layer.audio_streams().expect("asked").chosen;
+
+    comp.add_footage_layer(&footage, false, None, Some(BridgeStreamsArrival::Mixed))
+        .expect("placed mixed");
+    let rows = comp.get_layers().expect("layers");
+    assert_eq!(rows.len(), 1);
+    assert_eq!(chosen(&rows[0]), [0, 1]);
+    project.undo().expect("undone");
+
+    comp.add_footage_layer(&footage, false, None, Some(BridgeStreamsArrival::Split))
+        .expect("placed apart");
+    let rows = comp.get_layers().expect("layers");
+    assert_eq!(rows.len(), 2);
+    assert_eq!((chosen(&rows[0]), chosen(&rows[1])), (vec![0], vec![1]));
+    assert_eq!(rows[1].get_kind().expect("kind"), BridgeLayerKind::Audio);
+    // One placement, one undo step.
+    project.undo().expect("undone");
+    assert!(comp.get_layers().expect("layers").is_empty());
+
+    comp.add_footage_layer(&footage, true, None, Some(BridgeStreamsArrival::Split))
+        .expect("placed apart, as clips");
+    let rows = comp.get_layers().expect("layers");
+    assert_eq!(rows.len(), 2);
+    let clip_of = |row: &LayerReference| {
+        let lumit_core::model::LayerKind::Sequence { mut clips } = row.item().expect("row").kind
+        else {
+            panic!("a Sequence layer");
+        };
+        clips.remove(0)
+    };
+    let (picture, sound) = (clip_of(&rows[0]), clip_of(&rows[1]));
+    assert!(picture.link.is_some() && picture.link == sound.link);
+    assert_eq!(sound.audio_streams.places(), [1]);
+    assert!(rows[1].item().expect("row").audio_only);
+    // Merged from the row, the picture's clip takes both and the sound row
+    // goes with its clip.
+    assert!(rows[0].merge_audio_streams().expect("merged"));
+    let rows = comp.get_layers().expect("layers");
+    assert_eq!(rows.len(), 1);
+    assert_eq!(clip_of(&rows[0]).audio_streams.places(), [0, 1]);
+}
+
+/// In the Cut timeline a recording's streams are linked sound clips, a track
+/// to a stream. Placed apart, merged and split again, the sound is the same
+/// sound.
+#[test]
+#[cfg(feature = "media")]
+fn a_cut_places_splits_and_merges_a_recordings_streams_as_linked_clips() {
+    use crate::api::cut::BridgeCutResult;
+    use crate::api::streams::BridgeStreamsArrival;
+    let dir = tempfile::tempdir().expect("temp dir");
+    let Some((project, comp, footage)) = two_stream_recording(dir.path()) else {
+        return; // no ffmpeg on this machine
+    };
+    let span = |n: i64| BridgeRational { num: n, den: 1 };
+    let arrival = Some(BridgeStreamsArrival::Split);
+    let placed = comp.cut_place(None, &footage, span(0), span(4), 0, false, true, arrival);
+    assert_eq!(placed.expect("placed"), BridgeCutResult::Done);
+
+    // The picture's track, silent, over a sound track to each stream.
+    let clips_of = |row: &LayerReference| match row.item().expect("row").kind {
+        lumit_core::model::LayerKind::Sequence { clips } => clips,
+        _ => panic!("a Sequence layer"),
+    };
+    let rows = comp.get_layers().expect("layers");
+    assert_eq!(rows.len(), 3);
+    let picture = clips_of(&rows[0]).remove(0);
+    let sounds: Vec<_> = rows[1..].iter().map(|r| clips_of(r).remove(0)).collect();
+    assert!(sounds.iter().all(|c| c.link == picture.link));
+    // Down the stack in the file's own order.
+    let places: Vec<u32> = sounds
+        .iter()
+        .flat_map(|c| c.audio_streams.places().to_vec())
+        .collect();
+    assert_eq!(places, [0, 1]);
+    let split = mix_of(&project, &comp);
+
+    // Asked of the picture clip, the merge lands on the clips with its sound.
+    let merged = comp.cut_merge_audio_streams(vec![picture.id]);
+    assert_eq!(merged.expect("merged"), BridgeCutResult::Done);
+    let rows = comp.get_layers().expect("layers");
+    assert_eq!(rows.len(), 2, "the track the merge emptied went with it");
+    assert_eq!(clips_of(&rows[1])[0].audio_streams.places(), [0, 1]);
+    assert!(apart(&mix_of(&project, &comp), &split) < 1e-5);
+    let again = comp.cut_merge_audio_streams(vec![picture.id]);
+    assert_eq!(again.expect("asked again"), BridgeCutResult::Nothing);
+
+    let parted = comp.cut_split_audio_streams(vec![picture.id]);
+    assert_eq!(parted.expect("split"), BridgeCutResult::Done);
+    assert_eq!(comp.get_layers().expect("layers").len(), 3);
+    assert!(apart(&mix_of(&project, &comp), &split) < 1e-5);
+    project.undo().expect("undone");
+    assert_eq!(comp.get_layers().expect("layers").len(), 2);
 }

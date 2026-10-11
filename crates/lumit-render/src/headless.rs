@@ -2832,9 +2832,9 @@ pub struct AudioJobsBuilder {
     heard: Option<Uuid>,
 }
 
-/// Whether each footage **item** carries an audio stream, probed once per
+/// How many audio streams each footage **item** carries, probed once per
 /// process rather than once per [`AudioJobsBuilder`] — see
-/// [`AudioJobsBuilder::item_has_audio`], which is the only reader.
+/// [`AudioJobsBuilder::item_audio_streams`], which is the only reader.
 ///
 /// Keyed by the item rather than by its file, so two projects and two tests
 /// never answer for one another. A missing file is never stored, so relinking
@@ -2846,7 +2846,7 @@ pub struct AudioJobsBuilder {
 /// there to another. Clear this on the same signal the
 /// decoded-audio cache would need, if overwriting a track under a running Lumit
 /// ever stops adding the mute switch.
-static HAS_AUDIO: LazyLock<Mutex<HashMap<Uuid, bool>>> =
+static AUDIO_STREAMS: LazyLock<Mutex<HashMap<Uuid, u32>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
 /// The layer's *Duck under* wire, if its graph lands one on the Layer out's
@@ -3141,14 +3141,15 @@ impl AudioJobsBuilder {
                 let Some(ProjectItem::Footage(f)) = doc.item(*item) else {
                     return;
                 };
-                if !self.item_has_audio(*item, &footage_path(f)) {
+                let Some(sound) = self.sound_of(*item, footage_path(f), &layer.audio_streams)
+                else {
                     return;
-                }
+                };
                 jobs.push(AudioJob {
                     item: *item,
                     layer: strip,
                     clip: None,
-                    path: footage_path(f),
+                    sound,
                     in_s,
                     out_s,
                     offset_s,
@@ -3289,11 +3290,11 @@ impl AudioJobsBuilder {
                     let Some(ProjectItem::Footage(f)) = doc.item(item) else {
                         continue;
                     };
-                    let path = footage_path(f);
-                    if !self.item_has_audio(item, &path) {
+                    let Some(sound) = self.sound_of(item, footage_path(f), &clip.audio_streams)
+                    else {
                         continue;
-                    }
-                    Some((item, path))
+                    };
+                    Some((item, sound))
                 }
                 lumit_core::sequence::ClipSource::Comp(_) => None,
             };
@@ -3385,7 +3386,7 @@ impl AudioJobsBuilder {
             // line changing for the gain.
             let fade = (fade.is_active() || clip.gain_db != 0.0).then_some(fade);
 
-            let Some((item, path)) = file else {
+            let Some((item, sound)) = file else {
                 let lumit_core::sequence::ClipSource::Comp(nested_id) = clip.source else {
                     continue;
                 };
@@ -3442,7 +3443,7 @@ impl AudioJobsBuilder {
                 // Which clip this is, so a filtered reading of the mix can ask
                 // for one clip of one row (docs/impl/audio-nodes.md §2).
                 clip: Some(clip.id),
-                path,
+                sound,
                 in_s: clip_in,
                 out_s: clip_out,
                 // Where the clip's source sample 0 sits on the comp timeline:
@@ -3566,35 +3567,60 @@ impl AudioJobsBuilder {
         }
     }
 
-    /// Whether footage `item` at `path` carries an audio stream, cached so each
+    /// What a layer or clip of footage `item` at `path` sounds, given the
+    /// streams it has chosen: the file and the chosen streams it actually
+    /// has. `None` when it has none of them, which is a silent file, or a
+    /// choice of streams that are not there.
+    fn sound_of(
+        &mut self,
+        item: Uuid,
+        path: PathBuf,
+        chosen: &lumit_core::model::AudioStreams,
+    ) -> Option<lumit_media::SoundSource> {
+        let count = self.item_audio_streams(item, &path);
+        let there: Vec<u32> = chosen
+            .places()
+            .iter()
+            .copied()
+            .filter(|place| *place < count)
+            .collect();
+        (!there.is_empty()).then(|| lumit_media::SoundSource::streams_of(path, &there))
+    }
+
+    /// Whether footage `item` at `path` carries an audio stream at all.
+    fn item_has_audio(&mut self, item: Uuid, path: &Path) -> bool {
+        self.item_audio_streams(item, path) > 0
+    }
+
+    /// How many audio streams footage `item` at `path` carries, cached so each
     /// file is probed for audio at most once across a session.
     ///
-    /// The memo is [`HAS_AUDIO`] — **per process, not per builder**: a builder
+    /// The memo is [`AUDIO_STREAMS`] — **per process, not per builder**: a builder
     /// is made afresh wherever the question is asked (the timeline asking each
     /// row for its mute switch, the audio engine preparing a plan, the Audio
     /// level driver reading the comp's mix on every frame it draws), and a
     /// probe is an FFmpeg open. Per builder, "once a session" was a sentence
     /// this comment made rather than a thing that happened.
-    fn item_has_audio(&mut self, item: Uuid, path: &Path) -> bool {
-        if let Ok(memo) = HAS_AUDIO.lock() {
-            if let Some(&has) = memo.get(&item) {
-                return has;
+    pub fn item_audio_streams(&mut self, item: Uuid, path: &Path) -> u32 {
+        if let Ok(memo) = AUDIO_STREAMS.lock() {
+            if let Some(&count) = memo.get(&item) {
+                return count;
             }
         }
         // A missing file isn't remembered, so a relinked clip is heard.
         if !path.is_file() {
-            return false;
+            return 0;
         }
         // The lock is not held across the probe: FFI, and as slow as opening a
         // file (14-ENGINEERING-RULES §5). Two threads racing one new item probe
         // it twice and agree.
-        let has = lumit_media::probe::probe(path)
-            .map(|p| p.audio.is_some())
-            .unwrap_or(false);
-        if let Ok(mut memo) = HAS_AUDIO.lock() {
-            memo.insert(item, has);
+        let count = lumit_media::probe::probe(path)
+            .map(|p| p.audio_streams().count() as u32)
+            .unwrap_or(0);
+        if let Ok(mut memo) = AUDIO_STREAMS.lock() {
+            memo.insert(item, count);
         }
-        has
+        count
     }
 }
 
@@ -4095,6 +4121,7 @@ mod tests {
             volume_db: lumit_core::anim::Property::zero(),
             pan: lumit_core::anim::Property::zero(),
             audio_only: false,
+            audio_streams: Default::default(),
             adjustment: false,
             retime: None,
             interpolation: Default::default(),
@@ -4159,7 +4186,7 @@ mod tests {
     /// song without a file on disk. Ids are fresh per test, so seeding one says
     /// nothing about anybody else's.
     fn seed_has_audio(item: Uuid) {
-        HAS_AUDIO.lock().unwrap().insert(item, true);
+        AUDIO_STREAMS.lock().unwrap().insert(item, 1);
     }
 
     /// Put a layer of `kind` into comp `comp` (which must exist in `doc`).
@@ -4180,6 +4207,7 @@ mod tests {
             volume_db: lumit_core::anim::Property::zero(),
             pan: lumit_core::anim::Property::zero(),
             audio_only: false,
+            audio_streams: Default::default(),
             adjustment: false,
             retime: None,
             interpolation: Default::default(),
@@ -4290,6 +4318,7 @@ mod tests {
                 volume_db: Property::zero(),
                 pan: Property::zero(),
                 audio_only: false,
+                audio_streams: Default::default(),
                 retime: None,
                 interpolation: Default::default(),
                 parked_flow: None,
@@ -4919,6 +4948,7 @@ mod tests {
             fx: true,
             gain_db: 0.0,
             link: None,
+            audio_streams: Default::default(),
             extra: serde_json::Map::new(),
         };
         push_layer(
@@ -5856,6 +5886,7 @@ mod tests {
             volume_db: Property::zero(),
             pan: Property::zero(),
             audio_only: false,
+            audio_streams: Default::default(),
             adjustment: false,
             retime: None,
             interpolation: Default::default(),

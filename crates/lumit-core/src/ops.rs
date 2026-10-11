@@ -595,6 +595,15 @@ pub enum Op {
         layer: Uuid,
         animation: Animation,
     },
+    /// Choose which of its file's audio streams a layer sounds
+    /// ([`crate::model::AudioStreams`]). Carries the whole choice, so undoing
+    /// it puts back the one before. Valid on any layer, as Volume and Pan
+    /// are, and only heard on a Footage layer of a file with those streams.
+    SetLayerAudioStreams {
+        comp: Uuid,
+        layer: Uuid,
+        streams: crate::model::AudioStreams,
+    },
     /// Move a composition's **master fader** — one gain stage on the summed
     /// mix, ahead of the safety limiter (docs/09 §3.1). dB; 0 is
     /// unity, −100 and below is exact silence.
@@ -884,6 +893,7 @@ impl Op {
             Op::SetCameraSolveLink { .. } => "Link camera to solve",
             Op::SetLayerVolume { .. } => "Edit volume",
             Op::SetLayerPan { .. } => "Edit pan",
+            Op::SetLayerAudioStreams { .. } => "Set audio streams",
             Op::SetMasterVolume { .. } => "Move master fader",
             Op::SetSoundMix { .. } => "Sound mix",
             Op::SetBeatGrid { .. } => "Set beat grid",
@@ -972,6 +982,7 @@ fn lock_guards(op: &Op) -> Option<(Uuid, Uuid)> {
         | Op::SetCameraSolveLink { comp, layer, .. }
         | Op::SetLayerVolume { comp, layer, .. }
         | Op::SetLayerPan { comp, layer, .. }
+        | Op::SetLayerAudioStreams { comp, layer, .. }
         | Op::SetRetimeProperty { comp, layer, .. }
         | Op::SetLayerInterpolation { comp, layer, .. } => Some((*comp, *layer)),
 
@@ -1037,6 +1048,7 @@ fn comp_guards(op: &Op) -> Option<Uuid> {
         | Op::SetCameraSolveLink { comp, .. }
         | Op::SetLayerVolume { comp, .. }
         | Op::SetLayerPan { comp, .. }
+        | Op::SetLayerAudioStreams { comp, .. }
         | Op::SetRetimeProperty { comp, .. }
         | Op::SetLayerInterpolation { comp, .. }
         | Op::GroupLayers { comp, .. }
@@ -2179,6 +2191,24 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 comp: *comp,
                 layer: *layer,
                 animation: previous,
+            })
+        }
+        Op::SetLayerAudioStreams {
+            comp,
+            layer,
+            streams,
+        } => {
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let l = c
+                .layers
+                .iter_mut()
+                .find(|l| l.id == *layer)
+                .ok_or(OpError::UnknownLayer)?;
+            let previous = std::mem::replace(&mut l.audio_streams, streams.clone());
+            Ok(Op::SetLayerAudioStreams {
+                comp: *comp,
+                layer: *layer,
+                streams: previous,
             })
         }
         Op::SetMasterVolume { comp, db } => {

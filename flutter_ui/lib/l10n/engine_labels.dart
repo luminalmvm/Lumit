@@ -1451,6 +1451,7 @@ Map<String, String> get _built => {
       "Trim comp to work area": l10n.menuTrimCompToWorkArea,
       "Crop comp to region of interest": l10n.menuCropCompToRegion,
       "Edit pan": l10n.histEditPan,
+      "Set audio streams": l10n.histSetAudioStreams,
       "Move master fader": l10n.histMoveMasterFader,
       // The mark the Audio timeline writes, which reads in the history under
       // the same words the row carries.

@@ -35,6 +35,7 @@ import '../state/timeline_columns.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/drag_escape.dart';
+import '../widgets/layer_picker.dart';
 import 'timeline_metrics_frb.dart' show TimelineMode, laneKeyHalf;
 import 'timeline_snap.dart';
 
@@ -955,22 +956,15 @@ class ParentPickerFrb extends StatelessWidget {
   Widget build(BuildContext context) {
     final picker = SizedBox(
       width: width,
-      child: BareLazyDropdown(
+      child: LayerPicker(
         key: ValueKey<String>('tl-parent-${layer.internallayerId}'),
         // In an outline row, so the mockup's 16/10 face (§12A.6).
         dense: true,
-        label: info.parent == null ? l10n.none : (info.parentName ?? l10n.none),
-        options: () => [
-          (null, l10n.none),
-          // Numbered by the layer's place in the composition (item 6.13) —
-          // "3. Sky" — so two layers with the same name are still two
-          // entries you can tell apart. Position, not name: it counts from
-          // the whole stack, this layer included, whether or not the entry
-          // is offered.
-          for (var i = 0; i < all.length; i++)
-            if (all[i].layer.internallayerId != layer.internallayerId)
-              (all[i].layer.internallayerId, '${i + 1}. ${all[i].info.name}'),
-        ],
+        layers: all,
+        value: info.parent,
+        empty: l10n.none,
+        missing: info.parentName ?? l10n.none,
+        offered: (e) => e.layer.internallayerId != layer.internallayerId,
         onChanged: (id) {
           // A cycle is refused engine-side; the picker reports nothing and the
           // row keeps the parent it had.
@@ -1045,13 +1039,6 @@ class MattePickerFrb extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     final matte = info.matte;
-    final sourceName = matte == null
-        ? l10n.noMatte
-        : all
-                .where((e) => e.layer.internallayerId == matte.layer)
-                .map((e) => e.info.name)
-                .firstOrNull ??
-            engineLabel('Matte');
     final faceWidth =
         toggleRoom ? (width - matteToggleWidth).clamp(40.0, width) : width;
 
@@ -1069,28 +1056,21 @@ class MattePickerFrb extends StatelessWidget {
             // is the face and nothing else, and the dropdown still
             // does not swell into room it is not given.
             width: faceWidth,
-            child: BareLazyDropdown<UuidValue?>(
+            child: LayerPicker(
               key: ValueKey<String>('tl-matte-${layer.internallayerId}'),
               // In an outline row, so the mockup's 16/10 face (§12A.6).
               dense: true,
-              label: sourceName,
-              // Built when the menu opens, never per rebuild — which is what
-              // lets it probe. A matte gates this layer with another
-              // layer's *picture*, so a layer with none (a camera, a Null, an
-              // audio-only clip) is not offered, and neither is this one:
-              // matting a layer with itself has no meaning.
-              options: () => [
-                (null, l10n.noMatte),
-                // Numbered by place in the composition, as every layer
-                // picker is (item 6.13).
-                for (var i = 0; i < all.length; i++)
-                  if (all[i].layer.internallayerId != layer.internallayerId &&
-                      all[i].layer.hasPicture())
-                    (
-                      all[i].layer.internallayerId,
-                      '${i + 1}. ${all[i].info.name}'
-                    ),
-              ],
+              layers: all,
+              value: matte?.layer,
+              empty: l10n.noMatte,
+              missing: engineLabel('Matte'),
+              // A matte gates this layer with another layer's *picture*, so
+              // a layer with none (a camera, a Null, an audio-only clip) is
+              // not offered, and neither is this one: matting a layer with
+              // itself has no meaning.
+              offered: (e) =>
+                  e.layer.internallayerId != layer.internallayerId &&
+                  e.layer.hasPicture(),
               onChanged: (id) => _set(id == null
                   ? null
                   : BridgeMatte(

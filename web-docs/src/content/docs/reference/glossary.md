@@ -15,6 +15,7 @@ areas and components of Lumit.
 | **Project** | The whole document. Saved as a `.lum` file. |
 | **Asset** | Anything in the Project panel: footage, audio, images, compositions. |
 | **Footage item** | An asset referencing a media file from disk. |
+| **[Audio stream](/use/audio/#audio-streams)** | One of the sounds a media file carries side by side. |
 | **[Packed project](/use/projects/#packed-projects)** | A project file that also carries its footage files inside it. |
 | **Folder** | A grouping item in the Project panel. |
 | **Composition** | A timeline holding layers. |

@@ -1426,7 +1426,7 @@ mod tests {
         let placed = project
             .import_footage(clip.to_string_lossy().into_owned())
             .unwrap();
-        comp.add_footage_layer(&placed, false, None).unwrap();
+        comp.add_footage_layer(&placed, false, None, None).unwrap();
         let (item, comp) = (placed.id, comp.id);
         let document = {
             let state = project.state().unwrap();

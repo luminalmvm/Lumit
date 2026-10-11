@@ -408,7 +408,9 @@ impl MixPlan {
         start_s: f64,
         end_s: f64,
         buckets: usize,
-        pyramid_of: &mut dyn FnMut(&std::path::Path) -> Option<Arc<crate::peaks::PeakPyramid>>,
+        pyramid_of: &mut dyn FnMut(
+            &lumit_media::SoundSource,
+        ) -> Option<Arc<crate::peaks::PeakPyramid>>,
     ) -> Vec<f32> {
         let mut out = vec![0.0f32; buckets * 3];
         if buckets == 0 || rate == 0 || end_s <= start_s {
@@ -428,7 +430,7 @@ impl MixPlan {
             if to_s <= from_s {
                 continue;
             }
-            let pyramid = clip.source.path().and_then(&mut *pyramid_of);
+            let pyramid = clip.source.sound().and_then(&mut *pyramid_of);
             let first = ((from_s - start_s) / step_s).floor().max(0.0) as usize;
             let last = (((to_s - start_s) / step_s).ceil().max(0.0) as usize).min(buckets);
             for (b, sum) in sums.iter_mut().enumerate().take(last).skip(first) {
@@ -1215,7 +1217,7 @@ mod tests {
         let dir = Scratch::new("mix");
         let path = ramp_wav(&dir.0, "ramp.wav", RATE, 5);
         let pool = crate::stream::Pool::new(64 * 1024 * 1024);
-        let file = pool.source(&path, RATE);
+        let file = pool.file(&path, RATE);
         let block = crate::stream::BLOCK_SECONDS * RATE as usize;
 
         let wave = |frames: usize, step: f32| {

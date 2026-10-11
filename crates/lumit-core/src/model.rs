@@ -149,6 +149,86 @@ impl Default for SequenceRef {
     }
 }
 
+/// The most audio streams one layer or clip names. A file with more than a
+/// handful is rare, and a list read from a project file is not trusted to be
+/// short.
+pub const MAX_AUDIO_STREAMS: usize = 32;
+
+/// Which of its file's audio streams a layer or a clip sounds
+/// (docs/01-GLOSSARY.md: Audio stream).
+///
+/// # In plain terms
+///
+/// A recording can carry several sounds side by side: a screen capture with
+/// the game on one stream and the microphone on another. A layer of such a
+/// file sounds the first stream unless it is told otherwise, which is what
+/// every layer did before one could choose. Told otherwise it sounds the
+/// streams listed here, mixed: one of them, for a stream on a row of its own,
+/// or several, for streams put back together.
+///
+/// A stream is named by its place among the file's audio streams, counted
+/// from nought in the file's own order. The list is kept ascending with no
+/// stream twice, and the first stream alone is kept as the empty list. So a
+/// layer that never chose writes nothing to the project file, and two layers
+/// sounding the same streams compare equal. A place the file has not got is
+/// silence.
+// ponytail: places, so a file re-recorded with its streams in another order
+// re-points them. A stream has no id that survives a re-encode; match on the
+// stream's title if that ever bites.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[serde(from = "Vec<u32>", into = "Vec<u32>")]
+pub struct AudioStreams(Vec<u32>);
+
+impl AudioStreams {
+    /// These streams, mixed. None is the first stream.
+    #[must_use]
+    pub fn of(places: &[u32]) -> Self {
+        let mut places = places.to_vec();
+        places.sort_unstable();
+        places.dedup();
+        places.truncate(MAX_AUDIO_STREAMS);
+        if places == [0] {
+            places.clear();
+        }
+        Self(places)
+    }
+
+    /// The stream at `place` and no other.
+    #[must_use]
+    pub fn only(place: u32) -> Self {
+        Self::of(&[place])
+    }
+
+    /// Whether this is the file's first stream and nothing else: the state
+    /// that is left out of the project file.
+    #[must_use]
+    pub fn is_first(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// The places sounded, ascending. Never empty.
+    #[must_use]
+    pub fn places(&self) -> &[u32] {
+        if self.0.is_empty() {
+            &[0]
+        } else {
+            &self.0
+        }
+    }
+}
+
+impl From<Vec<u32>> for AudioStreams {
+    fn from(places: Vec<u32>) -> Self {
+        Self::of(&places)
+    }
+}
+
+impl From<AudioStreams> for Vec<u32> {
+    fn from(streams: AudioStreams) -> Self {
+        streams.0
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FootageItem {
     pub id: Uuid,
@@ -2472,6 +2552,13 @@ pub struct Layer {
     /// skips a hidden one, and why the audio path does not look at it at all.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub audio_only: bool,
+    /// Which of its file's audio streams this layer sounds, for a Footage
+    /// layer of a file with more than one. The first unless it has been
+    /// told otherwise, and left out of the file until then. A Sequence layer
+    /// keeps one on each clip instead ([`crate::sequence::Clip::audio_streams`])
+    /// and no other kind reads it.
+    #[serde(default, skip_serializing_if = "AudioStreams::is_first")]
+    pub audio_streams: AudioStreams,
     /// This layer is acting as an **adjustment layer**: its own picture
     /// is set aside and its effect stack runs on the composite of everything
     /// beneath it instead.
@@ -3802,6 +3889,7 @@ mod tests {
             volume_db: Property::zero(),
             pan: Property::zero(),
             audio_only: false,
+            audio_streams: Default::default(),
             adjustment: false,
             retime: Some(map),
             interpolation: Default::default(),
@@ -4166,6 +4254,7 @@ mod tests {
             volume_db: crate::anim::Property::zero(),
             pan: crate::anim::Property::zero(),
             audio_only: false,
+            audio_streams: Default::default(),
             adjustment: false,
             retime: None,
             interpolation: Default::default(),
@@ -4481,6 +4570,7 @@ mod tests {
             volume_db: crate::anim::Property::zero(),
             pan: crate::anim::Property::zero(),
             audio_only: false,
+            audio_streams: Default::default(),
             adjustment: false,
             retime: None,
             interpolation: Default::default(),
