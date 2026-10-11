@@ -3112,9 +3112,29 @@ fn a_shapes_trim_round_trips_and_is_clamped() {
             interp_out: BridgeSideInterp::Linear,
         },
     ]);
+    // A gradient's stops arrive in any order and are kept in the ramp's.
+    let stop = |position: f64, opacity: f64| crate::api::layer::BridgeGradientStop {
+        position,
+        colour: crate::api::assets::BridgeColourRgba {
+            r: 0.0,
+            g: 1.0,
+            b: 0.0,
+            a: 1.0,
+        },
+        opacity,
+    };
+    contents[0].gradient = 1;
+    contents[0].gradient_end_opacity = BridgeScalar::Static(-20.0);
+    contents[0].gradient_stops = vec![stop(140.0, 30.0), stop(25.0, 250.0)];
     shape.set_shape_contents(contents, None).expect("set");
 
     let got = &shape.get_shape_contents().expect("contents")[0];
+    assert_eq!(got.gradient_end_opacity, BridgeScalar::Static(0.0));
+    assert_eq!(
+        got.gradient_stops,
+        vec![stop(25.0, 100.0), stop(100.0, 30.0)],
+        "sorted along the ramp, and held inside it"
+    );
     assert_eq!(
         got.trim_start,
         BridgeScalar::Static(0.0),

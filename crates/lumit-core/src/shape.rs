@@ -2037,9 +2037,18 @@ mod tests {
     fn an_unkeyed_shape_is_absent_from_the_file() {
         let json = serde_json::to_string(&item(square(0.0, 0.0, 4.0))).unwrap();
         assert!(!json.contains("path_keys"), "{json}");
+        assert!(!json.contains("gradient"), "{json}");
 
         let mut keyed = item(square(0.0, 0.0, 4.0));
         keyed.path_keys = vec![shape_key(1, &square(2.0, 2.0, 4.0))];
+        // A faded gradient with a stop between its ends comes back as it went.
+        keyed.gradient = 1;
+        keyed.gradient_end_opacity = Property::fixed(0.0);
+        keyed.gradient_stops = vec![GradientStop {
+            position: 40.0,
+            colour: LinearColour([0.0, 1.0, 0.0, 1.0]),
+            opacity: 50.0,
+        }];
         let json = serde_json::to_string(&keyed).unwrap();
         assert!(json.contains("path_keys"), "{json}");
         let back: ShapeItem = serde_json::from_str(&json).unwrap();
