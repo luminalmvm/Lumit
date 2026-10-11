@@ -665,6 +665,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeImportRow dco_decode_bridge_import_row(dynamic raw);
 
   @protected
+  BridgeImported dco_decode_bridge_imported(dynamic raw);
+
+  @protected
   BridgeImportedProject dco_decode_bridge_imported_project(dynamic raw);
 
   @protected
@@ -2353,6 +2356,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeImportRow sse_decode_bridge_import_row(SseDeserializer deserializer);
+
+  @protected
+  BridgeImported sse_decode_bridge_imported(SseDeserializer deserializer);
 
   @protected
   BridgeImportedProject sse_decode_bridge_imported_project(
@@ -4251,6 +4257,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_import_row(
       BridgeImportRow self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_imported(
+      BridgeImported self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_imported_project(

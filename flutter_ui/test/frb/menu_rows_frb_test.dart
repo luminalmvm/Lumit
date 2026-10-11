@@ -429,7 +429,8 @@ void main() {
         animationPresetOpenPicker = () async => path;
 
         await choose(tester, 'Animation', l10n.menuApplyAnimationPreset);
-        await tester.pump();
+        // The file is read off the interface's thread.
+        await settleFrb(tester, until: () => a.getEffects().isNotEmpty);
 
         expect(a.getEffects().length, 1);
         expect(b.getEffects(), isEmpty,

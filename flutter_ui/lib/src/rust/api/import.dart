@@ -10,6 +10,10 @@ import 'project.dart';
 
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`
 
+/// Stop the open or import in flight, whichever kind it is. It stops at its
+/// next step and leaves the project as it was. Harmless when there is none.
+void cancelImport() => BridgeLib.instance.api.crateApiImportCancelImport();
+
 /// One blank in a reason's sentence, by name: `ae_mode` → `Dissolve`,
 /// `percent` → `50`. Named rather than positional so a translation may put
 /// them in whatever order its language wants.

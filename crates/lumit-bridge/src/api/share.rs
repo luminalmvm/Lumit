@@ -1258,7 +1258,11 @@ pub fn join_shared_project(
         }
     };
     let media_root = root.unwrap_or_default();
-    let (project, _missing) = adopt(document, None, &media_root, on_change_stream, None)?;
+    crate::packing::begin();
+    let Some((project, _missing)) = adopt(document, None, &media_root, on_change_stream, None)?
+    else {
+        return Ok(BridgeJoinOutcome::Failed);
+    };
     let store = {
         let state = project.state()?;
         let state = state.read().map_err(|_| BridgeError::ReadFailed)?;

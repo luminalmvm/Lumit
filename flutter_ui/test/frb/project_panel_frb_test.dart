@@ -625,7 +625,9 @@ void main() {
       expect(p.state.project!.getItems(), isEmpty);
 
       await tester.tap(find.byKey(const ValueKey('project-import')));
-      await tester.pump();
+      // The files are read off the interface's thread.
+      await settleFrb(tester,
+          until: () => p.state.project!.getItems().isNotEmpty);
 
       expect(p.state.project!.getItems(), hasLength(1),
           reason: 'the import reached the document');
@@ -667,7 +669,10 @@ void main() {
       final file = File('${dir.path}/poster.psd')
         ..writeAsBytesSync(_layeredPsd());
 
-      expect(await p.state.importFootagePaths([file.path]), isTrue);
+      expect(
+          await tester
+              .runAsync(() => p.state.importFootagePaths([file.path])),
+          isTrue);
 
       // The roots: the Compositions folder and the folder of layer items.
       final roots = p.state.project!.getItems();
@@ -1012,7 +1017,8 @@ void main() {
             reason: 'the drop-target treatment, as the folder rows wear it');
 
         await dropEvent('performOperation', <String>['C:/clips/shot.mov']);
-        await tester.pump();
+        await settleFrb(tester,
+            until: () => find.text('shot.mov').evaluate().isNotEmpty);
 
         expect(highlight(), isNull, reason: 'the drag is over');
         expect(find.text('shot.mov'), findsOneWidget);
@@ -1032,8 +1038,8 @@ void main() {
         ));
 
         expect(
-          await importDroppedPaths(
-              p.state, ['C:/clips/a.mov', 'C:/clips/b.mov']),
+          await tester.runAsync(() => importDroppedPaths(
+              p.state, ['C:/clips/a.mov', 'C:/clips/b.mov'])),
           isTrue,
         );
         expect(p.state.project!.getItems().length, 2);

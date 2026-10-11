@@ -12,7 +12,8 @@ import 'package:lumit_flutter/l10n/strings.dart';
 import 'package:lumit_flutter/shell/comp_settings_frb.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart';
-import 'package:lumit_flutter/src/rust/api/import.dart' show BridgeImportReport;
+import 'package:lumit_flutter/src/rust/api/import.dart'
+    show BridgeImportReport, cancelImport;
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
@@ -368,6 +369,51 @@ class LumitState extends ChangeNotifier {
   /// card goes up, like [busyProgress], and let go after it comes down.
   final ValueNotifier<VoidCallback?> busyCancel = ValueNotifier(null);
 
+  /// What the card's Cancel button says, or null for the plain word. Set and
+  /// let go with [busyCancel].
+  final ValueNotifier<String?> busyCancelLabel = ValueNotifier(null);
+
+  /// Run a job with the card up over the shell, the engine's own progress on
+  /// its bar and a Cancel that stops it.
+  ///
+  /// [after] holds the card back for a job that is usually over at once: an
+  /// ordinary save of a packed project copies its footage too, and a card that
+  /// flashed up on every Ctrl+S of a small one would be noise.
+  Future<T> withBusyCard<T>(
+    String label,
+    Future<T> Function(RustStreamSink<double> progress) start, {
+    required VoidCallback cancel,
+    String? cancelLabel,
+    Duration after = Duration.zero,
+  }) async {
+    // Set before the card goes up: it keeps whichever bar it opened with.
+    busyProgress.value = 0;
+    busyCancel.value = cancel;
+    busyCancelLabel.value = cancelLabel;
+    StreamSubscription<double>? watching;
+    Timer? raise;
+    try {
+      final progress = RustStreamSink<double>();
+      // The call is started before the sink is listened to, as an open's is: a
+      // sink has no stream until it has been handed to a call.
+      final pending = start(progress);
+      watching = progress.stream.listen((fraction) {
+        if (fraction >= (busyProgress.value ?? 0)) {
+          busyProgress.value = fraction;
+        }
+      });
+      raise = Timer(after, () => busy.value = label);
+      return await pending;
+    } finally {
+      raise?.cancel();
+      watching?.cancel();
+      busy.value = null;
+      busyProgress.value = null;
+      busyCancel.value = null;
+      busyCancelLabel.value = null;
+    }
+  }
+
   /// The Viewer has something to show, or there is nothing for it to show —
   /// either way the shell can come out from behind its progress bar.
   ///
@@ -386,6 +432,35 @@ class LumitState extends ChangeNotifier {
     opening.value = false;
   }
 
+  /// Whether the open in flight is an import, which is what its card's Cancel
+  /// button then says.
+  bool openIsImport = false;
+
+  /// Whether the open in flight was asked to stop.
+  bool _openCancelled = false;
+
+  /// How the open in flight is stopped, or null while it cannot be: before it
+  /// has run long enough to be worth stopping, and once the engine's part is
+  /// over and only the preview is left to start.
+  final ValueNotifier<VoidCallback?> openCancel = ValueNotifier(null);
+
+  /// Ask the engine to stop the open or import in flight. It stops at its
+  /// next step and the project on screen stays. One that has already got past
+  /// its last step opens all the same.
+  void _cancelOpen() {
+    _openCancelled = true;
+    cancelImport();
+  }
+
+  /// Offer Cancel on the opening card after a moment, so the button does not
+  /// flash on an open that is over at once. The caller cancels the timer and
+  /// clears [openCancel] when the engine has answered.
+  Timer _offerOpenCancel() {
+    _openCancelled = false;
+    return Timer(const Duration(milliseconds: 300),
+        () => openCancel.value = _cancelOpen);
+  }
+
   /// [recover] false opens the file as it is, for the recovery dialogue's own
   /// opens, which must not ask the question again.
   Future<void> openProject(String path, {bool recover = true}) async {
@@ -397,6 +472,8 @@ class LumitState extends ChangeNotifier {
     // was up.
     if (opening.value) return;
     opening.value = true;
+    openIsImport = false;
+    final offer = _offerOpenCancel();
     // Determinate from the first frame, before the engine has had a turn to
     // say so: the card must not flip from a sweeping bar to a filling one a
     // millisecond in. Nothing is claimed here — the fill is zero, and the
@@ -427,8 +504,10 @@ class LumitState extends ChangeNotifier {
     // Null means the file would not open; the previous project stays loaded
     // rather than the app being left with none.
     final opened = await pending;
+    offer.cancel();
+    openCancel.value = null;
     if (opened == null) {
-      postNotice(l10n.couldNotOpen(path), error: true);
+      if (!_openCancelled) postNotice(l10n.couldNotOpen(path), error: true);
       openProgress.value = null;
       opening.value = false;
       return;
@@ -497,13 +576,27 @@ class LumitState extends ChangeNotifier {
       // Unreadable folder: the engine's own refusal will say so.
     }
     opening.value = true;
-    // An import reports no phases, so its card sweeps rather than filling —
-    // and must not inherit the fill, or the live reports, of the last open.
+    openIsImport = true;
+    final offer = _offerOpenCancel();
+    // Determinate from the first frame and reported as an open is, for
+    // [openProject]'s reasons.
+    openProgress.value =
+        OpenProgress(phase: OpenPhase.readingFile, fraction: 0);
+    final progress = RustStreamSink<OpenProgress>();
+    final pending = LumitBridgeState.importAeBundle(
+        path: target,
+        onChangeStream: _changeSink(),
+        onProgressStream: progress);
     _openProgressWatch?.cancel();
-    _openProgressWatch = null;
-    openProgress.value = null;
-    final imported = await LumitBridgeState.importAeBundle(
-        path: target, onChangeStream: _changeSink());
+    _openProgressWatch = progress.stream.listen(_reportOpenProgress);
+    final imported = await pending;
+    offer.cancel();
+    openCancel.value = null;
+    if (imported == null && _openCancelled) {
+      openProgress.value = null;
+      opening.value = false;
+      return null;
+    }
     if (imported == null) {
       // Three misses, three answers. An `.aep` the parser could not read is
       // the one the direct route made possible and the one worth being calm
@@ -666,30 +759,39 @@ class LumitState extends ChangeNotifier {
   /// many for something every new user's first action goes through.
   /// A batch is **one** undo step: picking six files in the dialogue,
   /// or dropping six on the panel, is one action the user took, so it is one
-  /// Ctrl-Z. The group is closed in a `finally` because a group left open
-  /// records nothing.
+  /// Ctrl-Z. The engine reads the files off the interface's thread and files
+  /// them together, and a layered document comes in as a composition of its
+  /// layers.
+  ///
+  /// A big file takes a while to read, so a card goes up over the shell once
+  /// it has, with a Cancel that leaves the project as it was. One import at a
+  /// time: a second asked for while one runs is refused.
   Future<bool> importFootagePaths(List<String> paths) async {
     final project = this.project;
     if (project == null || paths.isEmpty) return false;
-    final group = paths.length > 1;
-    if (group) project.beginUndoGroup();
+    if (_importing || opening.value || busy.value != null) return false;
+    _importing = true;
     try {
-      for (final path in paths) {
-        // A layered document comes in as a composition of its layers. The
-        // engine says which files those are, and everything else is footage.
-        final leftOut = project.importLayers(path: path);
-        if (leftOut == null) {
-          project.importFootage(path: path);
-        } else if (leftOut > 0) {
-          postNotice(l10n.importLayersLeftOut(leftOut));
-        }
+      final imported = await withBusyCard(
+        l10n.importingFiles(paths.length),
+        (progress) => project.importFiles(paths: paths, onProgress: progress),
+        cancel: cancelImport,
+        cancelLabel: l10n.cancelImport,
+        after: const Duration(milliseconds: 300),
+      );
+      if (imported.cancelled) return false;
+      if (imported.leftOut > 0) {
+        postNotice(l10n.importLayersLeftOut(imported.leftOut));
       }
     } finally {
-      if (group) project.endUndoGroup();
+      _importing = false;
     }
     notifyDocumentChanged();
     return true;
   }
+
+  /// An import of files is running.
+  bool _importing = false;
 
   /// Make a composition, asking for its settings first.
   ///

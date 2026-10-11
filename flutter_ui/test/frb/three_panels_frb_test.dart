@@ -109,7 +109,8 @@ void main() {
       // Load it back: the stack grows, and the copy is its own instance.
       final before = p.layer.getEffects().single.id();
       await tester.tap(find.byKey(const ValueKey('preset-load')));
-      await tester.pumpAndSettle();
+      // The file is read off the interface's thread.
+      await settleFrb(tester, until: () => p.layer.getEffects().length == 2);
 
       final after = p.layer.getEffects();
       expect(after, hasLength(2));
@@ -141,6 +142,7 @@ void main() {
       await tester.pump(kDoubleTapMinTime);
       await tester.tap(row);
       await tester.pumpAndSettle();
+      await settleFrb(tester, until: () => p.layer.getEffects().isNotEmpty);
 
       expect(p.layer.getEffects(), hasLength(1));
       expect(p.layer.getEffects().single.name(), 'blur');
@@ -205,7 +207,7 @@ void main() {
 
       await mount(tester, p, loadPicker: () async => path);
       await tester.tap(find.byKey(const ValueKey('preset-load')));
-      await tester.pumpAndSettle();
+      await settleFrb(tester);
 
       expect(p.layer.getEffects(), isEmpty,
           reason: 'a picker takes any file, so this is a normal thing to do');

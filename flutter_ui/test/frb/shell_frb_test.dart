@@ -426,10 +426,9 @@ void main() {
     /// Each button is its own answer, and the close mark is none of
     /// them — the shape changed, what the dialogue can answer did not.
     ///
-    /// *Restore all changes* is the case driven here because replaying the
-    /// journal is synchronous engine work. Opening an autosave is not: it goes
-    /// through `state.openProject`, whose future never completes in a widget
-    /// test's fake-async zone.
+    /// *Restore all changes* is driven here, with the real turns its replay
+    /// needs. Opening an autosave is not: it goes through `state.openProject`,
+    /// whose future never completes in a widget test's fake-async zone.
     testWidgets('each button is its own answer', (tester) async {
       // Held outside `run` on purpose. A second `pumpWidget` in one test does
       // not re-root the tree under a modal-capable host, so the opener element
@@ -483,6 +482,7 @@ void main() {
       expect(
         await run('lumit-recover-journal', () async {
           await tester.tap(find.byKey(const ValueKey('recover-journal')));
+          await settleFrb(tester, until: () => choice != null);
         }),
         RecoveryChoice.journal,
       );

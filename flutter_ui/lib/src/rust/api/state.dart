@@ -36,7 +36,8 @@ abstract class LumitBridgeState implements RustOpaqueInterface {
   /// `None` when what was picked is not either of those, or is one this build
   /// cannot read: the previous project stays loaded and the frontend shows
   /// its own notice, exactly as [`LumitBridgeState::open_project`] does for a
-  /// `.lum` that will not open. Anything short of that is not a failure — an
+  /// `.lum` that will not open. `None` as well when [`cancel_import`] stopped
+  /// it. Anything short of that is not a failure — an
   /// import **always completes** (docs/11 §9), and what could not be carried
   /// across is in the report rather than in an error.
   ///
@@ -49,9 +50,12 @@ abstract class LumitBridgeState implements RustOpaqueInterface {
   /// frozen for as long as it takes.
   static Future<BridgeImportedProject?> importAeBundle(
           {required String path,
-          RustStreamSink<ScopedChange>? onChangeStream}) =>
+          RustStreamSink<ScopedChange>? onChangeStream,
+          RustStreamSink<OpenProgress>? onProgressStream}) =>
       BridgeLib.instance.api.crateApiStateLumitBridgeStateImportAeBundle(
-          path: path, onChangeStream: onChangeStream);
+          path: path,
+          onChangeStream: onChangeStream,
+          onProgressStream: onProgressStream);
 
   static ProjectReference newProject(
           {RustStreamSink<ScopedChange>? onChangeStream}) =>
@@ -73,6 +77,9 @@ abstract class LumitBridgeState implements RustOpaqueInterface {
   /// project, closed while its host was away. It opens as it was left and
   /// carries on looking for the host, and [`ProjectReference::share_guest`]
   /// says so.
+  ///
+  /// `None` as well when [`crate::api::import::cancel_import`] stopped it,
+  /// which leaves whatever was open as it was.
   static Future<ProjectReference?> openProject(
           {required String path,
           RustStreamSink<ScopedChange>? onChangeStream,

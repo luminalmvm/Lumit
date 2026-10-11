@@ -25,7 +25,7 @@ use lumit_import::{ItemPath, Outcome, Reason, ReportRow};
 
 use crate::api::{
     project::ProjectReference,
-    state::{adopt, CallbackStream, LumitBridgeState},
+    state::{adopt, report_phase, CallbackStream, LumitBridgeState, OpenPhase, OpenProgressStream},
     BridgeError,
 };
 
@@ -113,6 +113,13 @@ pub struct BridgeImportedProject {
     pub report: BridgeImportReport,
 }
 
+/// Stop the open or import in flight, whichever kind it is. It stops at its
+/// next step and leaves the project as it was. Harmless when there is none.
+#[frb(sync)]
+pub fn cancel_import() {
+    crate::packing::cancel();
+}
+
 impl LumitBridgeState {
     /// Import an After Effects project and make it the open one — either front
     /// door: an `.aep` read directly, or a Lumit Bridge bundle as a
@@ -123,7 +130,8 @@ impl LumitBridgeState {
     /// `None` when what was picked is not either of those, or is one this build
     /// cannot read: the previous project stays loaded and the frontend shows
     /// its own notice, exactly as [`LumitBridgeState::open_project`] does for a
-    /// `.lum` that will not open. Anything short of that is not a failure — an
+    /// `.lum` that will not open. `None` as well when [`cancel_import`] stopped
+    /// it. Anything short of that is not a failure — an
     /// import **always completes** (docs/11 §9), and what could not be carried
     /// across is in the report rather than in an error.
     ///
@@ -137,11 +145,18 @@ impl LumitBridgeState {
     pub fn import_ae_bundle(
         path: &str,
         on_change_stream: Option<CallbackStream>,
+        on_progress_stream: Option<OpenProgressStream>,
     ) -> Result<Option<BridgeImportedProject>, BridgeError> {
+        let progress = on_progress_stream.as_ref();
+        crate::packing::begin();
+        report_phase(progress, OpenPhase::ReadingFile);
         let path = PathBuf::from(path);
         let Ok(bundle) = lumit_import::open_ae(&path) else {
             return Ok(None);
         };
+        if crate::packing::cancelled() {
+            return Ok(None);
+        }
         let (doc, mut report) = lumit_import::map_capture(&bundle.capture);
 
         // What the direct parser had to skip is the report's to say (docs/11
@@ -169,9 +184,11 @@ impl LumitBridgeState {
 
         // The project is unsaved — an import is not a file (see above) — so the
         // media root is passed separately rather than derived from a path.
-        // No progress stream: an import runs behind its own card, and the one
-        // phased bar there is belongs to opening a `.lum`.
-        let (project, missing) = adopt(doc, None, &media_root, on_change_stream, None)?;
+        let Some((project, missing)) = adopt(doc, None, &media_root, on_change_stream, progress)?
+        else {
+            return Ok(None);
+        };
+        report_phase(progress, OpenPhase::StartingPreview);
 
         for name in missing {
             if already.contains(&name) {

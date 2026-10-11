@@ -553,7 +553,7 @@ fn phase_fraction(phase: OpenPhase) -> f64 {
 
 /// Say a phase has begun, if anyone is listening. A dropped report costs the
 /// bar one step and nothing else, so it is never worth failing an open over.
-fn report_phase(sink: Option<&OpenProgressStream>, phase: OpenPhase) {
+pub(crate) fn report_phase(sink: Option<&OpenProgressStream>, phase: OpenPhase) {
     if let Some(sink) = sink {
         let _ = sink.add(OpenProgress {
             phase,
@@ -882,6 +882,9 @@ impl LumitBridgeState {
     /// project, closed while its host was away. It opens as it was left and
     /// carries on looking for the host, and [`ProjectReference::share_guest`]
     /// says so.
+    ///
+    /// `None` as well when [`crate::api::import::cancel_import`] stopped it,
+    /// which leaves whatever was open as it was.
     pub fn open_project(
         path: &str,
         on_change_stream: Option<CallbackStream>,
@@ -889,6 +892,7 @@ impl LumitBridgeState {
         share_events: Option<StreamSink<crate::api::share::BridgeShareEvent>>,
     ) -> Result<Option<ProjectReference>, BridgeError> {
         let progress = on_progress_stream.as_ref();
+        crate::packing::begin();
         report_phase(progress, OpenPhase::ReadingFile);
         let path = PathBuf::from(path);
         let Ok((mut doc, _manifest)) = lumit_project::open(&path) else {
@@ -908,7 +912,11 @@ impl LumitBridgeState {
         // directory, which `Path::new("")` gives us — nothing to relink from,
         // rather than a panic.
         let project_dir = path.parent().unwrap_or_else(|| Path::new("")).to_path_buf();
-        let (project, _missing) = adopt(doc, Some(path), &project_dir, on_change_stream, progress)?;
+        let Some((project, _missing)) =
+            adopt(doc, Some(path), &project_dir, on_change_stream, progress)?
+        else {
+            return Ok(None);
+        };
         if let Some(resuming) = resuming {
             crate::api::share::resume(&project, resuming, share_events)?;
         }
@@ -938,13 +946,16 @@ impl LumitBridgeState {
 /// §2.5). Opening a `.lum` ignores the list — the Project panel already draws a
 /// relink slate on each of them — while the importer turns it into report rows,
 /// because an import is exactly the moment somebody wants to be told.
+///
+/// `None` when it was cancelled (`crate::packing::cancel`), with nothing
+/// changed. The caller clears the flag before it starts.
 pub(crate) fn adopt(
     mut doc: Document,
     saved_at: Option<PathBuf>,
     media_root: &Path,
     on_change_stream: Option<CallbackStream>,
     on_progress: Option<&OpenProgressStream>,
-) -> Result<(ProjectReference, Vec<String>), BridgeError> {
+) -> Result<Option<(ProjectReference, Vec<String>)>, BridgeError> {
     let id = Uuid::now_v7();
 
     // A file that says every save packs is believed only when this machine
@@ -980,10 +991,17 @@ pub(crate) fn adopt(
             }
         });
     }
+    if crate::packing::cancelled() {
+        return Ok(None);
+    }
     report_phase(on_progress, OpenPhase::ResolvingMedia);
     let (_relinked, missing) = lumit_project::resolve_all_media(&mut doc, media_root, &[]);
     // What is still missing may be something another person sent before.
     crate::footage::restore(&mut doc);
+    // The last moment to stop: from here the project that was open is closed.
+    if crate::packing::cancelled() {
+        return Ok(None);
+    }
     report_phase(on_progress, OpenPhase::PreparingProject);
 
     // Every footage file this project holds, handed to the probe worker
@@ -1099,5 +1117,5 @@ pub(crate) fn adopt(
         crate::probe::request(file);
     }
 
-    Ok((ProjectReference::new(id), missing))
+    Ok(Some((ProjectReference::new(id), missing)))
 }

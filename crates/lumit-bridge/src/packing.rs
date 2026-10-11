@@ -16,8 +16,9 @@ use lumit_core::Document;
 use lumit_project::PackSource;
 use uuid::Uuid;
 
-/// Set to stop the pack or unpack in flight. One flag for the process, because
-/// one project is open at a time, and each job clears it as it starts.
+/// Set to stop the pack, unpack, open or import in flight. One flag for the
+/// process, because one project is open at a time and these never overlap,
+/// and each job clears it as it starts.
 static CANCEL: AtomicBool = AtomicBool::new(false);
 
 /// The read-out folders this process has taken, by document
@@ -26,7 +27,7 @@ static CANCEL: AtomicBool = AtomicBool::new(false);
 /// holding a folder costs one small handle. One entry a document opened.
 static HELD: Mutex<BTreeMap<Uuid, File>> = Mutex::new(BTreeMap::new());
 
-/// A pack or an unpack is starting: forget any earlier cancel.
+/// A job that can be stopped is starting: forget any earlier cancel.
 pub(crate) fn begin() {
     CANCEL.store(false, Ordering::Release);
 }
@@ -210,12 +211,11 @@ pub(crate) fn restore(
     if doc.packed.is_empty() {
         return;
     }
-    // An open is not cancelled from here, so the flag is not read.
     let mut copied = |done: u64, total: u64| {
         if total > 0 {
             report(done as f64 / total as f64);
         }
-        true
+        !cancelled()
     };
     let _ = lumit_project::restore_packed(doc, &archives(archive), project_dir, &dest, &mut copied);
 }

@@ -29,6 +29,7 @@
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
+import 'package:lumit_flutter/src/rust/api/import.dart' show cancelImport;
 import 'package:lumit_flutter/src/rust/api/shell.dart';
 
 import '../l10n/strings.dart';
@@ -90,7 +91,26 @@ Future<RecoveryChoice?> showRecoveryDialogFrb({
 
   switch (choice) {
     case RecoveryChoice.journal:
-      state.project?.restoreJournal(projectPath: projectPath);
+      final project = state.project;
+      if (project == null) break;
+      final restored = await state.withBusyCard(
+        l10n.recoveryRestoring,
+        (progress) => project.restoreJournal(
+            projectPath: projectPath, onProgress: progress),
+        cancel: cancelImport,
+        after: const Duration(milliseconds: 300),
+      );
+      // Stopped, so the edits are still in the journal. The question is put
+      // again now: left there under an open project, the next edit would
+      // land on top of them.
+      if (restored.cancelled) {
+        if (!context.mounted) return null;
+        return showRecoveryDialogFrb(
+            context: context,
+            state: state,
+            projectPath: projectPath,
+            crashed: crashed);
+      }
       state.sharingLetGo();
     case RecoveryChoice.autosave:
       // Before the autosave opens: the edits are the saved file's, and the

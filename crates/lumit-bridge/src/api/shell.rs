@@ -15,6 +15,7 @@
 use flutter_rust_bridge::frb;
 
 use crate::api::{project::ProjectReference, BridgeError};
+use crate::frb_generated::StreamSink;
 
 /// What this build can truthfully say about itself at load time.
 ///
@@ -181,6 +182,9 @@ pub struct BridgeRecovery {
     /// no longer applies rather than skipping it, because every op after one
     /// that failed was written against a document that no longer exists.
     pub replayed: u32,
+    /// True when the replay was stopped. The project and its journal are then
+    /// as they were, so the edits can still be restored.
+    pub cancelled: bool,
 }
 
 impl ProjectReference {
@@ -262,13 +266,17 @@ impl ProjectReference {
     /// This is the whole point of the journal: a session that ended badly left
     /// its edits there, and this is what puts them back. The replay stops at the
     /// first op that no longer applies — see [`BridgeRecovery::replayed`].
-    #[frb(sync)]
-    pub fn restore_journal(&self, project_path: String) -> Result<BridgeRecovery, BridgeError> {
-        // The document is about to be swapped for another, which nobody else
-        // in a shared project would hear of. Sharing is let go of as it is
-        // when a project closes, and starting it again merges with whoever
-        // was here.
-        crate::api::share::stop(self.id);
+    ///
+    /// Not sync: it reads the whole project again. `on_progress` hears the
+    /// fraction of the edits replayed, and
+    /// [`crate::api::import::cancel_import`] stops it before anything is
+    /// swapped.
+    pub fn restore_journal(
+        &self,
+        project_path: String,
+        on_progress: Option<StreamSink<f64>>,
+    ) -> Result<BridgeRecovery, BridgeError> {
+        crate::packing::begin();
         let path = std::path::PathBuf::from(project_path);
         let (mut doc, _manifest) =
             lumit_project::open(&path).map_err(|_| BridgeError::ReadFailed)?;
@@ -278,8 +286,15 @@ impl ProjectReference {
             .unwrap_or_default();
         let found = ops.len() as u32;
         let mut replayed = 0_u32;
+        let mut report = crate::packing::progress(|fraction| {
+            if let Some(sink) = &on_progress {
+                let _ = sink.add(fraction);
+            }
+        });
         for op in &ops {
-            if lumit_core::ops::apply(&mut doc, op).is_err() {
+            if !report(u64::from(replayed), u64::from(found))
+                || lumit_core::ops::apply(&mut doc, op).is_err()
+            {
                 break;
             }
             replayed += 1;
@@ -292,7 +307,19 @@ impl ProjectReference {
         // made. Nothing is copied here unless that copy has been deleted.
         let dir = path.parent().unwrap_or_else(|| std::path::Path::new(""));
         crate::packing::restore(&mut doc, &path, dir, |_| {});
+        if crate::packing::cancelled() {
+            return Ok(BridgeRecovery {
+                found,
+                replayed,
+                cancelled: true,
+            });
+        }
 
+        // The document is about to be swapped for another, which nobody else
+        // in a shared project would hear of. Sharing is let go of as it is
+        // when a project closes, and starting it again merges with whoever
+        // was here.
+        crate::api::share::stop(self.id);
         let state = self.state()?;
         let mut state = state.write().map_err(|_| BridgeError::WriteFailed)?;
         // The observer is attached to the old store, so the recovered document
@@ -310,7 +337,11 @@ impl ProjectReference {
         state.path = Some(path);
         state.media.clear();
 
-        Ok(BridgeRecovery { found, replayed })
+        Ok(BridgeRecovery {
+            found,
+            replayed,
+            cancelled: false,
+        })
     }
 }
 

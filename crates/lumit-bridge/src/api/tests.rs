@@ -342,7 +342,7 @@ fn a_packed_project_keeps_its_footage_when_the_original_goes() {
     let open = || {
         let opened = LumitBridgeState::new_project(None).expect("a new project");
         let name = sent.to_string_lossy().into_owned();
-        opened.restore_journal(name).expect("opens");
+        opened.restore_journal(name, None).expect("opens");
         opened
     };
     let packed = || lumit_project::open(&sent).expect("opens").0.packed.len();
@@ -2781,7 +2781,7 @@ fn restoring_replaces_the_document_and_keeps_the_change_observer() {
         .new_composition("Unsaved".into(), None)
         .expect("comp");
     let recovered = project
-        .restore_journal(target.to_string_lossy().into_owned())
+        .restore_journal(target.to_string_lossy().into_owned(), None)
         .expect("restored");
     assert!(recovered.replayed <= recovered.found);
 
@@ -2988,7 +2988,7 @@ fn closing_a_saved_project_keeps_its_journal() {
     project.new_composition("Saved".into(), None).expect("comp");
     project.save(target.clone()).expect("saved");
     // Recovery reopens the file, so the edit below lands on what was saved.
-    project.restore_journal(target).expect("restored");
+    project.restore_journal(target, None).expect("restored");
     project
         .new_composition("Unsaved".into(), None)
         .expect("an edit");
@@ -8989,6 +8989,57 @@ fn an_addon_installs_lists_and_removes_and_is_refused_honestly() {
     assert!(addon_list().is_empty());
 
     lumit_ml::store::with_dir(None);
+}
+
+// An import stopped part way leaves the project as it was, with nothing to
+// undo, however many of its files had been read by then.
+#[cfg(feature = "media")]
+#[test]
+fn a_cancelled_import_leaves_the_project_as_it_was() {
+    use lumit_media::psd::fixture::{document, Layer};
+
+    let dir = tempfile::tempdir().expect("temp dir");
+    let layers = [
+        Layer::solid("Background", [0, 0, 32, 32], [255, 0, 0, 255]),
+        Layer::solid("Hat", [8, 8, 16, 16], [0, 0, 255, 255]),
+    ];
+    let paths: Vec<String> = ["one.psd", "two.psd"]
+        .into_iter()
+        .map(|name| {
+            let path = dir.path().join(name);
+            std::fs::write(&path, document(32, 32, 8, &layers)).expect("the fixture writes");
+            path.to_string_lossy().into_owned()
+        })
+        .collect();
+
+    let project = LumitBridgeState::new_project(None).expect("a new project");
+    let snapshot = || {
+        let state = project.state().expect("state");
+        let state = state.read().expect("read");
+        state.store.snapshot()
+    };
+    let before = snapshot();
+
+    // Stopped once the first file has been read, and again at the last ask.
+    for stop_at in [1, 2] {
+        let ended = project
+            .import_while(paths.clone(), &mut |read, _| read < stop_at)
+            .expect("a cancel is not an error");
+        assert!(ended.cancelled);
+        assert!(
+            std::sync::Arc::ptr_eq(&before, &snapshot()),
+            "nothing was committed"
+        );
+        assert!(!project.history().expect("history").can_undo);
+    }
+
+    let ended = project
+        .import_while(paths, &mut |_, _| true)
+        .expect("the files import");
+    assert!(!ended.cancelled);
+    project.undo().expect("one import, one step");
+    assert_eq!(snapshot().items.len(), before.items.len());
+    assert!(!project.history().expect("history").can_undo);
 }
 
 // A Photoshop document comes in as a comp of its layers and a folder of layer

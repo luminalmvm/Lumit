@@ -6558,6 +6558,10 @@
   "@recoveryRestoreNone": {
     "description": "Recovery dialogue: the leftmost button in the footer. Opens the saved file as it is; nothing is deleted. Three words at most — three buttons share one row."
   },
+  "recoveryRestoring": "Restoring the changes",
+  "@recoveryRestoring": {
+    "description": "Card shown over the interface after Restore all changes was pressed in the recovery dialogue, while the edits a crash left behind are being put back onto the saved file. The card carries a percentage and a Cancel button."
+  },
   "recoveryTitle": "Recover work",
   "@recoveryTitle": {
     "description": "Recovery dialogue: the kicker title, drawn in capitals by the style. Shown when a project has work its saved file does not contain."
@@ -12974,6 +12978,19 @@
         "type": "int"
       }
     }
+  },
+  "importingFiles": "{count, plural, =1{Importing the file} other{Importing {count} files}}",
+  "@importingFiles": {
+    "description": "Card shown over the interface while files chosen with Import, or dropped on the Project panel, are being read. {count} is how many files were chosen. The card carries a percentage and a Cancel import button.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "cancelImport": "Cancel import",
+  "@cancelImport": {
+    "description": "Button on the card shown over the interface while files or an After Effects project are being imported. Stops the import and leaves the project as it was."
   },
   "exportPresetSetDefault": "Set as default",
   "@exportPresetSetDefault": {

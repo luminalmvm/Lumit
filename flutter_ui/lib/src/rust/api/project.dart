@@ -21,8 +21,8 @@ import 'shell.dart';
 import 'solid.dart';
 import 'state.dart';
 
-// These functions are ignored because they are not marked as `pub`: `new_comp_ops`, `new_comp_with`, `next_comp_name_in`, `of`, `save_with`, `to_model`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `import_while`, `new_comp_ops`, `new_comp_with`, `next_comp_name_in`, `of`, `place_layers`, `save_with`, `to_model`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `new`, `state`
 
 /// Whether undo and redo have anything to do, for greying the menu items.
@@ -72,6 +72,32 @@ class BridgeHistoryEntry {
           runtimeType == other.runtimeType &&
           name == other.name &&
           undone == other.undone;
+}
+
+/// How an import of files ended.
+class BridgeImported {
+  /// True when the import was stopped, which leaves the project as it was.
+  final bool cancelled;
+
+  /// How many layers of the layered files were left out because they hold
+  /// no picture.
+  final int leftOut;
+
+  const BridgeImported({
+    required this.cancelled,
+    required this.leftOut,
+  });
+
+  @override
+  int get hashCode => cancelled.hashCode ^ leftOut.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeImported &&
+          runtimeType == other.runtimeType &&
+          cancelled == other.cancelled &&
+          leftOut == other.leftOut;
 }
 
 /// How a save that packs ended.
@@ -422,6 +448,19 @@ class ProjectReference {
         that: this,
       );
 
+  /// Import each of `paths`, as one undo step: a layered file as a
+  /// composition ([`Self::import_layers`]) and any other as footage
+  /// ([`Self::import_footage`]). This is the call the Import command makes.
+  ///
+  /// Not sync. Every file is read before the project is touched, which is
+  /// the slow part. `on_progress` hears the fraction of the files read, and
+  /// [`crate::api::import::cancel_import`] stops it between two files with
+  /// the project left as it was.
+  Future<BridgeImported> importFiles(
+          {required List<String> paths, RustStreamSink<double>? onProgress}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceImportFiles(
+          that: this, paths: paths, onProgress: onProgress);
+
   /// Record `path` as a footage item, as one undo step.
   ///
   /// Importing only *records* the file — it does not decode it or read its size.
@@ -464,7 +503,9 @@ class ProjectReference {
   ///
   /// Only the layer list is read here. The pixels are read when a layer is
   /// first drawn.
-  int? importLayers({required String path}) => BridgeLib.instance.api
+  ///
+  /// Not sync: reading the layer list of a big file takes a while.
+  Future<int?> importLayers({required String path}) => BridgeLib.instance.api
       .crateApiProjectProjectReferenceImportLayers(that: this, path: path);
 
   /// Whether the document has moved since it was last saved (or opened).
@@ -592,9 +633,15 @@ class ProjectReference {
   /// This is the whole point of the journal: a session that ended badly left
   /// its edits there, and this is what puts them back. The replay stops at the
   /// first op that no longer applies — see [`BridgeRecovery::replayed`].
-  BridgeRecovery restoreJournal({required String projectPath}) =>
+  ///
+  /// Not sync: it reads the whole project again. `on_progress` hears the
+  /// fraction of the edits replayed, and
+  /// [`crate::api::import::cancel_import`] stops it before anything is
+  /// swapped.
+  Future<BridgeRecovery> restoreJournal(
+          {required String projectPath, RustStreamSink<double>? onProgress}) =>
       BridgeLib.instance.api.crateApiProjectProjectReferenceRestoreJournal(
-          that: this, projectPath: projectPath);
+          that: this, projectPath: projectPath, onProgress: onProgress);
 
   /// Save to `path`, or to wherever the project was last saved when `path` is
   /// empty. Answers the path actually written, so Dart can show it and stop

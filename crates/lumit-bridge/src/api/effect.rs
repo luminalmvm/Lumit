@@ -520,7 +520,8 @@ pub fn list_graph_groups() -> Vec<BridgePresetInfo> {
 ///
 /// The file is told apart by its first bytes and not by its name. A file that
 /// is neither is refused as any other non-preset is.
-#[frb(sync)]
+///
+/// Not sync: it reads a file, and converts one that is After Effects' own.
 pub fn read_effect_preset(path: String) -> Result<String, BridgeError> {
     let path = std::path::Path::new(&path);
     if !lumit_import::is_ffx(path) {

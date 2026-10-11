@@ -419,13 +419,20 @@ class _LumitAppViewState extends State<LumitAppView> {
           builder: (context, opening, _) => opening
               ? ValueListenableBuilder<OpenProgress?>(
                   valueListenable: state.openProgress,
-                  // Null is the sweep: an import says nothing about how far it
-                  // has got, and opening a `.lum` says everything.
-                  builder: (context, progress, _) => OpeningOverlay(
-                    label: progress == null
-                        ? null
-                        : openPhaseLabel(progress.phase),
-                    fraction: progress?.fraction,
+                  // Null is the sweep, for a job that says nothing about how
+                  // far it has got.
+                  builder: (context, progress, _) =>
+                      ValueListenableBuilder<VoidCallback?>(
+                    valueListenable: state.openCancel,
+                    builder: (context, cancel, _) => OpeningOverlay(
+                      label: progress == null
+                          ? null
+                          : openPhaseLabel(progress.phase),
+                      fraction: progress?.fraction,
+                      onCancel: cancel,
+                      cancelLabel:
+                          state.openIsImport ? l10n.cancelImport : null,
+                    ),
                   ),
                 )
               : const SizedBox.shrink(),
@@ -436,7 +443,8 @@ class _LumitAppViewState extends State<LumitAppView> {
         BusyOverlay(
             busy: state.busy,
             progress: state.busyProgress,
-            cancel: state.busyCancel),
+            cancel: state.busyCancel,
+            cancelLabel: state.busyCancelLabel),
       ]),
     );
   }

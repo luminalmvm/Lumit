@@ -116,6 +116,17 @@ pub struct BridgeUnpackResult {
 /// The fraction of a pack or an unpack that is done, 0..=1.
 pub type PackProgressStream = StreamSink<f64>;
 
+/// How an import of files ended.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BridgeImported {
+    /// True when the import was stopped, which leaves the project as it was.
+    pub cancelled: bool,
+    /// How many layers of the layered files were left out because they hold
+    /// no picture.
+    pub left_out: u32,
+}
+
 #[derive(Debug, Clone)]
 #[frb]
 pub struct ProjectReference {
@@ -501,7 +512,8 @@ impl ProjectReference {
     ///
     /// Only the layer list is read here. The pixels are read when a layer is
     /// first drawn.
-    #[frb(sync)]
+    ///
+    /// Not sync: reading the layer list of a big file takes a while.
     pub fn import_layers(&self, path: String) -> Result<Option<u32>, BridgeError> {
         #[cfg(not(feature = "media"))]
         {
@@ -514,6 +526,19 @@ impl ProjectReference {
             let Some(layered) = crate::layered::Layered::open(&file) else {
                 return Ok(None);
             };
+            self.place_layers(file, &layered).map(Some)
+        }
+    }
+
+    /// The second half of [`Self::import_layers`], for a file already read.
+    #[cfg(feature = "media")]
+    #[frb(ignore)]
+    fn place_layers(
+        &self,
+        file: std::path::PathBuf,
+        layered: &crate::layered::Layered,
+    ) -> Result<u32, BridgeError> {
+        {
             let (width, height) = layered.size();
             let name = file
                 .file_stem()
@@ -553,8 +578,86 @@ impl ProjectReference {
 
             // Outside the lock: one probe answers for every layer of the file.
             crate::probe::request(file);
-            Ok(Some(left_out))
+            Ok(left_out)
         }
+    }
+
+    /// Import each of `paths`, as one undo step: a layered file as a
+    /// composition ([`Self::import_layers`]) and any other as footage
+    /// ([`Self::import_footage`]). This is the call the Import command makes.
+    ///
+    /// Not sync. Every file is read before the project is touched, which is
+    /// the slow part. `on_progress` hears the fraction of the files read, and
+    /// [`crate::api::import::cancel_import`] stops it between two files with
+    /// the project left as it was.
+    pub fn import_files(
+        &self,
+        paths: Vec<String>,
+        on_progress: Option<StreamSink<f64>>,
+    ) -> Result<BridgeImported, BridgeError> {
+        crate::packing::begin();
+        self.import_while(
+            paths,
+            &mut crate::packing::progress(|fraction| {
+                if let Some(sink) = &on_progress {
+                    let _ = sink.add(fraction);
+                }
+            }),
+        )
+    }
+
+    /// [`Self::import_files`], which stops when `carry_on` says no. It is
+    /// asked before each file is read, with how many have been and how many
+    /// there are, and once more before the project is touched.
+    #[frb(ignore)]
+    pub(crate) fn import_while(
+        &self,
+        paths: Vec<String>,
+        carry_on: &mut dyn FnMut(u64, u64) -> bool,
+    ) -> Result<BridgeImported, BridgeError> {
+        let total = paths.len() as u64;
+        #[cfg(feature = "media")]
+        let mut read = Vec::new();
+        let mut stopped = false;
+        for (at, path) in paths.iter().enumerate() {
+            stopped = !carry_on(at as u64, total);
+            if stopped {
+                break;
+            }
+            #[cfg(feature = "media")]
+            read.push(crate::layered::Layered::open(std::path::Path::new(path)));
+            #[cfg(not(feature = "media"))]
+            let _ = path;
+        }
+        if stopped || !carry_on(total, total) {
+            return Ok(BridgeImported {
+                cancelled: true,
+                left_out: 0,
+            });
+        }
+
+        let group = paths.len() > 1;
+        if group {
+            self.begin_undo_group()?;
+        }
+        let mut placed = paths.into_iter().enumerate();
+        let left_out = placed.try_fold(0_u32, |left_out, (at, path)| {
+            #[cfg(feature = "media")]
+            if let Some(Some(layered)) = read.get(at) {
+                return Ok(left_out + self.place_layers(path.into(), layered)?);
+            }
+            #[cfg(not(feature = "media"))]
+            let _ = at;
+            self.import_footage(path).map(|_| left_out)
+        });
+        // A group left open records nothing, so it closes whatever happened.
+        if group {
+            self.end_undo_group()?;
+        }
+        Ok(BridgeImported {
+            cancelled: false,
+            left_out: left_out?,
+        })
     }
 
     /// Record `path` as a footage item, as one undo step.
