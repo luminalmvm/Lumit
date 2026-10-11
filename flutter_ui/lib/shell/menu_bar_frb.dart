@@ -459,57 +459,40 @@ class LumitMenuBarFrb extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // macOS puts menus in the system bar, not in the window, and they are
+    // read on other terms there: see [_SystemMenuBar].
+    if (defaultTargetPlatform == TargetPlatform.macOS) {
+      return _SystemMenuBar(bar: this);
+    }
     // Half this bar's enablement is about the *selection* — the Effect menu,
     // Delete, Duplicate, Pre-compose, Retime — and the selection lives in a
     // ValueNotifier that does not notify the shell state. Without this the bar
     // would keep whatever selection it was last built with, and every one of
     // those rows would be greyed out with a layer plainly selected.
-    // The updater is watched on macOS only, where the whole tree is handed to
-    // the system and there is no rebuilding a single row. In-app, the Help
-    // menu's live row listens for itself (see [_MenuList]), so download
-    // progress never rebuilds the whole bar.
+    // The updater is not watched here: the Help menu's live row listens for
+    // itself (see [_MenuList]), so download progress never rebuilds the whole
+    // bar.
     final ui = context.read<LumitUiState>();
     return ValueListenableBuilder<List<LayerReference>>(
       valueListenable: ui.selectedLayers,
-      builder: (context, _, __) => defaultTargetPlatform == TargetPlatform.macOS
-          ? ListenableBuilder(
-              listenable: ui.updates,
-              builder: (context, _) => _bar(context),
-            )
-          : _bar(context),
+      builder: (context, _, __) => _bar(context),
     );
   }
 
+  /// Every menu, with this bar's pickers and its palette.
+  List<MenuSection> _menus(BuildContext context) => lumitMenus(
+        context,
+        app,
+        openPicker: openPicker,
+        savePicker: savePicker,
+        footagePicker: footagePicker,
+        aeProjectPicker: aeProjectPicker,
+        palette: () => _palette(context),
+      );
+
   Widget _bar(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    final menus = lumitMenus(
-      context,
-      app,
-      openPicker: openPicker,
-      savePicker: savePicker,
-      footagePicker: footagePicker,
-      aeProjectPicker: aeProjectPicker,
-      palette: () => _palette(context),
-    );
-
-    // macOS puts menus in the system bar, not in the window. The bar itself
-    // draws nothing here; the hotkey holder still has to be in the tree.
-    if (defaultTargetPlatform == TargetPlatform.macOS) {
-      return PlatformMenuBar(
-        menus: platformMenusFor(context, menus),
-        child: Stack(children: [
-          _RequestHotkey(
-            requests: context.read<LumitUiState>().paletteRequest,
-            onRequested: () => _palette(context),
-          ),
-          _RequestHotkey(
-            requests: context.read<LumitUiState>().consoleRequest,
-            onRequested: () => _console(context),
-          ),
-        ]),
-      );
-    }
-
+    final menus = _menus(context);
     final ui = context.read<LumitUiState>();
     // Nine menu names do not fit a narrow window, and a menu you cannot
     // reach is worse than one you have to scroll to, so the bar scrolls
@@ -2375,9 +2358,9 @@ List<PlatformMenuItem> platformMenusFor(
         continue;
       }
       // A live row resolves to whatever it currently reads. The Mac menu is
-      // rebuilt whenever the bar is, and the bar watches the same object the
-      // row does, so this stays in step without the in-app renderer's
-      // rebuild-in-place machinery.
+      // read again whenever the object the row watches speaks (see
+      // [_SystemMenuBar]), so this stays in step without the in-app
+      // renderer's rebuild-in-place machinery.
       final item = raw.current;
       final label = switch (item.checked) {
         true => '✓ ${item.text}',
@@ -2455,6 +2438,114 @@ List<PlatformMenuItem> platformMenusFor(
         ]),
       ),
   ];
+}
+
+/// The bar on macOS, where the menus are the system's and this draws nothing.
+///
+/// **Read when something changes, not when the bar is rebuilt.** The system is
+/// handed the whole tree at once, every row of every menu with its enablement
+/// worked out, where the in-window bar reads one menu as it opens. Working
+/// that out asks the engine a few dozen questions, and the bar is rebuilt
+/// whenever the shell is, which a resized window does on every frame. So the
+/// tree is read here when what it shows has changed — the document, the
+/// selection, the shell's own state, the updater's row — and kept. A rebuild
+/// hands over what was kept and asks the engine nothing, and because the
+/// rows are then the same objects, `PlatformMenuBar` sends the system nothing
+/// either.
+class _SystemMenuBar extends StatefulWidget {
+  final LumitMenuBarFrb bar;
+
+  const _SystemMenuBar({required this.bar});
+
+  @override
+  State<_SystemMenuBar> createState() => _SystemMenuBarState();
+}
+
+class _SystemMenuBarState extends State<_SystemMenuBar> {
+  List<PlatformMenuItem> _menus = const [];
+  late final LumitUiState _ui = context.read<LumitUiState>();
+  StreamSubscription<Object>? _edits;
+
+  /// Whether a read is already on its way, so that an edit which says so
+  /// three times over is read once.
+  bool _stale = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _watch(widget.bar.app);
+    // The selection and the updater each speak for themselves, and neither
+    // tells the shell state.
+    for (final each in [_ui, _ui.selectedLayers, _ui.updates]) {
+      each.addListener(_markStale);
+    }
+  }
+
+  /// An edit made elsewhere comes down the change stream and one made here is
+  /// announced on the state itself, so both are listened to.
+  void _watch(LumitState app) {
+    app.addListener(_markStale);
+    _edits = app.onChange.listen((_) => _markStale());
+  }
+
+  void _unwatch(LumitState app) {
+    app.removeListener(_markStale);
+    _edits?.cancel();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // The first read, once there is a tree above to read the rows against,
+    // and another only if something they were built from up there changes.
+    _menus = _read();
+  }
+
+  @override
+  void didUpdateWidget(covariant _SystemMenuBar old) {
+    super.didUpdateWidget(old);
+    if (old.bar.app == widget.bar.app) return;
+    _unwatch(old.bar.app);
+    _watch(widget.bar.app);
+    _markStale();
+  }
+
+  @override
+  void dispose() {
+    _unwatch(widget.bar.app);
+    for (final each in [_ui, _ui.selectedLayers, _ui.updates]) {
+      each.removeListener(_markStale);
+    }
+    super.dispose();
+  }
+
+  void _markStale() {
+    if (_stale) return;
+    _stale = true;
+    scheduleMicrotask(() {
+      _stale = false;
+      if (mounted) setState(() => _menus = _read());
+    });
+  }
+
+  List<PlatformMenuItem> _read() =>
+      platformMenusFor(context, widget.bar._menus(context));
+
+  @override
+  Widget build(BuildContext context) => PlatformMenuBar(
+        menus: _menus,
+        // The hotkey holders still have to be in the tree.
+        child: Stack(children: [
+          _RequestHotkey(
+            requests: _ui.paletteRequest,
+            onRequested: () => widget.bar._palette(context),
+          ),
+          _RequestHotkey(
+            requests: _ui.consoleRequest,
+            onRequested: () => widget.bar._console(context),
+          ),
+        ]),
+      );
 }
 
 // --- The in-app renderer --------------------------------------------------
