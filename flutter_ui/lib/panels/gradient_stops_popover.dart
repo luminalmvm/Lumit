@@ -10,7 +10,6 @@ import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/assets.dart';
-import 'package:lumit_flutter/src/rust/api/layer.dart';
 
 import '../icons/lumit_icon.dart';
 import '../icons/lumit_icons.dart';
@@ -23,14 +22,32 @@ import '../widgets/controls.dart';
 /// `shape.rs`.
 const int maxGradientStops = 16;
 
+/// A stop between a gradient's two ends, as plain numbers: what it reads at
+/// the playhead. [id] says which stop it is from one edit to the next, so a
+/// stop that is keyed keeps its keys.
+class RampStop {
+  final int id;
+  final double position;
+  final BridgeColourRgba colour;
+  final double opacity;
+
+  const RampStop({
+    required this.id,
+    required this.position,
+    required this.colour,
+    required this.opacity,
+  });
+}
+
 /// A gradient as the editor holds it: the two ends, and the stops between
-/// them in order. Opacities are 0..100 and positions a per cent of the ramp.
+/// them in the order they were made. Opacities are 0..100 and positions a per
+/// cent of the ramp.
 class GradientRamp {
   final BridgeColourRgba startColour;
   final double startOpacity;
   final BridgeColourRgba endColour;
   final double endOpacity;
-  final List<BridgeGradientStop> between;
+  final List<RampStop> between;
 
   const GradientRamp({
     required this.startColour,
@@ -60,6 +77,8 @@ class GradientRampPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final box = bar ?? Offset.zero & size;
+    final between = [...ramp.between]
+      ..sort((a, b) => a.position.compareTo(b.position));
     canvas.save();
     canvas.clipRect(box);
     const cell = 5.0;
@@ -79,12 +98,12 @@ class GradientRampPainter extends CustomPainter {
         ..shader = LinearGradient(
           colors: [
             _shown(ramp.startColour, ramp.startOpacity),
-            for (final s in ramp.between) _shown(s.colour, s.opacity),
+            for (final s in between) _shown(s.colour, s.opacity),
             _shown(ramp.endColour, ramp.endOpacity),
           ],
           stops: [
             0,
-            for (final s in ramp.between) (s.position / 100).clamp(0.0, 1.0),
+            for (final s in between) (s.position / 100).clamp(0.0, 1.0),
             1,
           ],
         ).createShader(box),
@@ -128,10 +147,11 @@ Future<void> showGradientStopsPopover({
 /// One colour on the ramp while it is being edited. A class rather than a
 /// record, as a stop being dragged past another has to stay the same stop.
 class _Stop {
+  final int id;
   double position;
   BridgeColourRgba colour;
   double opacity;
-  _Stop(this.position, this.colour, this.opacity);
+  _Stop(this.id, this.position, this.colour, this.opacity);
 }
 
 const double _width = 292;
@@ -163,12 +183,18 @@ class _GradientStopsPopover extends StatefulWidget {
 
 class _GradientStopsPopoverState extends State<_GradientStopsPopover> {
   late final _Stop _start =
-      _Stop(0, widget.ramp.startColour, widget.ramp.startOpacity);
+      _Stop(-1, 0, widget.ramp.startColour, widget.ramp.startOpacity);
   late final _Stop _end =
-      _Stop(100, widget.ramp.endColour, widget.ramp.endOpacity);
+      _Stop(-1, 100, widget.ramp.endColour, widget.ramp.endOpacity);
   late final List<_Stop> _between = [
-    for (final s in widget.ramp.between) _Stop(s.position, s.colour, s.opacity),
+    for (final s in widget.ramp.between)
+      _Stop(s.id, s.position, s.colour, s.opacity),
   ];
+
+  /// The id the next stop made here takes, past every one handed in.
+  late int _nextId = widget.ramp.between
+          .fold(-1, (most, s) => math.max(most, s.id)) +
+      1;
   late _Stop _selected = _start;
 
   /// The stop the pointer has hold of, whether it has been pulled far enough
@@ -186,19 +212,19 @@ class _GradientStopsPopoverState extends State<_GradientStopsPopover> {
 
   /// The ramp as it stands, leaving out a stop that is being pulled off.
   GradientRamp get _ramp {
-    final between = [
-      for (final s in _between)
-        if (!(_pulledOff && identical(s, _dragging))) s,
-    ]..sort((a, b) => a.position.compareTo(b.position));
     return GradientRamp(
       startColour: _start.colour,
       startOpacity: _start.opacity,
       endColour: _end.colour,
       endOpacity: _end.opacity,
       between: [
-        for (final s in between)
-          BridgeGradientStop(
-              position: s.position, colour: s.colour, opacity: s.opacity),
+        for (final s in _between)
+          if (!(_pulledOff && identical(s, _dragging)))
+            RampStop(
+                id: s.id,
+                position: s.position,
+                colour: s.colour,
+                opacity: s.opacity),
       ],
     );
   }
@@ -219,6 +245,7 @@ class _GradientStopsPopoverState extends State<_GradientStopsPopover> {
     final u = span <= 0 ? 0.0 : (position - before.position) / span;
     double mix(double a, double b) => a + (b - a) * u;
     return _Stop(
+      _nextId++,
       position,
       BridgeColourRgba(
         r: mix(before.colour.r, after.colour.r),

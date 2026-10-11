@@ -8857,9 +8857,27 @@
   "@shapeGradientStopOpacity": {
     "description": "Gradient editor: label over how opaque the selected stop is, as a percentage."
   },
+  "shapeGradientStopOpacityRow": "Stop {n} opacity",
+  "@shapeGradientStopOpacityRow": {
+    "description": "Timeline row under a shape layer's art: how opaque one of the stops along its gradient fill is, as a percentage. {n} counts the stops up from 1.",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
   "shapeGradientStopPosition": "Position",
   "@shapeGradientStopPosition": {
     "description": "Gradient editor: label over how far along the gradient the selected stop sits, as a percentage."
+  },
+  "shapeGradientStopPositionRow": "Stop {n} position",
+  "@shapeGradientStopPositionRow": {
+    "description": "Timeline row under a shape layer's art: how far along its gradient fill one of the stops sits, as a percentage. {n} counts the stops up from 1.",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
   },
   "shapeGradientStopRemove": "Remove",
   "@shapeGradientStopRemove": {

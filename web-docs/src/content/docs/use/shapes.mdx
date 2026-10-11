@@ -41,7 +41,7 @@ with the second on the outer edge.
 opaque the Gradient colour end is, as a percentage. The ramp fades evenly between them, and
 an end at 0 is clear.
 
-The points and the two opacities are animatable; the colours are not.
+The points and the opacities are animatable; the colours are not.
 
 ### Gradient stops
 
@@ -52,8 +52,12 @@ are the Fill and the Gradient colour.
 - Drag a stop to move it. Drag it away from the ramp, or press **Remove**, to take it off.
 - **Colour**, **Opacity** and **Position** set the selected stop.
 
+Each stop also has two rows in the Timeline, **Stop 1 position** and **Stop 1 opacity** for
+the first, and both are animatable. Editing a keyed stop in the editor sets a keyframe at the
+playhead.
+
 Two stops at the same position make a hard edge. A gradient holds up to 16 stops between
-its ends, and they are not animatable.
+its ends.
 
 ## Combine two shapes
 

@@ -19560,9 +19560,9 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     if (arr.length != 3)
       throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
     return BridgeGradientStop(
-      position: dco_decode_f_64(arr[0]),
+      position: dco_decode_bridge_scalar(arr[0]),
       colour: dco_decode_bridge_colour_rgba(arr[1]),
-      opacity: dco_decode_f_64(arr[2]),
+      opacity: dco_decode_bridge_scalar(arr[2]),
     );
   }
 
@@ -25097,9 +25097,9 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeGradientStop sse_decode_bridge_gradient_stop(
       SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    var var_position = sse_decode_f_64(deserializer);
+    var var_position = sse_decode_bridge_scalar(deserializer);
     var var_colour = sse_decode_bridge_colour_rgba(deserializer);
-    var var_opacity = sse_decode_f_64(deserializer);
+    var var_opacity = sse_decode_bridge_scalar(deserializer);
     return BridgeGradientStop(
         position: var_position, colour: var_colour, opacity: var_opacity);
   }
@@ -31308,9 +31308,9 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   void sse_encode_bridge_gradient_stop(
       BridgeGradientStop self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_f_64(self.position, serializer);
+    sse_encode_bridge_scalar(self.position, serializer);
     sse_encode_bridge_colour_rgba(self.colour, serializer);
-    sse_encode_f_64(self.opacity, serializer);
+    sse_encode_bridge_scalar(self.opacity, serializer);
   }
 
   @protected

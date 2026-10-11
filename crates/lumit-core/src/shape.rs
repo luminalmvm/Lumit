@@ -176,7 +176,8 @@ pub struct ShapeItem {
     )]
     pub gradient_end_opacity: Property,
     /// The colours the ramp passes through between its two ends, in any
-    /// order. Empty is the plain two-colour ramp, and is absent from the file.
+    /// order, as a stop that animates can pass another. Empty is the plain
+    /// two-colour ramp, and is absent from the file.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub gradient_stops: Vec<GradientStop>,
     /// **A morphing path**: the shapes this item's path is keyed to,
@@ -310,11 +311,12 @@ fn full_opacity() -> f64 {
 pub struct GradientStop {
     /// How far along the ramp it sits, per cent. Two stops at one place make
     /// a hard edge.
-    pub position: f64,
+    #[serde(with = "crate::mask::still_or_keyed")]
+    pub position: Property,
     pub colour: LinearColour,
     /// 0..100, like the two ends.
-    #[serde(default = "full_opacity")]
-    pub opacity: f64,
+    #[serde(default = "crate::paint::full", with = "crate::mask::still_or_keyed")]
+    pub opacity: Property,
 }
 
 /// The most stops a gradient carries between its two ends. Past what a ramp
@@ -508,19 +510,20 @@ impl ShapeItem {
         let to_alpha = to.0[3] * faded(&self.gradient_end_opacity);
         // The ramp's colours in order: the fill, the stops between, then the
         // gradient colour.
-        let mut between: Vec<&GradientStop> = self
+        let mut between: Vec<(f64, &GradientStop)> = self
             .gradient_stops
             .iter()
-            .filter(|s| s.position.is_finite())
             .take(MAX_GRADIENT_STOPS)
+            .map(|s| (s.position.value_at(t), s))
+            .filter(|(at, _)| at.is_finite())
             .collect();
-        between.sort_by(|a, b| a.position.total_cmp(&b.position));
+        between.sort_by(|a, b| a.0.total_cmp(&b.0));
         let mut points = Vec::with_capacity(between.len() + 2);
         points.push((0.0f32, [from.0[0], from.0[1], from.0[2], from_alpha]));
-        for stop in between {
+        for (at, stop) in between {
             let c = stop.colour.0;
-            let alpha = c[3] * (stop.opacity.clamp(0.0, 100.0) / 100.0) as f32;
-            let at = (stop.position.clamp(0.0, 100.0) / 100.0) as f32;
+            let alpha = c[3] * faded(&stop.opacity);
+            let at = (at.clamp(0.0, 100.0) / 100.0) as f32;
             points.push((at, [c[0], c[1], c[2], alpha]));
         }
         points.push((1.0, [to.0[0], to.0[1], to.0[2], to_alpha]));
@@ -1859,9 +1862,9 @@ mod tests {
         it.gradient_start_x = Property::fixed(0.0);
         it.gradient_end_x = Property::fixed(20.0);
         it.gradient_stops = vec![GradientStop {
-            position: 50.0,
+            position: Property::fixed(50.0),
             colour: LinearColour([0.0, 1.0, 0.0, 1.0]),
-            opacity: 0.0,
+            opacity: Property::fixed(0.0),
         }];
         let rgba = rasterise_contents(&[it.clone()], 20, 20, 0.0, 0.0, 20.0, 20.0, 0.0);
         assert!(rgb_at(&rgba, 20, 0, 10)[0] > 200, "the fill at the start");
@@ -1871,9 +1874,16 @@ mod tests {
         );
         assert!(alpha_at(&rgba, 20, 10, 10) < 40, "and clear at the stop");
 
-        // Solid, the stop is its own colour where it sits.
-        it.gradient_stops[0].opacity = 100.0;
-        let rgba = rasterise_contents(&[it], 20, 20, 0.0, 0.0, 20.0, 20.0, 0.0);
+        // Keyed solid, the stop is its own colour where it sits by then.
+        let key = |secs: i64, value: f64| crate::anim::Keyframe {
+            time: crate::time::Rational::new(secs, 1).expect("a whole second"),
+            value,
+            interp_in: crate::anim::SideInterp::Linear,
+            interp_out: crate::anim::SideInterp::Linear,
+        };
+        it.gradient_stops[0].opacity.animation =
+            crate::anim::Animation::Keyframed(vec![key(0, 0.0), key(1, 100.0)]);
+        let rgba = rasterise_contents(&[it], 20, 20, 0.0, 0.0, 20.0, 20.0, 1.0);
         let middle = rgb_at(&rgba, 20, 10, 10);
         assert!(
             middle[1] > 200 && middle[0] < 120 && middle[2] < 120,
@@ -2045,9 +2055,9 @@ mod tests {
         keyed.gradient = 1;
         keyed.gradient_end_opacity = Property::fixed(0.0);
         keyed.gradient_stops = vec![GradientStop {
-            position: 40.0,
+            position: Property::fixed(40.0),
             colour: LinearColour([0.0, 1.0, 0.0, 1.0]),
-            opacity: 50.0,
+            opacity: Property::fixed(50.0),
         }];
         let json = serde_json::to_string(&keyed).unwrap();
         assert!(json.contains("path_keys"), "{json}");

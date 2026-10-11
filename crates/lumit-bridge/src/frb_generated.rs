@@ -21087,9 +21087,9 @@ impl SseDecode for crate::api::cache::BridgeGovernorReport {
 impl SseDecode for crate::api::layer::BridgeGradientStop {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        let mut var_position = <f64>::sse_decode(deserializer);
+        let mut var_position = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_colour = <crate::api::assets::BridgeColourRgba>::sse_decode(deserializer);
-        let mut var_opacity = <f64>::sse_decode(deserializer);
+        let mut var_opacity = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         return crate::api::layer::BridgeGradientStop {
             position: var_position,
             colour: var_colour,
@@ -35161,9 +35161,9 @@ impl SseEncode for crate::api::cache::BridgeGovernorReport {
 impl SseEncode for crate::api::layer::BridgeGradientStop {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        <f64>::sse_encode(self.position, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.position, serializer);
         <crate::api::assets::BridgeColourRgba>::sse_encode(self.colour, serializer);
-        <f64>::sse_encode(self.opacity, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.opacity, serializer);
     }
 }
 

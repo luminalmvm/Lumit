@@ -157,13 +157,13 @@ pub struct BridgeVertex {
 }
 
 /// A colour part way along a shape's gradient: where it sits as a per cent of
-/// the ramp, and how opaque it is, 0..100.
+/// the ramp, and how opaque it is, 0..100. Both animate.
 #[frb(non_opaque)]
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct BridgeGradientStop {
-    pub position: f64,
+    pub position: BridgeScalar,
     pub colour: crate::api::assets::BridgeColourRgba,
-    pub opacity: f64,
+    pub opacity: BridgeScalar,
 }
 
 impl BridgeVertex {
@@ -239,8 +239,8 @@ pub struct BridgeShapeItem {
     pub gradient_end_y: BridgeScalar,
     pub gradient_start_opacity: BridgeScalar,
     pub gradient_end_opacity: BridgeScalar,
-    /// The colours the ramp passes through between its two ends, sorted by
-    /// position. Empty is the plain two-colour ramp.
+    /// The colours the ramp passes through between its two ends, in the order
+    /// they were made. Empty is the plain two-colour ramp.
     pub gradient_stops: Vec<BridgeGradientStop>,
     /// **A boolean combine**: how this item joins the item **before**
     /// it in the list — 0 draws it on its own, 1 unions, 2 subtracts this one
@@ -314,9 +314,9 @@ impl BridgeShapeItem {
                 .gradient_stops
                 .iter()
                 .map(|s| BridgeGradientStop {
-                    position: s.position,
+                    position: BridgeScalar::read_at(&s.position, offset),
                     colour: crate::api::assets::colour_of(s.colour),
-                    opacity: s.opacity,
+                    opacity: BridgeScalar::read_at(&s.opacity, offset),
                 })
                 .collect(),
             combine: item.combine,
@@ -411,23 +411,20 @@ impl BridgeShapeItem {
                 100.0,
             )?,
             gradient_end_opacity: clamped_property(&self.gradient_end_opacity, offset, 0.0, 100.0)?,
-            gradient_stops: {
-                // Held inside the ramp and kept in order, so the list the
-                // frontend reads back is the one the engine draws.
-                let mut stops: Vec<lumit_core::shape::GradientStop> = self
-                    .gradient_stops
-                    .iter()
-                    .filter(|s| s.position.is_finite() && s.opacity.is_finite())
-                    .take(lumit_core::shape::MAX_GRADIENT_STOPS)
-                    .map(|s| lumit_core::shape::GradientStop {
-                        position: s.position.clamp(0.0, 100.0),
+            // Held inside the ramp, every key of them, and left in the order
+            // they came in: a stop's rows are found by where it is in the list.
+            gradient_stops: self
+                .gradient_stops
+                .iter()
+                .take(lumit_core::shape::MAX_GRADIENT_STOPS)
+                .map(|s| {
+                    Ok(lumit_core::shape::GradientStop {
+                        position: clamped_property(&s.position, offset, 0.0, 100.0)?,
                         colour: crate::api::assets::linear_of(s.colour),
-                        opacity: s.opacity.clamp(0.0, 100.0),
+                        opacity: clamped_property(&s.opacity, offset, 0.0, 100.0)?,
                     })
-                    .collect();
-                stops.sort_by(|a, b| a.position.total_cmp(&b.position));
-                stops
-            },
+                })
+                .collect::<Result<_, BridgeError>>()?,
             // Five readings and no sixth: a number naming none of them draws
             // the art on its own, which is the answer that shows something.
             combine: if self.combine <= 4 { self.combine } else { 0 },

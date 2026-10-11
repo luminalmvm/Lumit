@@ -591,11 +591,11 @@ enum BridgeFadeShape {
 }
 
 /// A colour part way along a shape's gradient: where it sits as a per cent of
-/// the ramp, and how opaque it is, 0..100.
+/// the ramp, and how opaque it is, 0..100. Both animate.
 class BridgeGradientStop {
-  final double position;
+  final BridgeScalar position;
   final BridgeColourRgba colour;
-  final double opacity;
+  final BridgeScalar opacity;
 
   const BridgeGradientStop({
     required this.position,
@@ -1633,8 +1633,8 @@ class BridgeShapeItem {
   final BridgeScalar gradientStartOpacity;
   final BridgeScalar gradientEndOpacity;
 
-  /// The colours the ramp passes through between its two ends, sorted by
-  /// position. Empty is the plain two-colour ramp.
+  /// The colours the ramp passes through between its two ends, in the order
+  /// they were made. Empty is the plain two-colour ramp.
   final List<BridgeGradientStop> gradientStops;
 
   /// **A boolean combine**: how this item joins the item **before**
