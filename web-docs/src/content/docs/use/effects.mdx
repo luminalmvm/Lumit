@@ -30,6 +30,20 @@ animated: turn on its stopwatch to begin. See [Keyframes](/use/keyframes/).
 Effects run in stack order. An exposure ahead of a glow does not look like a glow ahead of an
 exposure. Drag an effect up or down the stack to reorder it.
 
+## Past the layer's edges
+
+A layer's picture is the size of the layer, and a shape or text layer's is the size of its
+art. Some effects reach past it, and the layer grows to hold them:
+
+- **Drop shadow**, always.
+- **Gaussian blur**, **Channel blur**, **Directional blur** and **Glow**, with **Repeat edge
+  pixels** off. Added to a shape or text layer, they start with it off.
+- **Tile**, with an output larger than the layer.
+
+An effect after one of these works on the grown layer. Its points and mask paths stay
+where they were on the layer. A **Matte** is black past the layer's edges. On an
+adjustment layer nothing reaches past the frame.
+
 ## Apply one effect to many layers
 
 Select several layers and apply an effect, and each of them gets its own copy — from the

@@ -89,9 +89,9 @@ pub struct ChannelBlur {
 
     /// On holds the border pixel outward, so a bright edge does not darken as
     /// the gather runs off the frame; off lets the frame edge fall away into
-    /// transparency. AE's control is a switch and so is this one — not the
-    /// three-way Edges enum, which Radial blur uses because it genuinely has
-    /// three cases (docs/08 §3.45, §3.22's precedent).
+    /// transparency and the blur spread past it. AE's control is a switch and
+    /// so is this one — not the three-way Edges enum, which Radial blur uses
+    /// because it genuinely has three cases (docs/08 §3.45, §3.22's precedent).
     #[toggle(label = "Repeat edge pixels", default = true)]
     pub repeat_edge_pixels: bool,
 
@@ -140,5 +140,16 @@ impl EffectDef for ChannelBlurDef {
     fn apply_cpu(&self, rgba: &mut [f32], w: u32, h: u32, p: Params<'_>) {
         let (radii, edge, mix) = ChannelBlur::read(p).packed();
         cpu::channel_blur(rgba, w, h, radii, edge, mix);
+    }
+
+    fn spread_px(&self, p: Params<'_>) -> [f32; 2] {
+        let (radii, edge, mix) = ChannelBlur::read(p).packed();
+        // As far as the widest of the four reads.
+        let reach = if edge == 0 && mix > 0.0 {
+            radii.into_iter().fold(0.0, f32::max)
+        } else {
+            0.0
+        };
+        [reach, reach]
     }
 }

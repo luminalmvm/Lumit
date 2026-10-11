@@ -481,6 +481,17 @@ pub trait EffectDef: Sync + Send + 'static {
         false
     }
 
+    /// How far this op throws picture past the edge of the one it is handed,
+    /// in raster pixels, across and down. The walk gives it that much empty
+    /// room on each side first, the way Tile grows the picture, so a blur on
+    /// a shape spreads out of the shape and is not cut off at its edge.
+    ///
+    /// Zero for every effect that stays inside its picture, which is the
+    /// default, and for one whose Repeat edge pixels is on.
+    fn spread_px(&self, _p: super::params::Params<'_>) -> [f32; 2] {
+        [0.0, 0.0]
+    }
+
     /// The source-relative frame offsets **this instance** reads at this layer
     /// frame, the picture-side twin of [`driver_window`](EffectDef::driver_window).
     ///

@@ -4395,6 +4395,112 @@ mod tests {
         }
     }
 
+    /// **A blur with Repeat edge pixels off spreads past the layer's own
+    /// edges**, and one with it on stays inside them.
+    ///
+    /// The same 8×8 solid in the middle of a 32×32 comp. Held, the blur has
+    /// nothing but red to read and the layer is its own eight pixels. Let go,
+    /// the stack is given room round the layer and the red runs out into it.
+    /// Without the room the pixels past the edge are still the background,
+    /// which is what this test fails on.
+    ///
+    /// A Mirror after the blur still folds the layer about its own middle,
+    /// though the picture it is handed now starts six pixels further out.
+    #[test]
+    fn a_blur_with_repeat_edge_pixels_off_spreads_past_the_layers_edges() {
+        let mut r = match HeadlessRenderer::shared() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let comp_with_blur = |repeat: bool, mirror: Option<f64>| {
+            let mut doc = Document::new();
+            let solid_id = Uuid::now_v7();
+            doc.items.push(ProjectItem::Solid(SolidDef {
+                id: solid_id,
+                name: "Solid".into(),
+                colour: LinearColour([1.0, 0.0, 0.0, 1.0]),
+                width: 8,
+                height: 8,
+                extra: serde_json::Map::new(),
+            }));
+            let mut blur = lumit_core::fx::instantiate("blur").expect("blur is a builtin");
+            for p in &mut blur.params {
+                match p.id.as_str() {
+                    "radius" => {
+                        p.value = lumit_core::model::EffectValue::Float(Property::fixed(6.0));
+                    }
+                    "repeat_edge_pixels" => {
+                        p.value = lumit_core::model::EffectValue::Bool(repeat);
+                    }
+                    _ => {}
+                }
+            }
+            let comp_id = push_comp(&mut doc, "Scene", 32, 32);
+            // Pinned at its own middle in the middle of the comp: the layer
+            // is the pixels 12..20.
+            let mut layer = matrix_layer("Solid", LayerKind::Solid { def: solid_id }, 8, 8);
+            layer.transform.position_x = Property::fixed(16.0);
+            layer.transform.position_y = Property::fixed(16.0);
+            layer.effects = vec![blur];
+            // Folded about the layer's own middle, at this angle.
+            if let Some(angle) = mirror {
+                let mut fold = lumit_core::fx::instantiate("mirror").expect("mirror is a builtin");
+                for p in &mut fold.params {
+                    let v = match p.id.as_str() {
+                        "centre_x" | "centre_y" => 4.0,
+                        "angle" => angle,
+                        _ => continue,
+                    };
+                    p.value = lumit_core::model::EffectValue::Float(Property::fixed(v));
+                }
+                layer.effects.push(fold);
+            }
+            doc.comp_mut(comp_id).unwrap().layers.push(layer);
+            (DocumentStore::new(doc), comp_id)
+        };
+        let red_at = |rgba: &[u8], x: u32, y: u32| rgba[((y * 32 + x) * 4) as usize];
+
+        let (store, comp_id) = comp_with_blur(true, None);
+        let (held, _, _) = r
+            .render_rgba(&store.snapshot(), comp_id, 0, 1.0)
+            .expect("render");
+        assert!(red_at(&held, 16, 16) > 200, "held, the solid stays solid");
+        assert_eq!(red_at(&held, 10, 16), 0, "and nothing leaves the layer");
+
+        let (store, comp_id) = comp_with_blur(false, None);
+        let (spread, _, _) = r
+            .render_rgba(&store.snapshot(), comp_id, 0, 1.0)
+            .expect("render");
+        assert!(
+            red_at(&spread, 10, 16) > 20,
+            "let go, the blur must reach past the layer's edge"
+        );
+        assert!(
+            red_at(&spread, 12, 16) < red_at(&held, 12, 16),
+            "and the edge itself must fall away"
+        );
+        assert_eq!(red_at(&spread, 3, 16), 0, "but no further than its Radius");
+
+        // The blurred solid is the same either side of its middle, so a fold
+        // about the middle changes nothing, whichever half it keeps. A fold
+        // about anywhere else would.
+        for angle in [0.0, 180.0] {
+            let (store, comp_id) = comp_with_blur(false, Some(angle));
+            let (folded, _, _) = r
+                .render_rgba(&store.snapshot(), comp_id, 0, 1.0)
+                .expect("render");
+            for x in [10, 13, 18, 21] {
+                assert!(
+                    red_at(&folded, x, 16).abs_diff(red_at(&spread, x, 16)) <= 2,
+                    "the Mirror's centre moved off the layer's middle at {x}, angle {angle}"
+                );
+            }
+        }
+    }
+
     /// A full-frame red solid composites to red in the centre pixel — the GPU
     /// oracle that proves the headless seam drives the real compositor. Skips
     /// when the machine has no adapter (the lavapipe/hardware convention the

@@ -178,6 +178,10 @@ impl EffectDef for DropShadowStyleDef {
     fn apply_cpu(&self, rgba: &mut [f32], w: u32, h: u32, p: Params<'_>) {
         cpu::drop_shadow(rgba, w, h, &DropShadowStyle::read(p).packed());
     }
+
+    fn spread_px(&self, p: Params<'_>) -> [f32; 2] {
+        DropShadowStyle::read(p).packed().spread()
+    }
 }
 
 /// Colour overlay — §2's entry 5, interior, over the gradient overlay.
@@ -359,6 +363,10 @@ impl EffectDef for OuterGlowDef {
 
     fn apply_cpu(&self, rgba: &mut [f32], w: u32, h: u32, p: Params<'_>) {
         cpu::drop_shadow(rgba, w, h, &OuterGlow::read(p).packed());
+    }
+
+    fn spread_px(&self, p: Params<'_>) -> [f32; 2] {
+        OuterGlow::read(p).packed().spread()
     }
 }
 
@@ -895,6 +903,17 @@ impl EffectDef for StrokeStyleDef {
 
     fn apply_cpu(&self, rgba: &mut [f32], w: u32, h: u32, p: Params<'_>) {
         cpu::stroke_contour(rgba, w, h, &StrokeStyle::read(p).packed());
+    }
+
+    fn spread_px(&self, p: Params<'_>) -> [f32; 2] {
+        let stroke = StrokeStyle::read(p).packed();
+        // As far as the outline is grown outward.
+        let reach = if stroke.opacity > 0.0 && stroke.mix > 0.0 {
+            stroke.grow_px
+        } else {
+            0.0
+        };
+        [reach, reach]
     }
 }
 

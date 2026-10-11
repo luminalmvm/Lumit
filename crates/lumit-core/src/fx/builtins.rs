@@ -598,6 +598,27 @@ pub fn point_self_layer_params_at(inst: &mut EffectInstance, layer: uuid::Uuid) 
     }
 }
 
+/// Start `inst` with Repeat edge pixels off when it lands on a Shape or Text
+/// layer.
+///
+/// Their picture is only as big as the art, so a blur or a glow held inside it
+/// is cut off at the art's edge, and on a flat shape does nothing at all. The
+/// apply site passes the layer for the reason it passes the raster. A preset
+/// and plain [`instantiate`] keep the declared default.
+pub fn spread_on_art(inst: &mut EffectInstance, kind: &crate::model::LayerKind) {
+    use crate::model::LayerKind;
+    if !matches!(kind, LayerKind::Shape { .. } | LayerKind::Text { .. }) {
+        return;
+    }
+    if let Some(slot) = inst
+        .params
+        .iter_mut()
+        .find(|p| p.id == "repeat_edge_pixels")
+    {
+        slot.value = EffectValue::Bool(false);
+    }
+}
+
 /// Whether the parameter `id` is editable given what `inst` currently holds —
 /// the greyed-row rule of [`EnabledWhen`], evaluated.
 ///

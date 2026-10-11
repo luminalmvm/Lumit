@@ -735,6 +735,60 @@ pub fn take_watched_points() -> Option<lumit_core::fx::points::PointsStream> {
 /// where a dispatch would have been and then takes the same road any op takes,
 /// the Mix seam and the matte dissolve included. An op with no closure in the
 /// list passes its picture through, exactly as a missing LUT does.
+/// The room an op that spreads past its picture is given, in texels on each
+/// side across and down, kept inside the widest texture there is.
+fn spread_room(
+    def: &dyn lumit_core::fx::EffectDef,
+    p: lumit_core::fx::Params<'_>,
+    w: u32,
+    h: u32,
+) -> [u32; 2] {
+    let [across, down] = def.spread_px(p);
+    let texels = |px: f32, n: u32| {
+        (px.ceil() as u32).min(crate::plan::MAX_TEXTURE_SIDE.saturating_sub(n) / 2)
+    };
+    [texels(across, w), texels(down, h)]
+}
+
+/// The x and y pairs in pixels that are a distance and not a place on the
+/// picture, by the name they share: Offset's Shift. Every other one is a
+/// place, as a Centre or a noise field's origin is, and goes in with the
+/// picture when an op above has given it room.
+const DISTANCES: &[&str] = &["shift"];
+
+/// `p` with every place it names moved `by` texels right and down.
+fn places_moved(
+    schema: &lumit_core::fx::EffectSchema,
+    p: lumit_core::fx::Params<'_>,
+    by: [u32; 2],
+) -> Vec<(lumit_core::fx::ParamId, lumit_core::fx::Value)> {
+    use lumit_core::fx::{ParamId, Unit, Value};
+    let px = |id: &str| {
+        schema
+            .params
+            .iter()
+            .any(|row| row.id == id && row.unit == Unit::Px)
+    };
+    let slides: Vec<(ParamId, f32)> = schema
+        .pairs()
+        .filter(|pair| px(pair.x) && px(pair.y) && !DISTANCES.contains(&pair.stem))
+        .flat_map(|pair| {
+            [
+                (ParamId::new(pair.x), by[0] as f32),
+                (ParamId::new(pair.y), by[1] as f32),
+            ]
+        })
+        .collect();
+    p.iter()
+        .map(
+            |(id, value)| match (value, slides.iter().find(|(place, _)| *place == id)) {
+                (Value::Float(v), Some((_, by))) => (id, Value::Float(v + by)),
+                _ => (id, value),
+            },
+        )
+        .collect()
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn run_ops(
     fx: &FxEngine,
@@ -757,14 +811,21 @@ pub fn run_ops(
     cache: Option<(&std::cell::RefCell<FxCache>, u128)>,
 ) -> Tex {
     let mut tex = tex;
-    // The working raster, which **one** effect can grow mid-stack: Tile
+    // The working raster, which an effect can grow mid-stack: Tile
     // with Output width or height above 100 % stamps copies past the frame's
     // edges, and the ops after it run on the wider picture so those copies are
-    // real picture to them rather than transparency. Every other op returns the
+    // real picture to them rather than transparency. An op that spreads past
+    // its edges is given room the same way, below. Every other op returns the
     // size it was given, so this pair never moves and the walk is what it was.
     // The caller reads the finished size off the texture; a caller that cannot
     // take a wider one crops it back through `lumit_gpu::fx::fit_centred`.
     let (mut w, mut h) = (w, h);
+    // How many texels of room the spreading ops so far have put on the left
+    // and top of the picture, and its size counting only that room. A later
+    // op's places are measured from the layer's own corner, so they are moved
+    // this far to stay on the picture where they were.
+    let mut moved = [0u32; 2];
+    let (mut spread_w, mut spread_h) = (w, h);
     // The name of each op's output, before anything runs: the input's
     // name, the raster, the flare substitution count, then op after op — so
     // the k-th name covers ops 0..=k. `None` from the first op that binds
@@ -1043,6 +1104,12 @@ pub fn run_ops(
             if let Some(into) = timings.as_mut() {
                 into.push(0.0);
             }
+            // The room a held op spread into is in the held picture, and
+            // the ops after it are still that far in.
+            let [across, down] = spread_room(resolved.def, resolved.params, spread_w, spread_h);
+            moved = [moved[0] + across, moved[1] + down];
+            spread_w += across * 2;
+            spread_h += down * 2;
             // A picture held from inside a run was made with its room.
             unroomed = asks.map(|[across, down]| {
                 unroomed.unwrap_or((
@@ -1071,6 +1138,72 @@ pub fn run_ops(
             }
             _ => {}
         }
+        // An op that spreads past the edge of its picture, a blur with Repeat
+        // edge pixels off, is given the room to spread into first. The picture
+        // is grown the way Tile grows it, so the ops after it run on the wider
+        // one and the composite places it by its centre. Zero for every other
+        // op, and nothing happens.
+        let [across, down] = spread_room(resolved.def, resolved.params, w, h);
+        if [across, down] != [0, 0] {
+            w += across * 2;
+            h += down * 2;
+            tex = lumit_gpu::fx::fit_centred(ctx, tex, w, h);
+            moved = [moved[0] + across, moved[1] + down];
+            spread_w += across * 2;
+            spread_h += down * 2;
+        }
+        // What this op places goes that far in with the picture: its points
+        // through the camera, its mask paths, and every place it names. All
+        // three are the op's own once nothing has spread, which is nearly
+        // every stack.
+        let px_scale = resolved
+            .params
+            .float(lumit_core::fx::ParamId::new("derived.px_scale"), 1.0)
+            .max(1e-6);
+        let inset = [moved[0] as f32 / px_scale, moved[1] as f32 / px_scale];
+        let moved_schedule = schedule.filter(|_| moved != [0, 0]).map(|s| {
+            let slid = |p: lumit_core::fx::points::Projection| {
+                let [mut x, mut y, w] = p.m;
+                for ((x, y), w) in x.iter_mut().zip(y.iter_mut()).zip(w) {
+                    *x += inset[0] * w;
+                    *y += inset[1] * w;
+                }
+                lumit_core::fx::points::Projection { m: [x, y, w] }
+            };
+            let mut s = s.clone();
+            s.projection = Some(slid(s.projection.unwrap_or_default()));
+            for stream in &mut s.input {
+                stream.projection = slid(stream.projection);
+            }
+            s
+        });
+        let moved_paths: Vec<lumit_core::mask::MaskPolyline> = if moved == [0, 0] {
+            Vec::new()
+        } else {
+            mask_paths_of_op
+                .iter()
+                .map(|path| {
+                    let mut path = path.clone();
+                    for point in &mut path.points {
+                        point[0] += inset[0];
+                        point[1] += inset[1];
+                    }
+                    path
+                })
+                .collect()
+        };
+        let mask_paths_of_op = if moved == [0, 0] {
+            mask_paths_of_op
+        } else {
+            &moved_paths[..]
+        };
+        // A points op's places are read through the camera, which has moved.
+        let moved_places = (moved != [0, 0] && slot.is_none())
+            .then(|| places_moved(resolved.def.schema(), resolved.params, moved));
+        let op_params = moved_places.as_ref().map_or(resolved.params, |entries| {
+            lumit_core::fx::Params::new(entries)
+        });
+        let schedule = moved_schedule.as_ref().or(schedule);
         // The picture this op is handed, kept for the recycling below: an op
         // that passes its input straight through has made nothing, and the one
         // texture must not be offered to the pool while the chain still holds
@@ -1134,10 +1267,10 @@ pub fn run_ops(
             // once — the same decision `cpu::apply_stack` makes, read from
             // the same function. Normal leaves the kernel's own Mix alone and
             // runs no pass.
-            let blend = lumit_core::fx::cpu::blend_seam(schema, resolved.params);
+            let blend = lumit_core::fx::cpu::blend_seam(schema, op_params);
             let params = match &blend {
                 Some((_, _, entries)) => lumit_core::fx::Params::new(entries),
-                None => resolved.params,
+                None => op_params,
             };
             let mut blend_input = blend.as_ref().map(|_| tex.clone());
             // As above: a Light wrap's background plate, sized to the
