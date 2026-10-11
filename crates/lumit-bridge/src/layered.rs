@@ -614,6 +614,12 @@ impl Scope<'_> {
     }
 }
 
+/// How many groups may sit inside each other and each still become a
+/// composition of its own. A group past that is read as plain layers of the
+/// one it is in. Every composition inside another is a level the renderer
+/// walks down by calling itself, and a file can hold thousands of groups.
+const MAX_GROUP_DEPTH: usize = 16;
+
 /// The ops that fill `comp` with `psd`'s layers, and how many records were
 /// left out because they hold no picture: an adjustment layer of a kind that
 /// is not mapped, a gradient or pattern fill, an empty layer.
@@ -648,9 +654,12 @@ fn psd_ops(
         fold: None,
     }];
     let mut left_out = 0u32;
+    // Groups opened past [`MAX_GROUP_DEPTH`], which are read as plain layers.
+    let mut flat = 0u32;
 
     // The file lists its layers bottom first, and a comp lists them top first.
     for (index, record) in psd.layers.iter().enumerate().rev() {
+        let depth = scopes.len();
         let Some(scope) = scopes.last_mut() else {
             break;
         };
@@ -669,12 +678,14 @@ fn psd_ops(
                 };
                 scope.fold = Some((group, record.visible));
             }
+            Section::Group if depth > MAX_GROUP_DEPTH => flat += 1,
             Section::Group => scopes.push(Scope {
                 header: Some(record),
                 layers: Vec::new(),
                 groups: Vec::new(),
                 fold: None,
             }),
+            Section::GroupEnd if flat > 0 => flat -= 1,
             Section::GroupEnd => {
                 close(&mut scopes, &mut items, comp_size, rate, out);
             }

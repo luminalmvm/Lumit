@@ -741,7 +741,15 @@ fn layer_record<R: Read + Seek>(
             }
             _ => {}
         }
-        budget.take_bytes(((notes.len() - from) * NOTE_BYTES) as u64)?;
+        // Each is charged for the path it is kept under as well, which is
+        // most of what a deep one costs.
+        let kept: usize = notes
+            .get(from..)
+            .unwrap_or_default()
+            .iter()
+            .map(|(path, _)| path.len() + NOTE_BYTES)
+            .sum();
+        budget.take_bytes(kept as u64)?;
         // Photoshop writes even lengths here. Other writers pad an odd one.
         at = end + (len & 1);
     }
@@ -1053,6 +1061,13 @@ fn read_plane<R: Read + Seek>(
                 .checked_sub(counts.len() as u64)
                 .ok_or_else(|| bad("a channel is too short"))?;
             let packed = r.bytes(checked_usize(packed_len)?, budget)?;
+            // The plane is as big as the layer says it is, and a layer can
+            // say anything. Packed bytes grow at most sixty-four times over,
+            // so a plane bigger than that was never in the file, and is not
+            // given the room.
+            if raw_len as u64 > packed_len.saturating_mul(64) {
+                return Err(bad("a channel is too short"));
+            }
             let mut out = budget.vec_with_capacity::<u8>(raw_len)?;
             out.resize(raw_len, 0);
             let mut at = 0usize;
@@ -1072,7 +1087,11 @@ fn read_plane<R: Read + Seek>(
             budget.take_bytes(raw_len as u64)?;
             let mut out = miniz_oxide::inflate::decompress_to_vec_zlib_with_limit(&packed, raw_len)
                 .map_err(|_| bad("a channel would not decompress"))?;
-            out.resize(raw_len, 0);
+            // Short of the plane the layer claims, it is not that plane. It
+            // is not padded out to a size only the layer's word stands for.
+            if out.len() != raw_len {
+                return Err(bad("a channel would not decompress"));
+            }
             if kind == 3 {
                 // Each row stores the difference from the sample to its left.
                 for line in out.chunks_exact_mut(row) {

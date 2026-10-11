@@ -129,7 +129,12 @@ pub fn is_ffx(path: &Path) -> bool {
 pub fn open_ffx(
     path: &Path,
 ) -> Result<(Vec<lumit_core::model::EffectInstance>, ImportReport), ImportError> {
-    let bytes = fs::read(path)?;
+    // A preset is a few kilobytes. No more than this of a file is read, so
+    // one that is far too large to be a preset is cut short and fails to read
+    // as one, and is never held whole to find that out.
+    const MOST: u64 = 64 << 20;
+    let mut bytes = Vec::new();
+    File::open(path)?.take(MOST).read_to_end(&mut bytes)?;
     let preset = aep::ffx::parse_preset(&bytes)?;
     let name = path
         .file_stem()

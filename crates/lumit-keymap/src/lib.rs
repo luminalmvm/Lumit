@@ -342,26 +342,28 @@ impl FromStr for Chord {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut mods = Modifiers::default();
-        let mut key: Option<String> = None;
-        let tokens: Vec<&str> = s.split('+').collect();
-        let last = tokens.len().saturating_sub(1);
-        for (i, tok) in tokens.iter().enumerate() {
-            let t = tok.trim();
-            if i == last {
-                // The final token is always the key, even if it spells a
-                // modifier word (so `Shift` alone is the Shift *key*).
-                key = Some(normalise_key(t));
-                break;
+        // The final token is always the key, even if it spells a modifier
+        // word (so `Shift` alone is the Shift *key*). The plus key is written
+        // with the sign that joins the others, so `+` and `Shift++` are read
+        // for what they are before anything is split on it: otherwise the
+        // chord would not read back, and a stored keymap holding one would
+        // not load at all.
+        let (held, key) = match s.strip_suffix('+') {
+            Some(rest) if rest.is_empty() || rest.ends_with('+') => {
+                (rest.strip_suffix('+').unwrap_or(""), "+")
             }
-            match t.to_ascii_lowercase().as_str() {
+            _ => s.rsplit_once('+').unwrap_or(("", s)),
+        };
+        for tok in held.split('+').filter(|_| !held.is_empty()) {
+            match tok.trim().to_ascii_lowercase().as_str() {
                 "mod" | "cmd" | "command" | "ctrl" | "control" | "primary" => mods.primary = true,
                 "shift" => mods.shift = true,
                 "alt" | "option" | "opt" => mods.alt = true,
                 other => return Err(ChordError::UnknownModifier(other.to_string())),
             }
         }
-        match key {
-            Some(k) if !k.is_empty() => Ok(Chord { mods, key: k }),
+        match normalise_key(key) {
+            k if !k.is_empty() => Ok(Chord { mods, key: k }),
             _ => Err(ChordError::Empty),
         }
     }
@@ -1159,7 +1161,15 @@ mod tests {
         let shift_key = chord("Shift");
         assert!(!shift_key.mods.shift && shift_key.key == "Shift");
         // Display is canonical and re-parses to the same chord.
-        for s in ["Space", "Mod+D", "Shift+F3", "Mod+Alt+Shift+K", "="] {
+        for s in [
+            "Space",
+            "Mod+D",
+            "Shift+F3",
+            "Mod+Alt+Shift+K",
+            "=",
+            "+",
+            "Shift++",
+        ] {
             let c = chord(s);
             assert_eq!(chord(&c.to_string()), c, "round-trip failed for {s}");
         }

@@ -495,7 +495,13 @@ pub struct BridgeAfterEffectsKeymap {
 pub fn keymap_import_after_effects(text: String) -> Result<BridgeAfterEffectsKeymap, BridgeError> {
     let import = lumit_keymap::import_after_effects_shortcuts(&text)
         .map_err(|e| BridgeError::InvalidKeymapFile(e.to_string()))?;
-    with_keymap(|km| *km = import.keymap);
+    // The file says which keys do what. The modifiers for the wheel and for
+    // breaking handles are not in it, and stay as they were set.
+    with_keymap(|km| {
+        let was = std::mem::replace(km, import.keymap);
+        km.wheel = was.wheel;
+        km.break_handles = was.break_handles;
+    });
     Ok(BridgeAfterEffectsKeymap {
         groups: keymap_groups(),
         actions: u32::try_from(import.actions).unwrap_or(u32::MAX),
