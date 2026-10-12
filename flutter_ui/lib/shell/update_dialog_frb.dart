@@ -185,7 +185,7 @@ Future<void> _askAboutRestart(
   // What the release says to read first, on its own window and ahead of the
   // restart question, every time the row is pressed: someone who chose Later
   // yesterday is being asked the same thing today.
-  final notice = updates.release?.notice ?? const <UpdateNoticeLine>[];
+  final notice = updates.notice;
   if (notice.isNotEmpty) {
     final read = await showLumitModal<bool>(
       context: context,

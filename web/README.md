@@ -100,6 +100,11 @@ the top of the GitHub release, and Lumit shows it after the update is downloaded
 before it restarts. It has to be in the file when the tag is pushed, and it can be
 edited on the GitHub release afterwards.
 
+`_next.md` holds that section for the release still to come. A change that needs a line
+adds it there, each nightly's GitHub release carries the section as it stands, and Lumit
+shows someone on nightly builds the lines their build hasn't said. When the release note is
+written the lines move into it.
+
 ## Brand
 
 `web/src/components/Wordmark.astro` builds the wordmark out of the app icon, and it is
