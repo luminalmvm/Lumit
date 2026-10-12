@@ -1288,6 +1288,14 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
           ? (index + 1 < keys.length ? keys[index + 1] : null)
           : (index > 0 ? keys[index - 1] : null);
 
+  /// Whether a side's handle is on the pane: its own key is selected, or the
+  /// key it faces is, so the span either side of a selected key can be shaped
+  /// from both ends.
+  bool _showsHandle(GraphChannel channel, int index, bool isOut) =>
+      widget.selectedKeys.contains('${channel.id}#$index') ||
+      widget.selectedKeys
+          .contains('${channel.id}#${isOut ? index + 1 : index - 1}');
+
   /// Seconds ↔ pixels on the time axis, so handle geometry can be worked out
   /// where the user actually sees it: on screen.
   double _xOfSeconds(double t) => widget.axis.xOf(t * widget.fps);
@@ -2674,7 +2682,8 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     return out;
   }
 
-  /// The draggable tangent endpoints for selected keys.
+  /// The draggable tangent endpoints for selected keys, and for the sides of
+  /// their neighbours that face them.
   // The theme is not asked for here: the ring paints itself from it
   // ([HandleRing]), so the dot's colours live where the dot is drawn.
   List<Widget> _tangentHandles((double, double) range, double height) {
@@ -2682,8 +2691,8 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     for (final channel in widget.channels) {
       final keys = _shownKeys(channel);
       for (var i = 0; i < keys.length; i++) {
-        if (!widget.selectedKeys.contains('${channel.id}#$i')) continue;
         for (final isOut in const [true, false]) {
+          if (!_showsHandle(channel, i, isOut)) continue;
           final e = _handleEndpointFor(channel, keys, i, isOut);
           if (e == null) continue;
           final point = Offset(
@@ -3029,8 +3038,8 @@ class _HandlesPainter extends CustomPainter {
     for (final channel in widget.channels) {
       final keys = state._shownKeys(channel);
       for (var i = 0; i < keys.length; i++) {
-        if (!widget.selectedKeys.contains('${channel.id}#$i')) continue;
         for (final isOut in const [true, false]) {
+          if (!state._showsHandle(channel, i, isOut)) continue;
           final e = state._handleEndpointFor(channel, keys, i, isOut);
           if (e == null) continue;
           final from = widget.lens == GraphLens.value
