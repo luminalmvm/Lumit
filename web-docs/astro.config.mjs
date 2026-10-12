@@ -70,6 +70,9 @@ r.addEventListener("input",set);set()})})`,
         ThemeSelect: "./src/components/ThemeSelect.astro",
         // The bar's links, as words rather than icons.
         SocialIcons: "./src/components/SocialIcons.astro",
+        // All three topics' lists, so a tab can swap them without leaving the
+        // page. Takes the place of the topics plugin's own override.
+        Sidebar: "./src/components/Sidebar.astro",
       },
       editLink: {
         baseUrl: "https://github.com/luminalmvm/Lumit/edit/main/web-docs/",
