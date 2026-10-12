@@ -564,22 +564,23 @@ pub(crate) fn status_of(
 ///
 /// Read on a frame change and held, never per rebuild.
 ///
-/// `NotFootage` for anything but a footage layer, and for media that will not
-/// probe: a Roto brush on a layer with no file behind it has no source frame to
-/// name, which is a refusal rather than a guess at zero.
+/// A Precomp layer answers with the frame of its nested comp, which is what a
+/// propagation over one renders and counts by.
+///
+/// `NotFootage` for any other kind of layer, and for media that will not
+/// probe: a Roto brush on a layer with nothing behind it has no source frame
+/// to name, which is a refusal rather than a guess at zero.
 #[frb(sync)]
 pub fn roto_source_frame(layer: LayerReference, frame: i64) -> Result<i64, BridgeError> {
     let comp = layer.composition()?;
     let item = layer.item()?;
-    let LayerKind::Footage { item: media } = item.kind else {
-        return Err(BridgeError::NotFootage);
-    };
+    let source = layer_source(&layer)?;
     let t_comp = comp
         .frame_rate
         .time_of_frame(frame)
         .map_err(|_| BridgeError::InvalidParam)?;
     let lt = lumit_core::time::layer_time(t_comp.0.to_f64(), item.start_offset.0);
-    source_frame_at((layer.project_id, media), item.source_time_at(lt))
+    source_frame_at(source, item.source_time_at(lt))
 }
 
 /// The frame of the file at `source` that is showing at `source_time`: the
@@ -593,15 +594,34 @@ pub(crate) fn source_frame_at(source: Source, source_time: f64) -> Result<i64, B
     i64::try_from(picked).map_err(|_| BridgeError::InvalidParam)
 }
 
-/// Where an analysis's file is: the project it is in, and the footage item.
+/// Where an analysis's frames are: the project it is in, and the item they
+/// come from. A footage item, whose file is decoded, or a composition, whose
+/// frames are rendered.
 pub(crate) type Source = (Uuid, Uuid);
 
-/// The file a footage layer reads, or `NotFootage` for any other kind.
+/// What a layer's analysis reads: a footage layer's file, a Precomp layer's
+/// nested comp, or `NotFootage` for any other kind, which has neither.
 pub(crate) fn layer_source(layer: &LayerReference) -> Result<Source, BridgeError> {
     match layer.item()?.kind {
         LayerKind::Footage { item } => Ok((layer.project_id, item)),
+        LayerKind::Precomp { comp } => Ok((layer.project_id, comp)),
         _ => Err(BridgeError::NotFootage),
     }
+}
+
+/// The composition `source` names and the document it is in, or `None` where
+/// it names a footage item. An analysis of a comp renders its frames, so the
+/// job is handed the document rather than a path.
+pub(crate) fn comp_source(
+    (project, item): Source,
+) -> Option<(std::sync::Arc<lumit_core::model::Document>, Uuid)> {
+    let project = crate::api::state::PROJECTS
+        .read()
+        .ok()?
+        .get(&project)?
+        .clone();
+    let doc = project.read().ok()?.store.snapshot();
+    doc.comp(item).is_some().then_some((doc, item))
 }
 
 /// The media's own rate, how many frames it runs and its picture's size, from
@@ -623,6 +643,14 @@ pub(crate) fn media_rate(
         .clone();
     let state = project.read().map_err(|_| BridgeError::ReadFailed)?;
     let doc = state.store.snapshot();
+    // A comp's own rate, length and size, for a Precomp layer.
+    if let Some(comp) = doc.comp(media) {
+        let frames = comp
+            .frame_rate
+            .frame_at(lumit_core::time::CompTime(comp.duration.0));
+        let frames = usize::try_from(frames).unwrap_or(0).max(1);
+        return Ok((comp.frame_rate.fps(), frames, (comp.width, comp.height)));
+    }
     let footage = doc
         .items
         .iter()
@@ -737,12 +765,16 @@ fn boundary_of(width: u32, height: u32, gray: &[u8]) -> Vec<f32> {
 // The buttons, down
 // ---------------------------------------------------------------------------
 
-/// The propagation job one Roto brush describes over the file at `source` —
-/// the shared front half of a Propagate press and of the release-time solve.
+/// The propagation job one Roto brush describes over the file or the comp at
+/// `source`, the shared front half of a Propagate press and of the
+/// release-time solve.
 fn job_of(
     source: Source,
     fx: &lumit_core::model::EffectInstance,
 ) -> Result<lumit_render::roto::RotoJob, BridgeError> {
+    if let Some((doc, comp)) = comp_source(source) {
+        return Ok(lumit_render::roto::job_for_comp(fx, doc, comp, true));
+    }
     let (path, fingerprint) = crate::api::track::media_source_in(source.0, source.1)?;
     lumit_render::roto::job_for(fx, path, &fingerprint, true).ok_or(BridgeError::NotFootage)
 }

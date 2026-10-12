@@ -1758,6 +1758,18 @@ pub fn nested_source_time(layer: &Layer, nested: &Composition, lt: f64) -> f64 {
     layer.source_time_at(lt).clamp(0.0, last)
 }
 
+/// Which frame of `nested` a Precomp `layer` shows at layer-local time `lt`.
+///
+/// What an analysis of a nested comp files its answers under, as a footage
+/// layer's are filed under the file's own frame: a Roto brush's matte, a plane
+/// of depth. Asked by the draw builder and the frame key both, so the two
+/// cannot name different frames.
+#[must_use]
+pub fn nested_source_frame(layer: &Layer, nested: &Composition, lt: f64) -> i64 {
+    let frame = nested_source_time(layer, nested, lt) * nested.frame_rate.fps();
+    frame.round().max(0.0) as i64
+}
+
 /// What the collapse switch actually does for a layer at local time `lt`
 /// (docs/06-RENDER-PIPELINE.md §1.4).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

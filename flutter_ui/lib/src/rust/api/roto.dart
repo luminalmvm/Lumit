@@ -9,7 +9,7 @@ import 'layer.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:uuid/uuid.dart';
 
-// These functions are ignored because they are not marked as `pub`: `boundary_of`, `job_of`, `layer_source`, `media_rate`, `press`, `prompt_of`, `read`, `read`, `roto_block_mut`, `roto_block`, `solve_frame`, `source_frame_at`, `status_of`, `stroke_of`
+// These functions are ignored because they are not marked as `pub`: `boundary_of`, `comp_source`, `job_of`, `layer_source`, `media_rate`, `press`, `prompt_of`, `read`, `read`, `roto_block_mut`, `roto_block`, `solve_frame`, `source_frame_at`, `status_of`, `stroke_of`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// The Roto brush `effect` on `layer`, as its status row draws it.
@@ -36,9 +36,12 @@ BridgeRotoStatus rotoStatus(
 ///
 /// Read on a frame change and held, never per rebuild.
 ///
-/// `NotFootage` for anything but a footage layer, and for media that will not
-/// probe: a Roto brush on a layer with no file behind it has no source frame to
-/// name, which is a refusal rather than a guess at zero.
+/// A Precomp layer answers with the frame of its nested comp, which is what a
+/// propagation over one renders and counts by.
+///
+/// `NotFootage` for any other kind of layer, and for media that will not
+/// probe: a Roto brush on a layer with nothing behind it has no source frame
+/// to name, which is a refusal rather than a guess at zero.
 PlatformInt64 rotoSourceFrame(
         {required LayerReference layer, required PlatformInt64 frame}) =>
     BridgeLib.instance.api

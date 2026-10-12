@@ -2953,9 +2953,7 @@ fn comp_walk(
         // frame rate for a media item, so this is the only place the answer is
         // in hand. Zero for a layer with no decoded source, which has no
         // propagated matte to find either.
-        let source_frame = pixels_by_layer
-            .get(&layer.id)
-            .map_or(0, |px| px.source_frame);
+        let source_frame = analysed_frame(doc, layer, lt, pixels_by_layer);
         // This layer's effects (docs/08 §3.25): a Posterize time scoped to *this
         // layer* holds this layer's OWN effect stack on the coarse grid — its
         // effects sample the held time while the transform and source below stay
@@ -3048,7 +3046,7 @@ fn comp_walk(
             // predicates and the same (instance, source frame) lookup the
             // layer-input path uses. Empty when its stack is not being folded
             // in, which is when there are no ops to carry them to.
-            let matte_frame = pixels_by_layer.get(&src.id).map_or(0, |px| px.source_frame);
+            let matte_frame = analysed_frame(doc, src, mlt, pixels_by_layer);
             let (matte_roto, matte_planes) = if fx.is_empty() {
                 (Vec::new(), Vec::new())
             } else {
@@ -4159,6 +4157,29 @@ fn graph_comp_draw(
         accumulation_below: None,
         flow_below: Vec::new(),
     }
+}
+
+/// Which frame of its source `layer` shows at layer time `lt`: the number an
+/// analysis files a matte or a plane under.
+///
+/// The file's own frame for footage, which the decode carried here. A Precomp
+/// layer decodes nothing, so its answer is the nested comp's frame, which is
+/// what an analysis of a comp renders and counts by. Nought for a layer with
+/// neither, which has no analysis to find.
+fn analysed_frame(
+    doc: &lumit_core::model::Document,
+    layer: &lumit_core::model::Layer,
+    lt: f64,
+    pixels_by_layer: &std::collections::HashMap<uuid::Uuid, &CompLayerPixels>,
+) -> i64 {
+    if let lumit_core::model::LayerKind::Precomp { comp } = layer.kind {
+        return doc.comp(comp).map_or(0, |nested| {
+            lumit_core::model::nested_source_frame(layer, nested, lt)
+        });
+    }
+    pixels_by_layer
+        .get(&layer.id)
+        .map_or(0, |px| px.source_frame)
 }
 
 /// One Roto brush's matte for one **source** frame, or `None` outside the

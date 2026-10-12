@@ -545,3 +545,87 @@ fn a_box_in_a_node_graph_cuts_by_the_matte_of_the_file_behind_it() {
     );
     lumit_render::planes::clear();
 }
+
+/// A model that covers the right half of the sixth frame it is shown and
+/// nothing of any other, so a matte drawn on the wrong frame cannot pass.
+struct SixthFrame(usize);
+
+impl lumit_render::planes::PlaneModel for SixthFrame {
+    fn run(
+        &mut self,
+        _: &[u8],
+        w: u32,
+        h: u32,
+    ) -> Result<PlaneOut, lumit_render::planes::PlaneFailure> {
+        assert_eq!((w, h), (COMP, COMP), "the comp is read at its own size");
+        self.0 += 1;
+        let mut out = half_matte();
+        if self.0 != 6 {
+            out.data.fill(0);
+        }
+        Ok(out)
+    }
+
+    fn made_with(&self) -> String {
+        "Written; rvm-test 1.0; ONNX Runtime none".into()
+    }
+}
+
+/// **Remove background on a Precomp layer reads the nested comp and cuts by
+/// the frame of it the layer is showing.**
+///
+/// Analyse used to refuse anything but a footage layer, so an effect put on a
+/// precomp did nothing. Here the nested comp is a red solid twelve frames
+/// long, the layer showing it starts half a second into the outer comp, and
+/// the model covers the right half of nested frame 5 alone. That frame is on
+/// screen at outer frame 35 and at no other.
+#[test]
+fn a_precomp_layer_is_cut_by_the_matte_of_its_nested_comp() {
+    let Ok(mut r) = HeadlessRenderer::shared() else {
+        lumit_gpu::no_adapter();
+        return;
+    };
+    lumit_render::planes::clear();
+
+    let (inner_doc, nested, _) = cutting(0, false);
+    let mut doc = (*inner_doc).clone();
+    for item in &mut doc.items {
+        if let ProjectItem::Composition(comp) = item {
+            comp.layers[0].effects.clear();
+            comp.duration = Duration(Rational::new(1, 5).unwrap());
+        }
+    }
+    let cut = lumit_core::fx::instantiate("remove_background").expect("a built-in");
+    let instance = cut.id;
+    let mut precomp = layer("the precomp", LayerKind::Precomp { comp: nested });
+    precomp.start_offset = CompTime(Rational::new(1, 2).unwrap());
+    precomp.effects = vec![cut.clone()];
+    let outer = comp_of(vec![precomp]);
+    let outer_id = outer.id;
+    doc.items.push(ProjectItem::Composition(outer));
+    let doc = Arc::new(doc);
+
+    let job = lumit_render::planes::job_for_comp(&cut, Arc::clone(&doc), nested, true)
+        .expect("a planes-tier effect");
+    let never = std::sync::atomic::AtomicBool::new(false);
+    let (run, _) = lumit_render::planes::analyse(job, None, &mut SixthFrame(0), &never, &|_| {})
+        .expect("the nested comp was read");
+    assert_eq!((run.first_frame, run.last_frame), (0, 11), "every frame");
+    lumit_render::planes::publish(instance, run);
+
+    let (cut, w, _) = r.render_rgba(&doc, outer_id, 35, 1.0).expect("the render");
+    assert_eq!(px(&cut, w, FAR)[0], 0, "the uncovered half is cut away");
+    assert_eq!(
+        px(&cut, w, NEAR),
+        [255, 0, 0, 255],
+        "the covered half is kept"
+    );
+
+    let (next, w, _) = r.render_rgba(&doc, outer_id, 36, 1.0).expect("the render");
+    assert_eq!(
+        px(&next, w, NEAR)[0],
+        0,
+        "the next frame wears its own matte"
+    );
+    lumit_render::planes::clear();
+}

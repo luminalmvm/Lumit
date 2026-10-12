@@ -2087,6 +2087,45 @@ pub fn planar_job_for(
     let LayerKind::Footage { .. } = layer.kind else {
         return None;
     };
+    let mut job = planar_job(
+        layer,
+        Box::new(move || MediaLuma::open(&path).map(|s| Box::new(s) as Box<dyn LumaFrames>)),
+        analyse,
+    )?;
+    job.key = Some(AnalysisKey::new(fingerprint, job.settings, &job.masks));
+    Some(job)
+}
+
+/// [`planar_job_for`] for a **Precomp** layer: the nested comp is what is
+/// followed, and its frames are rendered rather than decoded.
+///
+/// At the comp's own size, so the quad and the answer are both in the layer's
+/// own pixels and nothing converts. No sidecar entry, for the Camera track's
+/// reason ([`Job::key`]): the answer lives for as long as the project is open.
+///
+/// `None` when the layer is not a precomp, or carries no enabled Planar track.
+#[must_use]
+pub fn planar_job_for_precomp(doc: &Arc<Document>, layer: &Layer, analyse: bool) -> Option<Job> {
+    let LayerKind::Precomp { comp: nested } = layer.kind else {
+        return None;
+    };
+    planar_job(layer, comp_frames(doc, nested), analyse)
+}
+
+/// What opens a nested comp's frames at its own size, on the worker thread.
+fn comp_frames(doc: &Arc<Document>, nested: Uuid) -> OpenFrames {
+    let doc = Arc::clone(doc);
+    Box::new(move || {
+        CompLuma::open_at(doc, nested, 1.0).map(|s| Box::new(s) as Box<dyn LumaFrames>)
+    })
+}
+
+/// What a [`Job`] opens its frames with.
+type OpenFrames = Box<dyn FnOnce() -> Option<Box<dyn LumaFrames>> + Send>;
+
+/// The Planar track job on `layer` over whatever `open` reads, with no sidecar
+/// name yet: the half the footage and the precomp builders share.
+fn planar_job(layer: &Layer, open: OpenFrames, analyse: bool) -> Option<Job> {
     let fx = planar_track_effect(layer)?;
     let settings = AnalysisSettings::of(fx);
     let (kind, masks) = if settings.points() {
@@ -2104,11 +2143,11 @@ pub fn planar_job_for(
     };
     Some(Job {
         media: fx.id,
-        key: Some(AnalysisKey::new(fingerprint, settings, &masks)),
+        key: None,
         settings,
         kind,
         masks,
-        open: Box::new(move || MediaLuma::open(&path).map(|s| Box::new(s) as Box<dyn LumaFrames>)),
+        open,
         analyse,
     })
 }
@@ -2144,6 +2183,31 @@ pub fn points_job_for(
         kind: JobKind::TrackPoints(analysis),
         masks: MaskTrack::default(),
         open: Box::new(move || MediaLuma::open(&path).map(|s| Box::new(s) as Box<dyn LumaFrames>)),
+        analyse,
+    })
+}
+
+/// [`points_job_for`] for a **Precomp** layer, on [`planar_job_for_precomp`]'s
+/// terms: the nested comp rendered at its own size, and no sidecar entry.
+///
+/// `None` when the layer is not a precomp.
+#[must_use]
+pub fn points_job_for_precomp(
+    doc: &Arc<Document>,
+    layer: &Layer,
+    fx: &EffectInstance,
+    analyse: bool,
+) -> Option<Job> {
+    let LayerKind::Precomp { comp: nested } = layer.kind else {
+        return None;
+    };
+    Some(Job {
+        media: fx.id,
+        key: None,
+        settings: AnalysisSettings::default(),
+        kind: JobKind::TrackPoints(Analysis::of(fx, layer)?),
+        masks: MaskTrack::default(),
+        open: comp_frames(doc, nested),
         analyse,
     })
 }
@@ -2276,15 +2340,23 @@ impl CompLuma {
     /// no frames, or this machine has no graphics adapter to render with.
     #[must_use]
     pub fn open(doc: Arc<Document>, comp_id: Uuid) -> Option<Self> {
+        let scale = analysis_scale(doc.comp(comp_id)?);
+        #[allow(clippy::cast_possible_truncation)]
+        let scale = scale.min(1.0) as f32;
+        Self::open_at(doc, comp_id, scale)
+    }
+
+    /// [`Self::open`] at a render scale the caller chooses. One is the comp's
+    /// own raster, which is what an answer kept in the layer's own pixels has
+    /// to be measured at: a matte, a plane, a point.
+    #[must_use]
+    pub fn open_at(doc: Arc<Document>, comp_id: Uuid, scale: f32) -> Option<Self> {
         let comp = doc.comp(comp_id)?;
         let fps = comp.frame_rate.fps();
         let frames = comp
             .frame_rate
             .frame_at(lumit_core::time::CompTime(comp.duration.0));
         let frames = usize::try_from(frames).ok()?;
-        let scale = analysis_scale(comp);
-        #[allow(clippy::cast_possible_truncation)]
-        let scale = scale.min(1.0) as f32;
         // The size the renderer will actually hand back, from the renderer's own
         // rounding rather than a second copy of it.
         let (width, height) = lumit_gpu::composite::scaled_size(comp.width, comp.height, scale);
@@ -2334,6 +2406,24 @@ impl LumaFrames for CompLuma {
 
     fn analysis_scale(&self) -> f64 {
         f64::from(self.scale)
+    }
+}
+
+/// The same rendered frames with their colour kept, for the analyses that read
+/// a picture rather than follow its specks: the planes tier and the Roto brush
+/// on a Precomp layer.
+impl crate::frames::RotoFrames for CompLuma {
+    fn info(&self) -> (usize, u32, u32, f64) {
+        (self.frames, self.width, self.height, self.fps)
+    }
+
+    fn rgba(&mut self, n: usize) -> Option<Vec<u8>> {
+        let frame = u64::try_from(n).ok()?;
+        let (rgba, w, h) = self
+            .renderer
+            .render_rgba(&self.doc, self.comp, frame, self.scale)
+            .ok()?;
+        ((w, h) == (self.width, self.height)).then_some(rgba)
     }
 }
 

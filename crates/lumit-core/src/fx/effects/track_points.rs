@@ -209,7 +209,8 @@ pub struct TrackPoints {
 /// makes an analysis still good for an instance.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Analysis {
-    /// The footage item the layer shows.
+    /// What the layer shows: a footage item, or a Precomp layer's nested
+    /// comp.
     pub source: Uuid,
     pub blobs: bool,
     pub density: u32,
@@ -226,12 +227,14 @@ pub struct Analysis {
 }
 
 impl Analysis {
-    /// The analysis `inst` asks for on `layer`. `None` when the layer is not
-    /// footage, which has nothing to analyse.
+    /// The analysis `inst` asks for on `layer`. `None` when the layer is
+    /// neither footage nor a precomp, which has nothing to analyse.
     #[must_use]
     pub fn of(inst: &EffectInstance, layer: &Layer) -> Option<Self> {
-        let LayerKind::Footage { item } = layer.kind else {
-            return None;
+        let item = match layer.kind {
+            LayerKind::Footage { item } => item,
+            LayerKind::Precomp { comp } => comp,
+            _ => return None,
         };
         // The fallbacks are the schema's own defaults, for a row a
         // hand-edited project left out.

@@ -2137,6 +2137,13 @@ fn feed_source(
             let r = comp_key_visited(doc, nested, st, quality, stamper, visited);
             visited.pop();
             h.update(&r?.0.to_le_bytes());
+            // What an analysis filed for this layer, named by the nested
+            // comp's own frame as a footage layer's is by the file's. Nothing
+            // for a layer with no such effect, so its name stays what it was.
+            let frame = lumit_core::model::nested_source_frame(layer, nested, lt);
+            let frame = u64::try_from(frame).unwrap_or(0);
+            feed_roto(h, layer, frame, stamper);
+            feed_planes(h, layer, frame, stamper);
             // **A placed node graph's own Input values** (§5.3). The comp's
             // key above is the graph on its own defaults; what this layer
             // hands it is content beside it. Fed with the layer, so its driver

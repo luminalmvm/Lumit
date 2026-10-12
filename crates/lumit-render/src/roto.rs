@@ -82,6 +82,11 @@ pub use crate::frames::RotoFrames;
 pub struct RotoKey {
     media: [u8; 16],
     run: [u8; 16],
+    /// The frames are a comp's, rendered, and not a file's. Nothing in the
+    /// name says what that comp looked like when it was read, so a press of
+    /// Propagate reads it again rather than believing the files from last
+    /// time.
+    rendered: bool,
 }
 
 impl RotoKey {
@@ -92,11 +97,36 @@ impl RotoKey {
         h.update(b"lumit-roto/media/");
         h.update(&fingerprint.size.to_le_bytes());
         h.update(fingerprint.head_tail_hash.as_bytes());
+        Self::named(&h, block, settings, false)
+    }
+
+    /// The key for the nested comp `comp`, propagated for `instance` on a
+    /// Precomp layer. Named by who asked and what they asked about, since a
+    /// comp has no content to hash the way a file has.
+    #[must_use]
+    pub fn rendered(instance: Uuid, comp: Uuid, block: &RotoBlock, settings: RotoSettings) -> Self {
+        let mut h = blake3::Hasher::new();
+        h.update(b"lumit-roto/comp/");
+        h.update(instance.as_bytes());
+        h.update(comp.as_bytes());
+        Self::named(&h, block, settings, true)
+    }
+
+    fn named(
+        media_hash: &blake3::Hasher,
+        block: &RotoBlock,
+        settings: RotoSettings,
+        rendered: bool,
+    ) -> Self {
         let mut media = [0u8; 16];
-        media.copy_from_slice(&h.finalize().as_bytes()[..16]);
+        media.copy_from_slice(&media_hash.finalize().as_bytes()[..16]);
         let mut run = [0u8; 16];
         run.copy_from_slice(&lumit_core::roto::key_hash(block, settings)[..16]);
-        RotoKey { media, run }
+        RotoKey {
+            media,
+            run,
+            rendered,
+        }
     }
 
     fn prefix(&self) -> String {
@@ -139,6 +169,17 @@ pub struct RotoJob {
     /// feedback never turns into a propagation nobody pressed for. `None` — a
     /// press of Propagate — walks to both ends as ever.
     pub stop_after: Option<i64>,
+}
+
+impl RotoJob {
+    /// Whether this run reads every frame again and lends itself nothing: a
+    /// press of Propagate over a nested comp, which may have been edited since
+    /// the files from last time were written. A stop-after ask still borrows
+    /// from them, so a scribble's own frame comes back as quickly as it does
+    /// on footage.
+    fn rereads(&self) -> bool {
+        self.propagate && self.stop_after.is_none() && self.key.is_some_and(|k| k.rendered)
+    }
 }
 
 /// How far a propagation has got. Read, never subscribed to — the interface
@@ -1052,6 +1093,7 @@ fn run(job: RotoJob, cancel: &AtomicBool) {
 
     if let Some(hit) = key
         .zip(dir.as_deref())
+        .filter(|_| !job.rereads())
         .and_then(|(key, d)| read_sidecar(d, key))
     {
         // A whole run answers anybody, and a partial one answers a warm pass
@@ -1182,6 +1224,7 @@ fn propagate(
     report: &dyn Fn(Progress),
 ) -> Result<(RotoRun, bool), RotoFailure> {
     let base = job.block.base_frame.ok_or(RotoFailure::NoBaseFrame)?;
+    let rereads = job.rereads();
     let mut frames = (job.open)().ok_or(RotoFailure::Unreadable)?;
     let (count, width, height, fps) = frames.info();
     if count == 0 || width == 0 || height == 0 {
@@ -1208,7 +1251,7 @@ fn propagate(
 
     let dir = cache_dir();
     let lend = match (job.key, dir.as_deref()) {
-        (Some(key), Some(d)) => lendable(d, key),
+        (Some(key), Some(d)) if !rereads => lendable(d, key),
         _ => HashMap::new(),
     };
 
@@ -1521,9 +1564,53 @@ pub fn job_for(
     })
 }
 
+/// [`job_for`] for a brush on a **Precomp** layer: the nested comp `comp` is
+/// what is cut, and its frames are rendered rather than decoded.
+///
+/// At the comp's own size, because a stroke is in the layer's own pixels and
+/// those are the nested comp's.
+#[must_use]
+pub fn job_for_comp(
+    fx: &EffectInstance,
+    doc: Arc<Document>,
+    comp: Uuid,
+    propagate: bool,
+) -> RotoJob {
+    RotoJob {
+        open: Box::new(move || {
+            crate::track::CompLuma::open_at(doc, comp, 1.0)
+                .map(|f| Box::new(f) as Box<dyn RotoFrames>)
+        }),
+        propagate,
+        ..warm_job_for_comp(fx, comp)
+    }
+}
+
+/// The warm pass's half of [`job_for_comp`]: the name of the file and nothing
+/// to open, since a warm pass reads a sidecar and never a frame.
+fn warm_job_for_comp(fx: &EffectInstance, comp: Uuid) -> RotoJob {
+    let block = fx.roto.clone().unwrap_or_default();
+    let mut settings = RotoSettings::of(fx);
+    // The pack that would seed the run, for `job_for`'s reason.
+    if settings.segments() {
+        settings.identity = lumit_ml::segment::installed_identity().unwrap_or_default();
+    }
+    RotoJob {
+        instance: fx.id,
+        key: Some(RotoKey::rendered(fx.id, comp, &block, settings)),
+        settings,
+        block,
+        open: Box::new(|| None),
+        model: Box::new(open_segment),
+        propagate: false,
+        stop_after: None,
+    }
+}
+
 /// Every cached run a document could be holding, as warm-pass jobs: one per
-/// enabled Roto brush on a footage layer whose media has a fingerprint, and one
-/// per brush box in a node graph, against the footage its picture comes from.
+/// enabled Roto brush on a footage layer whose media has a fingerprint or on a
+/// Precomp layer, and one per brush box in a node graph, against the footage
+/// its picture comes from.
 ///
 /// One job per **instance**, because that is what a run is filed under. A
 /// footage item with no fingerprint or no resolved path is skipped: it is
@@ -1546,6 +1633,11 @@ pub fn warm_jobs(doc: &Document) -> Vec<RotoJob> {
             continue;
         };
         for layer in &comp.layers {
+            if let LayerKind::Precomp { comp: nested } = layer.kind {
+                let found = lumit_core::roto::brushes(&layer.effects).filter(|fx| stroked(fx));
+                out.extend(found.map(|fx| warm_job_for_comp(fx, nested)));
+                continue;
+            }
             let LayerKind::Footage { item: media, .. } = layer.kind else {
                 continue;
             };

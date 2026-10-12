@@ -407,13 +407,18 @@ pub fn fire_effect_action(
             PIN => create_corner_pin(layer, effect),
             TRANSFORM_KEYS => create_transform_keys(layer, effect),
             ANALYSE => {
-                let media = match item.kind {
-                    LayerKind::Footage { item } => item,
-                    _ => return Err(BridgeError::NotFootage),
-                };
-                let (path, fingerprint) = media_source(&layer, media)?;
-                let job = lumit_render::track::planar_job_for(&item, path, &fingerprint, true)
-                    .ok_or(BridgeError::NotFootage)?;
+                // A footage layer's file, or a Precomp layer's nested comp,
+                // whose frames are rendered rather than decoded.
+                let job = match item.kind {
+                    LayerKind::Footage { item: media } => {
+                        let (path, fingerprint) = media_source(&layer, media)?;
+                        lumit_render::track::planar_job_for(&item, path, &fingerprint, true)
+                    }
+                    _ => {
+                        lumit_render::track::planar_job_for_precomp(&snapshot(&layer)?, &item, true)
+                    }
+                }
+                .ok_or(BridgeError::NotFootage)?;
                 match lumit_render::track::request(job) {
                     lumit_render::track::Requested::Started => Ok(()),
                     _ => Err(BridgeError::AnalysisBusy),
@@ -430,12 +435,19 @@ pub fn fire_effect_action(
                 Ok(())
             }
             ANALYSE => {
-                let LayerKind::Footage { item: media } = item.kind else {
-                    return Err(BridgeError::NotFootage);
-                };
-                let (path, fingerprint) = media_source(&layer, media)?;
-                let job = lumit_render::track::points_job_for(&item, fx, path, &fingerprint, true)
-                    .ok_or(BridgeError::NotFootage)?;
+                let job = match item.kind {
+                    LayerKind::Footage { item: media } => {
+                        let (path, fingerprint) = media_source(&layer, media)?;
+                        lumit_render::track::points_job_for(&item, fx, path, &fingerprint, true)
+                    }
+                    _ => lumit_render::track::points_job_for_precomp(
+                        &snapshot(&layer)?,
+                        &item,
+                        fx,
+                        true,
+                    ),
+                }
+                .ok_or(BridgeError::NotFootage)?;
                 match lumit_render::track::request(job) {
                     lumit_render::track::Requested::Started => Ok(()),
                     _ => Err(BridgeError::AnalysisBusy),
@@ -494,18 +506,7 @@ pub fn fire_effect_action(
                     let (path, fingerprint) = media_source(&layer, media)?;
                     lumit_render::track::job_for(&item, path, &fingerprint, true)
                 }
-                _ => {
-                    let projects = PROJECTS.read().map_err(|_| BridgeError::ReadFailed)?;
-                    let project = projects
-                        .get(&layer.project_id)
-                        .ok_or(BridgeError::InvalidProject)?
-                        .clone();
-                    drop(projects);
-                    let state = project.read().map_err(|_| BridgeError::ReadFailed)?;
-                    let doc = state.store.snapshot();
-                    drop(state);
-                    lumit_render::track::job_for_precomp(&doc, &item, true)
-                }
+                _ => lumit_render::track::job_for_precomp(&snapshot(&layer)?, &item, true),
             }
             .ok_or(BridgeError::NotFootage)?;
             match lumit_render::track::request(job) {
@@ -515,6 +516,16 @@ pub fn fire_effect_action(
         }
         _ => Err(BridgeError::InvalidParam),
     }
+}
+
+/// The document `layer` is in, as it stands now: what an analysis of a nested
+/// comp renders its frames from.
+fn snapshot(
+    layer: &LayerReference,
+) -> Result<std::sync::Arc<lumit_core::model::Document>, BridgeError> {
+    let project = layer.project()?;
+    let state = project.read().map_err(|_| BridgeError::ReadFailed)?;
+    Ok(state.store.snapshot())
 }
 
 /// Where a footage item's file is, and what names its content.

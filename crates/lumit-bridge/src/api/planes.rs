@@ -180,12 +180,16 @@ pub(crate) fn status_of(
 // The buttons, down
 // ---------------------------------------------------------------------------
 
-/// The analysis job one planes-tier effect describes over the file at
-/// `source`.
+/// The analysis job one planes-tier effect describes over the file or the
+/// comp at `source`.
 fn job_of(
     source: crate::api::roto::Source,
     fx: &lumit_core::model::EffectInstance,
 ) -> Result<lumit_render::planes::PlaneJob, BridgeError> {
+    if let Some((doc, comp)) = crate::api::roto::comp_source(source) {
+        return lumit_render::planes::job_for_comp(fx, doc, comp, true)
+            .ok_or(BridgeError::NotFootage);
+    }
     let (path, fingerprint) = crate::api::track::media_source_in(source.0, source.1)?;
     lumit_render::planes::job_for(fx, path, &fingerprint, true).ok_or(BridgeError::NotFootage)
 }
