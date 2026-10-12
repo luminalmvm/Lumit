@@ -2,8 +2,18 @@
 import Base from "../../layouts/Base.astro";
 import SectionHead from "../../components/SectionHead.astro";
 import { Image } from "astro:assets";
-import card from "../../assets/shots/pro-card.png";
-import share from "../../assets/shots/pro-share.png";
+import shareShot from "../../assets/shots/pro-share.png";
+import syncShot from "../../assets/shots/pro-sync.png";
+import previewShot from "../../assets/shots/pro-preview.png";
+import phoneShot from "../../assets/shots/pro-preview-phone.png";
+import historyShot from "../../assets/shots/pro-history.png";
+// Each picture's clip is the same box, recorded from Lumit and from a preview's
+// own page, and the picture is the clip's first frame.
+import shareClip from "../../assets/clips/pro-share.mp4";
+import syncClip from "../../assets/clips/pro-sync.mp4";
+import previewClip from "../../assets/clips/pro-preview.mp4";
+import phoneClip from "../../assets/clips/pro-preview-phone.mp4";
+import historyClip from "../../assets/clips/pro-history.mp4";
 
 // What Pro is, what it costs, and how to get it. Nothing is bought on this
 // page: Pro is bought from inside Lumit, where the account is.
@@ -11,26 +21,53 @@ const MONTHLY = 6;
 const YEARLY = 60;
 const SAVING = Math.round((1 - YEARLY / (MONTHLY * 12)) * 100);
 
+// The first two share a row and the others have one each. `sizes` is how wide
+// a picture is drawn.
 const features = [
   {
     h: "Share projects anywhere",
     p: "Guests join through Lumit's relay. With no additional setup.",
     c: "mint",
+    shot: shareShot,
+    clip: shareClip,
+    alt: "Lumit's Shared project window, with the project kept online and two people joining it.",
+    wide: false,
+    sizes: "(min-width: 1360px) 424px, (min-width: 1024px) 34vw, 100vw",
   },
   {
     h: "Settings on every device",
     p: "Shortcuts, themes, workspaces, and presets follow you.",
     c: "azure",
+    shot: syncShot,
+    clip: syncClip,
+    alt: "The Account page of Lumit's settings: a Pro account, and a switch for each group of settings kept in sync.",
+    wide: false,
+    sizes: "(min-width: 1360px) 756px, (min-width: 1024px) 60vw, 100vw",
   },
   {
     h: "Preview with feedback",
     p: "Share previews, and people can leave feedback with timestamps.",
     c: "amber",
+    shot: previewShot,
+    clip: previewClip,
+    alt: "A preview's page in a browser: the video, a drawing on its picture, and comments beside it with their times.",
+    phone: {
+      shot: phoneShot,
+      clip: phoneClip,
+      alt: "The same preview on a phone, with the comments under the video.",
+    },
+    wide: true,
+    sizes: "(min-width: 1360px) 850px, 75vw",
   },
   {
     h: "Never lose an edit",
     p: "Save every change made, online. Revert to any point you want.",
     c: "violet",
+    shot: historyShot,
+    clip: historyClip,
+    alt: "Lumit's Project history window: every save of a project down the left, and the picture of the one chosen.",
+    wide: true,
+    sizes: "(min-width: 1360px) 1200px, 100vw",
   },
 ];
 
@@ -97,6 +134,9 @@ const questions = [
   title="Lumit Pro"
   description="Additional features to make life easier."
 >
+  <script is:inline>
+    document.documentElement.classList.add("anim");
+  </script>
   <section class="pt-14 pb-20 sm:pt-20 sm:pb-24">
     <div class="wrap flex flex-col gap-12">
       <p class="lockup" aria-hidden="true">
@@ -134,24 +174,30 @@ const questions = [
   <section class="pb-20 sm:pb-24">
     <div class="wrap flex flex-col gap-12">
       <SectionHead kicker="What you get" title="What Pro adds." />
-      <div class="grid gap-5 md:grid-cols-4">
+      <div class="features grid gap-5">
         {
           features.map((f, i) => (
-            <div class="card lit" style={`--c:var(--label-${f.c})`} data-reveal>
-              <p class="num"><i />{String(i + 1).padStart(2, "0")}</p>
-              <h3 class="mt-8 text-[19px] text-fg">{f.h}</h3>
-              <p class="mt-2.5 text-[15px] leading-[1.45] text-fg-3">{f.p}</p>
-            </div>
+            <figure class:list={["lit m-0 flex flex-col rounded-card border border-line bg-ink-2", f.wide && "lg:col-span-2"]} style={`--c:var(--label-${f.c});--i:${i % 2}`} data-reveal>
+              <div class:list={["stage", f.phone && "pair"]}>
+                <div class="frame">
+                  <Image src={f.shot} alt={f.alt} widths={[720, 1000, 1400]} sizes={f.sizes} loading="lazy" quality={90} />
+                  <video class="clip" data-clip src={f.clip} muted loop playsinline preload="none" tabindex="-1" aria-hidden="true" />
+                </div>
+                {f.phone && (
+                  <div class="frame phone">
+                    <Image src={f.phone.shot} alt={f.phone.alt} widths={[390, 780]} sizes="(min-width: 640px) 250px, 70vw" loading="lazy" quality={90} />
+                    <video class="clip" data-clip src={f.phone.clip} muted loop playsinline preload="none" tabindex="-1" aria-hidden="true" />
+                  </div>
+                )}
+              </div>
+              <figcaption class="p-7">
+                <p class="num"><i />{String(i + 1).padStart(2, "0")}</p>
+                <h3 class="mt-6 text-[22px] leading-[1.15] tracking-[-0.02em] text-fg">{f.h}</h3>
+                <p class="mt-2.5 text-[15px] leading-[1.45] text-fg-3">{f.p}</p>
+              </figcaption>
+            </figure>
           ))
         }
-      </div>
-      <div class="grid items-start gap-5 md:grid-cols-2">
-        <figure class="shot m-0" data-reveal>
-          <Image src={share} alt="Lumit's Shared project window, with guests joining through Lumit's relay." widths={[640, 1000]} sizes="(min-width: 768px) 580px, 100vw" />
-        </figure>
-        <figure class="shot m-0" data-reveal>
-          <Image src={card} alt="Lumit's profile card, showing a Pro account with its settings in sync." widths={[640, 1000]} sizes="(min-width: 768px) 580px, 100vw" />
-        </figure>
       </div>
     </div>
   </section>
@@ -291,7 +337,90 @@ const questions = [
     border-color: transparent;
     background:
       linear-gradient(var(--pick), var(--pick)) padding-box,
-      linear-gradient(135deg, var(--key-jade), var(--key-sky)) border-box;
+      linear-gradient(var(--turn), var(--key-jade), var(--key-sky)) border-box;
+    animation: turn 9s linear infinite;
+  }
+  /* The sweep goes slowly round the edge. An angle has to be registered to
+     be animated, and without that the edge just stands at 135. */
+  @property --turn {
+    syntax: "<angle>";
+    inherits: false;
+    initial-value: 135deg;
+  }
+  @keyframes turn {
+    to {
+      --turn: 495deg;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .plan-pick {
+      animation: none;
+    }
+  }
+  /* Where a feature's picture stands. One picture fills it to the edges. */
+  .stage {
+    position: relative;
+    border-bottom: 1px solid var(--color-line);
+    background: var(--color-ink);
+  }
+  .frame {
+    position: relative;
+    overflow: hidden;
+  }
+  .frame img {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  /* The two pictures that share a row are different shapes. Each column is as
+     wide as its picture is to its height, which makes the two the same height. */
+  @media (min-width: 1024px) {
+    .features {
+      grid-template-columns: minmax(0, 0.799fr) minmax(0, 1.426fr);
+    }
+  }
+  /* A preview on a computer and on a phone, side by side on a lit ground.
+     The columns are as wide as makes the two the same height. */
+  .pair {
+    display: grid;
+    grid-template-columns: 3.411fr 1fr;
+    gap: 28px;
+    align-items: center;
+    padding: 40px;
+    background:
+      radial-gradient(60% 90% at 12% 0%, color-mix(in srgb, var(--c) 13%, transparent), transparent 70%),
+      radial-gradient(50% 80% at 100% 100%, color-mix(in srgb, var(--key-sky) 9%, transparent), transparent 70%),
+      var(--color-ink);
+  }
+  .pair::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: var(--grain);
+    opacity: 0.05;
+    mix-blend-mode: overlay;
+    pointer-events: none;
+  }
+  .pair .frame {
+    border: 1px solid var(--color-line-2);
+    border-radius: var(--radius-card);
+    box-shadow: 0 24px 60px -20px rgb(0 0 0 / 0.7);
+  }
+  .pair .phone {
+    border: 5px solid var(--color-ink-3);
+    border-radius: 26px;
+    outline: 1px solid var(--color-line-2);
+  }
+  /* On a phone the phone's own picture is the one that can be read. */
+  @media (max-width: 639px) {
+    .pair {
+      grid-template-columns: minmax(0, 300px);
+      justify-content: center;
+      padding: 28px 20px;
+    }
+    .pair .frame:not(.phone) {
+      display: none;
+    }
   }
   .num {
     display: flex;
@@ -369,3 +498,20 @@ const questions = [
     line-height: 1.5;
   }
 </style>
+
+<script>
+  import "../../scripts/clips";
+
+  // Each part of the page arrives as it is scrolled to.
+  const seen = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        entry.target.classList.add("shown");
+        seen.unobserve(entry.target);
+      }
+    },
+    { rootMargin: "0px 0px -8% 0px" },
+  );
+  for (const el of document.querySelectorAll("[data-reveal]")) seen.observe(el);
+</script>
