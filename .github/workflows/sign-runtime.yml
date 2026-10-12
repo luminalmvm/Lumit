@@ -88,9 +88,9 @@ jobs:
           codesign -dvv signed/libonnxruntime.dylib
       # A stand-in for Lumit: a program signed the way the app is, with the
       # hardened runtime and no entitlement that turns library validation off.
-      # It has to refuse Microsoft's copy for its team and load ours, otherwise
-      # the signature was not what stopped the runtime loading and the zip
-      # fixes nothing.
+      # Where library validation is enforced it has to refuse Microsoft's copy
+      # for its team and load ours, otherwise the signature was not what
+      # stopped the runtime loading and the zip fixes nothing.
       - name: Check macOS refuses the published library and loads the signed one
         run: |
           cat > probe.c <<'EOF'
@@ -109,18 +109,38 @@ jobs:
           codesign --force --timestamp --options runtime \
             --sign "$MACOS_SIGN_IDENTITY" probe
 
-          echo "As published, which has to be refused:"
-          if ./probe "$PWD/upstream/libonnxruntime.dylib" > refused.txt 2>&1; then
+          # A library signed by nobody, which library validation always refuses.
+          # If it loads, this machine isn't enforcing library validation and
+          # loading Microsoft's copy here says nothing, so the teams are
+          # compared instead, which is the rule macOS applies.
+          echo 'int control;' > control.c
+          clang -dynamiclib -o control.dylib control.c
+          csrutil status || true
+          if ./probe "$PWD/control.dylib"; then
+            echo "::warning::Library validation is not enforced on this machine, so the teams were compared instead"
+            team() { codesign -dv "$1" 2>&1 | sed -n 's/^TeamIdentifier=//p'; }
+            [ "$(team upstream/libonnxruntime.dylib)" != "$(team probe)" ] || {
+              echo "::error::The published library is already signed by this team"
+              exit 1
+            }
+            [ "$(team signed/libonnxruntime.dylib)" = "$(team probe)" ] || {
+              echo "::error::The signed library is not signed by this team"
+              exit 1
+            }
+          else
+            echo "As published, which has to be refused:"
+            if ./probe "$PWD/upstream/libonnxruntime.dylib" > refused.txt 2>&1; then
+              cat refused.txt
+              echo "::error::The published library loaded, so its signature is not the problem"
+              exit 1
+            fi
             cat refused.txt
-            echo "::error::The published library loaded, so its signature is not the problem"
-            exit 1
+            # A refusal for any other reason proves nothing about the signature.
+            grep -q "Team ID" refused.txt || {
+              echo "::error::The published library was refused, but not for its team"
+              exit 1
+            }
           fi
-          cat refused.txt
-          # A refusal for any other reason proves nothing about the signature.
-          grep -q "Team ID" refused.txt || {
-            echo "::error::The published library was refused, but not for its team"
-            exit 1
-          }
 
           echo "Signed, which has to load:"
           ./probe "$PWD/signed/libonnxruntime.dylib"
