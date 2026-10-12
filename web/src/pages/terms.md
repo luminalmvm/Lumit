@@ -2,70 +2,66 @@
 layout: ../layouts/Prose.astro
 title: Terms
 kicker: The small print
-description: The terms for a Lumit account and for Lumit Pro.
+description: Terms for a Lumit account and Lumit Pro.
 updated: October 2026
 ---
 
-Lumit the editor is free software under the [GPLv3](https://github.com/luminalmvm/Lumit/blob/main/LICENSE),
-and these terms change nothing about that. They cover what runs on our servers: a Lumit
-account, and Lumit Pro.
+Lumit, the editor, is free software under the [GPLv3](https://github.com/luminalmvm/Lumit/blob/main/LICENSE). 
+Terms here cover what runs on our servers: a Lumit account, and Lumit Pro.
 
-Lumit and Lumit Pro are made and run by Mackenzie Reed, which is who "we" means on this page.
+Lumit and Lumit Pro are largely maintained and made by Mack Reed, which is who "we" means on this page.
 
 ## Your account
 
 - An account is optional. Lumit works without one.
-- Keep your sign-in to yourself. What is done with your account is yours to answer for.
-- You can delete it at any time from **Settings ▸ Account** in Lumit.
+- Never share your login details. We don't take responsibility if you lose your account. 
+- You can delete your account at any time from **Settings ▸ Account** within Lumit.
 
 ## Lumit Pro
 
-Pro is a subscription that adds these to an account: shared projects through Lumit's
-relay, shared projects kept online, review links, backups of your projects, and settings
-synced across your machines.
+Pro is a subscription allowing access to additional online features.
 
 - It is sold by Paddle, who are the merchant of record. Their
   [buyer terms](https://www.paddle.com/legal/checkout-buyer-terms) apply to the payment.
-- It renews each month or each year until you cancel, at the price shown when you bought it.
-- You can cancel whenever you like, from **Manage subscription** in Lumit. Pro then runs to
-  the end of what you have paid for.
-- If the price changes, you will be told before your next renewal.
-- Refunds are covered on the [refunds page](/refunds).
+- It renews monthly or yearly until you cancel.
+- Cancel at any time from **Manage subscription** in Lumit. Pro continues until the next
+  renewal date.
+- We will tell you before any price change.
+- See [refunds](/refunds).
 
-## Using the relay fairly
+## Dealing with misuse
 
-The relay is there to carry shared projects between the people working on them. Don't use
-it for anything else, don't try to break it, and don't use it to send anything you have no
-right to send. We may slow or stop a connection that is harming the relay for others.
+If the features provided with Pro are used in a way to harm or negatively 
+impact others, or the user attempts to misuse/circumvent/break the features 
+provided we reserve the right to suspend a user's connection and subscription 
+with immediate effect.
 
 ## What you store with us
 
-- It stays yours. We use it only to give it back to you and to the people you share it with.
-- A review link can be opened by anyone who has its address. Set a password on one that
-  shouldn't be.
-- Don't send anything you have no right to share, or anything unlawful. We may remove a
-  link that is reported to us and breaks this.
-- An account can store 50 GB across review links, backups and footage kept online.
-- If Pro ends, what you stored can still be opened and deleted, and nothing new can be
-  added. A project kept online that nobody opens is cleared 90 days after Pro ends.
-- A backup is a second copy. Keep your own project files as well.
+- It stays yours.
+- Anyone with a review link's address can open it.
+- Don't store anything unlawful, or that you have no right to share. We may remove it.
+- Pro includes 50 GB of storage.
+- If Pro ends, you can still open and delete what you stored. A project kept online is
+  cleared after 90 days unopened.
+- Keep your own copy of your projects.
 
-## What we promise, and what we don't
+## Our promise
 
-We will look after the servers and fix what breaks as quickly as we can. We can't promise
-that they will never be down, and a shared project keeps working on your own network or
-through a relay of your own when they are.
+We will make sure to avoid and reduce downtime wherever possible. 
+It is possible features will sometimes be inaccessible, but we will strive to 
+minimise this.
 
-Nothing here limits any right the law gives you as a customer. Beyond that, the servers
-are provided as they are, and we are not liable for losses that follow from using them or
-from not being able to.
+Nothing here limits any right the law gives you as a customer. Servers
+are provided as is.
+We are not liable for losses that follow from using them or from not being able to.
 
-## Ending an account
+## Terminating an account
 
-We may close an account that is used to abuse the servers or other people. If we do and
-you have Pro, you get back what you have paid for the time that is left.
+We may close an account used to abuse our servers or other people. If you have Pro, the
+unused time is refunded.
 
 ## Changes and questions
 
-If these terms change in a way that matters, we will say so in the release notes before
-the change applies. Questions go to [hello@lumitlab.com](mailto:hello@lumitlab.com).
+If these terms change in any meaningful way, we will say so in the release notes first.
+Questions: [hello@lumitlab.com](mailto:hello@lumitlab.com).

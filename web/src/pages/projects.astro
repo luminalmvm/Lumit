@@ -43,7 +43,7 @@ const projects = [
     clip: solsticeClip,
     name: "Solstice",
     tag: "Light and glow",
-    p: "A burst of light, a drift of stars, and a horizon. Three cameras over 3D layers, particles, and the whole look on two adjustment layers.",
+    p: "Three cameras, 3D layers, and particles.",
     alt: "Cream and amber rays bursting from a bright point over a deep blue night sky",
     layers: 34,
     fonts: [font("Cinzel"), font("Lora")],
@@ -55,7 +55,7 @@ const projects = [
     clip: irisClip,
     name: "Iris",
     tag: "Effects and a shader",
-    p: "An eye opens and the inside is a kaleidoscope. The fold is a Custom shader with its own rows, and the spiral is one petal and its repeater.",
+    p: "A kaleidoscope from a custom shader and a repeater.",
     alt: "A spiral of small bright eyes turning round a pink light on a dark violet ground",
     layers: 30,
     fonts: [font("Abril Fatface"), font("Raleway"), font("Playfair Display")],
@@ -67,7 +67,7 @@ const projects = [
     clip: lumaKeyClip,
     name: "Luma Key",
     tag: "Isometric",
-    p: "A film lot on a floating island that builds itself. The points family lays the tiles, plants the trees, and strings the lights.",
+    p: "An island built with the points effects.",
     alt: "An isometric film studio lot on a floating island, with its name lying on the ground beside it",
     layers: 55,
     fonts: [font("Oswald"), font("Lora")],
@@ -80,7 +80,7 @@ const projects = [
     clip: stackClip,
     name: "Stack",
     tag: "Type and blend modes",
-    p: "A picture is a stack of layers, shown flat and then turned in space. Blend modes, track mattes, and a camera with depth of field.",
+    p: "Blend modes, track mattes, and depth of field.",
     alt: "The words Stack, Blend, Matte and Depth in black on overlapping indigo, mint, amber and coral bands",
     layers: 40,
     fonts: [font("Montserrat"), font("IBM Plex Mono")],
@@ -92,7 +92,7 @@ const projects = [
     clip: pulseClip,
     name: "Pulse",
     tag: "Interface motion",
-    p: "A film for a made-up music player. One camera move from start to finish, glow with falloff, and numbers driven by expressions.",
+    p: "One camera move, glow, and expressions.",
     alt: "A music player card seen at an angle in the dark, with a level meter and a volume dial reading 82",
     layers: 85,
     fonts: [font("Montserrat"), font("IBM Plex Mono")],
@@ -104,7 +104,7 @@ const projects = [
     clip: morphClip,
     name: "Morph",
     tag: "Shape morph",
-    p: "One shape through seven pictures, ending on the mark. Every change is path keyframes, and the holes morph as well as the outline.",
+    p: "One shape morphed through seven pictures.",
     alt: "A white soundwave of rounded bars on an indigo ground",
     layers: 53,
     fonts: [font("Nunito")],
@@ -115,14 +115,13 @@ const projects = [
 
 <Base
   title="Projects - Lumit"
-  description="Six short motion-graphics projects made in Lumit, to download, open and take apart."
+  description="Projects to download and take apart."
 >
   <section class="pt-14 pb-24 sm:pt-20 sm:pb-32">
     <div class="wrap flex flex-col gap-14">
       <SectionHead page kicker="Projects" title="Made in Lumit.">
         <Fragment slot="lede">
-          Six short pieces, the same ones in the pictures on the home page. Each is a
-          project file you can download, open, and take apart.
+          Six projects to download and take apart.
         </Fragment>
       </SectionHead>
 
@@ -176,21 +175,6 @@ const projects = [
           ))
         }
       </div>
-
-      <ul class="notes">
-        <li>
-          The fonts are free ones from Google Fonts. A project opened without its fonts
-          is set in Inter until they're installed.
-        </li>
-        <li>
-          Luma Key uses the points family of effects, which is newer than 0.6.0. The
-          rest were made on the same build, so try a newer version if one opens wrongly.
-        </li>
-        <li>
-          Open one with File ▸ Open project…, then twirl a layer open or press the Graph button
-          to see how a move was made.
-        </li>
-      </ul>
     </div>
   </section>
 </Base>
@@ -281,32 +265,6 @@ const projects = [
     color: var(--color-key);
     font-family: var(--font-mono);
     font-size: 11px;
-  }
-
-  .notes {
-    display: grid;
-    gap: 10px;
-    margin: 0;
-    padding: 0;
-    max-width: 720px;
-    list-style: none;
-    color: var(--color-fg-3);
-    font-size: 15px;
-    line-height: 1.45;
-  }
-  .notes li {
-    position: relative;
-    padding-left: 18px;
-  }
-  .notes li::before {
-    content: "";
-    position: absolute;
-    top: 0.6em;
-    left: 0;
-    width: 6px;
-    height: 6px;
-    border: 1px solid var(--color-fg-4);
-    transform: rotate(45deg);
   }
 </style>
 

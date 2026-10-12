@@ -6,34 +6,16 @@ import card from "../../assets/shots/pro-card.png";
 import share from "../../assets/shots/pro-share.png";
 
 // What Pro is, what it costs, and how to get it. Nothing is bought on this
-// page: Pro is bought from inside Lumit, where the account is. The prices are
-// written here in dollars, and the server is only asked whether Pro is free
-// for now.
-const CLOUD = "https://cloud.lumitlab.com";
+// page: Pro is bought from inside Lumit, where the account is.
 const MONTHLY = 6;
 const YEARLY = 60;
 const SAVING = Math.round((1 - YEARLY / (MONTHLY * 12)) * 100);
 
 const features = [
   {
-    h: "Share from anywhere",
-    p: "Guests join through Lumit's relay. Nothing to set up.",
+    h: "Share projects anywhere",
+    p: "Guests join through Lumit's relay. With no additional setup.",
     c: "mint",
-  },
-  {
-    h: "Projects that stay online",
-    p: "People can open one and edit while you're away.",
-    c: "teal",
-  },
-  {
-    h: "Review links",
-    p: "Send an edit as a link. The notes come back on your timeline.",
-    c: "violet",
-  },
-  {
-    h: "Backup with history",
-    p: "Every save is kept. Go back to any of them.",
-    c: "indigo",
   },
   {
     h: "Settings on every device",
@@ -41,64 +23,68 @@ const features = [
     c: "azure",
   },
   {
-    h: "Support Lumit",
-    p: "Helps pay for servers and development.",
+    h: "Preview with feedback",
+    p: "Share previews, and people can leave feedback with timestamps.",
     c: "amber",
+  },
+  {
+    h: "Never lose an edit",
+    p: "Save every change made, online. Revert to any point you want.",
+    c: "violet",
   },
 ];
 
 // The whole editor is on the left and it stays there.
 const compare = [
   { what: "Every effect, export format, and resolution", free: true, pro: true },
-  { what: "Shared projects on your own network or VPN", free: true, pro: true },
-  { what: "Shared projects through a relay you run yourself", free: true, pro: true },
+  { what: "Shared projects through your own relay, or network", free: true, pro: true },
   { what: "Profiles on one machine, each with its own settings", free: true, pro: true },
-  { what: "Shared projects through Lumit's relay, from anywhere", free: false, pro: true },
-  { what: "Shared projects kept online, for people who are never on together", free: false, pro: true },
-  { what: "Review links, with the comments back in your timeline", free: false, pro: true },
-  { what: "A backup of every save, with its history", free: false, pro: true },
-  { what: "Settings synced across your machines", free: false, pro: true },
+  { what: "Shared projects through Lumit's relay, accessible from any device", free: false, pro: true },
+  { what: "Shared projects kept online while you're away", free: false, pro: true },
+  { what: "Settings synced across your devices", free: false, pro: true },
+  { what: "Save and send previews, and receive comments with timestamps within Lumit", free: false, pro: true },
+  { what: "Backup every save and revert at any time", free: false, pro: true },
 ];
 
 const steps = [
   {
     h: "Open Lumit",
-    p: "Press your name at the bottom left.",
+    p: "In the bottom left open the menu.",
   },
   {
     h: "Sign in",
     p: "With Google, Discord, or an email.",
   },
   {
-    h: "Pick monthly or yearly",
-    p: "You pay in your browser.",
+    h: "Pick your plan",
+    p: "Both monthly and yearly options are provided.",
   },
 ];
 
 const questions = [
   {
     q: "Is Lumit still free?",
-    a: "Yes. Nothing that was free has moved behind Pro.",
+    a: "Yes. We will never move editing tools behind a paywall.",
   },
   {
-    q: "Can you read my shared project?",
-    a: "No. It is encrypted with the invite's key, which our servers never get. That goes for a project kept online too.",
+    q: "Can Lumit's relay read my project?",
+    a: "No. Everything is encrypted, the only people who see your projects are those you share it with.",
   },
   {
     q: "Does everyone sharing a project need Pro?",
-    a: "No, only the host does. Guests and reviewers don't need an account.",
+    a: "No, only the host does. Guests accessing the shared project don't need Pro.",
   },
   {
-    q: "What do you keep about me?",
-    a: "Your email, your name, the settings you sync, and what you send us: review videos with their comments, and backups of your project files. Never your card.",
+    q: "What data do you keep about me?",
+    a: "Your email, name, the settings you sync, and what you back up or send for review. Never your bank details.",
   },
   {
     q: "How much can I store?",
-    a: "50 GB, across review links, backups, and footage kept online.",
+    a: "50 GB.",
   },
   {
     q: "What happens if I cancel?",
-    a: "Pro runs to the end of what you paid for. After that your links and backups can still be opened and deleted, and your settings stay on each machine.",
+    a: "Pro will continue until the next renewal period.",
   },
   {
     q: "Can I get a refund?",
@@ -109,7 +95,7 @@ const questions = [
 
 <Base
   title="Lumit Pro"
-  description="Share a Lumit project from anywhere, send edits for review, and keep every save. Lumit itself stays free and open source."
+  description="Additional features to make life easier."
 >
   <section class="pt-14 pb-20 sm:pt-20 sm:pb-24">
     <div class="wrap flex flex-col gap-12">
@@ -119,14 +105,9 @@ const questions = [
       </p>
       <SectionHead page kicker="Lumit Pro" title="Work together from anywhere.">
         <Fragment slot="lede">
-          Lumit is free and open source, and that isn't changing.
+          Lumit is free and open source, that will never change.
         </Fragment>
       </SectionHead>
-
-      <p class="preview" id="pro-preview" hidden>
-        <i class="key" style="--k:var(--label-mint)"></i>
-        Pro is free while we test it.
-      </p>
 
       <div class="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.1fr)]">
         <div class="plan card" data-plan="monthly">
@@ -139,7 +120,7 @@ const questions = [
         </div>
         <div class="card flex flex-col justify-between gap-6">
           <p class="text-[15px] leading-[1.45] text-fg-2">
-            Get Pro inside Lumit, from your name at the bottom left.
+            Get Pro in Lumit, from your profile in the bottom left.
           </p>
           <div class="flex flex-wrap gap-3">
             <a class="btn border-white" href="/download">Download Lumit</a>
@@ -153,7 +134,7 @@ const questions = [
   <section class="pb-20 sm:pb-24">
     <div class="wrap flex flex-col gap-12">
       <SectionHead kicker="What you get" title="What Pro adds." />
-      <div class="grid gap-5 md:grid-cols-3">
+      <div class="grid gap-5 md:grid-cols-4">
         {
           features.map((f, i) => (
             <div class="card lit" style={`--c:var(--label-${f.c})`} data-reveal>
@@ -237,16 +218,6 @@ const questions = [
   </section>
 </Base>
 
-<script is:inline define:vars={{ CLOUD }}>
-  // Whether Pro is free for now, which only the server knows.
-  (async () => {
-    try {
-      const config = await (await fetch(CLOUD + "/v1/config")).json();
-      if (config.preview) document.getElementById("pro-preview").hidden = false;
-    } catch {}
-  })();
-</script>
-
 <style>
   /* The two keys of the mark run together. Only Pro is drawn in it. */
   .sweep {
@@ -291,14 +262,6 @@ const questions = [
     line-height: 1;
     letter-spacing: 0.1em;
     text-transform: uppercase;
-  }
-  .preview {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin: 0;
-    color: var(--color-fg-2);
-    font-size: 15px;
   }
   .plan .tag {
     display: flex;
