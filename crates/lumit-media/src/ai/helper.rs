@@ -369,6 +369,16 @@ fn cap_memory(_child: &Child) -> Option<()> {
 }
 
 /// The helper's cap on its own memory, set before it opens the file.
+///
+/// A limit on address space, which the kernel holds it to: past it the next
+/// request for memory is refused, and the helper ends on that.
+///
+/// macOS counts what a process is given before it runs a line, which on an
+/// Apple silicon Mac is some 460 GiB of address space, and refuses a limit
+/// below what the process already has. So there the limit is the cap on top
+/// of that. macOS 27 holds a process to it exactly. Older releases, which
+/// Lumit still runs on, took the call and held nothing to it, so on macOS the
+/// helper also watches itself: see [`hold_to`].
 #[cfg(unix)]
 #[allow(unsafe_code)]
 fn cap_own_memory() {
@@ -381,21 +391,214 @@ fn cap_own_memory() {
     extern "C" {
         fn setrlimit(resource: std::os::raw::c_int, limit: *const Limit) -> std::os::raw::c_int;
     }
-    /// `RLIMIT_AS`, from sys/resource.h. macOS takes the call and does not
-    /// hold a process to it, so there the deadline is the only limit.
+    /// `RLIMIT_AS`, from sys/resource.h.
     const ADDRESS_SPACE: std::os::raw::c_int = if cfg!(target_os = "macos") { 5 } else { 9 };
 
+    #[cfg(target_os = "macos")]
+    let cap = MEMORY_CAP.saturating_add(own_address_space().unwrap_or(0));
+    #[cfg(not(target_os = "macos"))]
+    let cap = MEMORY_CAP;
     let limit = Limit {
-        soft: MEMORY_CAP,
-        hard: MEMORY_CAP,
+        soft: cap,
+        hard: cap,
     };
     // SAFETY: a plain libc call that reads `limit`, which has the layout it
     // expects on every 64-bit target and outlives it.
     unsafe {
         setrlimit(ADDRESS_SPACE, &limit);
     }
+    #[cfg(target_os = "macos")]
+    hold_to(MEMORY_CAP);
+}
+
+/// How often the helper on macOS looks at what it holds. Memory can be taken
+/// at ten gigabytes a second, so the cap is passed by about a hundred
+/// megabytes before the helper is ended: 110 MiB, measured on an M-series
+/// Mac writing as fast as it could.
+#[cfg(target_os = "macos")]
+const WATCH: Duration = Duration::from_millis(10);
+
+/// End this process when it holds more than `cap` bytes, or when what it
+/// holds can't be read: a helper that can't be capped is not left to run.
+///
+/// The cap for a macOS that takes a limit and does not keep it. A thread that
+/// does nothing else looks every [`WATCH`].
+#[cfg(target_os = "macos")]
+fn hold_to(cap: u64) {
+    let watch = std::thread::Builder::new()
+        .name("memory-cap".to_owned())
+        .spawn(move || loop {
+            if own_footprint().is_none_or(|held| held > cap) {
+                std::process::exit(1);
+            }
+            std::thread::sleep(WATCH);
+        });
+    if watch.is_err() {
+        std::process::exit(1);
+    }
+}
+
+/// One of libproc's reports on this process, as the twelve 64-bit numbers
+/// both of the two asked for here are. `None` when the system will not say.
+#[cfg(target_os = "macos")]
+#[allow(unsafe_code)]
+fn own_report(
+    ask: impl FnOnce(std::os::raw::c_int, *mut [u64; 12]) -> bool,
+    at: usize,
+) -> Option<u64> {
+    let mut report = [0u64; 12];
+    let pid = std::os::raw::c_int::try_from(std::process::id()).ok()?;
+    ask(pid, &mut report)
+        .then(|| report.get(at).copied())
+        .flatten()
+}
+
+/// The memory this process holds, as Activity Monitor counts it: what is its
+/// own and in use, compressed or not.
+#[cfg(target_os = "macos")]
+#[allow(unsafe_code)]
+fn own_footprint() -> Option<u64> {
+    /// `RUSAGE_INFO_V0`, from sys/resource.h.
+    const V0: std::os::raw::c_int = 0;
+    /// Where `ri_phys_footprint` is in `struct rusage_info_v0`, after a UUID
+    /// that fills the first two.
+    const FOOTPRINT: usize = 9;
+    extern "C" {
+        fn proc_pid_rusage(
+            pid: std::os::raw::c_int,
+            flavor: std::os::raw::c_int,
+            usage: *mut [u64; 12],
+        ) -> std::os::raw::c_int;
+    }
+    // SAFETY: a plain libproc call that fills `usage`, which is the 96 bytes
+    // the flavour asked for writes and outlives the call.
+    own_report(
+        |pid, usage| unsafe { proc_pid_rusage(pid, V0, usage) == 0 },
+        FOOTPRINT,
+    )
+}
+
+/// The address space this process has, used or not, which is what the kernel
+/// measures a limit on it against.
+#[cfg(target_os = "macos")]
+#[allow(unsafe_code)]
+fn own_address_space() -> Option<u64> {
+    /// `PROC_PIDTASKINFO`, from sys/proc_info.h. `pti_virtual_size` is the
+    /// first number in the `struct proc_taskinfo` it fills.
+    const TASK_INFO: std::os::raw::c_int = 4;
+    /// The size of that structure, which the call returns when it has filled
+    /// it.
+    const SIZE: std::os::raw::c_int = 96;
+    extern "C" {
+        fn proc_pidinfo(
+            pid: std::os::raw::c_int,
+            flavor: std::os::raw::c_int,
+            arg: u64,
+            buffer: *mut [u64; 12],
+            size: std::os::raw::c_int,
+        ) -> std::os::raw::c_int;
+    }
+    // SAFETY: a plain libproc call that fills `info`, which is the `SIZE`
+    // bytes it is told it may write and outlives the call.
+    own_report(
+        |pid, info| unsafe { proc_pidinfo(pid, TASK_INFO, 0, info, SIZE) == SIZE },
+        0,
+    )
 }
 
 /// On Windows the caller caps the helper: see [`cap_memory`].
 #[cfg(not(unix))]
 fn cap_own_memory() {}
+
+#[cfg(test)]
+#[cfg(target_os = "macos")]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
+    use super::{cap_own_memory, hold_to, own_address_space, own_footprint, MEMORY_CAP};
+    use std::process::Command;
+    use std::time::Duration;
+
+    /// Set for the copy of this test program that is the process being held,
+    /// to which of the two ways it is held.
+    const HELD: &str = "LUMIT_TEST_HELD_TO_A_CAP";
+    const MIB: u64 = 1 << 20;
+
+    /// Take a gigabyte in pieces, written to so that it is held, saying how
+    /// much is held after each. A piece refused ends it early.
+    fn take_a_gigabyte() {
+        let mut taken = Vec::new();
+        for _ in 0..64 {
+            let mut piece = Vec::<u8>::new();
+            if piece.try_reserve_exact(16 << 20).is_err() {
+                return;
+            }
+            piece.resize(16 << 20, 1);
+            taken.push(std::hint::black_box(piece));
+            println!("{}", own_footprint().unwrap() / MIB);
+        }
+    }
+
+    /// Run this test again as a process held in the way `how` names, and
+    /// answer how it ended and the most it said it held, in MiB.
+    fn held(how: &str) -> (Option<i32>, u64) {
+        let child = Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "ai::helper::tests::a_process_is_held_to_its_cap"])
+            .args(["--nocapture", "--test-threads=1"])
+            .env(HELD, how)
+            .output()
+            .unwrap();
+        let reached = String::from_utf8_lossy(&child.stdout)
+            .lines()
+            .filter_map(|line| line.trim().parse::<u64>().ok())
+            .next_back()
+            .unwrap_or(0);
+        (child.status.code(), reached)
+    }
+
+    /// Both caps on macOS, each against a process that asks for a gigabyte
+    /// with far less allowed. The process is this test, run a second time.
+    #[test]
+    fn a_process_is_held_to_its_cap() {
+        match std::env::var(HELD).as_deref() {
+            // The watcher, 64 MiB above what the process starts with.
+            Ok("watched") => {
+                hold_to(own_footprint().unwrap() + 64 * MIB);
+                take_a_gigabyte();
+                std::thread::sleep(Duration::from_secs(5));
+                std::process::exit(0);
+            }
+            // The kernel's limit, as the helper sets it. The cap itself is
+            // more than a test should take, so the process first sets aside
+            // all but 64 MiB of it, untouched and so costing nothing.
+            Ok("limited") => {
+                cap_own_memory();
+                let mut aside = Vec::<u8>::new();
+                let most = usize::try_from(MEMORY_CAP - 64 * MIB).unwrap();
+                aside.try_reserve_exact(most).unwrap();
+                take_a_gigabyte();
+                std::process::exit(0);
+            }
+            _ => {}
+        }
+        let before = own_footprint().unwrap();
+        let piece = std::hint::black_box(vec![1u8; 32 << 20]);
+        let grew = own_footprint().unwrap() - before;
+        assert!(grew >= 24 * MIB, "32 MiB taken reads as {grew} bytes");
+        drop(piece);
+        assert!(own_address_space().unwrap() > grew);
+
+        let (ended, reached) = held("watched");
+        assert_eq!(ended, Some(1), "the watcher ends it");
+        assert!(reached < 512, "held {reached} MiB against a cap near 64");
+
+        // Refused by the kernel within the 64 MiB left, give or take what
+        // the allocator had in hand already.
+        let (ended, reached) = held("limited");
+        assert_eq!(ended, Some(0), "refused, and it stopped asking");
+        assert!(
+            reached < 256,
+            "held {reached} MiB with 64 left under the limit"
+        );
+    }
+}

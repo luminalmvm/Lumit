@@ -75,6 +75,9 @@ Future<void> _start(List<String> args) async {
   // dead and no way to make it live: the first thing a user does needs
   // something to do it *to*.
   state.newProject();
+  // macOS says what a double-click or a clicked link asked for in an event,
+  // not on the command line. What has come so far joins the arguments.
+  args = [...args, ...await takeOpenRequests()];
   // A document on the command line opens over the empty project. On failure
   // openProject posts its notice and the empty project stands — the same
   // degraded-but-alive behaviour as a failed File → Open.

@@ -231,14 +231,25 @@ done
 # nested executable: notarisation named both by path and refused the whole app
 # for a Developer ID, a timestamp and a hardened runtime each of them lacked.
 #
-# They take Broker.entitlements, NOT the app's: each one dlopens third-party
-# plugins, which the hardened runtime refuses without library validation off,
+# The plugin brokers take Broker.entitlements, NOT the app's: each one dlopens
+# third-party plugins, which the hardened runtime refuses without library validation off,
 # and that entitlement belongs to the process that needs it rather than to the
 # application. A broker holds one bundle path and a pipe; the app holds the
 # project, the media and the network. Spending the weaker containment on the
 # smaller process is the whole point of there being two of them (docs/12 §2.3).
+#
+# The media broker is the exception, and takes none. It loads no plugin: only
+# Lumit's own code and the FFmpeg libraries signed with this identity a few
+# lines up, which is all library validation asks. It is also the one broker
+# whose whole job is reading a stranger's file, so it is the last that should
+# be able to load a stranger's code.
 for broker in "$app/Contents/MacOS/"lumit-*-broker; do
     [ -e "$broker" ] || continue
+    if [ "$(basename "$broker")" = "lumit-media-broker" ]; then
+        # shellcheck disable=SC2086 # as above
+        codesign --force $signopts --sign "$identity" "$broker"
+        continue
+    fi
     # shellcheck disable=SC2086 # as above
     codesign --force $signopts --sign "$identity" \
         --entitlements "$root/flutter_ui/macos/Runner/Broker.entitlements" "$broker"

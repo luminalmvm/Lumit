@@ -16,6 +16,8 @@
 
 import 'dart:io';
 
+import 'package:flutter/foundation.dart'
+    show debugDefaultTargetPlatformOverride;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/l10n/engine_labels.dart';
@@ -325,6 +327,62 @@ void main() {
 
       expect(allItems(p.state).whereType<ItemReference_Composition>().length, 1,
           reason: 'Redo put it back');
+    });
+
+    /// On macOS the whole tree goes to the system, every row with its
+    /// enablement read from the engine. It is read when something it shows
+    /// changes and kept, so a rebuild of the bar asks the engine nothing: the
+    /// same rows are handed over, which is also what stops `PlatformMenuBar`
+    /// sending the system its menus again.
+    testWidgets('the macOS menus are read on a change, not on a rebuild',
+        (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      try {
+        final p = await mount(tester);
+        List<PlatformMenuItem> menus() =>
+            tester.widget<PlatformMenuBar>(find.byType(PlatformMenuBar)).menus;
+        // Every row under [rows], through the menus and the groups rows are
+        // divided into.
+        Iterable<PlatformMenuItem> under(List<PlatformMenuItem> rows) =>
+            rows.expand((row) => [
+                  row,
+                  if (row is PlatformMenu) ...under(row.menus),
+                  ...under(row.members),
+                ]);
+        PlatformMenuItem undo() =>
+            under(menus()).firstWhere((row) => row.label.startsWith('Undo'));
+
+        final kept = menus();
+        expect(kept, isNotEmpty);
+        expect(undo().onSelected, isNull, reason: 'nothing to undo yet');
+
+        // The shell rebuilding for a reason of its own, as a window being
+        // resized does on every frame.
+        tester.element(find.byType(LumitMenuBarFrb)).markNeedsBuild();
+        await tester.pump();
+        expect(identical(menus(), kept), isTrue,
+            reason: 'a rebuild hands over what was read, and reads nothing');
+
+        // An edit, and the rows are read again.
+        p.state.project!.newFolder(name: 'Footage');
+        p.state.notifyDocumentChanged();
+        await tester.pump();
+        expect(identical(menus(), kept), isFalse);
+        expect(undo().onSelected, isNotNull,
+            reason: 'Undo lights up with the edit');
+
+        // So does the selection, which tells nobody but its own listeners.
+        final afterEdit = menus();
+        p.uiState.selectedLayers.value =
+            List.of(p.uiState.selectedLayers.value);
+        // Twice: the read follows the notification by a microtask, and with
+        // nothing else asking for a frame the first pump is what runs it.
+        await tester.pump();
+        await tester.pump();
+        expect(identical(menus(), afterEdit), isFalse);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
     });
 
     testWidgets(

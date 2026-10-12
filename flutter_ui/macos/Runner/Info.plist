@@ -11,9 +11,8 @@
 	<!-- .lum / .lumfx / .lumtheme document types. The .icns document icons
 	     live in packaging/macos/ and join the bundle's resources with the
 	     macOS pass — until then the types associate with a generic icon.
-	     Opening a double-clicked document also lands with that pass
-	     (application:openFile: in the AppDelegate); docs/TODO.md carries
-	     both. -->
+	     A double-clicked document arrives as an event, at
+	     application(_:open:) in AppDelegate.swift. -->
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>
@@ -115,6 +114,24 @@
 	     nothing in a shipped build. -->
 	<key>FLTEnableImpeller</key>
 	<false/>
+	<!-- The lumit: scheme, which an invite link on lumitlab.com is
+	     (lumit://join/<invite>). The Windows installer and the Linux desktop
+	     file register the same one. macOS hands a clicked link over as an
+	     event, to the Lumit already running if there is one, and never as an
+	     argument: application(_:open:) in AppDelegate.swift takes it. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>io.github.luminalmvm.lumit.invite</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>lumit</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleIdentifier</key>
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleInfoDictionaryVersion</key>

@@ -21,6 +21,9 @@ class MainFlutterWindow: NSWindow {
 
     RegisterGeneratedPlugins(registry: flutterViewController)
     viewerTextureBridge = ViewerTextureBridge(controller: flutterViewController)
+    // A double-clicked project or a clicked invite link reaches Dart through
+    // the application delegate, which needs this engine to say so on.
+    (NSApp.delegate as? AppDelegate)?.opens.attach(to: flutterViewController)
     // An extension's page is a web view Flutter places in its panel.
     ExtensionViewFactory.register(with: flutterViewController)
 

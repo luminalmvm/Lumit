@@ -170,6 +170,16 @@ After editing `crates/lumit-bridge/src/api/**`, run `.\scripts\codegen.ps1`. The
 
 A file ending `_frb` calls the bridge.
 
+On macOS two things arrive differently from Windows and Linux:
+
+- A double-clicked `.lum` and a clicked `lumit://` invite link come as events, not
+  arguments, and go to the Lumit already running if there is one. `OpenRequests` in
+  `flutter_ui/macos/Runner/AppDelegate.swift` keeps them, and Dart takes them with
+  `takeOpenRequests` in `state/app_state.dart` and reads them as arguments.
+- The menus are the system's, and the whole tree is handed over at once. It's read when
+  the document, the selection or the shell state changes and kept, so a rebuild asks the
+  engine nothing. The in-window bar reads one menu as it opens.
+
 ## 4. The map
 
 One Cargo workspace. Every `crates/lumit-*` folder is a member, one job each.
@@ -185,7 +195,7 @@ One Cargo workspace. Every `crates/lumit-*` folder is a member, one job each.
 | `lumit-budget` | The resource governor's ledger |
 | `lumit-flow` | Optical flow, CPU and WGSL |
 | `lumit-media` | FFmpeg: probe, index, seek, hardware decode, encode. Reads PSD and Illustrator files by layer |
-| `lumit-media-broker` | The process an Illustrator file is read in, so a bad one can't take Lumit down |
+| `lumit-media-broker` | The process an Illustrator file is read in, held to 4 GiB and a deadline, so a bad one can't take Lumit down |
 | `lumit-audio` | Playback, the audio clock, mixing, waveforms, beat detection |
 | `lumit-text` | Text: system fonts, shaping, layout and rasterisation |
 | `lumit-colour` | OCIO, implemented natively |

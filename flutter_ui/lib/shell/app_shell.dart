@@ -341,6 +341,19 @@ class _LumitAppViewState extends State<LumitAppView> {
       });
     });
     _share = context.read<LumitState>().share..addListener(_offerConflicts);
+    listenForOpenRequests(_openAsked);
+  }
+
+  /// A project double-clicked in Finder, or an invite link clicked in a
+  /// browser, while Lumit is running. On macOS both come to this Lumit and
+  /// are opened as File ▸ Open and the Shared project window would.
+  void _openAsked(List<String> asked) {
+    if (!mounted) return;
+    final app = context.read<LumitState>();
+    final project = projectPathFromArgs(asked);
+    if (project != null) app.openProject(project);
+    final invite = inviteFromArgs(asked);
+    if (invite != null) showShareFrb(context, app, invite: invite);
   }
 
   AppLifecycleListener? _clipboardWatch;
