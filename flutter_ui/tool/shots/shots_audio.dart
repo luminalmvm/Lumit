@@ -119,7 +119,7 @@ Future<void> main() async {
   // What the machine can play through: an empty list is a machine with no
   // output, which is the one condition under which a lit meter is impossible
   // rather than merely late (api/audio.rs: no device, no mix, no readings).
-  final devices = listAudioDevices();
+  final devices = await listAudioDevices();
   say('audio devices: active="${devices.active}" fellBack=${devices.fellBack} '
       '${devices.devices.map((d) => d.name).join(" | ")}');
 

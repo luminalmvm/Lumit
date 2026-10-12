@@ -302,10 +302,10 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   })? _perf;
   Timer? _perfTimer;
 
-  /// What the machine can play through, captured when the Audio page comes
-  /// forward and again after a change. Asking the sound system is a real call,
-  /// so it is never made from `build()` — same rule as the cache readouts
-  /// above. Null until the page has been opened once.
+  /// What the machine can play through, asked for when the Audio page comes
+  /// forward and again after a change. Asking the sound system is a slow
+  /// call, so it is made off the interface thread (see [_readAudio]) and never
+  /// from `build()`. Null until the first answer is in.
   BridgeAudioDevices? _audio;
 
   /// The Export page's two engine readings — what the export dialog opens on,
@@ -344,7 +344,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
       // Re-read rather than cache for the session: a device can be plugged in
       // while Settings is open, and stepping off the page and back is the
       // obvious way to ask again.
-      if (page == SettingsPage.audio) _audio = listAudioDevices();
+      if (page == SettingsPage.audio) _readAudio();
       if (page == SettingsPage.export) _readExportDefaults();
       // The keymap filters engine-side, so the shared search has to be handed
       // over when the page it belongs to comes forward.
@@ -373,10 +373,27 @@ class _SettingsWindowState extends State<_SettingsWindow> {
     _pollPerf();
     _perfTimer ??=
         Timer.periodic(const Duration(seconds: 1), (_) => setState(_pollPerf));
-    _audio = listAudioDevices();
+    _readAudio();
     _readExportDefaults();
     _watchAddons();
   }
+
+  /// Ask the sound system what it offers and draw the answer when it comes.
+  /// The asking takes a couple of hundred milliseconds on Windows, long
+  /// enough to hold the page turn up, so the page comes forward with what it
+  /// knew last and the list catches up behind it.
+  ///
+  /// Only the last asking is drawn. Two can be out at once, one from the page
+  /// coming forward and one from a choice made on it, and the older answer
+  /// may be the later to arrive.
+  void _readAudio() {
+    final ask = ++_audioAsks;
+    listAudioDevices().then((found) {
+      if (mounted && ask == _audioAsks) setState(() => _audio = found);
+    });
+  }
+
+  int _audioAsks = 0;
 
   /// A press on a page's name, in the sidebar or over its rows in a search.
   /// It ends the search, because the page is where the press was going. The
@@ -2038,7 +2055,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
     // Dart's, because a settings file should not carry an empty value.
     setAudioDevice(id: id ?? '');
     workspace.setAudioDevice(id);
-    setState(() => _audio = listAudioDevices());
+    _readAudio();
   }
 
   // ---- Autosave ------------------------------------------------------------

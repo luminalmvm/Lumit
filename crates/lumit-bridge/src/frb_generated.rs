@@ -15299,15 +15299,16 @@ fn wire__crate__api__layer__layer_reference_trim_clip_impl(
     )
 }
 fn wire__crate__api__audio__list_audio_devices_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
     data_len_: i32,
-) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
         flutter_rust_bridge::for_generated::TaskInfo {
             debug_name: "list_audio_devices",
-            port: None,
-            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
         },
         move || {
             let message = unsafe {
@@ -15320,10 +15321,12 @@ fn wire__crate__api__audio__list_audio_devices_impl(
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             deserializer.end();
-            transform_result_sse::<_, ()>((move || {
-                let output_ok = Result::<_, ()>::Ok(crate::api::audio::list_audio_devices())?;
-                Ok(output_ok)
-            })())
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok = Result::<_, ()>::Ok(crate::api::audio::list_audio_devices())?;
+                    Ok(output_ok)
+                })())
+            }
         },
     )
 }
@@ -28709,6 +28712,7 @@ fn pde_ffi_dispatcher_primary_impl(
             rust_vec_len,
             data_len,
         ),
+        435 => wire__crate__api__audio__list_audio_devices_impl(port, ptr, rust_vec_len, data_len),
         453 => wire__crate__api__share__online_forward_impl(port, ptr, rust_vec_len, data_len),
         464 => wire__crate__api__project__project_reference_bring_comps_impl(
             port,
@@ -29191,7 +29195,6 @@ fn pde_ffi_dispatcher_sync_impl(
 432 => wire__crate__api__layer__layer_reference_toggle_retime_property_impl(ptr, rust_vec_len, data_len),
 433 => wire__crate__api__layer__layer_reference_toggle_shape_path_key_impl(ptr, rust_vec_len, data_len),
 434 => wire__crate__api__layer__layer_reference_trim_clip_impl(ptr, rust_vec_len, data_len),
-435 => wire__crate__api__audio__list_audio_devices_impl(ptr, rust_vec_len, data_len),
 436 => wire__crate__api__shell__list_autosaves_impl(ptr, rust_vec_len, data_len),
 437 => wire__crate__api__composition__list_blend_modes_impl(ptr, rust_vec_len, data_len),
 438 => wire__crate__api__effect__list_drivers_impl(ptr, rust_vec_len, data_len),

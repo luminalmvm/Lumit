@@ -1734,7 +1734,7 @@ abstract class BridgeLibApi extends BaseApi {
       required PlatformInt64 startFrame,
       required PlatformInt64 endFrame});
 
-  BridgeAudioDevices crateApiAudioListAudioDevices();
+  Future<BridgeAudioDevices> crateApiAudioListAudioDevices();
 
   List<BridgeAutosave> crateApiShellListAutosaves({required String project});
 
@@ -14586,11 +14586,12 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       );
 
   @override
-  BridgeAudioDevices crateApiAudioListAudioDevices() {
-    return handler.executeSync(SyncTask(
-      callFfi: () {
+  Future<BridgeAudioDevices> crateApiAudioListAudioDevices() {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 435)!;
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 435, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_bridge_audio_devices,

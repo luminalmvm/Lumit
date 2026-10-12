@@ -51,9 +51,10 @@ void resetAudioClip() => BridgeLib.instance.api.crateApiAudioResetAudioClip();
 
 /// Every output the machine offers, and which one is in use.
 ///
-/// Asking the sound system is not free, so this is a call to make when a list
-/// is about to be shown — never in a rebuild path.
-BridgeAudioDevices listAudioDevices() =>
+/// Asking the sound system is slow, about a quarter of a second on Windows
+/// with four outputs, so this is not a sync call: it runs off the interface
+/// thread and the list is drawn when the answer comes.
+Future<BridgeAudioDevices> listAudioDevices() =>
     BridgeLib.instance.api.crateApiAudioListAudioDevices();
 
 /// Play through the output with this id; an empty string means the system

@@ -56,6 +56,8 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('settings-page-audio')));
       await tester.pumpAndSettle();
+      // The list of outputs is asked for off the interface thread.
+      await settleFrb(tester);
       return p.uiState;
     }
 
@@ -68,10 +70,16 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text(l10n.settingsAudioSystemDefault).last);
       await tester.pumpAndSettle();
+      // The row reads the list back off the interface thread, so the line
+      // about the missing device goes when that answer lands.
+      await settleFrb(tester,
+          until: () =>
+              find.text(l10n.settingsAudioDeviceMissing).evaluate().isEmpty);
 
       expect(ui.workspace.audioDevice, isNull,
           reason: 'the settings file follows the machine again');
-      expect(listAudioDevices().fellBack, isFalse,
+      final devices = await tester.runAsync(listAudioDevices);
+      expect(devices!.fellBack, isFalse,
           reason: 'the engine was told, so nothing is being substituted');
       expect(find.text(l10n.settingsAudioDeviceMissing), findsNothing);
       expect(find.text(l10n.settingsAudioSystemDefault), findsOneWidget);
