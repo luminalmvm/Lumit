@@ -106,7 +106,7 @@ class AccountSettings extends StatelessWidget {
               else
                 _button(t, 'profile-remove-${profile.id}', l10n.profileRemove,
                     () async {
-                  final sure = await _confirm(
+                  final sure = await askBefore(
                       context,
                       l10n.profileRemoveAsk(profileName(profile)),
                       l10n.profileRemove);
@@ -163,7 +163,7 @@ class AccountSettings extends StatelessWidget {
             const SizedBox(width: 8),
             _button(t, 'delete-account', l10n.settingsAccountDelete,
                 () async {
-              final sure = await _confirm(
+              final sure = await askBefore(
                   context,
                   l10n.settingsAccountDeleteAsk,
                   l10n.settingsAccountDeleteConfirm);
@@ -204,7 +204,36 @@ class AccountSettings extends StatelessWidget {
         ),
         description: plan?.$1 ?? '',
       ),
+      // Mail about new comments on review links, for every link the account
+      // has. A link has a switch of its own in the Review links window.
+      _row(
+        t,
+        l10n.settingsReviewMail,
+        IgnorePointer(
+          ignoring: !account.pro,
+          child: Opacity(
+            opacity: account.pro ? 1 : 0.4,
+            child: HouseToggle(
+              key: const ValueKey('settings-review-mail'),
+              value: account.reviewMail,
+              onChanged: (on) => unawaited(_setReviewMail(context, on)),
+            ),
+          ),
+        ),
+        description: account.pro ? '' : l10n.reviewNeedsPro,
+      ),
     ];
+  }
+
+  Future<void> _setReviewMail(BuildContext context, bool on) async {
+    try {
+      await ui.account.setReviewMail(on);
+    } on CloudError catch (e) {
+      // The switch stays where the server has it, and says why.
+      if (context.mounted) {
+        context.read<LumitState>().postNotice(cloudErrorText(e), error: true);
+      }
+    }
   }
 
   List<Widget?> _sync(BuildContext context, LumitTheme t) {
@@ -259,8 +288,10 @@ class AccountSettings extends StatelessWidget {
   }
 }
 
-/// Ask before something that can't be taken back. True for yes.
-Future<bool> _confirm(BuildContext context, String question, String yes) async {
+/// Ask before something that can't be taken back. True for yes. [note] is
+/// one quiet line under the question.
+Future<bool> askBefore(BuildContext context, String question, String yes,
+    {String? note}) async {
   final sure = await showLumitModal<bool>(
     context: context,
     builder: (close) => FloatSurface(
@@ -274,6 +305,10 @@ Future<bool> _confirm(BuildContext context, String question, String yes) async {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(question, style: t.bodyPrimary.copyWith(height: 1.4)),
+              if (note != null) ...[
+                const SizedBox(height: 6),
+                Text(note, style: t.small),
+              ],
               const SizedBox(height: 14),
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,

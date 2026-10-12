@@ -304,23 +304,38 @@ class LumitTooltip extends StatelessWidget {
   /// after the message, read from the keymap as the tip appears, so a rebound
   /// shortcut is taught rebound and an unbound one is left out.
   final String? action;
+
+  /// How wide the tip may be before its words wrap. For one that says a
+  /// name of any length, which would otherwise be one line across the
+  /// window. Null leaves it on one line.
+  final double? maxWidth;
   final Widget child;
   const LumitTooltip(
-      {super.key, required this.message, this.action, required this.child});
+      {super.key,
+      required this.message,
+      this.action,
+      this.maxWidth,
+      required this.child});
 
   @override
   Widget build(BuildContext context) {
     final scope = ThemeScope.of(context);
     if (!scope.showTooltips) return child;
-    return _HoverTip(message: message, action: action, child: child);
+    return _HoverTip(
+        message: message, action: action, maxWidth: maxWidth, child: child);
   }
 }
 
 class _HoverTip extends StatefulWidget {
   final String message;
   final String? action;
+  final double? maxWidth;
   final Widget child;
-  const _HoverTip({required this.message, this.action, required this.child});
+  const _HoverTip(
+      {required this.message,
+      this.action,
+      this.maxWidth,
+      required this.child});
 
   @override
   State<_HoverTip> createState() => _HoverTipState();
@@ -373,6 +388,8 @@ class _HoverTipState extends State<_HoverTip> {
               spec: scope.motion.tooltip,
               rise: scope.motion.tooltipRise,
               child: Container(
+                constraints: BoxConstraints(
+                    maxWidth: widget.maxWidth ?? double.infinity),
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: t.surface3,

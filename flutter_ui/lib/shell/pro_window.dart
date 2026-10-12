@@ -57,6 +57,22 @@ String writtenDate(DateTime date) {
   }
 }
 
+/// A size in bytes as it is written: 178 KB, 1.7 MB, 20 GB. In thousands,
+/// which is how the server counts an account's room, and with one decimal
+/// place only where it says something.
+String writtenBytes(int bytes) {
+  final (amount, unit) = bytes >= 1000000000
+      ? (bytes / 1e9, l10n.unitGb)
+      : bytes >= 1000000
+          ? (bytes / 1e6, l10n.unitMb)
+          : (bytes / 1e3, l10n.unitKb);
+  final written = amount.toStringAsFixed(amount < 10 ? 1 : 0);
+  final neat = written.endsWith('.0')
+      ? written.substring(0, written.length - 2)
+      : written;
+  return '$neat $unit';
+}
+
 /// A price as the shop gave it, with its currency's own sign where there is
 /// one.
 String writtenPrice(CloudPrice price) {
@@ -178,7 +194,7 @@ class _ProWindowState extends State<_ProWindow>
           onClose: widget.close,
           keyPrefix: 'pro',
         ),
-        _Hero(
+        ProHero(
           arrive: _arrive,
           headline: pro ? l10n.proThanksHeadline : l10n.proHeadline,
           lead: pro
@@ -202,13 +218,20 @@ class _ProWindowState extends State<_ProWindow>
               ),
               _Feature(
                 index: 1,
+                mark: LumitIcons.comment,
+                title: l10n.proFeatureReviewTitle,
+                body: l10n.proFeatureReviewBody,
+                on: pro,
+              ),
+              _Feature(
+                index: 2,
                 mark: LumitIcons.loop,
                 title: l10n.proFeatureSyncTitle,
                 body: l10n.proFeatureSyncBody,
                 on: pro,
               ),
               _Feature(
-                index: 2,
+                index: 3,
                 mark: LumitIcons.star,
                 title: l10n.proFeatureSupportTitle,
                 body: l10n.proFeatureSupportBody,
@@ -343,7 +366,7 @@ class _ProWindowState extends State<_ProWindow>
 
 /// The top of the window: the mark, a headline and a line under it, standing
 /// in front of a slow wash of the sweep.
-class _Hero extends StatelessWidget {
+class ProHero extends StatelessWidget {
   final Animation<double> arrive;
   final String headline;
 
@@ -351,12 +374,13 @@ class _Hero extends StatelessWidget {
   final String? lead;
   final bool pro, preview;
 
-  const _Hero({
-    required this.arrive,
+  const ProHero({
+    super.key,
+    this.arrive = kAlwaysDismissedAnimation,
     required this.headline,
-    required this.lead,
-    required this.pro,
-    required this.preview,
+    this.lead,
+    this.pro = false,
+    this.preview = false,
   });
 
   @override
@@ -369,7 +393,7 @@ class _Hero extends StatelessWidget {
             child: AnimatedBuilder(
               animation: arrive,
               builder: (context, _) => CustomPaint(
-                painter: _WashPainter(
+                painter: ProWashPainter(
                   t.surface1,
                   // Brighter for a moment as Pro arrives, then settling a
                   // little above where it began.
@@ -421,11 +445,44 @@ class _Hero extends StatelessWidget {
   }
 }
 
+/// What a window shows in place of something that comes with Lumit Pro: the
+/// hero, with [headline] saying what it is, and the one button that opens
+/// the Lumit Pro window.
+class ProOffer extends StatelessWidget {
+  final String headline;
+
+  /// Whether Pro is free for everyone for now, which the badge says.
+  final bool preview;
+
+  const ProOffer({super.key, required this.headline, this.preview = false});
+
+  @override
+  Widget build(BuildContext context) => Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ProHero(headline: headline, preview: preview),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(22, 6, 22, 22),
+            child: SizedBox(
+              height: 30,
+              child: HouseButton(
+                key: const ValueKey('pro-offer'),
+                primary: true,
+                onPressed: () => unawaited(showProWindow(context)),
+                child: Text(l10n.menuLumitPro),
+              ),
+            ),
+          ),
+        ],
+      );
+}
+
 /// Two soft lights, one of each key, falling away into the surface.
-class _WashPainter extends CustomPainter {
+class ProWashPainter extends CustomPainter {
   final Color ground;
   final double strength;
-  const _WashPainter(this.ground, this.strength);
+  const ProWashPainter(this.ground, this.strength);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -451,7 +508,7 @@ class _WashPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_WashPainter old) =>
+  bool shouldRepaint(ProWashPainter old) =>
       old.strength != strength || old.ground != ground;
 }
 

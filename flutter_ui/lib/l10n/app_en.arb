@@ -8954,6 +8954,10 @@
   "@unitGb": {
     "description": "The gigabyte unit, shown after an amount of memory."
   },
+  "unitKb": "KB",
+  "@unitKb": {
+    "description": "The kilobyte unit, shown after the size of a small file."
+  },
   "unitMb": "MB",
   "@unitMb": {
     "description": "The megabyte unit, shown after an amount of memory."
@@ -16496,11 +16500,11 @@
   },
   "proFeatureSupportTitle": "Support Lumit",
   "@proFeatureSupportTitle": {
-    "description": "Third feature in the Lumit Pro window."
+    "description": "Last feature in the Lumit Pro window."
   },
   "proFeatureSupportBody": "Helps pay for servers and development.",
   "@proFeatureSupportBody": {
-    "description": "What the third Lumit Pro feature does."
+    "description": "What the last Lumit Pro feature does."
   },
   "proMonthly": "Monthly",
   "@proMonthly": {
@@ -16680,5 +16684,710 @@
   "menuLumitPro": "Lumit Pro…",
   "@menuLumitPro": {
     "description": "Help menu row that opens the Lumit Pro window. Lumit Pro is a product name: do not translate it."
+  },
+  "menuReviewLinks": "Review links…",
+  "@menuReviewLinks": {
+    "description": "File menu row that opens the Review links window. A review link is an address where people watch an export in a browser and comment on it."
+  },
+  "menuSendForReview": "Send for review…",
+  "@menuSendForReview": {
+    "description": "Composition menu row, and a button in the Review links window: export the selected composition and make a review link for it."
+  },
+  "reviewTitle": "Review links",
+  "@reviewTitle": {
+    "description": "Title strip of the Review links window, and the tooltip of its button on the status line."
+  },
+  "reviewProHeadline": "Review links come with Lumit Pro.",
+  "@reviewProHeadline": {
+    "description": "Heading in the Review links window for someone without Lumit Pro, over a button that opens the Lumit Pro window."
+  },
+  "reviewEmpty": "No review links yet.",
+  "@reviewEmpty": {
+    "description": "The Review links window when the account has made none, over the Send for review button."
+  },
+  "reviewOpenCount": "{count} open",
+  "@reviewOpenCount": {
+    "description": "Review links window: under a link in the list, how many of its comments are not yet resolved. Shown only when there are some.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "reviewStorage": "{used} of {limit} used",
+  "@reviewStorage": {
+    "description": "Foot of the Review links window: how much of the account's room on Lumit's server its files take. Both are written with their unit, such as 3.4 GB of 50 GB used.",
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "reviewPageLink": "Link",
+  "@reviewPageLink": {
+    "description": "Review links window: the tab beside Comments, holding a link's own settings and versions."
+  },
+  "reviewOf": "{part} of {whole}",
+  "@reviewOf": {
+    "description": "Send for review: how much of the file has been uploaded, both written with their unit, such as 12 MB of 48 MB.",
+    "placeholders": {
+      "part": {
+        "type": "String"
+      },
+      "whole": {
+        "type": "String"
+      }
+    }
+  },
+  "reviewCopy": "Copy",
+  "@reviewCopy": {
+    "description": "Review links window: button that copies a link's address."
+  },
+  "reviewOpen": "Open",
+  "@reviewOpen": {
+    "description": "Review links window: button that opens a link in the web browser. A verb."
+  },
+  "reviewReviewers": "Reviewers",
+  "@reviewReviewers": {
+    "description": "Review links window: heading over what reviewers, the people watching a link, may do. Also the label of the same choice when a link is made."
+  },
+  "reviewCanComment": "Can comment",
+  "@reviewCanComment": {
+    "description": "Review links window, under Reviewers: a switch for whether people watching may leave comments."
+  },
+  "reviewCanAttach": "Can attach pictures",
+  "@reviewCanAttach": {
+    "description": "Review links window, under Reviewers: a switch for whether people watching may attach a picture to a comment. It is off and takes no press while Can comment is off."
+  },
+  "reviewCanDownload": "Can download",
+  "@reviewCanDownload": {
+    "description": "Review links window, under Reviewers: a switch for whether people watching may download the file."
+  },
+  "reviewPasswordSet": "Set",
+  "@reviewPasswordSet": {
+    "description": "Review links window: button beside the password field that puts the typed password on the link. A verb."
+  },
+  "reviewExpires": "Expires",
+  "@reviewExpires": {
+    "description": "Review links window: row label for when a link stops working."
+  },
+  "reviewExpiresNever": "Never",
+  "@reviewExpiresNever": {
+    "description": "Review links window: the choice for a link that does not stop working."
+  },
+  "reviewExpiresDays": "{days, plural, =1{In a day} other{In {days} days}}",
+  "@reviewExpiresDays": {
+    "description": "Review links window: a choice for when a link stops working, counted from now.",
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "reviewVersions": "Versions",
+  "@reviewVersions": {
+    "description": "Review links window: heading over the versions of a link's video."
+  },
+  "reviewVersion": "v{n}",
+  "@reviewVersion": {
+    "description": "Review links window: a version's short name, such as v2. Keep it as short.",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "reviewDeleteVersion": "Delete…",
+  "@reviewDeleteVersion": {
+    "description": "Review links window: button on a version's row that deletes that version, after asking."
+  },
+  "reviewDeleteLink": "Delete link…",
+  "@reviewDeleteLink": {
+    "description": "Review links window: button that deletes a review link, after asking."
+  },
+  "reviewDeleteLinkAsk": "Delete {title}?",
+  "@reviewDeleteLinkAsk": {
+    "description": "Question before a review link is deleted. The title is the link's own.",
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "reviewDeleteLinkNote": "Its versions and comments go with it, and its address stops working.",
+  "@reviewDeleteLinkNote": {
+    "description": "A quiet line under the question asked before a review link is deleted."
+  },
+  "reviewDeleteVersionAsk": "Delete version {n}?",
+  "@reviewDeleteVersionAsk": {
+    "description": "Question before one version of a review link is deleted.",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "reviewDeleteVersionNote": "Its comments go with it.",
+  "@reviewDeleteVersionNote": {
+    "description": "A quiet line under the question asked before one version of a review link is deleted."
+  },
+  "reviewDeleteVersionCleanNote": "Its comments go with it, and the video only link stops working.",
+  "@reviewDeleteVersionCleanNote": {
+    "description": "The same quiet line when the version being deleted is the one the link's video only address shows."
+  },
+  "reviewDeleteCommentAsk": "Delete this comment?",
+  "@reviewDeleteCommentAsk": {
+    "description": "Question before a comment on a review link is deleted."
+  },
+  "reviewDeleteRepliesNote": "Its replies go with it.",
+  "@reviewDeleteRepliesNote": {
+    "description": "A quiet line under the question asked before a comment that has replies is deleted."
+  },
+  "reviewDeleteLikeAsk": "Delete this like?",
+  "@reviewDeleteLikeAsk": {
+    "description": "Question before a like on a review link is deleted. A like is a mark a reviewer leaves on a frame with no words."
+  },
+  "reviewComments": "Comments",
+  "@reviewComments": {
+    "description": "Review links window: heading over a link's comments."
+  },
+  "reviewFilterOpen": "Open",
+  "@reviewFilterOpen": {
+    "description": "Review links window: filter that shows only comments not yet resolved. An adjective."
+  },
+  "reviewFilterAll": "All",
+  "@reviewFilterAll": {
+    "description": "Review links window: filter that shows every comment, resolved or not."
+  },
+  "reviewAddToTimeline": "Add to Timeline",
+  "@reviewAddToTimeline": {
+    "description": "Review links window: button that puts a link's open comments on the Timeline as markers: on the layer a comment points at, and else on the composition. Timeline is the panel's name."
+  },
+  "reviewNoComments": "No comments yet.",
+  "@reviewNoComments": {
+    "description": "Review links window: a version nobody has commented on."
+  },
+  "reviewNoOpenComments": "No open comments.",
+  "@reviewNoOpenComments": {
+    "description": "Review links window: a version whose comments are all resolved, while only open ones are shown."
+  },
+  "reviewNoComp": "This link's composition is not in the open project.",
+  "@reviewNoComp": {
+    "description": "Review links window: why a link's comments can't be added to the Timeline or jumped to."
+  },
+  "reviewResolve": "Resolve",
+  "@reviewResolve": {
+    "description": "Review links window: action on a comment that marks it dealt with."
+  },
+  "reviewReopen": "Reopen",
+  "@reviewReopen": {
+    "description": "Review links window: action on a resolved comment that makes it open again."
+  },
+  "reviewReply": "Reply",
+  "@reviewReply": {
+    "description": "Review links window: action on a comment, and the hint in the field a reply is typed in."
+  },
+  "reviewDrawing": "Drawing",
+  "@reviewDrawing": {
+    "description": "Review links window: tooltip on the mark that says a comment has something drawn over its frame."
+  },
+  "reviewSendTitle": "Send for review",
+  "@reviewSendTitle": {
+    "description": "Title strip of the Review links window while a composition is being sent."
+  },
+  "reviewSendAs": "Send as",
+  "@reviewSendAs": {
+    "description": "Send for review: row label over the choice between a new version of an existing link and a separate link."
+  },
+  "reviewSendVersion": "New version of {title}",
+  "@reviewSendVersion": {
+    "description": "Send for review: the choice to add to the link this composition already has.",
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "reviewSendSeparate": "Separate link",
+  "@reviewSendSeparate": {
+    "description": "Send for review: the choice to make a link of its own instead of a new version."
+  },
+  "reviewLinkTitle": "Title",
+  "@reviewLinkTitle": {
+    "description": "Send for review: row label for what the link is called."
+  },
+  "reviewCreate": "Create link",
+  "@reviewCreate": {
+    "description": "Send for review: the button that exports the composition and makes the link."
+  },
+  "reviewAddVersion": "Add version",
+  "@reviewAddVersion": {
+    "description": "Send for review: the same button when the export becomes a new version of an existing link."
+  },
+  "reviewLacking": "Footage you have not got will show as colour bars.",
+  "@reviewLacking": {
+    "description": "Send for review: warning in a shared project when some footage has not reached this computer."
+  },
+  "reviewExporting": "Exporting",
+  "@reviewExporting": {
+    "description": "Send for review: heading while the composition is being exported."
+  },
+  "reviewFrames": "{frame} of {total} frames",
+  "@reviewFrames": {
+    "description": "Send for review: how far the export has got.",
+    "placeholders": {
+      "frame": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "reviewWaiting": "Waiting for another export",
+  "@reviewWaiting": {
+    "description": "Send for review: shown while the export is queued behind one that is already running."
+  },
+  "reviewUploading": "Uploading",
+  "@reviewUploading": {
+    "description": "Send for review: heading while the exported file is being sent to Lumit's server."
+  },
+  "reviewCopied": "Link copied",
+  "@reviewCopied": {
+    "description": "Send for review: heading once the link is made. Its address is already on the clipboard."
+  },
+  "reviewErrorPro": "Review links need Lumit Pro.",
+  "@reviewErrorPro": {
+    "description": "Error in the Review links window when the account has no Lumit Pro."
+  },
+  "reviewErrorStorage": "Your storage is full. Delete a link or a version to make room.",
+  "@reviewErrorStorage": {
+    "description": "Error in the Review links window when the account's files on Lumit's server have reached their limit."
+  },
+  "reviewErrorTooLarge": "This export is too large to send. Try 720p or a shorter span.",
+  "@reviewErrorTooLarge": {
+    "description": "Error in the Review links window when the exported file is over the server's limit. Span is the export dialog's word for the part of a composition that is written."
+  },
+  "reviewErrorVersions": "This link has all the versions it can hold. Send a separate link.",
+  "@reviewErrorVersions": {
+    "description": "Error in the Review links window when a link already has the most versions allowed."
+  },
+  "reviewErrorLinks": "Your account has all the links it can hold. Delete one first.",
+  "@reviewErrorLinks": {
+    "description": "Error in the Review links window when a new link is refused because the account already has the most review links allowed."
+  },
+  "reviewErrorGone": "This link is gone or has expired.",
+  "@reviewErrorGone": {
+    "description": "Error in the Review links window when the server no longer has a link."
+  },
+  "reviewErrorLastVersion": "A link keeps at least one version. Delete the link instead.",
+  "@reviewErrorLastVersion": {
+    "description": "Error in the Review links window when the only version of a link is deleted."
+  },
+  "reviewErrorExportRefused": "The export could not start. Check that nothing else is exporting.",
+  "@reviewErrorExportRefused": {
+    "description": "Error in the Review links window when the engine would not begin exporting the composition."
+  },
+  "reviewErrorExportFailed": "The export failed.",
+  "@reviewErrorExportFailed": {
+    "description": "Error in the Review links window when exporting the composition stopped part way."
+  },
+  "reviewErrorComments": "This link has all the comments it can hold.",
+  "@reviewErrorComments": {
+    "description": "Error in the Review links window when a reply is refused because the link has reached the most comments allowed."
+  },
+  "reviewErrorPassword": "A password is up to 100 plain letters, numbers and symbols.",
+  "@reviewErrorPassword": {
+    "description": "Error in the Review links window when the password typed for a link has accented letters or other characters it can't take, or is too long."
+  },
+  "reviewLiked": "{name} liked this moment",
+  "@reviewLiked": {
+    "description": "Review links window: a quiet line among a link's comments for a like, which is a mark a reviewer leaves on a frame with no words. A timecode follows it.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "reviewLikedTwo": "{first} and {second} liked this moment",
+  "@reviewLikedTwo": {
+    "description": "Review links window: the same line when two reviewers liked the same second of the video. Both are named.",
+    "placeholders": {
+      "first": {
+        "type": "String"
+      },
+      "second": {
+        "type": "String"
+      }
+    }
+  },
+  "reviewLikedMore": "{name} and {count} others liked this moment",
+  "@reviewLikedMore": {
+    "description": "Review links window: the same line when three or more reviewers liked the same second of the video. The first one is named and the rest are counted, so the count is two or more.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "reviewCopyCommentLink": "Copy link to this comment",
+  "@reviewCopyCommentLink": {
+    "description": "Review links window: row in a comment's menu. It copies an address that opens the link in a browser at that comment's frame."
+  },
+  "reviewCompare": "Compare",
+  "@reviewCompare": {
+    "description": "Review links window: button on a version's row that opens the link in a browser with that version beside the one before it."
+  },
+  "reviewSeenBy": "Seen by",
+  "@reviewSeenBy": {
+    "description": "Review links window: heading over the list of people who have opened a link in a browser, before anyone has."
+  },
+  "reviewSeenByCount": "Seen by {count}",
+  "@reviewSeenByCount": {
+    "description": "Review links window: the same heading with how many people have opened the link.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "reviewSeenByNobody": "Nobody yet.",
+  "@reviewSeenByNobody": {
+    "description": "Review links window, under Seen by: nobody has opened the link in a browser."
+  },
+  "reviewSeenBySomeone": "Someone",
+  "@reviewSeenBySomeone": {
+    "description": "Review links window, under Seen by: a person who opened the link and gave no name."
+  },
+  "reviewSeenByMore": "and {count} more",
+  "@reviewSeenByMore": {
+    "description": "Review links window, under Seen by: how many more people opened the link than the list shows.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "reviewWhatChanged": "What changed",
+  "@reviewWhatChanged": {
+    "description": "Send for review: row label for an optional line saying what is different in a new version. Reviewers see it."
+  },
+  "reviewChanged": "Changed",
+  "@reviewChanged": {
+    "description": "Review links window: a quiet word under a link in the list when its composition has been edited since the newest version was sent."
+  },
+  "reviewChangedSince": "Changed since {version} was sent.",
+  "@reviewChangedSince": {
+    "description": "Review links window: line on a link when its composition has been edited since its newest version was sent. The version is written as v2. A button to send a new version follows.",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "reviewSendNewVersion": "Send a new version",
+  "@reviewSendNewVersion": {
+    "description": "Review links window: button beside the line saying a link's composition has changed since it was sent. It opens Send for review on a new version of that link."
+  },
+  "reviewApproved": "Approved",
+  "@reviewApproved": {
+    "description": "Review links window: a quiet word beside a tick on a link in the list when a reviewer has approved its newest version."
+  },
+  "reviewApprovedBy": "Approved by {name}",
+  "@reviewApprovedBy": {
+    "description": "Review links window: a quiet line above a version's comments, beside a tick, when one reviewer has approved that version. The time follows it.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "reviewApprovedByTwo": "Approved by {first} and {second}",
+  "@reviewApprovedByTwo": {
+    "description": "Review links window: the same line when two reviewers have approved the version.",
+    "placeholders": {
+      "first": {
+        "type": "String"
+      },
+      "second": {
+        "type": "String"
+      }
+    }
+  },
+  "reviewApprovedByMore": "Approved by {name} and {count} others",
+  "@reviewApprovedByMore": {
+    "description": "Review links window: the same line when three or more reviewers have approved the version. The first one is named and the rest are counted.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "reviewRemoveApproval": "Remove {name}'s approval",
+  "@reviewRemoveApproval": {
+    "description": "Review links window: row in the menu on the line that says who approved a version. It takes that reviewer's approval off the version, after asking.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "reviewRemoveApprovalAsk": "Remove {name}'s approval?",
+  "@reviewRemoveApprovalAsk": {
+    "description": "Review links window: the question asked before a reviewer's approval is taken off a version.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "reviewRemove": "Remove",
+  "@reviewRemove": {
+    "description": "Review links window: the button that answers yes to removing a reviewer's approval."
+  },
+  "reviewRange": "{from} to {to}",
+  "@reviewRange": {
+    "description": "Review links window: where a comment on a range of frames runs, as two timecodes. The page in the browser words it the same way.",
+    "placeholders": {
+      "from": {
+        "type": "String"
+      },
+      "to": {
+        "type": "String"
+      }
+    }
+  },
+  "reviewJustNow": "just now",
+  "@reviewJustNow": {
+    "description": "Review links window: how long ago a comment, an approval, a version or an opening was, when it was under a minute ago. Lower case, as it stands at the end of a row. The page in the browser uses the same words."
+  },
+  "reviewMinutesAgo": "{count, plural, =1{1 minute ago} other{{count} minutes ago}}",
+  "@reviewMinutesAgo": {
+    "description": "Review links window: how long ago something was, in whole minutes, under an hour.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "reviewHoursAgo": "{count, plural, =1{1 hour ago} other{{count} hours ago}}",
+  "@reviewHoursAgo": {
+    "description": "Review links window: how long ago something was, in whole hours, under a day. Older than that is written as a date.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "reviewClean": "Video only",
+  "@reviewClean": {
+    "description": "Review links window: label of the row for a link's second address, which shows the video and none of the comments, likes, approvals or versions. A button beside it copies that address."
+  },
+  "reviewCleanRemoveAsk": "Remove the video only link?",
+  "@reviewCleanRemoveAsk": {
+    "description": "Question before a review link's second address, the one that shows only the video, is taken away."
+  },
+  "reviewCleanRemoveNote": "Its address stops working at once.",
+  "@reviewCleanRemoveNote": {
+    "description": "A quiet line under the question asked before a review link's video only address is taken away."
+  },
+  "reviewNoteLayersChanged": "{count, plural, =1{1 layer changed} other{{count} layers changed}}",
+  "@reviewNoteLayersChanged": {
+    "description": "Send for review: part of the line that says what changed since the last version, worked out from the composition.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "reviewNoteLayersAdded": "{count, plural, =1{1 layer added} other{{count} layers added}}",
+  "@reviewNoteLayersAdded": {
+    "description": "Send for review: part of the line that says what changed since the last version.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "reviewNoteLayersRemoved": "{count, plural, =1{1 layer removed} other{{count} layers removed}}",
+  "@reviewNoteLayersRemoved": {
+    "description": "Send for review: part of the line that says what changed since the last version.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "reviewNoteEffectsAdded": "{count, plural, =1{1 effect added} other{{count} effects added}}",
+  "@reviewNoteEffectsAdded": {
+    "description": "Send for review: part of the line that says what changed since the last version.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "reviewNoteEffectsRemoved": "{count, plural, =1{1 effect removed} other{{count} effects removed}}",
+  "@reviewNoteEffectsRemoved": {
+    "description": "Send for review: part of the line that says what changed since the last version.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "reviewNoteLayerChanged": "{layer} changed",
+  "@reviewNoteLayerChanged": {
+    "description": "Send for review: part of the line that says what changed since the last version, when one layer changed. It is named, as in Title text changed.",
+    "placeholders": {
+      "layer": {
+        "type": "String"
+      }
+    }
+  },
+  "reviewNoteLayerAdded": "{layer} added",
+  "@reviewNoteLayerAdded": {
+    "description": "Send for review: part of the line that says what changed since the last version, when one layer was added. It is named.",
+    "placeholders": {
+      "layer": {
+        "type": "String"
+      }
+    }
+  },
+  "reviewNoteLayerRemoved": "{layer} removed",
+  "@reviewNoteLayerRemoved": {
+    "description": "Send for review: part of the line that says what changed since the last version, when one layer was removed. It is named.",
+    "placeholders": {
+      "layer": {
+        "type": "String"
+      }
+    }
+  },
+  "reviewNoteEffectAdded": "{effect} added to {layer}",
+  "@reviewNoteEffectAdded": {
+    "description": "Send for review: part of the line that says what changed since the last version, when one effect was added. The effect and its layer are named, as in Glow added to Title text.",
+    "placeholders": {
+      "effect": {
+        "type": "String"
+      },
+      "layer": {
+        "type": "String"
+      }
+    }
+  },
+  "reviewNoteEffectRemoved": "{effect} removed from {layer}",
+  "@reviewNoteEffectRemoved": {
+    "description": "Send for review: part of the line that says what changed since the last version, when one effect was removed. The effect and its layer are named.",
+    "placeholders": {
+      "effect": {
+        "type": "String"
+      },
+      "layer": {
+        "type": "String"
+      }
+    }
+  },
+  "reviewNoteOneMore": "{first} and more",
+  "@reviewNoteOneMore": {
+    "description": "Send for review: the line that says what changed since the last version, when there is room on the page for only one kind of change. The largest is said and the rest are not.",
+    "placeholders": {
+      "first": {
+        "type": "String"
+      }
+    }
+  },
+  "reviewCleanMove": "Move to {version}",
+  "@reviewCleanMove": {
+    "description": "Review links window: on the Video only row, beside the version that address shows, when the link has a newer one. It points the address at the newest version, written as v3.",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "reviewNoteTwo": "{first}, {second}",
+  "@reviewNoteTwo": {
+    "description": "Send for review: the line that says what changed since the last version, when two kinds of thing did. Each part is a count and what it counts, as in 3 layers changed, 1 effect added.",
+    "placeholders": {
+      "first": {
+        "type": "String"
+      },
+      "second": {
+        "type": "String"
+      }
+    }
+  },
+  "reviewNoteMore": "{first}, {second} and more",
+  "@reviewNoteMore": {
+    "description": "Send for review: the same line when more than two kinds of thing changed. The two largest are said and the rest are not.",
+    "placeholders": {
+      "first": {
+        "type": "String"
+      },
+      "second": {
+        "type": "String"
+      }
+    }
+  },
+  "reviewMore": "More",
+  "@reviewMore": {
+    "description": "Review links window: what the three-dot button at the end of a row is called. It opens the row's menu."
+  },
+  "reviewGoToFrame": "Go to frame",
+  "@reviewGoToFrame": {
+    "description": "Review links window: row in a comment's menu. It moves the playhead to the frame the comment is on."
+  },
+  "reviewShowDrawing": "Show drawing",
+  "@reviewShowDrawing": {
+    "description": "Review links window: row in a comment's menu. It shows what the reviewer drew over the frame."
+  },
+  "reviewShowPicture": "Show picture",
+  "@reviewShowPicture": {
+    "description": "Review links window: row in a comment's menu, and what the small picture on a comment is called for a screen reader. It shows the picture the reviewer sent with the comment at its full size."
+  },
+  "reviewHideDrawing": "Hide drawing",
+  "@reviewHideDrawing": {
+    "description": "Review links window: row in a comment's menu. It puts away the drawing being shown."
+  },
+  "reviewCopyLink": "Copy link",
+  "@reviewCopyLink": {
+    "description": "Review links window: row in a link's menu. It copies the link's address."
+  },
+  "reviewOpenInBrowser": "Open in browser",
+  "@reviewOpenInBrowser": {
+    "description": "Review links window: row in a link's menu. It opens the link in the web browser."
+  },
+  "reviewMail": "Email me",
+  "@reviewMail": {
+    "description": "Review links window: label of the switch on a link that says whether its sender is emailed about new comments on it."
+  },
+  "reviewMailOff": "Off in Settings",
+  "@reviewMailOff": {
+    "description": "Review links window: beside the Email me switch when emails about new comments are turned off for the whole account in Settings."
+  },
+  "settingsReviewMail": "Email me about new comments",
+  "@settingsReviewMail": {
+    "description": "Settings, Account: switch that says whether the account is emailed when someone comments on one of its review links."
+  },
+  "reviewNeedsPro": "Review links are part of Lumit Pro.",
+  "@reviewNeedsPro": {
+    "description": "Settings, Account: under the switch for emails about new comments, for an account without Lumit Pro."
+  },
+  "proFeatureReviewTitle": "Review links",
+  "@proFeatureReviewTitle": {
+    "description": "Third feature in the Lumit Pro window."
+  },
+  "proFeatureReviewBody": "Send an export by link. Comments come back on the frame.",
+  "@proFeatureReviewBody": {
+    "description": "What the third Lumit Pro feature does: people watch an export in a browser and comment on a frame of it."
   }
 }

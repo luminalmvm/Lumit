@@ -16,6 +16,7 @@ its entry here first. AE and Vegas names are noted only to help people arriving 
 | **Packed project** | A `.lum` that also carries its footage files inside it. The verbs are **pack** and **unpack** |
 | **Shared project** | A project several people edit at once. The **host** shares it and owns the file, the **guests** join with an **invite**, which is written as an **invite link** |
 | **Relay** | A server that passes a shared project's edits between a host and guests who cannot reach each other. It cannot read them. Somebody's own, or **Lumit's relay**, which comes with Lumit Pro |
+| **Review link** | An address where an export of a comp is watched in a browser and commented on, frame by frame. The people watching are **reviewers**, never *viewers*, and each upload to the link is a **version**. Comes with Lumit Pro |
 | **Folder** | A group in the Project panel. Not *bin* |
 | **Composition (comp)** | Resolution, frame rate, duration, background, and a layer stack or a node graph |
 | **Node graph** | A comp whose picture is made by nodes and wires instead of layers |

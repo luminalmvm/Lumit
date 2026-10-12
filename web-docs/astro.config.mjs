@@ -122,6 +122,7 @@ r.addEventListener("input",set);set()})})`,
                         "use/colour-management",
                         "use/compositions",
                         "use/export",
+                        "use/review-links",
                       ],
                     },
                     {

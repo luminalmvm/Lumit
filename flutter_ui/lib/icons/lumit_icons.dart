@@ -334,6 +334,8 @@ abstract final class LumitIcons {
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6V3h3M10 3h3v3M13 10v3h-3M6 13H3v-3"/><rect x="6" y="6" width="4" height="4"/></svg>';
   static const String note =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2.5h7l3 3v8H3z"/><path d="M10 2.5v3h3"/></svg>';
+  static const String comment =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 3h11v7.5H7.5L4.5 13v-2.5h-2z"/></svg>';
   static const String group =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="2.5" width="11" height="11" stroke-dasharray="2 1.5"/><rect x="5" y="5" width="6" height="6"/></svg>';
   /// The panel itself, not one of its actions: two boxes and the wire between them.
@@ -526,6 +528,7 @@ abstract final class LumitIcons {
     'Heal': heal,
     'Frame all': frameAll,
     'Note': note,
+    'Comment': comment,
     'Group': group,
     'Nodes': nodes,
     'Export': export,

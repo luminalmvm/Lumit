@@ -1,0 +1,168 @@
+---
+title: Review links
+description: Send an export by link, read the comments left on it, and add them to the Timeline as markers.
+sidebar:
+  order: 18.5
+---
+
+A **review link** is an address where an export of a composition is watched in a browser.
+Anyone who has it is a **reviewer** and can comment on a frame. The comments come back to
+Lumit. It is part of [Lumit Pro](/use/profiles/#lumit-pro): the person sending needs it, and
+reviewers do not.
+
+## Send a composition
+
+1. Front the composition, or select it in the Project panel.
+2. Choose **Composition ▸ Send for review…**.
+3. Set the fields and press **Create link**.
+
+| Field | What it sets |
+| --- | --- |
+| **Title** | What the link is called. It starts as the composition's name. |
+| **Size** | **1080p** at 6 Mb/s, or **720p** at 3 Mb/s. The composition is fitted inside it, turned for a portrait composition, and never enlarged. |
+| **Span** | The whole composition, or the work area when one is set. |
+| **Reviewers** | **Can comment** lets reviewers leave comments. |
+
+Lumit exports an H.264 MP4 at the composition's frame rate, with its sound, and uploads it.
+**Cancel** stops either. When the upload finishes, the link is on the clipboard.
+
+- Missing footage is drawn as colour bars.
+- The export waits behind one that is already running. Items waiting in the export queue are
+  not started.
+- The window can be closed while a composition is being sent. A ring on the bottom strip
+  turns until it finishes.
+- A send is refused when the account's storage is full, and when the file is over 2 GB.
+- An account holds up to 1,000 links.
+
+## Versions
+
+A composition that has been sent before is sent as a **new version** of its link.
+**Separate link** makes a link of its own instead. A comment belongs to the version it was
+made on. A link holds up to 50 versions.
+
+**What changed** is a line of up to 200 characters about a new version. It is shown beside
+the version, in Lumit and in the browser. Lumit fills it in with the two largest changes to
+the composition's layers and effects since the last version, and it can be typed over. One
+layer or effect is named, as in `Glow added to Title text`, and more than one are counted. It
+starts empty for a link sent from another machine.
+
+A link is marked **Changed** when its composition has been edited since the newest version
+was sent. **Send a new version** on the link sends one. An edit is a change to the
+composition's settings, to one of its layers, or to a composition nested in it. Markers do
+not count, the composition's or a layer's. The mark shows in the profile the version was
+sent from.
+
+## The Review links window
+
+**File ▸ Review links…** opens the window. The links are listed on the left, newest
+activity first, and the chosen one is on the right.
+
+| Action | How |
+| --- | --- |
+| Copy the address | **Copy** |
+| Open the link in the browser | **Open** |
+| Choose a version | The list beside the title |
+| Send the fronted composition | **Send for review…** |
+| Copy, open, send a new version or delete | Right-click the link in the list |
+
+A dot marks a link with comments or approvals that have not been seen. While there are any,
+a button on the bottom strip shows how many and opens the window on the newest. The first
+time a profile lists an account's links, the comments already on them count as seen.
+
+| Key | What it does |
+| --- | --- |
+| `Up`, `Down` | Moves through the links, or through the comments once the keys are on them |
+| `Right`, `Enter` | Puts the keys on the chosen link's comments |
+| `Left` | Puts the keys back on the links |
+| `Enter` on a comment | Goes to its frame |
+| `Home`, `End` | Goes to the first or the last |
+| `Esc` | Closes the window |
+
+The foot of the window shows how much of the account's storage is used.
+
+### The Link page
+
+| Control | What it does |
+| --- | --- |
+| **Can comment** | Whether reviewers can leave comments. |
+| **Can attach pictures** | Whether reviewers can attach a picture to a comment. Off while **Can comment** is off. Turning it off removes no picture already on the link. |
+| **Can download** | Whether reviewers can download the file. |
+| **Email me** | Whether you are emailed when a comment, a reply or an approval lands on this link. **Settings ▸ Account ▸ Email me about new comments** turns the emails off for every link. |
+| **Video only** | A second address for the link that shows the video and nothing of the review: no comments, likes, approvals or other versions. **Copy link** makes it on the first press and copies it. It shows the version that was newest when it was made and stays on that one. The row says which, and **Move to v…** points it at the newest. **Remove** stops it working. The password and the expiry apply to it too. |
+| **Password** | A password every reviewer types before watching, of up to 100 plain letters, numbers and symbols. **Clear** removes it. |
+| **Expires** | When the link stops working: never, or in a day, 7 days or 30 days. A link that has expired is deleted. |
+| **Seen by** | Who has opened the link in a browser: the name they gave, or **Someone**, the version they were on, and when they were last there. The newest six are listed, and **and … more** shows the rest. Opening the link from Lumit is not counted. |
+| **Compare** | Opens the browser with that version beside the one before it. |
+| **Delete…** | Deletes that version and its comments. A link keeps at least one version. |
+| **Delete link…** | Deletes the link, its versions and its comments. |
+
+## Comments
+
+The **Comments** page lists the comments on the chosen version. **Open** shows the ones
+that are not resolved, and **All** shows every one. Each says how many it holds. A comment
+made while the window is open appears in the list.
+
+A comment shows who wrote it, when, its timecode in the composition, and its text. A comment
+on a range of frames shows the two timecodes it runs between.
+
+A comment with a pin, an arrow or a box also shows the name of the layer it points at. That
+is the top layer under the pin, the arrow's head or the middle of the box, on the comment's
+frame of the composition as it is now. Hidden layers, layers outside their in and out
+points, and camera, light, null, adjustment and audio layers are passed over.
+
+A pencil marks a comment with a drawing. Pressing it shows the drawing over that frame of
+the composition as it is now, and pressing it again hides it.
+
+A comment sent with a picture shows it small under its text. Pressing it shows the picture
+whole, and pressing again or `Esc` puts it away. A comment can be a picture with no text.
+
+A mention is `@` and the name of someone on the link: its sender, anyone who has commented,
+or anyone who has approved a version. It is drawn in the accent colour, and a mention of you
+sits on a tint of it.
+
+A like is one line: who liked that moment, and its timecode. Likes in the same second share
+a line. A like is never counted as unseen.
+
+| Action | How |
+| --- | --- |
+| Go to a comment's frame | Press its timecode |
+| Show or hide a drawing | Press the pencil |
+| Show a picture whole | Press the picture |
+| Resolve or reopen | Point at the comment: **Resolve** or **Reopen** |
+| Reply | Point at the comment: **Reply**, then type and press `Enter` |
+| Copy a link to a comment | Point at the comment: **⋯**, or right-click it, then **Copy link to this comment** |
+| Delete | Point at the comment: **⋯**, or right-click it, then **Delete**. Its replies go with it. |
+| Remove an approval | Point at the **Approved by** line above the comments: **Remove**, or right-click it. A reviewer approves a version in the browser. |
+
+A comment's menu holds everything its row does. **Copy link to this comment** copies the
+link's address with the comment's version and frame, so the browser opens there.
+
+Pressing a timecode fronts the composition the link was sent from, moves the playhead, and
+selects the layer the comment points at. The composition is found in the open project by
+the one it was sent from, or by its name. Where the open project does not have it,
+timecodes do nothing, no layer is named, a drawing is shown without its frame, and
+**Add to Timeline** is off.
+
+## Add comments to the Timeline
+
+**Add to Timeline** puts every open comment on the chosen version onto the Timeline as
+[markers](/use/markers/), in one undo step.
+
+- A comment that points at a layer becomes a layer marker on that layer, so it moves with
+  the layer. Every other comment becomes a marker on the composition.
+- A marker's label is the reviewer's name and the comment: `Ana: Hold this a beat longer`.
+  A picture with no text is the name alone.
+- A comment on a range of frames becomes a [region](/use/markers/#regions).
+- Comments on the same frame of the same layer, or of the composition, share one marker.
+- Each reviewer has one colour.
+- A marker already on that frame is replaced. Beat markers stay.
+- Replies, likes and resolved comments are not added, and nor is a comment whose marker is
+  already on the Timeline.
+
+A version exported from the work area puts its markers on the frames it was exported from.
+
+## Related
+
+- [Exporting](/use/export/)
+- [Markers](/use/markers/)
+- [Profiles and accounts](/use/profiles/)

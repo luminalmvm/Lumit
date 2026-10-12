@@ -76,6 +76,7 @@ import 'pro_window.dart';
 import 'export_dialog_frb.dart';
 import 'export_queue_frb.dart';
 import 'recovery_dialog_frb.dart';
+import 'review_links_window.dart';
 import 'project_settings_frb.dart';
 import 'settings_window_frb.dart';
 import 'share_dialog_frb.dart';
@@ -1006,6 +1007,8 @@ List<MenuSection> lumitMenus(
             // Sharing this project, joining somebody else's, and who is here.
             MenuEntry(
                 l10n.menuSharedProject, () => showShareFrb(context, app)),
+            // Exports sent out for comments, and the comments that came back.
+            MenuEntry(l10n.menuReviewLinks, () => showReviewLinks(context)),
             MenuEntry.divider(),
             // The project's own settings, kept apart from Settings because Settings
             // is this machine's and these travel in the `.lum`.
@@ -1148,6 +1151,11 @@ List<MenuSection> lumitMenus(
             MenuEntry(l10n.menuAddToExportQueue,
                 comp == null ? null : () => exportFrb(context),
                 action: 'export.queue.add'),
+            MenuEntry(
+                l10n.menuSendForReview,
+                comp == null
+                    ? null
+                    : () => showReviewLinks(context, send: comp)),
             MenuEntry.divider(),
             // Comp-level markers, including the beat pass, which makes them
             // (docs/09 §10) — the layer's own markers are Layer ▸ Markers.

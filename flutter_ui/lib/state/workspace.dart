@@ -2109,19 +2109,29 @@ class Workspace extends ChangeNotifier {
   /// no widget test has a graphics adapter to render one on, and the wiring is
   /// what those tests are about.
   static Future<Uint8List?> Function(CompositionReference comp, int frame)
-      compThumbnailPng = _compThumbnailPng;
+      compThumbnailPng = compStillPng;
 
-  static Future<Uint8List?> _compThumbnailPng(
-      CompositionReference comp, int frame) async {
-    final still = await comp.thumbnail(
-        frame: BigInt.from(frame), maxEdge: projectThumbnailPixels);
+  /// The engine's picture of [comp] at [frame], its longer side no more than
+  /// [maxEdge], for whoever asked to draw and then dispose of. Null on a
+  /// machine with nothing to draw it on.
+  static Future<Image?> compStill(CompositionReference comp, int frame,
+      {int maxEdge = projectThumbnailPixels}) async {
+    final still =
+        await comp.thumbnail(frame: BigInt.from(frame), maxEdge: maxEdge);
     if (still == null || still.width == 0 || still.height == 0) return null;
-    // RGBA in, PNG out, both through `dart:ui` — the same encoder the Viewer's
-    // own photograph goes through, so the two roads file the same kind of file.
     final decoded = Completer<Image>();
     decodeImageFromPixels(still.rgba, still.width, still.height,
         PixelFormat.rgba8888, decoded.complete);
-    final image = await decoded.future;
+    return decoded.future;
+  }
+
+  /// The same picture as a PNG.
+  static Future<Uint8List?> compStillPng(CompositionReference comp, int frame,
+      {int maxEdge = projectThumbnailPixels}) async {
+    final image = await compStill(comp, frame, maxEdge: maxEdge);
+    if (image == null) return null;
+    // RGBA in, PNG out, both through `dart:ui` — the same encoder the Viewer's
+    // own photograph goes through, so the two roads file the same kind of file.
     try {
       final png = await image.toByteData(format: ImageByteFormat.png);
       return png?.buffer.asUint8List();

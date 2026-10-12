@@ -72,6 +72,7 @@ import 'package:lumit_flutter/state/preview_progress.dart';
 import 'package:lumit_flutter/state/profiles.dart';
 import 'package:lumit_flutter/state/relay_door.dart';
 import 'package:lumit_flutter/state/render_timings.dart';
+import 'package:lumit_flutter/state/reviews.dart';
 import 'package:lumit_flutter/state/settings.dart';
 import 'package:lumit_flutter/state/tools.dart';
 import 'package:lumit_flutter/state/updates.dart';
@@ -136,6 +137,9 @@ class LumitUiState extends ChangeNotifier {
 
   /// The way to Lumit's own relay, for a shared project.
   late final RelayDoor relayDoor = RelayDoor(account);
+
+  /// The account's review links, and the comments left on them.
+  late final ReviewsState reviews = ReviewsState(account, profiles);
 
   /// Settings came in from a profile or the server. The workspace has them.
   /// This hands on the ones something else acts on.
@@ -2097,6 +2101,20 @@ class LumitUiState extends ChangeNotifier {
     // the window and when they close it, alongside the deliberate acts below.
     _lifecycle = AppLifecycleListener(
       onInactive: rememberSession,
+      // Pro may have come back while the window was away: bought on the
+      // website, or a late payment gone through. So someone signed in and
+      // believed to have none is asked after on coming back to it, at most
+      // once in five minutes. What was waiting on Pro follows the account.
+      onResume: () {
+        final now = DateTime.now();
+        if (!account.signedIn ||
+            account.pro ||
+            now.difference(_proAsked) < const Duration(minutes: 5)) {
+          return;
+        }
+        _proAsked = now;
+        unawaited(account.refreshAccount());
+      },
       onExitRequested: () async {
         rememberSession();
         // The window stays open while the question is up. The platform waits
@@ -2370,6 +2388,7 @@ class LumitUiState extends ChangeNotifier {
     cutLinked.dispose();
     _lifecycle.dispose();
     _clock.dispose();
+    reviews.dispose();
     profiles.dispose();
     unawaited(relayDoor.close());
     account.dispose();
@@ -3302,6 +3321,9 @@ class LumitUiState extends ChangeNotifier {
   ProjectReference? _sessionProject;
 
   late final AppLifecycleListener _lifecycle;
+
+  /// When the account was last read on coming back to the window.
+  DateTime _proAsked = DateTime(0);
 
   /// Write down where the user is. A project with no file has nowhere to be
   /// written to — the sessions are keyed by path — so this is a no-op until it

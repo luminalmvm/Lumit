@@ -138,6 +138,10 @@ class CloudAccount {
   /// How this account can be signed in to: `password`, `google`, `discord`.
   final List<String> providers;
 
+  /// Whether the server emails this account about new comments on its
+  /// review links. On until it is turned off.
+  final bool reviewMail;
+
   const CloudAccount({
     required this.id,
     required this.email,
@@ -147,6 +151,7 @@ class CloudAccount {
     this.preview = false,
     this.subscription,
     this.providers = const [],
+    this.reviewMail = true,
   });
 
   factory CloudAccount.from(Map<String, dynamic> j) => CloudAccount(
@@ -162,6 +167,7 @@ class CloudAccount {
             for (final p in all)
               if (p is String) p,
         ],
+        reviewMail: j['review_mail'] != false,
       );
 
   Map<String, dynamic> toJson() => {
@@ -172,6 +178,7 @@ class CloudAccount {
         'plan': pro ? 'pro' : 'free',
         'preview': preview,
         'providers': providers,
+        'review_mail': reviewMail,
       };
 }
 
@@ -574,6 +581,14 @@ class AccountState extends ChangeNotifier {
   Future<void> rename(String name) async {
     account = CloudAccount.from(
         await call('PATCH', '/v1/me', body: {'name': name.trim()}));
+    notifyListeners();
+  }
+
+  /// Whether the server emails the account about new comments on any of
+  /// its review links.
+  Future<void> setReviewMail(bool on) async {
+    account = CloudAccount.from(
+        await call('PATCH', '/v1/me', body: {'review_mail': on}));
     notifyListeners();
   }
 

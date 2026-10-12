@@ -32,8 +32,10 @@ import 'package:lumit_flutter/panels/timeline_timings.dart';
 import 'package:lumit_flutter/src/rust/api/audio.dart'
     show BridgeAudioMeter, audioMeters;
 
+import '../state/reviews.dart' show isReviewExport;
 import 'cache_confirm_frb.dart';
 import 'profile_chip.dart';
+import 'review_links_window.dart';
 import 'share_dialog_frb.dart';
 
 /// Bumped by whatever starts an export — the export dialogue, the console's
@@ -230,6 +232,17 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
           // person, and everything after it is about the project.
           _bubble(t, const ProfileChip()),
           _divider(t),
+          // Review links, while there are comments nobody has looked at or a
+          // composition is on its way up.
+          ListenableBuilder(
+            listenable: _ui.reviews,
+            builder: (context, _) => !_ui.reviews.wantsAttention
+                ? const SizedBox.shrink()
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [_bubble(t, const ReviewChip()), _divider(t)],
+                  ),
+          ),
           _bubble(t, _savedState(t, state)),
           _divider(t),
           // Deliberately NOT const: a const child is skipped by the tick's
@@ -644,6 +657,9 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
               child: Text(l10n.cancel, style: t.small),
             ),
           ],
+        // A file made for a review link went to the server and is gone.
+        BridgeExportState_Done(:final path) when isReviewExport(path) =>
+          const [],
         BridgeExportState_Done(:final path) => [
             // The finished file is one click away: the line opens its folder.
             Flexible(
