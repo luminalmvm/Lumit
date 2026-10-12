@@ -310,7 +310,7 @@ class ProfilesState extends ChangeNotifier {
   Future<void> remove(Profile profile) async {
     if (profile == current || !all.remove(profile)) return;
     await deleteSecret(profile.slot);
-    for (final what in const ['settings', 'synced', 'reviews']) {
+    for (final what in const ['settings', 'synced', 'reviews', 'backup']) {
       try {
         _file(profile.id, what).deleteSync();
       } catch (_) {

@@ -1,10 +1,12 @@
 //! The `.lum` project container, autosave, and the crash-recovery journal —
 //! docs/10-FILE-FORMAT.md, Phase 0 scope (no thumbnails yet).
 
+pub mod bring;
 pub mod fixtures;
 pub mod pack;
 pub mod plugins;
 
+pub use bring::{bring, Brought};
 pub use pack::{
     autosave_owner, hold_read_out, restore_packed, save_packed, unpack, PackSource, Packed,
     Unpacked,
@@ -57,6 +59,10 @@ pub enum ProjectError {
     /// A pack or an unpack was told to stop. Nothing half-written is left.
     #[error("cancelled")]
     Cancelled,
+    /// A composition was asked for out of a project file that has none by
+    /// that id.
+    #[error("that composition is not in the project file")]
+    UnknownComposition,
 }
 
 /// manifest.json — MUST be the archive's first entry and parse standalone.

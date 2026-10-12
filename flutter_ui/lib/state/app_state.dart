@@ -113,8 +113,8 @@ class LumitState extends ChangeNotifier {
   /// notice lists. Held while Lumit is open and never written anywhere.
   final List<LumitNotice> recentNotices = [];
 
-  void postNotice(String message, {bool error = false}) {
-    final posted = LumitNotice(message, error: error);
+  void postNotice(String message, {bool error = false, VoidCallback? onTap}) {
+    final posted = LumitNotice(message, error: error, onTap: onTap);
     recentNotices.insert(0, posted);
     if (recentNotices.length > 20) recentNotices.removeLast();
     notice.value = posted;
@@ -921,5 +921,8 @@ class LumitState extends ChangeNotifier {
 class LumitNotice {
   final String message;
   final bool error;
-  const LumitNotice(this.message, {this.error = false});
+
+  /// What a press on its words does, for a notice that leads somewhere.
+  final VoidCallback? onTap;
+  const LumitNotice(this.message, {this.error = false, this.onTap});
 }

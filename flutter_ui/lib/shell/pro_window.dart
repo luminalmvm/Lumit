@@ -57,6 +57,18 @@ String writtenDate(DateTime date) {
   }
 }
 
+/// The same without the year when it is this one, for a day in a list: 4
+/// October, and 4 October 2025 once that is last year.
+String writtenDay(DateTime date) {
+  if (date.year != DateTime.now().year) return writtenDate(date);
+  try {
+    final tag = l10n.localeName;
+    return DateFormat.MMMMd(tag == 'en' ? 'en_GB' : tag).format(date);
+  } catch (_) {
+    return DateFormat.MMMMd().format(date);
+  }
+}
+
 /// A size in bytes as it is written: 178 KB, 1.7 MB, 20 GB. In thousands,
 /// which is how the server counts an account's room, and with one decimal
 /// place only where it says something.
@@ -225,13 +237,20 @@ class _ProWindowState extends State<_ProWindow>
               ),
               _Feature(
                 index: 2,
+                mark: LumitIcons.undo,
+                title: l10n.proFeatureBackupTitle,
+                body: l10n.proFeatureBackupBody,
+                on: pro,
+              ),
+              _Feature(
+                index: 3,
                 mark: LumitIcons.loop,
                 title: l10n.proFeatureSyncTitle,
                 body: l10n.proFeatureSyncBody,
                 on: pro,
               ),
               _Feature(
-                index: 3,
+                index: 4,
                 mark: LumitIcons.star,
                 title: l10n.proFeatureSupportTitle,
                 body: l10n.proFeatureSupportBody,

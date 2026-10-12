@@ -60,18 +60,26 @@ Future<String?> pickProjectToOpen() async {
 
 /// Choose where to save a project, defaulting the name to `untitled.lum` (as
 /// the egui Save dialogue does), or null when cancelled.
-Future<String?> pickProjectSaveLocation() async {
+Future<String?> pickProjectSaveLocation(
+    {String suggestedName = 'untitled.lum', String? initialDirectory}) async {
   final location = await getSaveLocation(
     acceptedTypeGroups: [_projectGroup()],
-    suggestedName: 'untitled.lum',
+    suggestedName: suggestedName,
+    initialDirectory: initialDirectory,
   );
   return location?.path;
 }
 
-/// Pick one or more footage files, or an empty list when cancelled.
-Future<List<String>> pickFootage() async {
+/// Pick one or more footage files, or an empty list when cancelled. With
+/// [projects] a Lumit project is offered too, which an import brings one
+/// composition in from.
+Future<List<String>> pickFootage({bool projects = false}) async {
   final files = await openFiles(
-    acceptedTypeGroups: [_footageGroup(), _anyGroup()],
+    acceptedTypeGroups: [
+      _footageGroup(),
+      if (projects) _projectGroup(),
+      _anyGroup(),
+    ],
   );
   return [for (final f in files) f.path];
 }

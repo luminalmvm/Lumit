@@ -121,6 +121,19 @@ class ProjectBadge extends StatelessWidget {
   }
 }
 
+/// Relink: ask which file [footage] is now, and point it there. The files
+/// that moved with it are found from the one. False when none was picked.
+Future<bool> relinkFootage(FootageReference footage,
+    {Future<String?> Function()? picker}) async {
+  final path = picker != null
+      ? await picker()
+      : await pickFootage()
+          .then((paths) => paths.isEmpty ? null : paths.first);
+  if (path == null) return false;
+  footage.relink(path: path);
+  return true;
+}
+
 /// One Project panel row.
 class ProjectRowFrb extends StatefulWidget {
   final ItemReference item;
@@ -438,14 +451,9 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
   }
 
   Future<void> _doRelink(FootageReference footage) async {
-    final picker = widget.relinkPicker;
-    final path = picker != null
-        ? await picker()
-        : await pickFootage()
-            .then((paths) => paths.isEmpty ? null : paths.first);
-    if (path == null) return;
-    footage.relink(path: path);
-    widget.onLocalEdit();
+    if (await relinkFootage(footage, picker: widget.relinkPicker)) {
+      widget.onLocalEdit();
+    }
   }
 
   @override

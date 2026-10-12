@@ -16593,6 +16593,674 @@
   "@proClose": {
     "description": "Button that closes the Lumit Pro window once the account has Pro."
   },
+  "proFeatureBackupTitle": "Backup and history",
+  "@proFeatureBackupTitle": {
+    "description": "Lumit Pro window: the name of one thing Pro does. Each save of a project is kept on Lumit's server, and the earlier saves are its history."
+  },
+  "proFeatureBackupBody": "Every save is kept, and opens on any machine.",
+  "@proFeatureBackupBody": {
+    "description": "Lumit Pro window: the one short line under Backup and history."
+  },
+  "backupMenuOpen": "Open from backup…",
+  "@backupMenuOpen": {
+    "description": "File menu row. Opens the window that lists the projects the account has in backup."
+  },
+  "backupMenuHistory": "Project history…",
+  "@backupMenuHistory": {
+    "description": "File menu row. Opens the window that lists the earlier saves of the open project. Not the list of undo steps, which is Edit, History."
+  },
+  "backupHistoryTitle": "Project history",
+  "@backupHistoryTitle": {
+    "description": "Title of the window that lists the earlier saves of the open project."
+  },
+  "backupOpenTitle": "Open from backup",
+  "@backupOpenTitle": {
+    "description": "Title of the window that lists the projects the account has in backup."
+  },
+  "backupNeedsPro": "Backup is part of Lumit Pro.",
+  "@backupNeedsPro": {
+    "description": "Line shown to an account without Lumit Pro wherever backup is offered: under its switch in Settings, and in the Project history and Open from backup windows. Also said when the server refuses a save for the same reason."
+  },
+  "backupDayToday": "Today",
+  "@backupDayToday": {
+    "description": "Project history window: heading over the versions saved today. Also the day in a version's date."
+  },
+  "backupDayYesterday": "Yesterday",
+  "@backupDayYesterday": {
+    "description": "Project history window: heading over the versions saved yesterday. Also the day in a version's date."
+  },
+  "backupDayTime": "{day}, {time}",
+  "@backupDayTime": {
+    "description": "A version's date. {day} is Today, Yesterday or a written date, {time} is a clock time.",
+    "placeholders": {
+      "day": {
+        "type": "String"
+      },
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "backupLastSave": "Last save",
+  "@backupLastSave": {
+    "description": "Project history window: small tag on the version that is the open project's file as it was last saved. Autosaves sent since can sit above it in the list."
+  },
+  "backupAhead": "The file on this machine is not backed up.",
+  "@backupAhead": {
+    "description": "Project history window: one line over the list when the open project's file is none of the versions listed, because it was saved after the last one was sent and that save has not gone."
+  },
+  "backupSaveRow": "Save",
+  "@backupSaveRow": {
+    "description": "Project history window: what a version nobody has named is called in the list, when it came from a save. A noun, beside Autosave."
+  },
+  "backupVersionNumber": "Version {n}",
+  "@backupVersionNumber": {
+    "description": "Project history window: small heading over the chosen version. {n} counts up from 1.",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "backupVersions": "{count, plural, =1{1 version} other{{count} versions}}",
+  "@backupVersions": {
+    "description": "How many versions of a project are kept, on a card in the Open from backup window and at the foot of the Project history window.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "backupOpenCopy": "Open a copy",
+  "@backupOpenCopy": {
+    "description": "Project history window: button. Fetches the chosen version as a new file beside the project and opens it."
+  },
+  "backupPutBack": "Put back",
+  "@backupPutBack": {
+    "description": "Project history window: button, and the button that confirms it. Makes the chosen version the project again."
+  },
+  "backupPutBackAsk": "Put back the version from {when}?",
+  "@backupPutBackAsk": {
+    "description": "Question asked before a version with no name is put back. One short line. {when} is a day and a time as the list shows them, such as today, 01:11.",
+    "placeholders": {
+      "when": {
+        "type": "String"
+      }
+    }
+  },
+  "backupPutBackNamedAsk": "Put back {name}?",
+  "@backupPutBackNamedAsk": {
+    "description": "Question asked before a version with a name is put back. One short line. {name} is the name the person gave the version.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "backupPutBackNote": "The project as it is now stays in the history.",
+  "@backupPutBackNote": {
+    "description": "Quiet line under the question asked before a version is put back. Nothing is lost by putting a version back: the project as it stands is kept as a version first."
+  },
+  "backupDayTodayWithin": "today",
+  "@backupDayTodayWithin": {
+    "description": "Today, in the middle of a sentence: the version from today, 01:11."
+  },
+  "backupDayYesterdayWithin": "yesterday",
+  "@backupDayYesterdayWithin": {
+    "description": "Yesterday, in the middle of a sentence: the version from yesterday, 01:11."
+  },
+  "backupPutBackUnsent": "The project as it is now could not be backed up, so nothing was put back.",
+  "@backupPutBackUnsent": {
+    "description": "Bottom-strip warning. Putting a version back first backs up the project as it stands, and stops when that fails."
+  },
+  "backupNameVersion": "Name this version…",
+  "@backupNameVersion": {
+    "description": "Project history window: button. Opens a small window that asks for a name."
+  },
+  "backupNameTitle": "Name this version",
+  "@backupNameTitle": {
+    "description": "Heading of the small window that asks what to call a version."
+  },
+  "backupRenameVersionTitle": "Rename this version",
+  "@backupRenameVersionTitle": {
+    "description": "Heading of the small window that asks what to call a version that has a name already."
+  },
+  "backupRemoveName": "Remove name",
+  "@backupRemoveName": {
+    "description": "Project history window: row in the menu of a version that has a name. Takes the name off, so the version is thinned out with age like any other."
+  },
+  "backupDeleteVersion": "Delete version…",
+  "@backupDeleteVersion": {
+    "description": "Project history window: row in a version's menu."
+  },
+  "backupDeleteVersionAsk": "Delete the version from {when}?",
+  "@backupDeleteVersionAsk": {
+    "description": "Question asked before a version with no name is deleted. {when} is a day and a time as the list shows them, such as today, 01:11.",
+    "placeholders": {
+      "when": {
+        "type": "String"
+      }
+    }
+  },
+  "backupDeleteNamedAsk": "Delete {name}?",
+  "@backupDeleteNamedAsk": {
+    "description": "Question asked before a version with a name is deleted. {name} is the name the person gave the version.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "backupDeleteVersionNote": "It cannot be put back.",
+  "@backupDeleteVersionNote": {
+    "description": "Quiet line under the question asked before a version is deleted. Put back is what the Project history window calls making a version the project again."
+  },
+  "backupThisProject": "Back up this project",
+  "@backupThisProject": {
+    "description": "Project history window: label of the switch that keeps the open project in or out of backup."
+  },
+  "backupNotSaved": "Save the project to start its history.",
+  "@backupNotSaved": {
+    "description": "Project history window: the one line shown for a project that has never been saved to a file."
+  },
+  "backupNoVersions": "No versions yet",
+  "@backupNoVersions": {
+    "description": "Project history window: shown when the project has no versions in backup."
+  },
+  "backupTryAgain": "Try again",
+  "@backupTryAgain": {
+    "description": "Button under a line saying the server could not be reached, in the Project history and Open from backup windows."
+  },
+  "backupStatusBackedUp": "Backed up",
+  "@backupStatusBackedUp": {
+    "description": "State of the open project's backup, on the bottom strip's mark and in the Project history window, when the time is not known."
+  },
+  "backupStatusBackedUpAt": "Backed up at {time}",
+  "@backupStatusBackedUpAt": {
+    "description": "State of the open project's backup when it was backed up today. {time} is a clock time.",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "backupStatusBackedUpOn": "Backed up on {date}",
+  "@backupStatusBackedUpOn": {
+    "description": "State of the open project's backup when it was backed up before today. {date} is a written date.",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "backupStatusSending": "Backing up",
+  "@backupStatusSending": {
+    "description": "State of the open project's backup while a save is being sent."
+  },
+  "backupStatusWaiting": "Waiting to back up",
+  "@backupStatusWaiting": {
+    "description": "State of the open project's backup when the server could not be reached. Lumit tries again by itself."
+  },
+  "backupStatusFailed": "Not backed up",
+  "@backupStatusFailed": {
+    "description": "State of the open project's backup when the server refused the save. The reason follows it."
+  },
+  "backupStatusTooLarge": "Over 95 MB, so not backed up",
+  "@backupStatusTooLarge": {
+    "description": "State of the open project's backup when its file is over 95 MB."
+  },
+  "backupStatusNewer": "Saved more recently on {device}",
+  "@backupStatusNewer": {
+    "description": "State of the open project's backup when another machine has saved a newer version than the file here. {device} is that machine's name.",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "backupStatusOff": "Backup is off in Settings",
+  "@backupStatusOff": {
+    "description": "Project history window: shown when backup has been switched off on the Account page of Settings."
+  },
+  "backupNewerNotice": "A newer version was saved on {device}.",
+  "@backupNewerNotice": {
+    "description": "Bottom-strip notice after opening a project that another machine has saved since. {device} is that machine's name. A press opens the Project history window.",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "backupTooLargeNotice": "{name} is over 95 MB, so it is not backed up.",
+  "@backupTooLargeNotice": {
+    "description": "Bottom-strip notice, said once for a project whose file is too large to back up. {name} is the project's name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "backupProEnded": "Your Lumit Pro has ended. Saves are no longer backed up.",
+  "@backupProEnded": {
+    "description": "Bottom-strip notice, said once when Lumit Pro ends while a project that was being backed up is open."
+  },
+  "backupWelcomeTitle": "Backed up",
+  "@backupWelcomeTitle": {
+    "description": "Welcome screen: the heading over the short list of backed-up projects that are not among the recent ones. Drawn in capitals, so give the sentence-case words."
+  },
+  "backupWelcomeAll": "All backups",
+  "@backupWelcomeAll": {
+    "description": "Welcome screen: the quiet words beside the Backed up heading that open the Open from backup window."
+  },
+  "backupSearch": "Search backups",
+  "@backupSearch": {
+    "description": "Open from backup window: placeholder in the search field."
+  },
+  "backupNothing": "Nothing backed up yet",
+  "@backupNothing": {
+    "description": "Open from backup window: shown when the account has no projects in backup."
+  },
+  "backupFetching": "Fetching",
+  "@backupFetching": {
+    "description": "Open from backup window: on a project's card while its file is being downloaded."
+  },
+  "backupRenameTitle": "Rename in backup",
+  "@backupRenameTitle": {
+    "description": "Heading of the small window that asks for a project's new name in backup. The file on the machine keeps its name."
+  },
+  "backupDelete": "Delete from backup…",
+  "@backupDelete": {
+    "description": "Open from backup window: row in a project's menu."
+  },
+  "backupDeleteAsk": "Delete {name} and its history from backup? The file on this machine stays.",
+  "@backupDeleteAsk": {
+    "description": "Question asked before a project is deleted from backup. {name} is the project's name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "backupErrorStorageFull": "Your Lumit Pro storage is full.",
+  "@backupErrorStorageFull": {
+    "description": "Said when the server refuses a save because the account's storage is used up."
+  },
+  "backupErrorTooLarge": "Projects over 95 MB are not backed up.",
+  "@backupErrorTooLarge": {
+    "description": "Said when the server refuses a save because the project file is too large."
+  },
+  "backupErrorTooMany": "This account already has 1,000 projects in backup.",
+  "@backupErrorTooMany": {
+    "description": "Said when the server refuses a new project because the account holds as many as it may."
+  },
+  "backupErrorGone": "That is no longer in backup.",
+  "@backupErrorGone": {
+    "description": "Said when a project or a version was asked for and the server no longer has it."
+  },
+  "backupErrorLastVersion": "A project keeps its only version. Delete the project from backup instead.",
+  "@backupErrorLastVersion": {
+    "description": "Said when the only version of a project is deleted from the Project history window."
+  },
+  "backupErrorDownload": "The download did not arrive whole. Try again.",
+  "@backupErrorDownload": {
+    "description": "Said when a fetched version does not match what the server said it was. Nothing was written."
+  },
+  "backupErrorWrite": "The file could not be written there.",
+  "@backupErrorWrite": {
+    "description": "Said when a fetched version could not be written to the folder chosen for it."
+  },
+  "backupErrorSignedOut": "Sign in to use backup.",
+  "@backupErrorSignedOut": {
+    "description": "Said when backup is asked for and nobody is signed in."
+  },
+  "backupSettingsGroup": "Backup",
+  "@backupSettingsGroup": {
+    "description": "Group heading on the Account page of Settings."
+  },
+  "backupSettingsOn": "Back up projects when they are saved",
+  "@backupSettingsOn": {
+    "description": "Switch on the Account page of Settings."
+  },
+  "backupProHeadline": "Backup and history come with Lumit Pro.",
+  "@backupProHeadline": {
+    "description": "Headline shown in the Project history and Open from backup windows to an account without Lumit Pro, over the one button that opens the Lumit Pro window."
+  },
+  "backupMenuSaveVersion": "Save a version…",
+  "@backupMenuSaveVersion": {
+    "description": "File menu row. Saves the project and gives the saved version a name, so it is kept for good."
+  },
+  "backupKeySaveVersion": "Save a version with a name",
+  "@backupKeySaveVersion": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "backupSaveVersionTitle": "Save a version",
+  "@backupSaveVersionTitle": {
+    "description": "Heading of the small window that asks what to call the version a save is about to make."
+  },
+  "backupVersionSaved": "Saved the version {name}.",
+  "@backupVersionSaved": {
+    "description": "Bottom-strip notice once Save a version has saved the project and named the version. {name} is the name given.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "backupVersionUnsent": "Saved, but it could not be backed up, so the version has no name yet.",
+  "@backupVersionUnsent": {
+    "description": "Bottom-strip warning when Save a version saved the project and the server could not be reached to keep and name the version."
+  },
+  "backupAutosave": "Autosave",
+  "@backupAutosave": {
+    "description": "Project history window: the one word on a version that was sent from an autosave between two saves, in the list and over the chosen version."
+  },
+  "backupFilterAll": "All",
+  "@backupFilterAll": {
+    "description": "Project history window: the first of two options over the list. Every version is listed."
+  },
+  "backupFilterNamed": "Named",
+  "@backupFilterNamed": {
+    "description": "Project history window: the second of two options over the list. Only versions somebody has named are listed."
+  },
+  "backupVersionsShown": "{shown} of {count, plural, =1{1 version} other{{count} versions}}",
+  "@backupVersionsShown": {
+    "description": "Foot of the Project history window while only named versions are listed: how many of the project's versions the list is showing, such as 3 of 16 versions.",
+    "placeholders": {
+      "shown": {
+        "type": "int"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "backupNoNamed": "No named versions",
+  "@backupNoNamed": {
+    "description": "Project history window: shown in the list when only named versions are listed and nothing has a name."
+  },
+  "backupKept": "Named versions are kept for good. The rest thin with age.",
+  "@backupKept": {
+    "description": "Project history window: one quiet line at the foot of the list saying what is kept. It has to fit on one line about 290 pixels wide. Versions with a name are never deleted to save space. Thin is the verb: the others become fewer as they get older."
+  },
+  "backupKeptRule": "After a day, autosaves thin to one an hour. After a week, everything without a name thins to one a day, and after three months to one a week.",
+  "@backupKeptRule": {
+    "description": "Project history window: tooltip on the line saying what is kept, giving the rule. Every autosave is kept for a day, then the last of each hour. After a week every version without a name, autosave or not, is thinned to the last of each day, and after 90 days to the last of each week."
+  },
+  "backupNow": "Back up now",
+  "@backupNow": {
+    "description": "Project history window: small button beside the state of the backup when the project's file is waiting to be sent or was refused. Sends it."
+  },
+  "backupOpenNewer": "Open that version…",
+  "@backupOpenNewer": {
+    "description": "Project history window: small button beside the state of the backup when another machine has saved a newer version than the file here. Asks, then makes that version the project."
+  },
+  "backupOpenNewerAskToday": "Open the version saved on {device} at {time}?",
+  "@backupOpenNewerAskToday": {
+    "description": "Question asked before the newer version another machine saved today is opened in place of the file here. {device} is that machine's name, {time} a clock time.",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      },
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "backupOpenNewerAsk": "Open the version saved on {device}, {when}?",
+  "@backupOpenNewerAsk": {
+    "description": "Question asked before the newer version another machine saved before today is opened in place of the file here. {device} is that machine's name, {when} a day and a time, such as yesterday, 10:05.",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      },
+      "when": {
+        "type": "String"
+      }
+    }
+  },
+  "backupOpenNewerConfirm": "Open",
+  "@backupOpenNewerConfirm": {
+    "description": "Button that confirms opening the newer version another machine saved."
+  },
+  "backupAutosaves": "{count, plural, =1{1 autosave} other{{count} autosaves}}",
+  "@backupAutosaves": {
+    "description": "Project history window: one row standing for a run of autosaves between two saves. A press shows them.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "backupStorageIn": "{used} of {limit} used · {backups} in backups",
+  "@backupStorageIn": {
+    "description": "How much of the account's storage is used, and how much of that is project backups. Review links use the same storage. Shown in the Open from backup window and under the backup switch in Settings.",
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      },
+      "backups": {
+        "type": "String"
+      }
+    }
+  },
+  "backupFootageNote": "Footage is backed up only when a project is packed.",
+  "@backupFootageNote": {
+    "description": "Open from backup window: one quiet line at its foot. A backup is the project file, and footage is inside that file only for a packed project. Otherwise footage is not backed up."
+  },
+  "backupFootageMissing": "{count, plural, =1{1 footage file is missing.} other{{count} footage files are missing.}}",
+  "@backupFootageMissing": {
+    "description": "Bottom-strip warning after a project is opened from backup, or a version is put back or opened as a copy, when footage it uses is not on this machine. A press selects the first missing file in the Project panel and opens the file picker to relink it.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "backupFreeUp": "Free up space…",
+  "@backupFreeUp": {
+    "description": "Project history window: small button beside the state of the backup when the account's storage is full. Opens the Open from backup window, which shows how much is used and where a project can be deleted from backup."
+  },
+  "backupCardOpen": "Open",
+  "@backupCardOpen": {
+    "description": "Open from backup window: first row in a project's menu. Opens the project, fetching it first when its file is not on this machine."
+  },
+  "backupChanged": "Changed",
+  "@backupChanged": {
+    "description": "Project history window: small heading over the lines saying what changed in the chosen version since the one before it."
+  },
+  "backupChangeCompsAdded": "{count, plural, =1{composition added} other{compositions added}}",
+  "@backupChangeCompsAdded": {
+    "description": "Project history window: one line under Changed. The number is shown before it in a column of its own, so it is not in the words. No full stop.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "backupChangeCompsRemoved": "{count, plural, =1{composition removed} other{compositions removed}}",
+  "@backupChangeCompsRemoved": {
+    "description": "Project history window: one line under Changed. The number is shown before it in a column of its own. No full stop.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "backupChangeCompsRenamed": "{count, plural, =1{composition renamed} other{compositions renamed}}",
+  "@backupChangeCompsRenamed": {
+    "description": "Project history window: one line under Changed. The number is shown before it in a column of its own. No full stop.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "backupChangeLayersAdded": "{count, plural, =1{layer added in {where}} other{layers added in {where}}}",
+  "@backupChangeLayersAdded": {
+    "description": "Project history window: one line under Changed. The number is shown before it in a column of its own. {where} names the compositions the layers are in, such as Titles, or Titles and Scene. No full stop.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "where": {
+        "type": "String"
+      }
+    }
+  },
+  "backupChangeLayersRemoved": "{count, plural, =1{layer removed in {where}} other{layers removed in {where}}}",
+  "@backupChangeLayersRemoved": {
+    "description": "Project history window: one line under Changed. The number is shown before it in a column of its own. {where} names the compositions the layers were in. No full stop.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "where": {
+        "type": "String"
+      }
+    }
+  },
+  "backupChangeLayersChanged": "{count, plural, =1{layer changed in {where}} other{layers changed in {where}}}",
+  "@backupChangeLayersChanged": {
+    "description": "Project history window: one line under Changed. The number is shown before it in a column of its own. {where} names the compositions the layers are in. No full stop.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "where": {
+        "type": "String"
+      }
+    }
+  },
+  "backupChangeEffectsAdded": "{count, plural, =1{effect added} other{effects added}}",
+  "@backupChangeEffectsAdded": {
+    "description": "Project history window: one line under Changed. The number is shown before it in a column of its own. No full stop.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "backupChangeEffectsRemoved": "{count, plural, =1{effect removed} other{effects removed}}",
+  "@backupChangeEffectsRemoved": {
+    "description": "Project history window: one line under Changed. The number is shown before it in a column of its own. No full stop.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "backupChangeFootageAdded": "{count, plural, =1{footage item added} other{footage items added}}",
+  "@backupChangeFootageAdded": {
+    "description": "Project history window: one line under Changed. The number is shown before it in a column of its own. No full stop.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "backupChangeFootageRemoved": "{count, plural, =1{footage item removed} other{footage items removed}}",
+  "@backupChangeFootageRemoved": {
+    "description": "Project history window: one line under Changed. The number is shown before it in a column of its own. No full stop.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "backupChangeWhere2": "{first} and {second}",
+  "@backupChangeWhere2": {
+    "description": "Two composition names, for the line saying which compositions changed layers are in.",
+    "placeholders": {
+      "first": {
+        "type": "String"
+      },
+      "second": {
+        "type": "String"
+      }
+    }
+  },
+  "backupChangeWhere3": "{first}, {second} and {third}",
+  "@backupChangeWhere3": {
+    "description": "Three composition names, for the line saying which compositions changed layers are in.",
+    "placeholders": {
+      "first": {
+        "type": "String"
+      },
+      "second": {
+        "type": "String"
+      },
+      "third": {
+        "type": "String"
+      }
+    }
+  },
+  "backupChangeWhereMore": "{first}, {second}, {third} and {count} more",
+  "@backupChangeWhereMore": {
+    "description": "Three composition names and how many more there are, for the line saying which compositions changed layers are in.",
+    "placeholders": {
+      "first": {
+        "type": "String"
+      },
+      "second": {
+        "type": "String"
+      },
+      "third": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "backupBringBack": "Bring a composition back…",
+  "@backupBringBack": {
+    "description": "Project history window: an action in words at the foot, and a row in a version's menu. Fetches the chosen version, lists its compositions in a small window, and adds the one chosen to the project as it is now, beside what is there."
+  },
+  "backupBringBackTitle": "Bring a composition back",
+  "@backupBringBackTitle": {
+    "description": "Title of the small window that lists the compositions in a version from the project's history, to choose one to add to the open project."
+  },
+  "backupBringBackConfirm": "Bring back",
+  "@backupBringBackConfirm": {
+    "description": "Button in the Bring a composition back window. Adds the chosen composition to the open project."
+  },
+  "backupBroughtBack": "Brought back {name}.",
+  "@backupBroughtBack": {
+    "description": "Bottom-strip notice once a composition from an earlier version has been added to the open project. {name} is the composition's name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "importCompTitle": "Import a composition",
+  "@importCompTitle": {
+    "description": "Title of the small window that lists the compositions in another Lumit project file picked with Import footage, to choose one to add to the open project."
+  },
+  "importCompConfirm": "Import",
+  "@importCompConfirm": {
+    "description": "Button in the Import a composition window. Adds the chosen composition to the open project."
+  },
+  "importCompDone": "Imported {name}.",
+  "@importCompDone": {
+    "description": "Bottom-strip notice once a composition from another Lumit project file has been added to the open project. {name} is the composition's name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "bringUnreadable": "That project could not be read.",
+  "@bringUnreadable": {
+    "description": "Bottom-strip warning when a composition was to be brought in from a version in the project's history, or from another Lumit project file, and the file is not a project this Lumit can read."
+  },
+  "bringNoComps": "That project has no compositions.",
+  "@bringNoComps": {
+    "description": "Bottom-strip notice when a composition was to be brought in from a version in the project's history, or from another Lumit project file, and it holds none."
+  },
   "settingsAccount": "Account",
   "@settingsAccount": {
     "description": "Name of the Settings page for profiles, the Lumit account and sync."
@@ -17202,7 +17870,7 @@
   },
   "reviewNoteLayersChanged": "{count, plural, =1{1 layer changed} other{{count} layers changed}}",
   "@reviewNoteLayersChanged": {
-    "description": "Send for review: part of the line that says what changed since the last version, worked out from the composition.",
+    "description": "Send for review: part of the line that says what changed since the last version, worked out from the composition. The Project history window counts the same things under Changed.",
     "placeholders": {
       "count": {
         "type": "int"
@@ -17389,5 +18057,9 @@
   "proFeatureReviewBody": "Send an export by link. Comments come back on the frame.",
   "@proFeatureReviewBody": {
     "description": "What the third Lumit Pro feature does: people watch an export in a browser and comment on a frame of it."
+  },
+  "settingsStorage": "Storage",
+  "@settingsStorage": {
+    "description": "Settings Account page: row that says how much of the account's Lumit Pro storage is used."
   }
 }

@@ -116,6 +116,7 @@ r.addEventListener("input",set);set()})})`,
                       label: "Projects and media",
                       items: [
                         "use/projects",
+                        "use/backup",
                         "use/importing",
                         "use/proxies",
                         "use/image-sequences",

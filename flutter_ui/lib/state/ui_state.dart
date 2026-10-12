@@ -53,6 +53,7 @@ import 'package:lumit_flutter/src/rust/api/streams.dart'
 import 'package:lumit_flutter/src/rust/api/share.dart' as bridge_share
     show shareSetLimits, shareSetFootage;
 import 'package:lumit_flutter/state/account.dart';
+import 'package:lumit_flutter/state/backup.dart';
 import 'package:lumit_flutter/state/addons.dart';
 import 'package:lumit_flutter/state/extensions.dart';
 import 'package:lumit_flutter/state/addons_engine.dart';
@@ -140,6 +141,9 @@ class LumitUiState extends ChangeNotifier {
 
   /// The account's review links, and the comments left on them.
   late final ReviewsState reviews = ReviewsState(account, profiles);
+  /// The open project's backup and the account's backed-up projects.
+  late final BackupState backup = BackupState(_app, account, profiles,
+      looking: () => (selectedComp, playheadFrame.value));
 
   /// Settings came in from a profile or the server. The workspace has them.
   /// This hands on the ones something else acts on.
@@ -540,6 +544,12 @@ class LumitUiState extends ChangeNotifier {
   /// Project panel offers "add this to the comp" rather than the new-layer
   /// ring it used to fall through to. Null with nothing picked there.
   final ValueNotifier<ItemReference?> selectedProjectItem = ValueNotifier(null);
+
+  /// An item the Project panel is asked to select and show, by something
+  /// outside it that has just made one: a composition brought in from another
+  /// project file. Asked for like [selectPropertyRequest], since the panel's
+  /// selection is its own.
+  final ValueNotifier<ItemReference?> projectPickRequest = ValueNotifier(null);
 
   /// Bumped each time a rendered frame reaches the Viewer, on any of the three
   /// transports. Watched by anything that redraws when the picture does — the
@@ -2389,6 +2399,7 @@ class LumitUiState extends ChangeNotifier {
     _lifecycle.dispose();
     _clock.dispose();
     reviews.dispose();
+    backup.dispose();
     profiles.dispose();
     unawaited(relayDoor.close());
     account.dispose();

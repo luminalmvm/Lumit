@@ -1,11 +1,16 @@
-// A file on its way to Lumit's server.
+// A file on its way to Lumit's server or back from it.
 //
-// A review link's video goes that way, in the pieces the server asks for.
+// Two things move files that way: a review link's video and a project's
+// backup. They go up in the pieces the server asks for, and come down into a
+// file beside the one they are to become. Both halves are here, so there is
+// one of each.
 
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
+
+import 'package:crypto/crypto.dart';
 
 import 'account.dart';
 
@@ -102,4 +107,52 @@ Future<List<Map<String, Object>>> sendParts(
   }
   onProgress(size);
   return parts;
+}
+
+/// Write [bytes] to [path], if they come to [hash] when one is given.
+///
+/// They go into a file beside it first, and that file takes the place of
+/// [path] in one step. A download that is cut off, or arrives as the wrong
+/// bytes, leaves whatever was at [path] exactly as it was.
+///
+/// With [resume] the bytes follow what the file beside it already holds, and
+/// one that is cut off keeps that file, to be carried on from. Without, it
+/// leaves nothing.
+Future<void> writeChecked(Stream<List<int>> bytes, String? hash, String path,
+    {bool resume = false}) async {
+  final part = File('$path.part');
+  Digest? digest;
+  final hasher = hash == null
+      ? null
+      : sha256.startChunkedConversion(
+          ChunkedConversionSink<Digest>.withCallback((d) => digest = d.single));
+  RandomAccessFile? out;
+  try {
+    out = await part.open(mode: resume ? FileMode.append : FileMode.write);
+    await for (final chunk in bytes) {
+      hasher?.add(chunk);
+      await out.writeFrom(chunk);
+    }
+    hasher?.close();
+    if (hash != null && '$digest' != hash) throw const CloudError('bad_hash');
+    await out.flush();
+    await out.close();
+    out = null;
+    await part.rename(path);
+  } catch (e) {
+    try {
+      await out?.close();
+    } catch (_) {
+      // Closed as far as it is going to be.
+    }
+    if (!resume) {
+      try {
+        await part.delete();
+      } catch (_) {
+        // Never made.
+      }
+    }
+    if (e is CloudError) rethrow;
+    throw CloudError(e is FileSystemException ? 'unwritable' : 'offline');
+  }
 }

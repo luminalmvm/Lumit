@@ -338,6 +338,9 @@ class AccountState extends ChangeNotifier {
     try {
       return (await _send(method, path, body: body, bearer: token)).$2;
     } on CloudError catch (e) {
+      // 402 is Pro having ended since the account was last read. It is read
+      // again, so the rest of the interface stops saying otherwise.
+      if (e.status == 402 && pro) unawaited(refreshAccount());
       // 402 and 409 answer with what is stored, which a caller may want.
       if (e.status != 401) rethrow;
     }

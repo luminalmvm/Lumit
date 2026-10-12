@@ -128,7 +128,8 @@ Not interchangeable.
 | **Workspace** | A saved panel layout |
 | **Profile** | One person's settings on a machine: appearance, shortcuts, layout, preferences and what they have saved. Never anything about the machine |
 | **Account** | A Lumit account, which a profile can be signed in to. Optional |
-| **Lumit Pro** | The paid plan on an account: Lumit's relay, and **sync**, which keeps a profile the same on every machine |
+| **Lumit Pro** | The paid plan on an account: Lumit's relay, **sync**, which keeps a profile the same on every machine, and **backup** |
+| **Backup** | A copy of a project that Lumit Pro keeps each time it is saved. Its earlier saves are its **history** |
 | **Graph panel** | Draws a layer's effects as nodes and wires. Not the evaluation graph |
 | **Viewer** | Shows a comp, footage or layer. Holds one, two or four **views** |
 | **Timeline** | A comp's layers against time |

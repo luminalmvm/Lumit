@@ -622,6 +622,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeFadeShape dco_decode_bridge_fade_shape(dynamic raw);
 
   @protected
+  BridgeFileComp dco_decode_bridge_file_comp(dynamic raw);
+
+  @protected
   BridgeFileParam dco_decode_bridge_file_param(dynamic raw);
 
   @protected
@@ -1265,6 +1268,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       dynamic raw);
 
   @protected
+  List<BridgeFileComp> dco_decode_list_bridge_file_comp(dynamic raw);
+
+  @protected
   List<BridgeFootageLack> dco_decode_list_bridge_footage_lack(dynamic raw);
 
   @protected
@@ -1445,6 +1451,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeWirePoint> dco_decode_list_bridge_wire_point(dynamic raw);
+
+  @protected
+  List<CompositionReference> dco_decode_list_composition_reference(dynamic raw);
 
   @protected
   List<ItemReference> dco_decode_list_item_reference(dynamic raw);
@@ -1673,6 +1682,13 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<String>? dco_decode_opt_list_String(dynamic raw);
+
+  @protected
+  List<BridgeFileComp>? dco_decode_opt_list_bridge_file_comp(dynamic raw);
+
+  @protected
+  List<CompositionReference>? dco_decode_opt_list_composition_reference(
+      dynamic raw);
 
   @protected
   Float32List? dco_decode_opt_list_prim_f_32_strict(dynamic raw);
@@ -2348,6 +2364,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeFadeShape sse_decode_bridge_fade_shape(SseDeserializer deserializer);
+
+  @protected
+  BridgeFileComp sse_decode_bridge_file_comp(SseDeserializer deserializer);
 
   @protected
   BridgeFileParam sse_decode_bridge_file_param(SseDeserializer deserializer);
@@ -3085,6 +3104,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  List<BridgeFileComp> sse_decode_list_bridge_file_comp(
+      SseDeserializer deserializer);
+
+  @protected
   List<BridgeFootageLack> sse_decode_list_bridge_footage_lack(
       SseDeserializer deserializer);
 
@@ -3320,6 +3343,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeWirePoint> sse_decode_list_bridge_wire_point(
+      SseDeserializer deserializer);
+
+  @protected
+  List<CompositionReference> sse_decode_list_composition_reference(
       SseDeserializer deserializer);
 
   @protected
@@ -3579,6 +3606,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<String>? sse_decode_opt_list_String(SseDeserializer deserializer);
+
+  @protected
+  List<BridgeFileComp>? sse_decode_opt_list_bridge_file_comp(
+      SseDeserializer deserializer);
+
+  @protected
+  List<CompositionReference>? sse_decode_opt_list_composition_reference(
+      SseDeserializer deserializer);
 
   @protected
   Float32List? sse_decode_opt_list_prim_f_32_strict(
@@ -4294,6 +4329,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_fade_shape(
       BridgeFadeShape self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_file_comp(
+      BridgeFileComp self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_file_param(
@@ -5113,6 +5152,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       List<BridgeExtensionPermission> self, SseSerializer serializer);
 
   @protected
+  void sse_encode_list_bridge_file_comp(
+      List<BridgeFileComp> self, SseSerializer serializer);
+
+  @protected
   void sse_encode_list_bridge_footage_lack(
       List<BridgeFootageLack> self, SseSerializer serializer);
 
@@ -5351,6 +5394,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_list_bridge_wire_point(
       List<BridgeWirePoint> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_composition_reference(
+      List<CompositionReference> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_item_reference(
@@ -5616,6 +5663,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   void sse_encode_opt_list_String(List<String>? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_list_bridge_file_comp(
+      List<BridgeFileComp>? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_list_composition_reference(
+      List<CompositionReference>? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_list_prim_f_32_strict(

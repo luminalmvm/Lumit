@@ -20,6 +20,7 @@ import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'pro_window.dart';
 import 'profile_chip.dart';
+import 'project_history_window.dart' show backupSize;
 import 'settings_rows.dart';
 import 'sign_in_window.dart';
 
@@ -38,8 +39,10 @@ String profileGroupLabel(ProfileGroup group) => switch (group) {
 List<String> accountSettingsRows() => [
       l10n.settingsAccountProfiles,
       l10n.settingsAccountPlan,
+      l10n.settingsStorage,
       l10n.settingsSyncOn,
       for (final group in ProfileGroup.values) profileGroupLabel(group),
+      l10n.backupSettingsOn,
     ];
 
 class AccountSettings extends StatelessWidget {
@@ -67,6 +70,9 @@ class AccountSettings extends StatelessWidget {
         section(l10n.settingsAccountProfiles, _profiles(context, t));
         section(l10n.settingsAccountGroup, _account(context, t));
         section(l10n.settingsSync, _sync(context, t));
+        section(l10n.backupSettingsGroup, [
+          if (matches(l10n.backupSettingsOn)) _BackupRow(ui: ui),
+        ]);
         return Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -204,6 +210,9 @@ class AccountSettings extends StatelessWidget {
         ),
         description: plan?.$1 ?? '',
       ),
+      // The account's, so it is said with the account and not under what
+      // fills it.
+      if (account.pro && matches(l10n.settingsStorage)) _StorageRow(ui: ui),
       // Mail about new comments on review links, for every link the account
       // has. A link has a switch of its own in the Review links window.
       _row(
@@ -285,6 +294,79 @@ class AccountSettings extends StatelessWidget {
           },
         ),
     ];
+  }
+}
+
+/// How much of the account's storage is used, which backups fill. It asks
+/// the server as it is shown, and is drawn again when the answer comes.
+class _StorageRow extends StatefulWidget {
+  final LumitUiState ui;
+  const _StorageRow({required this.ui});
+
+  @override
+  State<_StorageRow> createState() => _StorageRowState();
+}
+
+class _StorageRowState extends State<_StorageRow> {
+  @override
+  void initState() {
+    super.initState();
+    unawaited(widget.ui.backup.refresh());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    final backup = widget.ui.backup;
+    return ListenableBuilder(
+      listenable: backup,
+      builder: (context, _) => settingsRow(
+        t,
+        l10n.settingsStorage,
+        '',
+        Text(
+            backup.limit > 0
+                ? l10n.backupStorageIn(backupSize(backup.used),
+                    backupSize(backup.limit), backupSize(backup.stored))
+                : '',
+            key: const ValueKey('settings-storage'),
+            style: t.small.copyWith(color: t.textSecondary)),
+      ),
+    );
+  }
+}
+
+/// The switch for backing projects up when they are saved.
+class _BackupRow extends StatelessWidget {
+  final LumitUiState ui;
+  const _BackupRow({required this.ui});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    final backup = ui.backup;
+    return ListenableBuilder(
+      listenable: backup,
+      builder: (context, _) {
+        final pro = ui.account.pro;
+        return settingsRow(
+          t,
+          l10n.backupSettingsOn,
+          pro ? '' : l10n.backupNeedsPro,
+          IgnorePointer(
+            ignoring: !pro,
+            child: Opacity(
+              opacity: pro ? 1 : 0.4,
+              child: HouseToggle(
+                key: const ValueKey('settings-backup-on'),
+                value: backup.on,
+                onChanged: backup.setOn,
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 }
 

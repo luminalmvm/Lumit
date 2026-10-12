@@ -22,8 +22,64 @@ import 'solid.dart';
 import 'state.dart';
 
 // These functions are ignored because they are not marked as `pub`: `import_while`, `new_comp_ops`, `new_comp_with`, `next_comp_name_in`, `of`, `place_layers`, `save_with`, `to_model`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `new`, `state`
+
+/// The compositions in the project file at `path`, in the file's own order,
+/// read without opening it as the project. `None` when it is not a project
+/// file this build reads.
+///
+/// Not `#[frb(sync)]`: it reads and parses a whole file.
+Future<List<BridgeFileComp>?> compsInFile({required String path}) =>
+    BridgeLib.instance.api.crateApiProjectCompsInFile(path: path);
+
+/// One composition in a project file that is not the open project, as the
+/// picker that brings one in lists it.
+class BridgeFileComp {
+  /// What [`ProjectReference::bring_comps`] is asked for it by.
+  final UuidValue id;
+  final String name;
+  final int width;
+  final int height;
+  final int fpsNum;
+  final int fpsDen;
+
+  /// How long it is, in frames at its own rate.
+  final PlatformInt64 durationFrames;
+
+  const BridgeFileComp({
+    required this.id,
+    required this.name,
+    required this.width,
+    required this.height,
+    required this.fpsNum,
+    required this.fpsDen,
+    required this.durationFrames,
+  });
+
+  @override
+  int get hashCode =>
+      id.hashCode ^
+      name.hashCode ^
+      width.hashCode ^
+      height.hashCode ^
+      fpsNum.hashCode ^
+      fpsDen.hashCode ^
+      durationFrames.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeFileComp &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          name == other.name &&
+          width == other.width &&
+          height == other.height &&
+          fpsNum == other.fpsNum &&
+          fpsDen == other.fpsDen &&
+          durationFrames == other.durationFrames;
+}
 
 /// Whether undo and redo have anything to do, for greying the menu items.
 class BridgeHistory {
@@ -316,6 +372,39 @@ class ProjectReference {
       BridgeLib.instance.api.crateApiProjectProjectReferenceBeginUndoGroup(
         that: this,
       );
+
+  /// Bring compositions out of the project file at `path` and into this
+  /// project, as one undo step. The file is an earlier save of this project,
+  /// from its history, or any other `.lum`.
+  ///
+  /// Each arrives as a new composition with what it places, and footage the
+  /// project already has is used again ([`lumit_project::bring`]). They are
+  /// filed where a composition and a solid made here would be.
+  ///
+  /// `earlier_save` says the file is a save of this project that was fetched
+  /// to somewhere else, so its footage is looked for from this project's own
+  /// folder and not from the file's.
+  ///
+  /// `source` is what the file is called, for a composition whose name the
+  /// project already has: it arrives as "Titles (`source`)", in the same
+  /// step, so there are never two of one name to tell apart.
+  ///
+  /// `None`, with nothing changed, when the file is not a project this build
+  /// reads or has no composition by one of the ids. Otherwise the new
+  /// composition for each id, in the order asked.
+  ///
+  /// Not `#[frb(sync)]`: it reads a whole file and looks for its footage.
+  Future<List<CompositionReference>?> bringComps(
+          {required String path,
+          required List<UuidValue> comps,
+          required bool earlierSave,
+          required String source}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceBringComps(
+          that: this,
+          path: path,
+          comps: comps,
+          earlierSave: earlierSave,
+          source: source);
 
   /// Where *this project* parks its rendered frames, overriding the
   /// application-wide choice — or `None` when it follows that choice, which is

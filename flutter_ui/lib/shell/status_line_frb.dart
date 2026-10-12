@@ -35,6 +35,7 @@ import 'package:lumit_flutter/src/rust/api/audio.dart'
 import '../state/reviews.dart' show isReviewExport;
 import 'cache_confirm_frb.dart';
 import 'profile_chip.dart';
+import 'project_history_window.dart';
 import 'review_links_window.dart';
 import 'share_dialog_frb.dart';
 
@@ -244,6 +245,8 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
                   ),
           ),
           _bubble(t, _savedState(t, state)),
+          // The open project's backup, beside whether it is saved.
+          BackupMark(unsaved: _unsaved, wrap: (mark) => _bubble(t, mark)),
           _divider(t),
           // Deliberately NOT const: a const child is skipped by the tick's
           // rebuild, which froze the meter at whatever it first read. Three
@@ -387,12 +390,18 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
     ];
   }
 
+  /// Whether the project had unsaved changes when the strip was last drawn.
+  /// Kept as [_savedState] works it out, so the backup's mark beside it can
+  /// read the same answer without asking the engine a second time.
+  bool _unsaved = false;
+
   /// Saved / unsaved, at the far left. Being unsaved is a fact, not a fault,
   /// so it reads in the ordinary text colour — the muted tint is for the
   /// states where nothing is at risk.
   Widget _savedState(LumitTheme t, LumitState state) {
     final project = state.project;
     final dirty = project?.isDirty() ?? false;
+    _unsaved = dirty;
     final label = project == null
         ? l10n.noProject
         : dirty
@@ -537,7 +546,9 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
                   child: MouseRegion(
                     cursor: SystemMouseCursors.click,
                     child: GestureDetector(
-                      onTap: () => _showNotices(context, t, state),
+                      // A notice that leads somewhere goes there.
+                      onTap: notice.onTap ??
+                          () => _showNotices(context, t, state),
                       child: Text(
                         notice.message,
                         key: const ValueKey('status-notice'),
