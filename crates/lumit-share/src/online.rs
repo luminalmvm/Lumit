@@ -1997,6 +1997,12 @@ impl Drop for Member {
         } else {
             inner.in_step();
         }
+        // The last of it. The member's thread can be some seconds noticing,
+        // and what it kept after this would land on the copy opened again.
+        {
+            let _kept = inner.kept.lock();
+            inner.left.store(true, Ordering::Relaxed);
+        }
         inner.end();
     }
 }
