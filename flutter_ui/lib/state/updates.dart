@@ -532,6 +532,9 @@ class UpdateService extends ChangeNotifier {
 
   UpdateStage _stage = UpdateStage.idle;
   UpdateRelease? _release;
+
+  /// The notice of the release that is running, when the last check saw it.
+  List<UpdateNoticeLine> _said = const [];
   File? _downloaded;
   double _progress = 0;
   String? _failure;
@@ -551,6 +554,14 @@ class UpdateService extends ChangeNotifier {
 
   /// The release that is waiting, once one has been found.
   UpdateRelease? get release => _release;
+
+  /// What the waiting release says to read first, less what the build that is
+  /// running said already. A nightly carries the next release's notice night
+  /// after night, and only a line that is new is worth a window.
+  List<UpdateNoticeLine> get notice => [
+        for (final line in _release?.notice ?? const <UpdateNoticeLine>[])
+          if (!_said.contains(line)) line
+      ];
 
   /// How far the download has got, 0 to 1. Zero at every other stage.
   double get progress => _progress;
@@ -612,6 +623,7 @@ class UpdateService extends ChangeNotifier {
       // The newest release this machine can install: the one `latest` named,
       // or on the nightly channel the best of the recent ones.
       UpdateRelease? found;
+      _said = const [];
       for (final entry in json is List ? json : [json]) {
         if (entry is! Map<String, dynamic>) continue;
         final release = UpdateRelease.parse(
@@ -621,6 +633,7 @@ class UpdateService extends ChangeNotifier {
           replaceable: site.replaceable,
           nightly: nightly,
         );
+        if (release?.version == current) _said = release!.notice;
         if (release != null &&
             (found == null ||
                 compareVersions(release.version, found.version) > 0)) {

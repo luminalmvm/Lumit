@@ -507,17 +507,22 @@ jobs:
           # file has one, goes at the top of the release ahead of the generated
           # notes. Lumit reads it from there and shows it once the update is
           # downloaded, before it restarts (flutter_ui/lib/state/updates.dart).
-          notes="web/src/content/releases/${tag#v}.md"
+          heads_up() {
+            if [ -f "$1" ]; then
+              awk '/^#/ { keep = (tolower($0) ~ /^#+[[:space:]]*before you update[[:space:]]*$/) } keep' "$1"
+            fi
+          }
           before=
-          if [ -f "$notes" ]; then
-            awk '/^#/ { keep = (tolower($0) ~ /^#+[[:space:]]*before you update[[:space:]]*$/) } keep' \
-              "$notes" > before.md
-            if [ -s before.md ]; then before="--notes-file before.md"; fi
-          fi
+          heads_up "web/src/content/releases/${tag#v}.md" > before.md
+          if [ -s before.md ]; then before="--notes-file before.md"; fi
           # A nightly says what it is at the top of its own page, which is the
-          # one place somebody who was sent a link to it will read.
+          # one place somebody who was sent a link to it will read. Under that
+          # goes what the next release has to say so far (_next.md), so someone
+          # on nightly builds is told when a change lands and not weeks later.
           case "$tag" in *-nightly.*)
             echo "Nightly build: new features first, less tested. Projects saved in a nightly may not open in the stable version." > before.md
+            heads_up web/src/content/releases/_next.md > next.md
+            if grep -q '^[-*+] ' next.md; then { echo; cat next.md; } >> before.md; fi
             before="--notes-file before.md" ;;
           esac
           gh release create "$tag" dist/* \

@@ -223,10 +223,9 @@ enum DiscordStatus {
 /// settings file's own so that file does not depend on a generated name.
 enum StreamsArrival {
   /// The layer plays the first stream, as a file with one stream arrives.
-  /// What a fresh install has.
   first,
 
-  /// One layer plays every stream mixed.
+  /// One layer plays every stream mixed. What a fresh install has.
   mixed,
 
   /// A layer to each stream.
@@ -518,7 +517,7 @@ class InterfaceSettings {
     this.retimeOpensToSpeed = false,
     this.retimeInSeconds = false,
     this.videoAsSequenceLayer = false,
-    this.streamsArrival = StreamsArrival.first,
+    this.streamsArrival = StreamsArrival.mixed,
     this.playheadStaysOnStop = false,
     this.pasteLayersAtOriginalTime = false,
     this.multiwaveWaveforms = true,
@@ -554,7 +553,7 @@ class InterfaceSettings {
         'retime_opens_to_speed': retimeOpensToSpeed,
         'retime_in_seconds': retimeInSeconds,
         'video_as_sequence_layer': videoAsSequenceLayer,
-        'streams_arrival': streamsArrival.name,
+        'audio_streams_arrival': streamsArrival.name,
         'playhead_stays_on_stop': playheadStaysOnStop,
         'paste_layers_at_original_time': pasteLayersAtOriginalTime,
         'multiwave_waveforms': multiwaveWaveforms,
@@ -611,9 +610,15 @@ class InterfaceSettings {
         // settings file written before this field existed adopts it.
         retimeInSeconds: j['retime_in_seconds'] as bool? ?? false,
         videoAsSequenceLayer: j['video_as_sequence_layer'] as bool? ?? false,
+        // 0.7.0 kept this under `streams_arrival` and wrote the first stream
+        // there whether or not anybody had chosen it, so only a layer each is
+        // believed from that key. Anything else gets the default.
         streamsArrival: StreamsArrival.values.firstWhere(
-            (a) => a.name == j['streams_arrival'],
-            orElse: () => StreamsArrival.first),
+            (a) =>
+                a.name ==
+                (j['audio_streams_arrival'] ??
+                    (j['streams_arrival'] == 'split' ? 'split' : null)),
+            orElse: () => StreamsArrival.mixed),
         // Absent means off here too, but for the opposite reason: the returning
         // playhead is the *new* default, so a settings file written
         // before this field existed adopts it rather than being pinned to the
