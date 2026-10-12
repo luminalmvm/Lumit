@@ -39,7 +39,7 @@ with immediate effect.
 ## What you store with us
 
 - It stays yours.
-- Anyone with a review link's address can open it.
+- Anyone with a preview's address can open it.
 - Don't store anything unlawful, or that you have no right to share. We may remove it.
 - Pro includes 50 GB of storage.
 - If Pro ends, you can still open and delete what you stored. A project kept online is

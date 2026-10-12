@@ -1,4 +1,4 @@
-// The Review links window: the exports sent out for comments, and what came
+// The Previews window: the exports sent out for comments, and what came
 // back.
 //
 // One window that reads the account and shows what is true of it. Somebody
@@ -61,7 +61,7 @@ const double _bodyHeight = _listMargin + 9.5 * reviewLinkRowHeight;
 /// The two pages of the chosen link: what people said, and the link itself.
 enum _Page { comments, link }
 
-/// Open the Review links window: on [link] when one is named, and straight on
+/// Open the Previews window: on [link] when one is named, and straight on
 /// sending [send] when a composition is.
 Future<void> showReviewLinks(BuildContext context,
     {String? link, CompositionReference? send}) async {

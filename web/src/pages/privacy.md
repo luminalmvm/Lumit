@@ -19,7 +19,7 @@ normal. Lumit is largely maintained by Mack Reed, who is responsible for what is
 - **Your subscription.** Whether you have Pro, and when it renews. Never your card.
 - **The settings you sync.** Appearance, shortcuts, panel layout, preferences, and what you
   have saved.
-- **Review links.** The video you send, its comments, and the names people enter.
+- **Previews.** The video you send, its comments, and the names people enter.
 - **Backups.** Your saved project files.
 - **Projects kept online.** Encrypted before they leave your computer. We can't read them.
 

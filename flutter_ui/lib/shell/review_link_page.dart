@@ -1,4 +1,4 @@
-// The Link page of the Review links window: what reviewers may do with a
+// The Link page of the Previews window: what reviewers may do with a
 // link, who has opened it, its versions, and the way to delete it.
 //
 // It asks the server one thing itself, as it opens: who has opened the link.

@@ -1,7 +1,7 @@
 // Sending a composition for review: what to send, the wait while it is
 // exported and uploaded, and the link at the end of it.
 //
-// This is one face of the Review links window. The form is an ordinary
+// This is one face of the Previews window. The form is an ordinary
 // dialogue. The wait and the link stand in front of the Pro wash, because
 // they are the server's part of the job.
 //

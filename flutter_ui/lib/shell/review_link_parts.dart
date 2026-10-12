@@ -1,4 +1,4 @@
-// The pieces the Review links window is put together from: a link's still, a
+// The pieces the Previews window is put together from: a link's still, a
 // comment's row, a like's line, and the page of a link's own settings,
 // viewers and versions.
 //

@@ -219,7 +219,7 @@ class AccountSettings extends StatelessWidget {
       // the two things that fill it.
       if (account.pro && matches(l10n.settingsStorage)) _StorageRow(ui: ui),
       // Mail about new comments on review links, for every link the account
-      // has. A link has a switch of its own in the Review links window.
+      // has. A link has a switch of its own in the Previews window.
       _row(
         t,
         l10n.settingsReviewMail,
