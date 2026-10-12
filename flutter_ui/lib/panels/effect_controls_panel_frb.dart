@@ -2368,7 +2368,9 @@ class _EffectSection extends StatelessWidget {
             param.id.endsWith('_x') &&
             next.id == '${param.id.substring(0, param.id.length - 2)}_y' &&
             param.kind is BridgeParamKind_Float &&
-            next.kind is BridgeParamKind_Float;
+            next.kind is BridgeParamKind_Float &&
+            !drivenByExpression(stagedValue(id, param.id) ?? values[param.id]) &&
+            !drivenByExpression(stagedValue(id, next.id) ?? values[next.id]);
         if (isPair) {
           final stem = pairStemOf(info.name, param.id);
           out.add(marked(

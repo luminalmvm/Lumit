@@ -753,7 +753,9 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
           param.id.endsWith('_x') &&
           next.id == '${param.id.substring(0, param.id.length - 2)}_y' &&
           param.kind is BridgeParamKind_Float &&
-          next.kind is BridgeParamKind_Float) {
+          next.kind is BridgeParamKind_Float &&
+          !drivenByExpression(_staged(id, param.id) ?? values[param.id]) &&
+          !drivenByExpression(_staged(id, next.id) ?? values[next.id])) {
         final stem = pairStemOf(picked.info.name, param.id);
         rows.add(EffectPointRowFrb(
           key: ValueKey<String>('node-row-$id-${param.id}-pair'),

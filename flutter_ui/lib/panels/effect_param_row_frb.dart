@@ -593,6 +593,25 @@ class EffectParamRowFrb extends StatelessWidget {
     }
     if (value == null) return Text('—', style: t.small);
 
+    // A driven parameter is a line of code, not a number to drag, so it gets
+    // the editor row instead of the value field. Asked once, ahead of the
+    // kinds: an angle or a whole number can hold an expression as well as a
+    // Float can, and Animation ▸ Add expression or an import puts one there.
+    if (value
+        case BridgeEffectValue_Float(field0: BridgeScalar_Expression expr)) {
+      final owner = currentLayer;
+      if (owner == null) return Text('—', style: t.small);
+      return EffectParamRowExpression(
+        key: ValueKey<String>('fx-expression-$id-${param.id}-${param.hashCode}'),
+        value: expr,
+        comp: comp,
+        frame: frame,
+        layer: owner,
+        set: _set,
+        setLive: _setLive,
+      );
+    }
+
     switch (param.kind) {
       case BridgeParamKind_Float(
           :final sliderMin,
@@ -601,23 +620,6 @@ class EffectParamRowFrb extends StatelessWidget {
           :final hardMax
         ):
         if (value case BridgeEffectValue_Float(:final field0)) {
-          // A driven parameter is a line of code, not a number to drag, so it
-          // gets the editor row instead of the value field.
-          if (field0 case BridgeScalar_Expression expr) {
-            final owner = currentLayer;
-            if (owner == null) return Text('—', style: t.small);
-            return EffectParamRowExpression(
-              key: ValueKey<String>(
-                  'fx-expression-$id-${param.id}-${param.hashCode}'),
-              value: expr,
-              comp: comp,
-              frame: frame,
-              layer: owner,
-              set: _set,
-              setLive: _setLive,
-            );
-          }
-
           final field = _scalarField(
             context,
             scalar: field0,
@@ -1177,24 +1179,6 @@ class EffectParamRowFrb extends StatelessWidget {
     required String keyName,
     bool log = false,
   }) {
-    // A driven parameter is a line of code, not a number to drag — the same
-    // answer the Float row gives.
-    if (scalar case BridgeScalar_Expression expr) {
-      final owner = currentLayer;
-      if (owner == null) {
-        return Text('—', style: ThemeScope.of(context).theme.small);
-      }
-      return EffectParamRowExpression(
-        key: ValueKey<String>('fx-expression-$keyName-${param.hashCode}'),
-        value: expr,
-        comp: comp,
-        frame: frame,
-        layer: owner,
-        set: _set,
-        setLive: _setLive,
-      );
-    }
-
     final animated = scalar is! BridgeScalar_Static;
     final shown = animated
         ? sampledScalar(scalar, timeOfFrame(comp, frame))
@@ -2153,6 +2137,12 @@ class EffectPointRowFrb extends StatelessWidget {
     );
   }
 }
+
+/// Whether [value] is a number an expression works out. A point with one on
+/// either half is drawn as two rows and not as an [EffectPointRowFrb], whose
+/// wells hold a number and have no room for a line of code.
+bool drivenByExpression(BridgeEffectValue? value) =>
+    value is BridgeEffectValue_Float && value.field0 is BridgeScalar_Expression;
 
 /// What a scalar reads at [frame]: its own number while it is still, and its
 /// curve at the playhead once it is keyed.
