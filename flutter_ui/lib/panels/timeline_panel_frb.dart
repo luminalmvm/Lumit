@@ -4286,13 +4286,12 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                     ),
                   ),
                   // The outline's own gutter: a fixed block level
-                  // with the toolbar and column header, then its
-                  // thumb — which only shows in graph view, where
-                  // the two halves scroll apart.
+                  // with the toolbar and column header. Its thumb is
+                  // drawn further up the stack, over the row seams.
                   _scrollGutter(
                     t,
                     controller: _vOutline,
-                    showThumb: _graph,
+                    showThumb: false,
                     header: [
                       // The toolbar's block carries the navigator band the
                       // toolbar itself does, or the gutter's thumb
@@ -4364,6 +4363,19 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                   ),
                 ),
               ),
+              // The gutter's thumb, which only shows in graph view, where the
+              // two halves scroll apart. Over the seams, which cross the
+              // gutter and would otherwise rule lines through it.
+              if (_graph)
+                Positioned(
+                  top: t.density.timelineChromeRow +
+                      t.density.navigatorBand +
+                      t.density.timelineHeaderRow,
+                  right: 0,
+                  width: scrollGutterWidth,
+                  bottom: 0,
+                  child: GutterScrollbar(controller: _vOutline),
+                ),
               // The stretch of a lifted layer's card that crosses the gutter.
               // The outline's block draws the card's left end and the lanes'
               // block its right; without this the gutter showed between them
