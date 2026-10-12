@@ -16,11 +16,16 @@ class HouseProgressBar extends StatelessWidget {
   /// indeterminate sweep, which would only be smeared by a second easing.
   final bool eased;
 
+  /// What the fill is drawn in when it is not the accent: the sweep, for a
+  /// job that is Lumit Pro's.
+  final Gradient? fill;
+
   const HouseProgressBar({
     super.key,
     required this.fraction,
     this.height = 4,
     this.eased = true,
+    this.fill,
   });
 
   @override
@@ -45,7 +50,10 @@ class HouseProgressBar extends StatelessWidget {
           child: child,
         ),
         child: Container(
-          decoration: BoxDecoration(color: t.accent, borderRadius: radius),
+          decoration: BoxDecoration(
+              color: fill == null ? t.accent : null,
+              gradient: fill,
+              borderRadius: radius),
         ),
       ),
     );

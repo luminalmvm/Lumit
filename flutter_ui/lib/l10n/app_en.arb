@@ -1595,7 +1595,7 @@
   "@firstRunAutoUpdate": {
     "description": "First run: the sentence beside the automatic-updates checkbox."
   },
-  "firstRunCut": "Footage arrives on Sequence layers, and Lumit opens in the Cut workspace.",
+  "firstRunCut": "Footage arrives on Sequence layers, in the Cut workspace.",
   "@firstRunCut": {
     "description": "First run: what choosing Premiere Pro or Resolve habits does. Sequence layer and Cut (the workspace) are Lumit product terms."
   },
@@ -6417,7 +6417,7 @@
   "@sourceTitle": {
     "description": "Title of the Viewer's source side, where one footage item is looked at before it is placed in a composition."
   },
-  "sourceEmptyHint": "Double-click footage in the Project panel to load it here.",
+  "sourceEmptyHint": "Double-click footage to load it here.",
   "@sourceEmptyHint": {
     "description": "Empty-state line in the Viewer's source side before any footage has been loaded into it."
   },
@@ -6449,7 +6449,7 @@
   "@sourceInsert": {
     "description": "Button that places the marked stretch of the source at the playhead and moves the clips after it later."
   },
-  "sourceInsertTip": "Place the marked stretch at the playhead and move what follows along",
+  "sourceInsertTip": "Insert at the playhead",
   "@sourceInsertTip": {
     "description": "Tooltip for the source side's Insert button."
   },
@@ -6457,27 +6457,27 @@
   "@sourceOverwrite": {
     "description": "Button that places the marked stretch of the source at the playhead, replacing whatever is there."
   },
-  "sourceOverwriteTip": "Place the marked stretch at the playhead, over what is there",
+  "sourceOverwriteTip": "Overwrite at the playhead",
   "@sourceOverwriteTip": {
     "description": "Tooltip for the source side's Overwrite button."
   },
-  "cutRefusedOverlap": "That would move a clip onto one that stays. Lock that track or clear the space first.",
+  "cutRefusedOverlap": "That would overlap another clip.",
   "@cutRefusedOverlap": {
     "description": "Status-line notice when an edit in the Cut timeline is refused because a clip it would carry along would land on a clip that does not move."
   },
-  "cutRefusedBeforeStart": "A clip cannot start before the composition does.",
+  "cutRefusedBeforeStart": "Clips can't start before the composition.",
   "@cutRefusedBeforeStart": {
     "description": "Status-line notice when an edit in the Cut timeline is refused because it would move a clip before the start of the composition."
   },
-  "cutRefusedLocked": "A track this edit has to change is locked.",
+  "cutRefusedLocked": "A track this edit needs is locked.",
   "@cutRefusedLocked": {
     "description": "Status-line notice when an edit in the Cut timeline is refused because it needs to change a locked track."
   },
-  "cutRefusedLimit": "The clip has no more to give that way.",
+  "cutRefusedLimit": "No more footage in that direction.",
   "@cutRefusedLimit": {
     "description": "Status-line notice when a trim, roll, slip or slide in the Cut timeline is refused because a clip or its neighbour would be left with no length, or would run off the start of its source."
   },
-  "cutRefusedUncuttable": "A clip whose Retime is driven by an expression cannot be cut.",
+  "cutRefusedUncuttable": "Clips with a Retime expression can't be cut.",
   "@cutRefusedUncuttable": {
     "description": "Status-line notice when a cut in the Cut timeline is refused because the clip's Retime is an expression."
   },
@@ -6485,7 +6485,7 @@
   "@cutRefusedNothing": {
     "description": "Status-line notice when an edit in the Cut timeline finds nothing to act on: no clip under the razor, no gap, or no edit point."
   },
-  "cutRefusedWrongLayer": "Picture clips go on picture tracks and sound clips on sound tracks.",
+  "cutRefusedWrongLayer": "Picture goes on picture tracks, sound on sound tracks.",
   "@cutRefusedWrongLayer": {
     "description": "Status-line notice when a clip in the Cut timeline is refused because it was put on the wrong kind of track."
   },
@@ -8954,6 +8954,10 @@
   "@unitGb": {
     "description": "The gigabyte unit, shown after an amount of memory."
   },
+  "unitKb": "KB",
+  "@unitKb": {
+    "description": "The kilobyte unit, shown after the size of a small file."
+  },
   "unitMb": "MB",
   "@unitMb": {
     "description": "The megabyte unit, shown after an amount of memory."
@@ -9477,7 +9481,7 @@
   "@cutRippleDelete": {
     "description": "Cut timeline, clip menu: remove the clip and close the room it leaves, so everything after it moves earlier."
   },
-  "cutNoTracks": "No tracks yet. Drop footage here to make one.",
+  "cutNoTracks": "Drop footage here.",
   "@cutNoTracks": {
     "description": "Shown across the Cut timeline's empty rows when the composition has no layers. 'Tracks' is this panel's own word for its rows."
   },
@@ -10580,7 +10584,7 @@
       }
     }
   },
-  "aeExpressionOverKeys": "the expression sits over keyframes, and only one of the two can drive a property here — the keyframes do, and the expression's text is kept: {source}",
+  "aeExpressionOverKeys": "the keyframes are used, and the expression is kept as text: {source}",
   "@aeExpressionOverKeys": {
     "description": "Import report row reason, lower case. An After Effects expression Lumit could run, on a property that also has keyframes; Lumit keeps the keyframes. The placeholder is the expression's source text.",
     "placeholders": {
@@ -12902,7 +12906,7 @@
       }
     }
   },
-  "expressionsFileNotExpressions": "That file does not hold Lumit expressions.",
+  "expressionsFileNotExpressions": "That isn't a Lumit expressions file.",
   "@expressionsFileNotExpressions": {
     "description": "Status-line notice when the file chosen for Import in the Expressions panel is not a file of saved expressions."
   },
@@ -15269,7 +15273,7 @@
   "@shareAddress": {
     "description": "Field label in the Shared project window: this computer's network address, which goes into the invite. The person can type another over it."
   },
-  "shareHostHint": "Anyone with the invite can join and edit until you stop sharing.",
+  "shareHostHint": "Anyone with the link can join and edit.",
   "@shareHostHint": {
     "description": "Quiet line on the Share this project page of the Shared project window, under the fields."
   },
@@ -15621,7 +15625,7 @@
   "@shareShowTitle": {
     "description": "Title of the small question that opens when Show is pressed beside a hidden invite link."
   },
-  "shareShowBody": "Anyone who sees this link can join the project and change it, and the link holds your internet address. Keep it off streams, recordings and screenshots.",
+  "shareShowBody": "Anyone who sees this link can join. Keep it off streams and screenshots.",
   "@shareShowBody": {
     "description": "Body of the question asked before a hidden invite link is shown."
   },
@@ -15645,35 +15649,35 @@
   "@shareRelayExample": {
     "description": "Placeholder in the empty Relay field, showing what a relay's address looks like. Keep it as a made-up address."
   },
-  "shareRelayHint": "A relay is a small server someone you trust runs. It carries your edits to people your router does not let in, and cannot read them. Leave it empty if you have none.",
+  "shareRelayHint": "Your own relay server. Optional.",
   "@shareRelayHint": {
     "description": "Quiet line under the Relay field in the Shared project window."
   },
-  "shareAddressHint": "Another address this computer can be reached at, such as a VPN's. It is added to the link. Leave it empty if you are not sure.",
+  "shareAddressHint": "Another address for this computer, such as a VPN's. Optional.",
   "@shareAddressHint": {
     "description": "Quiet line under the Address field, under Advanced, while a project is being shared."
   },
-  "shareOpenChecking": "Checking whether people outside your network can join…",
+  "shareOpenChecking": "Checking your connection…",
   "@shareOpenChecking": {
     "description": "Quiet line under the invite link for a second or two after sharing starts, while Lumit asks the home router, and a relay if one is set, to let people in."
   },
-  "shareOpenAnywhere": "Anyone you send this link to can join.",
+  "shareOpenAnywhere": "Anyone with this link can join.",
   "@shareOpenAnywhere": {
     "description": "Quiet line under the invite link once the home router has agreed to let people outside the network in."
   },
-  "shareOpenRelay": "Anyone you send this link to can join. People your router does not let in come through the relay.",
+  "shareOpenRelay": "Anyone with this link can join, through the relay.",
   "@shareOpenRelay": {
     "description": "Quiet line under the invite link when the home router would not let people in but the relay is ready."
   },
-  "shareOpenLocal": "Only people on your own network can join with this link, because your router would not let anyone else in. The other person can share the project instead, or you can stop, set a relay under Advanced and share again.",
+  "shareOpenLocal": "Only people on your network can join. To share further, set a relay under Advanced.",
   "@shareOpenLocal": {
     "description": "Warning line under the invite link when the home router refused, or sits behind another router, and no relay is set."
   },
-  "shareOpenLocalOff": "Only people on your own network can join with this link, because the router was not asked to let anyone else in.",
+  "shareOpenLocalOff": "Only people on your network can join.",
   "@shareOpenLocalOff": {
     "description": "Warning line under the invite link when the person unticked the Internet box before sharing and no relay is set."
   },
-  "shareRelayDown": "The relay is not answering, so only people on your own network can join just now. Lumit keeps trying it.",
+  "shareRelayDown": "The relay isn't responding. Only people on your network can join for now.",
   "@shareRelayDown": {
     "description": "Warning line under the invite link when a relay is set but cannot be reached and the home router would not let people in either."
   },
@@ -15693,19 +15697,19 @@
   "@sharePasswordTheirs": {
     "description": "Placeholder in the empty Password field on the Join a project page, shown when the pasted invite link needs a password."
   },
-  "sharePasswordHint": "People joining have to type this as well as having the link. Leave it empty for no password.",
+  "sharePasswordHint": "Optional.",
   "@sharePasswordHint": {
     "description": "Quiet line under the Password field on the Share this project page."
   },
-  "sharePasswordSet": "People joining need the password as well as this link.",
+  "sharePasswordSet": "Guests also need the password.",
   "@sharePasswordSet": {
-    "description": "Quiet line under the invite link while a project is shared with a password."
+    "description": "Quiet line under the invite link while a project is shared with a password. For a project kept online it is the tooltip of the lock beside Invite to edit, the only one of the two invites the password is asked for."
   },
-  "sharePasswordNeeded": "That invite needs the host's password",
+  "sharePasswordNeeded": "Enter the host's password",
   "@sharePasswordNeeded": {
     "description": "Line in the Shared project window when a guest tries to join by an invite link that needs a password and typed none."
   },
-  "shareUnreachableOrPassword": "Nobody answered, or the password is wrong. Check both, and that the host is still sharing.",
+  "shareUnreachableOrPassword": "Couldn't join. Check the password, and that the host is still sharing.",
   "@shareUnreachableOrPassword": {
     "description": "Line in the Shared project window when joining with a password failed. Lumit is not told which of the two it was."
   },
@@ -15713,11 +15717,11 @@
   "@shareFootage": {
     "description": "Row label and group heading in the Shared project window, for sending footage files to people in the project who have not got them."
   },
-  "shareGive": "Send stand-ins of my footage to people who have not got it",
+  "shareGive": "Send stand-ins of my footage",
   "@shareGive": {
     "description": "Text beside a tick box in the Shared project window. A stand-in is a small copy of a whole clip that another person can cut with."
   },
-  "shareTake": "Get stand-ins of footage I have not got",
+  "shareTake": "Get stand-ins of missing footage",
   "@shareTake": {
     "description": "Text beside a tick box in the Shared project window. When ticked, Lumit asks the others for a small copy of any clip the project uses that is not on this computer."
   },
@@ -15737,7 +15741,7 @@
   "@shareLimitUnit": {
     "description": "Unit shown after the Upload limit and Download limit fields: kilobytes a second."
   },
-  "shareLimitHint": "How fast footage is sent and fetched, in kilobytes a second. 0 or empty is no limit. Edits are never held back.",
+  "shareLimitHint": "In KB/s. Leave empty for no limit.",
   "@shareLimitHint": {
     "description": "Quiet line under the two limit fields in the Shared project window."
   },
@@ -15795,7 +15799,7 @@
       }
     }
   },
-  "shareExportAskBody": "{name} has not got all the footage and asks this computer to export \"{comp}\" and send them the file. It goes in your export queue and starts now.",
+  "shareExportAskBody": "{name} is missing footage and wants this computer to export \"{comp}\" for them.",
   "@shareExportAskBody": {
     "description": "Body of the question shown when another person asks this computer to export for them. {comp} is a composition's name.",
     "placeholders": {
@@ -15849,7 +15853,7 @@
   "@exportFootageStandIns": {
     "description": "Option in the export dialogue's Missing footage list. Exports from the small copies as they are, which is draft quality."
   },
-  "exportFootageCount": "{count, plural, =1{1 footage item in this composition is not on this computer.} other{{count} footage items in this composition are not on this computer.}}",
+  "exportFootageCount": "{count, plural, =1{1 footage item is missing.} other{{count} footage items are missing.}}",
   "@exportFootageCount": {
     "description": "Line under the Missing footage row in the export dialogue.",
     "placeholders": {
@@ -15862,7 +15866,7 @@
   "@exportFootageStarting": {
     "description": "Footer line of the export dialogue for the moment after Export is pressed with footage to fetch."
   },
-  "exportFootageMaking": "The others' computers are getting the footage ready…",
+  "exportFootageMaking": "Preparing footage…",
   "@exportFootageMaking": {
     "description": "Footer line of the export dialogue while another person's computer is making the files this export asked for and nothing has been sent yet."
   },
@@ -15875,7 +15879,7 @@
       }
     }
   },
-  "exportFootageFailed": "Some of the footage could not be fetched. Whoever has it may have left, or switched sending off.",
+  "exportFootageFailed": "Couldn't fetch some footage.",
   "@exportFootageFailed": {
     "description": "Footer line of the export dialogue when footage this export needs could not be got."
   },
@@ -15888,7 +15892,7 @@
       }
     }
   },
-  "exportRemoteRunning": "{name}'s computer is exporting, frame {frame} of {total}",
+  "exportRemoteRunning": "Exporting on {name}'s computer, frame {frame} of {total}",
   "@exportRemoteRunning": {
     "description": "Footer line of the export dialogue while another person's computer does the export.",
     "placeholders": {
@@ -15903,7 +15907,7 @@
       }
     }
   },
-  "exportRemoteFetching": "Fetching the finished file, {percent}%",
+  "exportRemoteFetching": "Fetching the file, {percent}%",
   "@exportRemoteFetching": {
     "description": "Footer line of the export dialogue while the file another person's computer exported is being sent back.",
     "placeholders": {
@@ -15921,7 +15925,7 @@
       }
     }
   },
-  "exportRemoteRefused": "{name} did not take the export",
+  "exportRemoteRefused": "{name} declined the export",
   "@exportRemoteRefused": {
     "description": "Footer line of the export dialogue when the other person said no to doing the export.",
     "placeholders": {
@@ -15930,7 +15934,7 @@
       }
     }
   },
-  "exportRemoteLacking": "{name}'s computer has not got all the footage either",
+  "exportRemoteLacking": "{name} is missing footage too",
   "@exportRemoteLacking": {
     "description": "Footer line of the export dialogue when the person asked to export turns out not to have every file.",
     "placeholders": {
@@ -15972,7 +15976,7 @@
   "@settingsShareDownLimit": {
     "description": "Row title in Settings: the fastest this computer takes footage from others in a shared project."
   },
-  "settingsShareLimitHint": "How fast footage is sent and fetched in a shared project. Edits are never held back.",
+  "settingsShareLimitHint": "Applies to footage in shared projects.",
   "@settingsShareLimitHint": {
     "description": "Description under the Footage upload limit row in Settings."
   },
@@ -16033,7 +16037,7 @@
   "@settingsExtensionsInstall": {
     "description": "Row title in the Extensions section of the Addons page, beside a Choose button that opens a folder picker."
   },
-  "settingsExtensionsInstallHint": "Pick the folder that holds the extension's extension.json. Lumit shows what it asks to be allowed before anything is installed.",
+  "settingsExtensionsInstallHint": "Pick the folder containing extension.json.",
   "@settingsExtensionsInstallHint": {
     "description": "Description under the Install from a folder row in the Extensions section of Settings. extension.json is a file name and is not translated."
   },
@@ -16079,23 +16083,23 @@
   "@extensionCannot": {
     "description": "Heading of the list of things an extension is never able to do, in the install question."
   },
-  "extensionCanProject": "See what the open project's file is called, and when a project opens, saves or closes",
+  "extensionCanProject": "See the project's file name, and when it opens, saves or closes",
   "@extensionCanProject": {
     "description": "One line of the It can list in the extension install question."
   },
-  "extensionCanActivity": "See when you edit and what each step is called, and when Lumit is the window in front",
+  "extensionCanActivity": "See when you edit, the name of each edit, and when Lumit is in front",
   "@extensionCanActivity": {
     "description": "One line of the It can list in the extension install question."
   },
-  "extensionCanExport": "See when an export starts and finishes, and fingerprint the file it made",
+  "extensionCanExport": "See when exports start and finish, and fingerprint the file",
   "@extensionCanExport": {
     "description": "One line of the It can list in the extension install question. A fingerprint is a short number worked out from a file that changes if the file does."
   },
-  "extensionCanImport": "Bring files into the project, and watch a folder you pick for new ones",
+  "extensionCanImport": "Import files, and watch a folder you pick",
   "@extensionCanImport": {
     "description": "One line of the It can list in the extension install question."
   },
-  "extensionCanShare": "Open the Shared project window for you to share or join, see who is in a shared project, and read its invite link while you share",
+  "extensionCanShare": "Open the Shared project window, see who's in a shared project, and read its invite link",
   "@extensionCanShare": {
     "description": "One line of the It can list in the extension install question."
   },
@@ -16108,7 +16112,7 @@
       }
     }
   },
-  "extensionCanPanel": "Show its own panel, and a line in the strip at the bottom of the window",
+  "extensionCanPanel": "Show its own panel, and a line at the bottom of the window",
   "@extensionCanPanel": {
     "description": "Last line of the It can list in the extension install question, shown for every extension."
   },
@@ -16120,11 +16124,11 @@
   "@extensionCannotFiles": {
     "description": "One line of the It cannot list in the extension install question."
   },
-  "extensionCannotEdit": "Change what is in your project, beyond bringing files into it when it is allowed to",
+  "extensionCannotEdit": "Change your project, apart from importing files when allowed",
   "@extensionCannotEdit": {
     "description": "One line of the It cannot list in the extension install question."
   },
-  "extensionWebNote": "Its panel is a web page, and like any web page it can load things from the internet. Install an extension only from someone you trust.",
+  "extensionWebNote": "Only install extensions from people you trust.",
   "@extensionWebNote": {
     "description": "Quiet note at the foot of the extension install question."
   },
@@ -16132,7 +16136,7 @@
   "@extensionInstall": {
     "description": "Default button of the extension install question."
   },
-  "extensionInstalled": "{name} is installed. Its panel is under Window, Extensions.",
+  "extensionInstalled": "{name} installed. Find it under Window ▸ Extensions.",
   "@extensionInstalled": {
     "description": "Bottom-strip notice after an extension is installed. Window and Extensions are menu names.",
     "placeholders": {
@@ -16141,11 +16145,11 @@
       }
     }
   },
-  "extensionNotOne": "That folder has no extension.json in it",
+  "extensionNotOne": "No extension.json in that folder",
   "@extensionNotOne": {
     "description": "Bottom-strip notice when the folder picked to install an extension from is not an extension. extension.json is a file name and is not translated."
   },
-  "extensionNewer": "That extension needs Lumit {version} or newer",
+  "extensionNewer": "Needs Lumit {version} or newer",
   "@extensionNewer": {
     "description": "Bottom-strip notice when an extension asks for a newer Lumit than this one.",
     "placeholders": {
@@ -16154,7 +16158,7 @@
       }
     }
   },
-  "extensionTooLarge": "That extension's folder holds more than an extension may",
+  "extensionTooLarge": "That extension is too large",
   "@extensionTooLarge": {
     "description": "Bottom-strip notice when an extension's folder has too many files or is too large to install."
   },
@@ -16162,7 +16166,7 @@
   "@extensionBusy": {
     "description": "Bottom-strip notice when an install is asked for while another is running."
   },
-  "extensionFailed": "The extension could not be installed",
+  "extensionFailed": "Couldn't install the extension",
   "@extensionFailed": {
     "description": "Bottom-strip notice when an extension's files could not be read or copied."
   },
@@ -16170,27 +16174,27 @@
   "@extensionMissingTitle": {
     "description": "Title shown in a dock panel whose extension has been removed."
   },
-  "extensionMissingHint": "The extension this panel showed has been removed. Close the panel, or install it again in Settings.",
+  "extensionMissingHint": "This extension was removed. Install it again in Settings.",
   "@extensionMissingHint": {
     "description": "Hint under the title in a dock panel whose extension has been removed."
   },
-  "extensionFailedTitle": "The extension could not be shown",
+  "extensionFailedTitle": "Couldn't show the extension",
   "@extensionFailedTitle": {
     "description": "Title shown in an extension's dock panel when its page could not be put up."
   },
-  "extensionFailedHint": "Its page would not load. Closing the panel and showing it again tries once more.",
+  "extensionFailedHint": "Couldn't load. Close the panel and open it again.",
   "@extensionFailedHint": {
     "description": "Hint in an extension's dock panel when its page failed to load."
   },
-  "extensionBrokenHint": "The page its extension.json names is missing. Install the extension again.",
+  "extensionBrokenHint": "A file is missing. Install the extension again.",
   "@extensionBrokenHint": {
     "description": "Hint in an extension's dock panel when the installed folder has lost its page. extension.json is a file name and is not translated."
   },
-  "extensionNoRuntime": "Lumit shows extensions with Microsoft's WebView2, which is not installed on this computer.",
+  "extensionNoRuntime": "Extensions need Microsoft WebView2, which isn't installed.",
   "@extensionNoRuntime": {
     "description": "Hint in an extension's dock panel on a Windows machine without the WebView2 runtime. WebView2 is a product name."
   },
-  "extensionStrayed": "This panel has left the extension's own pages, so nothing it asks of Lumit is answered.",
+  "extensionStrayed": "This panel has left the extension's pages, so it can't use Lumit.",
   "@extensionStrayed": {
     "description": "Warning strip at the top of an extension's dock panel when the page inside has gone to some other website."
   },
@@ -16202,7 +16206,7 @@
   "@profileUnnamed": {
     "description": "Name shown for a profile that has not been given one, on the profile button at the left of the bottom strip and in its card."
   },
-  "profileLocal": "On this machine only",
+  "profileLocal": "On this device only",
   "@profileLocal": {
     "description": "Quiet line under a profile's name in the profile card when it is not signed in to a Lumit account."
   },
@@ -16242,7 +16246,7 @@
   "@profileRemove": {
     "description": "Button in Settings beside a profile that is not the one in use: take it off this machine."
   },
-  "profileRemoveAsk": "Remove {name} from this machine? Its settings here are deleted, its account isn't.",
+  "profileRemoveAsk": "Remove {name}? Its settings on this device are deleted. The account stays.",
   "@profileRemoveAsk": {
     "description": "Confirmation before a profile is removed. {name} is the profile's name.",
     "placeholders": {
@@ -16275,7 +16279,7 @@
   "@proCardTitle": {
     "description": "Heading of the card inviting someone to look at Lumit Pro, in the profile card. A product name: do not translate."
   },
-  "proCardLine": "Share anywhere, and reflect settings on any device.",
+  "proCardLine": "Share anywhere. Settings on every device.",
   "@proCardLine": {
     "description": "One line under the Lumit Pro heading in the profile card."
   },
@@ -16295,7 +16299,7 @@
   "@syncStatusSyncing": {
     "description": "Line in the profile card while settings are being sent to or fetched from Lumit's server."
   },
-  "syncStatusFailed": "Could not sync. Lumit will try again soon.",
+  "syncStatusFailed": "Couldn't sync. Trying again soon.",
   "@syncStatusFailed": {
     "description": "Line in the profile card when the last attempt to sync settings failed."
   },
@@ -16409,7 +16413,7 @@
   "@signInResent": {
     "description": "Shown in place of the Send another code link for a moment after it is clicked."
   },
-  "signInBrowser": "Finish signing in in your browser.",
+  "signInBrowser": "Continue in your browser.",
   "@signInBrowser": {
     "description": "Line shown in the sign-in window while it waits for a Google or Discord sign-in to finish in the browser."
   },
@@ -16417,27 +16421,27 @@
   "@signInWorking": {
     "description": "Shown on the filled button of the sign-in window while it is busy, which takes a couple of seconds."
   },
-  "signInUnavailable": "Signing in is not switched on yet.",
+  "signInUnavailable": "Sign-in isn't available yet.",
   "@signInUnavailable": {
     "description": "Shown in the sign-in window when Lumit's server offers no way to sign in."
   },
-  "signInErrorCredentials": "That email and password do not match an account.",
+  "signInErrorCredentials": "Wrong email or password.",
   "@signInErrorCredentials": {
     "description": "Error in the sign-in window."
   },
-  "signInErrorCode": "That code is not right, or it has run out.",
+  "signInErrorCode": "Wrong or expired code.",
   "@signInErrorCode": {
     "description": "Error on the code page of the sign-in window."
   },
-  "signInErrorSlow": "Too many tries. Wait a few minutes and try again.",
+  "signInErrorSlow": "Too many attempts. Try again in a few minutes.",
   "@signInErrorSlow": {
     "description": "Error in the sign-in window when the server is limiting attempts."
   },
-  "signInErrorOffline": "Lumit's server could not be reached. Check your connection.",
+  "signInErrorOffline": "Can't connect. Check your internet.",
   "@signInErrorOffline": {
     "description": "Error in the sign-in window and the Lumit Pro window."
   },
-  "signInErrorEmail": "That does not look like an email address.",
+  "signInErrorEmail": "Enter a valid email.",
   "@signInErrorEmail": {
     "description": "Error in the sign-in window."
   },
@@ -16450,23 +16454,23 @@
       }
     }
   },
-  "signInErrorName": "Type the name people will see.",
+  "signInErrorName": "Enter a name.",
   "@signInErrorName": {
     "description": "Error when creating an account with the name left empty."
   },
-  "signInErrorProvider": "That account's email isn't confirmed, so it can't be used to sign in.",
+  "signInErrorProvider": "Verify your email with that account first.",
   "@signInErrorProvider": {
     "description": "Error after trying to sign in with a Google or Discord account whose email address is not verified."
   },
-  "signInErrorTimedOut": "Sign-in wasn't finished in the browser. Try again.",
+  "signInErrorTimedOut": "Sign-in timed out. Try again.",
   "@signInErrorTimedOut": {
     "description": "Error when a Google or Discord sign-in was started and never finished."
   },
-  "signInErrorBrowser": "The browser could not be opened.",
+  "signInErrorBrowser": "Couldn't open your browser.",
   "@signInErrorBrowser": {
     "description": "Error when Lumit could not open the web browser for signing in or for the shop."
   },
-  "signInErrorGeneric": "That did not work. Try again in a moment.",
+  "signInErrorGeneric": "Something went wrong. Try again.",
   "@signInErrorGeneric": {
     "description": "Error in the sign-in window and the Lumit Pro window for anything unexpected."
   },
@@ -16478,11 +16482,11 @@
   "@proHeadline": {
     "description": "Large heading in the Lumit Pro window."
   },
-  "proFeatureRelayTitle": "Share from anywhere",
+  "proFeatureRelayTitle": "Share projects anywhere",
   "@proFeatureRelayTitle": {
     "description": "First feature in the Lumit Pro window."
   },
-  "proFeatureRelayBody": "Guests join through Lumit's relay. Nothing to set up.",
+  "proFeatureRelayBody": "Guests join through Lumit's relay. With no additional setup.",
   "@proFeatureRelayBody": {
     "description": "What the first Lumit Pro feature does. A relay passes a shared project's edits between people who cannot reach each other."
   },
@@ -16493,14 +16497,6 @@
   "proFeatureSyncBody": "Shortcuts, themes, workspaces, and presets follow you.",
   "@proFeatureSyncBody": {
     "description": "What the second Lumit Pro feature does."
-  },
-  "proFeatureSupportTitle": "Support Lumit",
-  "@proFeatureSupportTitle": {
-    "description": "Third feature in the Lumit Pro window."
-  },
-  "proFeatureSupportBody": "Helps pay for servers and development.",
-  "@proFeatureSupportBody": {
-    "description": "What the third Lumit Pro feature does."
   },
   "proMonthly": "Monthly",
   "@proMonthly": {
@@ -16539,7 +16535,7 @@
   "@proSignInPreview": {
     "description": "The filled button in the Lumit Pro window when nobody is signed in and Pro is free for now."
   },
-  "proWaiting": "Finish paying in your browser.",
+  "proWaiting": "Complete your purchase in your browser.",
   "@proWaiting": {
     "description": "Line in the Lumit Pro window after the shop has been opened in the browser."
   },
@@ -16547,7 +16543,7 @@
   "@proWaitingCancel": {
     "description": "Link in the Lumit Pro window that stops waiting for the shop."
   },
-  "proThanksHeadline": "You have Lumit Pro",
+  "proThanksHeadline": "You now have Lumit Pro",
   "@proThanksHeadline": {
     "description": "Large heading in the Lumit Pro window once the account has Pro."
   },
@@ -16577,7 +16573,7 @@
       }
     }
   },
-  "proPastDue": "The last payment failed. Update your card to keep Pro.",
+  "proPastDue": "Payment failed. Update your card to keep Pro.",
   "@proPastDue": {
     "description": "Warning in the Lumit Pro window and Settings."
   },
@@ -16588,6 +16584,674 @@
   "proClose": "Done",
   "@proClose": {
     "description": "Button that closes the Lumit Pro window once the account has Pro."
+  },
+  "proFeatureBackupTitle": "Backup and history",
+  "@proFeatureBackupTitle": {
+    "description": "Lumit Pro window: the name of one thing Pro does. Each save of a project is kept on Lumit's server, and the earlier saves are its history."
+  },
+  "proFeatureBackupBody": "Go back to any save, on any device.",
+  "@proFeatureBackupBody": {
+    "description": "Lumit Pro window: the one short line under Backup and history."
+  },
+  "backupMenuOpen": "Open from backup…",
+  "@backupMenuOpen": {
+    "description": "File menu row. Opens the window that lists the projects the account has in backup."
+  },
+  "backupMenuHistory": "Project history…",
+  "@backupMenuHistory": {
+    "description": "File menu row. Opens the window that lists the earlier saves of the open project. Not the list of undo steps, which is Edit, History."
+  },
+  "backupHistoryTitle": "Project history",
+  "@backupHistoryTitle": {
+    "description": "Title of the window that lists the earlier saves of the open project."
+  },
+  "backupOpenTitle": "Open from backup",
+  "@backupOpenTitle": {
+    "description": "Title of the window that lists the projects the account has in backup."
+  },
+  "backupNeedsPro": "Backup is part of Lumit Pro.",
+  "@backupNeedsPro": {
+    "description": "Line shown to an account without Lumit Pro wherever backup is offered: under its switch in Settings, and in the Project history and Open from backup windows. Also said when the server refuses a save for the same reason."
+  },
+  "backupDayToday": "Today",
+  "@backupDayToday": {
+    "description": "Project history window: heading over the versions saved today. Also the day in a version's date."
+  },
+  "backupDayYesterday": "Yesterday",
+  "@backupDayYesterday": {
+    "description": "Project history window: heading over the versions saved yesterday. Also the day in a version's date."
+  },
+  "backupDayTime": "{day}, {time}",
+  "@backupDayTime": {
+    "description": "A version's date. {day} is Today, Yesterday or a written date, {time} is a clock time.",
+    "placeholders": {
+      "day": {
+        "type": "String"
+      },
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "backupLastSave": "Last save",
+  "@backupLastSave": {
+    "description": "Project history window: small tag on the version that is the open project's file as it was last saved. Autosaves sent since can sit above it in the list."
+  },
+  "backupAhead": "The file on this device is not backed up.",
+  "@backupAhead": {
+    "description": "Project history window: one line over the list when the open project's file is none of the versions listed, because it was saved after the last one was sent and that save has not gone."
+  },
+  "backupSaveRow": "Save",
+  "@backupSaveRow": {
+    "description": "Project history window: what a version nobody has named is called in the list, when it came from a save. A noun, beside Autosave."
+  },
+  "backupVersionNumber": "Version {n}",
+  "@backupVersionNumber": {
+    "description": "Project history window: small heading over the chosen version. {n} counts up from 1.",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "backupVersions": "{count, plural, =1{1 version} other{{count} versions}}",
+  "@backupVersions": {
+    "description": "How many versions of a project are kept, on a card in the Open from backup window and at the foot of the Project history window.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "backupOpenCopy": "Open a copy",
+  "@backupOpenCopy": {
+    "description": "Project history window: button. Fetches the chosen version as a new file beside the project and opens it."
+  },
+  "backupPutBack": "Put back",
+  "@backupPutBack": {
+    "description": "Project history window: button, and the button that confirms it. Makes the chosen version the project again."
+  },
+  "backupPutBackAsk": "Put back the version from {when}?",
+  "@backupPutBackAsk": {
+    "description": "Question asked before a version with no name is put back. One short line. {when} is a day and a time as the list shows them, such as today, 01:11.",
+    "placeholders": {
+      "when": {
+        "type": "String"
+      }
+    }
+  },
+  "backupPutBackNamedAsk": "Put back {name}?",
+  "@backupPutBackNamedAsk": {
+    "description": "Question asked before a version with a name is put back. One short line. {name} is the name the person gave the version.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "backupPutBackNote": "The current project stays in the history.",
+  "@backupPutBackNote": {
+    "description": "Quiet line under the question asked before a version is put back. Nothing is lost by putting a version back: the project as it stands is kept as a version first."
+  },
+  "backupDayTodayWithin": "today",
+  "@backupDayTodayWithin": {
+    "description": "Today, in the middle of a sentence: the version from today, 01:11."
+  },
+  "backupDayYesterdayWithin": "yesterday",
+  "@backupDayYesterdayWithin": {
+    "description": "Yesterday, in the middle of a sentence: the version from yesterday, 01:11."
+  },
+  "backupPutBackUnsent": "The current project could not be backed up, so nothing was put back.",
+  "@backupPutBackUnsent": {
+    "description": "Bottom-strip warning. Putting a version back first backs up the project as it stands, and stops when that fails."
+  },
+  "backupNameVersion": "Name this version…",
+  "@backupNameVersion": {
+    "description": "Project history window: button. Opens a small window that asks for a name."
+  },
+  "backupNameTitle": "Name this version",
+  "@backupNameTitle": {
+    "description": "Heading of the small window that asks what to call a version."
+  },
+  "backupRenameVersionTitle": "Rename this version",
+  "@backupRenameVersionTitle": {
+    "description": "Heading of the small window that asks what to call a version that has a name already."
+  },
+  "backupRemoveName": "Remove name",
+  "@backupRemoveName": {
+    "description": "Project history window: row in the menu of a version that has a name. Takes the name off, so the version is thinned out with age like any other."
+  },
+  "backupDeleteVersion": "Delete version…",
+  "@backupDeleteVersion": {
+    "description": "Project history window: row in a version's menu."
+  },
+  "backupDeleteVersionAsk": "Delete the version from {when}?",
+  "@backupDeleteVersionAsk": {
+    "description": "Question asked before a version with no name is deleted. {when} is a day and a time as the list shows them, such as today, 01:11.",
+    "placeholders": {
+      "when": {
+        "type": "String"
+      }
+    }
+  },
+  "backupDeleteNamedAsk": "Delete {name}?",
+  "@backupDeleteNamedAsk": {
+    "description": "Question asked before a version with a name is deleted. {name} is the name the person gave the version.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "backupDeleteVersionNote": "It cannot be put back.",
+  "@backupDeleteVersionNote": {
+    "description": "Quiet line under the question asked before a version is deleted. Put back is what the Project history window calls making a version the project again."
+  },
+  "backupThisProject": "Back up this project",
+  "@backupThisProject": {
+    "description": "Project history window: label of the switch that keeps the open project in or out of backup."
+  },
+  "backupNotSaved": "Save the project to start its history.",
+  "@backupNotSaved": {
+    "description": "Project history window: the one line shown for a project that has never been saved to a file."
+  },
+  "backupNoVersions": "No versions yet",
+  "@backupNoVersions": {
+    "description": "Project history window: shown when the project has no versions in backup."
+  },
+  "backupTryAgain": "Try again",
+  "@backupTryAgain": {
+    "description": "Button under a line saying the server could not be reached, in the Project history and Open from backup windows."
+  },
+  "backupStatusBackedUp": "Backed up",
+  "@backupStatusBackedUp": {
+    "description": "State of the open project's backup, on the bottom strip's mark and in the Project history window, when the time is not known."
+  },
+  "backupStatusBackedUpAt": "Backed up at {time}",
+  "@backupStatusBackedUpAt": {
+    "description": "State of the open project's backup when it was backed up today. {time} is a clock time.",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "backupStatusBackedUpOn": "Backed up on {date}",
+  "@backupStatusBackedUpOn": {
+    "description": "State of the open project's backup when it was backed up before today. {date} is a written date.",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "backupStatusSending": "Backing up",
+  "@backupStatusSending": {
+    "description": "State of the open project's backup while a save is being sent."
+  },
+  "backupStatusWaiting": "Waiting to back up",
+  "@backupStatusWaiting": {
+    "description": "State of the open project's backup when the server could not be reached. Lumit tries again by itself."
+  },
+  "backupStatusFailed": "Not backed up",
+  "@backupStatusFailed": {
+    "description": "State of the open project's backup when the server refused the save. The reason follows it."
+  },
+  "backupStatusTooLarge": "Over 95 MB. Not backed up",
+  "@backupStatusTooLarge": {
+    "description": "State of the open project's backup when its file is over 95 MB."
+  },
+  "backupStatusNewer": "Saved more recently on {device}",
+  "@backupStatusNewer": {
+    "description": "State of the open project's backup when another machine has saved a newer version than the file here. {device} is that machine's name.",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "backupStatusOff": "Backup is off in Settings",
+  "@backupStatusOff": {
+    "description": "Project history window: shown when backup has been switched off on the Account page of Settings."
+  },
+  "backupNewerNotice": "A newer version was saved on {device}.",
+  "@backupNewerNotice": {
+    "description": "Bottom-strip notice after opening a project that another machine has saved since. {device} is that machine's name. A press opens the Project history window.",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "backupTooLargeNotice": "{name} is over 95 MB, so it is not backed up.",
+  "@backupTooLargeNotice": {
+    "description": "Bottom-strip notice, said once for a project whose file is too large to back up. {name} is the project's name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "backupProEnded": "Your Lumit Pro has ended. Saves are no longer backed up.",
+  "@backupProEnded": {
+    "description": "Bottom-strip notice, said once when Lumit Pro ends while a project that was being backed up is open."
+  },
+  "backupWelcomeTitle": "Backed up",
+  "@backupWelcomeTitle": {
+    "description": "Welcome screen: the heading over the short list of backed-up projects that are not among the recent ones. Drawn in capitals, so give the sentence-case words."
+  },
+  "backupWelcomeAll": "All backups",
+  "@backupWelcomeAll": {
+    "description": "Welcome screen: the quiet words beside the Backed up heading that open the Open from backup window."
+  },
+  "backupSearch": "Search backups",
+  "@backupSearch": {
+    "description": "Open from backup window: placeholder in the search field."
+  },
+  "backupNothing": "Nothing backed up yet",
+  "@backupNothing": {
+    "description": "Open from backup window: shown when the account has no projects in backup."
+  },
+  "backupFetching": "Fetching",
+  "@backupFetching": {
+    "description": "Open from backup window: on a project's card while its file is being downloaded."
+  },
+  "backupRenameTitle": "Rename in backup",
+  "@backupRenameTitle": {
+    "description": "Heading of the small window that asks for a project's new name in backup. The file on the machine keeps its name."
+  },
+  "backupDelete": "Delete from backup…",
+  "@backupDelete": {
+    "description": "Open from backup window: row in a project's menu."
+  },
+  "backupDeleteAsk": "Delete {name} and its history from backup? The file on this device stays.",
+  "@backupDeleteAsk": {
+    "description": "Question asked before a project is deleted from backup. {name} is the project's name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "backupErrorStorageFull": "Your Lumit Pro storage is full.",
+  "@backupErrorStorageFull": {
+    "description": "Said when the server refuses a save because the account's storage is used up."
+  },
+  "backupErrorTooLarge": "Projects over 95 MB are not backed up.",
+  "@backupErrorTooLarge": {
+    "description": "Said when the server refuses a save because the project file is too large."
+  },
+  "backupErrorTooMany": "Backup is limited to 1,000 projects.",
+  "@backupErrorTooMany": {
+    "description": "Said when the server refuses a new project because the account holds as many as it may."
+  },
+  "backupErrorGone": "That is no longer in backup.",
+  "@backupErrorGone": {
+    "description": "Said when a project or a version was asked for and the server no longer has it."
+  },
+  "backupErrorLastVersion": "This is the only version. Delete the project from backup instead.",
+  "@backupErrorLastVersion": {
+    "description": "Said when the only version of a project is deleted from the Project history window."
+  },
+  "backupErrorDownload": "Download failed. Try again.",
+  "@backupErrorDownload": {
+    "description": "Said when a fetched version does not match what the server said it was. Nothing was written."
+  },
+  "backupErrorWrite": "Could not save the file there.",
+  "@backupErrorWrite": {
+    "description": "Said when a fetched version could not be written to the folder chosen for it."
+  },
+  "backupErrorSignedOut": "Sign in to use backup.",
+  "@backupErrorSignedOut": {
+    "description": "Said when backup is asked for and nobody is signed in."
+  },
+  "backupSettingsGroup": "Backup",
+  "@backupSettingsGroup": {
+    "description": "Group heading on the Account page of Settings."
+  },
+  "backupSettingsOn": "Back up projects when they are saved",
+  "@backupSettingsOn": {
+    "description": "Switch on the Account page of Settings."
+  },
+  "backupProHeadline": "Backup and history come with Lumit Pro.",
+  "@backupProHeadline": {
+    "description": "Headline shown in the Project history and Open from backup windows to an account without Lumit Pro, over the one button that opens the Lumit Pro window."
+  },
+  "backupMenuSaveVersion": "Save a version…",
+  "@backupMenuSaveVersion": {
+    "description": "File menu row. Saves the project and gives the saved version a name, so it is kept for good."
+  },
+  "backupKeySaveVersion": "Save a version with a name",
+  "@backupKeySaveVersion": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "backupSaveVersionTitle": "Save a version",
+  "@backupSaveVersionTitle": {
+    "description": "Heading of the small window that asks what to call the version a save is about to make."
+  },
+  "backupVersionSaved": "Saved the version {name}.",
+  "@backupVersionSaved": {
+    "description": "Bottom-strip notice once Save a version has saved the project and named the version. {name} is the name given.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "backupVersionUnsent": "Saved, but not backed up. The version has no name yet.",
+  "@backupVersionUnsent": {
+    "description": "Bottom-strip warning when Save a version saved the project and the server could not be reached to keep and name the version."
+  },
+  "backupAutosave": "Autosave",
+  "@backupAutosave": {
+    "description": "Project history window: the one word on a version that was sent from an autosave between two saves, in the list and over the chosen version."
+  },
+  "backupFilterAll": "All",
+  "@backupFilterAll": {
+    "description": "Project history window: the first of two options over the list. Every version is listed."
+  },
+  "backupFilterNamed": "Named",
+  "@backupFilterNamed": {
+    "description": "Project history window: the second of two options over the list. Only versions somebody has named are listed."
+  },
+  "backupVersionsShown": "{shown} of {count, plural, =1{1 version} other{{count} versions}}",
+  "@backupVersionsShown": {
+    "description": "Foot of the Project history window while only named versions are listed: how many of the project's versions the list is showing, such as 3 of 16 versions.",
+    "placeholders": {
+      "shown": {
+        "type": "int"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "backupNoNamed": "No named versions",
+  "@backupNoNamed": {
+    "description": "Project history window: shown in the list when only named versions are listed and nothing has a name."
+  },
+  "backupKept": "Named versions are kept. The rest thin with age.",
+  "@backupKept": {
+    "description": "Project history window: one quiet line at the foot of the list saying what is kept. It has to fit on one line about 290 pixels wide. Versions with a name are never deleted to save space. Thin is the verb: the others become fewer as they get older."
+  },
+  "backupKeptRule": "Autosaves thin to one an hour after a day. Unnamed versions thin to one a day after a week, and one a week after three months.",
+  "@backupKeptRule": {
+    "description": "Project history window: tooltip on the line saying what is kept, giving the rule. Every autosave is kept for a day, then the last of each hour. After a week every version without a name, autosave or not, is thinned to the last of each day, and after 90 days to the last of each week."
+  },
+  "backupNow": "Back up now",
+  "@backupNow": {
+    "description": "Project history window: small button beside the state of the backup when the project's file is waiting to be sent or was refused. Sends it."
+  },
+  "backupOpenNewer": "Open that version…",
+  "@backupOpenNewer": {
+    "description": "Project history window: small button beside the state of the backup when another machine has saved a newer version than the file here. Asks, then makes that version the project."
+  },
+  "backupOpenNewerAskToday": "Open the version saved on {device} at {time}?",
+  "@backupOpenNewerAskToday": {
+    "description": "Question asked before the newer version another machine saved today is opened in place of the file here. {device} is that machine's name, {time} a clock time.",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      },
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "backupOpenNewerAsk": "Open the version saved on {device}, {when}?",
+  "@backupOpenNewerAsk": {
+    "description": "Question asked before the newer version another machine saved before today is opened in place of the file here. {device} is that machine's name, {when} a day and a time, such as yesterday, 10:05.",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      },
+      "when": {
+        "type": "String"
+      }
+    }
+  },
+  "backupOpenNewerConfirm": "Open",
+  "@backupOpenNewerConfirm": {
+    "description": "Button that confirms opening the newer version another machine saved."
+  },
+  "backupAutosaves": "{count, plural, =1{1 autosave} other{{count} autosaves}}",
+  "@backupAutosaves": {
+    "description": "Project history window: one row standing for a run of autosaves between two saves. A press shows them.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "backupStorageIn": "{used} of {limit} used · {backups} in backups",
+  "@backupStorageIn": {
+    "description": "How much of the account's storage is used, and how much of that is project backups. Previews and footage kept online use the same storage. Shown in the Open from backup window and under the backup switch in Settings.",
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      },
+      "backups": {
+        "type": "String"
+      }
+    }
+  },
+  "backupFootageNote": "Footage is backed up only when a project is packed.",
+  "@backupFootageNote": {
+    "description": "Open from backup window: one quiet line at its foot. A backup is the project file, and footage is inside that file only for a packed project. Otherwise footage is not backed up."
+  },
+  "backupFootageMissing": "{count, plural, =1{1 footage file is missing.} other{{count} footage files are missing.}}",
+  "@backupFootageMissing": {
+    "description": "Bottom-strip warning after a project is opened from backup, or a version is put back or opened as a copy, when footage it uses is not on this machine. A press selects the first missing file in the Project panel and opens the file picker to relink it.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "backupFreeUp": "Free up space…",
+  "@backupFreeUp": {
+    "description": "Project history window: small button beside the state of the backup when the account's storage is full. Opens the Open from backup window, which shows how much is used and where a project can be deleted from backup."
+  },
+  "backupCardOpen": "Open",
+  "@backupCardOpen": {
+    "description": "Open from backup window: first row in a project's menu. Opens the project, fetching it first when its file is not on this machine."
+  },
+  "backupChanged": "Changed",
+  "@backupChanged": {
+    "description": "Project history window: small heading over the lines saying what changed in the chosen version since the one before it."
+  },
+  "backupChangeCompsAdded": "{count, plural, =1{composition added} other{compositions added}}",
+  "@backupChangeCompsAdded": {
+    "description": "Project history window: one line under Changed. The number is shown before it in a column of its own, so it is not in the words. No full stop.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "backupChangeCompsRemoved": "{count, plural, =1{composition removed} other{compositions removed}}",
+  "@backupChangeCompsRemoved": {
+    "description": "Project history window: one line under Changed. The number is shown before it in a column of its own. No full stop.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "backupChangeCompsRenamed": "{count, plural, =1{composition renamed} other{compositions renamed}}",
+  "@backupChangeCompsRenamed": {
+    "description": "Project history window: one line under Changed. The number is shown before it in a column of its own. No full stop.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "backupChangeLayersAdded": "{count, plural, =1{layer added in {where}} other{layers added in {where}}}",
+  "@backupChangeLayersAdded": {
+    "description": "Project history window: one line under Changed. The number is shown before it in a column of its own. {where} names the compositions the layers are in, such as Titles, or Titles and Scene. No full stop.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "where": {
+        "type": "String"
+      }
+    }
+  },
+  "backupChangeLayersRemoved": "{count, plural, =1{layer removed in {where}} other{layers removed in {where}}}",
+  "@backupChangeLayersRemoved": {
+    "description": "Project history window: one line under Changed. The number is shown before it in a column of its own. {where} names the compositions the layers were in. No full stop.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "where": {
+        "type": "String"
+      }
+    }
+  },
+  "backupChangeLayersChanged": "{count, plural, =1{layer changed in {where}} other{layers changed in {where}}}",
+  "@backupChangeLayersChanged": {
+    "description": "Project history window: one line under Changed. The number is shown before it in a column of its own. {where} names the compositions the layers are in. No full stop.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "where": {
+        "type": "String"
+      }
+    }
+  },
+  "backupChangeEffectsAdded": "{count, plural, =1{effect added} other{effects added}}",
+  "@backupChangeEffectsAdded": {
+    "description": "Project history window: one line under Changed. The number is shown before it in a column of its own. No full stop.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "backupChangeEffectsRemoved": "{count, plural, =1{effect removed} other{effects removed}}",
+  "@backupChangeEffectsRemoved": {
+    "description": "Project history window: one line under Changed. The number is shown before it in a column of its own. No full stop.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "backupChangeFootageAdded": "{count, plural, =1{footage item added} other{footage items added}}",
+  "@backupChangeFootageAdded": {
+    "description": "Project history window: one line under Changed. The number is shown before it in a column of its own. No full stop.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "backupChangeFootageRemoved": "{count, plural, =1{footage item removed} other{footage items removed}}",
+  "@backupChangeFootageRemoved": {
+    "description": "Project history window: one line under Changed. The number is shown before it in a column of its own. No full stop.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "backupChangeWhere2": "{first} and {second}",
+  "@backupChangeWhere2": {
+    "description": "Two composition names, for the line saying which compositions changed layers are in.",
+    "placeholders": {
+      "first": {
+        "type": "String"
+      },
+      "second": {
+        "type": "String"
+      }
+    }
+  },
+  "backupChangeWhere3": "{first}, {second} and {third}",
+  "@backupChangeWhere3": {
+    "description": "Three composition names, for the line saying which compositions changed layers are in.",
+    "placeholders": {
+      "first": {
+        "type": "String"
+      },
+      "second": {
+        "type": "String"
+      },
+      "third": {
+        "type": "String"
+      }
+    }
+  },
+  "backupChangeWhereMore": "{first}, {second}, {third} and {count} more",
+  "@backupChangeWhereMore": {
+    "description": "Three composition names and how many more there are, for the line saying which compositions changed layers are in.",
+    "placeholders": {
+      "first": {
+        "type": "String"
+      },
+      "second": {
+        "type": "String"
+      },
+      "third": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "backupBringBack": "Bring a composition back…",
+  "@backupBringBack": {
+    "description": "Project history window: an action in words at the foot, and a row in a version's menu. Fetches the chosen version, lists its compositions in a small window, and adds the one chosen to the project as it is now, beside what is there."
+  },
+  "backupBringBackTitle": "Bring a composition back",
+  "@backupBringBackTitle": {
+    "description": "Title of the small window that lists the compositions in a version from the project's history, to choose one to add to the open project."
+  },
+  "backupBringBackConfirm": "Bring back",
+  "@backupBringBackConfirm": {
+    "description": "Button in the Bring a composition back window. Adds the chosen composition to the open project."
+  },
+  "backupBroughtBack": "Brought back {name}.",
+  "@backupBroughtBack": {
+    "description": "Bottom-strip notice once a composition from an earlier version has been added to the open project. {name} is the composition's name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "importCompTitle": "Import a composition",
+  "@importCompTitle": {
+    "description": "Title of the small window that lists the compositions in another Lumit project file picked with Import footage, to choose one to add to the open project."
+  },
+  "importCompConfirm": "Import",
+  "@importCompConfirm": {
+    "description": "Button in the Import a composition window. Adds the chosen composition to the open project."
+  },
+  "importCompDone": "Imported {name}.",
+  "@importCompDone": {
+    "description": "Bottom-strip notice once a composition from another Lumit project file has been added to the open project. {name} is the composition's name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "bringUnreadable": "That project could not be read.",
+  "@bringUnreadable": {
+    "description": "Bottom-strip warning when a composition was to be brought in from a version in the project's history, or from another Lumit project file, and the file is not a project this Lumit can read."
+  },
+  "bringNoComps": "That project has no compositions.",
+  "@bringNoComps": {
+    "description": "Bottom-strip notice when a composition was to be brought in from a version in the project's history, or from another Lumit project file, and it holds none."
   },
   "settingsAccount": "Account",
   "@settingsAccount": {
@@ -16613,7 +17277,7 @@
   "@settingsAccountDelete": {
     "description": "Button on the Account page of Settings."
   },
-  "settingsAccountDeleteAsk": "Delete your Lumit account? Any subscription ends now and synced settings are removed. Settings on this machine stay.",
+  "settingsAccountDeleteAsk": "Delete your Lumit account? Your subscription ends and synced settings are removed. Settings on this device stay.",
   "@settingsAccountDeleteAsk": {
     "description": "Confirmation before a Lumit account is deleted."
   },
@@ -16665,11 +17329,11 @@
   "@shareCloud": {
     "description": "Row label on the Share this project page: whether guests can come in through the relay Lumit itself runs for people with Lumit Pro."
   },
-  "shareCloudUse": "Let guests join through Lumit's relay",
+  "shareCloudUse": "Use Lumit's relay",
   "@shareCloudUse": {
     "description": "Checkbox on the Share this project page, for an account with Lumit Pro."
   },
-  "shareCloudPro": "Lumit Pro lets guests join from anywhere.",
+  "shareCloudPro": "Share anywhere with Lumit Pro.",
   "@shareCloudPro": {
     "description": "Line on the Share this project page for someone without Lumit Pro, beside a button that opens the Lumit Pro window."
   },
@@ -16680,5 +17344,1515 @@
   "menuLumitPro": "Lumit Pro…",
   "@menuLumitPro": {
     "description": "Help menu row that opens the Lumit Pro window. Lumit Pro is a product name: do not translate it."
+  },
+  "menuReviewLinks": "Previews…",
+  "@menuReviewLinks": {
+    "description": "File menu row that opens the Previews window. A preview is an address where people watch an export in a browser and comment on it."
+  },
+  "menuSendForReview": "Share a preview…",
+  "@menuSendForReview": {
+    "description": "Composition menu row, and a button in the Previews window: export the selected composition and make a preview for it."
+  },
+  "reviewTitle": "Previews",
+  "@reviewTitle": {
+    "description": "Title strip of the Previews window, and the tooltip of its button on the status line."
+  },
+  "reviewProHeadline": "Previews come with Lumit Pro.",
+  "@reviewProHeadline": {
+    "description": "Heading in the Previews window for someone without Lumit Pro, over a button that opens the Lumit Pro window."
+  },
+  "reviewEmpty": "No previews yet.",
+  "@reviewEmpty": {
+    "description": "The Previews window when the account has made none, over the Share a preview button."
+  },
+  "reviewOpenCount": "{count} open",
+  "@reviewOpenCount": {
+    "description": "Previews window: under a link in the list, how many of its comments are not yet resolved. Shown only when there are some.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "reviewStorage": "{used} of {limit} used",
+  "@reviewStorage": {
+    "description": "Foot of the Previews window: how much of the account's room on Lumit's server its files take. Both are written with their unit, such as 3.4 GB of 50 GB used.",
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "reviewPageLink": "Link",
+  "@reviewPageLink": {
+    "description": "Previews window: the tab beside Comments, holding a link's own settings and versions."
+  },
+  "reviewOf": "{part} of {whole}",
+  "@reviewOf": {
+    "description": "Share a preview: how much of the file has been uploaded, both written with their unit, such as 12 MB of 48 MB.",
+    "placeholders": {
+      "part": {
+        "type": "String"
+      },
+      "whole": {
+        "type": "String"
+      }
+    }
+  },
+  "reviewCopy": "Copy",
+  "@reviewCopy": {
+    "description": "Previews window: button that copies a link's address."
+  },
+  "reviewOpen": "Open",
+  "@reviewOpen": {
+    "description": "Previews window: button that opens a link in the web browser. A verb."
+  },
+  "reviewReviewers": "Reviewers",
+  "@reviewReviewers": {
+    "description": "Previews window: heading over what reviewers, the people watching a link, may do. Also the label of the same choice when a link is made."
+  },
+  "reviewCanComment": "Can comment",
+  "@reviewCanComment": {
+    "description": "Previews window, under Reviewers: a switch for whether people watching may leave comments."
+  },
+  "reviewCanAttach": "Can attach pictures",
+  "@reviewCanAttach": {
+    "description": "Previews window, under Reviewers: a switch for whether people watching may attach a picture to a comment. It is off and takes no press while Can comment is off."
+  },
+  "reviewCanDownload": "Can download",
+  "@reviewCanDownload": {
+    "description": "Previews window, under Reviewers: a switch for whether people watching may download the file."
+  },
+  "reviewPasswordSet": "Set",
+  "@reviewPasswordSet": {
+    "description": "Previews window: button beside the password field that puts the typed password on the link. A verb."
+  },
+  "reviewExpires": "Expires",
+  "@reviewExpires": {
+    "description": "Previews window: row label for when a link stops working."
+  },
+  "reviewExpiresNever": "Never",
+  "@reviewExpiresNever": {
+    "description": "Previews window: the choice for a link that does not stop working."
+  },
+  "reviewExpiresDays": "{days, plural, =1{In a day} other{In {days} days}}",
+  "@reviewExpiresDays": {
+    "description": "Previews window: a choice for when a link stops working, counted from now.",
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "reviewVersions": "Versions",
+  "@reviewVersions": {
+    "description": "Previews window: heading over the versions of a link's video."
+  },
+  "reviewVersion": "v{n}",
+  "@reviewVersion": {
+    "description": "Previews window: a version's short name, such as v2. Keep it as short.",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "reviewDeleteVersion": "Delete…",
+  "@reviewDeleteVersion": {
+    "description": "Previews window: button on a version's row that deletes that version, after asking."
+  },
+  "reviewDeleteLink": "Delete link…",
+  "@reviewDeleteLink": {
+    "description": "Previews window: button that deletes a preview, after asking."
+  },
+  "reviewDeleteLinkAsk": "Delete {title}?",
+  "@reviewDeleteLinkAsk": {
+    "description": "Question before a preview is deleted. The title is the link's own.",
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "reviewDeleteLinkNote": "Its versions and comments are deleted too.",
+  "@reviewDeleteLinkNote": {
+    "description": "A quiet line under the question asked before a preview is deleted."
+  },
+  "reviewDeleteVersionAsk": "Delete version {n}?",
+  "@reviewDeleteVersionAsk": {
+    "description": "Question before one version of a preview is deleted.",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "reviewDeleteVersionNote": "Its comments are deleted too.",
+  "@reviewDeleteVersionNote": {
+    "description": "A quiet line under the question asked before one version of a preview is deleted."
+  },
+  "reviewDeleteVersionCleanNote": "Its comments are deleted too, and the video only link stops working.",
+  "@reviewDeleteVersionCleanNote": {
+    "description": "The same quiet line when the version being deleted is the one the link's video only address shows."
+  },
+  "reviewDeleteCommentAsk": "Delete this comment?",
+  "@reviewDeleteCommentAsk": {
+    "description": "Question before a comment on a preview is deleted."
+  },
+  "reviewDeleteRepliesNote": "Its replies are deleted too.",
+  "@reviewDeleteRepliesNote": {
+    "description": "A quiet line under the question asked before a comment that has replies is deleted."
+  },
+  "reviewDeleteLikeAsk": "Delete this like?",
+  "@reviewDeleteLikeAsk": {
+    "description": "Question before a like on a preview is deleted. A like is a mark a reviewer leaves on a frame with no words."
+  },
+  "reviewComments": "Comments",
+  "@reviewComments": {
+    "description": "Previews window: heading over a link's comments."
+  },
+  "reviewFilterOpen": "Open",
+  "@reviewFilterOpen": {
+    "description": "Previews window: filter that shows only comments not yet resolved. An adjective."
+  },
+  "reviewFilterAll": "All",
+  "@reviewFilterAll": {
+    "description": "Previews window: filter that shows every comment, resolved or not."
+  },
+  "reviewAddToTimeline": "Add to Timeline",
+  "@reviewAddToTimeline": {
+    "description": "Previews window: button that puts a link's open comments on the Timeline as markers: on the layer a comment points at, and else on the composition. Timeline is the panel's name."
+  },
+  "reviewNoComments": "No comments yet.",
+  "@reviewNoComments": {
+    "description": "Previews window: a version nobody has commented on."
+  },
+  "reviewNoOpenComments": "No open comments.",
+  "@reviewNoOpenComments": {
+    "description": "Previews window: a version whose comments are all resolved, while only open ones are shown."
+  },
+  "reviewNoComp": "This link's composition is not in the open project.",
+  "@reviewNoComp": {
+    "description": "Previews window: why a link's comments can't be added to the Timeline or jumped to."
+  },
+  "reviewResolve": "Resolve",
+  "@reviewResolve": {
+    "description": "Previews window: action on a comment that marks it dealt with."
+  },
+  "reviewReopen": "Reopen",
+  "@reviewReopen": {
+    "description": "Previews window: action on a resolved comment that makes it open again."
+  },
+  "reviewReply": "Reply",
+  "@reviewReply": {
+    "description": "Previews window: action on a comment, and the hint in the field a reply is typed in."
+  },
+  "reviewDrawing": "Drawing",
+  "@reviewDrawing": {
+    "description": "Previews window: tooltip on the mark that says a comment has something drawn over its frame."
+  },
+  "reviewSendTitle": "Share a preview",
+  "@reviewSendTitle": {
+    "description": "Title strip of the Previews window while a composition is being sent."
+  },
+  "reviewSendAs": "Send as",
+  "@reviewSendAs": {
+    "description": "Share a preview: row label over the choice between a new version of an existing link and a separate link."
+  },
+  "reviewSendVersion": "New version of {title}",
+  "@reviewSendVersion": {
+    "description": "Share a preview: the choice to add to the link this composition already has.",
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "reviewSendSeparate": "Separate link",
+  "@reviewSendSeparate": {
+    "description": "Share a preview: the choice to make a link of its own instead of a new version."
+  },
+  "reviewLinkTitle": "Title",
+  "@reviewLinkTitle": {
+    "description": "Share a preview: row label for what the link is called."
+  },
+  "reviewCreate": "Create link",
+  "@reviewCreate": {
+    "description": "Share a preview: the button that exports the composition and makes the link."
+  },
+  "reviewAddVersion": "Add version",
+  "@reviewAddVersion": {
+    "description": "Share a preview: the same button when the export becomes a new version of an existing link."
+  },
+  "reviewLacking": "Missing footage shows as colour bars.",
+  "@reviewLacking": {
+    "description": "Share a preview: warning in a shared project when some footage has not reached this computer."
+  },
+  "reviewExporting": "Exporting",
+  "@reviewExporting": {
+    "description": "Share a preview: heading while the composition is being exported."
+  },
+  "reviewFrames": "{frame} of {total} frames",
+  "@reviewFrames": {
+    "description": "Share a preview: how far the export has got.",
+    "placeholders": {
+      "frame": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "reviewWaiting": "Waiting for another export",
+  "@reviewWaiting": {
+    "description": "Share a preview: shown while the export is queued behind one that is already running."
+  },
+  "reviewUploading": "Uploading",
+  "@reviewUploading": {
+    "description": "Share a preview: heading while the exported file is being sent to Lumit's server."
+  },
+  "reviewCopied": "Link copied",
+  "@reviewCopied": {
+    "description": "Share a preview: heading once the link is made. Its address is already on the clipboard."
+  },
+  "reviewErrorPro": "Previews need Lumit Pro.",
+  "@reviewErrorPro": {
+    "description": "Error in the Previews window when the account has no Lumit Pro."
+  },
+  "reviewErrorStorage": "Storage full. Delete a link or a version.",
+  "@reviewErrorStorage": {
+    "description": "Error in the Previews window when the account's files on Lumit's server have reached their limit."
+  },
+  "reviewErrorTooLarge": "Too large to send. Try 720p or a shorter span.",
+  "@reviewErrorTooLarge": {
+    "description": "Error in the Previews window when the exported file is over the server's limit. Span is the export dialog's word for the part of a composition that is written."
+  },
+  "reviewErrorVersions": "This link is full. Send a separate link.",
+  "@reviewErrorVersions": {
+    "description": "Error in the Previews window when a link already has the most versions allowed."
+  },
+  "reviewErrorLinks": "No room for another link. Delete one first.",
+  "@reviewErrorLinks": {
+    "description": "Error in the Previews window when a new link is refused because the account already has the most previews allowed."
+  },
+  "reviewErrorGone": "This link is gone or has expired.",
+  "@reviewErrorGone": {
+    "description": "Error in the Previews window when the server no longer has a link."
+  },
+  "reviewErrorLastVersion": "This is the only version. Delete the link instead.",
+  "@reviewErrorLastVersion": {
+    "description": "Error in the Previews window when the only version of a link is deleted."
+  },
+  "reviewErrorExportRefused": "The export could not start. Check that nothing else is exporting.",
+  "@reviewErrorExportRefused": {
+    "description": "Error in the Previews window when the engine would not begin exporting the composition."
+  },
+  "reviewErrorExportFailed": "The export failed.",
+  "@reviewErrorExportFailed": {
+    "description": "Error in the Previews window when exporting the composition stopped part way."
+  },
+  "reviewErrorComments": "This link is full of comments.",
+  "@reviewErrorComments": {
+    "description": "Error in the Previews window when a reply is refused because the link has reached the most comments allowed."
+  },
+  "reviewErrorPassword": "A password is up to 100 plain letters, numbers and symbols.",
+  "@reviewErrorPassword": {
+    "description": "Error in the Previews window when the password typed for a link has accented letters or other characters it can't take, or is too long."
+  },
+  "reviewLiked": "{name} liked this moment",
+  "@reviewLiked": {
+    "description": "Previews window: a quiet line among a link's comments for a like, which is a mark a reviewer leaves on a frame with no words. A timecode follows it.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "reviewLikedTwo": "{first} and {second} liked this moment",
+  "@reviewLikedTwo": {
+    "description": "Previews window: the same line when two reviewers liked the same second of the video. Both are named.",
+    "placeholders": {
+      "first": {
+        "type": "String"
+      },
+      "second": {
+        "type": "String"
+      }
+    }
+  },
+  "reviewLikedMore": "{name} and {count} others liked this moment",
+  "@reviewLikedMore": {
+    "description": "Previews window: the same line when three or more reviewers liked the same second of the video. The first one is named and the rest are counted, so the count is two or more.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "reviewCopyCommentLink": "Copy link to this comment",
+  "@reviewCopyCommentLink": {
+    "description": "Previews window: row in a comment's menu. It copies an address that opens the link in a browser at that comment's frame."
+  },
+  "reviewCompare": "Compare",
+  "@reviewCompare": {
+    "description": "Previews window: button on a version's row that opens the link in a browser with that version beside the one before it."
+  },
+  "reviewSeenBy": "Seen by",
+  "@reviewSeenBy": {
+    "description": "Previews window: heading over the list of people who have opened a link in a browser, before anyone has."
+  },
+  "reviewSeenByCount": "Seen by {count}",
+  "@reviewSeenByCount": {
+    "description": "Previews window: the same heading with how many people have opened the link.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "reviewSeenByNobody": "Nobody yet.",
+  "@reviewSeenByNobody": {
+    "description": "Previews window, under Seen by: nobody has opened the link in a browser."
+  },
+  "reviewSeenBySomeone": "Someone",
+  "@reviewSeenBySomeone": {
+    "description": "Previews window, under Seen by: a person who opened the link and gave no name."
+  },
+  "reviewSeenByMore": "and {count} more",
+  "@reviewSeenByMore": {
+    "description": "Previews window, under Seen by: how many more people opened the link than the list shows.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "reviewWhatChanged": "What changed",
+  "@reviewWhatChanged": {
+    "description": "Share a preview: row label for an optional line saying what is different in a new version. Reviewers see it."
+  },
+  "reviewChanged": "Changed",
+  "@reviewChanged": {
+    "description": "Previews window: a quiet word under a link in the list when its composition has been edited since the newest version was sent."
+  },
+  "reviewChangedSince": "Changed since {version} was sent.",
+  "@reviewChangedSince": {
+    "description": "Previews window: line on a link when its composition has been edited since its newest version was sent. The version is written as v2. A button to send a new version follows.",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "reviewSendNewVersion": "Send a new version",
+  "@reviewSendNewVersion": {
+    "description": "Previews window: button beside the line saying a link's composition has changed since it was sent. It opens Share a preview on a new version of that link."
+  },
+  "reviewApproved": "Approved",
+  "@reviewApproved": {
+    "description": "Previews window: a quiet word beside a tick on a link in the list when a reviewer has approved its newest version."
+  },
+  "reviewApprovedBy": "Approved by {name}",
+  "@reviewApprovedBy": {
+    "description": "Previews window: a quiet line above a version's comments, beside a tick, when one reviewer has approved that version. The time follows it.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "reviewApprovedByTwo": "Approved by {first} and {second}",
+  "@reviewApprovedByTwo": {
+    "description": "Previews window: the same line when two reviewers have approved the version.",
+    "placeholders": {
+      "first": {
+        "type": "String"
+      },
+      "second": {
+        "type": "String"
+      }
+    }
+  },
+  "reviewApprovedByMore": "Approved by {name} and {count} others",
+  "@reviewApprovedByMore": {
+    "description": "Previews window: the same line when three or more reviewers have approved the version. The first one is named and the rest are counted.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "reviewRemoveApproval": "Remove {name}'s approval",
+  "@reviewRemoveApproval": {
+    "description": "Previews window: row in the menu on the line that says who approved a version. It takes that reviewer's approval off the version, after asking.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "reviewRemoveApprovalAsk": "Remove {name}'s approval?",
+  "@reviewRemoveApprovalAsk": {
+    "description": "Previews window: the question asked before a reviewer's approval is taken off a version.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "reviewRemove": "Remove",
+  "@reviewRemove": {
+    "description": "Previews window: the button that answers yes to removing a reviewer's approval."
+  },
+  "reviewRange": "{from} to {to}",
+  "@reviewRange": {
+    "description": "Previews window: where a comment on a range of frames runs, as two timecodes. The page in the browser words it the same way.",
+    "placeholders": {
+      "from": {
+        "type": "String"
+      },
+      "to": {
+        "type": "String"
+      }
+    }
+  },
+  "reviewJustNow": "just now",
+  "@reviewJustNow": {
+    "description": "Previews window: how long ago a comment, an approval, a version or an opening was, when it was under a minute ago. Lower case, as it stands at the end of a row. The page in the browser uses the same words."
+  },
+  "reviewMinutesAgo": "{count, plural, =1{1 minute ago} other{{count} minutes ago}}",
+  "@reviewMinutesAgo": {
+    "description": "Previews window: how long ago something was, in whole minutes, under an hour.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "reviewHoursAgo": "{count, plural, =1{1 hour ago} other{{count} hours ago}}",
+  "@reviewHoursAgo": {
+    "description": "Previews window: how long ago something was, in whole hours, under a day. Older than that is written as a date.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "reviewClean": "Video only",
+  "@reviewClean": {
+    "description": "Previews window: label of the row for a link's second address, which shows the video and none of the comments, likes, approvals or versions. A button beside it copies that address."
+  },
+  "reviewCleanRemoveAsk": "Remove the video only link?",
+  "@reviewCleanRemoveAsk": {
+    "description": "Question before a preview's second address, the one that shows only the video, is taken away."
+  },
+  "reviewCleanRemoveNote": "The link stops working at once.",
+  "@reviewCleanRemoveNote": {
+    "description": "A quiet line under the question asked before a preview's video only address is taken away."
+  },
+  "reviewNoteLayersChanged": "{count, plural, =1{1 layer changed} other{{count} layers changed}}",
+  "@reviewNoteLayersChanged": {
+    "description": "Share a preview: part of the line that says what changed since the last version, worked out from the composition. The Project history window counts the same things under Changed.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "reviewNoteLayersAdded": "{count, plural, =1{1 layer added} other{{count} layers added}}",
+  "@reviewNoteLayersAdded": {
+    "description": "Share a preview: part of the line that says what changed since the last version.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "reviewNoteLayersRemoved": "{count, plural, =1{1 layer removed} other{{count} layers removed}}",
+  "@reviewNoteLayersRemoved": {
+    "description": "Share a preview: part of the line that says what changed since the last version.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "reviewNoteEffectsAdded": "{count, plural, =1{1 effect added} other{{count} effects added}}",
+  "@reviewNoteEffectsAdded": {
+    "description": "Share a preview: part of the line that says what changed since the last version.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "reviewNoteEffectsRemoved": "{count, plural, =1{1 effect removed} other{{count} effects removed}}",
+  "@reviewNoteEffectsRemoved": {
+    "description": "Share a preview: part of the line that says what changed since the last version.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "reviewNoteLayerChanged": "{layer} changed",
+  "@reviewNoteLayerChanged": {
+    "description": "Share a preview: part of the line that says what changed since the last version, when one layer changed. It is named, as in Title text changed.",
+    "placeholders": {
+      "layer": {
+        "type": "String"
+      }
+    }
+  },
+  "reviewNoteLayerAdded": "{layer} added",
+  "@reviewNoteLayerAdded": {
+    "description": "Share a preview: part of the line that says what changed since the last version, when one layer was added. It is named.",
+    "placeholders": {
+      "layer": {
+        "type": "String"
+      }
+    }
+  },
+  "reviewNoteLayerRemoved": "{layer} removed",
+  "@reviewNoteLayerRemoved": {
+    "description": "Share a preview: part of the line that says what changed since the last version, when one layer was removed. It is named.",
+    "placeholders": {
+      "layer": {
+        "type": "String"
+      }
+    }
+  },
+  "reviewNoteEffectAdded": "{effect} added to {layer}",
+  "@reviewNoteEffectAdded": {
+    "description": "Share a preview: part of the line that says what changed since the last version, when one effect was added. The effect and its layer are named, as in Glow added to Title text.",
+    "placeholders": {
+      "effect": {
+        "type": "String"
+      },
+      "layer": {
+        "type": "String"
+      }
+    }
+  },
+  "reviewNoteEffectRemoved": "{effect} removed from {layer}",
+  "@reviewNoteEffectRemoved": {
+    "description": "Share a preview: part of the line that says what changed since the last version, when one effect was removed. The effect and its layer are named.",
+    "placeholders": {
+      "effect": {
+        "type": "String"
+      },
+      "layer": {
+        "type": "String"
+      }
+    }
+  },
+  "reviewNoteOneMore": "{first} and more",
+  "@reviewNoteOneMore": {
+    "description": "Share a preview: the line that says what changed since the last version, when there is room on the page for only one kind of change. The largest is said and the rest are not.",
+    "placeholders": {
+      "first": {
+        "type": "String"
+      }
+    }
+  },
+  "reviewCleanMove": "Move to {version}",
+  "@reviewCleanMove": {
+    "description": "Previews window: on the Video only row, beside the version that address shows, when the link has a newer one. It points the address at the newest version, written as v3.",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "reviewNoteTwo": "{first}, {second}",
+  "@reviewNoteTwo": {
+    "description": "Share a preview: the line that says what changed since the last version, when two kinds of thing did. Each part is a count and what it counts, as in 3 layers changed, 1 effect added.",
+    "placeholders": {
+      "first": {
+        "type": "String"
+      },
+      "second": {
+        "type": "String"
+      }
+    }
+  },
+  "reviewNoteMore": "{first}, {second} and more",
+  "@reviewNoteMore": {
+    "description": "Share a preview: the same line when more than two kinds of thing changed. The two largest are said and the rest are not.",
+    "placeholders": {
+      "first": {
+        "type": "String"
+      },
+      "second": {
+        "type": "String"
+      }
+    }
+  },
+  "reviewMore": "More",
+  "@reviewMore": {
+    "description": "Previews window: what the three-dot button at the end of a row is called. It opens the row's menu."
+  },
+  "reviewGoToFrame": "Go to frame",
+  "@reviewGoToFrame": {
+    "description": "Previews window: row in a comment's menu. It moves the playhead to the frame the comment is on."
+  },
+  "reviewShowDrawing": "Show drawing",
+  "@reviewShowDrawing": {
+    "description": "Previews window: row in a comment's menu. It shows what the reviewer drew over the frame."
+  },
+  "reviewShowPicture": "Show picture",
+  "@reviewShowPicture": {
+    "description": "Previews window: row in a comment's menu, and what the small picture on a comment is called for a screen reader. It shows the picture the reviewer sent with the comment at its full size."
+  },
+  "reviewHideDrawing": "Hide drawing",
+  "@reviewHideDrawing": {
+    "description": "Previews window: row in a comment's menu. It puts away the drawing being shown."
+  },
+  "reviewCopyLink": "Copy link",
+  "@reviewCopyLink": {
+    "description": "Previews window: row in a link's menu. It copies the link's address."
+  },
+  "reviewOpenInBrowser": "Open in browser",
+  "@reviewOpenInBrowser": {
+    "description": "Previews window: row in a link's menu. It opens the link in the web browser."
+  },
+  "reviewMail": "Email me",
+  "@reviewMail": {
+    "description": "Previews window: label of the switch on a link that says whether its sender is emailed about new comments on it."
+  },
+  "reviewMailOff": "Off in Settings",
+  "@reviewMailOff": {
+    "description": "Previews window: beside the Email me switch when emails about new comments are turned off for the whole account in Settings."
+  },
+  "settingsReviewMail": "Email me about new comments",
+  "@settingsReviewMail": {
+    "description": "Settings, Account: switch that says whether the account is emailed when someone comments on one of its previews."
+  },
+  "reviewNeedsPro": "Previews are part of Lumit Pro.",
+  "@reviewNeedsPro": {
+    "description": "Settings, Account: under the switch for emails about new comments, for an account without Lumit Pro."
+  },
+  "proFeatureReviewTitle": "Previews",
+  "@proFeatureReviewTitle": {
+    "description": "Third feature in the Lumit Pro window."
+  },
+  "proFeatureReviewBody": "Send an export as a link. Get comments on the frame.",
+  "@proFeatureReviewBody": {
+    "description": "What the third Lumit Pro feature does: people watch an export in a browser and comment on a frame of it."
+  },
+  "shareOnline": "Keep online",
+  "@shareOnline": {
+    "description": "Share this project page of the Shared project window: row label of the tick box that keeps the shared project on Lumit's server, which comes with Lumit Pro."
+  },
+  "shareOnlineStarting": "Putting it online…",
+  "@shareOnlineStarting": {
+    "description": "Share this project page of the Shared project window: what the Start sharing button says while the project is being stored on Lumit's server."
+  },
+  "shareOnlineLine": "Kept online and encrypted.",
+  "@shareOnlineLine": {
+    "description": "Shared project window, for a project that is kept online (held on Lumit's server so people can edit when nobody else is there): the quiet line at the top. The project is encrypted before it leaves the computer."
+  },
+  "shareOnlineInStep": "In step",
+  "@shareOnlineInStep": {
+    "description": "Shared project window, for a project that is kept online (held on Lumit's server so people can edit when nobody else is there): shown when this computer has every edit and is connected to Lumit's server."
+  },
+  "shareOnlineAway": "Reconnecting. Your edits wait here.",
+  "@shareOnlineAway": {
+    "description": "Bottom-strip notice, and the tooltip of the strip's button, for a project kept online when the connection to Lumit's server is lost or not yet made. The person can carry on editing."
+  },
+  "shareOnlineWaiting": "The host's Lumit Pro has ended. Edits wait here until it is back.",
+  "@shareOnlineWaiting": {
+    "description": "Bottom-strip notice, and a line in the Shared project window, for a project kept online when Lumit's server has stopped taking edits because the host (the person who shared it) no longer has Lumit Pro. Lumit Pro is a product name: do not translate it."
+  },
+  "shareOnlineBack": "In step again",
+  "@shareOnlineBack": {
+    "description": "Bottom-strip notice for a project kept online, shown when Lumit's server is found again and the edits made meanwhile were merged."
+  },
+  "shareOnlineLooking": "Reconnecting",
+  "@shareOnlineLooking": {
+    "description": "Bottom-strip button of a project kept online, and the first line of the Shared project window, in the warning colour, when there is no connection to Lumit's server just now. Short."
+  },
+  "shareOnlineOnHold": "On hold",
+  "@shareOnlineOnHold": {
+    "description": "Bottom-strip button of a project kept online, and the first line of the Shared project window, in the warning colour, when Lumit's server has stopped taking edits because the host's Lumit Pro has ended. Edits wait on each computer. Two words at most."
+  },
+  "shareOnlineNewLink": "This is a new link. Anyone who was away needs it.",
+  "@shareOnlineNewLink": {
+    "description": "Shared project window, for a project that is kept online (held on Lumit's server so people can edit when nobody else is there): shown under the invite link after the host removed someone, which replaces the link. People connected at the time were sent the new one."
+  },
+  "shareOnlineStopTitle": "Stop keeping this project online?",
+  "@shareOnlineStopTitle": {
+    "description": "Question asked before a project stops being kept online, in the Shared project window and on the Settings Account page."
+  },
+  "shareOnlineStopBody": "It stays on this computer, and everyone keeps their copy. Edits are no longer shared.",
+  "@shareOnlineStopBody": {
+    "description": "Under the question asked before a project stops being kept online, when a copy of the project is on this computer."
+  },
+  "shareOnlineStopNo": "Keep online",
+  "@shareOnlineStopNo": {
+    "description": "The careful answer to the question asked before a project stops being kept online."
+  },
+  "shareOnlineOriginals": "Keep the originals online",
+  "@shareOnlineOriginals": {
+    "description": "Shared project window, for a project that is kept online (held on Lumit's server so people can edit when nobody else is there): the host's tick box in the Footage group. When ticked, this computer sends the original footage files to Lumit's server as well as the small stand-ins."
+  },
+  "shareOnlinePreparing": "Getting ready to send",
+  "@shareOnlinePreparing": {
+    "description": "Shared project window, for a project that is kept online (held on Lumit's server so people can edit when nobody else is there): state of a footage file in the Footage list while its stand-in is being made and encrypted, before any of it is sent."
+  },
+  "shareOnlineWaitingSend": "Waiting to send",
+  "@shareOnlineWaitingSend": {
+    "description": "Shared project window, for a project that is kept online (held on Lumit's server so people can edit when nobody else is there): state of a footage file in the Footage list that is queued to be sent to Lumit's server."
+  },
+  "shareOnlineWaitingFetch": "Waiting to fetch",
+  "@shareOnlineWaitingFetch": {
+    "description": "Shared project window, for a project that is kept online (held on Lumit's server so people can edit when nobody else is there): state of a footage file in the Footage list that is queued to be fetched from Lumit's server."
+  },
+  "shareOnlineFailedSend": "Could not be sent",
+  "@shareOnlineFailedSend": {
+    "description": "Shared project window, for a project that is kept online (held on Lumit's server so people can edit when nobody else is there): state of a footage file in the Footage list that Lumit's server refused."
+  },
+  "shareOnlineFailedFetch": "Could not be fetched",
+  "@shareOnlineFailedFetch": {
+    "description": "Shared project window, for a project that is kept online (held on Lumit's server so people can edit when nobody else is there): state of a footage file in the Footage list that could not be fetched from Lumit's server."
+  },
+  "shareOnlineFailedMake": "Could not be made ready",
+  "@shareOnlineFailedMake": {
+    "description": "Shared project window, for a project that is kept online (held on Lumit's server so people can edit when nobody else is there): state of a footage file in the Footage list whose stand-in could not be made on this computer."
+  },
+  "shareOnlineFailedOpen": "Arrived damaged",
+  "@shareOnlineFailedOpen": {
+    "description": "Shared project window, for a project that is kept online (held on Lumit's server so people can edit when nobody else is there): state of a footage file in the Footage list that was fetched from Lumit's server and would not open."
+  },
+  "shareOnlineFull": "The host's storage is full. No more footage is sent.",
+  "@shareOnlineFull": {
+    "description": "Bottom-strip notice, and a line in the Shared project window, when Lumit's server refuses footage for a project kept online because the host's Lumit Pro storage is full."
+  },
+  "shareOnlineNoOriginal": "Original not online yet",
+  "@shareOnlineNoOriginal": {
+    "description": "Row in a footage item's menu in the Project panel, for a project kept online, in place of Fetch the original when Lumit's server does not hold the original file. Short enough for one line of a menu."
+  },
+  "shareOnlineNotFound": "No project found. Check the link with the host.",
+  "@shareOnlineNotFound": {
+    "description": "Join a project page: shown when an invite link to a project kept online finds nothing on Lumit's server."
+  },
+  "shareOnlineNotFoundOrPassword": "No project found, or wrong password.",
+  "@shareOnlineNotFoundOrPassword": {
+    "description": "Join a project page: shown when an invite link to a project kept online, given with a password, finds nothing on Lumit's server. A wrong password looks the same as a wrong link."
+  },
+  "shareOnlineErrorPro": "Keeping a project online needs Lumit Pro.",
+  "@shareOnlineErrorPro": {
+    "description": "Error in the Shared project window when Lumit's server refuses to keep a project because the account has no Lumit Pro. Lumit Pro is a product name: do not translate it."
+  },
+  "shareOnlineErrorTooMany": "No room for another project online. Stop keeping one online first.",
+  "@shareOnlineErrorTooMany": {
+    "description": "Error in the Shared project window when the account already keeps the most projects online that it may."
+  },
+  "shareOnlineErrorRefused": "Something went wrong. Try again in a moment.",
+  "@shareOnlineErrorRefused": {
+    "description": "Error in the Shared project window when Lumit's server refuses a call about a project kept online for a reason that has no words of its own."
+  },
+  "shareOnlineErrorSignedOut": "Sign in again.",
+  "@shareOnlineErrorSignedOut": {
+    "description": "Error in the Shared project window when the host of a project kept online tries to remove someone or stop sharing while signed out."
+  },
+  "proFeatureOnlineTitle": "Projects kept online",
+  "@proFeatureOnlineTitle": {
+    "description": "A feature in the Lumit Pro window: a shared project held on Lumit's server."
+  },
+  "proFeatureOnlineBody": "Guests can edit while you are away.",
+  "@proFeatureOnlineBody": {
+    "description": "What the Lumit Pro feature Projects kept online does: people with the invite can open the shared project and edit it when the host's computer is off."
+  },
+  "shareOnlineOriginal": "{name} (original)",
+  "@shareOnlineOriginal": {
+    "description": "Shared project window, for a project that is kept online (held on Lumit's server so people can edit when nobody else is there): a footage file in the Footage list when it is the original file and not a stand-in of it. {name} is the footage item's name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "shareOnlineSending": "Sending, {percent}%",
+  "@shareOnlineSending": {
+    "description": "Shared project window, for a project that is kept online (held on Lumit's server so people can edit when nobody else is there): state of a footage file in the Footage list while it is being sent to Lumit's server. {percent} is how far along it is.",
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "shareOnlineFetching": "Fetching, {percent}%",
+  "@shareOnlineFetching": {
+    "description": "Shared project window, for a project that is kept online (held on Lumit's server so people can edit when nobody else is there): state of a footage file in the Footage list while it is being fetched from Lumit's server. {percent} is how far along it is.",
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "shareOnlineWaitingOwn": "Your Lumit Pro has ended. Edits wait here until it is back.",
+  "@shareOnlineWaitingOwn": {
+    "description": "Bottom-strip notice and a line in the Shared project window, under the words On hold, shown to the host of a project kept online when Lumit's server has stopped taking edits because their own Lumit Pro has ended. Lumit Pro is a product name: do not translate it."
+  },
+  "shareActivity": "Activity",
+  "@shareActivity": {
+    "description": "Group heading in the Shared project window for a project kept online: who edited it and when, newest first."
+  },
+  "shareActivityAll": "Show all",
+  "@shareActivityAll": {
+    "description": "Quiet button under the Activity list of the Shared project window, which shows only the newest twelve entries until it is pressed."
+  },
+  "shareFollowStop": "Stop following",
+  "@shareFollowStop": {
+    "description": "Tooltip of the eye beside the person being followed, in the people list of the Shared project window."
+  },
+  "settingsOnlineGroup": "Kept online",
+  "@settingsOnlineGroup": {
+    "description": "Section heading on the Settings Account page: the shared projects this account keeps on Lumit's server."
+  },
+  "settingsOnlineStop": "Stop keeping online",
+  "@settingsOnlineStop": {
+    "description": "Button that ends a project being kept on Lumit's server, in the Shared project window and beside each project on the Settings Account page, and the answer that confirms it. It deletes the project from the server. Every copy on a computer stays."
+  },
+  "shareActivityOneIn": "{name} made {count, plural, =1{1 edit} other{{count} edits}} in {comp}",
+  "@shareActivityOneIn": {
+    "description": "Bottom-strip notice for a shared project kept online, shown once when someone edited it while this computer was not there (before it joined, while its copy was closed, or while it had no connection). A press opens the Shared project window. {name} is the person, {count} how many edits, {comp} the one composition they were in.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      },
+      "comp": {
+        "type": "String"
+      }
+    }
+  },
+  "shareActivityOne": "{name} made {count, plural, =1{1 edit} other{{count} edits}}",
+  "@shareActivityOne": {
+    "description": "Bottom-strip notice for a shared project kept online, shown once when someone edited it while this computer was not there (before it joined, while its copy was closed, or while it had no connection). A press opens the Shared project window. Used when the edits were in more than one composition, or in none. {name} is the person, {count} how many edits.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shareActivityTwo": "{name} and {other} made {count, plural, =1{1 edit} other{{count} edits}}",
+  "@shareActivityTwo": {
+    "description": "Bottom-strip notice for a shared project kept online, shown once when someone edited it while this computer was not there (before it joined, while its copy was closed, or while it had no connection). A press opens the Shared project window. Used when two people did. {name} and {other} are the people, {count} how many edits between them.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "other": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shareActivityMany": "{name} and {others} others made {count, plural, =1{1 edit} other{{count} edits}}",
+  "@shareActivityMany": {
+    "description": "Bottom-strip notice for a shared project kept online, shown once when someone edited it while this computer was not there (before it joined, while its copy was closed, or while it had no connection). A press opens the Shared project window. Used when three or more people did. {name} is one of them, {others} how many more there are (always two or more), {count} how many edits between them all.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "others": {
+        "type": "int"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shareActivityEdits": "{count, plural, =1{1 edit} other{{count} edits}}",
+  "@shareActivityEdits": {
+    "description": "Activity list of the Shared project window: how many edits one person made in one sitting.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shareActivityMore": "and {count} more",
+  "@shareActivityMore": {
+    "description": "Activity list of the Shared project window: after the first three compositions a person edited, how many others there were. Lower case, it follows a list of names.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shareFollow": "Follow {name}",
+  "@shareFollow": {
+    "description": "Tooltip on another person in the people list of the Shared project window. Pressing them makes this computer's open composition and playhead go where theirs go. {name} is the person.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "shareFollowing": "Following {name}",
+  "@shareFollowing": {
+    "description": "Chip over the Viewer while this computer follows another person in a shared project: its open composition and playhead go where theirs go. {name} is the person.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsOnlineUnnamed": "Unnamed project",
+  "@settingsOnlineUnnamed": {
+    "description": "Settings Account page, the list of shared projects kept on Lumit's server: what one is called when this computer does not know its file."
+  },
+  "settingsOnlineHolds": "{size} · opened {when}",
+  "@settingsOnlineHolds": {
+    "description": "Settings Account page, under a shared project kept on Lumit's server: how much the server holds for it, such as 12 MB, and when someone last opened it, such as today, 14:32 or 4 October.",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      },
+      "when": {
+        "type": "String"
+      }
+    }
+  },
+  "shareOnlineUse": "People can edit while you are away",
+  "@shareOnlineUse": {
+    "description": "Share this project page of the Shared project window: beside the Keep online tick box, what ticking it does. No full stop, like the tick box above it."
+  },
+  "shareOnlinePro": "Keep it online with Lumit Pro.",
+  "@shareOnlinePro": {
+    "description": "Share this project page of the Shared project window: beside Keep online, for someone without Lumit Pro, what it would do here. Short enough for one line beside a button. Lumit Pro is a product name: do not translate it."
+  },
+  "shareStatusOnline": "Kept online",
+  "@shareStatusOnline": {
+    "description": "Bottom-strip button of a shared project that is kept on Lumit's server. An ordinary shared project says Shared there."
+  },
+  "shareHostTag": "host",
+  "@shareHostTag": {
+    "description": "People list of the Shared project window: a small tag after the name of the person who shares the project. Lower case, one word."
+  },
+  "shareRemoveTitle": "Remove {name}?",
+  "@shareRemoveTitle": {
+    "description": "Question asked when the host of a shared project presses Remove beside a person.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "shareRemoveBody": "The invite link changes. Anyone who is away will need the new one.",
+  "@shareRemoveBody": {
+    "description": "Under the question asked before the host removes a person from a shared project."
+  },
+  "shareRemoveNo": "Keep",
+  "@shareRemoveNo": {
+    "description": "The careful answer to the question asked before the host removes a person from a shared project: they stay."
+  },
+  "shareRemoving": "Removing…",
+  "@shareRemoving": {
+    "description": "People list of the Shared project window: in place of Remove while the person is being taken out."
+  },
+  "shareHaveInvite": "Have a new invite?",
+  "@shareHaveInvite": {
+    "description": "Shared project window, for a guest whose project cannot be reached: pressing it shows the field a new invite link is pasted into."
+  },
+  "shareShowBodyOnline": "Anyone who sees this link can join and edit. Keep it off streams and screenshots.",
+  "@shareShowBodyOnline": {
+    "description": "Under the question asked before the invite link of a project kept online is shown. This link holds no address of the person's computer."
+  },
+  "shareConflictsHeld": "{count} waiting",
+  "@shareConflictsHeld": {
+    "description": "Shared project window, beside the label Conflicts: how many wait to be chosen between.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shareDropped": "{count, plural, =1{1 of your changes was dropped} other{{count} of your changes were dropped}}",
+  "@shareDropped": {
+    "description": "Bottom-strip notice and a row at the head of the Activity list in the Shared project window, both in the warning colour and both in these words: how many of this person's edits could not be put into a project kept online when their computer came back to it, and are gone.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shareFollowStopShort": "Stop",
+  "@shareFollowStopShort": {
+    "description": "Button on the Following chip over the Viewer: stop following that person. One word."
+  },
+  "shareOnlineFullOwn": "Storage full, {used} of {limit}",
+  "@shareOnlineFullOwn": {
+    "description": "Shared project window, shown to the host of a project kept online when Lumit's server refuses footage because their storage is full. {used} and {limit} are sizes such as 47 GB.",
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "shareOnlineManage": "Manage…",
+  "@shareOnlineManage": {
+    "description": "Shared project window: button beside Storage full that opens the Settings Account page, where the account's storage is listed."
+  },
+  "shareOnlineOriginalsCost": "Keep the originals online ({size})",
+  "@shareOnlineOriginalsCost": {
+    "description": "Shared project window: the host's tick box in the Footage group while it is unticked, with how much ticking it would send, such as 1.2 GB.",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "shareOnlineOriginalsHeld": "{size} online",
+  "@shareOnlineOriginalsHeld": {
+    "description": "Shared project window, beside the ticked Keep the originals online box: how much original footage Lumit's server holds for the project, such as 1.2 GB.",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "shareOnlineRetry": "Try again",
+  "@shareOnlineRetry": {
+    "description": "Tooltip of the mark beside a footage file that could not be sent or fetched, in the Shared project window."
+  },
+  "shareOnlineCount": "{done} of {total}",
+  "@shareOnlineCount": {
+    "description": "Shared project window, on the edge of the Footage group: which file is on its way out of how many, such as 2 of 6.",
+    "placeholders": {
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "settingsOnlinePut": "{size} · put online {date}",
+  "@settingsOnlinePut": {
+    "description": "Settings Account page, under a project kept online that this computer does not know the file of: how much the server holds for it, and the day it was put online, such as 11 October. Size first, as the row above it has it.",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      },
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsOnlineToday": "today, {time}",
+  "@settingsOnlineToday": {
+    "description": "Settings Account page, after the word opened: earlier today, at this time. Lower case.",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsOnlineYesterday": "yesterday, {time}",
+  "@settingsOnlineYesterday": {
+    "description": "Settings Account page, after the word opened: yesterday, at this time. Lower case.",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsStorage": "Storage",
+  "@settingsStorage": {
+    "description": "Settings Account page: row that says how much of the account's Lumit Pro storage is used."
+  },
+  "shareVersionsOlder": "On Lumit {version}",
+  "@shareVersionsOlder": {
+    "description": "Bottom-strip button of a project kept online, and the first line of the Shared project window, on the host's computer when an older Lumit keeps the project than the one running. Short. {version} is a version of Lumit, such as 0.7.0.",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "shareVersionsWaitingHost": "Waiting for the host",
+  "@shareVersionsWaitingHost": {
+    "description": "Bottom-strip button of a project kept online, and the first line of the Shared project window, on a guest's computer that runs a newer Lumit than keeps the project. Not an error. Short."
+  },
+  "shareVersionsNeedsUpdate": "Update needed",
+  "@shareVersionsNeedsUpdate": {
+    "description": "Bottom-strip button of a project kept online, and the first line of the Shared project window, when a newer Lumit keeps the project than the one running. Short."
+  },
+  "shareVersionsMovable": "Move it forward to edit it here. Anyone on an older Lumit has to update.",
+  "@shareVersionsMovable": {
+    "description": "Shared project window, on the host's computer, under words such as On Lumit 0.5.2: an older Lumit keeps the project than the one running. Beside it is the button Move it forward. It does not name the older version again."
+  },
+  "shareVersionsHostFirst": "Waiting for the host to open it in Lumit {version}.",
+  "@shareVersionsHostFirst": {
+    "description": "Bottom-strip notice and a line in the Shared project window, under the words Waiting for the host, on a guest's computer that runs a newer Lumit than keeps the project. {version} is the Lumit this computer runs, such as 0.7.0.",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "shareVersionsHostFirstJoin": "The host has to open this project in Lumit {version} first.",
+  "@shareVersionsHostFirstJoin": {
+    "description": "Join a project page of the Shared project window, when the link leads to a project kept by an older Lumit than this one. {version} is the Lumit this computer runs, such as 0.7.0.",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "shareVersionsUpdate": "Update to Lumit {version} to edit this project. Your edits are kept.",
+  "@shareVersionsUpdate": {
+    "description": "Bottom-strip notice when a newer Lumit keeps the project than the one running. The project is open on this computer, so it does not say open. A press leads to the update. {version} is a version of Lumit, such as 0.7.0.",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "shareVersionsUpdateJoin": "Update to Lumit {version} to join this project.",
+  "@shareVersionsUpdateJoin": {
+    "description": "Join a project page of the Shared project window, when the link leads to a project kept by a newer Lumit than this one. {version} is a version of Lumit, such as 0.7.0.",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "shareForwardTitle": "Move this project forward to Lumit {version}?",
+  "@shareForwardTitle": {
+    "description": "Question asked of the host of a project kept online, when they open it with a newer Lumit than keeps it. {version} is the Lumit this computer runs, such as 0.7.0.",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "shareForwardBody": "It is on Lumit {version}. Anyone on an older Lumit has to update to rejoin. This cannot be undone.",
+  "@shareForwardBody": {
+    "description": "Under the question about moving a project kept online forward. {version} is the older Lumit that keeps it, such as 0.6.0.",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "shareForwardYes": "Move it forward",
+  "@shareForwardYes": {
+    "description": "The answer that moves a project kept online forward to the Lumit running, and the button in the Shared project window that does the same."
+  },
+  "shareForwardNo": "Not now",
+  "@shareForwardNo": {
+    "description": "The careful answer to the question about moving a project kept online forward: it stays as it is."
+  },
+  "shareForwardMoving": "Moving it forward…",
+  "@shareForwardMoving": {
+    "description": "Bottom-strip button, first line of the Shared project window and the Join button, while a project kept online is being moved forward to the Lumit running."
+  },
+  "shareForwardBusy": "Someone is still editing in Lumit {version}. Try again in a moment.",
+  "@shareForwardBusy": {
+    "description": "Notice when a project kept online could not be moved forward because people on the older Lumit went on editing all through. {version} is a version of Lumit, such as 0.7.0.",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "shareForwardUnreadable": "An edit could not be read, so the project stays on Lumit {version}.",
+  "@shareForwardUnreadable": {
+    "description": "Notice when a project kept online could not be moved forward because the newer Lumit could not read something the older one stored. Nothing was changed. {version} is a version of Lumit, such as 0.7.0.",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "shareForwardNotHost": "Only the host's account can move this project forward.",
+  "@shareForwardNotHost": {
+    "description": "Notice when a project kept online could not be moved forward because the account signed in is not its host's."
+  },
+  "shareOnlineStopTitleNamed": "Stop keeping {name} online?",
+  "@shareOnlineStopTitleNamed": {
+    "description": "The same question on the Settings Account page, where several projects are listed. {name} is the project.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "shareOnlineStopBodyAway": "This computer has no file for it. Everyone else keeps their copy, and edits are no longer shared.",
+  "@shareOnlineStopBodyAway": {
+    "description": "Under the question asked before a project stops being kept online, when this computer knows no file for it."
+  },
+  "shareActivitySeen": "Seen",
+  "@shareActivitySeen": {
+    "description": "Activity list of the Shared project window: small legend over the sittings the person has already looked at, under the ones that are new to them. One word."
+  },
+  "shareDroppedWhy": "What they changed was no longer there.",
+  "@shareDroppedWhy": {
+    "description": "Shared project window, a quiet line under the count of this person's changes that were dropped: why. They, here, is the changes."
+  },
+  "shareOnlineAwayLine": "Your edits wait here.",
+  "@shareOnlineAwayLine": {
+    "description": "Shared project window, under the words Looking for the server, for a project kept online with no connection to Lumit's server. It does not say looking again."
+  },
+  "shareVersionsUpdateLine": "Update to Lumit {version} to edit it. Your edits are kept.",
+  "@shareVersionsUpdateLine": {
+    "description": "Shared project window, under the words Update needed, when a newer Lumit keeps the project than the one running. Beside it is the button that checks for updates. {version} is a version of Lumit, such as 0.7.0.",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsOnlineEnded": "Lumit Pro has ended",
+  "@settingsOnlineEnded": {
+    "description": "Settings Account page, over the projects the account keeps online: label of a row shown when the account's Lumit Pro has ended. Beside it is the button Lumit Pro. Lumit Pro is a product name: do not translate it."
+  },
+  "settingsOnlineEndedHint": "Edits wait on each computer until it is back.",
+  "@settingsOnlineEndedHint": {
+    "description": "Settings Account page, under the label Lumit Pro has ended: what that means for the projects kept online."
+  },
+  "shareLinkEdit": "Invite to edit",
+  "@shareLinkEdit": {
+    "description": "Shared project window, for a project kept online: label of the invite link that lets people change the project. Under it is the one labelled Invite to look."
+  },
+  "shareLinkLook": "Invite to look",
+  "@shareLinkLook": {
+    "description": "Shared project window, for a project kept online: label of the second invite link. Whoever joins by it sees the project and the people and can change nothing."
+  },
+  "shareShowBodyLook": "Anyone who sees this link can see the project. Keep it off streams and screenshots.",
+  "@shareShowBodyLook": {
+    "description": "Under the question asked before the invite that can only look is shown. Whoever joins by this link can change nothing."
+  },
+  "shareLookOnly": "Look only",
+  "@shareLookOnly": {
+    "description": "Bottom-strip button of a project kept online, and the first line of the Shared project window, on the computer of someone who joined by the invite to look: they can see the project and not change it. Two words at most."
+  },
+  "shareLookTag": "look only",
+  "@shareLookTag": {
+    "description": "People list of the Shared project window, and the tooltip of a person in the bottom strip: a small tag after the name of someone who can see the project and not change it. Lower case, as the tags you and host are."
+  },
+  "shareOpenMyCopy": "Open my copy",
+  "@shareOpenMyCopy": {
+    "description": "Shared project window and Conflicts window: opens this person's own project as it was just before their computer came back to the shared project and some of their changes were held or dropped. It opens as a project of its own."
+  },
+  "shareReturnCopyKept": "{count, plural, =1{Your copy from before this computer came back} other{Your copies from before this computer came back}}",
+  "@shareReturnCopyKept": {
+    "description": "Shared project window, head of the Activity list: says that this person's own project from just before their computer came back to the shared project is kept. There are one or two. Beside it are the buttons that open them.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shareReturnForgetTitle": "{count, plural, =1{Delete your copy?} other{Delete both your copies?}}",
+  "@shareReturnForgetTitle": {
+    "description": "Question asked when the person dismisses the row about changes of theirs that were dropped, and Lumit holds their own project from before that, once or twice over.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shareReturnForgetBody": "{count, plural, =1{It is your project as it was before this computer came back.} other{Each is your project as it was before this computer came back.}}",
+  "@shareReturnForgetBody": {
+    "description": "Under the question about deleting the copy or copies: what they are.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shareLookJoined": "You can look, not edit. Changes made here are undone.",
+  "@shareLookJoined": {
+    "description": "Bottom-strip notice on the computer of someone who joined a shared project by the invite to look. Said when they join, and again whenever something they change is put back. Every tool still works on their computer, and whatever is changed is undone at once, so this says why."
+  },
+  "shareOpenMyCopyFrom": "Open my copy from {when}",
+  "@shareOpenMyCopyFrom": {
+    "description": "Shared project window: the Open my copy button when Lumit holds two such copies, told apart by when each was written, such as 16:20 or 4 October, 16:20.",
+    "placeholders": {
+      "when": {
+        "type": "String"
+      }
+    }
+  },
+  "sharePasswordHintOnline": "Optional. Editors need it as well as the link.",
+  "@sharePasswordHintOnline": {
+    "description": "Quiet line under the Password field on the Share this project page while Keep online is ticked. The invite to look never asks for the password."
+  },
+  "shareFullLook": "That project has as many people looking as it can take. Try again later.",
+  "@shareFullLook": {
+    "description": "Notice on the computer of someone who can only look at a shared project, when they are turned away because no more people who only look are taken, or someone who can edit needed the place."
+  },
+  "shareLinkNoPassword": "no password",
+  "@shareLinkNoPassword": {
+    "description": "Shared project window, for a project kept online with a password: a small tag on the Invite to look row, where the Invite to edit row has a lock. Anyone holding that link can see the project without the password. Lower case, as the tags you and host are."
+  },
+  "shareLookOnTitle": "Turn on the invite to look?",
+  "@shareLookOnTitle": {
+    "description": "Shared project window, on the host's computer, for a project kept online that has a password: the question asked when the host switches on Invite to look, the link people can see the project by and not change it."
+  },
+  "shareLookOnBody": "Either link then shows the project without the password. Editing still needs it.",
+  "@shareLookOnBody": {
+    "description": "Under the question Turn on the invite to look?. With the invite to look on, someone holding the invite to edit can see the project without typing its password, and so can anyone with the invite to look. Editing still needs the password."
+  },
+  "shareLookOnYes": "Turn on",
+  "@shareLookOnYes": {
+    "description": "The answer that switches on Invite to look in the Shared project window. Beside Cancel."
+  },
+  "shareLookOffTitle": "Turn off the invite to look?",
+  "@shareLookOffTitle": {
+    "description": "Shared project window, on the host's computer: the question asked when the host switches off Invite to look while someone is looking by it."
+  },
+  "shareLookOffBody": "{count, plural, =1{The person looking now is removed and keeps their copy.} other{The {count} people looking now are removed and keep their copies.}}",
+  "@shareLookOffBody": {
+    "description": "Under the question Turn off the invite to look?. {count} is how many people are in the project by the invite to look right now. Switching it off takes them out of the project. What each has of it stays on their own computer as a project of their own.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shareLookOffYes": "Turn off",
+  "@shareLookOffYes": {
+    "description": "The answer that switches off Invite to look in the Shared project window. Beside Cancel."
+  },
+  "shareNoteHint": "Leave a note on where you are",
+  "@shareNoteHint": {
+    "description": "Shared project window, Activity group, for a project kept online: the hint in the empty field where a note for the others is typed. The note carries the composition open, the time the playhead is at and the layer chosen."
+  },
+  "shareNoteSend": "Send",
+  "@shareNoteSend": {
+    "description": "Button beside the field where a note is typed in the Shared project window. It leaves the note for everyone in the project."
+  },
+  "shareNoteWaiting": "not sent yet",
+  "@shareNoteWaiting": {
+    "description": "Shared project window, Activity group: a small tag on a note this person wrote while Lumit's server was out of reach, where the note's time would be. It is sent by itself when the server is found. Lower case, as the tags you and host are."
+  },
+  "shareNoteSaid": "{name}: {text}",
+  "@shareNoteSaid": {
+    "description": "Bottom-strip notice when someone else leaves a note in a project kept online. {name} is who wrote it and {text} is the note's own words. A press opens the list of notes.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "text": {
+        "type": "String"
+      }
+    }
+  },
+  "shareNotesNew": "{count, plural, =1{1 new note} other{{count} new notes}}",
+  "@shareNotesNew": {
+    "description": "Bottom-strip notice when several notes were left in a project kept online while this computer was not there. {count} is how many. A press opens the list.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shareOnlineNearlyLarge": "Nearly too large",
+  "@shareOnlineNearlyLarge": {
+    "description": "Bottom-strip button of a project kept online, and the first line of the Shared project window, in the warning colour, when the project has grown past what Lumit's server stores. Edits still go in for now. Three words at most."
+  },
+  "shareOnlineNearlyLargeLine": "It has to get smaller to stay online.",
+  "@shareOnlineNearlyLargeLine": {
+    "description": "Shared project window, under the words Nearly too large, for a project kept online that has grown past what Lumit's server stores. It does not say too large again."
+  },
+  "shareOnlineNearlyLargeSaid": "This project is nearly too large to keep online.",
+  "@shareOnlineNearlyLargeSaid": {
+    "description": "Bottom-strip notice, and the tooltip of the strip's button, for a project kept online that has grown past what Lumit's server stores. Edits still go in for now and will stop unless the project gets smaller."
+  },
+  "shareOnlineTooLarge": "Too large",
+  "@shareOnlineTooLarge": {
+    "description": "Bottom-strip button of a project kept online, and the first line of the Shared project window, in the warning colour, when the project is too large for Lumit's server and edits have stopped going in. Two words at most."
+  },
+  "shareOnlineTooLargeLine": "Edits made here are kept on this computer.",
+  "@shareOnlineTooLargeLine": {
+    "description": "Shared project window, under the words Too large, on the computer of someone who is not the host. The project is too large for Lumit's server, so what this person changes reaches nobody and stays in their own copy. It does not say too large again."
+  },
+  "shareOnlineTooLargeLineOwn": "Edits made here are kept on this computer. Stop keeping it online to make it smaller.",
+  "@shareOnlineTooLargeLineOwn": {
+    "description": "Shared project window, under the words Too large, on the host's computer. The project is too large for Lumit's server, and it cannot be made smaller while it is kept online. Stop keeping online is a button in the same window."
+  },
+  "shareOnlineTooLargeSaid": "This project is too large to keep online. Edits made here are kept on this computer.",
+  "@shareOnlineTooLargeSaid": {
+    "description": "Bottom-strip notice, and the tooltip of the strip's button, for a project kept online that is too large for Lumit's server. Nothing changed on this computer reaches anyone else, and nothing is lost."
+  },
+  "shareLinkLockEdit": "to edit",
+  "@shareLinkLockEdit": {
+    "description": "Shared project window, for a project kept online with a password while the invite to look is on: a small tag beside the lock on the Invite to edit row. The password is then only needed to change the project, and the link by itself shows it. Lower case, as the tags you, host and no password are."
+  },
+  "sharePasswordSetEdit": "People need the password to edit. This link alone shows the project.",
+  "@sharePasswordSetEdit": {
+    "description": "Tooltip on the lock beside the Invite to edit link of a project kept online, while the invite to look is on. In place of the tooltip that says people joining need the password as well as the link."
+  },
+  "shareNoteTakeDown": "Take down",
+  "@shareNoteTakeDown": {
+    "description": "Shared project window, Activity group, for a project kept online: what the small cross at the end of a note's row does, on hover, and the answer that confirms it. The note is removed for everyone in the project. Its writer may do it, and so may the host."
+  },
+  "shareNoteDownTitle": "Take down {name}'s note?",
+  "@shareNoteDownTitle": {
+    "description": "Shared project window, on the host's computer: the question asked before the host takes down a note someone else wrote. {name} is who wrote it.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "shareNoteDownBody": "It is removed for everyone.",
+  "@shareNoteDownBody": {
+    "description": "Under the question Take down {name}'s note?. The note is removed from every computer in the project, for good."
+  },
+  "shareReplaced": "Invite replaced",
+  "@shareReplaced": {
+    "description": "Bottom-strip button of a project kept online, and the first line of the Shared project window, in the warning colour, on a computer that was away when the host made a new invite. Its copy is still part of the project and cannot find it until the new invite is pasted. Two words at most."
+  },
+  "shareReplacedLine": "Edits wait here until the new one is pasted.",
+  "@shareReplacedLine": {
+    "description": "Shared project window, under the words Invite replaced, with the field for a new invite right under it. It does not say the invite was replaced again."
+  },
+  "shareReplacedSaid": "The host replaced the invite. Edits wait here until the new one is pasted.",
+  "@shareReplacedSaid": {
+    "description": "Bottom-strip notice, and the tooltip of the strip's button, on a computer that was away from a project kept online when the host made a new invite. A press opens the Shared project window, where the new invite is pasted."
+  },
+  "shareJoinClosed": "That project is no longer kept online.",
+  "@shareJoinClosed": {
+    "description": "Join a project page, under the invite link: the link was for a project its host has stopped keeping on Lumit's server."
+  },
+  "shareJoinMoved": "That invite was replaced. Ask the host for the new one.",
+  "@shareJoinMoved": {
+    "description": "Join a project page, under the invite link: the host has made a new invite since this one was handed out, so this one opens nothing."
+  },
+  "shareJoinRemoved": "The host removed you from that project.",
+  "@shareJoinRemoved": {
+    "description": "Join a project page, under the invite link: this computer was taken out of the project by its host, and the invite it holds opens nothing."
+  },
+  "shareJoinLookOff": "The invite to look is off. Ask the host to turn it on.",
+  "@shareJoinLookOff": {
+    "description": "Join a project page, under the invite link: the link is the one people can look at a project by and not change it, and the host has that invite switched off."
   }
 }

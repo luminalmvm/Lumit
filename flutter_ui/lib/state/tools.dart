@@ -282,6 +282,25 @@ class ToolsState extends ChangeNotifier {
   /// The armed tool.
   ToolMode get tool => _tool;
 
+  /// This machine can only look at the shared project it is in, so what
+  /// changes the project is held still. The one flag for it: the Hand is the
+  /// tool in hand, only it and Zoom can be armed ([arms]), and the panels of
+  /// controls are dimmed and take no input (`LookHeld`). Selection is in
+  /// hand again when it ends.
+  bool get lookOnly => _lookOnly;
+  bool _lookOnly = false;
+  set lookOnly(bool now) {
+    if (now == _lookOnly) return;
+    _lookOnly = now;
+    _tool = now ? ToolMode.hand : ToolMode.select;
+    notifyListeners();
+  }
+
+  /// Whether [group] can be armed now: every one, but on a machine that can
+  /// only look, which keeps the two that look.
+  bool arms(ToolGroup group) =>
+      !_lookOnly || group == ToolGroup.hand || group == ToolGroup.zoom;
+
   /// The member each group last had armed, so a group button keeps showing the
   /// variant you chose rather than snapping back to the first one.
   final Map<ToolGroup, ToolMode> _lastUsed = {};
@@ -510,7 +529,7 @@ class ToolsState extends ChangeNotifier {
   /// application; but arming one would have handed the user a pointer that does
   /// nothing, which is worse than a button that visibly cannot be pressed.
   void select(ToolMode tool) {
-    if (!tool.ready) return;
+    if (!tool.ready || !arms(tool.group)) return;
     _lastUsed[tool.group] = tool;
     if (_tool == tool) return;
     _tool = tool;

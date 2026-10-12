@@ -62,6 +62,8 @@ import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'about_window_frb.dart';
 import 'ae_report_frb.dart';
+import 'backups_window.dart';
+import 'bring_composition_frb.dart';
 import 'command_palette_frb.dart';
 import 'comp_settings_frb.dart';
 import 'fx_console_context.dart';
@@ -73,9 +75,11 @@ import 'menu_animation_frb.dart';
 import 'menu_layer_frb.dart';
 import 'precompose_dialog_frb.dart';
 import 'pro_window.dart';
+import 'project_history_window.dart';
 import 'export_dialog_frb.dart';
 import 'export_queue_frb.dart';
 import 'recovery_dialog_frb.dart';
+import 'review_links_window.dart';
 import 'project_settings_frb.dart';
 import 'settings_window_frb.dart';
 import 'share_dialog_frb.dart';
@@ -83,6 +87,7 @@ import 'theme_name_dialog.dart';
 import 'tool_bar_frb.dart' show LumitTopLineToolsFrb;
 import 'tour_frb.dart';
 import 'update_dialog_frb.dart';
+import 'welcome_frb.dart' show projectDisplayName;
 import 'workspace_shortcut_frb.dart';
 
 /// The machinery half of Window ▸ Workspace (docs/07 §1.4): saving the
@@ -193,6 +198,10 @@ class MenuEntry {
   final String? action;
   final bool todo;
 
+  /// A word shown where the chord would be, in its place. The backup rows
+  /// say Pro there to an account that has not got it.
+  final String? aside;
+
   /// The tick a fixed row was built with. Null on a row that is not a toggle,
   /// and null on a [MenuEntry.toggle], which reads its own tick live.
   final bool? _checked;
@@ -211,6 +220,7 @@ class MenuEntry {
     this.label,
     this.onPressed, {
     this.action,
+    this.aside,
     bool? checked,
   })  : isDivider = false,
         children = null,
@@ -237,6 +247,7 @@ class MenuEntry {
       : isDivider = false,
         children = null,
         todo = false,
+        aside = null,
         _checked = null,
         _checkedNow = checked,
         live = null,
@@ -258,6 +269,7 @@ class MenuEntry {
       : isDivider = false,
         children = null,
         todo = false,
+        aside = null,
         _checked = null,
         _checkedNow = checked,
         live = null,
@@ -270,6 +282,7 @@ class MenuEntry {
         isDivider = true,
         action = null,
         todo = false,
+        aside = null,
         _checked = null,
         _checkedNow = null,
         live = null,
@@ -280,6 +293,7 @@ class MenuEntry {
         isDivider = false,
         action = null,
         todo = false,
+        aside = null,
         _checked = null,
         _checkedNow = null,
         live = null,
@@ -291,6 +305,7 @@ class MenuEntry {
         children = null,
         isDivider = false,
         todo = true,
+        aside = null,
         _checked = null,
         _checkedNow = null,
         live = null,
@@ -313,6 +328,7 @@ class MenuEntry {
         isDivider = false,
         action = null,
         todo = false,
+        aside = null,
         _checked = null,
         _checkedNow = null;
 
@@ -913,6 +929,10 @@ List<MenuSection> lumitMenus(
     return () => run(layer);
   }
 
+  /// What a backup row says where its chord would be: Pro, to an account
+  /// that has not got it. Read as the menu opens.
+  String? needsPro() => ui.account.pro ? null : l10n.proTag;
+
   return [
     (
       title: l10n.menuFile,
@@ -928,6 +948,8 @@ List<MenuSection> lumitMenus(
                 for (final path in ui.workspace.recentProjects)
                   MenuEntry(path, () => app.openProject(path)),
             ]),
+            MenuEntry(l10n.backupMenuOpen, () => showBackups(context),
+                aside: needsPro()),
             MenuEntry.divider(),
             // Closing a project puts an empty one in its place, because the shell
             // always has a document: the engine's `close` is what `newProject`
@@ -951,6 +973,16 @@ List<MenuSection> lumitMenus(
                     : () => saveProjectFrb(app, ui,
                         forcePicker: true, picker: savePicker),
                 action: 'file.save.as'),
+            // Save, and name the version the save makes. Greyed for a
+            // project whose saves are not sent, which has no version to name.
+            MenuEntry(
+                l10n.backupMenuSaveVersion,
+                project == null || (ui.account.pro && !ui.backup.sends)
+                    ? null
+                    : () => saveVersionFrb(context, app, ui,
+                        picker: savePicker),
+                action: 'file.save.version',
+                aside: needsPro()),
             // The footage inside the `.lum`, so the one file can be handed to
             // somebody else. Read as the menu opens: a pack is a save, and
             // nothing else tells the bar that one has happened.
@@ -975,7 +1007,7 @@ List<MenuSection> lumitMenus(
                   l10n.menuUnpackProject,
                   (_packState(project)?.packed ?? 0) == 0
                       ? null
-                      : () => unpackProjectFrb(app)),
+                      : () => unpackProjectFrb(app, ui)),
             ]),
             MenuEntry.divider(),
             // Import footage stands in the menu proper (owner, 2026-08-25,
@@ -985,7 +1017,8 @@ List<MenuSection> lumitMenus(
                 l10n.menuImportFootage,
                 project == null
                     ? null
-                    : () => importFootageFrb(app, picker: footagePicker),
+                    : () =>
+                        importFootageFrb(context, app, picker: footagePicker),
                 action: 'file.import'),
             // The After Effects route keeps the submenu. The Bridge-bundle entry
             // is gone (owner, repeatedly): the .aep front door is the import; the
@@ -1006,6 +1039,8 @@ List<MenuSection> lumitMenus(
             // Sharing this project, joining somebody else's, and who is here.
             MenuEntry(
                 l10n.menuSharedProject, () => showShareFrb(context, app)),
+            // Exports sent out for comments, and the comments that came back.
+            MenuEntry(l10n.menuReviewLinks, () => showReviewLinks(context)),
             MenuEntry.divider(),
             // The project's own settings, kept apart from Settings because Settings
             // is this machine's and these travel in the `.lum`.
@@ -1020,6 +1055,9 @@ List<MenuSection> lumitMenus(
             // is the one command whose absence costs a day's work.
             MenuEntry(l10n.menuRecover,
                 projectPath == null ? null : () => _recover(context, app)),
+            MenuEntry(l10n.backupMenuHistory,
+                project == null ? null : () => showProjectHistory(context),
+                aside: needsPro()),
           ]
     ),
     (
@@ -1148,6 +1186,11 @@ List<MenuSection> lumitMenus(
             MenuEntry(l10n.menuAddToExportQueue,
                 comp == null ? null : () => exportFrb(context),
                 action: 'export.queue.add'),
+            MenuEntry(
+                l10n.menuSendForReview,
+                comp == null
+                    ? null
+                    : () => showReviewLinks(context, send: comp)),
             MenuEntry.divider(),
             // Comp-level markers, including the beat pass, which makes them
             // (docs/09 §10) — the layer's own markers are Layer ▸ Markers.
@@ -1892,9 +1935,26 @@ Future<void> openProjectFrb(LumitState app,
   await app.openProject(path);
 }
 
-Future<void> importFootageFrb(LumitState app,
-        {Future<List<String>> Function()? picker}) async =>
-    app.importFootagePaths(await (picker ?? pickFootage)());
+/// Import what was picked, and say whether anything came in. Footage comes
+/// in as footage. A Lumit project is not footage: one of its compositions is
+/// brought in, chosen from a list.
+Future<bool> importFootageFrb(BuildContext context, LumitState app,
+    {Future<List<String>> Function()? picker}) async {
+  final picked = await (picker ?? () => pickFootage(projects: true))();
+  bool project(String path) => path.toLowerCase().endsWith('.lum');
+  var landed = await app.importFootagePaths([
+    for (final path in picked)
+      if (!project(path)) path,
+  ]);
+  for (final path in picked.where(project)) {
+    if (!context.mounted) break;
+    landed |= await bringCompositionFrom(context, path,
+        earlierSave: false,
+        subject: projectDisplayName(path),
+        source: projectDisplayName(path));
+  }
+  return landed;
+}
 
 /// Import an After Effects project, then show its report (docs/11 §9).
 ///
@@ -2202,7 +2262,7 @@ BridgePackState? _packState(ProjectReference? project) {
 
 /// Write the packed footage back out beside the project and save the project
 /// without it.
-Future<void> unpackProjectFrb(LumitState app) async {
+Future<void> unpackProjectFrb(LumitState app, LumitUiState ui) async {
   final project = app.project;
   if (project == null) return;
   try {
@@ -2219,6 +2279,9 @@ Future<void> unpackProjectFrb(LumitState app) async {
   } catch (_) {
     app.postNotice(l10n.couldNotUnpackProject, error: true);
   }
+  // An unpack saves the project, which is a save to back up like any other.
+  final path = project.path();
+  if (path != null) ui.backup.saved(path);
   app.notifyDocumentChanged();
 }
 
@@ -2255,7 +2318,7 @@ Future<void> saveProjectFrb(
   // someone else opens the way it was left. Written here rather than as it
   // changes, because this is the moment it is asked for: recording a panel
   // drag into the document would make moving furniture an unsaved change.
-  project.setUiState(uiState: ui.sessionJson());
+  project.setUiState(uiState: ui.backup.stamp(ui.sessionJson(), target));
   try {
     final packs = project.packState();
     final String written;
@@ -2289,6 +2352,8 @@ Future<void> saveProjectFrb(
     ui.rememberSession();
     app.refreshWindowTitle();
     ui.pushDiscordStatus();
+    // Told and not waited for: sending the save is no part of making it.
+    ui.backup.saved(written);
     // The welcome screen's picture of this project, taken *after* the save and
     // never in front of it: the save is done, the notice is posted, and taking
     // the picture happens on its own time. The fronted composition at the
@@ -2708,7 +2773,12 @@ class _MenuListState extends State<_MenuList> {
       children: [
         if (ticks) menuTick(item.checked == true, colour: style?.color),
         Expanded(child: Text(item.text, style: style)),
-        if (shortcut != null)
+        if (item.aside case final aside?)
+          Padding(
+            padding: const EdgeInsets.only(left: 16),
+            child: Text(t.kickerCase(aside), style: t.kicker),
+          )
+        else if (shortcut != null)
           Padding(
             padding: const EdgeInsets.only(left: 16),
             child: Text(shortcut, style: t.small.copyWith(color: t.textMuted)),

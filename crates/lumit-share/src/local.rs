@@ -1,6 +1,7 @@
 //! Making what a peer sent fit this machine: refusing what it will not hold,
 //! and pointing footage at its own copy. Any thread.
 
+use crate::{Dropped, MAX_DROPPED};
 use lumit_core::model::{MediaRef, ProjectItem};
 use lumit_core::{Document, Op};
 use lumit_project::{comp_size_is_sane, resolve_all_media, resolve_media, Resolved};
@@ -53,6 +54,42 @@ pub(crate) fn sane_document(doc: &Document) -> bool {
         ProjectItem::Composition(comp) => comp_size_is_sane(comp.width, comp.height),
         _ => true,
     })
+}
+
+/// What each of the first [`MAX_DROPPED`] of `refused`, the edits a return
+/// dropped, was to, by the names in `before`, this machine's document from
+/// just before the merge.
+pub(crate) fn dropped(refused: &[Op], before: &Document) -> Vec<Dropped> {
+    let named = |op: &Op| {
+        let (item, layer) = serde_json::to_value(op)
+            .ok()
+            .and_then(|op| target(&op, before))
+            .unzip();
+        Dropped {
+            step: op.name().to_owned(),
+            item,
+            layer: layer.flatten(),
+        }
+    };
+    refused.iter().take(MAX_DROPPED).map(named).collect()
+}
+
+/// The name of what an edit, as JSON, was to, and of its layer if it was to
+/// one. An edit inside a composition says which in a field called `comp`,
+/// and one to a layer names that in `layer`. An edit to a project item names
+/// it in `id`. So this needs no list of them. A batch is the first of its
+/// edits that names anything `before` still has.
+fn target(op: &serde_json::Value, before: &Document) -> Option<(String, Option<String>)> {
+    let id = |field: &str| Uuid::try_parse(op.get(field)?.as_str()?).ok();
+    if let Some(comp) = id("comp").and_then(|comp| before.comp(comp)) {
+        let layer = id("layer").and_then(|id| comp.layers.iter().find(|layer| layer.id == id));
+        return Some((comp.name.clone(), layer.map(|layer| layer.name.clone())));
+    }
+    if let Some(item) = id("id").and_then(|item| before.item(item)) {
+        return Some((item.name().to_owned(), None));
+    }
+    let inside = op.get("ops")?.as_array()?;
+    inside.iter().find_map(|op| target(op, before))
 }
 
 /// Point the footage a peer's edit names, or the proxy of some, at this

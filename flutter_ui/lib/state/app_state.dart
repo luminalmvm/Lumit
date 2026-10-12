@@ -113,11 +113,17 @@ class LumitState extends ChangeNotifier {
   /// notice lists. Held while Lumit is open and never written anywhere.
   final List<LumitNotice> recentNotices = [];
 
-  void postNotice(String message, {bool error = false}) {
-    final posted = LumitNotice(message, error: error);
-    recentNotices.insert(0, posted);
+  void postNotice(String message,
+      {bool error = false, bool sticky = false, VoidCallback? onTap}) {
+    final posted =
+        LumitNotice(message, error: error, sticky: sticky, onTap: onTap);
+    // One that stays until it is dismissed keeps the line from anything
+    // quiet, which waits behind it in the list a press on the line shows.
+    final kept = notice.value;
+    final behind = kept != null && kept.sticky && !error && !sticky;
+    recentNotices.insert(behind && recentNotices.isNotEmpty ? 1 : 0, posted);
     if (recentNotices.length > 20) recentNotices.removeLast();
-    notice.value = posted;
+    if (!behind) notice.value = posted;
   }
 
   /// How the shell asks what to do with unsaved changes. It answers true when
@@ -174,6 +180,18 @@ class LumitState extends ChangeNotifier {
 
   StreamSubscription<BridgeShareEvent>? _shareEvents;
 
+  /// Until when losing the server and finding it again goes unsaid.
+  DateTime _quietUntil = DateTime(0);
+
+  /// The host of a project kept online is moving it to a new invite, which
+  /// its own machine sees as losing the server and finding it again, once
+  /// or twice over. That is the host's own doing, so for the next few
+  /// seconds nothing is said of it.
+  void quietReturn() =>
+      _quietUntil = DateTime.now().add(const Duration(seconds: 10));
+
+  bool get _quiet => DateTime.now().isBefore(_quietUntil);
+
   /// Share the open project from this machine, under [name], listening on
   /// [port]. [key] is the secret of the invite this project was last shared
   /// by, to make the same invite again, or null for a new one. [outside]
@@ -206,11 +224,38 @@ class LumitState extends ChangeNotifier {
       return null;
     }
     if (started case BridgeShareStarted_Sharing(:final port, :final restored)) {
-      _shareEvents = events.stream.listen(_onShareEvent);
+      _shareEvents = events.stream.listen(handleShareEvent);
       share.begin(ShareRole.host, open, onPort: port);
       // The project was closed without saving, and the engine has put back
       // what everyone did after the last save.
       if (restored > 0) postNotice(l10n.shareRestored(restored));
+    }
+    return started;
+  }
+
+  /// Keep the open project online, under [name]: Lumit's server holds it,
+  /// sealed, and puts everyone's edits in order, so anyone with the invite
+  /// can open it when nobody else is there. [password] is one everyone has
+  /// to give as well as holding the link. The door to the server has to be
+  /// open first. Null when there is no project open or it is already shared.
+  Future<BridgeOnlineStarted?> keepOnline(
+      {required String name, String? password}) async {
+    final open = project;
+    if (open == null || share.active) return null;
+    final events = RustStreamSink<BridgeShareEvent>();
+    BridgeOnlineStarted? started;
+    try {
+      started = await open.shareOnline(
+          name: name, password: password, events: events);
+    } catch (_) {
+      // Closed while it was being stored.
+    }
+    if (started is BridgeOnlineStarted_Online && identical(project, open)) {
+      _shareEvents = events.stream.listen(handleShareEvent);
+      share.begin(ShareRole.host, open);
+    } else {
+      // Nothing will come down it, so its port is let go of.
+      events.stream.listen((_) {}).cancel();
     }
     return started;
   }
@@ -236,6 +281,10 @@ class LumitState extends ChangeNotifier {
     _openProgressWatch?.cancel();
     _openProgressWatch = null;
     openProgress.value = null;
+    if (shareJoinOverride?.call(invite) case final stood?) {
+      opening.value = false;
+      return stood;
+    }
     final events = RustStreamSink<BridgeShareEvent>();
     BridgeJoinOutcome outcome;
     try {
@@ -252,12 +301,65 @@ class LumitState extends ChangeNotifier {
     if (outcome case BridgeJoinOutcome_Joined(:final project)) {
       // Deliberately still `opening`: the document is in, the picture is not.
       _adopt(project);
-      _shareEvents = events.stream.listen(_onShareEvent);
+      _shareEvents = events.stream.listen(handleShareEvent);
       share.begin(ShareRole.guest, project);
+      // Everything in a project kept online happened before this machine
+      // was in it.
+      if (share.online != null) _tellActivity();
+      // Joined by the invite that can only look. Said once, and it stays
+      // until it is dismissed: every tool on this machine is live, and
+      // whatever one does is undone a beat later.
+      if (share.online?.look ?? false) {
+        _sayShare(l10n.shareLookJoined, sticky: true);
+      }
     } else {
       opening.value = false;
     }
     return outcome;
+  }
+
+  /// How this machine last said it stands to a project on another Lumit.
+  Type? _versionsSaid;
+
+  /// The host agreed: move the open project forward from the older Lumit
+  /// that keeps it online to this one. The copy joins by itself when that
+  /// is done, as after any time away. What stopped it is said on the line.
+  Future<void> moveForward() async {
+    final open = project;
+    if (open == null || share.forwarding) return;
+    share.setForwarding(true);
+    var outcome = const BridgeOnlineForward.failed();
+    try {
+      outcome = shareForwardOverride?.call() ?? await open.shareOnlineForward();
+    } catch (_) {
+      // Closed while it was being moved.
+    }
+    if (identical(project, open)) forwardCame(outcome);
+  }
+
+  /// Moving the open project forward ended. Public, as [handleShareEvent]
+  /// is, so that a test can say how.
+  void forwardCame(BridgeOnlineForward outcome) {
+    final from = share.versionsOf ?? '';
+    share.setForwarding(false);
+    if (outcome case BridgeOnlineForward_Update(:final version)) {
+      share.setVersions(BridgeShareVersions.update(version: version));
+    }
+    if (shareForwardText(outcome, from) case final words?) {
+      postNotice(words, error: true);
+    }
+  }
+
+  /// The same for the project [invite] names, before it is joined.
+  Future<BridgeOnlineForward> forwardInvite(
+      {required String invite, required String name, String? password}) async {
+    try {
+      return shareForwardOverride?.call() ??
+          await bridge_share.onlineForward(
+              invite: invite, name: name, password: password);
+    } catch (_) {
+      return const BridgeOnlineForward.failed();
+    }
   }
 
   /// Stop sharing, or leave if someone else hosts. The project stays open.
@@ -277,28 +379,322 @@ class LumitState extends ChangeNotifier {
   void _forgetShare() {
     _shareEvents?.cancel();
     _shareEvents = null;
+    _activitySoon?.cancel();
+    _activitySoon = null;
+    _tellUntil = DateTime(0);
+    _notesHeard = null;
+    _versionsSaid = null;
+    // What stayed on the line was about sharing, and that is over.
+    if (notice.value?.sticky ?? false) notice.value = null;
+    // Ended first, so whoever keeps the counts below hears of it while
+    // they are still there to keep.
     share.end();
+    shareWatched.clear();
+    shareWatchedRecent = const {};
   }
 
-  void _onShareEvent(BridgeShareEvent event) {
+  /// The wait before the activity list is read again.
+  Timer? _activitySoon;
+
+  /// How many edits of each sitting this machine has had in front of it, by
+  /// who made them and when the sitting began. A sitting reads as new when
+  /// any of it was missed, so this is what tells the missed part from what
+  /// was watched as it happened. Whoever holds the settings fills it when a
+  /// copy is opened and keeps [shareWatchedRecent] when it closes, so a copy
+  /// opened again counts only what it missed too.
+  final Map<String, int> shareWatched = {};
+
+  /// The part of [shareWatched] worth keeping: the sittings that ended in
+  /// the last quarter of an hour, which are the only ones that can still
+  /// grow.
+  Map<String, int> shareWatchedRecent = const {};
+
+  /// Until when what was missed is still to be said: a few seconds from
+  /// joining or coming back, which is when the list catches up.
+  DateTime _tellUntil = DateTime(0);
+
+  void _tellActivity() =>
+      _tellUntil = DateTime.now().add(const Duration(seconds: 3));
+
+  /// Read who changed what, and the notes people left.
+  void _readActivity() {
+    _activitySoon?.cancel();
+    _activitySoon = null;
+    final open = project;
+    if (open == null || share.online == null) return;
+    final List<BridgeShareSitting> list;
+    final List<BridgeShareNote> notes;
+    try {
+      list = open.shareActivity();
+      notes = open.shareNotes();
+    } catch (_) {
+      // Closed between the event and the read.
+      return;
+    }
+    share.setActivity(list, notes);
+    _tellEdits(list);
+    // Last, so a note's own words are what the line is left saying.
+    _tellNotes(notes);
+  }
+
+  /// Just after this machine has joined or come back, say once what
+  /// happened while it was not there: before it joined, while its copy was
+  /// closed, or while it was away.
+  void _tellEdits(List<BridgeShareSitting> list) {
+    // What comes in while this machine is away is what it is told of when
+    // it is back, so none of it counts as watched yet.
+    if (share.away) return;
+    final names = <String>[];
+    final comps = <String>{};
+    final recent = <String, int>{};
+    final lately = DateTime.now().millisecondsSinceEpoch ~/ 1000 - 900;
+    var edits = 0;
+    for (final sitting in list) {
+      final key = '${sitting.name}|${sitting.began}';
+      final missed =
+          sitting.isNew ? sitting.edits - (shareWatched[key] ?? 0) : 0;
+      shareWatched[key] = sitting.edits;
+      if (sitting.ended >= lately) recent[key] = sitting.edits;
+      if (missed <= 0) continue;
+      edits += missed;
+      if (!names.contains(sitting.name)) names.add(sitting.name);
+      comps.addAll([
+        for (final comp in sitting.comps)
+          if (comp.name.isNotEmpty) comp.name,
+      ]);
+    }
+    shareWatchedRecent = recent;
+    if (edits == 0 || DateTime.now().isAfter(_tellUntil)) return;
+    _tellUntil = DateTime(0);
+    final said = LumitNotice(shareActivityText(names, edits, comps),
+        onTap: () => share.showActivity?.call());
+    recentNotices.insert(0, said);
+    if (recentNotices.length > 20) recentNotices.removeLast();
+    // Something that went wrong on the way back stays on the line, and so
+    // does anything that stays until it is dismissed. This waits behind it,
+    // in the list a press on the line shows.
+    if ((notice.value?.error ?? false) || (notice.value?.sticky ?? false)) {
+      recentNotices.insert(0, recentNotices.removeAt(1));
+    } else {
+      notice.value = said;
+    }
+  }
+
+  /// The notes this machine has been told of since sharing began. Null
+  /// until the list is first read, when the ones to tell of are those left
+  /// while it was not there.
+  Set<String>? _notesHeard;
+
+  /// Say that someone else has left a note: its words when it is one, and
+  /// how many when it is several. A press leads to them.
+  void _tellNotes(List<BridgeShareNote> notes) {
+    final heard = _notesHeard;
+    final arrived = [
+      for (final note in notes)
+        if (!note.mine &&
+            (heard == null ? note.isNew : !heard.contains(note.id)))
+          note,
+    ];
+    _notesHeard = {for (final note in notes) note.id};
+    if (arrived.isEmpty) return;
+    postNotice(
+        switch (arrived) {
+          [final one] => l10n.shareNoteSaid(
+              one.name, one.text.replaceAll(RegExp(r'\s+'), ' ')),
+          _ => l10n.shareNotesNew(arrived.length),
+        },
+        onTap: () => share.showActivity?.call());
+  }
+
+  /// Take the note called [id] down, for everyone. False when it was not:
+  /// it is not this machine's to take down, or it has gone already.
+  bool takeNoteDown(String id) {
+    final open = project;
+    if (open == null) return false;
+    try {
+      if (!open.shareNoteTakeDown(id: id)) return false;
+    } catch (_) {
+      // Closed between the press and the call.
+      return false;
+    }
+    _readActivity();
+    return true;
+  }
+
+  /// Leave a note in the project kept online, with where this person is:
+  /// the composition open, the playhead's frame in it and the layer chosen.
+  /// False when it was not taken, as on a machine that can only look.
+  bool leaveNote(String text,
+      {CompositionReference? comp, int? frame, LayerReference? layer}) {
+    final open = project;
+    if (open == null) return false;
+    try {
+      if (!open.shareNote(
+          text: text, comp: comp, frame: frame, layer: layer)) {
+        return false;
+      }
+    } catch (_) {
+      // Closed between the press and the call.
+      return false;
+    }
+    _readActivity();
+    return true;
+  }
+
+  /// The person has looked at who changed what and at the notes, so none of
+  /// it is new to them any more.
+  Future<void> activitySeen() async {
+    final open = project;
+    if (open == null ||
+        !(share.activity.any((sitting) => sitting.isNew) ||
+            share.notes.any((note) => note.isNew))) {
+      return;
+    }
+    try {
+      await open.shareActivitySeen();
+    } catch (_) {
+      // Closed meanwhile.
+      return;
+    }
+    if (identical(project, open)) _readActivity();
+  }
+
+  /// What the line last said of how the shared project stands.
+  LumitNotice? _shareSaid;
+
+  /// Say how the shared project stands. The strip's own button carries the
+  /// warning colour for it, so the sentence is drawn as news and not as an
+  /// alarm, unless it is an [error]. A press leads to the Shared project
+  /// window, which says the same.
+  void _sayShare(String message,
+      {bool error = false, bool sticky = false, VoidCallback? onTap}) {
+    postNotice(message,
+        error: error,
+        sticky: sticky,
+        onTap: onTap ?? () => share.showWindow?.call());
+    if (notice.value?.message == message) _shareSaid = notice.value;
+  }
+
+  /// The Shared project window has opened. It says how the project stands,
+  /// so whatever the line was saying of that has been read.
+  void shareWindowOpened() {
+    if (_shareSaid != null && identical(notice.value, _shareSaid)) {
+      notice.value = null;
+    }
+    _shareSaid = null;
+  }
+
+  /// Something happened to the shared project. Public, as [handleChange]
+  /// is, so that a test can say it did.
+  void handleShareEvent(BridgeShareEvent event) {
     switch (event) {
       case BridgeShareEvent_People(:final people):
         share.setPeople(people);
       case BridgeShareEvent_Away():
         share.setAway(true);
-        postNotice(l10n.shareAway);
-      case BridgeShareEvent_Back(:final held, :final refused):
+        // A machine the server takes no edits from gives the line up, and
+        // has just been told why. That is the thing to say, and it stands.
+        // So does how it stands to a project on another Lumit.
+        if (!_quiet && share.writable && share.versions == null) {
+          share.online == null
+              ? postNotice(l10n.shareAway)
+              : _sayShare(l10n.shareOnlineAway);
+        }
+      case BridgeShareEvent_Back(:final held, :final refused, :final dropped):
+        // Whether the engine kept this machine's own project from before
+        // the merge, which it does when it held or dropped anything.
+        share.readReturnCopies();
         share.setAway(false, conflicts: held);
+        _versionsSaid = null;
         // The engine put the host's document in place of this one, so every
         // panel reads again, the way it does when a project is swapped.
         final open = project;
         if (open != null) {
           handleChange(ScopedChange(project: open, items: true));
         }
-        postNotice(refused > 0 ? l10n.shareBackRefused(refused) : l10n.shareBack,
-            error: refused > 0);
+        final online = share.online != null;
+        if (online) _tellActivity();
+        if (refused > 0 && online) {
+          // The one thing said here that a person must not miss: it stays
+          // until they dismiss it or open the window, where a row says the
+          // same in the same words.
+          share.setDropped(refused, dropped);
+          _sayShare(l10n.shareDropped(refused),
+              error: true,
+              sticky: true,
+              onTap: () => held > 0
+                  ? share.showConflicts?.call()
+                  : share.showActivity?.call());
+        } else if (refused > 0) {
+          share.setDropped(refused, dropped);
+          _sayShare(l10n.shareBackRefused(refused), error: true, sticky: true);
+        } else if (!_quiet) {
+          postNotice(online ? l10n.shareOnlineBack : l10n.shareBack);
+        }
+        if (online) _readActivity();
+      case BridgeShareEvent_Writable(:final writable):
+        // Said on every return to the server, so only a change is news.
+        final was = share.writable;
+        share.setWritable(writable);
+        if (was && !writable) {
+          // Two things stop it: the project too large to store, which the
+          // engine has said by now, and the host's Lumit Pro ended.
+          _sayShare((share.online?.tooLarge ?? false)
+              ? l10n.shareOnlineTooLargeSaid
+              : (share.online?.host ?? false)
+                  ? l10n.shareOnlineWaitingOwn
+                  : l10n.shareOnlineWaiting);
+        }
+      case BridgeShareEvent_Activity():
+        // Said as often as edits go in, which is twenty times a second from
+        // someone at work. The list is read at most twice in one.
+        _activitySoon ??=
+            Timer(const Duration(milliseconds: 500), _readActivity);
+      case BridgeShareEvent_Versions(:final versions):
+        share.setVersions(versions);
+        // It was not the server that was missing, so that is taken back.
+        if (notice.value?.message == l10n.shareOnlineAway) notice.value = null;
+        // Said once for each way of standing, however often it is found.
+        final said = versions.runtimeType;
+        if (said == _versionsSaid) break;
+        _versionsSaid = said;
+        switch (versions) {
+          case BridgeShareVersions_Movable():
+            // The host is asked, once for this opening of the project.
+            share.showForward?.call();
+          case BridgeShareVersions_HostFirst():
+            _sayShare(l10n.shareVersionsHostFirst(shareThisLumit()));
+          case BridgeShareVersions_Update(:final version):
+            _sayShare(l10n.shareVersionsUpdate(version),
+                sticky: true, onTap: () => share.showUpdate?.call());
+        }
+      case BridgeShareEvent_LookOnly():
+        // Something made on a machine that can only look was taken back.
+        // Said then, in the words it was told on joining, so the two read
+        // as one fact. The engine says it once for a run of edits.
+        _sayShare(l10n.shareLookJoined);
+      case BridgeShareEvent_LookInvite():
+        // The invite that can only look was turned on or off.
+        share.onlineSaid();
+      case BridgeShareEvent_TooLarge(:final tooLarge):
+        // This machine went to store the project and it did not fit, or
+        // now does. Said once while edits still go in. When they stop, that
+        // is said as it happens.
+        share.onlineSaid();
+        if (tooLarge && share.writable) {
+          _sayShare(l10n.shareOnlineNearlyLargeSaid);
+        } else if (!tooLarge &&
+            notice.value?.message == l10n.shareOnlineNearlyLargeSaid) {
+          notice.value = null;
+        }
       case BridgeShareEvent_Elsewhere():
         postNotice(l10n.shareElsewhere, error: true);
+      case BridgeShareEvent_Replaced():
+        // The invite this copy finds its project by was replaced while it
+        // was away. It stays away until it is given the new one, which the
+        // window a press leads to has the place for.
+        share.setReplaced();
+        _sayShare(l10n.shareReplacedSaid, sticky: true);
       case BridgeShareEvent_Reach(:final reach):
         share.setReach(reach);
       case BridgeShareEvent_Relayed(:final relayed):
@@ -315,9 +711,19 @@ class LumitState extends ChangeNotifier {
       case BridgeShareEvent_ExportAsked(:final job, :final from, :final comp):
         share.exportAsked(job, from, comp);
       case BridgeShareEvent_Ended(:final reason):
+        // The host of a project kept online is told it has closed like
+        // everyone else, and is the one who closed it.
+        final own = reason is BridgeShareEnding_Closed &&
+            (share.online?.host ?? false);
+        // Someone who can only look is turned away when no more of them
+        // are taken, or when someone who can edit needs the place.
+        final looker = reason is BridgeShareEnding_Full &&
+            (share.online?.look ?? false);
         stopSharing();
-        postNotice(shareEndingText(reason),
-            error: reason is! BridgeShareEnding_Closed);
+        if (!own) {
+          postNotice(looker ? l10n.shareFullLook : shareEndingText(reason),
+              error: reason is! BridgeShareEnding_Closed);
+        }
     }
   }
 
@@ -535,15 +941,17 @@ class LumitState extends ChangeNotifier {
     // Deliberately still `opening`: the document is in, the picture is not.
     _adopt(opened);
     // A guest's own copy, closed while its host was away, opens still a guest
-    // and still looking. What it has found since comes down the events.
+    // and still looking. What it has found since comes down the events. A
+    // copy of a project kept online opens a member of it however it was
+    // closed, and looks for Lumit's server.
     var guest = false;
     try {
-      guest = opened.shareGuest();
+      guest = opened.shareGuest() || opened.shareOnlineState() != null;
     } catch (_) {
       // Closed again already.
     }
     if (guest) {
-      _shareEvents = shareEvents.stream.listen(_onShareEvent);
+      _shareEvents = shareEvents.stream.listen(handleShareEvent);
       share.begin(ShareRole.guest, opened);
     } else {
       // Nothing will come down it, so its port is let go of.
@@ -921,5 +1329,13 @@ class LumitState extends ChangeNotifier {
 class LumitNotice {
   final String message;
   final bool error;
-  const LumitNotice(this.message, {this.error = false});
+
+  /// It keeps the line until it is dismissed, and is not pushed off by the
+  /// next quiet thing said. For the few a person must not miss.
+  final bool sticky;
+
+  /// What a press on its words does, for a notice that leads somewhere.
+  final VoidCallback? onTap;
+  const LumitNotice(this.message,
+      {this.error = false, this.sticky = false, this.onTap});
 }

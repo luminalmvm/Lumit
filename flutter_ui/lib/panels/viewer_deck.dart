@@ -248,19 +248,25 @@ class _CacheMeterState extends State<_CacheMeter> {
   double _count(LumitUiState ui) {
     final frames = widget.duration;
     if (frames <= 0) return 0;
-    final work = workAreaFrames(widget.comp);
-    final held = widget.comp.cachedFrames(
-      frames: BigInt.from(frames),
-      scale: ui.viewerScale,
-    );
-    final start = work.start.clamp(0, frames);
-    final end = work.end.clamp(start, frames);
-    if (end <= start) return 0;
-    var ready = 0;
-    for (var f = start; f < end && f < held.length; f++) {
-      if (held[f] != 0) ready++;
+    try {
+      final work = workAreaFrames(widget.comp);
+      final held = widget.comp.cachedFrames(
+        frames: BigInt.from(frames),
+        scale: ui.viewerScale,
+      );
+      final start = work.start.clamp(0, frames);
+      final end = work.end.clamp(start, frames);
+      if (end <= start) return 0;
+      var ready = 0;
+      for (var f = start; f < end && f < held.length; f++) {
+        if (held[f] != 0) ready++;
+      }
+      return ready / (end - start);
+    } catch (_) {
+      // The composition's project has gone, as when a frame lands while one
+      // project takes the place of another. Nothing of it is held.
+      return 0;
     }
-    return ready / (end - start);
   }
 
   @override

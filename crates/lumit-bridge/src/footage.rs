@@ -24,7 +24,7 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{sync_channel, Receiver, RecvTimeoutError, SyncSender};
 use std::sync::{Arc, LazyLock, Mutex};
 use std::time::{Duration, Instant};
@@ -92,24 +92,29 @@ fn kept_under(root: Option<&Path>) -> Option<PathBuf> {
         .or_else(lumit_project::shared_footage_dir)
 }
 
-/// The folder files sent for `footage` are kept in. Named by the file's
-/// fingerprint, so a file used by two projects is fetched once.
-fn folder(root: Option<&Path>, footage: &FootageItem) -> Option<PathBuf> {
+/// What files sent for `footage` are filed under, here and on Lumit's server
+/// for a project kept online. Worked out from the file's fingerprint, so a
+/// file used by two projects is fetched once.
+pub(crate) fn key(footage: &FootageItem) -> String {
     // The fingerprint comes with the item from another machine, and this is
-    // a folder name made of it. Only what a hash is made of is let through,
-    // so nothing in it can name a place outside the folder.
+    // a name made of it. Only what a hash is made of is let through, so
+    // nothing in it can name a place outside the folder.
     let hex = |print: &&lumit_core::model::Fingerprint| {
         !print.head_tail_hash.is_empty()
             && print.head_tail_hash.bytes().all(|b| b.is_ascii_hexdigit())
     };
-    let key = match footage.media.fingerprint.as_ref().filter(hex) {
+    match footage.media.fingerprint.as_ref().filter(hex) {
         Some(print) => {
             let hash: String = print.head_tail_hash.chars().take(32).collect();
             format!("{hash}-{}", print.size)
         }
         None => footage.id.to_string(),
-    };
-    Some(kept_under(root)?.join(key))
+    }
+}
+
+/// The folder files sent for `footage` are kept in.
+fn folder(root: Option<&Path>, footage: &FootageItem) -> Option<PathBuf> {
+    Some(kept_under(root)?.join(key(footage)))
 }
 
 /// The item's file name with nothing of a path about it.
@@ -1209,6 +1214,52 @@ impl Carrier {
             _ => {}
         }
     }
+}
+
+/// Raised to stop every file being sealed or opened for a project kept
+/// online. Each remembers the number it started at, so a stop asked for as
+/// another file begins is not lost, and stops nothing begun after it.
+static ONLINE_STOPS: AtomicU64 = AtomicU64::new(0);
+
+pub(crate) fn online_cancel() {
+    ONLINE_STOPS.fetch_add(1, Ordering::Relaxed);
+}
+
+/// Seal the file at `from` into `to` for Lumit's server to keep, or with
+/// `open` open one that came back from it, for the project kept online
+/// `project`. `report` hears the fraction done. False when it failed or was
+/// stopped, and then nothing is left at `to`.
+///
+/// On the frb worker thread that asked. The key is taken first and the list
+/// of shared projects let go of, so a long file holds nothing up.
+pub(crate) fn online_pass(
+    project: Uuid,
+    open: bool,
+    from: &Path,
+    to: &Path,
+    report: impl FnMut(f64),
+) -> bool {
+    let seal = crate::api::share::with_sharing(project, |sharing| match sharing {
+        lumit_share::Sharing::Online(member) => member.seal(),
+        _ => None,
+    });
+    let Some(seal) = seal.flatten() else {
+        return false;
+    };
+    let began = ONLINE_STOPS.load(Ordering::Relaxed);
+    let stop = AtomicBool::new(false);
+    let mut progress = crate::packing::progress(report);
+    let mut told = |done, total| {
+        progress(done, total);
+        let stopped = ONLINE_STOPS.load(Ordering::Relaxed) != began;
+        stop.store(stopped, Ordering::Relaxed);
+    };
+    let passed = if open {
+        seal.open_file(from, to, &stop, &mut told)
+    } else {
+        seal.seal_file(from, to, &stop, &mut told)
+    };
+    passed.is_ok()
 }
 
 /// An export's settings as they cross to another machine.

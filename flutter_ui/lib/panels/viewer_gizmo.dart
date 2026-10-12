@@ -46,6 +46,7 @@ import '../state/dock.dart' show Panel;
 import '../state/layer_bounds.dart' show shapeContentsRect;
 import '../state/preview_throttle.dart';
 import '../widgets/controls.dart';
+import '../widgets/share_marks.dart';
 import 'timeline_extras_frb.dart' show DoubleTap, showMenuAt;
 import 'timeline_snap.dart' show snapSuspended;
 import 'viewer_anchor.dart';
@@ -856,8 +857,54 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     HardwareKeyboard.instance.addHandler(_onKey);
   }
 
+  /// The rows a drag on the picture writes, for the others in a shared
+  /// project: by the handle, the transform rows of the layers it acts on.
+  /// A path point is its whole layer, since a path's row is not known
+  /// here. A band changes nothing.
+  List<String> _rowsOf(_GizmoDrag drag) {
+    final props = switch (drag) {
+      _GizmoDrag.none || _GizmoDrag.marquee => null,
+      _GizmoDrag.move ||
+      _GizmoDrag.motionKey =>
+        const [BridgeTransformProp.positionX],
+      _GizmoDrag.scale => const [BridgeTransformProp.scaleX],
+      _GizmoDrag.rotate => const [BridgeTransformProp.rotation],
+      _GizmoDrag.anchor => const [
+          BridgeTransformProp.anchorX,
+          BridgeTransformProp.positionX
+        ],
+      _GizmoDrag.points => const <BridgeTransformProp>[],
+    };
+    if (props == null) return const [];
+    final acting = _acting;
+    return [
+      for (final box in acting == null ? _selected : [acting])
+        if (props.isEmpty)
+          '${box.id}'
+        else
+          for (final prop in props)
+            '${transformPath('${box.id}')}/${prop.name}',
+    ];
+  }
+
+  // A drag begins and ends with a `setState` here, so this hears each one.
+  // Its rows are in this person's hand while it is under way. One that
+  // someone else is changing is not dragged.
+  @override
+  void setState(VoidCallback fn) {
+    super.setState(fn);
+    final rows = _rowsOf(_drag);
+    if (rows.isNotEmpty &&
+        !rows.every(valuesInHand.value.contains) &&
+        heldByOthers(rows)) {
+      return _onPanCancel();
+    }
+    sayInHand(this, rows);
+  }
+
   @override
   void dispose() {
+    sayInHand(this, const []);
     HardwareKeyboard.instance.removeHandler(_onKey);
     _throttle.cancel();
     super.dispose();

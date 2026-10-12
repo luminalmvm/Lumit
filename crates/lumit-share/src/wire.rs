@@ -217,9 +217,7 @@ fn scrub(
 }
 
 pub(crate) fn encode(message: &Message, names: &Names) -> Result<Arc<[u8]>, ShareError> {
-    let mut value = serde_json::to_value(message)?;
-    scrub(&mut value, &mut names.lock(), None, true);
-    Ok(serde_json::to_vec(&value)?.into())
+    Ok(scrubbed(message, names)?.into())
 }
 
 /// Read a message. `root` is the folder this machine keeps the project's
@@ -229,6 +227,24 @@ pub(crate) fn decode(
     names: &Names,
     root: Option<&Path>,
 ) -> Result<Message, ShareError> {
+    unscrubbed(bytes, names, root)
+}
+
+/// Anything that leaves this machine, as JSON with [`scrub`] run over it: a
+/// message, or what a project kept online stores.
+pub(crate) fn scrubbed(value: &impl Serialize, names: &Names) -> Result<Vec<u8>, ShareError> {
+    let mut value = serde_json::to_value(value)?;
+    scrub(&mut value, &mut names.lock(), None, true);
+    Ok(serde_json::to_vec(&value)?)
+}
+
+/// Read what [`scrubbed`] wrote on another machine, with [`scrub`] run over
+/// it again on the way in.
+pub(crate) fn unscrubbed<T: serde::de::DeserializeOwned>(
+    bytes: &[u8],
+    names: &Names,
+    root: Option<&Path>,
+) -> Result<T, ShareError> {
     let mut value: Value = serde_json::from_slice(bytes)?;
     scrub(&mut value, &mut names.lock(), root, false);
     Ok(serde_json::from_value(value)?)

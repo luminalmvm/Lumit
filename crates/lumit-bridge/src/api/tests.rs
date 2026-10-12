@@ -10059,3 +10059,89 @@ fn a_cut_places_splits_and_merges_a_recordings_streams_as_linked_clips() {
     project.undo().expect("undone");
     assert_eq!(comp.get_layers().expect("layers").len(), 2);
 }
+
+/// A composition brought out of another project file is filed where one made
+/// here would be, with its solid, and one undo takes all of it away. A file
+/// that is not a project, and an id the file has not got, change nothing. A
+/// project from a newer Lumit is refused by the same door as the first:
+/// `lumit_project::open`, whose own test covers it.
+#[test]
+fn a_composition_brought_from_a_file_is_filed_and_is_one_undo_step() {
+    use lumit_core::model::LayerKind;
+
+    let dir = tempfile::tempdir().expect("temp dir");
+    let path = |name: &str| dir.path().join(name).to_string_lossy().into_owned();
+    let other = LumitBridgeState::new_project(None).expect("a project");
+    let titles = other
+        .new_composition("Titles".into(), None)
+        .expect("a comp");
+    titles.add_solid_layer(None).expect("a solid layer");
+    other.save(path("earlier.lum")).expect("saved");
+    let listed = crate::api::project::comps_in_file(path("earlier.lum")).expect("a project file");
+    assert_eq!(listed.len(), 1);
+    assert_eq!(
+        (listed[0].id, listed[0].name.as_str()),
+        (titles.id, "Titles")
+    );
+
+    let project = LumitBridgeState::new_project(None).expect("a project");
+    let doc = || {
+        let state = project.state().expect("state");
+        let state = state.read().expect("read");
+        state.store.snapshot()
+    };
+    let empty = doc();
+
+    std::fs::write(dir.path().join("notes.lum"), "not a project").expect("written");
+    assert!(crate::api::project::comps_in_file(path("notes.lum")).is_none());
+    for (file, id) in [("notes.lum", titles.id), ("earlier.lum", Uuid::now_v7())] {
+        let refused = project.bring_comps(path(file), vec![id], false, String::new());
+        assert!(refused.expect("asked").is_none());
+    }
+    assert_eq!(doc(), empty);
+    assert!(project.history_entries().expect("history").is_empty());
+
+    let brought = project
+        .bring_comps(
+            path("earlier.lum"),
+            vec![titles.id],
+            false,
+            "Earlier".into(),
+        )
+        .expect("asked")
+        .expect("brought");
+    let after = doc();
+    let new = after.comp(brought[0].id).expect("the new composition");
+    assert_ne!(new.id, titles.id);
+    assert_eq!(new.name, "Titles", "nothing here had the name");
+    let LayerKind::Solid { def } = new.layers[0].kind else {
+        panic!("the layer is a solid");
+    };
+    let filed = |folder: Option<Uuid>| {
+        let folder = after.folder(folder.expect("a folder to file into"));
+        folder.expect("the folder").children.clone()
+    };
+    assert_eq!(filed(after.auto_folders.compositions), [new.id]);
+    assert_eq!(filed(after.auto_folders.solids), [def]);
+
+    assert_eq!(project.history_entries().expect("history").len(), 1);
+
+    // A second time the name is taken, so the arrival says where it came
+    // from, and that is still one step.
+    let second = project
+        .bring_comps(
+            path("earlier.lum"),
+            vec![titles.id],
+            false,
+            "Earlier".into(),
+        )
+        .expect("asked")
+        .expect("brought");
+    let named = doc().comp(second[0].id).expect("the second").name.clone();
+    assert_eq!(named, "Titles (Earlier)");
+    assert_eq!(project.history_entries().expect("history").len(), 2);
+    project.undo().expect("undone");
+    assert_eq!(doc(), after);
+    project.undo().expect("undone");
+    assert_eq!(doc(), empty);
+}

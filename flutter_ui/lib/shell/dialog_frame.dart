@@ -372,9 +372,13 @@ Widget dialogRow(
 /// for a dialog too narrow to seat them in a line — §12A.6's ladder step 2. The
 /// order is unchanged, so the filled action is still last, which in a column
 /// means the bottom.
+///
+/// [leading] stands at the far edge in the line's place: an action kept
+/// apart from the way out, such as one that ends something for everybody.
 Widget dialogFooter(
   LumitTheme t, {
   String summary = '',
+  Widget? leading,
   required List<Widget> actions,
   required String keyPrefix,
   bool stacked = false,
@@ -414,16 +418,25 @@ Widget dialogFooter(
             )
           : Row(
               children: [
-                if (summary.isNotEmpty)
-                  Flexible(
-                    child: Text(
-                      summary,
-                      key: ValueKey<String>('$keyPrefix-summary'),
-                      style: dialogMono(t),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                const Spacer(),
+                // The line takes all the room, which stands the actions at
+                // the far end whatever its length. Sharing the room with a
+                // spacer left them adrift in the middle under a short line.
+                Expanded(
+                  child: leading != null
+                      ? Align(
+                          alignment: Alignment.centerLeft,
+                          child: SizedBox(
+                              height: dialogFooterButton, child: leading),
+                        )
+                      : summary.isEmpty
+                      ? const SizedBox.shrink()
+                      : Text(
+                          summary,
+                          key: ValueKey<String>('$keyPrefix-summary'),
+                          style: dialogMono(t),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                ),
                 for (final action in actions) ...[
                   const SizedBox(width: dialogFooterGap),
                   SizedBox(height: dialogFooterButton, child: action),
@@ -432,10 +445,144 @@ Widget dialogFooter(
             ),
     );
 
+/// The scrollbar Settings has, for a list long enough to be travelled by it:
+/// a track down the side of [child], a thumb that drags, and a press on the
+/// track that pages. [top] starts it lower, under something held over the
+/// list.
+///
+/// The strip laid over the gutter is what takes the drag. A scrollbar's own
+/// thumb answers a drag too, but one that starts anywhere else on the gutter
+/// falls through to the window and carries it off.
+Widget dialogGutter(
+    BuildContext context, LumitTheme t, ScrollController controller,
+    {double top = 0, required Widget child}) {
+  const thickness = 6.0, inset = 2.0, ends = 8.0;
+  return Stack(
+    children: [
+      RawScrollbar(
+        controller: controller,
+        thumbVisibility: true,
+        trackVisibility: true,
+        thickness: thickness,
+        radius: const Radius.circular(3),
+        thumbColor: t.surface4,
+        trackColor: t.surface2,
+        trackRadius: const Radius.circular(3),
+        padding: EdgeInsets.fromLTRB(0, top + ends, inset, ends),
+        child: ScrollConfiguration(
+          behavior:
+              ScrollConfiguration.of(context).copyWith(scrollbars: false),
+          child: child,
+        ),
+      ),
+      Positioned(
+        right: inset,
+        top: top + ends,
+        bottom: ends,
+        width: thickness,
+        child: GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onVerticalDragUpdate: (drag) {
+            if (!controller.hasClients) return;
+            final position = controller.position;
+            final viewport = position.viewportDimension;
+            final range = position.maxScrollExtent;
+            if (viewport <= 0 || range <= 0) return;
+            // A pixel of gutter is worth as much of the list as a pixel of
+            // thumb, so the thumb keeps up with the pointer.
+            controller.jumpTo((position.pixels +
+                    drag.delta.dy * (viewport + range) / viewport)
+                .clamp(0.0, range));
+          },
+        ),
+      ),
+    ],
+  );
+}
+
+/// A footer's filled action. With nothing to do it keeps its box, a hairline
+/// round its dimmed word, so the row of buttons holds its shape as the
+/// action comes and goes.
+Widget dialogFilledAction(
+  LumitTheme t, {
+  required Key key,
+  required String label,
+  required VoidCallback? onPressed,
+  bool autofocus = false,
+}) =>
+    _boxedWhenDead(
+      t,
+      dead: onPressed == null,
+      HouseButton(
+        key: key,
+        primary: true,
+        frameless: onPressed == null,
+        autofocus: autofocus,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        onPressed: onPressed,
+        child: Text(label),
+      ),
+    );
+
+/// A footer's outlined action, which keeps its box the same way: a footer
+/// whose buttons all go dead for a moment, while something is fetched, does
+/// not change shape as it does.
+Widget dialogPlainAction(
+  LumitTheme t, {
+  required Key key,
+  required String label,
+  required VoidCallback? onPressed,
+}) =>
+    _boxedWhenDead(
+      t,
+      dead: onPressed == null,
+      HouseButton(
+        key: key,
+        frameless: onPressed == null,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        onPressed: onPressed,
+        child: Text(label),
+      ),
+    );
+
+Widget _boxedWhenDead(LumitTheme t, Widget button, {required bool dead}) =>
+    dead
+        ? DecoratedBox(
+            position: DecorationPosition.foreground,
+            decoration: BoxDecoration(
+              border: Border.all(color: t.hairline),
+              borderRadius: BorderRadius.circular(t.tokens.actionRadius),
+            ),
+            child: button,
+          )
+        : button;
+
 /// A factual line — the footer's summary, a group's own reading. Mono, small,
 /// quiet: it reports rather than labels.
 TextStyle dialogMono(LumitTheme t) =>
     t.mono.copyWith(fontSize: dialogMonoSize, color: t.textMuted);
+
+/// A thin thumb down the side of [child], which scrolls with [controller].
+/// It is there for as long as there is more than fits, so a list that goes
+/// on says so. It only shows where things are: a drag on a window moves the
+/// window. [top] starts the thumb lower, under something held over the
+/// list.
+Widget dialogScroller(
+        BuildContext context, LumitTheme t, ScrollController controller,
+        {double top = 0, required Widget child}) =>
+    RawScrollbar(
+      controller: controller,
+      thumbVisibility: true,
+      interactive: false,
+      thickness: 3,
+      radius: const Radius.circular(2),
+      thumbColor: t.surface4,
+      padding: EdgeInsets.fromLTRB(2, top + 2, 2, 2),
+      child: ScrollConfiguration(
+        behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+        child: child,
+      ),
+    );
 
 /// A dropdown at the drawing's height, in the width the row gives it.
 Widget dialogDropdown<T>(
@@ -467,3 +614,35 @@ Widget dialogDropdown<T>(
         disabledReason: disabledReason,
       ),
     );
+
+/// Text that says the whole of itself in a tooltip when there was not the
+/// room to show it all.
+class FittedText extends StatelessWidget {
+  final String text;
+  final TextStyle style;
+
+  /// How many lines it may run to before it is cut.
+  final int lines;
+  const FittedText(this.text, this.style, {super.key, this.lines = 1});
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+        builder: (context, box) {
+          final line = Text(text,
+              style: style, maxLines: lines, overflow: TextOverflow.ellipsis);
+          final painter = TextPainter(
+            text: TextSpan(text: text, style: style),
+            maxLines: lines,
+            textDirection: Directionality.of(context),
+            textScaler: MediaQuery.textScalerOf(context),
+          )..layout(maxWidth: box.maxWidth);
+          final cut = painter.didExceedMaxLines;
+          painter.dispose();
+          // The tip wraps: a name of any length on one line would lie
+          // across whatever is beside it.
+          return cut
+              ? LumitTooltip(message: text, maxWidth: 320, child: line)
+              : line;
+        },
+      );
+}

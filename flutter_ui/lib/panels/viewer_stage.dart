@@ -36,6 +36,7 @@ import 'viewer_anchor.dart';
 import 'viewer_camera.dart';
 import 'viewer_dropper_layer.dart';
 import 'viewer_effect_points.dart';
+import 'viewer_follow.dart';
 import 'viewer_gizmo.dart';
 import 'viewer_layer_map.dart';
 import 'viewer_overlays.dart';
@@ -880,6 +881,10 @@ class ViewerStage extends StatelessWidget {
             // is the Viewer's, but it follows the effect selection rather than
             // anything this panel knows.
             ViewerPrefixChip(uiState: uiState),
+            // Whose composition and playhead this machine is following, on
+            // the view that shows the composition in front.
+            if (comp.internalid == uiState.selectedComp?.internalid)
+              ViewerFollow(uiState: uiState),
           ],
         ),
       )),
@@ -896,6 +901,72 @@ class ViewerStage extends StatelessWidget {
       child: _MissingBadge(footage: footage),
     );
   }
+}
+
+/// The layer a click on [comp]'s picture would select at [frame], with [at]
+/// in composition pixels: the gizmo's own rule ([layerAtPoint], over boxes
+/// built as [ViewerStage._boxes] builds them), for a composition and a frame
+/// that need not be the ones on screen.
+///
+/// It is what a review comment's pin is looked up with, and two things differ
+/// from a click. A layer that is not in the picture at [frame], before its in
+/// point or after its out, is passed over. So is one with no picture of its
+/// own, a Camera, Adjustment, Null, Light or Audio layer, because a comment
+/// points at something that was seen.
+///
+/// It reads the composition from the engine and samples what is keyed, so it
+/// is for a handler and never for a build.
+BridgeLayerEntry? layerAtCompPoint(
+    LumitUiState uiState, CompositionReference comp, int frame, Offset at) {
+  final model = comp.getModel();
+  final settings = comp.getSettings();
+  final size = BridgeCompSize(width: settings.width, height: settings.height);
+  final revision = comp.documentRevision();
+  final time = timeOfFrame(comp, frame);
+  final seconds = frame / (model.fps > 0 ? model.fps : 60.0);
+  double read(BridgeScalar s, LayerReference layer) => switch (s) {
+        BridgeScalar_Static(:final field0) => field0,
+        BridgeScalar_Expression() =>
+          sampledExpression(s, time, layer, revision),
+        _ => sampledScalar(s, time),
+      };
+  const pictureless = {
+    BridgeLayerKind.camera,
+    BridgeLayerKind.adjustment,
+    BridgeLayerKind.nullLayer,
+    BridgeLayerKind.light,
+    BridgeLayerKind.audio,
+  };
+  for (final entry in model.layers) {
+    final info = entry.info;
+    if (pictureless.contains(info.kind) || !info.switches.visible) continue;
+    if (frame < info.inFrame || frame >= info.outFrame) continue;
+    final tf = info.transform;
+    final rotation = read(tf.rotation, entry.layer);
+    final box = LayerBox(
+      layer: entry.layer,
+      id: entry.layer.internallayerId,
+      // No fitting and no pan: a "screen" pixel here is a composition pixel.
+      map: ViewerLayerMap.of(
+        positionX: read(tf.positionX, entry.layer),
+        positionY: read(tf.positionY, entry.layer),
+        anchorX: read(tf.anchorX, entry.layer),
+        anchorY: read(tf.anchorY, entry.layer),
+        scaleXPercent: read(tf.scaleX, entry.layer),
+        scaleYPercent: read(tf.scaleY, entry.layer),
+        rotationDegrees: rotation,
+        origin: Offset.zero,
+        viewScale: 1,
+      ),
+      bounds: uiState.layerBounds.boundsOf(entry,
+          compSize: size, revision: revision, t: seconds),
+      draggable: false,
+      scalable: false,
+      rotationDegrees: rotation,
+    );
+    if (box.contains(at)) return entry;
+  }
+  return null;
 }
 
 /// The badge that appears only once a probe has actually found a file gone.

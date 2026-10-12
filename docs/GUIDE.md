@@ -196,7 +196,7 @@ One Cargo workspace. Every `crates/lumit-*` folder is a member, one job each.
 | `lumit-keymap` | Shortcuts |
 | `lumit-ingress` | Limits for reading untrusted input |
 | `lumit-peer` | Authenticating the plugin broker pipes |
-| `lumit-share` | Shared projects: the host's end, a guest's end, and the encrypted channel between them. Lumit's own relay is dialled through a door the interface keeps (`state/relay_door.dart`) |
+| `lumit-share` | Shared projects: the host's end, a guest's end, the encrypted channel between them, and a member's end of a project kept online (`online.rs`). Lumit's own relay and its server are each dialled through a door the interface keeps (`state/relay_door.dart`, `state/online_door.dart`) |
 | `lumit-relay` | The relay a shared project can meet at, and what both ends say to one. Also a program, `lumit-relay`, with nothing but std in it |
 | `lumit-extensions` | Installed extensions: reading an `extension.json`, and the folder they live in |
 | `lumit-fx-macros` | `#[derive(Effect)]` |

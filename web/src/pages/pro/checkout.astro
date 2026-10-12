@@ -10,20 +10,20 @@ const TOKEN = import.meta.env.PUBLIC_PADDLE_TOKEN ?? "live_bf1fc1df61f5f25cceeb3
 const SANDBOX = import.meta.env.PUBLIC_PADDLE_ENV === "sandbox";
 ---
 
-<Base title="Get Lumit Pro" description="Pay for Lumit Pro.">
+<Base title="Get Lumit Pro" description="Lumit Pro checkout.">
   <section class="pt-14 pb-24 sm:pt-20 sm:pb-32">
     <div class="wrap">
       <div class="sec-rule"><p class="kicker pl-3">Lumit Pro</p></div>
 
       <div id="pay-ready" hidden>
-        <h1 class="sec-title mt-7">Finish paying for Pro.</h1>
+        <h1 class="sec-title mt-7">Complete your purchase.</h1>
         <div class="mt-9 flex flex-wrap gap-3">
-          <a class="btn border-white" href="" id="pay-again">Open the payment form</a>
+          <a class="btn border-white" href="" id="pay-again">Open checkout</a>
         </div>
       </div>
 
       <div id="pay-empty">
-        <h1 class="sec-title mt-7">Pro is bought from inside Lumit.</h1>
+        <h1 class="sec-title mt-7">Get Pro in Lumit.</h1>
         <div class="mt-9 flex flex-wrap gap-3">
           <a class="btn border-white" href="/pro">What is in Pro</a>
           <a class="btn btn-ghost" href="/download">Download Lumit</a>

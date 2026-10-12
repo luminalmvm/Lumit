@@ -274,7 +274,12 @@ class _PopupEntrance extends StatelessWidget {
 /// control near the right edge.
 class _PopupLayout extends SingleChildLayoutDelegate {
   final Offset anchor;
-  const _PopupLayout(this.anchor);
+
+  /// Where the popup's bottom edge goes when there is no room under the
+  /// anchor. A tip on a control at the foot of the window then sits over the
+  /// control and not on top of it. Null only pulls it up as far as fits.
+  final double? above;
+  const _PopupLayout(this.anchor, {this.above});
 
   @override
   BoxConstraints getConstraintsForChild(BoxConstraints constraints) =>
@@ -286,13 +291,20 @@ class _PopupLayout extends SingleChildLayoutDelegate {
       ));
 
   @override
-  Offset getPositionForChild(Size size, Size childSize) => Offset(
-        anchor.dx.clamp(0.0, (size.width - childSize.width).clamp(0.0, 1e6)),
-        anchor.dy.clamp(0.0, (size.height - childSize.height).clamp(0.0, 1e6)),
-      );
+  Offset getPositionForChild(Size size, Size childSize) {
+    final over = above;
+    final top = over != null && anchor.dy + childSize.height > size.height
+        ? over - childSize.height
+        : anchor.dy;
+    return Offset(
+      anchor.dx.clamp(0.0, (size.width - childSize.width).clamp(0.0, 1e6)),
+      top.clamp(0.0, (size.height - childSize.height).clamp(0.0, 1e6)),
+    );
+  }
 
   @override
-  bool shouldRelayout(_PopupLayout old) => old.anchor != anchor;
+  bool shouldRelayout(_PopupLayout old) =>
+      old.anchor != anchor || old.above != above;
 }
 
 /// A tooltip that honours Settings → Interface → Show tooltips app-wide —
@@ -304,23 +316,38 @@ class LumitTooltip extends StatelessWidget {
   /// after the message, read from the keymap as the tip appears, so a rebound
   /// shortcut is taught rebound and an unbound one is left out.
   final String? action;
+
+  /// How wide the tip may be before its words wrap. For one that says a
+  /// name of any length, which would otherwise be one line across the
+  /// window. Null leaves it on one line.
+  final double? maxWidth;
   final Widget child;
   const LumitTooltip(
-      {super.key, required this.message, this.action, required this.child});
+      {super.key,
+      required this.message,
+      this.action,
+      this.maxWidth,
+      required this.child});
 
   @override
   Widget build(BuildContext context) {
     final scope = ThemeScope.of(context);
     if (!scope.showTooltips) return child;
-    return _HoverTip(message: message, action: action, child: child);
+    return _HoverTip(
+        message: message, action: action, maxWidth: maxWidth, child: child);
   }
 }
 
 class _HoverTip extends StatefulWidget {
   final String message;
   final String? action;
+  final double? maxWidth;
   final Widget child;
-  const _HoverTip({required this.message, this.action, required this.child});
+  const _HoverTip(
+      {required this.message,
+      this.action,
+      this.maxWidth,
+      required this.child});
 
   @override
   State<_HoverTip> createState() => _HoverTipState();
@@ -352,6 +379,8 @@ class _HoverTipState extends State<_HoverTip> {
     // its control the further the control is from the window's corner.
     final origin = overlayLocal(
         context, box.localToGlobal(Offset(0, box.size.height + 4)));
+    final above =
+        overlayLocal(context, box.localToGlobal(const Offset(0, -4))).dy;
     final scope = ThemeScope.of(context);
     final t = scope.theme;
     // Null outside the shell (a bare widget test), where there is no keymap.
@@ -368,11 +397,13 @@ class _HoverTipState extends State<_HoverTip> {
           // near the bottom (the Viewer's transport) would otherwise tip below
           // the window entirely.
           child: CustomSingleChildLayout(
-            delegate: _PopupLayout(origin),
+            delegate: _PopupLayout(origin, above: above),
             child: Entrance(
               spec: scope.motion.tooltip,
               rise: scope.motion.tooltipRise,
               child: Container(
+                constraints: BoxConstraints(
+                    maxWidth: widget.maxWidth ?? double.infinity),
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: t.surface3,

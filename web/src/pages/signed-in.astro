@@ -7,17 +7,17 @@ import Base from "../layouts/Base.astro";
   The sign-in itself has already gone back to Lumit by the time this page is
   shown, so there is nothing here but the news.
 */}
-<Base title="Signed in - Lumit" description="You are signed in to Lumit.">
+<Base title="Signed in - Lumit" description="You're signed in.">
   <section class="pt-14 pb-24 sm:pt-20 sm:pb-32">
     <div class="wrap">
       <div class="sec-rule"><p class="kicker pl-3">Lumit account</p></div>
 
       <div id="in-ok">
-        <h1 class="sec-title mt-7">You are signed in.</h1>
+        <h1 class="sec-title mt-7">You're signed in.</h1>
       </div>
 
       <div id="in-failed" hidden>
-        <h1 class="sec-title mt-7">That sign-in didn't go through.</h1>
+        <h1 class="sec-title mt-7">Sign-in failed.</h1>
         <p class="lede mt-4" id="in-why" hidden></p>
       </div>
     </div>
@@ -32,7 +32,7 @@ import Base from "../layouts/Base.astro";
     document.getElementById("in-failed").hidden = false;
     if (error === "unverified_email") {
       const why = document.getElementById("in-why");
-      why.textContent = "That account's email isn't confirmed with them.";
+      why.textContent = "Verify your email with Google or Discord, then try again.";
       why.hidden = false;
     }
   })();

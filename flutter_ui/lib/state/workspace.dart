@@ -975,6 +975,43 @@ class Workspace extends ChangeNotifier {
     save();
   }
 
+  /// The projects kept online whose originals this machine gives Lumit's
+  /// server, by the engine's id for each. The host's choice, made a project
+  /// at a time, because originals are large and the storage is the host's.
+  final Set<String> shareOriginals = {};
+
+  void setShareOriginals(String project, bool on) {
+    on ? shareOriginals.add(project) : shareOriginals.remove(project);
+    save();
+  }
+
+  /// For each copy of a project kept online, by the engine's id for it: how
+  /// many edits of each recent sitting the copy had in front of it when it
+  /// was last open. A copy opened again is told what it missed, and this is
+  /// what lets that be counted from where it left off.
+  final Map<String, Map<String, int>> shareWatched = {};
+
+  void setShareWatched(String project, Map<String, int> watched) {
+    shareWatched.remove(project);
+    if (watched.isNotEmpty) shareWatched[project] = watched;
+    while (shareWatched.length > maxShareHosted) {
+      shareWatched.remove(shareWatched.keys.first);
+    }
+    save();
+  }
+
+  /// For a project kept online whose host has just made a new invite: that
+  /// invite, from the server taking it until the engine has it. Lumit going
+  /// down between the two would otherwise lose the only copy, and the host's
+  /// own machine could not find its project again.
+  final Map<String, String> shareMoved = {};
+
+  void setShareMoved(String project, String? link) {
+    shareMoved.remove(project);
+    if (link != null) shareMoved[project] = link;
+    save();
+  }
+
   /// How often Lumit writes a spare copy of every open project, in minutes,
   /// and how many copies it keeps (docs/10 §4). Zero minutes is off.
   ///
@@ -1711,6 +1748,12 @@ class Workspace extends ChangeNotifier {
   static File storeFile() {
     final override = storeOverride;
     if (override != null) return File(override);
+    // A test that never set the override, or let it go with a save still to
+    // come, must not reach this machine's own file either.
+    if (Platform.environment.containsKey('FLUTTER_TEST')) {
+      return File('${Directory.systemTemp.path}${Platform.pathSeparator}'
+          'lumit-test-stray${Platform.pathSeparator}workspace.json');
+    }
     final base = Platform.environment['APPDATA'] ??
         '${Platform.environment['HOME'] ?? '.'}/.config';
     return File('$base${Platform.pathSeparator}lumit'
@@ -1753,6 +1796,9 @@ class Workspace extends ChangeNotifier {
         'extension_slots': extensionSlots,
         'extension_folders': extensionFolders,
         'share_hosted': shareHosted,
+        'share_originals': shareOriginals.toList(),
+        'share_watched': shareWatched,
+        'share_moved': shareMoved,
         'autosave_minutes': autosaveMinutes,
         'autosave_keep': autosaveKeep,
         'custom_themes': [for (final t in customThemes) t.toJson()],
@@ -1880,6 +1926,27 @@ class Workspace extends ChangeNotifier {
     if (hosted is Map) {
       for (final MapEntry(:key, :value) in hosted.entries) {
         if (key is String && value is String) shareHosted[key] = value;
+      }
+    }
+    shareOriginals.clear();
+    final originals = j['share_originals'];
+    if (originals is List) shareOriginals.addAll(originals.whereType<String>());
+    shareWatched.clear();
+    final sawEdits = j['share_watched'];
+    if (sawEdits is Map) {
+      for (final MapEntry(:key, :value) in sawEdits.entries) {
+        if (key is! String || value is! Map) continue;
+        shareWatched[key] = {
+          for (final MapEntry(key: sitting, value: edits) in value.entries)
+            if (sitting is String && edits is int) sitting: edits,
+        };
+      }
+    }
+    shareMoved.clear();
+    final moved = j['share_moved'];
+    if (moved is Map) {
+      for (final MapEntry(:key, :value) in moved.entries) {
+        if (key is String && value is String) shareMoved[key] = value;
       }
     }
     // Absent means the shipped cadence, which is what a file written before the
@@ -2103,19 +2170,29 @@ class Workspace extends ChangeNotifier {
   /// no widget test has a graphics adapter to render one on, and the wiring is
   /// what those tests are about.
   static Future<Uint8List?> Function(CompositionReference comp, int frame)
-      compThumbnailPng = _compThumbnailPng;
+      compThumbnailPng = compStillPng;
 
-  static Future<Uint8List?> _compThumbnailPng(
-      CompositionReference comp, int frame) async {
-    final still = await comp.thumbnail(
-        frame: BigInt.from(frame), maxEdge: projectThumbnailPixels);
+  /// The engine's picture of [comp] at [frame], its longer side no more than
+  /// [maxEdge], for whoever asked to draw and then dispose of. Null on a
+  /// machine with nothing to draw it on.
+  static Future<Image?> compStill(CompositionReference comp, int frame,
+      {int maxEdge = projectThumbnailPixels}) async {
+    final still =
+        await comp.thumbnail(frame: BigInt.from(frame), maxEdge: maxEdge);
     if (still == null || still.width == 0 || still.height == 0) return null;
-    // RGBA in, PNG out, both through `dart:ui` — the same encoder the Viewer's
-    // own photograph goes through, so the two roads file the same kind of file.
     final decoded = Completer<Image>();
     decodeImageFromPixels(still.rgba, still.width, still.height,
         PixelFormat.rgba8888, decoded.complete);
-    final image = await decoded.future;
+    return decoded.future;
+  }
+
+  /// The same picture as a PNG.
+  static Future<Uint8List?> compStillPng(CompositionReference comp, int frame,
+      {int maxEdge = projectThumbnailPixels}) async {
+    final image = await compStill(comp, frame, maxEdge: maxEdge);
+    if (image == null) return null;
+    // RGBA in, PNG out, both through `dart:ui` — the same encoder the Viewer's
+    // own photograph goes through, so the two roads file the same kind of file.
     try {
       final png = await image.toByteData(format: ImageByteFormat.png);
       return png?.buffer.asUint8List();

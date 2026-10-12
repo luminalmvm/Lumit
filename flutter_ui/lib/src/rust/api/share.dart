@@ -18,8 +18,8 @@ import 'solid.dart';
 import 'state.dart';
 part 'share.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `asking`, `at_relay`, `carry`, `describe`, `ending`, `events_for`, `holders_of`, `kept_text`, `let_go`, `person`, `reach`, `relayed`, `resume`, `saved`, `saving`, `stop_all`, `stop`, `unlocked`, `with_sharing`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `asking`, `at_relay`, `carry`, `describe`, `dropped`, `ending`, `events_for`, `forwarded`, `holders_of`, `kept_text`, `let_go`, `online_item`, `person`, `reach`, `relayed`, `resume`, `saved`, `saving`, `stop_all`, `stop`, `unlocked`, `versions`, `with_sharing`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// The port a host listens on unless the person picks another.
 int shareDefaultPort() =>
@@ -49,6 +49,12 @@ void shareSetFootage({required bool give, required bool take}) =>
 bool shareLinkLocked({required String text}) =>
     BridgeLib.instance.api.crateApiShareShareLinkLocked(text: text);
 
+/// Whether the invite in `text` is to a project that is kept online, which
+/// is joined through the door [`share_online_door`] names. False for
+/// anything that is not an invite.
+bool shareLinkOnline({required String text}) =>
+    BridgeLib.instance.api.crateApiShareShareLinkOnline(text: text);
+
 /// The port a relay listens on unless its owner picked another, for an
 /// address typed without one.
 int shareRelayPort() => BridgeLib.instance.api.crateApiShareShareRelayPort();
@@ -65,8 +71,37 @@ String shareCloudRelay() =>
 void shareCloudDoor({int? port}) =>
     BridgeLib.instance.api.crateApiShareShareCloudDoor(port: port);
 
+/// Say which port on this machine the door to projects kept online is on,
+/// or `None` when it has shut. The interface keeps the door, since it is
+/// what can reach Lumit's server and holds the account the server knows a
+/// host by. With none, a project kept online is away: it is edited on, and
+/// looked for again the moment a door opens.
+void shareOnlineDoor({int? port}) =>
+    BridgeLib.instance.api.crateApiShareShareOnlineDoor(port: port);
+
+/// Stop every file being sealed or opened by
+/// [`ProjectReference::online_seal`] and [`ProjectReference::online_open`].
+/// Harmless when there is none.
+void onlineCancel() => BridgeLib.instance.api.crateApiShareOnlineCancel();
+
+/// For the host, once the person has agreed: move the project an invite
+/// names forward from the older Lumit that keeps it online to this one.
+/// Asked when [`join_shared_project`] answered
+/// [`BridgeShareVersions::Movable`], with the invite, name and password it
+/// was given, and on [`BridgeOnlineForward::Moved`] that is asked again.
+///
+/// Not sync: it waits on the whole project being fetched and stored.
+Future<BridgeOnlineForward> onlineForward(
+        {required String invite, required String name, String? password}) =>
+    BridgeLib.instance.api.crateApiShareOnlineForward(
+        invite: invite, name: name, password: password);
+
 /// Join the project an invite names. It opens as a new, unsaved project in
 /// place of whatever was open, so saving it writes this person's own copy.
+///
+/// An invite to a project that is kept online joins that, with nothing
+/// different to say here. The door [`share_online_door`] names has to be
+/// open, and without one the answer is `Unreachable`.
 ///
 /// `password` is the host's, when it set one. `footage` is the folder this
 /// machine keeps the project's footage in. Each item is looked for there by
@@ -191,9 +226,162 @@ sealed class BridgeJoinOutcome with _$BridgeJoinOutcome {
   const factory BridgeJoinOutcome.versionMismatch({
     required String host,
   }) = BridgeJoinOutcome_VersionMismatch;
+
+  /// The project is kept online by another version of Lumit, and
+  /// `versions` says which and what would let this machine in. The two
+  /// refusals are [`BridgeShareVersions::Update`] and
+  /// [`BridgeShareVersions::HostFirst`]. On
+  /// [`BridgeShareVersions::Movable`] the person is asked, and on a yes
+  /// [`online_forward`] and then this again.
+  const factory BridgeJoinOutcome.versions({
+    required BridgeShareVersions versions,
+  }) = BridgeJoinOutcome_Versions;
   const factory BridgeJoinOutcome.full() = BridgeJoinOutcome_Full;
   const factory BridgeJoinOutcome.unsafe() = BridgeJoinOutcome_Unsafe;
   const factory BridgeJoinOutcome.failed() = BridgeJoinOutcome_Failed;
+}
+
+/// One footage item of a project kept online, as this machine has it.
+class BridgeOnlineFootage {
+  final FootageReference item;
+  final String name;
+
+  /// What Lumit's server files it under, `<hash32>-<size>`, which is what
+  /// its folder is called in this machine's own cache of sent footage. An
+  /// item whose file was never fingerprinted goes by its own id.
+  final String key;
+
+  /// Where it is on this machine.
+  final BridgeFootageHere here;
+
+  /// A composition uses it.
+  final bool used;
+
+  /// How big the original is here. 0 when this machine has not got it.
+  final BigInt bytes;
+
+  const BridgeOnlineFootage({
+    required this.item,
+    required this.name,
+    required this.key,
+    required this.here,
+    required this.used,
+    required this.bytes,
+  });
+
+  @override
+  int get hashCode =>
+      item.hashCode ^
+      name.hashCode ^
+      key.hashCode ^
+      here.hashCode ^
+      used.hashCode ^
+      bytes.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeOnlineFootage &&
+          runtimeType == other.runtimeType &&
+          item == other.item &&
+          name == other.name &&
+          key == other.key &&
+          here == other.here &&
+          used == other.used &&
+          bytes == other.bytes;
+}
+
+@freezed
+sealed class BridgeOnlineForward with _$BridgeOnlineForward {
+  const BridgeOnlineForward._();
+
+  /// The project is this Lumit's now, or was already. Everyone connected
+  /// was cut off to find that out. A copy that is open joins by itself,
+  /// and an invite is joined by asking [`join_shared_project`] again.
+  const factory BridgeOnlineForward.moved() = BridgeOnlineForward_Moved;
+
+  /// This Lumit could not read what the older one stored, or an edit in
+  /// it would not apply. Nothing was changed: the project is still the
+  /// older Lumit's, and still works there.
+  const factory BridgeOnlineForward.unreadable() =
+      BridgeOnlineForward_Unreadable;
+
+  /// It is not this machine's to move. Lumit's server does not know the
+  /// account signed in here for the host's.
+  const factory BridgeOnlineForward.notHost() = BridgeOnlineForward_NotHost;
+
+  /// A newer Lumit than this one keeps the project by now. This machine
+  /// has to be updated to `version`.
+  const factory BridgeOnlineForward.update({
+    required String version,
+  }) = BridgeOnlineForward_Update;
+
+  /// Lumit's server would not take it. `code` is its own word for why.
+  const factory BridgeOnlineForward.refused({
+    required String code,
+  }) = BridgeOnlineForward_Refused;
+
+  /// No door to Lumit's server is open, or it could not be reached
+  /// through the one that is.
+  const factory BridgeOnlineForward.unreachable() =
+      BridgeOnlineForward_Unreachable;
+
+  /// The project is not kept online, the link is not an invite to one or
+  /// lacks its password, or people on the older Lumit went on editing
+  /// through every try.
+  const factory BridgeOnlineForward.failed() = BridgeOnlineForward_Failed;
+}
+
+/// A new invite for a project kept online, before the server has it.
+class BridgeOnlineMove {
+  /// The new invite. Handed to [`ProjectReference::share_online_moved`]
+  /// once the server has taken `body`, and to people from then on.
+  final String link;
+
+  /// The body of the call that moves the project to the new invite,
+  /// `PUT /v1/online/<id>/access`, to send as it is.
+  final String body;
+
+  const BridgeOnlineMove({
+    required this.link,
+    required this.body,
+  });
+
+  @override
+  int get hashCode => link.hashCode ^ body.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeOnlineMove &&
+          runtimeType == other.runtimeType &&
+          link == other.link &&
+          body == other.body;
+}
+
+@freezed
+sealed class BridgeOnlineStarted with _$BridgeOnlineStarted {
+  const BridgeOnlineStarted._();
+
+  /// It is kept online, and `link` is the invite to hand out.
+  const factory BridgeOnlineStarted.online({
+    required String link,
+  }) = BridgeOnlineStarted_Online;
+
+  /// Lumit's server would not keep it. `code` is the server's own word
+  /// for why, or the door's: `signed_out` with nobody signed in.
+  const factory BridgeOnlineStarted.refused({
+    required String code,
+  }) = BridgeOnlineStarted_Refused;
+
+  /// No door to Lumit's server is open, or it could not be reached
+  /// through the one that is.
+  const factory BridgeOnlineStarted.unreachable() =
+      BridgeOnlineStarted_Unreachable;
+
+  /// The project is shared already, another is being put online just
+  /// now, or it is more than the server keeps.
+  const factory BridgeOnlineStarted.failed() = BridgeOnlineStarted_Failed;
 }
 
 @freezed
@@ -261,6 +449,64 @@ class BridgeShareConflict {
           edits == other.edits;
 }
 
+/// Which doors a shared project is reached through from this machine.
+class BridgeShareDoors {
+  /// The door to Lumit's relay, which [`share_cloud_door`] names.
+  final bool relay;
+
+  /// The door to projects kept online, which [`share_online_door`] names.
+  final bool online;
+
+  const BridgeShareDoors({
+    required this.relay,
+    required this.online,
+  });
+
+  @override
+  int get hashCode => relay.hashCode ^ online.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeShareDoors &&
+          runtimeType == other.runtimeType &&
+          relay == other.relay &&
+          online == other.online;
+}
+
+/// One edit this machine made while away that was dropped on its return,
+/// because what it was to was gone by then.
+class BridgeShareDropped {
+  /// What the edit is called in the History list, in the engine's English.
+  final String step;
+
+  /// The composition it was in, or the project item it was to, by the
+  /// name it had on this machine before the merge. `None` when the edit
+  /// names nothing this machine still had.
+  final String? item;
+
+  /// The layer it was to, by the name it had here, for an edit to one.
+  final String? layer;
+
+  const BridgeShareDropped({
+    required this.step,
+    this.item,
+    this.layer,
+  });
+
+  @override
+  int get hashCode => step.hashCode ^ item.hashCode ^ layer.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeShareDropped &&
+          runtimeType == other.runtimeType &&
+          step == other.step &&
+          item == other.item &&
+          layer == other.layer;
+}
+
 @freezed
 sealed class BridgeShareEnding with _$BridgeShareEnding {
   const BridgeShareEnding._();
@@ -298,15 +544,26 @@ sealed class BridgeShareEvent with _$BridgeShareEvent {
   /// The host is back. The document was replaced by the host's with this
   /// guest's own edits merged in, so everything on screen is stale. `held`
   /// conflicts wait in `share_conflicts`, and `refused` edits no longer
-  /// applied and are gone.
+  /// applied and are gone. `dropped` says what those were to, the first
+  /// twenty of them. [`ProjectReference::share_return_copies`] has this
+  /// machine's document from before, when anything was held or dropped.
   const factory BridgeShareEvent.back({
     required int held,
     required int refused,
+    required List<BridgeShareDropped> dropped,
   }) = BridgeShareEvent_Back;
 
   /// The invite this guest is looking for its host by leads to a different
   /// project. It is still away and still looking.
   const factory BridgeShareEvent.elsewhere() = BridgeShareEvent_Elsewhere;
+
+  /// For a copy of a project kept online: the invite this machine finds
+  /// the project by was replaced while it was away, and opens nothing
+  /// now. It is still [`Self::Away`], with what was made here kept, and
+  /// asks Lumit's server no more until
+  /// [`ProjectReference::share_reinvite`] gives it the new invite, which
+  /// the host has. It comes once for an invite.
+  const factory BridgeShareEvent.replaced() = BridgeShareEvent_Replaced;
 
   /// Sharing is over for this guest. The project stays open as it is.
   const factory BridgeShareEvent.ended({
@@ -340,6 +597,59 @@ sealed class BridgeShareEvent with _$BridgeShareEvent {
     required int from,
     required String comp,
   }) = BridgeShareEvent_ExportAsked;
+
+  /// For a project kept online: whether Lumit's server is taking edits to
+  /// it. It stops when the host's account no longer has Lumit Pro, and
+  /// for a project that has grown too large once the server has kept as
+  /// many edits past its last snapshot as it will:
+  /// [`BridgeShareOnline::too_large`] says which, and is set before this
+  /// comes. A machine that makes an edit then goes [`Self::Away`], and
+  /// stays so until the server takes edits again. What it makes meanwhile
+  /// is kept and merged as after any time away.
+  const factory BridgeShareEvent.writable({
+    required bool writable,
+  }) = BridgeShareEvent_Writable;
+
+  /// For a project kept online: what [`ProjectReference::share_activity`]
+  /// or [`ProjectReference::share_notes`] gives has changed. It comes as
+  /// often as edits go in, which while someone is at work is many times a
+  /// second, so the lists are worth reading again no more often than they
+  /// are worth drawing.
+  const factory BridgeShareEvent.activity() = BridgeShareEvent_Activity;
+
+  /// For a copy of a project kept online: another version of Lumit keeps
+  /// the project, so this machine is [`Self::Away`] from it, and
+  /// `versions` says what would let it back. It comes when that is found
+  /// and again if it changes. The machine goes on asking, and is
+  /// [`Self::Back`] by itself once the two match.
+  /// [`ProjectReference::share_online_versions`] gives the same at any
+  /// time.
+  const factory BridgeShareEvent.versions({
+    required BridgeShareVersions versions,
+  }) = BridgeShareEvent_Versions;
+
+  /// For a machine that can only look at a project kept online
+  /// ([`BridgeShareOnline::look`]): something the person made on it has
+  /// just been taken back, as everything made there is. Without a word
+  /// here that reads as a fault. It comes at the start of a run of such
+  /// edits and not again until they have stopped for two seconds, so
+  /// dragging something says it once.
+  const factory BridgeShareEvent.lookOnly() = BridgeShareEvent_LookOnly;
+
+  /// For a project kept online: the invite that can only look is now on
+  /// or off ([`BridgeShareOnline::look_on`]). It comes to every machine
+  /// in the project when the host turns it, and once on joining a
+  /// project that has it on.
+  const factory BridgeShareEvent.lookInvite({
+    required bool lookOn,
+  }) = BridgeShareEvent_LookInvite;
+
+  /// For a project kept online: it has grown too large to go on being
+  /// kept, or fits again ([`BridgeShareOnline::too_large`]). On each
+  /// machine that finds it out, when it does, and when that changes.
+  const factory BridgeShareEvent.tooLarge({
+    required bool tooLarge,
+  }) = BridgeShareEvent_TooLarge;
 }
 
 @freezed
@@ -364,6 +674,197 @@ sealed class BridgeShareFetching with _$BridgeShareFetching {
   const factory BridgeShareFetching.failed() = BridgeShareFetching_Failed;
 }
 
+/// Some words someone left in a project kept online, with where they were
+/// when they wrote them. A note is no part of the document: it is not in
+/// the project's file, and an undo does not touch it.
+class BridgeShareNote {
+  /// Tells one note from another.
+  final String id;
+
+  /// Who wrote it, as they were called then.
+  final String name;
+
+  /// This machine's person wrote it.
+  final bool mine;
+
+  /// When it was written, in seconds since 1970, by the clock of the
+  /// machine it was written on.
+  final PlatformInt64 at;
+
+  /// The words. Five hundred characters at most.
+  final String text;
+
+  /// The composition its writer had open, when they had one.
+  final BridgeSittingComp? comp;
+
+  /// The frame their playhead was on in it. `None` when they had no
+  /// composition open, or it is no longer in the project.
+  final PlatformInt64? frame;
+
+  /// The layer they had chosen, while it is still in that composition.
+  final LayerReference? layer;
+
+  /// It was left while this machine was not there to see it, and its
+  /// person has not been shown the list since. For this machine alone.
+  final bool isNew;
+
+  /// It was written here and is not in the project yet: this machine is
+  /// away from the server, or it was written this moment. It is sent
+  /// when the server is found, and nobody else has it until then.
+  final bool waiting;
+
+  const BridgeShareNote({
+    required this.id,
+    required this.name,
+    required this.mine,
+    required this.at,
+    required this.text,
+    this.comp,
+    this.frame,
+    this.layer,
+    required this.isNew,
+    required this.waiting,
+  });
+
+  @override
+  int get hashCode =>
+      id.hashCode ^
+      name.hashCode ^
+      mine.hashCode ^
+      at.hashCode ^
+      text.hashCode ^
+      comp.hashCode ^
+      frame.hashCode ^
+      layer.hashCode ^
+      isNew.hashCode ^
+      waiting.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeShareNote &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          name == other.name &&
+          mine == other.mine &&
+          at == other.at &&
+          text == other.text &&
+          comp == other.comp &&
+          frame == other.frame &&
+          layer == other.layer &&
+          isNew == other.isNew &&
+          waiting == other.waiting;
+}
+
+/// What a project that is kept online is to this machine.
+class BridgeShareOnline {
+  /// This is the machine of the person whose account keeps the project
+  /// online, who can take people out, make a new invite and stop keeping
+  /// it. As Lumit's server said when it was last found.
+  final bool host;
+
+  /// Lumit's server is taking edits. See [`BridgeShareEvent::Writable`].
+  /// False with `too_large` true is the project having grown too large.
+  /// False without it is the host's account having no Lumit Pro.
+  final bool writable;
+
+  /// The project has grown too large for Lumit's server to keep whole:
+  /// this machine went to store it as it stands and it did not fit.
+  ///
+  /// With `writable` still true it is a warning. Edits go in as before,
+  /// for a while: the server keeps only so many past the last time the
+  /// project was stored whole, and then takes no more. Making the project
+  /// smaller before then mends it, and this goes false the next time this
+  /// machine stores it, which is after some two thousand more edits.
+  ///
+  /// With `writable` false that point has been reached. Nothing made on
+  /// this machine reaches anyone. It is away, what it makes is kept on
+  /// disk as for any time away, and nothing is dropped. No edit can make
+  /// the project smaller now, since none goes in. It ends when someone's
+  /// Lumit does store the project, which this machine sees and comes
+  /// back for, or when the host stops keeping it online.
+  final bool tooLarge;
+
+  /// This machine is without the server just now, and working on alone.
+  final bool away;
+
+  /// What Lumit's server knows the project by, for the calls the
+  /// interface makes to it itself: footage, and the host's own.
+  final String id;
+
+  /// What those calls show the server, as `X-Lumit-Online`.
+  final String access;
+
+  /// The invite to hand out.
+  final String link;
+
+  /// This machine can only look: it joined by the invite that changes
+  /// nothing. An edit made on it is taken back at once, and it gives the
+  /// server no footage. The interface says so, and does not offer what
+  /// would change the project.
+  final bool look;
+
+  /// The invite that can only look, to hand out beside `link`: whoever
+  /// joins by it sees the project and the people, follows, and is seen,
+  /// and changes nothing. It opens by itself, whatever password `link`
+  /// needs: a password guards editing, and nobody who only looks is
+  /// given it. So anyone this link reaches can read the project, while
+  /// `look_on` is true. A new invite replaces it with `link`. On a
+  /// machine that can only look it is the same as `link`.
+  final String lookLink;
+
+  /// The invite that can only look is on. A project starts with it off,
+  /// and off it opens nothing, whoever holds `look_link`. The host turns
+  /// it with [`ProjectReference::share_online_look`]. While it is on,
+  /// whoever holds `link` can read the project without its password,
+  /// since `look_link` can be worked out from `link`: a password guards
+  /// editing and nothing else. As Lumit's server last said, so false for
+  /// a copy opened again until it has found the server.
+  final bool lookOn;
+
+  const BridgeShareOnline({
+    required this.host,
+    required this.writable,
+    required this.tooLarge,
+    required this.away,
+    required this.id,
+    required this.access,
+    required this.link,
+    required this.look,
+    required this.lookLink,
+    required this.lookOn,
+  });
+
+  @override
+  int get hashCode =>
+      host.hashCode ^
+      writable.hashCode ^
+      tooLarge.hashCode ^
+      away.hashCode ^
+      id.hashCode ^
+      access.hashCode ^
+      link.hashCode ^
+      look.hashCode ^
+      lookLink.hashCode ^
+      lookOn.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeShareOnline &&
+          runtimeType == other.runtimeType &&
+          host == other.host &&
+          writable == other.writable &&
+          tooLarge == other.tooLarge &&
+          away == other.away &&
+          id == other.id &&
+          access == other.access &&
+          link == other.link &&
+          look == other.look &&
+          lookLink == other.lookLink &&
+          lookOn == other.lookOn;
+}
+
 /// One person in a shared project, and what they are looking at.
 class BridgeSharePerson {
   final int id;
@@ -374,6 +875,16 @@ class BridgeSharePerson {
 
   /// This is the person at this machine.
   final bool me;
+
+  /// This is the host. In a project kept online that is anyone signed in
+  /// to the account that keeps it, so it can be more than one person, or
+  /// nobody while the host is not here.
+  final bool host;
+
+  /// This person can only look. They joined a project kept online by the
+  /// invite that changes nothing: they see it and are seen, and nothing
+  /// they do reaches anyone.
+  final bool look;
 
   /// The composition they have open, if it is still in the project.
   final CompositionReference? comp;
@@ -393,11 +904,19 @@ class BridgeSharePerson {
   final List<String> properties;
   final List<String> keys;
 
+  /// The controls they are changing right now, as their frontend named
+  /// them in [`ProjectReference::share_presence`], to be held for them.
+  /// Empty when they are changing nothing. In a project kept online it
+  /// empties by itself two seconds after their machine last said so.
+  final List<String> changing;
+
   const BridgeSharePerson({
     required this.id,
     required this.name,
     required this.colour,
     required this.me,
+    required this.host,
+    required this.look,
     this.comp,
     required this.layers,
     this.playhead,
@@ -405,6 +924,7 @@ class BridgeSharePerson {
     this.cursorY,
     required this.properties,
     required this.keys,
+    required this.changing,
   });
 
   @override
@@ -413,13 +933,16 @@ class BridgeSharePerson {
       name.hashCode ^
       colour.hashCode ^
       me.hashCode ^
+      host.hashCode ^
+      look.hashCode ^
       comp.hashCode ^
       layers.hashCode ^
       playhead.hashCode ^
       cursorX.hashCode ^
       cursorY.hashCode ^
       properties.hashCode ^
-      keys.hashCode;
+      keys.hashCode ^
+      changing.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -430,13 +953,16 @@ class BridgeSharePerson {
           name == other.name &&
           colour == other.colour &&
           me == other.me &&
+          host == other.host &&
+          look == other.look &&
           comp == other.comp &&
           layers == other.layers &&
           playhead == other.playhead &&
           cursorX == other.cursorX &&
           cursorY == other.cursorY &&
           properties == other.properties &&
-          keys == other.keys;
+          keys == other.keys &&
+          changing == other.changing;
 }
 
 @freezed
@@ -480,6 +1006,111 @@ enum BridgeShareRelayed {
   /// every few seconds.
   unreachable,
   ;
+}
+
+/// This machine's own project from just before a return that held back or
+/// dropped any of its edits, and what that return dropped.
+class BridgeShareReturnCopy {
+  /// The project file. Everything the person had made by then is in it.
+  /// It is a project of its own, and opening it joins nothing.
+  final String path;
+
+  /// When it was kept, in seconds since 1970.
+  final PlatformInt64 at;
+
+  /// How many edits that return dropped: the `refused` of its
+  /// [`BridgeShareEvent::Back`]. 0 for a return that only held edits
+  /// back.
+  final int refused;
+
+  /// What the first twenty of those were to, as that `Back` named them.
+  /// Kept beside the file, so it is still known after Lumit closes.
+  final List<BridgeShareDropped> dropped;
+
+  const BridgeShareReturnCopy({
+    required this.path,
+    required this.at,
+    required this.refused,
+    required this.dropped,
+  });
+
+  @override
+  int get hashCode =>
+      path.hashCode ^ at.hashCode ^ refused.hashCode ^ dropped.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeShareReturnCopy &&
+          runtimeType == other.runtimeType &&
+          path == other.path &&
+          at == other.at &&
+          refused == other.refused &&
+          dropped == other.dropped;
+}
+
+/// One person's edits to a project kept online at one sitting: a run of
+/// them with no gap of more than ten minutes.
+class BridgeShareSitting {
+  /// What the person was called when they made the last of them.
+  final String name;
+
+  /// They were made on this machine, in this copy of the project.
+  final bool mine;
+
+  /// When the sitting began and ended, in seconds since 1970, by the
+  /// clock of the machine the edits were made on. Never later than this
+  /// machine's own clock says it is.
+  final PlatformInt64 began;
+  final PlatformInt64 ended;
+
+  /// How many edits. Each is one step of that person's undo history.
+  final int edits;
+
+  /// The compositions the edits were in, in the order they were first
+  /// touched, and at most 32 of them. An edit that is in no composition,
+  /// such as renaming an item in the Project panel, counts in `edits` and
+  /// adds nothing here.
+  final List<BridgeSittingComp> comps;
+
+  /// Some of it happened while this machine was not there to see: before
+  /// it joined, while its copy was closed, or while it was away. Never
+  /// true of this machine's own. It stays true until
+  /// [`ProjectReference::share_activity_seen`] is called.
+  final bool isNew;
+
+  const BridgeShareSitting({
+    required this.name,
+    required this.mine,
+    required this.began,
+    required this.ended,
+    required this.edits,
+    required this.comps,
+    required this.isNew,
+  });
+
+  @override
+  int get hashCode =>
+      name.hashCode ^
+      mine.hashCode ^
+      began.hashCode ^
+      ended.hashCode ^
+      edits.hashCode ^
+      comps.hashCode ^
+      isNew.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeShareSitting &&
+          runtimeType == other.runtimeType &&
+          name == other.name &&
+          mine == other.mine &&
+          began == other.began &&
+          ended == other.ended &&
+          edits == other.edits &&
+          comps == other.comps &&
+          isNew == other.isNew;
 }
 
 @freezed
@@ -545,4 +1176,59 @@ class BridgeShareTransfer {
           sending == other.sending &&
           done == other.done &&
           total == other.total;
+}
+
+@freezed
+sealed class BridgeShareVersions with _$BridgeShareVersions {
+  const BridgeShareVersions._();
+
+  /// A newer Lumit keeps it. This machine has to be updated to `version`.
+  const factory BridgeShareVersions.update({
+    required String version,
+  }) = BridgeShareVersions_Update;
+
+  /// An older Lumit keeps it, and this is the machine of its host, who
+  /// may move it forward to this Lumit. Nobody on the older Lumit can
+  /// join after that until they update, so the person is asked first.
+  /// On a yes: [`ProjectReference::share_online_forward`] for a copy that
+  /// is open, [`online_forward`] for an invite being joined.
+  const factory BridgeShareVersions.movable({
+    required String version,
+  }) = BridgeShareVersions_Movable;
+
+  /// An older Lumit keeps it, and this is a guest's machine. The host
+  /// has to open the project with the newer Lumit first.
+  const factory BridgeShareVersions.hostFirst({
+    required String version,
+  }) = BridgeShareVersions_HostFirst;
+}
+
+/// A composition some of a person's edits were in.
+class BridgeSittingComp {
+  /// Its id, which it keeps whatever it is called.
+  final String id;
+
+  /// What it is called now. Empty when it is no longer in the project.
+  final String name;
+
+  /// The composition itself, while it is still in the project.
+  final CompositionReference? comp;
+
+  const BridgeSittingComp({
+    required this.id,
+    required this.name,
+    this.comp,
+  });
+
+  @override
+  int get hashCode => id.hashCode ^ name.hashCode ^ comp.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeSittingComp &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          name == other.name &&
+          comp == other.comp;
 }

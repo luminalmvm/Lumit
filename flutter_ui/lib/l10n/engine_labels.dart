@@ -1235,6 +1235,7 @@ Map<String, String> get _built => {
       "Open a project": l10n.keyOpenAProject,
       "Save the project": l10n.keySaveTheProject,
       "Save the project somewhere else": l10n.keySaveTheProjectSomewhereElse,
+      "Save a version with a name": l10n.backupKeySaveVersion,
       "Import footage": l10n.keyImportFootage,
       "Export the composition": l10n.keyExportTheComposition,
       "New composition": l10n.keyNewComposition,

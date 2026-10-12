@@ -2,7 +2,7 @@
 //!
 //! Plain data and text. Nothing here touches the network.
 
-use crate::ShareError;
+use crate::{ShareError, ONLINE};
 use std::fmt;
 use std::net::{IpAddr, SocketAddr};
 use std::str::FromStr;
@@ -30,6 +30,11 @@ const PACKED_LOCKED: u8 = 3;
 /// What a guest's own copy of such a link starts with once the password has
 /// been given: the key the channel opens with, and the link's own secret.
 const PACKED_OPENED: u8 = 4;
+
+/// Added to what a link starts with when it is an invite that can only
+/// look. That one is its key and nothing more, so it has the one shape. A
+/// build from before there were any reads none of them.
+const LOOK: u8 = 0x40;
 
 /// What Argon2id spends on a password: 64 MiB of memory, gone over three
 /// times, on one thread. Trying a list of them costs that for every guess.
@@ -127,6 +132,13 @@ pub struct Invite {
     pub locked: bool,
     /// What the host's password is hashed with, for a locked invite.
     pub salt: [u8; 16],
+    /// An invite to a project kept online that can only look: whoever joins
+    /// by it sees the project and is seen, and changes nothing. Its key is
+    /// one way from the secret of the link that edits, so it gives nothing
+    /// of that one, and whoever holds that link holds this. It opens by
+    /// itself, whatever password the other needs: a password guards editing,
+    /// and nothing of it is in this. See `online`.
+    pub look: bool,
 }
 
 /// The key the channel is opened with when the host set a password: the
@@ -147,7 +159,36 @@ impl Invite {
             link: key,
             locked: false,
             salt: [0; 16],
+            look: false,
         }
+    }
+
+    /// The invite to a project that is kept online, which names no host:
+    /// Lumit's server has it, and the key says which project. `lock` is the
+    /// password everyone has to give with it, if the host set one.
+    #[must_use]
+    pub fn online(key: [u8; 32], lock: Option<&Lock>) -> Invite {
+        Invite {
+            locked: lock.is_some(),
+            salt: lock.map_or([0; 16], Lock::salt),
+            ..Invite::open(vec![ONLINE.to_owned()], Vec::new(), key)
+        }
+    }
+
+    /// The invite to a project kept online that can only look, from `read`,
+    /// the key everything that reads the project is worked out from.
+    #[must_use]
+    pub(crate) fn looking(read: [u8; 32]) -> Invite {
+        Invite {
+            look: true,
+            ..Invite::online(read, None)
+        }
+    }
+
+    /// Whether this is an invite to a project that is kept online.
+    #[must_use]
+    pub fn is_online(&self) -> bool {
+        self.addresses.iter().any(|address| address == ONLINE)
     }
 
     /// This invite with its password given, ready to join by. One that
@@ -185,7 +226,7 @@ pub fn key_from(text: &str) -> Option<[u8; 32]> {
 /// a chat program would cut a link short at.
 const LETTERS: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 
-fn to_letters(bytes: &[u8]) -> String {
+pub(crate) fn to_letters(bytes: &[u8]) -> String {
     let mut text = String::with_capacity(bytes.len().div_ceil(3) * 4);
     for group in bytes.chunks(3) {
         let mut word = [0u8; 3];
@@ -199,7 +240,7 @@ fn to_letters(bytes: &[u8]) -> String {
     text
 }
 
-fn from_letters(text: &str) -> Option<Vec<u8>> {
+pub(crate) fn from_letters(text: &str) -> Option<Vec<u8>> {
     let mut bytes = Vec::with_capacity(text.len() / 4 * 3 + 2);
     for group in text.as_bytes().chunks(4) {
         // One letter alone carries less than a byte.
@@ -261,7 +302,7 @@ fn plain(c: char) -> bool {
 }
 
 /// Take `n` bytes off the front of `bytes`.
-fn take<'a>(bytes: &mut &'a [u8], n: usize) -> Option<&'a [u8]> {
+pub(crate) fn take<'a>(bytes: &mut &'a [u8], n: usize) -> Option<&'a [u8]> {
     let (front, rest) = bytes.split_at_checked(n)?;
     *bytes = rest;
     Some(front)
@@ -269,6 +310,8 @@ fn take<'a>(bytes: &mut &'a [u8], n: usize) -> Option<&'a [u8]> {
 
 fn unpack(mut bytes: &[u8]) -> Option<Invite> {
     let kind = take(&mut bytes, 1)?[0];
+    let look = kind == (PACKED | LOOK);
+    let kind = if look { PACKED } else { kind };
     if ![PACKED, PACKED_LOCKED, PACKED_OPENED].contains(&kind) {
         return None;
     }
@@ -323,6 +366,7 @@ fn unpack(mut bytes: &[u8]) -> Option<Invite> {
         link,
         locked,
         salt,
+        look,
     })
 }
 
@@ -339,7 +383,7 @@ impl fmt::Display for Invite {
             packed.extend_from_slice(&self.key);
             packed.extend_from_slice(&self.link);
         } else {
-            packed.push(PACKED);
+            packed.push(PACKED | if self.look { LOOK } else { 0 });
             packed.extend_from_slice(&self.key);
         }
         let direct = self.addresses.iter().map(|address| (address, false));
@@ -399,6 +443,7 @@ mod tests {
             salt: [9; 16],
             key: std::array::from_fn(|n| n as u8 * 7),
             link: std::array::from_fn(|n| n as u8 * 7),
+            look: false,
         };
         let link = invite.to_string();
         let packed = link.strip_prefix(LINK).unwrap();

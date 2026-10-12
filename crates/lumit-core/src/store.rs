@@ -654,16 +654,57 @@ impl DocumentStore {
     /// document both had, `since` the edits made here after it, and the store
     /// holds `base` with those applied. [`Self::rejoin`] takes it from there.
     pub fn share_apart(&self, tap: Tap, base: Arc<Document>, since: Vec<(Op, Op)>) {
+        self.share_apart_sent(tap, base, since, Vec::new());
+    }
+
+    /// [`Self::share_apart`] for a copy whose first edits were sent before it
+    /// closed and never answered. `sent` numbers them as they were sent, so
+    /// [`Self::rejoin`] can tell which of them were taken all the same, and
+    /// edits made from now on are numbered after them.
+    pub fn share_apart_sent(
+        &self,
+        tap: Tap,
+        base: Arc<Document>,
+        since: Vec<(Op, Op)>,
+        sent: Vec<u64>,
+    ) {
         self.journal.lock().shared = Some(Shared {
-            link: Link::Adrift {
-                base,
-                since,
-                sent: Vec::new(),
-            },
+            next_id: sent.iter().copied().max().unwrap_or(0),
+            link: Link::Adrift { base, since, sent },
             tap,
-            next_id: 0,
             touched: BTreeMap::new(),
         });
+    }
+
+    /// A guest's unanswered edits as they sit on the document now, oldest
+    /// first: each one's number, and the op it lands as on the host's
+    /// document as far as this guest has heard it. `None` for one that no
+    /// longer lands. Empty for anyone else.
+    #[must_use]
+    pub fn pending(&self) -> Vec<(u64, Option<Op>)> {
+        let journal = self.journal.lock();
+        match journal.shared.as_ref().map(|shared| &shared.link) {
+            Some(Link::Guest { pending }) => {
+                let landed = |p: &Pending| p.landed.as_ref().map(|(op, _)| op.clone());
+                pending.iter().map(|p| (p.id, landed(p))).collect()
+            }
+            _ => Vec::new(),
+        }
+    }
+
+    /// The host's document as far as this guest has heard it: the one here
+    /// with this guest's unanswered edits taken off. `None` for anyone else,
+    /// and when they do not come off, which means the two have drifted
+    /// apart.
+    #[must_use]
+    pub fn heard(&self) -> Option<Document> {
+        let journal = self.journal.lock();
+        let Link::Guest { pending } = &journal.shared.as_ref()?.link else {
+            return None;
+        };
+        let mut doc = Document::clone(&self.snapshot());
+        unwind(pending, &mut doc).ok()?;
+        Some(doc)
     }
 
     /// What a guest without its host has to keep to merge later, with the
@@ -880,24 +921,35 @@ impl DocumentStore {
     /// Every edit made here since the host was lost is brought onto it
     /// ([`plan_merge`]). The ones that touch nothing the host's side changed
     /// are applied and sent like any other edit. The rest come back as
-    /// conflicts for the person to choose between, with a count of the edits
-    /// that no longer apply at all. The undo history is cleared, because its
+    /// conflicts for the person to choose between, with the edits that no
+    /// longer apply at all, and the document as it stood here just before,
+    /// which has all of them on it. The undo history is cleared, because its
     /// steps were made against a document that is no longer this one.
     ///
     /// `heard` is the last of this guest's edits the host took before it was
     /// lost, by the host's own account, or 0 for none. The answers to those
     /// went with the connection. They are in `theirs` already, so they are
     /// left out here and not made a second time.
-    pub fn rejoin(&self, theirs: Document, heard: u64) -> (Vec<Conflict>, usize) {
+    pub fn rejoin(&self, theirs: Document, heard: u64) -> (Vec<Conflict>, Vec<Op>, Arc<Document>) {
         let mut journal = self.journal.lock();
+        let before = self.snapshot();
         let Some(shared) = journal.shared.as_mut() else {
-            return (Vec::new(), 0);
+            return (Vec::new(), Vec::new(), before);
         };
         let Link::Adrift { base, since, sent } = &shared.link else {
-            return (Vec::new(), 0);
+            return (Vec::new(), Vec::new(), before);
         };
         let taken = sent.iter().take_while(|id| **id <= heard).count();
-        let merge = plan_merge(base, theirs, since.get(taken..).unwrap_or_default());
+        // What the host took of this guest's own before it was lost is this
+        // guest's doing, not the host's. It goes onto the base, so that only
+        // what someone else changed is held against the edits made here
+        // since. Left off, the guest's next edit to the same thing would be
+        // held back as if another person had been at it.
+        let mut own = Document::clone(base);
+        for (op, _) in since.iter().take(taken) {
+            let _ = apply(&mut own, op);
+        }
+        let merge = plan_merge(&own, theirs, since.get(taken..).unwrap_or_default());
         let mut pending = VecDeque::with_capacity(merge.clean.len());
         for (op, was) in merge.clean {
             shared.next_id += 1;
@@ -920,7 +972,7 @@ impl DocumentStore {
         journal.redo.clear();
         self.current.store(Arc::new(merge.merged));
         self.bump_revision();
-        (merge.conflicts, merge.refused)
+        (merge.conflicts, merge.refused, before)
     }
 
     /// The retained undo ops, oldest first (at most [`MAX_UNDO_DEPTH`] after
@@ -3279,9 +3331,9 @@ mod tests {
 
         let mut theirs = doc.clone();
         apply(&mut theirs, &rename(x, "theirs")).unwrap();
-        let (conflicts, refused) = guest.store.rejoin(theirs, 0);
+        let (conflicts, refused, _) = guest.store.rejoin(theirs, 0);
 
-        assert_eq!(refused, 0);
+        assert!(refused.is_empty());
         assert_eq!(conflicts.len(), 1);
         let held: Vec<&Op> = conflicts[0].ops.iter().map(|(op, _)| op).collect();
         assert_eq!(held, vec![&rename(x, "mine")]);
@@ -3289,6 +3341,91 @@ mod tests {
         assert_eq!(name_of(&guest.store, y).as_deref(), Some("mine"));
         assert!(guest.store.snapshot().item(added).is_some());
         assert_eq!(guest.heard.lock().len(), 2, "the clean edits are sent");
+    }
+
+    /// A batch that stops landing part-way leaves the document as it was:
+    /// what landed of it is taken back, however batches sit inside it. A
+    /// guest lands every unanswered edit again whenever someone else's goes
+    /// in underneath, and one that no longer lands must leave nothing behind
+    /// for the next to land on.
+    #[test]
+    fn a_batch_that_stops_landing_part_way_leaves_nothing_behind() {
+        let (doc, x, y) = two_solids();
+        let inner = vec![rename(y, "of it"), rename(Uuid::now_v7(), "nothing")];
+        let ops = vec![rename(x, "half"), Op::Batch { ops: inner }];
+        let mut landed = doc.clone();
+        assert!(land(&mut landed, &Op::Batch { ops }, None).is_err());
+        assert_eq!(json(&landed), json(&doc));
+    }
+
+    /// Two people who file things into one folder both keep theirs, whatever
+    /// else either did to its list: the edit lands cut down to what its
+    /// author changed. Every solid and every imported file goes into a
+    /// folder with the others of its kind, so this is how most unanswered
+    /// edits land once someone else has made one of their own.
+    #[test]
+    fn a_folders_children_merge_by_what_each_person_changed() {
+        let seed = DocumentStore::new(Document::new());
+        let folder = make_folder(&seed, "Solids");
+        let [a, b, c, m, t] = std::array::from_fn(|_| Uuid::now_v7());
+        let set = |children: &[Uuid]| Op::SetFolderChildren {
+            folder,
+            children: children.to_vec(),
+        };
+        // What the list was where the edit was made, what the edit made it,
+        // what it is here now, and what it has to come to.
+        let cases: [[&[Uuid]; 4]; 3] = [
+            // Both filed something.
+            [&[a, b], &[a, b, m], &[a, b, t], &[a, b, m, t]],
+            // One took something out, and the other filed something.
+            [&[a, b, c], &[a, c], &[a, b, c, t], &[a, c, t]],
+            // One put them in another order and filed something, and the
+            // other took one out and filed another.
+            [&[a, b, c], &[c, a, b, m], &[a, c, t], &[c, t, a, m]],
+        ];
+        for [was, mine, now, merged] in cases {
+            let mut doc = Document::clone(&seed.snapshot());
+            apply(&mut doc, &set(now)).unwrap();
+            land(&mut doc, &set(mine), Some(&set(was))).unwrap();
+            assert_eq!(doc.folder(folder).unwrap().children, merged);
+        }
+    }
+
+    /// The host took one of this guest's edits before it was lost, and never
+    /// got to answer it. That edit is the guest's own doing: what the guest
+    /// went on to do to the same thing is not held back as if someone else
+    /// had been at it. When someone else has, it still is.
+    #[test]
+    fn an_edit_the_host_took_is_not_held_against_the_guest_that_made_it() {
+        let (doc, x, y) = two_solids();
+        for theirs_too in [false, true] {
+            let guest = end(&doc, true);
+            // Sent and not answered when the host is lost. Then more is
+            // done to the same item, and to another.
+            guest.store.commit(rename(x, "first")).unwrap();
+            guest.store.cast_adrift();
+            guest.store.commit(rename(x, "second")).unwrap();
+            guest.store.commit(rename(y, "mine")).unwrap();
+
+            // The host had taken the first, which was the guest's edit 1.
+            let mut theirs = doc.clone();
+            apply(&mut theirs, &rename(x, "first")).unwrap();
+            if theirs_too {
+                apply(&mut theirs, &rename(x, "theirs")).unwrap();
+            }
+            let (conflicts, refused, _) = guest.store.rejoin(theirs, 1);
+
+            assert!(refused.is_empty());
+            let name = name_of(&guest.store, x);
+            if theirs_too {
+                assert_eq!(conflicts.len(), 1, "someone else changed it since");
+                assert_eq!(name.as_deref(), Some("theirs"));
+            } else {
+                assert!(conflicts.is_empty(), "nobody else touched it");
+                assert_eq!(name.as_deref(), Some("second"));
+            }
+            assert_eq!(name_of(&guest.store, y).as_deref(), Some("mine"));
+        }
     }
 
     /// An edit made on top of a held one is held with it. Deleting an item
@@ -3305,9 +3442,9 @@ mod tests {
 
         let mut theirs = doc.clone();
         apply(&mut theirs, &rename(x, "theirs")).unwrap();
-        let (conflicts, refused) = guest.store.rejoin(theirs, 0);
+        let (conflicts, refused, _) = guest.store.rejoin(theirs, 0);
 
-        assert_eq!((conflicts.len(), refused), (1, 0));
+        assert_eq!((conflicts.len(), refused.len()), (1, 0));
         assert_eq!(conflicts[0].ops.len(), 2, "the delete and its undo");
         assert_eq!(name_of(&guest.store, x).as_deref(), Some("theirs"));
         for (op, was) in &conflicts[0].ops {
@@ -3377,8 +3514,8 @@ mod tests {
         set(&away.store, second, 7.0);
         set(&away.store, first, 5.0);
         let theirs = Document::clone(&host.store.snapshot());
-        let (conflicts, refused) = away.store.rejoin(theirs, 0);
-        assert_eq!((conflicts.len(), refused), (1, 0));
+        let (conflicts, refused, _) = away.store.rejoin(theirs, 0);
+        assert_eq!((conflicts.len(), refused.len()), (1, 0));
         assert_eq!(
             read(&away.store),
             both,

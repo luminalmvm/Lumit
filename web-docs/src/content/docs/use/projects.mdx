@@ -52,7 +52,8 @@ only, and an autosave reads its footage from the project file it was written bes
 
 A shared project is edited by several people at once. One person, the **host**, shares it
 from their computer and the others join as **guests**. Guests connect to the host's
-computer directly, over a local network, the internet or a VPN, or through a relay.
+computer directly, over a local network, the internet or a VPN, or through a relay. A
+shared project can also be [kept online](#keeping-a-shared-project-online).
 
 **File ▸ Shared project…** opens the **Shared project** window, which has two pages.
 
@@ -132,6 +133,9 @@ Each person has a colour, and what they have in hand is marked in it.
 A row out of sight in a layer that is twirled shut is marked on the layer. Two people on the
 same row or keyframe both show.
 
+The eye on a person's row in the Shared project window follows them: the open composition
+and the playhead go where theirs go. **Esc**, or moving the playhead, stops it.
+
 A guest chooses a **Footage folder** when joining, and each footage item is matched to a
 file in it by name and then by content. An item with no match can be relinked, or fetched
 from someone who has it.
@@ -154,9 +158,9 @@ project's record of the file.
 **Advanced** in the Shared project window holds the rest. The two limits are also in
 **Settings ▸ General ▸ Shared projects**.
 
-- **Send stand-ins of my footage to people who have not got it**: when unticked, this
+- **Send stand-ins of my footage**: when unticked, this
   computer sends none of its own footage.
-- **Get stand-ins of footage I have not got**: when unticked, nothing is fetched until it
+- **Get stand-ins of missing footage**: when unticked, nothing is fetched until it
   is asked for from the menu.
 - **Upload limit** and **Download limit**: the fastest footage is sent and fetched, in
   kilobytes a second. 0 or empty is no limit. Edits are not limited.
@@ -205,12 +209,87 @@ replaces the invite. The removed guest keeps its copy, the invite it holds stops
 and the guests still connected carry on. A guest that had lost the host at that moment
 needs the new invite.
 
-:::note
-Everyone needs the same version of Lumit. Image sequences, proxies, files an effect reads
-such as a LUT, and the results of tracking, roto and depth analysis are not sent. A proxy is looked for in the
-footage folder as footage is, and a file an effect reads by its name at the top of that
-folder. A shared project takes up to 16 people.
-:::
+### Keeping a shared project online
+
+A shared project can be **kept online**, so nobody's computer has to be on for the others
+to work. It is part of [Lumit Pro](/use/profiles/#lumit-pro): the host needs it, and guests
+need no account.
+
+| Action | How |
+| --- | --- |
+| Keep the open project online | Tick **Keep online** on **Share this project**, then **Start sharing**. |
+| Join | An invite link pasted on **Join a project**, then **Join**. |
+| Let someone look and not change | Turn on **Invite to look**, for the host, and send them that link. |
+| Leave a note | The line at the top of **Activity**, then **Send**. |
+| Open it again | Open the saved project file. |
+| See who edited it | **Activity** in the Shared project window. |
+| Remove someone | **Remove** on their row, for the host. |
+| Stop | **Stop keeping online**, for the host. A guest has **Leave**. |
+| Stop one whose file is gone | **Stop keeping online** on **Settings ▸ Account**, for the host. |
+
+**Invite to look** lets someone see the project and follow people, and not edit. Up to
+eight people can look at once. It never asks for the password: with one set, either link
+shows the project, and editing still needs the password.
+
+While someone changes a property, its row is held for them on every other computer. It is
+dimmed, with their name, until they let go.
+
+The first line of the window says how the computer stands with the server, and the bottom
+strip says the same.
+
+| Line | Meaning |
+| --- | --- |
+| In step | Every edit is shared. |
+| Reconnecting | The server cannot be reached. Edits wait on the computer and are merged later. |
+| Invite replaced | The host made a new invite. Paste it under **New invite**. |
+| On hold | The host's Lumit Pro has ended. Edits wait on each computer. |
+| Nearly too large | The project is over 95 MB, footage not counted. Edits stop unless it gets smaller. |
+| Too large | No more edits are shared. The host stops keeping it online, makes it smaller and keeps it online again. |
+| On Lumit 0.6.0, Waiting for the host, Update needed | See [After an update](#after-an-update). |
+
+**Activity** lists who edited the project and where, newest first. Edits made while the
+computer was away are listed first.
+
+A note is written on the line at the top of **Activity**. It carries the open composition
+and the playhead's time, and shows as a flag on that composition's time ruler. A note holds
+500 characters and cannot be changed. Its writer and the host can take it down.
+
+When edits made while away are dropped or left as conflicts, **Open my copy** opens the
+project as it was on the computer just before.
+
+**Remove** takes a person out and replaces the invite link. Anyone who is away needs the
+new one from the host.
+
+**Stop keeping online** deletes the project and its footage from the server. Everyone keeps
+their copy.
+
+**Settings ▸ Account** lists every project the account keeps online under **Kept online**,
+with **Stop keeping online** for each.
+
+Stand-ins of the footage are kept online too.
+
+- **Keep the originals online**, in the host's window, also sends the original files.
+- **Fetch the original**, on a footage row's menu, fetches one.
+
+Footage counts against the host's Lumit Pro storage.
+
+The project and its footage are encrypted before they leave the computer. The key is in the
+invite link and is never sent to the server.
+
+When the host's Lumit Pro ends, the project can still be opened. One that nobody opens for
+90 days after that is deleted from the server.
+
+#### After an update
+
+A project kept online is on the version of Lumit that last stored it.
+
+| Computer | What happens |
+| --- | --- |
+| The host's, on a newer Lumit | Lumit asks whether to move the project forward. **Not now** leaves it, and the Shared project window offers the move again. |
+| A guest's, on a newer Lumit | The copy waits, and joins by itself when the host has moved the project forward. |
+| Anyone's, on an older Lumit | The window names the version to update to. |
+
+Edits made while waiting are kept and merged afterwards. A move cannot be undone.
 
 ## Autosave
 
@@ -238,6 +317,7 @@ changes** throws the recorded edits away.
 
 ## Related
 
+- [Backup and history](/use/backup/)
 - [Importing media](/use/importing/)
 - [Compositions](/use/compositions/)
 - [Exporting](/use/export/)

@@ -91,6 +91,7 @@ import 'spectral_lane_frb.dart';
 import 'timeline_razor.dart';
 import 'layer_fold_frb.dart';
 import 'package:lumit_flutter/src/rust/api/retime.dart';
+import '../widgets/share_marks.dart';
 import '../widgets/smooth_zoom.dart';
 import '../widgets/zoom_anchored_scroll.dart';
 import 'waveform_frb.dart';
@@ -1739,6 +1740,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// only the waveform lanes redraw as the pointer moves, not the whole table.
   final ValueNotifier<BarDragPreview?> _barDrag = ValueNotifier(null);
 
+  /// A bar is being moved or trimmed. Its layers are in this person's hand,
+  /// which the others in a shared project are told.
+  void _barsTravel() => sayInHand(_barDrag, [...?_barDrag.value?.layers]);
+
   /// What a move drag starting on a selected bar carries: every
   /// **unlocked** selected layer — a locked one sits still, the way it sits
   /// out a switch batch — and the earliest in frame among them, the wall the
@@ -1762,6 +1767,23 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// reason: the box and every lane it crosses have to move together, and only
   /// they need to repaint while a handle is being dragged.
   final ValueNotifier<KeyStretch?> _keyStretch = ValueNotifier(null);
+
+  /// Keyframes are travelling in the lanes, by one key's drag or by the
+  /// block's. Their rows are in this person's hand, which the others in a
+  /// shared project are told. A row someone else is changing does not
+  /// travel: the travel is taken back as it is made, so the release finds
+  /// nothing to write.
+  void _keysTravel() {
+    final rows = {
+      for (final key in _keyStretch.value?.keys ?? const <String>{})
+        key.substring(0, key.lastIndexOf('#')),
+    };
+    if (!rows.every(valuesInHand.value.contains) && heldByOthers(rows)) {
+      _keyStretch.value = null;
+      return;
+    }
+    sayInHand(_keyStretch, rows.toList());
+  }
 
   /// The lane marquee's box while it is being dragged.
   final ValueNotifier<Rect?> _laneMarquee = ValueNotifier(null);
@@ -1964,6 +1986,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // notifier, which also fires for every playhead and pointer move.
     _share = Provider.of<LumitState>(context, listen: false).share
       ..roster.addListener(_onRoster);
+    _keyStretch.addListener(_keysTravel);
+    _barDrag.addListener(_barsTravel);
     _sharing = _share.active;
     // Chained, not overwritten: Effect controls may hold the claim already.
     _priorDeleteClaim = _ui!.deleteClaim;
@@ -3176,6 +3200,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     _mixRetry?.cancel();
     _itemChanges?.cancel();
     _share.roster.removeListener(_onRoster);
+    sayInHand(_keyStretch, const []);
+    sayInHand(_barDrag, const []);
     // With the panel gone nothing in it is selected, for the others either.
     _share.keys(const {});
     laneModes.removeListener(_onLaneMode);

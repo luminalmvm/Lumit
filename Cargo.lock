@@ -2394,11 +2394,13 @@ version = "0.6.0"
 dependencies = [
  "argon2",
  "blake3",
+ "chacha20poly1305",
  "getrandom 0.4.3",
  "hex",
  "lumit-core",
  "lumit-project",
  "lumit-relay",
+ "miniz_oxide",
  "parking_lot",
  "roxmltree",
  "serde",

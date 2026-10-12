@@ -612,6 +612,10 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
       builder: (context, groupId, _) => ValueListenableBuilder<LayerReference?>(
         valueListenable: ui.selectedLayer,
         builder: (context, layer, _) {
+          // The layer last drawn was another project's, and went with it.
+          if (_lastLayer?.internalprojectId != comp.internalproject) {
+            _lastLayer = null;
+          }
           // A picked group header is the subject the way a picked layer is:
           // its stack, its Add-effect, its parameter rows. The model
           // no longer holding the group — ungrouped, another comp fronted —

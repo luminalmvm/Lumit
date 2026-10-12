@@ -142,6 +142,28 @@ void main() {
       await tester.pumpAndSettle();
     }
 
+    testWidgets('a frame landing as the project is swapped does not throw',
+        (tester) async {
+      // Lantern's cache meter counts its composition's frames each time the
+      // engine says the cache moved. Said while one project is taking the
+      // place of another, the composition it holds is the old project's.
+      final p = withLayer();
+      await tester.pumpWidget(hostPanel(
+        child: const ViewerPanelFrb(),
+        state: p.state,
+        uiState: p.uiState,
+        size: const Size(1100, 700),
+        shape: ThemeShape.lantern,
+      ));
+      await tester.pump();
+      expect(find.byKey(const ValueKey('viewer-cache-ready')), findsOneWidget);
+
+      await tester.runAsync(() => p.state.newProject(ask: false));
+      p.uiState.cacheChanged.value++;
+
+      expect(tester.takeException(), isNull);
+    });
+
     /// **The scroll crash.** Scrolling over the Viewer with the dropper armed
     /// zooms the picture, which relays the panel out under the magnifier. The
     /// magnifier is in the application's overlay, so working out where to put

@@ -127,6 +127,46 @@ pub struct BridgeImported {
     pub left_out: u32,
 }
 
+/// One composition in a project file that is not the open project, as the
+/// picker that brings one in lists it.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BridgeFileComp {
+    /// What [`ProjectReference::bring_comps`] is asked for it by.
+    pub id: Uuid,
+    pub name: String,
+    pub width: u32,
+    pub height: u32,
+    pub fps_num: u32,
+    pub fps_den: u32,
+    /// How long it is, in frames at its own rate.
+    pub duration_frames: i64,
+}
+
+/// The compositions in the project file at `path`, in the file's own order,
+/// read without opening it as the project. `None` when it is not a project
+/// file this build reads.
+///
+/// Not `#[frb(sync)]`: it reads and parses a whole file.
+pub fn comps_in_file(path: String) -> Option<Vec<BridgeFileComp>> {
+    let (doc, _) = lumit_project::open(std::path::Path::new(&path)).ok()?;
+    let comps = doc.items.iter().filter_map(|item| match item {
+        lumit_core::model::ProjectItem::Composition(comp) => Some(BridgeFileComp {
+            id: comp.id,
+            name: comp.name.clone(),
+            width: comp.width,
+            height: comp.height,
+            fps_num: comp.frame_rate.num(),
+            fps_den: comp.frame_rate.den(),
+            duration_frames: comp
+                .frame_rate
+                .frame_at(lumit_core::time::CompTime(comp.duration.0)),
+        }),
+        _ => None,
+    });
+    Some(comps.collect())
+}
+
 #[derive(Debug, Clone)]
 #[frb]
 pub struct ProjectReference {
@@ -735,7 +775,11 @@ impl ProjectReference {
             media: MediaRef {
                 relative_path: on_disk,
                 absolute_path: file.to_string_lossy().into_owned(),
-                fingerprint: None,
+                // Stamped now and not left for the first save. A shared
+                // project tells one machine's copy of a file from another's
+                // by it, and files what it sends under it, and a document
+                // that is being edited never passes through a save.
+                fingerprint: lumit_project::fingerprint_path(&file).ok(),
                 extra: serde_json::Map::new(),
             },
             sequence: run.as_ref().map(|_| SequenceRef::default()),
@@ -793,6 +837,120 @@ impl ProjectReference {
         crate::probe::request(file);
 
         Ok(FootageReference::new(self.id, item_id))
+    }
+
+    /// Bring compositions out of the project file at `path` and into this
+    /// project, as one undo step. The file is an earlier save of this project,
+    /// from its history, or any other `.lum`.
+    ///
+    /// Each arrives as a new composition with what it places, and footage the
+    /// project already has is used again ([`lumit_project::bring`]). They are
+    /// filed where a composition and a solid made here would be.
+    ///
+    /// `earlier_save` says the file is a save of this project that was fetched
+    /// to somewhere else, so its footage is looked for from this project's own
+    /// folder and not from the file's.
+    ///
+    /// `source` is what the file is called, for a composition whose name the
+    /// project already has: it arrives as "Titles (`source`)", in the same
+    /// step, so there are never two of one name to tell apart.
+    ///
+    /// `None`, with nothing changed, when the file is not a project this build
+    /// reads or has no composition by one of the ids. Otherwise the new
+    /// composition for each id, in the order asked.
+    ///
+    /// Not `#[frb(sync)]`: it reads a whole file and looks for its footage.
+    // ponytail: footage packed inside the file is not read out of it, so an
+    // item whose file has gone from disk arrives missing, to be relinked.
+    // Unpack it here if a packed save is ever the only place a file is.
+    // ponytail: what a layer had worked out, a track, a roto matte, a depth
+    // pass, is filed in memory under ids that are new here, as it is for a
+    // duplicated layer. It is read back when the project is next opened. Warm
+    // those stores here if that wait shows.
+    pub fn bring_comps(
+        &self,
+        path: String,
+        comps: Vec<Uuid>,
+        earlier_save: bool,
+        source: String,
+    ) -> Result<Option<Vec<CompositionReference>>, BridgeError> {
+        use lumit_core::model::ProjectItem;
+        use lumit_core::ops::AutoFolderKind;
+        use std::path::{Path, PathBuf};
+
+        let file = PathBuf::from(path);
+        let Ok((mut from, _)) = lumit_project::open(&file) else {
+            return Ok(None);
+        };
+        let state = self.state()?;
+        let beside = |path: &Path| path.parent().map(Path::to_path_buf);
+        let own = {
+            let state = state.read().map_err(|_| BridgeError::ReadFailed)?;
+            state
+                .path
+                .as_deref()
+                .filter(|_| earlier_save)
+                .and_then(beside)
+        };
+        let root = own.or_else(|| beside(&file)).unwrap_or_default();
+        // Before the lock is taken: this asks the disk about every file, and
+        // walks the folder for any that are lost.
+        lumit_project::resolve_all_media(&mut from, &root, &[]);
+
+        let (comps, footage) = {
+            let state = state.write().map_err(|_| BridgeError::WriteFailed)?;
+            let doc = state.store.snapshot();
+            let Ok(brought) = lumit_project::bring(&doc, &from, &comps, &source) else {
+                return Ok(None);
+            };
+            let mut ops = brought.ops;
+            let mut filed = [
+                (AutoFolderKind::Compositions, Vec::new()),
+                (AutoFolderKind::Solids, Vec::new()),
+            ];
+            let mut footage = Vec::new();
+            for op in &ops {
+                let Op::AddItem { item, .. } = op else {
+                    continue;
+                };
+                match &**item {
+                    ProjectItem::Composition(comp) => filed[0].1.push(comp.id),
+                    ProjectItem::Solid(solid) => filed[1].1.push(solid.id),
+                    ProjectItem::Footage(f) => footage.push(PathBuf::from(&f.media.absolute_path)),
+                    ProjectItem::Folder(_) => {}
+                }
+            }
+            for (kind, ids) in filed {
+                if ids.is_empty() {
+                    continue;
+                }
+                let (folder, make) = crate::edits::ensure_auto_folder_ops(&doc, kind);
+                ops.extend(make);
+                let mut children = doc
+                    .folder(folder)
+                    .map(|f| f.children.clone())
+                    .unwrap_or_default();
+                children.extend(ids);
+                ops.push(Op::SetFolderChildren { folder, children });
+            }
+            state
+                .store
+                .commit(Op::Batch { ops })
+                .map_err(BridgeError::OpError)?;
+            (brought.comps, footage)
+        };
+
+        // Outside the lock, as an import does: the files are read now so the
+        // first question about each is a look-up.
+        for file in footage {
+            crate::probe::request(file);
+        }
+        Ok(Some(
+            comps
+                .into_iter()
+                .map(|id| CompositionReference::new(self.id, id))
+                .collect(),
+        ))
     }
 
     /// Save to `path`, or to wherever the project was last saved when `path` is

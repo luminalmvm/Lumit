@@ -563,7 +563,10 @@ fn layer_item(path: &Path, id: Uuid, index: usize, name: &str) -> ProjectItem {
         media: MediaRef {
             relative_path: file_name,
             absolute_path: path.to_string_lossy().into_owned(),
-            fingerprint: None,
+            // Stamped now, as an imported file's is. Every layer of one
+            // file has the same one, so a shared project sends the file
+            // once for all of them.
+            fingerprint: lumit_project::fingerprint_path(path).ok(),
             extra: serde_json::Map::new(),
         },
         colour_space: None,

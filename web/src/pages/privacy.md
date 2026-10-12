@@ -2,61 +2,51 @@
 layout: ../layouts/Prose.astro
 title: Privacy
 kicker: The small print
-description: What Lumit keeps about you, and what it never sees.
+description: What information Lumit stores.
 updated: October 2026
 ---
 
-Lumit is an editor that runs on your computer. Your projects and footage stay there. This
-page covers the two things that do talk to a server of ours: a Lumit account, and Lumit Pro.
+This page covers the items that interact with our system: a Lumit account, and Lumit Pro.
 
-If you never sign in, we hold nothing about you. Lumit is run by Mackenzie Reed, who is
-responsible for what is kept.
+If you never sign in, no information about you is ever stored, and you can use Lumit as
+normal. Lumit is largely maintained by Mack Reed, who is responsible for what is stored.
 
-## What we keep
+## What we store
 
-- **Your email and your name.** The name is the one other people see.
-- **How you sign in.** For Discord or Google that is their number for your account and the
-  address of your picture. For a password it is a scrambled form that can't be turned back
-  into the password, which never leaves your computer.
-- **Where you are signed in.** The name of each computer, so that you can sign out of one.
-- **Your subscription.** Whether you have Pro, when it renews, and Paddle's numbers for
-  you and for it. Never your card.
+- **Your email and name.** Your name (or nickname) is shared with others when commenting or
+  working in shared projects.
+- **How & where you sign in.** The option you used for sign-in, and the devices used.
+- **Your subscription.** Whether you have Pro, and when it renews. Never your card.
 - **The settings you sync.** Appearance, shortcuts, panel layout, preferences, and what you
-  have saved, for the kinds you leave ticked in Settings.
+  have saved.
+- **Previews.** The video you send, its comments, and the names people enter.
+- **Backups.** Your saved project files.
+- **Projects kept online.** Encrypted before they leave your computer. We can't read them.
 
-## What we never see
+## What we never access
 
-- Your projects, your footage, or anything you export.
-- What passes through the relay. It is encrypted with the invite's key before it leaves
-  your computer, and the relay is never given that key.
-- Your card. Paddle take the payment and only tell us that it happened.
+- Your projects, your footage, or anything you export, unless you back it up or send it
+  for review.
+- What passes through the relay. It is encrypted before it leaves your computer, and the
+  relay is never given that key.
+- Your card. We use Paddle for payments, we never see your details.
 
-## What a server notices anyway
+## Our providers
 
-Any server sees the internet address of whoever connects to it. Ours uses yours to limit
-how fast sign-ins can be tried, and forgets it within the hour. The relay sees which
-addresses are connected through it and how much they send, and keeps no record once they
-leave.
-
-This site sets no cookies and runs no trackers.
-
-## Who else is involved
-
-- **Cloudflare** run the servers and send the emails with your sign-in codes.
-- **Paddle** sell Pro on our behalf and take the payment. They hold what you give them
-  under [their own privacy policy](https://www.paddle.com/legal/privacy).
-- **Discord** or **Google**, only if you choose to sign in with them. They tell us your
-  email, your name, and your picture, and nothing else.
+- **Cloudflare** run the servers.
+- **Paddle** for sales. They hold your info under [their own privacy policy](https://www.paddle.com/legal/privacy).
+- **Discord** or **Google**, only if you sign in with them. They tell us your
+  email, your name, and your picture.
 
 ## Keeping and deleting
 
-We keep an account until you delete it. **Settings ▸ Account ▸ Delete account** in Lumit
-removes it straight away: the account, the synced settings, every sign-in, and it ends
-any subscription. A sign-in that isn't used for 60 days expires on its own.
+We store an account until you delete it. **Settings ▸ Account ▸ Delete account** in Lumit
+removes all your data: the account, synced settings, and cancels any subscription.
+A sign-in that isn't used for 60 days expires on its own.
 
 You can ask for a copy of what we hold, or for a correction, at
 [hello@lumitlab.com](mailto:hello@lumitlab.com).
 
 ## Changes
 
-If this page changes in a way that matters, we will say so in the release notes.
+If this page changes in any meaningful way, we will say so in the release notes.

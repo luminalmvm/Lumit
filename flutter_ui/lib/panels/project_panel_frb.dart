@@ -59,6 +59,7 @@ import 'package:lumit_flutter/src/rust/api/state.dart';
 import 'package:provider/provider.dart';
 
 import '../l10n/strings.dart';
+import '../shell/menu_bar_frb.dart' show importFootageFrb;
 import '../state/file_dialogs.dart';
 import '../state/timecode.dart';
 import '../theme/theme.dart';
@@ -212,6 +213,30 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     // same way the search focus is: the shell routes the chord to whichever
     // panel is focused rather than deciding what "everything" means itself.
     _boundUi!.selectAllRequest.addListener(_onSelectAllRequested);
+    _boundUi!.projectPickRequest.addListener(_onPickRequested);
+  }
+
+  /// Select an item something outside the panel has just made, and open the
+  /// folders it is filed in so the row is there to see.
+  void _onPickRequested() {
+    final item = _boundUi?.projectPickRequest.value;
+    if (!mounted || item == null) return;
+    final id = projectItemId(item);
+    bool holds(ItemReference at) {
+      if (projectItemId(at) == id) return true;
+      if (at is! ItemReference_Folder) return false;
+      final inside = at.field0.getChildren().any(holds);
+      if (inside) _closedFolders.remove(projectItemId(at));
+      return inside;
+    }
+
+    final project = Provider.of<LumitState>(context, listen: false).project;
+    (project?.getItems() ?? const <ItemReference>[]).any(holds);
+    // The rows have not been drawn with it yet, and the selection is
+    // published from what the rows hold.
+    _itemById[id] = item;
+    _select(id, SelectMode.replace);
+    _documentChanged();
   }
 
   void _onSearchRequested() {
@@ -241,6 +266,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     HardwareKeyboard.instance.removeHandler(_onKey);
     _boundUi?.panelSearchRequest.removeListener(_onSearchRequested);
     _boundUi?.selectAllRequest.removeListener(_onSelectAllRequested);
+    _boundUi?.projectPickRequest.removeListener(_onPickRequested);
     _changes?.cancel();
     _searchController.dispose();
     _searchFocus.dispose();
@@ -899,8 +925,10 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
         standIn: _standIns.putIfAbsent(id, () => _isStandIn(item)),
         people: [
           if (item case ItemReference_Composition(:final field0))
-            for (final p in share.inComp(field0)) (p.colour, p.name),
+            for (final p in share.inComp(field0))
+              (p.colour, p.name, share.lettersOf(p.name)),
         ],
+        peopleStale: share.outOfStep,
         holders: share.holding('item:$id'),
         selected: selected,
         shaded: shaded,
@@ -1367,8 +1395,8 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
 
   Future<void> _import() async {
     final state = Provider.of<LumitState>(context, listen: false);
-    if (await state
-        .importFootagePaths(await (widget.importPicker ?? pickFootage)())) {
+    if (await importFootageFrb(context, state, picker: widget.importPicker) &&
+        mounted) {
       _documentChanged();
     }
   }

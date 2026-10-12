@@ -13,7 +13,6 @@
 // of writing) so honest growth — a new column, another switch — does not trip
 // them, while another rebuild-the-world regression does.
 
-import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
@@ -32,7 +31,6 @@ import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:lumit_flutter/src/rust/api/state.dart';
-import 'package:lumit_flutter/src/rust/frb_generated.dart';
 import 'package:lumit_flutter/state/animated_mask_paths.dart';
 import 'package:lumit_flutter/state/comp_time.dart';
 import 'package:lumit_flutter/state/dropper.dart';
@@ -86,17 +84,9 @@ Future<void> tapNearLeft(WidgetTester tester, Finder finder) =>
 void main() {
   final counter = CountingHandler();
 
-  setUpAll(() async {
-    final stem = Platform.isWindows
-        ? 'lumit_bridge.dll'
-        : Platform.isMacOS
-            ? 'liblumit_bridge.dylib'
-            : 'liblumit_bridge.so';
-    await BridgeLib.init(
-      externalLibrary: ExternalLibrary.open('../target/debug/$stem'),
-      handler: counter,
-    );
-  });
+  // Through the shared start-up, which also keeps a run away from this
+  // machine's own settings file.
+  setUpAll(() => initEngineForTests(handler: counter));
 
   group('Bridge call budget', () {
     testWidgets('selecting a layer costs a bounded number of bridge calls',

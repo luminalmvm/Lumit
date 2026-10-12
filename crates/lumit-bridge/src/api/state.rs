@@ -901,7 +901,11 @@ impl LumitBridgeState {
     /// `share_events` is for a file that is a guest's own copy of a shared
     /// project, closed while its host was away. It opens as it was left and
     /// carries on looking for the host, and [`ProjectReference::share_guest`]
-    /// says so.
+    /// says so. It is also for a copy of a project that is kept online,
+    /// which is a member of it again however it was closed, and
+    /// [`ProjectReference::share_online_state`] says so. Either looks for
+    /// its project through a door, which [`ProjectReference::share_doors`]
+    /// names, and finds it once that is open.
     ///
     /// Not opened as well when [`crate::api::import::cancel_import`] stopped
     /// it, which leaves whatever was open as it was.
@@ -932,8 +936,17 @@ impl LumitBridgeState {
         };
         // What was kept is the copy as a guest left it, so it is what opens.
         let beside = path.parent().unwrap_or_else(|| Path::new(""));
-        let (doc, resuming) = match lumit_share::resume(&mut doc, beside) {
+        let (mut doc, resuming) = match lumit_share::resume(&mut doc, beside) {
             Some((kept, resuming)) => (kept, Some(resuming)),
+            None => (doc, None),
+        };
+        // Or a copy of a project that is kept online.
+        let reopened = match resuming {
+            Some(_) => None,
+            None => lumit_share::online::resume(&mut doc, beside),
+        };
+        let (doc, member) = match reopened {
+            Some((kept, member)) => (kept, Some(member)),
             None => (doc, None),
         };
 
@@ -953,8 +966,13 @@ impl LumitBridgeState {
             return Ok(BridgeOpened::NotOpened);
         };
         crate::claim::settle(project.id, Some(&path), claim);
+        use lumit_share::Sharing;
         if let Some(resuming) = resuming {
-            crate::api::share::resume(&project, resuming, share_events)?;
+            let start = |store, events| resuming.start(store, events).map(Sharing::Guest);
+            crate::api::share::resume(&project, start, share_events)?;
+        } else if let Some(member) = member {
+            let start = |store, events| member.start(store, events).map(Sharing::Online);
+            crate::api::share::resume(&project, start, share_events)?;
         }
         report_phase(progress, OpenPhase::StartingPreview);
         Ok(BridgeOpened::Opened { project })

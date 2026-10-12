@@ -776,7 +776,8 @@ class _ToolButtonState extends State<_ToolButton> {
     // A group nothing in which is built is on the strip but cannot be pressed:
     // the tool set is the specification, and a button that visibly
     // cannot be pressed says "coming" where a missing one says nothing.
-    final enabled = members.isNotEmpty;
+    // So is one this machine may not arm, because it can only look.
+    final enabled = members.isNotEmpty && widget.tools.arms(widget.group);
 
     // 15-DESIGN §5's icon states, exactly: secondary at rest, primary on hover,
     // accent when this is the tool in your hand — and muted for a group that

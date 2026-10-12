@@ -3,11 +3,15 @@
 // LumitState owns one and drives it. Panels listen and draw.
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart' show StringCharacters;
 import 'package:lumit_flutter/l10n/strings.dart';
+import 'package:lumit_flutter/shell/about_window_frb.dart' show lumitVersion;
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/share.dart';
+import 'package:lumit_flutter/state/reviews.dart' show commenterColour;
+import 'package:lumit_flutter/state/updates.dart' show versionFromBootLine;
 
 import 'preview_throttle.dart';
 
@@ -20,6 +24,60 @@ String shareEndingText(BridgeShareEnding reason) => switch (reason) {
       BridgeShareEnding_Unsafe() => l10n.shareUnsafe,
       BridgeShareEnding_Removed() => l10n.shareRemoved,
     };
+
+/// What others did in a project kept online while this machine was not
+/// there, in a handful of words: [names] in the order their edits were
+/// found, how many [edits] between them, and the [comps] those were in.
+String shareActivityText(List<String> names, int edits, Set<String> comps) =>
+    switch (names) {
+      [final one] when comps.length == 1 =>
+        l10n.shareActivityOneIn(one, edits, comps.first),
+      [final one] => l10n.shareActivityOne(one, edits),
+      [final one, final other] => l10n.shareActivityTwo(one, other, edits),
+      _ => l10n.shareActivityMany(names.first, names.length - 1, edits),
+    };
+
+/// The version of this Lumit as it is written, such as 0.7.0.
+String shareThisLumit() => versionFromBootLine(lumitVersion()) ?? '';
+
+/// Why moving a project kept online forward to this Lumit did not happen, in
+/// words. [version] is the Lumit that keeps it. Null when it did.
+String? shareForwardText(BridgeOnlineForward outcome, String version) =>
+    switch (outcome) {
+      BridgeOnlineForward_Moved() => null,
+      BridgeOnlineForward_Unreadable() => l10n.shareForwardUnreadable(version),
+      BridgeOnlineForward_NotHost() => l10n.shareForwardNotHost,
+      BridgeOnlineForward_Update(:final version) =>
+        l10n.shareVersionsUpdate(version),
+      BridgeOnlineForward_Refused(code: 'pro_required') =>
+        l10n.shareOnlineErrorPro,
+      BridgeOnlineForward_Refused() => l10n.shareOnlineErrorRefused,
+      BridgeOnlineForward_Unreachable() => l10n.signInErrorOffline,
+      BridgeOnlineForward_Failed() => l10n.shareForwardBusy(version),
+    };
+
+/// What joining by an invite and moving a project forward answer, set by
+/// tests to stand in for another version of Lumit: two cannot be run side by
+/// side.
+BridgeJoinOutcome? Function(String invite)? shareJoinOverride;
+BridgeOnlineForward Function()? shareForwardOverride;
+
+/// The letters a person's disc carries: their initial, and a second letter
+/// when someone else among [here] has the same initial, so Ana and Alex are
+/// An and Al and not both A. Two people of one name stay one letter each.
+String personLetters(String name, Iterable<String> here) {
+  final own = name.trim();
+  final letters = own.characters.where((c) => c.trim().isNotEmpty);
+  final first = letters.firstOrNull?.toUpperCase() ?? '';
+  for (final other in here) {
+    final theirs = other.trim();
+    if (theirs != own &&
+        theirs.characters.firstOrNull?.toUpperCase() == first) {
+      return '$first${letters.skip(1).firstOrNull?.toLowerCase() ?? ''}';
+    }
+  }
+  return first;
+}
 
 /// Which end of a shared project this is.
 enum ShareRole { none, host, guest }
@@ -50,7 +108,8 @@ class ShareState extends ChangeNotifier {
             '|${p.comp?.internalid}|${p.layers.map((l) => l.internallayerId)}'
             // A hash each, because a marquee can hold thousands of keyframes
             // and this is run for every move of anyone's playhead.
-            '|${Object.hashAll(p.properties)}|${Object.hashAll(p.keys)}')
+            '|${Object.hashAll(p.properties)}|${Object.hashAll(p.keys)}'
+            '|${Object.hashAll(p.changing)}')
         .join(';');
     if (now == _rosterWas) return;
     _rosterWas = now;
@@ -58,7 +117,165 @@ class ShareState extends ChangeNotifier {
   }
 
   /// This guest has lost its host and is working on alone until it is back.
+  /// For a project kept online it is Lumit's server that is lost.
   bool away = false;
+
+  /// What a project kept online is to this machine, as the engine last said:
+  /// whether this is its host, and what the interface shows Lumit's server
+  /// for it. Null for a project that is not kept online.
+  BridgeShareOnline? online;
+
+  /// Lumit's server is taking edits to a project kept online. It stops when
+  /// the host's Lumit Pro ends, and edits then wait on this machine.
+  bool writable = true;
+
+  /// Who changed what in a project kept online, newest sitting first, as the
+  /// engine last listed it. [LumitState] reads it, at most twice a second
+  /// and never in a build.
+  List<BridgeShareSitting> activity = const [];
+
+  /// The notes people have left in a project kept online, newest first, with
+  /// this person's own that are still waiting to be sent before them. Read
+  /// with [activity].
+  List<BridgeShareNote> notes = const [];
+
+  /// The letters [name]'s disc carries wherever it is drawn, so one person
+  /// is the same mark in the strip, the Project panel and the window. Told
+  /// apart from everyone in the project now and everyone in [activity] and
+  /// [notes].
+  String lettersOf(String name) => personLetters(name, [
+        for (final person in people) person.name,
+        for (final sitting in activity) sitting.name,
+        for (final note in notes) note.name,
+      ]);
+
+  /// The colour someone who wrote or edited is drawn in: the person's own,
+  /// while they are here by that name, and otherwise one that is always the
+  /// same for the name.
+  int colourOf(String name, {required bool mine}) {
+    for (final person in people) {
+      if (mine ? person.me : person.name == name) return person.colour;
+    }
+    return commenterColour(name);
+  }
+
+  /// Moves on each time [activity] is read again.
+  final ValueNotifier<int> activityRead = ValueNotifier(0);
+
+  /// Opens the Shared project window on what happened while this machine
+  /// was away. Null until there is a window to open it in.
+  VoidCallback? showActivity;
+
+  void setActivity(List<BridgeShareSitting> now,
+      [List<BridgeShareNote> left = const []]) {
+    activity = now;
+    notes = left;
+    activityRead.value++;
+  }
+
+  /// How this machine stands to a project another version of Lumit keeps
+  /// online, or null when nothing is in the way. The machine is away from
+  /// the project for as long as this is set.
+  BridgeShareVersions? versions;
+
+  /// This machine is not in step with the project, whatever the reason: it
+  /// is being moved forward, another Lumit keeps it, the server takes no
+  /// edits, or the server or the host is out of reach. The other people are
+  /// then only what was last heard of them, and are drawn fainter wherever
+  /// they are marked. True when the window has a state to name, but for a
+  /// project that is only nearly too large, which is still in step.
+  bool get outOfStep =>
+      forwarding || versions != null || (online != null && !writable) || away;
+
+  /// The Lumit that keeps the project, when it is not this one.
+  String? get versionsOf => switch (versions) {
+        BridgeShareVersions_Update(:final version) ||
+        BridgeShareVersions_Movable(:final version) ||
+        BridgeShareVersions_HostFirst(:final version) =>
+          version,
+        null => null,
+      };
+
+  /// The project is being moved forward to this Lumit just now.
+  bool forwarding = false;
+
+  /// How many of this person's changes were dropped the last time the
+  /// machine came back, until they have been told and say so, and what the
+  /// first of them were to, twenty at most.
+  int dropped = 0;
+  List<BridgeShareDropped> droppedWhat = const [];
+
+  /// This machine's own project from just before a return that held or
+  /// dropped any of its edits, as the files the engine keeps, each with when
+  /// it was written and what its own return dropped. Two at most: the
+  /// latest such return first, and after it the earliest one not yet dealt
+  /// with, which alone holds what that return dropped. Read when sharing
+  /// begins and on every return, so they are known after Lumit is opened
+  /// again too. A copy that could not be written is simply not here.
+  List<BridgeShareReturnCopy> returnCopies = const [];
+
+  void readReturnCopies() {
+    try {
+      returnCopies = _project?.shareReturnCopies() ?? const [];
+    } catch (_) {
+      returnCopies = const [];
+    }
+  }
+
+  /// The person has done with what the returns dropped: the count goes,
+  /// and every copy the engine kept with it.
+  void forgetReturn() {
+    try {
+      _project?.shareReturnCopyForget();
+    } catch (_) {
+      // The project closed between the press and the call.
+    }
+    returnCopies = const [];
+    setDropped(0);
+  }
+
+  /// Asks the host whether to move the project forward, and offers the
+  /// update a project on a newer Lumit needs. Null until there is a window
+  /// to do either in.
+  VoidCallback? showForward, showUpdate;
+
+  /// Opens the window that settles conflicts, and the Shared project
+  /// window itself.
+  VoidCallback? showConflicts, showWindow;
+
+  void setVersions(BridgeShareVersions? now) {
+    versions = now;
+    roster.value++;
+    notifyListeners();
+  }
+
+  void setForwarding(bool now) {
+    forwarding = now;
+    roster.value++;
+    notifyListeners();
+  }
+
+  void setDropped(int now, [List<BridgeShareDropped> what = const []]) {
+    dropped = now;
+    droppedWhat = what;
+    roster.value++;
+    activityRead.value++;
+    notifyListeners();
+  }
+
+  /// Read [online] again. Whose project it is and the invite it goes by are
+  /// only known once the server has been found, and both can change there.
+  void _readOnline() {
+    try {
+      online = _project?.shareOnlineState();
+      versions = _project?.shareOnlineVersions();
+    } catch (_) {
+      online = null;
+      versions = null;
+    }
+    final found = online;
+    if (found != null) role = found.host ? ShareRole.host : ShareRole.guest;
+  }
 
   /// For a host: whether people outside its network can get in.
   BridgeShareReach reach = const BridgeShareReach.off();
@@ -186,6 +403,16 @@ class ShareState extends ChangeNotifier {
     return out;
   }
 
+  /// The controls the others are changing right now, by the names their
+  /// rows go by, and for each who has it: what a row is held for them by. A
+  /// name leads with its layer, so it is the same row whichever composition
+  /// either machine has open.
+  Map<String, ({int colour, String name})> get changing => {
+        for (final person in others)
+          for (final name in person.changing)
+            name: (colour: person.colour, name: person.name),
+      };
+
   /// The colour of each other person who has [name] in hand, whichever
   /// composition they have open: what the Project panel marks an item by.
   List<int> holding(String name) {
@@ -201,7 +428,11 @@ class ShareState extends ChangeNotifier {
     port = onPort;
     _project = project;
     people = project.sharePeople();
-    away = false;
+    _readOnline();
+    readReturnCopies();
+    away = online?.away ?? false;
+    // From here on it is the engine's word, each time it says.
+    writable = online?.writable ?? true;
     held = 0;
     reach = as == ShareRole.host
         ? project.shareReach()
@@ -214,6 +445,9 @@ class ShareState extends ChangeNotifier {
     _noteRoster();
     // A guest's copy opened again brings the conflicts it was closed with.
     held = project.shareConflicts().length;
+    // Sharing has begun, which whoever follows the roster has to hear even
+    // when nobody is on it yet.
+    roster.value++;
     notifyListeners();
     _send();
   }
@@ -227,6 +461,15 @@ class ShareState extends ChangeNotifier {
     _project = null;
     people = const [];
     away = false;
+    replaced = false;
+    online = null;
+    versions = null;
+    forwarding = false;
+    dropped = 0;
+    droppedWhat = const [];
+    returnCopies = const [];
+    writable = true;
+    setActivity(const []);
     held = 0;
     reach = const BridgeShareReach.off();
     relayed = BridgeShareRelayed.off;
@@ -234,6 +477,7 @@ class ShareState extends ChangeNotifier {
     _transfers = const [];
     footage.value++;
     _noteRoster();
+    roster.value++;
     notifyListeners();
   }
 
@@ -277,9 +521,36 @@ class ShareState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// The host made a new invite while this machine was away, and it was not
+  /// the one taken out. The copy is still a member and asks the server no
+  /// more, until it is given the new invite.
+  bool replaced = false;
+
+  void setReplaced() {
+    replaced = true;
+    roster.value++;
+    notifyListeners();
+  }
+
   void setAway(bool now, {int? conflicts}) {
     away = now;
+    if (!now) replaced = false;
     if (conflicts != null) held = conflicts;
+    if (online != null) _readOnline();
+    roster.value++;
+    notifyListeners();
+  }
+
+  /// The server said something of the project that [online] holds: whether
+  /// the invite to look is on, or that the project has grown too large.
+  void onlineSaid() {
+    _readOnline();
+    roster.value++;
+    notifyListeners();
+  }
+
+  void setWritable(bool now) {
+    writable = now;
     roster.value++;
     notifyListeners();
     // Back with the host, which has forgotten what this person was looking
@@ -345,6 +616,10 @@ class ShareState extends ChangeNotifier {
   List<String> _properties = const [];
   Set<String> _keys = const {};
 
+  /// The controls this person is dragging or typing in right now, by the
+  /// names their rows go by. One or two at most.
+  List<String> _changing = const [];
+
   /// The keyframes each panel has selected, by the panel. Two panels have
   /// lanes with keyframes in them, and what the others see is both.
   final Map<String, Set<String>> _keysBy = {};
@@ -358,11 +633,14 @@ class ShareState extends ChangeNotifier {
       {required CompositionReference? comp,
       required List<LayerReference> layers,
       required int? playhead,
-      List<String> properties = const []}) {
+      List<String> properties = const [],
+      List<String> changing = const []}) {
     _comp = comp;
     _layers = layers;
     _playhead = playhead;
     _properties = properties;
+    // Someone who can only look changes nothing.
+    _changing = online?.look ?? false ? const [] : changing;
     _send();
   }
 
@@ -419,7 +697,7 @@ class ShareState extends ChangeNotifier {
     _sentProperties = _properties;
     _sentKeys = _keys;
     final now = '${_comp?.internalid}|${layers.map((l) => l.internallayerId)}'
-        '|$_playhead|${_x?.round()}|${_y?.round()}|$_marks';
+        '|$_playhead|${_x?.round()}|${_y?.round()}|$_marks|$_changing';
     if (now == _sent) return;
     _sent = now;
     try {
@@ -430,7 +708,9 @@ class ShareState extends ChangeNotifier {
           cursorX: _x,
           cursorY: _y,
           properties: _comp == null ? const [] : _properties,
-          keys: _comp == null ? const [] : _keys.toList());
+          keys: _comp == null ? const [] : _keys.toList(),
+          // Said whichever composition is open: a name says whose it is.
+          changing: _changing);
     } catch (_) {
       // The project closed between the gesture and the call.
     }

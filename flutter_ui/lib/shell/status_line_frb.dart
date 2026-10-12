@@ -28,12 +28,18 @@ import '../l10n/strings.dart';
 import '../panels/audio_meters_feed.dart' show amplitudeDb;
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import '../widgets/share_marks.dart';
+import 'package:lumit_flutter/src/rust/api/share.dart'
+    show BridgeSharePerson;
 import 'package:lumit_flutter/panels/timeline_timings.dart';
 import 'package:lumit_flutter/src/rust/api/audio.dart'
     show BridgeAudioMeter, audioMeters;
 
+import '../state/reviews.dart' show isReviewExport;
 import 'cache_confirm_frb.dart';
 import 'profile_chip.dart';
+import 'project_history_window.dart';
+import 'review_links_window.dart';
 import 'share_dialog_frb.dart';
 
 /// Bumped by whatever starts an export — the export dialogue, the console's
@@ -100,6 +106,14 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
     super.initState();
     _ui = context.read<LumitUiState>();
     _app = context.read<LumitState>();
+    // The strip is up for as long as the window is, so it is where the
+    // notice of what happened while this machine was away leads from.
+    _app.share
+      ..showActivity = _showActivity
+      ..showWindow = _showWindow
+      ..showConflicts = _showConflicts
+      ..showForward = _askForward
+      ..showUpdate = _offerUpdate;
     // One poll up front: a strip mounted over a running export (a hot reload
     // mid-export, say) has to pick it up without waiting for a start signal.
     _export = (widget.poll ?? exportPoll)();
@@ -200,8 +214,40 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
     });
   }
 
+  void _showActivity() {
+    if (mounted) unawaited(showShareFrb(context, _app, activity: true));
+  }
+
+  void _showWindow() {
+    if (mounted) unawaited(showShareFrb(context, _app));
+  }
+
+  void _showConflicts() {
+    if (mounted) unawaited(showShareConflictsFrb(context, _app));
+  }
+
+  /// The host has opened a project an older Lumit keeps online. Asked once,
+  /// and on a yes it is moved forward.
+  Future<void> _askForward() async {
+    final version = _app.share.versionsOf;
+    if (!mounted || version == null) return;
+    if (await askForward(context, version)) unawaited(_app.moveForward());
+  }
+
+  void _offerUpdate() {
+    if (mounted) unawaited(offerLumitUpdate(context, _app, _ui));
+  }
+
   @override
   void dispose() {
+    if (_app.share.showActivity == _showActivity) {
+      _app.share
+        ..showActivity = null
+        ..showWindow = null
+        ..showConflicts = null
+        ..showForward = null
+        ..showUpdate = null;
+    }
     statusLineExportStarted.removeListener(_tick);
     proxyJobChanged.removeListener(_tick);
     _ui.playing.removeListener(_tick);
@@ -230,7 +276,20 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
           // person, and everything after it is about the project.
           _bubble(t, const ProfileChip()),
           _divider(t),
+          // Review links, while there are comments nobody has looked at or a
+          // composition is on its way up.
+          ListenableBuilder(
+            listenable: _ui.reviews,
+            builder: (context, _) => !_ui.reviews.wantsAttention
+                ? const SizedBox.shrink()
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [_bubble(t, const ReviewChip()), _divider(t)],
+                  ),
+          ),
           _bubble(t, _savedState(t, state)),
+          // The open project's backup, beside whether it is saved.
+          BackupMark(unsaved: _unsaved, wrap: (mark) => _bubble(t, mark)),
           _divider(t),
           // Deliberately NOT const: a const child is skipped by the tick's
           // rebuild, which froze the meter at whatever it first read. Three
@@ -260,7 +319,7 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
           _divider(t),
           // A shared project's button, and nothing when it is not one.
           ListenableBuilder(
-            listenable: state.share.roster,
+            listenable: Listenable.merge([state.share.roster, _ui.following]),
             builder: (context, _) => !state.share.active
                 ? const SizedBox.shrink()
                 : Row(
@@ -374,12 +433,18 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
     ];
   }
 
+  /// Whether the project had unsaved changes when the strip was last drawn.
+  /// Kept as [_savedState] works it out, so the backup's mark beside it can
+  /// read the same answer without asking the engine a second time.
+  bool _unsaved = false;
+
   /// Saved / unsaved, at the far left. Being unsaved is a fact, not a fault,
   /// so it reads in the ordinary text colour — the muted tint is for the
   /// states where nothing is at risk.
   Widget _savedState(LumitTheme t, LumitState state) {
     final project = state.project;
     final dirty = project?.isDirty() ?? false;
+    _unsaved = dirty;
     final label = project == null
         ? l10n.noProject
         : dirty
@@ -461,45 +526,148 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
   /// dot for each other person with their names on hover, and what wants
   /// attention, a host out of reach or conflicts waiting. It opens the
   /// conflicts when there are some and the Shared project window when not.
+  ///
+  /// A project kept online says that it is, and wears the sweep on its mark,
+  /// which is Lumit Pro's, for as long as nothing is in the way. What is in
+  /// the way is a few words here, with the reason on hover.
   Widget _shared(LumitTheme t, LumitState state) {
     final share = state.share;
-    return LumitTooltip(
-      message: share.others.isEmpty
-          ? l10n.shareNobodyElse
-          : share.others.map((p) => p.name).join(', '),
-      child: HouseButton(
-        key: const ValueKey('status-share'),
-        frameless: true,
-        small: true,
-        padding: const EdgeInsets.symmetric(horizontal: 4),
-        onPressed: () => share.held > 0
-            ? showShareConflictsFrb(context, state)
-            : showShareFrb(context, state),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            lumitIcon(LumitIcon.link,
-                size: iconSize, color: share.away ? t.warning : t.textMuted),
+    final online = share.online != null;
+    final trouble = shareTrouble(share);
+    final tint = (trouble?.wrong ?? false) ? t.warning : t.textMuted;
+    void open() => share.held > 0
+        ? showShareConflictsFrb(context, state)
+        : showShareFrb(context, state);
+    // Fainter whenever the window draws these people fainter, and then not
+    // to be followed: where they are is not arriving.
+    final stale = share.outOfStep;
+    // This machine can look and not change, which the strip says for as
+    // long as nothing else is in the way.
+    final looking = trouble == null && (share.online?.look ?? false);
+    final others = share.others.toList();
+    final drawn = peopleDrawn(others.length, _peopleMarks);
+    String? where(BridgeSharePerson person) {
+      final open = person.comp?.internalid;
+      for (final (comp, name) in state.comps()) {
+        if (comp.internalid == open) return name;
+      }
+      return null;
+    }
+
+    Widget part(String id, List<Widget> children) => HouseButton(
+          key: ValueKey<String>(id),
+          frameless: true,
+          small: true,
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          onPressed: open,
+          child: Row(mainAxisSize: MainAxisSize.min, children: children),
+        );
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        LumitTooltip(
+          message: trouble?.said ??
+              (others.isEmpty ? l10n.shareNobodyElse : l10n.shareTitle),
+          child: part('status-share', [
+            if (trouble != null)
+              lumitIcon(LumitIcon.link, size: iconSize, color: tint)
+            else if (online)
+              proSwept(lumitIcon(LumitIcon.link,
+                  size: iconSize, color: t.textPrimary))
+            else
+              lumitIcon(LumitIcon.link, size: iconSize, color: t.textMuted),
             const SizedBox(width: 5),
-            Text(l10n.shareStatus, style: t.small),
-            for (final person in share.others) ...[
-              const SizedBox(width: 4),
-              sharePersonDot(t, person),
-            ],
-            if (share.away) ...[
-              const SizedBox(width: 6),
-              Text(l10n.shareHostUnreachable,
-                  style: t.small.copyWith(color: t.warning)),
-            ],
-            if (share.held > 0) ...[
-              const SizedBox(width: 6),
-              Text(l10n.shareConflictsWaiting(share.held), style: t.small),
-            ],
-          ],
+            Text(online ? l10n.shareStatusOnline : l10n.shareStatus,
+                style: t.small),
+          ]),
         ),
-      ),
+        // Each person by their initial. Their name and where they are on
+        // hover, and a press follows them, or stops if it already does.
+        for (final person in others.take(drawn))
+          Padding(
+            padding: const EdgeInsets.only(left: 4),
+            child: LumitTooltip(
+              message: [
+                person.name,
+                if (person.look) l10n.shareLookTag,
+                if (!stale) where(person),
+              ].nonNulls.join(' · '),
+              child: MouseRegion(
+                cursor: stale
+                    ? MouseCursor.defer
+                    : SystemMouseCursors.click,
+                child: GestureDetector(
+                  key: ValueKey<String>('status-person-${person.id}'),
+                  behavior: HitTestBehavior.opaque,
+                  onTap: stale
+                      ? null
+                      : () => _ui.follow(_ui.following.value == person.id
+                          ? null
+                          : person.id),
+                  child: PersonDisc(
+                    colour: person.colour,
+                    name: person.name,
+                    letters: share.lettersOf(person.name),
+                    stale: stale,
+                    ringed: _ui.following.value == person.id,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        // Whoever there is no room for, as a count that opens the window.
+        if (drawn < others.length)
+          Padding(
+            padding: const EdgeInsets.only(left: 4),
+            child: LumitTooltip(
+              message: others.skip(drawn).map((p) => p.name).join(', '),
+              child: MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: GestureDetector(
+                  key: const ValueKey('status-people-more'),
+                  behavior: HitTestBehavior.opaque,
+                  onTap: open,
+                  child: MorePeople(count: others.length - drawn),
+                ),
+              ),
+            ),
+          ),
+        if (trouble != null || share.held > 0 || looking)
+          part('status-share-state', [
+            if (trouble != null)
+              Text(trouble.words,
+                  key: const ValueKey('status-share-trouble'),
+                  style: t.small.copyWith(color: tint))
+            else if (looking)
+              // The standing fact about this window, so it is a mark of
+              // its own and not two more quiet words on the line.
+              Container(
+                key: const ValueKey('status-share-look'),
+                height: personDiscSize + 2,
+                alignment: Alignment.center,
+                padding: const EdgeInsets.symmetric(horizontal: 7),
+                decoration: BoxDecoration(
+                  color: t.textPrimary,
+                  borderRadius:
+                      BorderRadius.circular((personDiscSize + 2) / 2),
+                ),
+                child: Text(l10n.shareLookOnly,
+                    style: t.small.copyWith(
+                        height: 1,
+                        fontWeight: FontWeight.w600,
+                        color: t.surface0)),
+              ),
+            if (trouble != null && share.held > 0) const SizedBox(width: 6),
+            if (share.held > 0)
+              Text(l10n.shareConflictsWaiting(share.held), style: t.small),
+          ]),
+      ],
     );
   }
+
+  /// How many marks the strip gives to the other people before the last of
+  /// them becomes a count.
+  static const int _peopleMarks = 5;
 
   /// The latest notice, with the close button every notice carries. A click
   /// on its words lists the ones before it.
@@ -524,13 +692,28 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
                   child: MouseRegion(
                     cursor: SystemMouseCursors.click,
                     child: GestureDetector(
-                      onTap: () => _showNotices(context, t, state),
+                      // A notice that leads somewhere goes there, and has
+                      // then been read, unless it is one that stays.
+                      onTap: switch (notice.onTap) {
+                        null => () => _showNotices(context, t, state),
+                        final lead => () {
+                            if (!notice.sticky &&
+                                identical(state.notice.value, notice)) {
+                              state.notice.value = null;
+                            }
+                            lead();
+                          },
+                      },
                       child: Text(
                         notice.message,
                         key: const ValueKey('status-notice'),
+                        // One that leads somewhere is news, and is drawn
+                        // brighter than the hints beside it.
                         style: notice.error
                             ? t.small.copyWith(color: t.warning)
-                            : t.small,
+                            : notice.onTap != null
+                                ? t.small.copyWith(color: t.textPrimary)
+                                : t.small,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -644,6 +827,9 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
               child: Text(l10n.cancel, style: t.small),
             ),
           ],
+        // A file made for a review link went to the server and is gone.
+        BridgeExportState_Done(:final path) when isReviewExport(path) =>
+          const [],
         BridgeExportState_Done(:final path) => [
             // The finished file is one click away: the line opens its folder.
             Flexible(

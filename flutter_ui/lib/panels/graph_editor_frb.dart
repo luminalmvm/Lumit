@@ -35,6 +35,7 @@ import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/drag_escape.dart';
 import '../widgets/marquee.dart';
+import '../widgets/share_marks.dart';
 import 'graph_maths.dart';
 import 'key_block.dart';
 import 'layer_fold_frb.dart';
@@ -398,8 +399,27 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     if (mounted) setState(() {});
   }
 
+  // Every drag in the graph begins and ends with a `setState` here, so
+  // this hears them all. The properties on show are in this person's hand
+  // while one is under way, which the others in a shared project are told.
+  // One that someone else is changing is not dragged.
+  @override
+  void setState(VoidCallback fn) {
+    super.setState(fn);
+    final rows = _keyDrag == null && _boxDrag == null && _handleDrag == null
+        ? const <String>[]
+        : {for (final channel in widget.channels) channel.path}.toList();
+    if (rows.isNotEmpty &&
+        !rows.every(valuesInHand.value.contains) &&
+        heldByOthers(rows)) {
+      return _abandonDrag();
+    }
+    sayInHand(this, rows);
+  }
+
   @override
   void dispose() {
+    sayInHand(this, const []);
     rowValueDrag.removeListener(_rowDragChanged);
     _preview.cancel();
     _escape.dispose();

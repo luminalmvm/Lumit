@@ -14,8 +14,9 @@ its entry here first. AE and Vegas names are noted only to help people arriving 
 | **Audio item** | An asset pointing at an audio file |
 | **Audio stream** | One of the sounds a media file carries side by side, such as the game and the microphone of a screen recording. A layer or clip plays the first until it is told others. To **split** gives each a row of its own, to **merge** puts them back on one. Not *audio track* |
 | **Packed project** | A `.lum` that also carries its footage files inside it. The verbs are **pack** and **unpack** |
-| **Shared project** | A project several people edit at once. The **host** shares it and owns the file, the **guests** join with an **invite**, which is written as an **invite link** |
+| **Shared project** | A project several people edit at once. The **host** shares it and owns the file, the **guests** join with an **invite**, which is written as an **invite link**. One that is **kept online** is held by Lumit's server, which cannot read it and puts the edits in order, so nobody's machine has to be on |
 | **Relay** | A server that passes a shared project's edits between a host and guests who cannot reach each other. It cannot read them. Somebody's own, or **Lumit's relay**, which comes with Lumit Pro |
+| **Shared preview** | An address where an export of a comp is watched in a browser and commented on, frame by frame. The window that lists them is **Previews**. The people watching are **reviewers**, never *viewers*, and each upload to the link is a **version**. Comes with Lumit Pro |
 | **Folder** | A group in the Project panel. Not *bin* |
 | **Composition (comp)** | Resolution, frame rate, duration, background, and a layer stack or a node graph |
 | **Node graph** | A comp whose picture is made by nodes and wires instead of layers |
@@ -127,7 +128,8 @@ Not interchangeable.
 | **Workspace** | A saved panel layout |
 | **Profile** | One person's settings on a machine: appearance, shortcuts, layout, preferences and what they have saved. Never anything about the machine |
 | **Account** | A Lumit account, which a profile can be signed in to. Optional |
-| **Lumit Pro** | The paid plan on an account: Lumit's relay, and **sync**, which keeps a profile the same on every machine |
+| **Lumit Pro** | The paid plan on an account: Lumit's relay, **sync**, which keeps a profile the same on every machine, and **backup** |
+| **Backup** | A copy of a project that Lumit Pro keeps each time it is saved. Its earlier saves are its **history** |
 | **Graph panel** | Draws a layer's effects as nodes and wires. Not the evaluation graph |
 | **Viewer** | Shows a comp, footage or layer. Holds one, two or four **views** |
 | **Timeline** | A comp's layers against time |

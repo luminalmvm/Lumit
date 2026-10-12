@@ -286,6 +286,38 @@ class FootageReference {
         that: this,
       );
 
+  /// A file fetched from Lumit's server for this footage item has been
+  /// opened into [`Self::online_room`]. The project reads the item from
+  /// it from now on, by the road a file sent by a person takes: an
+  /// original is held against the item's fingerprint first and thrown
+  /// away if it is not that file, and a stand-in is only taken where
+  /// there was nothing. What comes of it arrives as
+  /// [`BridgeShareEvent::Footage`].
+  void onlineArrived({required bool original}) =>
+      BridgeLib.instance.api.crateApiFootageFootageReferenceOnlineArrived(
+          that: this, original: original);
+
+  /// The file this machine can give Lumit's server for this footage item
+  /// of a project kept online: a stand-in of it, made now if there is
+  /// none yet, or with `original` the file itself. It is what
+  /// [`ProjectReference::online_seal`] is given as its source. `None`
+  /// when this machine has nothing to give, or is set not to.
+  ///
+  /// Not sync: making a stand-in is an encode, as long as the clip is.
+  /// [`online_cancel`] does not stop it.
+  Future<String?> onlineGive({required bool original}) =>
+      BridgeLib.instance.api.crateApiFootageFootageReferenceOnlineGive(
+          that: this, original: original);
+
+  /// Where a file fetched from Lumit's server for this footage item is to
+  /// be opened to, which is [`ProjectReference::online_open`]'s `out`: its
+  /// place in this machine's cache of sent footage, where a stand-in or an
+  /// original a person sent would go. `None` when the project is not kept
+  /// online or has no such item.
+  String? onlineRoom({required bool original}) =>
+      BridgeLib.instance.api.crateApiFootageFootageReferenceOnlineRoom(
+          that: this, original: original);
+
   /// Play this file's own sound from the top — the Project panel's preview
   /// (docs/07 §3.1). `false` when the file cannot be found on this machine,
   /// so the panel can hush the button rather than offer a play that is silent.

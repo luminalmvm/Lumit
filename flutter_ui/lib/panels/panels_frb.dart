@@ -9,7 +9,9 @@
 // "Bridge".
 
 import 'package:flutter/widgets.dart';
+import 'package:lumit_flutter/main.dart' show LumitUiState;
 import 'package:lumit_flutter/panels/debug_panel.dart';
+import 'package:provider/provider.dart';
 
 import '../state/dock.dart';
 import 'audio_panel_frb.dart';
@@ -31,7 +33,51 @@ import 'text_panel_frb.dart';
 import 'timeline_panel_frb.dart';
 import 'viewer_panel_frb.dart';
 
-Widget buildPanelBodyFrb(BuildContext context, PaneId pane) => switch (pane.panel) {
+/// The panels whose whole business is changing the project. The Viewer,
+/// the timelines and the Project panel are where a person looks, plays and
+/// chooses a composition, so they are not among them.
+const Set<Panel> _changing = {
+  Panel.effectControls,
+  Panel.effectsAndPresets,
+  Panel.easing,
+  Panel.node,
+  Panel.mixer,
+  Panel.audio,
+  Panel.text,
+  Panel.paragraph,
+  Panel.expressions,
+};
+
+Widget buildPanelBodyFrb(BuildContext context, PaneId pane) =>
+    _changing.contains(pane.panel)
+        ? LookHeld(child: _panelBody(pane))
+        : _panelBody(pane);
+
+/// A panel of controls on a machine that can only look at the shared project
+/// it is in: dimmed, and taking no pointer and no keyboard focus. It is as it
+/// was the moment that ends. `ToolsState.lookOnly` is the rule.
+class LookHeld extends StatelessWidget {
+  final Widget child;
+  const LookHeld({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final tools = context.read<LumitUiState>().tools;
+    return ListenableBuilder(
+      listenable: tools,
+      child: child,
+      builder: (context, child) => IgnorePointer(
+        ignoring: tools.lookOnly,
+        child: ExcludeFocus(
+          excluding: tools.lookOnly,
+          child: Opacity(opacity: tools.lookOnly ? 0.4 : 1, child: child),
+        ),
+      ),
+    );
+  }
+}
+
+Widget _panelBody(PaneId pane) => switch (pane.panel) {
       Panel.project => const ProjectPanelFrb(),
       // The one panel that can be in the arrangement more than once, so the
       // pane is what tells it which views it holds.

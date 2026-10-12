@@ -23,6 +23,8 @@ import 'package:lumit_flutter/shell/layer_settings_frb.dart'
 import 'package:lumit_flutter/shell/menu_animation_frb.dart';
 import 'package:lumit_flutter/shell/menu_bar_frb.dart';
 import 'package:lumit_flutter/shell/menu_layer_frb.dart';
+import 'package:lumit_flutter/shell/project_history_window.dart'
+    show saveVersionFrb;
 import 'package:lumit_flutter/shell/project_settings_frb.dart';
 import 'package:lumit_flutter/shell/settings_window_frb.dart';
 import 'package:lumit_flutter/shell/share_dialog_frb.dart';
@@ -913,8 +915,10 @@ class _LumitAppViewState extends State<LumitAppView> {
         openProjectFrb(state);
       case 'file.save.as':
         saveProjectFrb(state, ui, forcePicker: true);
+      case 'file.save.version':
+        saveVersionFrb(context, state, ui);
       case 'file.import':
-        importFootageFrb(state);
+        importFootageFrb(context, state);
       case 'file.export':
         if (comp == null) {
           handled = false;
