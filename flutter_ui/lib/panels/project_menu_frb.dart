@@ -448,22 +448,31 @@ Future<void> showProjectMenuFrb({
                               ? l10n.tipLabelInherit
                               : l10n.tipLabelNoColour)
                           : null,
-                      GestureDetector(
-                        key: ValueKey<String>('project-menu-label-$i'),
-                        onTap: () {
-                          onSetLabel(i);
-                          close(null);
-                        },
-                        child: Container(
-                          width: 10,
-                          height: 10,
-                          margin: const EdgeInsets.only(right: 2),
-                          decoration: BoxDecoration(
-                            color: menuTheme.labelColour(i),
-                            shape: BoxShape.circle,
-                            border: i == label
-                                ? Border.all(color: menuTheme.textPrimary)
-                                : null,
+                      HoverMark(
+                        swells: true,
+                        builder: (context, lit) => GestureDetector(
+                          key: ValueKey<String>('project-menu-label-$i'),
+                          onTap: () {
+                            onSetLabel(i);
+                            close(null);
+                          },
+                          child: Container(
+                            width: 10,
+                            height: 10,
+                            margin: const EdgeInsets.only(right: 2),
+                            decoration: BoxDecoration(
+                              color: menuTheme.labelColour(i),
+                              shape: BoxShape.circle,
+                              border: i == label
+                                  ? Border.all(color: menuTheme.textPrimary)
+                                  : null,
+                            ),
+                            foregroundDecoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                  color: menuTheme.textPrimary
+                                      .withValues(alpha: 0.7 * lit)),
+                            ),
                           ),
                         ),
                       ),

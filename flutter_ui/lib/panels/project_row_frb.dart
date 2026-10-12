@@ -591,18 +591,22 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
                   // otherwise lose the one-click relink the row has always had.
                   LumitTooltip(
                     message: l10n.relinkEllipsis,
-                    child: GestureDetector(
-                      key: ValueKey<String>('relink-${projectItemId(item)}'),
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () =>
-                          _doRelink((item as ItemReference_Footage).field0),
-                      // Claims a double-click here too, so the row never opens
-                      // New composition over the badge.
-                      onDoubleTap: () =>
-                          _doRelink((item as ItemReference_Footage).field0),
-                      child: ProjectBadge(
-                        label: l10n.projectItemMissing,
-                        colour: t.warning,
+                    child: HoverMark(
+                      swells: true,
+                      builder: (context, lit) => GestureDetector(
+                        key: ValueKey<String>('relink-${projectItemId(item)}'),
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () =>
+                            _doRelink((item as ItemReference_Footage).field0),
+                        // Claims a double-click here too, so the row never
+                        // opens New composition over the badge.
+                        onDoubleTap: () =>
+                            _doRelink((item as ItemReference_Footage).field0),
+                        child: ProjectBadge(
+                          label: l10n.projectItemMissing,
+                          colour:
+                              Color.lerp(t.warning, t.textPrimary, 0.35 * lit)!,
+                        ),
                       ),
                     ),
                   ),
@@ -715,18 +719,21 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
         width: projectRowIconSize,
         child: item is! ItemReference_Folder
             ? null
-            : GestureDetector(
-                key: ValueKey<String>('project-twirl-${projectItemId(item)}'),
-                behavior: HitTestBehavior.opaque,
-                onTap: widget.onToggleFolder,
-                child: TwirlTurn(
-                  open: widget.folderOpen,
-                  child: lumitIcon(
-                    widget.folderOpen
-                        ? LumitIcon.twirlOpen
-                        : LumitIcon.twirlClosed,
-                    size: projectRowIconSize,
-                    color: t.textMuted,
+            : HoverMark(
+                builder: (context, lit) => GestureDetector(
+                  key:
+                      ValueKey<String>('project-twirl-${projectItemId(item)}'),
+                  behavior: HitTestBehavior.opaque,
+                  onTap: widget.onToggleFolder,
+                  child: TwirlTurn(
+                    open: widget.folderOpen,
+                    child: lumitIcon(
+                      widget.folderOpen
+                          ? LumitIcon.twirlOpen
+                          : LumitIcon.twirlClosed,
+                      size: projectRowIconSize,
+                      color: Color.lerp(t.textMuted, t.textPrimary, lit)!,
+                    ),
                   ),
                 ),
               ),
@@ -765,46 +772,54 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
       key: ValueKey<String>('project-glyph-${projectItemId(item)}'),
       child: LumitTooltip(
         message: l10n.tipLabelColour,
-        child: GestureDetector(
-          key: ValueKey<String>('project-label-swatch-${projectItemId(item)}'),
-          behavior: HitTestBehavior.opaque,
-          onTapDown: (d) async {
-            final picked = await showLabelPicker(context, d.globalPosition,
-                keyPrefix: 'project-label');
-            if (picked != null) widget.onSetLabel(picked);
-          },
-          child: SizedBox(
-            width: widget.thumbnails
-                ? projectRowThumbWidth
-                : projectRowIconSize,
-            height: projectRowHeight,
-            child: thumb != null
-                // The card's own treatment, at the row's size: the frame
-                // fills its slot and the slot wears the control corner. A
-                // pixel clear above and below, so the frames of rows that
-                // follow one another do not run into one strip.
-                ? Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 1),
-                    child: ClipRRect(
-                      borderRadius:
-                          BorderRadius.circular(t.tokens.controlRadius),
-                      child: Container(
-                        color: t.surface0,
-                        child: RawImage(image: thumb, fit: BoxFit.cover),
+        child: HoverMark(
+          builder: (_, lit) => GestureDetector(
+            key:
+                ValueKey<String>('project-label-swatch-${projectItemId(item)}'),
+            behavior: HitTestBehavior.opaque,
+            onTapDown: (d) async {
+              final picked = await showLabelPicker(context, d.globalPosition,
+                  keyPrefix: 'project-label');
+              if (picked != null) widget.onSetLabel(picked);
+            },
+            child: SizedBox(
+              width: widget.thumbnails
+                  ? projectRowThumbWidth
+                  : projectRowIconSize,
+              height: projectRowHeight,
+              child: thumb != null
+                  // The card's own treatment, at the row's size: the frame
+                  // fills its slot and the slot wears the control corner. A
+                  // pixel clear above and below, so the frames of rows that
+                  // follow one another do not run into one strip.
+                  ? Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 1),
+                      child: ClipRRect(
+                        borderRadius:
+                            BorderRadius.circular(t.tokens.controlRadius),
+                        child: Container(
+                          color: t.surface0,
+                          child: RawImage(image: thumb, fit: BoxFit.cover),
+                        ),
+                      ),
+                    )
+                  : Center(
+                      // The tint says what the item is, so it is lifted and
+                      // not replaced.
+                      child: lumitIcon(
+                        widget.missing ? LumitIcon.unlink : icon,
+                        size: projectRowIconSize,
+                        color: Color.lerp(
+                            widget.missing
+                                ? t.warning
+                                : tag != 0
+                                    ? t.labelColour(tag)
+                                    : tint,
+                            t.textPrimary,
+                            0.35 * lit)!,
                       ),
                     ),
-                  )
-                : Center(
-                    child: lumitIcon(
-                      widget.missing ? LumitIcon.unlink : icon,
-                      size: projectRowIconSize,
-                      color: widget.missing
-                          ? t.warning
-                          : tag != 0
-                              ? t.labelColour(tag)
-                              : tint,
-                    ),
-                  ),
+            ),
           ),
         ),
       ),

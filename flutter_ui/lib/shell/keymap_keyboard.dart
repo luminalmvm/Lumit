@@ -179,6 +179,10 @@ class _KeymapKeyboardState extends State<KeymapKeyboard> {
     if (modifier) {
       cap = MouseRegion(
         cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _hover = key),
+        onExit: (_) {
+          if (_hover == key) setState(() => _hover = null);
+        },
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: () => setState(() {
@@ -208,7 +212,10 @@ class _KeymapKeyboardState extends State<KeymapKeyboard> {
   /// What the key under the pointer does.
   Widget _readout(LumitTheme t) {
     final key = _hover;
-    if (key == null) return const SizedBox.shrink();
+    // A modifier lights under the pointer but is not a chord to read out.
+    if (key == null || _modifiers.contains(key)) {
+      return const SizedBox.shrink();
+    }
     final chord = _chord(key);
     final bindings = widget.keymap.bindingsFor(chord);
     final where = {

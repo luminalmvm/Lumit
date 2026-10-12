@@ -292,31 +292,37 @@ class AudioTrackOutlineRow extends StatelessWidget {
     final ink = on ? t.textPrimary : t.textMuted;
     return LumitTooltip(
       message: tip,
-      child: GestureDetector(
-        key: ValueKey<String>('atl-$name-${track.id}'),
-        behavior: HitTestBehavior.opaque,
-        onTap: () {
-          // A locked layer refuses, and quietly.
-          try {
-            comp.setSwitchOnLayers(
-              clicked: track.entry.layer.internallayerId,
-              layers: [track.entry.layer.internallayerId],
-              switch_: which,
-              on_: !on,
-            );
-          } catch (_) {}
-          onChanged();
+      child: HoverMark(
+        builder: (context, lit) {
+          final lifted =
+              Color.lerp(ink, on ? t.textPrimary : t.textSecondary, lit)!;
+          return GestureDetector(
+            key: ValueKey<String>('atl-$name-${track.id}'),
+            behavior: HitTestBehavior.opaque,
+            onTap: () {
+              // A locked layer refuses, and quietly.
+              try {
+                comp.setSwitchOnLayers(
+                  clicked: track.entry.layer.internallayerId,
+                  layers: [track.entry.layer.internallayerId],
+                  switch_: which,
+                  on_: !on,
+                );
+              } catch (_) {}
+              onChanged();
+            },
+            child: SizedBox(
+              width: switchCellWidth,
+              height: t.density.laneRow,
+              child: Center(
+                child: mark != null
+                    ? glyph.LumitIcon(on || offMark == null ? mark : offMark,
+                        size: iconSize, colour: lifted)
+                    : lumitIcon(icon!, size: iconSize, color: lifted),
+              ),
+            ),
+          );
         },
-        child: SizedBox(
-          width: switchCellWidth,
-          height: t.density.laneRow,
-          child: Center(
-            child: mark != null
-                ? glyph.LumitIcon(on || offMark == null ? mark : offMark,
-                    size: iconSize, colour: ink)
-                : lumitIcon(icon!, size: iconSize, color: ink),
-          ),
-        ),
       ),
     );
   }
@@ -405,20 +411,24 @@ class AudioTrackOutlineRow extends StatelessWidget {
         // pick it.
         LumitTooltip(
           message: track.open ? l10n.tipHideProperties : l10n.tipProperties,
-          child: GestureDetector(
-            key: ValueKey<String>('atl-twirl-${track.id}'),
-            behavior: HitTestBehavior.opaque,
-            onTap: onToggleOpen,
-            child: SizedBox(
-              width: 16,
-              height: t.density.laneRow,
-              child: Center(
-                child: TwirlTurn(
-                  open: track.open,
-                  child: glyph.LumitIcon(
-                    track.open ? LumitIcons.collapse : LumitIcons.expand,
-                    size: iconSize,
-                    colour: track.open ? t.textPrimary : t.textMuted,
+          child: HoverMark(
+            builder: (context, lit) => GestureDetector(
+              key: ValueKey<String>('atl-twirl-${track.id}'),
+              behavior: HitTestBehavior.opaque,
+              onTap: onToggleOpen,
+              child: SizedBox(
+                width: 16,
+                height: t.density.laneRow,
+                child: Center(
+                  child: TwirlTurn(
+                    open: track.open,
+                    child: glyph.LumitIcon(
+                      track.open ? LumitIcons.collapse : LumitIcons.expand,
+                      size: iconSize,
+                      colour: track.open
+                          ? t.textPrimary
+                          : Color.lerp(t.textMuted, t.textPrimary, lit),
+                    ),
                   ),
                 ),
               ),
@@ -484,27 +494,32 @@ class AudioTrackOutlineRow extends StatelessWidget {
   /// its own state, so a choice here does not change a lane there.
   Widget _laneChip(LumitTheme t) => LumitTooltip(
         message: l10n.laneModeTooltip,
-        child: GestureDetector(
-          key: ValueKey<String>('atl-lane-mode-${track.id}'),
-          behavior: HitTestBehavior.opaque,
-          onTap: onCycleLaneMode,
-          // Centred, and sized by its text: one line tall, the board's chip,
-          // not the two lane rows the track spends. (An alignment on the box
-          // would have it fill the row again.)
-          child: Center(
-            child: Container(
-              width: audioTrackChipWidth,
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-              decoration: BoxDecoration(
-                border: Border.all(color: t.hairlineStrong),
-                borderRadius: BorderRadius.circular(2),
-              ),
-              child: Text(
-                laneMode == LaneMode.spectral
-                    ? l10n.laneModeSpectral
-                    : l10n.laneModeWave,
-                textAlign: TextAlign.center,
-                style: t.mono.copyWith(fontSize: 9, color: t.textSecondary),
+        child: HoverMark(
+          builder: (context, lit) => GestureDetector(
+            key: ValueKey<String>('atl-lane-mode-${track.id}'),
+            behavior: HitTestBehavior.opaque,
+            onTap: onCycleLaneMode,
+            // Centred, and sized by its text: one line tall, the board's chip,
+            // not the two lane rows the track spends. (An alignment on the box
+            // would have it fill the row again.)
+            child: Center(
+              child: Container(
+                width: audioTrackChipWidth,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                decoration: BoxDecoration(
+                  border: Border.all(color: t.hairlineStrong),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+                child: Text(
+                  laneMode == LaneMode.spectral
+                      ? l10n.laneModeSpectral
+                      : l10n.laneModeWave,
+                  textAlign: TextAlign.center,
+                  style: t.mono.copyWith(
+                      fontSize: 9,
+                      color: Color.lerp(t.textSecondary, t.textPrimary, lit)),
+                ),
               ),
             ),
           ),

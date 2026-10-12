@@ -164,24 +164,29 @@ Widget dialogTitleBar(
   );
   final close = LumitTooltip(
     message: l10n.close,
-    child: GestureDetector(
-      key: ValueKey<String>('$keyPrefix-close'),
-      behavior: HitTestBehavior.opaque,
-      onTap: onClose,
-      child: SizedBox(
-        // The mark is 12 wide at the drawing's inset; the extra 8 of
-        // target hangs to its *left*, into the strip rather than into
-        // the corner, so a comfortable click area costs the glyph no
-        // part of the position the drawing gives it.
-        width: dialogCloseGlyph + 8,
-        height: dialogTitleStrip,
-        child: Align(
-          alignment: Alignment.centerRight,
-          child: glyph.LumitIcon(
-            LumitIcons.close,
-            size: dialogCloseGlyph,
-            colour: t.textMuted,
-            semanticLabel: l10n.close,
+    child: HoverMark(
+      swells: true,
+      // From the glyph's own middle, which sits at the box's right.
+      alignment: const Alignment(0.6, 0),
+      builder: (context, lit) => GestureDetector(
+        key: ValueKey<String>('$keyPrefix-close'),
+        behavior: HitTestBehavior.opaque,
+        onTap: onClose,
+        child: SizedBox(
+          // The mark is 12 wide at the drawing's inset; the extra 8 of
+          // target hangs to its *left*, into the strip rather than into
+          // the corner, so a comfortable click area costs the glyph no
+          // part of the position the drawing gives it.
+          width: dialogCloseGlyph + 8,
+          height: dialogTitleStrip,
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: glyph.LumitIcon(
+              LumitIcons.close,
+              size: dialogCloseGlyph,
+              colour: Color.lerp(t.textMuted, t.textPrimary, lit),
+              semanticLabel: l10n.close,
+            ),
           ),
         ),
       ),
@@ -241,27 +246,37 @@ Widget dialogTabs<T>(
       child: Row(
         children: [
           for (final (page, label) in tabs)
-            GestureDetector(
-              key: ValueKey<String>('$keyPrefix-tab-$page'),
-              behavior: HitTestBehavior.opaque,
-              onTap: () => onPick(page),
-              child: Container(
-                margin: const EdgeInsets.only(right: dialogTabGap),
-                padding: const EdgeInsets.fromLTRB(6, 6, 6, 5),
-                decoration: BoxDecoration(
-                  border: Border(
-                    bottom: BorderSide(
-                      // Transparent when it is not the page in force: the
-                      // rule is always there, so nothing shifts by a pixel as
-                      // the tab changes (§7.1).
-                      color:
-                          page == current ? t.accent : const Color(0x00000000),
+            HoverMark(
+              builder: (context, lit) => GestureDetector(
+                key: ValueKey<String>('$keyPrefix-tab-$page'),
+                behavior: HitTestBehavior.opaque,
+                onTap: () => onPick(page),
+                child: Container(
+                  margin: const EdgeInsets.only(right: dialogTabGap),
+                  padding: const EdgeInsets.fromLTRB(6, 6, 6, 5),
+                  decoration: BoxDecoration(
+                    border: Border(
+                      bottom: BorderSide(
+                        // Clear when it is not the page in force, and a faint
+                        // rule under the pointer: the rule is always there,
+                        // so nothing shifts by a pixel as the tab changes
+                        // (§7.1).
+                        color: page == current
+                            ? t.accent
+                            : t.hairlineStrong.withValues(alpha: lit),
+                      ),
                     ),
                   ),
-                ),
-                child: Text(
-                  t.kickerCase(label),
-                  style: page == current ? t.kickerOn : t.kicker,
+                  child: Text(
+                    t.kickerCase(label),
+                    // A page that is not in force lights towards the one
+                    // that is.
+                    style: page == current
+                        ? t.kickerOn
+                        : t.kicker.copyWith(
+                            color: Color.lerp(
+                                t.kicker.color, t.kickerOn.color, lit)),
+                  ),
                 ),
               ),
             ),

@@ -940,22 +940,25 @@ class _AudioClipStripState extends State<AudioClipStrip> {
         // picker and writes the layer's label.
         LumitTooltip(
           message: l10n.tipLabelColour,
-          child: GestureDetector(
-            key: ValueKey<String>('atl-clip-colour-${clip.id}'),
-            behavior: HitTestBehavior.opaque,
-            onTapDown: (d) async {
-              final picked = await showLabelPicker(context, d.globalPosition,
-                  keyPrefix: 'atl-clip-label');
-              if (picked == null || !mounted) return;
-              widget.track.entry.layer.setLabel(label: picked);
-              widget.onChanged();
-            },
-            child: Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(
-                color: label,
-                border: Border.all(color: t.surface0),
+          child: HoverMark(
+            builder: (_, lit) => GestureDetector(
+              key: ValueKey<String>('atl-clip-colour-${clip.id}'),
+              behavior: HitTestBehavior.opaque,
+              onTapDown: (d) async {
+                final picked = await showLabelPicker(context, d.globalPosition,
+                    keyPrefix: 'atl-clip-label');
+                if (picked == null || !mounted) return;
+                widget.track.entry.layer.setLabel(label: picked);
+                widget.onChanged();
+              },
+              child: Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: label,
+                  border: Border.all(
+                      color: Color.lerp(t.surface0, t.textPrimary, 0.7 * lit)!),
+                ),
               ),
             ),
           ),
@@ -976,8 +979,8 @@ class _AudioClipStripState extends State<AudioClipStrip> {
           clip: clip,
           tip: clip.fx ? l10n.switchEffectsOn : l10n.switchEffectsBypassed,
           on: clip.fx,
-          icon: lumitIcon(LumitIcon.fx,
-              size: _headerIcon, color: clip.fx ? t.textPrimary : t.textMuted),
+          icon: (ink) =>
+              lumitIcon(LumitIcon.fx, size: _headerIcon, color: ink),
           onPressed: widget.onToggleFx,
         ),
         _control(
@@ -986,8 +989,8 @@ class _AudioClipStripState extends State<AudioClipStrip> {
           clip: clip,
           tip: l10n.addEffect,
           on: false,
-          icon: glyph.LumitIcon(LumitIcons.addEffect,
-              size: _headerIcon, colour: t.textMuted),
+          icon: (ink) => glyph.LumitIcon(LumitIcons.addEffect,
+              size: _headerIcon, colour: ink),
           onPressed: widget.onAddEffect,
         ),
         _control(
@@ -996,12 +999,12 @@ class _AudioClipStripState extends State<AudioClipStrip> {
           clip: clip,
           tip: open ? l10n.tipHideProperties : l10n.tipProperties,
           on: open,
-          icon: TwirlTurn(
+          icon: (ink) => TwirlTurn(
             open: open,
             child: glyph.LumitIcon(
                 open ? LumitIcons.collapse : LumitIcons.expand,
                 size: _headerIcon,
-                colour: open ? t.textPrimary : t.textMuted),
+                colour: ink),
           ),
           onPressed: widget.onToggleOpen,
         ),
@@ -1014,7 +1017,7 @@ class _AudioClipStripState extends State<AudioClipStrip> {
   ///
   /// With no [onPressed] the glyph is drawn and takes no pointer, which is
   /// where a control stands on a panel that has nothing to wire it to. The
-  /// `Builder` is what gives the press the button's own context, which is what
+  /// builder is what gives the press the button's own context, which is what
   /// the add-effect menu drops from.
   Widget _control(
     LumitTheme t, {
@@ -1022,25 +1025,28 @@ class _AudioClipStripState extends State<AudioClipStrip> {
     required BridgeClip clip,
     required String tip,
     required bool on,
-    required Widget icon,
+    required Widget Function(Color ink) icon,
     required void Function(BridgeClip clip, BuildContext at)? onPressed,
   }) {
-    final cell = SizedBox(
+    Widget cell(double lit) => SizedBox(
         width: audioClipHeader,
         height: audioClipHeader,
-        child: Center(child: icon));
-    if (onPressed == null) return IgnorePointer(child: cell);
+        child: Center(
+            child: icon(on
+                ? t.textPrimary
+                : Color.lerp(t.textMuted, t.textPrimary, lit)!)));
+    if (onPressed == null) return IgnorePointer(child: cell(0));
     return LumitTooltip(
       message: tip,
-      child: Builder(
-        builder: (buttonContext) => Listener(
+      child: HoverMark(
+        builder: (buttonContext, lit) => Listener(
           // Says the press was the control's, before the box beneath sees it.
           onPointerDown: (_) => _pressedControl = true,
           child: GestureDetector(
             key: ValueKey<String>('atl-clip-$id-${clip.id}'),
             behavior: HitTestBehavior.opaque,
             onTap: () => onPressed(clip, buttonContext),
-            child: cell,
+            child: cell(lit),
           ),
         ),
       ),

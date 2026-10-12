@@ -12,6 +12,7 @@ import 'dart:ui' show ImageFilter;
 import 'package:flutter/widgets.dart';
 
 import '../../theme/motion.dart';
+import '../../theme/theme.dart';
 import 'base.dart';
 
 /// Plays [child] in once, when it is first put on screen: a fade, and with it
@@ -215,6 +216,67 @@ class _EntranceScope extends InheritedWidget {
   bool updateShouldNotify(_EntranceScope old) => false;
 }
 
+/// The wash a ground takes under the pointer, [lit] of the way there.
+///
+/// A little of the text colour laid over whatever is beneath, and not a step
+/// up the surface ramp: the light schemes' ramps do not run one way, so a
+/// step that lifts a row in one scheme is the ground's own colour in another.
+Color hoverTint(LumitTheme t, [double lit = 1]) =>
+    t.textPrimary.withValues(alpha: 0.07 * lit);
+
+/// The highlight a row that can be pressed takes under the pointer, the way a
+/// menu's rows take theirs: there at once, and trailing off behind the
+/// pointer as it moves on.
+///
+/// The fill is painted behind [child], so a row that draws its own ground,
+/// the one that is selected, covers it and keeps saying what it said. It is
+/// colour only and every animation level keeps it. Only the trail is dropped.
+class HoverFill extends StatefulWidget {
+  /// Half strength, for a list that also shows a selected row in a fill of
+  /// its own, so the row under the pointer is never taken for the chosen one.
+  final bool faint;
+  final BorderRadius? radius;
+  final MouseCursor cursor;
+  final Widget child;
+
+  const HoverFill({
+    super.key,
+    this.faint = false,
+    this.radius,
+    this.cursor = SystemMouseCursors.click,
+    required this.child,
+  });
+
+  @override
+  State<HoverFill> createState() => _HoverFillState();
+}
+
+class _HoverFillState extends State<HoverFill> {
+  bool _over = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final scope = ThemeScope.of(context);
+    final lit = hoverTint(scope.theme, widget.faint ? 0.5 : 1);
+    return MouseRegion(
+      cursor: widget.cursor,
+      onEnter: (_) => setState(() => _over = true),
+      onExit: (_) => setState(() => _over = false),
+      child: AnimatedContainer(
+        duration: _over ? Duration.zero : scope.motion.rowTrail.duration,
+        curve: scope.motion.rowTrail.curve,
+        decoration: BoxDecoration(
+          // Clear rather than absent at rest, so the fill has a colour to
+          // fade back to.
+          color: _over ? lit : lit.withValues(alpha: 0),
+          borderRadius: widget.radius,
+        ),
+        child: widget.child,
+      ),
+    );
+  }
+}
+
 /// The lighting and the swelling a pressable thing does under the pointer,
 /// kept apart from any one widget so a scrollbar's thumb and a mark move
 /// alike.
@@ -309,6 +371,72 @@ class HoverGlow {
   void dispose() {
     _light?.dispose();
     _swell?.dispose();
+  }
+}
+
+/// Says a thing can be pressed: it lights under the pointer and takes the
+/// click cursor, and where [swells] is set it grows a little as well.
+///
+/// In plain terms, a glyph or a readout that does something looks like a
+/// label until the pointer finds it. This wraps one. [builder] is handed how
+/// lit it is, 0 to 1, and mixes its own brighter colour in by that much (see
+/// [HoverGlow]). The growing is paint only, so nothing beside it moves.
+///
+/// Swelling is for a mark that stands alone and opens something: a tag, a
+/// close mark, a swatch. A column of switches or a list of names only lights,
+/// since a row of things all bobbing under a passing pointer is noise.
+class HoverMark extends StatefulWidget {
+  final bool swells;
+  final MouseCursor cursor;
+
+  /// The point the growth is measured from.
+  final Alignment alignment;
+  final Widget Function(BuildContext context, double lit) builder;
+
+  const HoverMark({
+    super.key,
+    this.swells = false,
+    this.cursor = SystemMouseCursors.click,
+    this.alignment = Alignment.center,
+    required this.builder,
+  });
+
+  @override
+  State<HoverMark> createState() => _HoverMarkState();
+}
+
+class _HoverMarkState extends State<HoverMark> with TickerProviderStateMixin {
+  late final HoverGlow _glow = HoverGlow(this, () => setState(() {}));
+
+  @override
+  void dispose() {
+    _glow.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final motion = ThemeScope.of(context).motion;
+    final child = widget.builder(context, _glow.light);
+    return MouseRegion(
+      cursor: widget.cursor,
+      onEnter: (_) => _glow.mark(motion, over: true),
+      onExit: (_) => _glow.mark(motion, over: false),
+      child: widget.swells
+          ? Listener(
+              onPointerDown: (_) => _glow.press(motion, down: true),
+              onPointerUp: (_) => _glow.press(motion, down: false),
+              onPointerCancel: (_) => _glow.press(motion, down: false),
+              child: Transform.scale(
+                scale: 1 + (motion.swellScale - 1) * _glow.swell(motion),
+                alignment: widget.alignment,
+                // Pressed where it rests, not where it is drawn on the way.
+                transformHitTests: false,
+                child: child,
+              ),
+            )
+          : child,
+    );
   }
 }
 

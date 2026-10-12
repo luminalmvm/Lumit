@@ -431,26 +431,27 @@ class _KeyBlockOverlayState extends State<KeyBlockOverlay> {
         child: Builder(
           builder: (badgeContext) => LumitTooltip(
             message: l10n.tipEaseTheBlock,
-            child: GestureDetector(
-              key: const ValueKey('tl-block-badge'),
-              behavior: HitTestBehavior.opaque,
-              onTap: () {
-                final box = badgeContext.findRenderObject() as RenderBox?;
-                if (box == null) return;
-                widget.onEase(box.localToGlobal(Offset.zero));
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                decoration: BoxDecoration(
-                  // The drawing's own 2b3034 — the ramp's top step, which is
-                  // what lifts a small label off the black lane ground it sits
-                  // on without giving it a border to carry.
-                  color: t.surface4,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-                child: Text(
+            // It reads as a label, so it lights and swells under the pointer
+            // to say it is the way in. From its left, the end nearest the box.
+            child: HoverMark(
+              swells: true,
+              alignment: Alignment.centerLeft,
+              builder: (context, lit) => GestureDetector(
+                key: const ValueKey('tl-block-badge'),
+                behavior: HitTestBehavior.opaque,
+                onTap: () {
+                  final box = badgeContext.findRenderObject() as RenderBox?;
+                  if (box == null) return;
+                  widget.onEase(box.localToGlobal(Offset.zero));
+                },
+                // At rest the drawing's own 2b3034, the ramp's top step, which
+                // is what lifts a small label off the black lane ground it
+                // sits on without giving it a border to carry.
+                child: HintPill.face(
+                  context,
                   l10n.keyBlockBadge(block.count, block.spanFrames),
-                  style: t.mono.copyWith(fontSize: 8, color: t.textPrimary),
+                  lit: lit,
+                  radius: 2,
                 ),
               ),
             ),

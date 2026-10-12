@@ -683,40 +683,38 @@ class _Swatch extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    final swatch = Container(
-      width: 20,
-      height: 20,
-      decoration: BoxDecoration(
-        color: PickedColour(colour.r, colour.g, colour.b).clipped,
-        border: Border.all(color: t.hairlineStrong),
-        borderRadius: BorderRadius.circular(3),
-      ),
-    );
-    final row = Row(
-      children: [
-        Text(label, style: t.small.copyWith(color: t.textSecondary)),
-        const SizedBox(width: 5),
-        swatch,
-      ],
-    );
-    if (onPicked == null) return row;
-    return LumitTooltip(
-      message: l10n.tipSwatchColour(label),
-      child: Builder(
-        builder: (context) => MouseRegion(
-          cursor: SystemMouseCursors.click,
-          child: GestureDetector(
-            onTapUp: (details) => showColourPicker(
-              context: context,
-              position: details.globalPosition,
-              initial: PickedColour(colour.r, colour.g, colour.b),
-              scale: ColourScale.bytes,
-              onCommit: (picked) => onPicked!(
-                ToolColour(picked.r, picked.g, picked.b),
+    Widget row(double lit) => Row(
+          children: [
+            Text(label, style: t.small.copyWith(color: t.textSecondary)),
+            const SizedBox(width: 5),
+            Container(
+              width: 20,
+              height: 20,
+              decoration: BoxDecoration(
+                color: PickedColour(colour.r, colour.g, colour.b).clipped,
+                border: Border.all(
+                    color:
+                        Color.lerp(t.hairlineStrong, t.textPrimary, 0.7 * lit)!),
+                borderRadius: BorderRadius.circular(3),
               ),
             ),
-            child: row,
+          ],
+        );
+    if (onPicked == null) return row(0);
+    return LumitTooltip(
+      message: l10n.tipSwatchColour(label),
+      child: HoverMark(
+        builder: (context, lit) => GestureDetector(
+          onTapUp: (details) => showColourPicker(
+            context: context,
+            position: details.globalPosition,
+            initial: PickedColour(colour.r, colour.g, colour.b),
+            scale: ColourScale.bytes,
+            onCommit: (picked) => onPicked!(
+              ToolColour(picked.r, picked.g, picked.b),
+            ),
           ),
+          child: row(lit),
         ),
       ),
     );

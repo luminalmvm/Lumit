@@ -344,13 +344,17 @@ class _Swatch extends StatelessWidget {
           onPreview: (picked) => onPicked(picked.clipped),
         );
       },
-      child: Container(
-        width: 56,
-        height: 22,
-        decoration: BoxDecoration(
-          color: colour,
-          borderRadius: BorderRadius.circular(t.tokens.controlRadius),
-          border: Border.all(color: t.hairlineStrong),
+      child: HoverMark(
+        swells: true,
+        builder: (_, lit) => Container(
+          width: 56,
+          height: 22,
+          decoration: BoxDecoration(
+            color: colour,
+            borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+            border: Border.all(
+                color: Color.lerp(t.hairlineStrong, t.textPrimary, 0.7 * lit)!),
+          ),
         ),
       ),
     );

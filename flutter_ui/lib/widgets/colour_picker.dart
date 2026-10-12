@@ -341,21 +341,26 @@ class ColourSwatchButton extends StatelessWidget {
           onCommit: onPicked,
         );
       },
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        child: Container(
+      child: HoverMark(
+        swells: true,
+        builder: (context, lit) => Container(
           width: 28,
           height: 18,
           decoration: BoxDecoration(
             color: colour,
             borderRadius: BorderRadius.circular(t.tokens.controlRadius),
-            border: Border.all(color: t.hairlineStrong),
+            border: Border.all(color: swatchEdge(t, lit)),
           ),
         ),
       ),
     );
   }
 }
+
+/// A swatch's edge, lit by [lit] as the pointer comes over it. A swatch is a
+/// colour somebody chose and cannot brighten, so its edge does.
+Color swatchEdge(LumitTheme t, double lit) =>
+    Color.lerp(t.hairlineStrong, t.textPrimary, lit)!;
 
 class _ColourPickerBody extends StatefulWidget {
   final PickedColour initial;
@@ -815,20 +820,22 @@ class _ColourPickerBodyState extends State<_ColourPickerBody> {
                   name: '',
                 ),
               ]),
-              child: MouseRegion(
-                cursor: SystemMouseCursors.click,
-                child: Container(
+              child: HoverMark(
+                swells: true,
+                builder: (context, lit) => Container(
                   width: 18,
                   height: 18,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
                     color: t.surface0,
                     borderRadius: BorderRadius.circular(t.tokens.controlRadius),
-                    border: Border.all(color: t.hairlineStrong),
+                    border: Border.all(color: swatchEdge(t, lit)),
                   ),
                   // The symbol, like the '#' beside the hex field: a mark, not
                   // a word, so it is not a translated string.
-                  child: Text('+', style: t.small.copyWith(color: t.textMuted)),
+                  child: Text('+',
+                      style: t.small.copyWith(
+                          color: Color.lerp(t.textMuted, t.textPrimary, lit))),
                 ),
               ),
             ),
@@ -847,15 +854,15 @@ class _ColourPickerBodyState extends State<_ColourPickerBody> {
             onMenu == null ? null : (d) => onMenu(d.globalPosition),
         onLongPressStart:
             onMenu == null ? null : (d) => onMenu(d.globalPosition),
-        child: MouseRegion(
-          cursor: SystemMouseCursors.click,
-          child: Container(
+        child: HoverMark(
+          swells: true,
+          builder: (context, lit) => Container(
             width: 18,
             height: 18,
             decoration: BoxDecoration(
               color: colour.clipped,
               borderRadius: BorderRadius.circular(t.tokens.controlRadius),
-              border: Border.all(color: t.hairlineStrong),
+              border: Border.all(color: swatchEdge(t, lit)),
             ),
           ),
         ),
@@ -889,13 +896,17 @@ class _ColourPickerBodyState extends State<_ColourPickerBody> {
               padding: const EdgeInsets.only(right: 4),
               child: GestureDetector(
                 onTap: () => _setColour(PickedColour.of(c), settled: true),
-                child: Container(
-                  width: 18,
-                  height: 18,
-                  decoration: BoxDecoration(
-                    color: c,
-                    borderRadius: BorderRadius.circular(t.tokens.controlRadius),
-                    border: Border.all(color: t.hairlineStrong),
+                child: HoverMark(
+                  swells: true,
+                  builder: (context, lit) => Container(
+                    width: 18,
+                    height: 18,
+                    decoration: BoxDecoration(
+                      color: c,
+                      borderRadius:
+                          BorderRadius.circular(t.tokens.controlRadius),
+                      border: Border.all(color: swatchEdge(t, lit)),
+                    ),
                   ),
                 ),
               ),

@@ -600,19 +600,22 @@ class _SettingsWindowState extends State<_SettingsWindow> {
 
   Widget _closeMark(LumitTheme t) => LumitTooltip(
         message: l10n.close,
-        child: GestureDetector(
-          key: const ValueKey('settings-close'),
-          behavior: HitTestBehavior.opaque,
-          onTap: widget.onClose,
-          child: SizedBox(
-            width: settingsCloseGlyph + 8,
-            height: settingsTitleStrip,
-            child: Center(
-              child: glyph.LumitIcon(
-                LumitIcons.close,
-                size: settingsCloseGlyph,
-                colour: t.textMuted,
-                semanticLabel: l10n.close,
+        child: HoverMark(
+          swells: true,
+          builder: (context, lit) => GestureDetector(
+            key: const ValueKey('settings-close'),
+            behavior: HitTestBehavior.opaque,
+            onTap: widget.onClose,
+            child: SizedBox(
+              width: settingsCloseGlyph + 8,
+              height: settingsTitleStrip,
+              child: Center(
+                child: glyph.LumitIcon(
+                  LumitIcons.close,
+                  size: settingsCloseGlyph,
+                  colour: Color.lerp(t.textMuted, t.textPrimary, lit),
+                  semanticLabel: l10n.close,
+                ),
               ),
             ),
           ),
@@ -629,34 +632,38 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             for (final page in SettingsPage.values)
-              GestureDetector(
-                key: ValueKey<String>('settings-page-${page.name}'),
-                behavior: HitTestBehavior.opaque,
-                onTap: () => _openPage(page),
-                // The tick and the fill behind it move from the page left to
-                // the page chosen. The padding gives up exactly what the tick
-                // takes at every step, so the name does not move.
-                child: AnimatedContainer(
-                  duration: ThemeScope.of(context).motion.mark.duration,
-                  curve: ThemeScope.of(context).motion.mark.curve,
-                  height: settingsNavRow,
-                  alignment: Alignment.centerLeft,
-                  padding: EdgeInsets.only(
-                      left: _marked(page) ? 14 - settingsNavTick : 14,
-                      right: 14),
-                  decoration: BoxDecoration(
-                    color: _marked(page) ? t.surface2 : null,
-                    // The tick, not a fill: the page in force is marked by an
-                    // accent edge down its left, which is the one job §3.1
-                    // leaves the accent on a list of names.
-                    border: _marked(page)
-                        ? Border(
-                            left: BorderSide(
-                                color: t.accent, width: settingsNavTick))
-                        : null,
+              // The highlight a menu's rows take, under the page's own mark:
+              // the page in force draws its fill over it.
+              HoverFill(
+                child: GestureDetector(
+                  key: ValueKey<String>('settings-page-${page.name}'),
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => _openPage(page),
+                  // The tick and the fill behind it move from the page left to
+                  // the page chosen. The padding gives up exactly what the
+                  // tick takes at every step, so the name does not move.
+                  child: AnimatedContainer(
+                    duration: ThemeScope.of(context).motion.mark.duration,
+                    curve: ThemeScope.of(context).motion.mark.curve,
+                    height: settingsNavRow,
+                    alignment: Alignment.centerLeft,
+                    padding: EdgeInsets.only(
+                        left: _marked(page) ? 14 - settingsNavTick : 14,
+                        right: 14),
+                    decoration: BoxDecoration(
+                      color: _marked(page) ? t.surface2 : null,
+                      // The tick, not a fill: the page in force is marked by
+                      // an accent edge down its left, which is the one job
+                      // §3.1 leaves the accent on a list of names.
+                      border: _marked(page)
+                          ? Border(
+                              left: BorderSide(
+                                  color: t.accent, width: settingsNavTick))
+                          : null,
+                    ),
+                    child: Text(page.label,
+                        style: _marked(page) ? t.bodyPrimary : t.body),
                   ),
-                  child: Text(page.label,
-                      style: _marked(page) ? t.bodyPrimary : t.body),
                 ),
               ),
           ],
@@ -738,19 +745,20 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           if (page != SettingsPage.shortcuts)
             if (_sectionsOf(page, t, ui) case final sections
                 when sections.isNotEmpty) ...[
-              MouseRegion(
-                cursor: SystemMouseCursors.click,
-                child: GestureDetector(
-                  key: ValueKey<String>('settings-found-${page.name}'),
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => _openPage(page),
-                  child: Container(
-                    height: settingsNavRow,
-                    color: t.surface2,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: settingsRowPadding),
-                    alignment: Alignment.centerLeft,
-                    child: Text(page.label, style: t.bodyPrimary),
+              ColoredBox(
+                color: t.surface2,
+                child: HoverFill(
+                  child: GestureDetector(
+                    key: ValueKey<String>('settings-found-${page.name}'),
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => _openPage(page),
+                    child: Container(
+                      height: settingsNavRow,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: settingsRowPadding),
+                      alignment: Alignment.centerLeft,
+                      child: Text(page.label, style: t.bodyPrimary),
+                    ),
                   ),
                 ),
               ),
@@ -1591,18 +1599,28 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                 key: ValueKey<String>('settings-accent-${_hex(colour)}'),
                 behavior: HitTestBehavior.opaque,
                 onTap: () => setState(() => ui.workspace.setAccent(colour)),
-                child: Container(
-                  width: _swatch,
-                  height: _swatch,
-                  decoration: BoxDecoration(
-                    color: colour,
-                    borderRadius:
-                        BorderRadius.circular(t.tokens.controlRadius),
-                    // The chosen one is ringed, so which of the six is in
-                    // force is readable without reading the hex beside them.
-                    border: _hex(colour) == _hex(t.accent)
-                        ? Border.all(color: t.textPrimary)
-                        : null,
+                child: HoverMark(
+                  swells: true,
+                  builder: (context, lit) => Container(
+                    width: _swatch,
+                    height: _swatch,
+                    decoration: BoxDecoration(
+                      color: colour,
+                      borderRadius:
+                          BorderRadius.circular(t.tokens.controlRadius),
+                      // The chosen one is ringed, so which of the six is in
+                      // force is readable without reading the hex beside
+                      // them. The one under the pointer is ringed faintly.
+                      border: _hex(colour) == _hex(t.accent)
+                          ? Border.all(color: t.textPrimary)
+                          : null,
+                    ),
+                    foregroundDecoration: BoxDecoration(
+                      borderRadius:
+                          BorderRadius.circular(t.tokens.controlRadius),
+                      border: Border.all(
+                          color: t.textPrimary.withValues(alpha: 0.7 * lit)),
+                    ),
                   ),
                 ),
               ),
@@ -3711,21 +3729,25 @@ class _ChordCellState extends State<_ChordCell> {
         GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: _startListening,
-          child: Container(
-            constraints: const BoxConstraints(minWidth: 110),
-            height: settingsControlHeight,
-            alignment: Alignment.center,
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            decoration: BoxDecoration(
-              color: _listening ? t.accent : t.surface2,
-              borderRadius: BorderRadius.circular(t.tokens.controlRadius),
-            ),
-            child: Text(
-              label,
-              textAlign: TextAlign.center,
-              style: chord.isEmpty && !_listening
-                  ? t.small.copyWith(color: t.textMuted)
-                  : t.small,
+          child: HoverMark(
+            builder: (context, lit) => Container(
+              constraints: const BoxConstraints(minWidth: 110),
+              height: settingsControlHeight,
+              alignment: Alignment.center,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              decoration: BoxDecoration(
+                color: _listening
+                    ? t.accent
+                    : Color.lerp(t.surface2, t.surface4, lit),
+                borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+              ),
+              child: Text(
+                label,
+                textAlign: TextAlign.center,
+                style: chord.isEmpty && !_listening
+                    ? t.small.copyWith(color: t.textMuted)
+                    : t.small,
+              ),
             ),
           ),
         ),

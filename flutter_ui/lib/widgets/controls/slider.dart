@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 
 import 'base.dart';
+import 'motion.dart';
 
 /// A thin themed slider. `commitOnRelease` reproduces the UI-scale rule: the
 /// dragged value shows live but `onChanged` fires on release.
@@ -63,8 +64,19 @@ class HouseSlider extends StatefulWidget {
   State<HouseSlider> createState() => _HouseSliderState();
 }
 
-class _HouseSliderState extends State<HouseSlider> {
+class _HouseSliderState extends State<HouseSlider>
+    with TickerProviderStateMixin {
   double? _pending;
+
+  /// The handle lighting, and growing a pixel, under the pointer and in the
+  /// hand.
+  late final HoverGlow _glow = HoverGlow(this, () => setState(() {}));
+
+  @override
+  void dispose() {
+    _glow.dispose();
+    super.dispose();
+  }
 
   double get _shown => _pending ?? widget.value;
 
@@ -78,17 +90,26 @@ class _HouseSliderState extends State<HouseSlider> {
 
   @override
   Widget build(BuildContext context) {
-    final t = ThemeScope.of(context).theme;
+    final scope = ThemeScope.of(context);
+    final t = scope.theme;
+    final motion = scope.motion;
     final width = widget.width;
     final frac =
         ((_shown - widget.min) / (widget.max - widget.min)).clamp(0.0, 1.0);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        GestureDetector(
+        MouseRegion(
+          cursor: SystemMouseCursors.click,
+          onEnter: (_) => _glow.mark(motion, over: true),
+          onExit: (_) => _glow.mark(motion, over: false),
+          child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTapUp: (d) => widget.onChanged(_fromDx(d.localPosition.dx, width)),
-          onHorizontalDragStart: (_) => widget.onChangeStart?.call(),
+          onHorizontalDragStart: (_) {
+            _glow.mark(motion, held: true);
+            widget.onChangeStart?.call();
+          },
           onHorizontalDragUpdate: (d) {
             final v = _fromDx(d.localPosition.dx, width);
             if (widget.commitOnRelease) {
@@ -104,13 +125,17 @@ class _HouseSliderState extends State<HouseSlider> {
             }
           },
           onHorizontalDragEnd: (_) {
+            _glow.mark(motion, held: false);
             if (_pending != null) {
               widget.onChanged(_pending!);
               setState(() => _pending = null);
             }
             widget.onChangeEnd?.call();
           },
-          onHorizontalDragCancel: () => widget.onChangeEnd?.call(),
+          onHorizontalDragCancel: () {
+            _glow.mark(motion, held: false);
+            widget.onChangeEnd?.call();
+          },
           child: SizedBox(
             width: width,
             height: 16,
@@ -123,10 +148,12 @@ class _HouseSliderState extends State<HouseSlider> {
                 // which read brighter than the value it points at.
                 track: t.hairlineStrong,
                 fill: t.accent,
-                knob: t.textSecondary,
+                knob: Color.lerp(t.textSecondary, t.textPrimary, _glow.light)!,
+                knobRadius: 5 + _glow.swell(motion),
                 frac: frac,
               ),
             ),
+          ),
           ),
         ),
         if (widget.showValue) ...[
@@ -143,11 +170,13 @@ class _HouseSliderState extends State<HouseSlider> {
 
 class _SliderPainter extends CustomPainter {
   final Color track, fill, knob;
+  final double knobRadius;
   final double frac;
   const _SliderPainter({
     required this.track,
     required this.fill,
     required this.knob,
+    required this.knobRadius,
     required this.frac,
   });
 
@@ -166,10 +195,15 @@ class _SliderPainter extends CustomPainter {
       ),
       Paint()..color = fill,
     );
-    canvas.drawCircle(Offset(size.width * frac, y), 5, Paint()..color = knob);
+    canvas.drawCircle(
+        Offset(size.width * frac, y), knobRadius, Paint()..color = knob);
   }
 
   @override
   bool shouldRepaint(_SliderPainter old) =>
-      old.frac != frac || old.fill != fill || old.track != track;
+      old.frac != frac ||
+      old.fill != fill ||
+      old.track != track ||
+      old.knob != knob ||
+      old.knobRadius != knobRadius;
 }

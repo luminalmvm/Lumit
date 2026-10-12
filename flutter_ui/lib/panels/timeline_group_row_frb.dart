@@ -246,6 +246,7 @@ class _GroupOutlineRowState extends State<GroupOutlineRow> {
       onSecondaryTapDown: (d) => _menu(context, d.globalPosition),
       child: MouseRegion(
         opaque: false,
+        cursor: SystemMouseCursors.click,
         onEnter: (_) => setState(() => _hover = true),
         onExit: (_) {
           if (mounted) setState(() => _hover = false);
@@ -256,7 +257,7 @@ class _GroupOutlineRowState extends State<GroupOutlineRow> {
           // A shade above the panel's ground, so a band of rows reads as one
           // region without a border round it. `surface_2` is the raised value
           // the mockup gives a grouping strip.
-          color: t.surface2,
+          color: _hover ? t.surface3 : t.surface2,
         ),
         padding: const EdgeInsets.symmetric(horizontal: 8),
         child: Row(
@@ -289,18 +290,20 @@ class _GroupOutlineRowState extends State<GroupOutlineRow> {
       children: [
         LumitTooltip(
           message: folded ? l10n.tipUnfoldGroup : l10n.tipFoldGroup,
-          child: GestureDetector(
-            key: ValueKey<String>('tl-group-twirl-${widget.header.id}'),
-            behavior: HitTestBehavior.opaque,
-            onTap: () => widget.actions.onToggleFold(widget.header.id),
-            child: SizedBox(
-              width: 16,
-              height: t.density.laneRow,
-              child: Center(
-                child: glyph.LumitIcon(
-                  folded ? LumitIcons.expand : LumitIcons.collapse,
-                  size: iconSize,
-                  colour: t.textPrimary,
+          child: HoverMark(
+            builder: (context, lit) => GestureDetector(
+              key: ValueKey<String>('tl-group-twirl-${widget.header.id}'),
+              behavior: HitTestBehavior.opaque,
+              onTap: () => widget.actions.onToggleFold(widget.header.id),
+              child: SizedBox(
+                width: 16,
+                height: t.density.laneRow,
+                child: Center(
+                  child: glyph.LumitIcon(
+                    folded ? LumitIcons.expand : LumitIcons.collapse,
+                    size: iconSize,
+                    colour: t.textPrimary,
+                  ),
                 ),
               ),
             ),
@@ -332,19 +335,22 @@ class _GroupOutlineRowState extends State<GroupOutlineRow> {
         if (_group.effects.isNotEmpty)
           LumitTooltip(
             message: l10n.tipGroupEffects,
-            child: GestureDetector(
-              key: ValueKey<String>('tl-group-fx-${widget.header.id}'),
-              behavior: HitTestBehavior.opaque,
-              onTap: () => widget.actions.onToggleFxFold(widget.header.id),
-              child: SizedBox(
-                width: 16,
-                height: t.density.laneRow,
-                child: Center(
-                  child: lumitIcon(
-                    LumitIcon.fx,
-                    size: iconSize,
-                    color:
-                        widget.header.fxOpen ? t.accent : t.textMuted,
+            child: HoverMark(
+              builder: (context, lit) => GestureDetector(
+                key: ValueKey<String>('tl-group-fx-${widget.header.id}'),
+                behavior: HitTestBehavior.opaque,
+                onTap: () => widget.actions.onToggleFxFold(widget.header.id),
+                child: SizedBox(
+                  width: 16,
+                  height: t.density.laneRow,
+                  child: Center(
+                    child: lumitIcon(
+                      LumitIcon.fx,
+                      size: iconSize,
+                      color: widget.header.fxOpen
+                          ? t.accent
+                          : Color.lerp(t.textMuted, t.textPrimary, lit)!,
+                    ),
                   ),
                 ),
               ),
@@ -389,25 +395,28 @@ class _GroupOutlineRowState extends State<GroupOutlineRow> {
   /// drawn as a bar rather than a dot so a coloured group and a coloured layer
   /// inside it do not read as the same mark twice.
   Widget _tick(LumitTheme t) {
-    return GestureDetector(
-      key: ValueKey<String>('tl-group-label-${widget.header.id}'),
-      behavior: HitTestBehavior.opaque,
-      onTapDown: (d) async {
-        final picked = await showLabelPicker(context, d.globalPosition,
-            keyPrefix: 'tl-group-label');
-        if (picked == null) return;
-        widget.actions.onLabel(_group, picked);
-      },
-      child: SizedBox(
-        width: 16,
-        height: t.density.laneRow,
-        child: Center(
-          child: Container(
-            width: 3,
-            height: 11,
-            decoration: BoxDecoration(
-              color: t.labelColour(_group.label),
-              borderRadius: BorderRadius.circular(1.5),
+    return HoverMark(
+      builder: (context, lit) => GestureDetector(
+        key: ValueKey<String>('tl-group-label-${widget.header.id}'),
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (d) async {
+          final picked = await showLabelPicker(context, d.globalPosition,
+              keyPrefix: 'tl-group-label');
+          if (picked == null) return;
+          widget.actions.onLabel(_group, picked);
+        },
+        child: SizedBox(
+          width: 16,
+          height: t.density.laneRow,
+          child: Center(
+            // Under the pointer the bar thickens, as a layer's dot grows.
+            child: Container(
+              width: 3 + 2 * lit,
+              height: 11 + 2 * lit,
+              decoration: BoxDecoration(
+                color: t.labelColour(_group.label),
+                borderRadius: BorderRadius.circular(2.5),
+              ),
             ),
           ),
         ),
@@ -456,35 +465,40 @@ class _GroupOutlineRowState extends State<GroupOutlineRow> {
       }
       return LumitTooltip(
         message: tip!,
-        child: GestureDetector(
-          key: ValueKey<String>('tl-group-${which.name}-${widget.header.id}'),
-          behavior: HitTestBehavior.opaque,
-          onTap: () => widget.actions.onSwitch(_group, sw, !on),
-          child: SizedBox(
-            width: switchCellWidth,
-            height: t.density.laneRow,
-            // The same whole-pixel inset a layer's switch cell uses (§6.20):
-            // a 16px glyph centred in a 23px row lands on a half pixel, and
-            // the icons carry a half-pixel nudge of their own.
-            child: Align(
-              alignment: Alignment.topLeft,
-              child: Padding(
-                padding: EdgeInsets.only(
-                  left: wholePixelInset(switchCellWidth, iconSize),
-                  top: wholePixelInset(t.density.laneRow, iconSize),
-                ),
-                // A layer row's own rule: off rests dim and comes up under
-                // the pointer, and the eye and the speaker never go dim.
-                child: glyph.LumitIcon(
-                  icon!,
-                  size: iconSize,
-                  colour: on
-                      ? t.textPrimary
-                      : _hover ||
-                              which == SwitchCell.visible ||
-                              which == SwitchCell.audible
-                          ? t.textMuted
-                          : t.textDisabled,
+        child: HoverMark(
+          builder: (context, lit) => GestureDetector(
+            key: ValueKey<String>('tl-group-${which.name}-${widget.header.id}'),
+            behavior: HitTestBehavior.opaque,
+            onTap: () => widget.actions.onSwitch(_group, sw, !on),
+            child: SizedBox(
+              width: switchCellWidth,
+              height: t.density.laneRow,
+              // The same whole-pixel inset a layer's switch cell uses (§6.20):
+              // a 16px glyph centred in a 23px row lands on a half pixel, and
+              // the icons carry a half-pixel nudge of their own.
+              child: Align(
+                alignment: Alignment.topLeft,
+                child: Padding(
+                  padding: EdgeInsets.only(
+                    left: wholePixelInset(switchCellWidth, iconSize),
+                    top: wholePixelInset(t.density.laneRow, iconSize),
+                  ),
+                  // A layer row's own rule: off rests dim and comes up under
+                  // the pointer, and the eye and the speaker never go dim.
+                  child: glyph.LumitIcon(
+                    icon!,
+                    size: iconSize,
+                    colour: on
+                        ? t.textPrimary
+                        : Color.lerp(
+                            _hover ||
+                                    which == SwitchCell.visible ||
+                                    which == SwitchCell.audible
+                                ? t.textMuted
+                                : t.textDisabled,
+                            t.textSecondary,
+                            lit),
+                  ),
                 ),
               ),
             ),

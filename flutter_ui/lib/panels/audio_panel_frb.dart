@@ -308,20 +308,25 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
   }
 
   Widget _phaseChip(LumitTheme t, String glyphText, double deltaMs) =>
-      GestureDetector(
-        key: ValueKey('beats-phase-${deltaMs > 0 ? 'later' : 'earlier'}'),
-        onTap: () => setState(() => _phaseMs += deltaMs),
-        child: LumitTooltip(
-          message:
-              deltaMs > 0 ? l10n.beatsPhaseLater : l10n.beatsPhaseEarlier,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 5),
-            decoration: BoxDecoration(
-              border: Border.all(color: t.hairlineStrong),
-              borderRadius: BorderRadius.circular(2),
+      HoverMark(
+        builder: (context, lit) => GestureDetector(
+          key: ValueKey('beats-phase-${deltaMs > 0 ? 'later' : 'earlier'}'),
+          onTap: () => setState(() => _phaseMs += deltaMs),
+          child: LumitTooltip(
+            message:
+                deltaMs > 0 ? l10n.beatsPhaseLater : l10n.beatsPhaseEarlier,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5),
+              decoration: BoxDecoration(
+                border: Border.all(color: t.hairlineStrong),
+                borderRadius: BorderRadius.circular(2),
+              ),
+              child: Text(glyphText,
+                  style: t.mono.copyWith(
+                      fontSize: 10,
+                      color:
+                          Color.lerp(t.textSecondary, t.textPrimary, lit))),
             ),
-            child: Text(glyphText,
-                style: t.mono.copyWith(fontSize: 10, color: t.textSecondary)),
           ),
         ),
       );
@@ -480,16 +485,19 @@ class _LevelsBlock extends StatelessWidget {
               builder: (context, lit, _) => LumitTooltip(
                 message:
                     lit ? l10n.mixerLimiterClipped : l10n.mixerLimiter,
-                child: GestureDetector(
-                  key: const ValueKey('audio-clip-lamp'),
-                  onTap: resetAudioClip,
-                  child: Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: lit ? t.error : t.surface2,
-                      border: Border.all(color: t.hairlineStrong),
-                      borderRadius: BorderRadius.circular(1),
+                child: HoverMark(
+                  builder: (context, over) => GestureDetector(
+                    key: const ValueKey('audio-clip-lamp'),
+                    onTap: resetAudioClip,
+                    child: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: Color.lerp(lit ? t.error : t.surface2,
+                            t.textPrimary, 0.35 * over),
+                        border: Border.all(color: t.hairlineStrong),
+                        borderRadius: BorderRadius.circular(1),
+                      ),
                     ),
                   ),
                 ),
@@ -782,25 +790,29 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
     required ValueChanged<BridgeFadeShape> onShape,
     required VoidCallback apply,
   }) {
-    Widget chip(String text, BridgeFadeShape option) => GestureDetector(
-          key: ValueKey('$key-${option.name}'),
-          onTap: () {
-            onShape(option);
-            apply();
-          },
-          child: Container(
-            margin: const EdgeInsets.only(left: 4),
-            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-            decoration: BoxDecoration(
-              border: Border.all(
-                  color: shape == option ? t.accent : t.hairlineStrong),
-              borderRadius: BorderRadius.circular(2),
-            ),
-            child: Text(
-              text,
-              style: t.mono.copyWith(
-                fontSize: 9,
-                color: shape == option ? t.textPrimary : t.textMuted,
+    Widget chip(String text, BridgeFadeShape option) => HoverMark(
+          builder: (context, lit) => GestureDetector(
+            key: ValueKey('$key-${option.name}'),
+            onTap: () {
+              onShape(option);
+              apply();
+            },
+            child: Container(
+              margin: const EdgeInsets.only(left: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+              decoration: BoxDecoration(
+                border: Border.all(
+                    color: shape == option ? t.accent : t.hairlineStrong),
+                borderRadius: BorderRadius.circular(2),
+              ),
+              child: Text(
+                text,
+                style: t.mono.copyWith(
+                  fontSize: 9,
+                  color: shape == option
+                      ? t.textPrimary
+                      : Color.lerp(t.textMuted, t.textSecondary, lit),
+                ),
               ),
             ),
           ),

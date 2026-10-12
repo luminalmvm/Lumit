@@ -450,9 +450,11 @@ class _FlowchartState extends State<_Flowchart> {
                   top: g.rowTop(_links(side).length, i),
                   width: _stub,
                   height: _pillHeight,
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () => _slideTo(link),
+                  child: HoverMark(
+                    builder: (context, _) => GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => _slideTo(link),
+                    ),
                   ),
                 ),
             ],

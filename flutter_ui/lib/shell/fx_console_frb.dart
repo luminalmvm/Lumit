@@ -596,16 +596,20 @@ class _FxConsoleState extends State<_FxConsole> {
   Widget _categoryKicker(LumitTheme t,
       {required String label, required String? category}) {
     final chosen = _category == category;
-    return GestureDetector(
-      key: ValueKey<String>('fx-console-cat-${category ?? '*all'}'),
-      behavior: HitTestBehavior.opaque,
-      onTap: () => setState(() {
-        _category = category;
-        _highlighted = 0;
-      }),
-      child: Text(label,
-          style: _kickerStyle(t)
-              .copyWith(color: chosen ? t.textPrimary : t.textMuted)),
+    return HoverMark(
+      builder: (context, lit) => GestureDetector(
+        key: ValueKey<String>('fx-console-cat-${category ?? '*all'}'),
+        behavior: HitTestBehavior.opaque,
+        onTap: () => setState(() {
+          _category = category;
+          _highlighted = 0;
+        }),
+        child: Text(label,
+            style: _kickerStyle(t).copyWith(
+                color: chosen
+                    ? t.textPrimary
+                    : Color.lerp(t.textMuted, t.textPrimary, lit))),
+      ),
     );
   }
 
@@ -652,42 +656,47 @@ class _FxConsoleState extends State<_FxConsole> {
   }
 
   Widget _entryRow(LumitTheme t, FxConsoleEntry entry, {required bool hot}) =>
-      GestureDetector(
-        key: ValueKey<String>('fx-console-item-${entry.label}'),
-        behavior: HitTestBehavior.opaque,
-        onTap: () {
-          widget.onClose();
-          entry.run();
-        },
-        child: Container(
-          height: _rowHeight,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          color: hot ? t.surface2 : null,
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(entry.label,
-                    overflow: TextOverflow.ellipsis,
-                    style: hot ? t.bodyPrimary : t.body),
-              ),
-              const SizedBox(width: 8),
-              // The preview swatch the board draws on every row. There
-              // is no per-effect render behind it yet, so it is the
-              // surface's own gradient, the slot the picture will take.
-              Container(
-                width: 34,
-                height: 19,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(t.tokens.controlRadius),
-                  border: Border.all(color: t.hairline, width: 1),
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [t.surface2, t.surface4],
+      HoverFill(
+        // The keys' own highlight is a fill, so the pointer's is the faint one.
+        faint: true,
+        child: GestureDetector(
+          key: ValueKey<String>('fx-console-item-${entry.label}'),
+          behavior: HitTestBehavior.opaque,
+          onTap: () {
+            widget.onClose();
+            entry.run();
+          },
+          child: Container(
+            height: _rowHeight,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            color: hot ? t.surface2 : null,
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(entry.label,
+                      overflow: TextOverflow.ellipsis,
+                      style: hot ? t.bodyPrimary : t.body),
+                ),
+                const SizedBox(width: 8),
+                // The preview swatch the board draws on every row. There
+                // is no per-effect render behind it yet, so it is the
+                // surface's own gradient, the slot the picture will take.
+                Container(
+                  width: 34,
+                  height: 19,
+                  decoration: BoxDecoration(
+                    borderRadius:
+                        BorderRadius.circular(t.tokens.controlRadius),
+                    border: Border.all(color: t.hairline, width: 1),
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [t.surface2, t.surface4],
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       );

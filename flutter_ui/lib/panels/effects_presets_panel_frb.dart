@@ -312,29 +312,32 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
     required String label,
     required bool open,
   }) =>
-      GestureDetector(
-        key: ValueKey<String>('fx-group-$group'),
-        behavior: HitTestBehavior.opaque,
-        onTap: () => _toggle(group),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(4, 6, 10, 2),
-          child: Row(
-            children: [
-              TwirlTurn(
-                open: open,
-                child: lumitIcon(
-                  open ? LumitIcon.twirlOpen : LumitIcon.twirlClosed,
-                  size: iconSize,
-                  color: t.textMuted,
+      HoverMark(
+        builder: (context, lit) => GestureDetector(
+          key: ValueKey<String>('fx-group-$group'),
+          behavior: HitTestBehavior.opaque,
+          onTap: () => _toggle(group),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(4, 6, 10, 2),
+            child: Row(
+              children: [
+                TwirlTurn(
+                  open: open,
+                  child: lumitIcon(
+                    open ? LumitIcon.twirlOpen : LumitIcon.twirlClosed,
+                    size: iconSize,
+                    color: Color.lerp(t.textMuted, t.textPrimary, lit)!,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 2),
-              Expanded(
-                child: Text(label,
-                    style: t.small.copyWith(color: t.textMuted),
-                    overflow: TextOverflow.ellipsis),
-              ),
-            ],
+                const SizedBox(width: 2),
+                Expanded(
+                  child: Text(label,
+                      style: t.small.copyWith(
+                          color: Color.lerp(t.textMuted, t.textPrimary, lit)),
+                      overflow: TextOverflow.ellipsis),
+                ),
+              ],
+            ),
           ),
         ),
       );
@@ -465,22 +468,26 @@ Widget _star(BuildContext context,
   final t = ThemeScope.of(context).theme;
   return LumitTooltip(
     message: on ? l10n.tipUnfavourite : l10n.tipFavourite,
-    child: GestureDetector(
-      key: ValueKey<String>(name),
-      behavior: HitTestBehavior.opaque,
-      onTap: onToggle,
-      child: SizedBox(
-        width: _starColumn,
-        height: 20,
-        child: on || hovered
-            ? Center(
-                child: lumitIcon(
-                  LumitIcon.star,
-                  size: iconSize,
-                  color: on ? t.accent : t.hairlineStrong,
-                ),
-              )
-            : null,
+    child: HoverMark(
+      builder: (context, lit) => GestureDetector(
+        key: ValueKey<String>(name),
+        behavior: HitTestBehavior.opaque,
+        onTap: onToggle,
+        child: SizedBox(
+          width: _starColumn,
+          height: 20,
+          child: on || hovered
+              ? Center(
+                  child: lumitIcon(
+                    LumitIcon.star,
+                    size: iconSize,
+                    color: on
+                        ? t.accent
+                        : Color.lerp(t.hairlineStrong, t.textPrimary, lit)!,
+                  ),
+                )
+              : null,
+        ),
       ),
     ),
   );
@@ -497,31 +504,35 @@ Widget _libraryRow(
   required String starKey,
 }) {
   final t = ThemeScope.of(context).theme;
-  return _Hovered(
-    builder: (context, hovered) => SizedBox(
-      height: 20,
-      child: Row(
-        children: [
-          _star(context,
-              on: favourite,
-              hovered: hovered,
-              onToggle: onToggleFavourite,
-              name: starKey),
-          Expanded(
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onDoubleTap: onApply,
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: Text(label,
-                      style: t.body, overflow: TextOverflow.ellipsis),
+  return HoverFill(
+    // Dragged or double-clicked, never pressed once, so no click cursor.
+    cursor: MouseCursor.defer,
+    child: _Hovered(
+      builder: (context, hovered) => SizedBox(
+        height: 20,
+        child: Row(
+          children: [
+            _star(context,
+                on: favourite,
+                hovered: hovered,
+                onToggle: onToggleFavourite,
+                name: starKey),
+            Expanded(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onDoubleTap: onApply,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: Text(label,
+                        style: t.body, overflow: TextOverflow.ellipsis),
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     ),
   );

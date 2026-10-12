@@ -324,8 +324,8 @@ class FoldRow extends StatelessWidget {
   /// twirl the heading shut.
   Widget _addEffectGlyph(Color ink) => LumitTooltip(
         message: l10n.addEffect,
-        child: Builder(
-          builder: (buttonContext) => GestureDetector(
+        child: HoverMark(
+          builder: (buttonContext, lit) => GestureDetector(
             key: ValueKey<String>(
                 'atl-track-add-effect-${layer.internallayerId}'),
             behavior: HitTestBehavior.opaque,
@@ -333,7 +333,9 @@ class FoldRow extends StatelessWidget {
             child: SizedBox(
               width: iconSize + 6,
               child: glyph.LumitIcon(LumitIcons.addEffect,
-                  size: iconSize, colour: ink),
+                  size: iconSize,
+                  colour: Color.lerp(ink,
+                      ThemeScope.of(buttonContext).theme.textPrimary, lit)),
             ),
           ),
         ),
@@ -355,25 +357,29 @@ class FoldRow extends StatelessWidget {
               final mode = laneModes.of(id);
               return LumitTooltip(
                 message: l10n.laneModeTooltip,
-                child: GestureDetector(
-                  key: ValueKey<String>('tl-lane-mode-$id'),
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => laneModes.cycle(id),
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: t.hairlineStrong),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                    child: Text(
-                      switch (mode) {
-                        LaneMode.wave => l10n.laneModeWave,
-                        LaneMode.stack => l10n.laneModeStack,
-                        LaneMode.spectral => l10n.laneModeSpectral,
-                      },
-                      style: t.mono
-                          .copyWith(fontSize: 9, color: t.textSecondary),
+                child: HoverMark(
+                  builder: (context, lit) => GestureDetector(
+                    key: ValueKey<String>('tl-lane-mode-$id'),
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => laneModes.cycle(id),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 5, vertical: 1),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: t.hairlineStrong),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                      child: Text(
+                        switch (mode) {
+                          LaneMode.wave => l10n.laneModeWave,
+                          LaneMode.stack => l10n.laneModeStack,
+                          LaneMode.spectral => l10n.laneModeSpectral,
+                        },
+                        style: t.mono.copyWith(
+                            fontSize: 9,
+                            color: Color.lerp(
+                                t.textSecondary, t.textPrimary, lit)),
+                      ),
                     ),
                   ),
                 ),
@@ -388,103 +394,113 @@ class FoldRow extends StatelessWidget {
         :final enabled,
         :final named
       ) =>
-        GestureDetector(
-          key: ValueKey<String>('tl-group-$path'),
-          behavior: HitTestBehavior.opaque,
-          // **A heading is picked as well as twirled**. Until this, a
-          // click on one only twirled, so an effect could not be selected here
-          // at all and Copy had nothing to take. A plain click still opens the
-          // heading, because that is what it has always done and the fold is
-          // how the outline is navigated; a *modified* click only picks, so
-          // Ctrl- and Shift-clicking a run of effects does not flap every one
-          // of them open on the way past.
-          //
-          // An effect's own heading only picks, whatever the click. Its name
-          // is the thing being chosen, here and in the effect controls, so
-          // choosing an open effect must not fold it away.
-          onTap: () {
-            onSelectProperty(path);
-            if (!isModifiedClick && effectIdOfPath(path) == null) {
-              onToggle(path);
-            }
-          },
-          // An *effect's* heading offers to copy the picked effects. The other
-          // headings — Transform, Effects, Masks, Audio — are groupings rather
-          // than things that can be copied, and `effectIdOfPath` is what tells
-          // them apart: only an effect's path carries an id.
-          onSecondaryTapUp: effectIdOfPath(path) == null
-              ? null
-              : (details) => _effectMenu(
-                    context,
-                    details.globalPosition,
-                    effectIdOfPath(path)!,
+        HoverMark(
+          builder: (_, lit) => GestureDetector(
+            key: ValueKey<String>('tl-group-$path'),
+            behavior: HitTestBehavior.opaque,
+            // **A heading is picked as well as twirled**. Until this, a
+            // click on one only twirled, so an effect could not be selected here
+            // at all and Copy had nothing to take. A plain click still opens the
+            // heading, because that is what it has always done and the fold is
+            // how the outline is navigated; a *modified* click only picks, so
+            // Ctrl- and Shift-clicking a run of effects does not flap every one
+            // of them open on the way past.
+            //
+            // An effect's own heading only picks, whatever the click. Its name
+            // is the thing being chosen, here and in the effect controls, so
+            // choosing an open effect must not fold it away.
+            onTap: () {
+              onSelectProperty(path);
+              if (!isModifiedClick && effectIdOfPath(path) == null) {
+                onToggle(path);
+              }
+            },
+            // An *effect's* heading offers to copy the picked effects. The other
+            // headings — Transform, Effects, Masks, Audio — are groupings rather
+            // than things that can be copied, and `effectIdOfPath` is what tells
+            // them apart: only an effect's path carries an id.
+            onSecondaryTapUp: effectIdOfPath(path) == null
+                ? null
+                : (details) => _effectMenu(
+                      context,
+                      details.globalPosition,
+                      effectIdOfPath(path)!,
+                    ),
+            child: Row(
+              children: [
+                // The effect's own bypass, where a panel offers it: this heading
+                // is the only place a clip's effect can be switched off, since a
+                // clip is nobody's subject in the Effect controls panel.
+                if (enabled != null && onSetEnabled != null) ...[
+                  fxEnableSwitch(
+                    id: path,
+                    on: enabled,
+                    onChanged: (on) => onSetEnabled!(path, on),
                   ),
-          child: Row(
-            children: [
-              // The effect's own bypass, where a panel offers it: this heading
-              // is the only place a clip's effect can be switched off, since a
-              // clip is nobody's subject in the Effect controls panel.
-              if (enabled != null && onSetEnabled != null) ...[
-                fxEnableSwitch(
-                  id: path,
-                  on: enabled,
-                  onChanged: (on) => onSetEnabled!(path, on),
-                ),
-                const SizedBox(width: 2),
-              ],
-              GestureDetector(
-                key: ValueKey<String>('tl-twirl-$path'),
-                behavior: HitTestBehavior.opaque,
-                onTap: () => onToggle(path),
-                child: SizedBox(
-                  // Wider than the glyph: the twirl is now the only way to open
-                  // a heading, so it has to be worth aiming at.
-                  width: iconSize + 6,
-                  child: TwirlTurn(
-                    open: open,
-                    child: glyph.LumitIcon(
-                      open ? LumitIcons.collapse : LumitIcons.expand,
-                      size: iconSize,
-                      colour: open ? t.textPrimary : t.textMuted,
+                  const SizedBox(width: 2),
+                ],
+                GestureDetector(
+                  key: ValueKey<String>('tl-twirl-$path'),
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => onToggle(path),
+                  child: SizedBox(
+                    // Wider than the glyph: the twirl is now the only way to open
+                    // a heading, so it has to be worth aiming at.
+                    width: iconSize + 6,
+                    child: TwirlTurn(
+                      open: open,
+                      child: glyph.LumitIcon(
+                        open ? LumitIcons.collapse : LumitIcons.expand,
+                        size: iconSize,
+                        colour: open
+                            ? t.textPrimary
+                            : Color.lerp(t.textMuted, t.textPrimary, lit),
+                      ),
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 4),
-              // An effect's own heading carries what that effect cost, in the
-              // render-time column with the layer totals (docs/13 §7.1). Every
-              // other heading — Transform, Effects, Audio — is a grouping
-              // rather than a thing that renders, so it carries nothing.
-              //
-              // **Expanded, and no Spacer.** A `Flexible` label beside a
-              // `Spacer` splits the free space between them, which put the
-              // number halfway across the row instead of in the column: two
-              // flex children share, they do not queue. One Expanded label
-              // takes the space, and the cell that follows lands hard right —
-              // where the layer rows' numbers are.
-              if (effectIdOfPath(path) case final String effectId
-                  when timingsColumn.width > 0) ...[
-                Expanded(
-                  child: Text(named ? label : t.propertyCase(label),
-                      style: t.body, overflow: TextOverflow.ellipsis),
-                ),
-                Padding(
-                  padding: EdgeInsets.only(right: timingsColumn.rightInset),
-                  child: SizedBox(
-                    width: timingsColumn.width,
-                    child: TimingsCell(effectId: effectId),
+                const SizedBox(width: 4),
+                // An effect's own heading carries what that effect cost, in the
+                // render-time column with the layer totals (docs/13 §7.1). Every
+                // other heading — Transform, Effects, Audio — is a grouping
+                // rather than a thing that renders, so it carries nothing.
+                //
+                // **Expanded, and no Spacer.** A `Flexible` label beside a
+                // `Spacer` splits the free space between them, which put the
+                // number halfway across the row instead of in the column: two
+                // flex children share, they do not queue. One Expanded label
+                // takes the space, and the cell that follows lands hard right —
+                // where the layer rows' numbers are.
+                if (effectIdOfPath(path) case final String effectId
+                    when timingsColumn.width > 0) ...[
+                  Expanded(
+                    child: Text(named ? label : t.propertyCase(label),
+                        style: t.body.copyWith(
+                            color:
+                                Color.lerp(t.body.color, t.textPrimary, lit)),
+                        overflow: TextOverflow.ellipsis),
                   ),
-                ),
-              ] else
-                Flexible(
-                  child: Text(named ? label : t.propertyCase(label),
-                      style: t.body, overflow: TextOverflow.ellipsis),
-                ),
-              // The glyph that fills the rack this heading names, where a
-              // panel offers one. It sits after the word, so the heading reads
-              // as what it is and the button as what it does.
-              if (onAddEffect != null) _addEffectGlyph(t.textMuted),
-            ],
+                  Padding(
+                    padding: EdgeInsets.only(right: timingsColumn.rightInset),
+                    child: SizedBox(
+                      width: timingsColumn.width,
+                      child: TimingsCell(effectId: effectId),
+                    ),
+                  ),
+                ] else
+                  Flexible(
+                    child: Text(named ? label : t.propertyCase(label),
+                        style: t.body.copyWith(
+                            color:
+                                Color.lerp(t.body.color, t.textPrimary, lit)),
+                        overflow: TextOverflow.ellipsis),
+                  ),
+                // The glyph that fills the rack this heading names, where a
+                // panel offers one. It sits after the word, so the heading reads
+                // as what it is and the button as what it does.
+                if (onAddEffect != null) _addEffectGlyph(t.textMuted),
+              ],
+            ),
           ),
         ),
       FoldTransformRow(:final group, :final transform) => TransformRowFrb(
@@ -858,14 +874,18 @@ class _FlowRow extends StatelessWidget {
           const SizedBox(width: fxKeyframeGutter),
         const SizedBox(width: 4),
         Expanded(
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: onLabelTap,
-            child: Row(children: [
-              Flexible(
-                  child:
-                      Text(t.propertyCase(row.kind.label), style: t.body)),
-            ]),
+          child: HoverMark(
+            builder: (context, lit) => GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onLabelTap,
+              child: Row(children: [
+                Flexible(
+                    child: Text(t.propertyCase(row.kind.label),
+                        style: t.body.copyWith(
+                            color: Color.lerp(
+                                t.body.color, t.textPrimary, lit)))),
+              ]),
+            ),
           ),
         ),
         SizedBox(width: valueColumn.width, child: control),
