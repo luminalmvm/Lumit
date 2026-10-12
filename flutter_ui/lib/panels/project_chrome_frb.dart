@@ -226,34 +226,47 @@ Widget projectColumnHeader(
 /// beside them would have nowhere to stand.
 Widget _sortHeading(LumitTheme t, ProjectColumn column, ProjectColumn? sort,
         bool ascending, ValueChanged<ProjectColumn> onSort, Widget word) =>
-    GestureDetector(
-      key: ValueKey<String>('project-sort-${column.name}'),
-      behavior: HitTestBehavior.opaque,
-      onTap: () => onSort(column),
-      child: sort != column
-          ? word
-          : Stack(
-              clipBehavior: Clip.none,
-              // The word keeps the width its column gave it.
-              fit: StackFit.passthrough,
-              children: [
-                word,
-                Positioned(
-                  key: const ValueKey('project-sort-arrow'),
-                  top: -6,
-                  left: 0,
-                  right: 0,
-                  child: Align(
-                    alignment: Alignment.topCenter,
-                    child: RotatedBox(
-                      quarterTurns: ascending ? 2 : 0,
-                      child: lumitIcon(LumitIcon.twirlOpen,
-                          size: 8, color: t.textPrimary),
-                    ),
+    HoverMark(
+      builder: (context, lit) => GestureDetector(
+        key: ValueKey<String>('project-sort-${column.name}'),
+        behavior: HitTestBehavior.opaque,
+        onTap: () => onSort(column),
+        child: sort != column
+            // A faint rule under the pointer, as a dialogue's tabs take: the
+            // word comes built from the columns, so it cannot be lit itself.
+            ? DecoratedBox(
+                position: DecorationPosition.foreground,
+                decoration: BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(
+                        color: t.textMuted.withValues(alpha: lit)),
                   ),
                 ),
-              ],
-            ),
+                child: word,
+              )
+            : Stack(
+                clipBehavior: Clip.none,
+                // The word keeps the width its column gave it.
+                fit: StackFit.passthrough,
+                children: [
+                  word,
+                  Positioned(
+                    key: const ValueKey('project-sort-arrow'),
+                    top: -6,
+                    left: 0,
+                    right: 0,
+                    child: Align(
+                      alignment: Alignment.topCenter,
+                      child: RotatedBox(
+                        quarterTurns: ascending ? 2 : 0,
+                        child: lumitIcon(LumitIcon.twirlOpen,
+                            size: 8, color: t.textPrimary),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+      ),
     );
 
 /// The search well. Inset on `surface_0` like every other value well (§2.1),
@@ -349,25 +362,37 @@ Widget _labelFilterSquare(
     Builder(
       builder: (context) => LumitTooltip(
         message: l10n.tipFilterColour,
-        child: GestureDetector(
-          key: const ValueKey('project-label-filter'),
-          behavior: HitTestBehavior.opaque,
-          onTapDown: (d) async {
-            final picked = await showLabelPicker(context, d.globalPosition,
-                keyPrefix: 'project-filter');
-            if (picked == null) return;
-            onFilter(picked == 0 ? null : picked);
-          },
-          child: labelFilter == null
-              ? projectHueSquare(t, size: projectFilterSquare)
-              : Container(
-                  width: projectFilterSquare,
-                  height: projectFilterSquare,
-                  decoration: BoxDecoration(
-                    color: t.labelColour(labelFilter),
-                    borderRadius: BorderRadius.circular(t.tokens.controlRadius),
-                  ),
-                ),
+        child: HoverMark(
+          swells: true,
+          builder: (_, lit) => GestureDetector(
+            key: const ValueKey('project-label-filter'),
+            behavior: HitTestBehavior.opaque,
+            onTapDown: (d) async {
+              final picked = await showLabelPicker(context, d.globalPosition,
+                  keyPrefix: 'project-filter');
+              if (picked == null) return;
+              onFilter(picked == 0 ? null : picked);
+            },
+            child: DecoratedBox(
+              position: DecorationPosition.foreground,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+                border: Border.all(
+                    color: t.textPrimary.withValues(alpha: 0.7 * lit)),
+              ),
+              child: labelFilter == null
+                  ? projectHueSquare(t, size: projectFilterSquare)
+                  : Container(
+                      width: projectFilterSquare,
+                      height: projectFilterSquare,
+                      decoration: BoxDecoration(
+                        color: t.labelColour(labelFilter),
+                        borderRadius:
+                            BorderRadius.circular(t.tokens.controlRadius),
+                      ),
+                    ),
+            ),
+          ),
         ),
       ),
     );
@@ -526,8 +551,10 @@ Widget projectFooter(
               height: 10,
               color: t.hairline,
               margin: const EdgeInsets.symmetric(horizontal: _footerIconGap)),
-          Builder(builder: (context) {
-            final ink = useProxies ? t.textPrimary : t.textMuted;
+          HoverMark(builder: (context, lit) {
+            final ink = useProxies
+                ? t.textPrimary
+                : Color.lerp(t.textMuted, t.textSecondary, lit);
             return LumitTooltip(
               message:
                   useProxies ? l10n.tipUseProxiesOn : l10n.tipUseProxiesOff,
@@ -567,15 +594,20 @@ Widget projectFooter(
           Flexible(
               child: LumitTooltip(
             message: active ? l10n.tipShowEverything : l10n.tipMissingOnly,
-            child: GestureDetector(
-              key: const ValueKey('missing-toggle'),
-              behavior: HitTestBehavior.opaque,
-              onTap: onToggleMissing,
-              child: Text(
-                '${l10n.projectMissingCount(missing)} · ',
-                style: count.copyWith(color: active ? t.warning : t.textMuted),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+            child: HoverMark(
+              builder: (context, lit) => GestureDetector(
+                key: const ValueKey('missing-toggle'),
+                behavior: HitTestBehavior.opaque,
+                onTap: onToggleMissing,
+                child: Text(
+                  '${l10n.projectMissingCount(missing)} · ',
+                  style: count.copyWith(
+                      color: active
+                          ? t.warning
+                          : Color.lerp(t.textMuted, t.textPrimary, lit)),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ),
           )),
@@ -600,31 +632,37 @@ Widget _footerAction(
   required String? label,
   required VoidCallback onPressed,
 }) {
-  final body = Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      lumitIcon(icon, size: projectFooterIconSize, color: t.textMuted),
-      if (label != null) ...[
-        const SizedBox(width: _footerIconGap),
-        Text(
-          t.kickerCase(label),
-          style: t.kicker.copyWith(letterSpacing: _footerLabelTracking),
-        ),
-      ],
-    ],
-  );
+  Widget body(double lit) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          lumitIcon(icon,
+              size: projectFooterIconSize,
+              color: Color.lerp(t.textMuted, t.textPrimary, lit)!),
+          if (label != null) ...[
+            const SizedBox(width: _footerIconGap),
+            Text(
+              t.kickerCase(label),
+              style: t.kicker.copyWith(
+                  letterSpacing: _footerLabelTracking,
+                  color: Color.lerp(t.kicker.color, t.textPrimary, lit)),
+            ),
+          ],
+        ],
+      );
   // Studio and Desk draw the bare glyph and word on the bar; Lantern's
   // bottom line carries them as ghost pills, which is the house button's
   // resting face under that shape.
   return switch (t.shape) {
-    ThemeShape.studio || ThemeShape.desk => GestureDetector(
-        key: key,
-        behavior: HitTestBehavior.opaque,
-        onTap: onPressed,
-        child: body,
+    ThemeShape.studio || ThemeShape.desk => HoverMark(
+        builder: (context, lit) => GestureDetector(
+          key: key,
+          behavior: HitTestBehavior.opaque,
+          onTap: onPressed,
+          child: body(lit),
+        ),
       ),
     ThemeShape.lantern =>
-      HouseButton(key: key, small: true, onPressed: onPressed, child: body),
+      HouseButton(key: key, small: true, onPressed: onPressed, child: body(0)),
   };
 }
 
@@ -805,9 +843,9 @@ Widget _previewSoundButton(LumitTheme t, bool playing, VoidCallback onPress) =>
         child: GestureDetector(
           key: const ValueKey('project-preview-sound'),
           onTap: onPress,
-          child: MouseRegion(
-            cursor: SystemMouseCursors.click,
-            child: Container(
+          child: HoverMark(
+            swells: true,
+            builder: (context, lit) => Container(
               decoration: BoxDecoration(
                 color: t.surface0,
                 borderRadius: BorderRadius.circular(t.tokens.controlRadius),
@@ -816,7 +854,9 @@ Widget _previewSoundButton(LumitTheme t, bool playing, VoidCallback onPress) =>
                 child: lumitIcon(
                   playing ? LumitIcon.pause : LumitIcon.play,
                   size: iconSizeTransport,
-                  color: playing ? t.accent : t.textSecondary,
+                  color: playing
+                      ? t.accent
+                      : Color.lerp(t.textSecondary, t.textPrimary, lit)!,
                 ),
               ),
             ),

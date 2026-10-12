@@ -102,8 +102,10 @@ Widget viewerBarMark({
         frameless: true,
         padding: EdgeInsets.zero,
         onPressed: onPressed,
-        child: Builder(
-          builder: (context) {
+        // The button's own hover fill is hidden behind Desk's round key, so
+        // the key lights itself.
+        child: HoverMark(
+          builder: (context, lit) {
             final t = ThemeScope.of(context).theme;
             // Desk draws the deck's marks as round keys on the plate.
             final key = t.shape == ThemeShape.desk;
@@ -113,8 +115,10 @@ Widget viewerBarMark({
               decoration: key
                   ? BoxDecoration(
                       shape: BoxShape.circle,
-                      color: t.surface2,
-                      border: Border.all(color: t.hairlineStrong),
+                      color: Color.lerp(t.surface2, t.surface4, lit),
+                      border: Border.all(
+                          color:
+                              Color.lerp(t.hairlineStrong, t.textMuted, lit)!),
                     )
                   : null,
               child: Center(

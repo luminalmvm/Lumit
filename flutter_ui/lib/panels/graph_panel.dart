@@ -2654,12 +2654,16 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
             const SizedBox(width: 10),
             LumitTooltip(
               message: l10n.graphFrameAll,
-              child: GestureDetector(
-                key: const ValueKey('graph-frame-all'),
-                behavior: HitTestBehavior.opaque,
-                onTap: () => _frameAll(_viewport, layout),
-                child: glyph.LumitIcon(LumitIcons.frameAll,
-                    size: graphIconSize, colour: t.textMuted),
+              child: HoverMark(
+                swells: true,
+                builder: (context, lit) => GestureDetector(
+                  key: const ValueKey('graph-frame-all'),
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => _frameAll(_viewport, layout),
+                  child: glyph.LumitIcon(LumitIcons.frameAll,
+                      size: graphIconSize,
+                      colour: Color.lerp(t.textMuted, t.textPrimary, lit)),
+                ),
               ),
             ),
             const SizedBox(width: 10),
@@ -3172,20 +3176,24 @@ class GraphNodeCard extends StatelessWidget {
   /// socket for every parameter it has (`LayerGraph::exposed`). The same mark
   /// and the same reading as the twirl on an Effect controls heading — what is
   /// under the header, shown or folded away.
-  Widget _twirl(LumitTheme t) => _claim(GestureDetector(
-        key: ValueKey<String>('graph-twirl-$_key'),
-        behavior: HitTestBehavior.opaque,
-        onTap: onExpose,
-        child: SizedBox(
-          width: graphBadgeSize,
-          height: graphBadgeSize,
-          child: Center(
-            child: TwirlTurn(
-              open: exposed,
-              child: lumitIcon(
-                exposed ? LumitIcon.twirlOpen : LumitIcon.twirlClosed,
-                size: graphTwirlSize,
-                color: exposed ? t.textPrimary : t.textMuted,
+  Widget _twirl(LumitTheme t) => _claim(HoverMark(
+        builder: (context, lit) => GestureDetector(
+          key: ValueKey<String>('graph-twirl-$_key'),
+          behavior: HitTestBehavior.opaque,
+          onTap: onExpose,
+          child: SizedBox(
+            width: graphBadgeSize,
+            height: graphBadgeSize,
+            child: Center(
+              child: TwirlTurn(
+                open: exposed,
+                child: lumitIcon(
+                  exposed ? LumitIcon.twirlOpen : LumitIcon.twirlClosed,
+                  size: graphTwirlSize,
+                  color: exposed
+                      ? t.textPrimary
+                      : Color.lerp(t.textMuted, t.textPrimary, lit)!,
+                ),
               ),
             ),
           ),

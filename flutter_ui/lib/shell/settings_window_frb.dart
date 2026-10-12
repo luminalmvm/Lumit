@@ -302,10 +302,10 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   })? _perf;
   Timer? _perfTimer;
 
-  /// What the machine can play through, captured when the Audio page comes
-  /// forward and again after a change. Asking the sound system is a real call,
-  /// so it is never made from `build()` — same rule as the cache readouts
-  /// above. Null until the page has been opened once.
+  /// What the machine can play through, asked for when the Audio page comes
+  /// forward and again after a change. Asking the sound system is a slow
+  /// call, so it is made off the interface thread (see [_readAudio]) and never
+  /// from `build()`. Null until the first answer is in.
   BridgeAudioDevices? _audio;
 
   /// The Export page's two engine readings — what the export dialog opens on,
@@ -344,7 +344,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
       // Re-read rather than cache for the session: a device can be plugged in
       // while Settings is open, and stepping off the page and back is the
       // obvious way to ask again.
-      if (page == SettingsPage.audio) _audio = listAudioDevices();
+      if (page == SettingsPage.audio) _readAudio();
       if (page == SettingsPage.export) _readExportDefaults();
       // The keymap filters engine-side, so the shared search has to be handed
       // over when the page it belongs to comes forward.
@@ -373,10 +373,27 @@ class _SettingsWindowState extends State<_SettingsWindow> {
     _pollPerf();
     _perfTimer ??=
         Timer.periodic(const Duration(seconds: 1), (_) => setState(_pollPerf));
-    _audio = listAudioDevices();
+    _readAudio();
     _readExportDefaults();
     _watchAddons();
   }
+
+  /// Ask the sound system what it offers and draw the answer when it comes.
+  /// The asking takes a couple of hundred milliseconds on Windows, long
+  /// enough to hold the page turn up, so the page comes forward with what it
+  /// knew last and the list catches up behind it.
+  ///
+  /// Only the last asking is drawn. Two can be out at once, one from the page
+  /// coming forward and one from a choice made on it, and the older answer
+  /// may be the later to arrive.
+  void _readAudio() {
+    final ask = ++_audioAsks;
+    listAudioDevices().then((found) {
+      if (mounted && ask == _audioAsks) setState(() => _audio = found);
+    });
+  }
+
+  int _audioAsks = 0;
 
   /// A press on a page's name, in the sidebar or over its rows in a search.
   /// It ends the search, because the page is where the press was going. The
@@ -583,19 +600,22 @@ class _SettingsWindowState extends State<_SettingsWindow> {
 
   Widget _closeMark(LumitTheme t) => LumitTooltip(
         message: l10n.close,
-        child: GestureDetector(
-          key: const ValueKey('settings-close'),
-          behavior: HitTestBehavior.opaque,
-          onTap: widget.onClose,
-          child: SizedBox(
-            width: settingsCloseGlyph + 8,
-            height: settingsTitleStrip,
-            child: Center(
-              child: glyph.LumitIcon(
-                LumitIcons.close,
-                size: settingsCloseGlyph,
-                colour: t.textMuted,
-                semanticLabel: l10n.close,
+        child: HoverMark(
+          swells: true,
+          builder: (context, lit) => GestureDetector(
+            key: const ValueKey('settings-close'),
+            behavior: HitTestBehavior.opaque,
+            onTap: widget.onClose,
+            child: SizedBox(
+              width: settingsCloseGlyph + 8,
+              height: settingsTitleStrip,
+              child: Center(
+                child: glyph.LumitIcon(
+                  LumitIcons.close,
+                  size: settingsCloseGlyph,
+                  colour: Color.lerp(t.textMuted, t.textPrimary, lit),
+                  semanticLabel: l10n.close,
+                ),
               ),
             ),
           ),
@@ -612,34 +632,38 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             for (final page in SettingsPage.values)
-              GestureDetector(
-                key: ValueKey<String>('settings-page-${page.name}'),
-                behavior: HitTestBehavior.opaque,
-                onTap: () => _openPage(page),
-                // The tick and the fill behind it move from the page left to
-                // the page chosen. The padding gives up exactly what the tick
-                // takes at every step, so the name does not move.
-                child: AnimatedContainer(
-                  duration: ThemeScope.of(context).motion.mark.duration,
-                  curve: ThemeScope.of(context).motion.mark.curve,
-                  height: settingsNavRow,
-                  alignment: Alignment.centerLeft,
-                  padding: EdgeInsets.only(
-                      left: _marked(page) ? 14 - settingsNavTick : 14,
-                      right: 14),
-                  decoration: BoxDecoration(
-                    color: _marked(page) ? t.surface2 : null,
-                    // The tick, not a fill: the page in force is marked by an
-                    // accent edge down its left, which is the one job §3.1
-                    // leaves the accent on a list of names.
-                    border: _marked(page)
-                        ? Border(
-                            left: BorderSide(
-                                color: t.accent, width: settingsNavTick))
-                        : null,
+              // The highlight a menu's rows take, under the page's own mark:
+              // the page in force draws its fill over it.
+              HoverFill(
+                child: GestureDetector(
+                  key: ValueKey<String>('settings-page-${page.name}'),
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => _openPage(page),
+                  // The tick and the fill behind it move from the page left to
+                  // the page chosen. The padding gives up exactly what the
+                  // tick takes at every step, so the name does not move.
+                  child: AnimatedContainer(
+                    duration: ThemeScope.of(context).motion.mark.duration,
+                    curve: ThemeScope.of(context).motion.mark.curve,
+                    height: settingsNavRow,
+                    alignment: Alignment.centerLeft,
+                    padding: EdgeInsets.only(
+                        left: _marked(page) ? 14 - settingsNavTick : 14,
+                        right: 14),
+                    decoration: BoxDecoration(
+                      color: _marked(page) ? t.surface2 : null,
+                      // The tick, not a fill: the page in force is marked by
+                      // an accent edge down its left, which is the one job
+                      // §3.1 leaves the accent on a list of names.
+                      border: _marked(page)
+                          ? Border(
+                              left: BorderSide(
+                                  color: t.accent, width: settingsNavTick))
+                          : null,
+                    ),
+                    child: Text(page.label,
+                        style: _marked(page) ? t.bodyPrimary : t.body),
                   ),
-                  child: Text(page.label,
-                      style: _marked(page) ? t.bodyPrimary : t.body),
                 ),
               ),
           ],
@@ -721,19 +745,20 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           if (page != SettingsPage.shortcuts)
             if (_sectionsOf(page, t, ui) case final sections
                 when sections.isNotEmpty) ...[
-              MouseRegion(
-                cursor: SystemMouseCursors.click,
-                child: GestureDetector(
-                  key: ValueKey<String>('settings-found-${page.name}'),
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => _openPage(page),
-                  child: Container(
-                    height: settingsNavRow,
-                    color: t.surface2,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: settingsRowPadding),
-                    alignment: Alignment.centerLeft,
-                    child: Text(page.label, style: t.bodyPrimary),
+              ColoredBox(
+                color: t.surface2,
+                child: HoverFill(
+                  child: GestureDetector(
+                    key: ValueKey<String>('settings-found-${page.name}'),
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => _openPage(page),
+                    child: Container(
+                      height: settingsNavRow,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: settingsRowPadding),
+                      alignment: Alignment.centerLeft,
+                      child: Text(page.label, style: t.bodyPrimary),
+                    ),
                   ),
                 ),
               ),
@@ -745,15 +770,11 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   Widget _pageBody(LumitTheme t, LumitUiState ui) {
     final sections = _everywhere ? _found(t, ui) : _sectionsOf(_page, t, ui);
     return Stack(children: [
-      RawScrollbar(
+      HouseScrollbar(
         controller: _scroll,
         thumbVisibility: true,
         trackVisibility: true,
         thickness: _gutterThickness,
-        radius: const Radius.circular(3),
-        thumbColor: t.surface4,
-        trackColor: t.surface2,
-        trackRadius: const Radius.circular(3),
         padding: const EdgeInsets.fromLTRB(
             0, _gutterEnds, _gutterInset, _gutterEnds),
         // Built whole, so the thumb is sized from the page's real length rather
@@ -806,7 +827,8 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         right: _gutterInset,
         top: _gutterEnds,
         bottom: _gutterEnds,
-        width: _gutterThickness,
+        // As wide as the bar at its widest, under the pointer.
+        width: _gutterThickness + scrollbarSwell,
         child: GestureDetector(
           behavior: HitTestBehavior.translucent,
           onVerticalDragUpdate: _dragGutter,
@@ -1577,18 +1599,28 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                 key: ValueKey<String>('settings-accent-${_hex(colour)}'),
                 behavior: HitTestBehavior.opaque,
                 onTap: () => setState(() => ui.workspace.setAccent(colour)),
-                child: Container(
-                  width: _swatch,
-                  height: _swatch,
-                  decoration: BoxDecoration(
-                    color: colour,
-                    borderRadius:
-                        BorderRadius.circular(t.tokens.controlRadius),
-                    // The chosen one is ringed, so which of the six is in
-                    // force is readable without reading the hex beside them.
-                    border: _hex(colour) == _hex(t.accent)
-                        ? Border.all(color: t.textPrimary)
-                        : null,
+                child: HoverMark(
+                  swells: true,
+                  builder: (context, lit) => Container(
+                    width: _swatch,
+                    height: _swatch,
+                    decoration: BoxDecoration(
+                      color: colour,
+                      borderRadius:
+                          BorderRadius.circular(t.tokens.controlRadius),
+                      // The chosen one is ringed, so which of the six is in
+                      // force is readable without reading the hex beside
+                      // them. The one under the pointer is ringed faintly.
+                      border: _hex(colour) == _hex(t.accent)
+                          ? Border.all(color: t.textPrimary)
+                          : null,
+                    ),
+                    foregroundDecoration: BoxDecoration(
+                      borderRadius:
+                          BorderRadius.circular(t.tokens.controlRadius),
+                      border: Border.all(
+                          color: t.textPrimary.withValues(alpha: 0.7 * lit)),
+                    ),
                   ),
                 ),
               ),
@@ -2038,7 +2070,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
     // Dart's, because a settings file should not carry an empty value.
     setAudioDevice(id: id ?? '');
     workspace.setAudioDevice(id);
-    setState(() => _audio = listAudioDevices());
+    _readAudio();
   }
 
   // ---- Autosave ------------------------------------------------------------
@@ -3697,21 +3729,25 @@ class _ChordCellState extends State<_ChordCell> {
         GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: _startListening,
-          child: Container(
-            constraints: const BoxConstraints(minWidth: 110),
-            height: settingsControlHeight,
-            alignment: Alignment.center,
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            decoration: BoxDecoration(
-              color: _listening ? t.accent : t.surface2,
-              borderRadius: BorderRadius.circular(t.tokens.controlRadius),
-            ),
-            child: Text(
-              label,
-              textAlign: TextAlign.center,
-              style: chord.isEmpty && !_listening
-                  ? t.small.copyWith(color: t.textMuted)
-                  : t.small,
+          child: HoverMark(
+            builder: (context, lit) => Container(
+              constraints: const BoxConstraints(minWidth: 110),
+              height: settingsControlHeight,
+              alignment: Alignment.center,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              decoration: BoxDecoration(
+                color: _listening
+                    ? t.accent
+                    : Color.lerp(t.surface2, t.surface4, lit),
+                borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+              ),
+              child: Text(
+                label,
+                textAlign: TextAlign.center,
+                style: chord.isEmpty && !_listening
+                    ? t.small.copyWith(color: t.textMuted)
+                    : t.small,
+              ),
             ),
           ),
         ),

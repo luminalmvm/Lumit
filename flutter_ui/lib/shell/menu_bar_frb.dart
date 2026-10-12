@@ -411,16 +411,24 @@ class _CommandBox extends StatelessWidget {
         key: const ValueKey('command-box'),
         behavior: HitTestBehavior.opaque,
         onTap: onPressed,
-        child: Container(
+        // It is a button drawn as a field, so under the pointer its edge and
+        // its glass light the way a button's would.
+        child: HoverMark(
+          builder: (context, lit) => Container(
           width: 220,
           height: pill ? 28 : 20,
           padding: EdgeInsets.symmetric(
               horizontal: pill ? ShapeTokens.capsuleEnd : 8),
           decoration: BoxDecoration(
-            color: pill ? t.surface1 : t.surface0,
+            color: pill
+                ? Color.lerp(t.surface1, t.surface2, lit)
+                : t.surface0,
             borderRadius: BorderRadius.circular(
                 pill ? t.tokens.actionRadius : t.tokens.wellRadius),
-            border: pill ? null : Border.all(color: t.hairline),
+            border: pill
+                ? null
+                : Border.all(
+                    color: Color.lerp(t.hairline, t.textMuted, lit)!),
             boxShadow: pill ? t.tokens.cardShadow : null,
           ),
           child: Row(
@@ -428,7 +436,7 @@ class _CommandBox extends StatelessWidget {
               glyph.LumitIcon(
                 IconStyle.resolve('search', LumitIcons.search, t),
                 size: 12,
-                colour: t.textMuted,
+                colour: Color.lerp(t.textMuted, t.textPrimary, lit),
               ),
               const SizedBox(width: 6),
               Expanded(
@@ -442,6 +450,7 @@ class _CommandBox extends StatelessWidget {
               if (chord case final chord?)
                 Text(chord, style: t.kicker.copyWith(color: t.textDisabled)),
             ],
+          ),
           ),
         ),
       ),

@@ -139,9 +139,9 @@ class LaneBottomBar extends StatelessWidget {
     final size = inward ? _zoomGlyphLarge : _zoomGlyphSmall;
     return LumitTooltip(
       message: inward ? l10n.tipZoomIn : l10n.tipZoomOut,
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        child: GestureDetector(
+      child: HoverMark(
+        swells: true,
+        builder: (context, lit) => GestureDetector(
           key: ValueKey<String>('tl-zoom-${inward ? 'in' : 'out'}'),
           behavior: HitTestBehavior.opaque,
           onTap: () =>
@@ -151,7 +151,8 @@ class LaneBottomBar extends StatelessWidget {
             height: t.density.secondaryRow,
             child: Center(
               child: lumitIcon(LumitIcon.zoomExtent,
-                  size: size, color: t.textMuted),
+                  size: size,
+                  color: Color.lerp(t.textMuted, t.textPrimary, lit)!),
             ),
           ),
         ),

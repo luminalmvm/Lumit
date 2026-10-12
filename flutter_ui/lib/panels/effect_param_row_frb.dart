@@ -346,21 +346,28 @@ class EffectParamRowFrb extends StatelessWidget {
     final labelStyle = _off
         ? t.body.copyWith(color: t.textDisabled)
         : (graphColour == null ? t.body : t.body.copyWith(color: graphColour));
-    final labelText = Text(
-      t.propertyCase(engineLabel(param.label)),
-      style: labelStyle,
-      overflow: TextOverflow.ellipsis,
-    );
-    final label = GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onLabelTap,
-      child: nameGroup == null
-          ? labelText
-          : Row(children: [
-              ...flatGroupPrefix(t, nameGroup),
-              Flexible(child: labelText),
-            ]),
-    );
+    Widget labelText(double lit) => Text(
+          t.propertyCase(engineLabel(param.label)),
+          style: _off || graphColour != null
+              ? labelStyle
+              : t.body.copyWith(
+                  color: Color.lerp(t.body.color, t.textPrimary, lit)),
+          overflow: TextOverflow.ellipsis,
+        );
+    Widget name(double lit) => GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onLabelTap,
+          child: nameGroup == null
+              ? labelText(lit)
+              : Row(children: [
+                  ...flatGroupPrefix(t, nameGroup),
+                  Flexible(child: labelText(lit)),
+                ]),
+        );
+    // Only a name that picks its property lights.
+    final label = onLabelTap == null
+        ? name(0)
+        : HoverMark(builder: (context, lit) => name(lit));
 
     // The unit goes on the control itself, inside the riders: `100 %` then the
     // Blend dropdown, never `100` then Blend then `%`. The reset arrow comes
@@ -1402,15 +1409,17 @@ class EffectParamRowFrb extends StatelessWidget {
                 onCommit: (picked) => _set(valueOf(picked)),
               );
             },
-            child: MouseRegion(
-              cursor: SystemMouseCursors.click,
-              child: Container(
+            child: HoverMark(
+              swells: true,
+              builder: (_, lit) => Container(
                 width: 28,
                 height: 18,
                 decoration: BoxDecoration(
                   color: shown,
                   borderRadius: BorderRadius.circular(t.tokens.wellRadius),
-                  border: Border.all(color: t.hairlineStrong),
+                  border: Border.all(
+                      color: Color.lerp(
+                          t.hairlineStrong, t.textPrimary, 0.7 * lit)!),
                 ),
               ),
             ),
@@ -2027,14 +2036,19 @@ class EffectPointRowFrb extends StatelessWidget {
           const SizedBox(width: effectRiderGap),
           LumitTooltip(
             message: linked ? l10n.tipUnlinkPair : l10n.tipLinkPair,
-            child: GestureDetector(
-              key: ValueKey<String>('fx-pair-link-$id-${xParam.id}'),
-              behavior: HitTestBehavior.opaque,
-              onTap: onToggleLink,
-              child: LumitIcon(
-                linked ? LumitIcons.link : LumitIcons.unlink,
-                size: 10,
-                colour: linked ? t.textPrimary : t.textMuted,
+            child: HoverMark(
+              swells: true,
+              builder: (context, lit) => GestureDetector(
+                key: ValueKey<String>('fx-pair-link-$id-${xParam.id}'),
+                behavior: HitTestBehavior.opaque,
+                onTap: onToggleLink,
+                child: LumitIcon(
+                  linked ? LumitIcons.link : LumitIcons.unlink,
+                  size: 10,
+                  colour: linked
+                      ? t.textPrimary
+                      : Color.lerp(t.textMuted, t.textPrimary, lit),
+                ),
               ),
             ),
           ),
@@ -2740,16 +2754,18 @@ class _DropperButton extends StatelessWidget {
             key: ValueKey<String>('dropper-$id'),
             behavior: HitTestBehavior.opaque,
             onTap: () => lit ? ui.disarmDropper() : arm(ui),
-            child: MouseRegion(
-              cursor: SystemMouseCursors.click,
-              child: SizedBox(
+            child: HoverMark(
+              swells: true,
+              builder: (context, over) => SizedBox(
                 width: 18,
                 height: 18,
                 child: Center(
                   child: LumitIcon(
                     glyph,
                     size: iconSize,
-                    colour: lit ? t.accent : t.textSecondary,
+                    colour: lit
+                        ? t.accent
+                        : Color.lerp(t.textSecondary, t.textPrimary, over),
                   ),
                 ),
               ),

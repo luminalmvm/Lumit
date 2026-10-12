@@ -4,6 +4,8 @@
 // Split out of timeline_panel_frb.dart; one outline row is
 // timeline_outline_row_frb.dart.
 
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
@@ -34,7 +36,7 @@ import 'timeline_outline_row_frb.dart';
 /// it receives none — so it never repainted and the thumb was simply
 /// invisible. This listens to the controller instead, which is the
 /// thing it actually needs to know about, and drags it directly.
-class GutterScrollbar extends StatelessWidget {
+class GutterScrollbar extends StatefulWidget {
   final ScrollController controller;
   final Axis axis;
   const GutterScrollbar({
@@ -44,8 +46,28 @@ class GutterScrollbar extends StatelessWidget {
   });
 
   @override
+  State<GutterScrollbar> createState() => _GutterScrollbarState();
+}
+
+class _GutterScrollbarState extends State<GutterScrollbar>
+    with TickerProviderStateMixin {
+  /// The thumb lighting and swelling under the pointer, as every other
+  /// scrollbar's does.
+  late final HoverGlow _glow = HoverGlow(this, () => setState(() {}));
+
+  @override
+  void dispose() {
+    _glow.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final t = ThemeScope.of(context).theme;
+    final scope = ThemeScope.of(context);
+    final t = scope.theme;
+    final motion = scope.motion;
+    final controller = widget.controller;
+    final axis = widget.axis;
     return AnimatedBuilder(
       animation: controller,
       builder: (context, _) {
@@ -75,15 +97,25 @@ class GutterScrollbar extends StatelessWidget {
                   (position.pixels + delta / travel * range).clamp(0.0, range));
             }
 
+            void hold(bool held) => _glow.mark(motion, held: held);
+            final vertical = axis == Axis.vertical;
             final thumb = MouseRegion(
               cursor: SystemMouseCursors.grab,
+              onEnter: (_) => _glow.mark(motion, over: true),
+              onExit: (_) => _glow.mark(motion, over: false),
               child: GestureDetector(
                 key: const ValueKey('tl-gutter-thumb'),
                 behavior: HitTestBehavior.opaque,
+                onVerticalDragStart: vertical ? (_) => hold(true) : null,
                 onVerticalDragUpdate:
-                    axis == Axis.vertical ? (d) => dragBy(d.delta.dy) : null,
+                    vertical ? (d) => dragBy(d.delta.dy) : null,
+                onVerticalDragEnd: vertical ? (_) => hold(false) : null,
+                onVerticalDragCancel: vertical ? () => hold(false) : null,
+                onHorizontalDragStart: vertical ? null : (_) => hold(true),
                 onHorizontalDragUpdate:
-                    axis == Axis.horizontal ? (d) => dragBy(d.delta.dx) : null,
+                    vertical ? null : (d) => dragBy(d.delta.dx),
+                onHorizontalDragEnd: vertical ? null : (_) => hold(false),
+                onHorizontalDragCancel: vertical ? null : () => hold(false),
                 child: Container(
                   // The 3 is along the thumb's length only: its thickness is
                   // set by the Positioned below, at the density's scrollbar
@@ -94,12 +126,27 @@ class GutterScrollbar extends StatelessWidget {
                   decoration: BoxDecoration(
                     // `surface_4`, the mockup's own thumb value: a raised
                     // block, not a rule. `hairline_strong` is for lines.
-                    color: t.surface4,
+                    color:
+                        scrollThumbColour(t, _glow.light, held: _glow.held),
                     borderRadius: BorderRadius.circular(3),
                   ),
                 ),
               ),
             );
+
+            // Swollen, the thumb is centred on whole pixels as it is at rest,
+            // and on the way there its two edges move in step.
+            final across = vertical ? constraints.maxWidth : constraints.maxHeight;
+            final rest = t.density.scrollbar;
+            final swollen = _glow.swell(motion);
+            final thickness = math.min(
+                rest + scrollbarSwell * swollen, math.max(rest, across));
+            final restInset = wholePixelInset(across, rest);
+            final inset = restInset +
+                (wholePixelInset(across, rest + scrollbarSwell)
+                            .clamp(0.0, restInset) -
+                        restInset) *
+                    swollen;
 
             return Stack(
               children: [
@@ -114,9 +161,8 @@ class GutterScrollbar extends StatelessWidget {
                         // on whole pixels and a block edge on a half pixel is
                         // a smear: half a pixel off centre is invisible, a
                         // soft edge is not.
-                        left: wholePixelInset(
-                            constraints.maxWidth, t.density.scrollbar),
-                        width: t.density.scrollbar,
+                        left: inset,
+                        width: thickness,
                         height: extent,
                         child: thumb)
                     : Positioned(
@@ -125,9 +171,8 @@ class GutterScrollbar extends StatelessWidget {
                         // centred in whatever bar carries it — not a thumb
                         // grown from the bar's own height, which is how it
                         // came out 14 and read as a second toolbar.
-                        top: wholePixelInset(
-                            constraints.maxHeight, t.density.scrollbar),
-                        height: t.density.scrollbar,
+                        top: inset,
+                        height: thickness,
                         width: extent,
                         child: thumb),
               ],
@@ -890,6 +935,10 @@ class Outline extends StatelessWidget {
   final ScrollController vScroll;
   final double viewport;
 
+  /// Whether a layer in hand is this half's alone to draw: graph view, where
+  /// there are no lanes beside it for the card to run on into.
+  final bool liftWhole;
+
   const Outline({
     super.key,
     required this.comp,
@@ -914,6 +963,7 @@ class Outline extends StatelessWidget {
     required this.groupActions,
     required this.vScroll,
     required this.viewport,
+    this.liftWhole = false,
   });
 
   @override
@@ -947,8 +997,9 @@ class Outline extends StatelessWidget {
         drag: layerDrag,
         heights: blockHeights,
         index: i,
-        // The left end of the one card a layer in hand is drawn as.
-        side: LiftSide.leading,
+        // The left end of the one card a layer in hand is drawn as, or the
+        // whole of it where the card stops at this half's edge.
+        side: liftWhole ? LiftSide.whole : LiftSide.leading,
         // **The selection is listened to here, one layer at a time.** A
         // click that lights a row must not redraw the layers it did not
         // touch, and this is the seam that decides that.

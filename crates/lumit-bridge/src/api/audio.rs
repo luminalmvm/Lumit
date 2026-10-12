@@ -306,9 +306,9 @@ pub struct BridgeAudioDevices {
 
 /// Every output the machine offers, and which one is in use.
 ///
-/// Asking the sound system is not free, so this is a call to make when a list
-/// is about to be shown — never in a rebuild path.
-#[frb(sync)]
+/// Asking the sound system is slow, about a quarter of a second on Windows
+/// with four outputs, so this is not a sync call: it runs off the interface
+/// thread and the list is drawn when the answer comes.
 pub fn list_audio_devices() -> BridgeAudioDevices {
     #[cfg(feature = "media")]
     let (list, active, fell_back) = crate::audio::devices();

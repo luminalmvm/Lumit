@@ -357,8 +357,9 @@ class _HouseCheckboxState extends State<HouseCheckbox> {
     // block of the primary text colour — no accent, which also puts the control
     // inside §3.1's accent discipline. The 14px container stays as the hit
     // target around the smaller mark; the focus ring reads in the animated
-    // token, like a focused value well.
-    final mark = SizedBox(
+    // token, like a focused value well. Under the pointer the edge lights, by
+    // [lit] of the way, which is what says the box can be ticked.
+    Widget mark(double lit) => SizedBox(
       width: 14,
       height: 14,
       child: Center(
@@ -374,7 +375,7 @@ class _HouseCheckboxState extends State<HouseCheckbox> {
                     ? t.textDisabled
                     : _focused
                         ? t.animated
-                        : t.textMuted,
+                        : Color.lerp(t.textMuted, t.textPrimary, lit)!,
                 width: _focused && onChanged != null ? 1.5 : 1),
           ),
           child: widget.value
@@ -396,7 +397,7 @@ class _HouseCheckboxState extends State<HouseCheckbox> {
       ),
     );
     // Disabled: no gesture, no focus, no shortcut — just the reading.
-    if (onChanged == null) return mark;
+    if (onChanged == null) return mark(0);
     return FocusableActionDetector(
       focusNode: _focusNode,
       shortcuts: _activateShortcuts,
@@ -410,7 +411,7 @@ class _HouseCheckboxState extends State<HouseCheckbox> {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () => onChanged(!widget.value),
-        child: mark,
+        child: HoverMark(builder: (context, lit) => mark(lit)),
       ),
     );
   }
@@ -475,7 +476,8 @@ class _HouseToggleState extends State<HouseToggle> {
         // The focus ring is drawn on a box *around* the pill rather than on
         // the pill itself, so taking focus never moves the switch by a pixel —
         // and the 26×16 box is a kinder hit target than a 22×12 one.
-        child: Container(
+        child: HoverMark(
+          builder: (context, lit) => Container(
           width: _width + 4,
           height: _height + 4,
           alignment: Alignment.center,
@@ -494,7 +496,10 @@ class _HouseToggleState extends State<HouseToggle> {
             width: _width,
             height: _height,
             decoration: BoxDecoration(
-              color: widget.value ? t.animated : t.hairlineStrong,
+              // Lifted a little under the pointer, whichever way it is set.
+              color: widget.value
+                  ? Color.lerp(t.animated, t.textPrimary, 0.25 * lit)
+                  : Color.lerp(t.hairlineStrong, t.textMuted, 0.6 * lit),
               borderRadius: BorderRadius.circular(_height / 2),
             ),
             child: Stack(
@@ -515,6 +520,7 @@ class _HouseToggleState extends State<HouseToggle> {
                 ),
               ],
             ),
+          ),
           ),
         ),
       ),
@@ -566,9 +572,11 @@ class _HouseRadioState extends State<HouseRadio> {
   Widget build(BuildContext context) {
     final scope = ThemeScope.of(context);
     final t = scope.theme;
-    final borderColor = !widget.enabled
+    Color ring(double lit) => !widget.enabled
         ? t.textMuted.withValues(alpha: 0.4)
-        : (_focused || widget.selected ? t.accent : t.hairlineStrong);
+        : (_focused || widget.selected
+            ? t.accent
+            : Color.lerp(t.hairlineStrong, t.textMuted, lit)!);
 
     return FocusableActionDetector(
       focusNode: _focusNode,
@@ -584,13 +592,15 @@ class _HouseRadioState extends State<HouseRadio> {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: widget.enabled ? widget.onChanged : null,
-        child: Container(
+        child: HoverMark(
+          cursor: widget.enabled ? SystemMouseCursors.click : MouseCursor.defer,
+          builder: (context, lit) => Container(
           width: 14,
           height: 14,
           decoration: BoxDecoration(
             color: t.surface3,
             shape: BoxShape.circle,
-            border: Border.all(color: borderColor, width: 1.5),
+            border: Border.all(color: ring(lit), width: 1.5),
           ),
           alignment: Alignment.center,
           child: widget.selected
@@ -608,6 +618,7 @@ class _HouseRadioState extends State<HouseRadio> {
                   ),
                 )
               : null,
+          ),
         ),
       ),
     );

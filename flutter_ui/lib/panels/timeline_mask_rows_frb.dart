@@ -149,14 +149,20 @@ mixin _InlineRename<T extends StatefulWidget> on State<T> {
         ),
       );
     }
-    return GestureDetector(
-      key: ValueKey<String>(nameKey),
-      behavior: HitTestBehavior.opaque,
-      onTap: () {
-        onTap?.call();
-        if (_nameTaps.tap()) startRename();
-      },
-      child: Text(renameCurrent, style: style, overflow: TextOverflow.ellipsis),
+    return HoverMark(
+      builder: (context, lit) => GestureDetector(
+        key: ValueKey<String>(nameKey),
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          onTap?.call();
+          if (_nameTaps.tap()) startRename();
+        },
+        child: Text(renameCurrent,
+            style: style.copyWith(
+                color: Color.lerp(style.color,
+                    ThemeScope.of(context).theme.textPrimary, lit)),
+            overflow: TextOverflow.ellipsis),
+      ),
     );
   }
 }
@@ -494,18 +500,21 @@ class _MaskValueRowState extends State<MaskValueRow> {
           ),
         const SizedBox(width: 4),
         Expanded(
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: widget.onLabelTap,
-            child: Row(children: [
-              Flexible(
-                child: Text(
-                    t.propertyCase(
-                        maskValueLabel(widget.value, widget.vertex)),
-                    style: t.body,
-                    overflow: TextOverflow.ellipsis),
-              ),
-            ]),
+          child: HoverMark(
+            builder: (context, lit) => GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: widget.onLabelTap,
+              child: Row(children: [
+                Flexible(
+                  child: Text(
+                      t.propertyCase(
+                          maskValueLabel(widget.value, widget.vertex)),
+                      style: t.body.copyWith(
+                          color: Color.lerp(t.body.color, t.textPrimary, lit)),
+                      overflow: TextOverflow.ellipsis),
+                ),
+              ]),
+            ),
           ),
         ),
         // Left of the value column, exactly where an effect parameter's field

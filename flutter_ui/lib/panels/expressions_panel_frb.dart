@@ -194,20 +194,25 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
                   padding: const EdgeInsets.symmetric(vertical: 4),
                   children: [
                     for (final name in names)
-                      GestureDetector(
-                        key: ValueKey<String>('expr-item-$name'),
-                        behavior: HitTestBehavior.opaque,
-                        // On the down stroke, so the second press of a
-                        // double-click applies what the first one loaded.
-                        onTapDown: (_) => _pick(ui, name),
-                        onDoubleTap: () => _apply(app, ui),
-                        child: Container(
-                          height: 20,
-                          color: name == _picked ? t.selectionFill : null,
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
-                          alignment: Alignment.centerLeft,
-                          child: Text(name,
-                              style: t.body, overflow: TextOverflow.ellipsis),
+                      HoverFill(
+                        faint: true,
+                        child: GestureDetector(
+                          key: ValueKey<String>('expr-item-$name'),
+                          behavior: HitTestBehavior.opaque,
+                          // On the down stroke, so the second press of a
+                          // double-click applies what the first one loaded.
+                          onTapDown: (_) => _pick(ui, name),
+                          onDoubleTap: () => _apply(app, ui),
+                          child: Container(
+                            height: 20,
+                            color: name == _picked ? t.selectionFill : null,
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 10),
+                            alignment: Alignment.centerLeft,
+                            child: Text(name,
+                                style: t.body,
+                                overflow: TextOverflow.ellipsis),
+                          ),
                         ),
                       ),
                   ],

@@ -1,5 +1,6 @@
 // The moving parts the house controls share: the entrance a floating surface
-// makes, and the quarter turn a twirl takes.
+// makes, what a pressable thing does under the pointer, and the quarter turn a
+// twirl takes.
 //
 // Timing is never stated here. Each of these is handed a `MotionSpec` from the
 // theme scope's `motion` (theme/motion.dart), which is where the shape and the
@@ -11,6 +12,7 @@ import 'dart:ui' show ImageFilter;
 import 'package:flutter/widgets.dart';
 
 import '../../theme/motion.dart';
+import '../../theme/theme.dart';
 import 'base.dart';
 
 /// Plays [child] in once, when it is first put on screen: a fade, and with it
@@ -212,6 +214,270 @@ class _EntranceScope extends InheritedWidget {
   // Read once, as the content mounts.
   @override
   bool updateShouldNotify(_EntranceScope old) => false;
+}
+
+/// The wash a ground takes under the pointer, [lit] of the way there.
+///
+/// A little of the text colour laid over whatever is beneath, and not a step
+/// up the surface ramp: the light schemes' ramps do not run one way, so a
+/// step that lifts a row in one scheme is the ground's own colour in another.
+Color hoverTint(LumitTheme t, [double lit = 1]) =>
+    t.textPrimary.withValues(alpha: 0.07 * lit);
+
+/// The highlight a row that can be pressed takes under the pointer, the way a
+/// menu's rows take theirs: there at once, and trailing off behind the
+/// pointer as it moves on.
+///
+/// The fill is painted behind [child], so a row that draws its own ground,
+/// the one that is selected, covers it and keeps saying what it said. It is
+/// colour only and every animation level keeps it. Only the trail is dropped.
+class HoverFill extends StatefulWidget {
+  /// Half strength, for a list that also shows a selected row in a fill of
+  /// its own, so the row under the pointer is never taken for the chosen one.
+  final bool faint;
+  final BorderRadius? radius;
+  final MouseCursor cursor;
+  final Widget child;
+
+  const HoverFill({
+    super.key,
+    this.faint = false,
+    this.radius,
+    this.cursor = SystemMouseCursors.click,
+    required this.child,
+  });
+
+  @override
+  State<HoverFill> createState() => _HoverFillState();
+}
+
+class _HoverFillState extends State<HoverFill> {
+  bool _over = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final scope = ThemeScope.of(context);
+    final lit = hoverTint(scope.theme, widget.faint ? 0.5 : 1);
+    return MouseRegion(
+      cursor: widget.cursor,
+      onEnter: (_) => setState(() => _over = true),
+      onExit: (_) => setState(() => _over = false),
+      child: AnimatedContainer(
+        duration: _over ? Duration.zero : scope.motion.rowTrail.duration,
+        curve: scope.motion.rowTrail.curve,
+        decoration: BoxDecoration(
+          // Clear rather than absent at rest, so the fill has a colour to
+          // fade back to.
+          color: _over ? lit : lit.withValues(alpha: 0),
+          borderRadius: widget.radius,
+        ),
+        child: widget.child,
+      ),
+    );
+  }
+}
+
+/// The lighting and the swelling a pressable thing does under the pointer,
+/// kept apart from any one widget so a scrollbar's thumb and a mark move
+/// alike.
+///
+/// In plain terms: [light] runs from 0 to 1 as the pointer arrives and back as
+/// it leaves, and whatever holds it mixes its lit colour in by that much. Every
+/// animation level keeps the light, because it is what says a thing can be
+/// pressed, and with motion off it is simply there. [swell] is the growing
+/// that goes with it, which only Full plays.
+///
+/// Nothing is made until the pointer first arrives, so a Timeline full of
+/// switches nobody has pointed at holds no controllers.
+class HoverGlow {
+  final TickerProvider _vsync;
+  final VoidCallback _onChange;
+  AnimationController? _light;
+  AnimationController? _swell;
+  bool _over = false;
+  bool _held = false;
+
+  HoverGlow(this._vsync, this._onChange);
+
+  /// Whether it is in the hand: a thumb being dragged.
+  bool get held => _held;
+
+  /// How lit it is, 0 at rest and 1 under the pointer or in the hand.
+  double get light => _light?.value ?? 0;
+
+  /// Note where the pointer is. Only what is given changes. A null [motion]
+  /// is a tree with no theme scope, where nothing is drawn lit anyway.
+  void mark(Motion? motion, {bool? over, bool? held}) {
+    if (motion == null) return;
+    final was = _over || _held;
+    final wasHeld = _held;
+    _over = over ?? _over;
+    _held = held ?? _held;
+    final now = _over || _held;
+    if (now != was) {
+      _run(_light ??= _make(), now ? motion.hoverIn : motion.hoverOut, now);
+      _run(_swell ??= _make(), motion.swell, now);
+    } else if (_held != wasHeld) {
+      // Still lit, but picked up or put down: its colour steps at once.
+      _onChange();
+    }
+  }
+
+  /// A press takes the swell back in, quickly, and letting go springs it out
+  /// again, so a thing that swelled under the pointer gives under the finger.
+  void press(Motion? motion, {required bool down}) {
+    final swell = _swell;
+    if (motion == null || swell == null || motion.swell.isStill || !_over) {
+      return;
+    }
+    if (down) {
+      swell.duration = motion.hoverIn.duration;
+      swell.reverse();
+    } else {
+      _run(swell, motion.swell, true);
+    }
+  }
+
+  /// How far out the swell is: 0 at rest, 1 at its size, and a little past 1
+  /// on the way where the shape springs. Always 0 where nothing swells.
+  double swell(Motion motion) {
+    final controller = _swell;
+    if (controller == null || motion.swell.isStill) return 0;
+    // Out on the swell's own curve, back on a plain ease: a spring run
+    // backwards would grow again before it shrank.
+    return controller.status == AnimationStatus.reverse
+        ? Curves.easeIn.transform(controller.value)
+        : motion.swell.curve.transform(controller.value);
+  }
+
+  AnimationController _make() =>
+      AnimationController(vsync: _vsync)..addListener(_onChange);
+
+  /// To its on or off end the way [spec] says, or there at once where the
+  /// spec is still.
+  static void _run(AnimationController controller, MotionSpec spec, bool on) {
+    if (spec.isStill) {
+      controller.value = on ? 1 : 0;
+      return;
+    }
+    controller.duration = spec.duration;
+    if (on) {
+      controller.forward();
+    } else {
+      controller.reverse();
+    }
+  }
+
+  void dispose() {
+    _light?.dispose();
+    _swell?.dispose();
+  }
+}
+
+/// Says a thing can be pressed: it lights under the pointer and takes the
+/// click cursor, and where [swells] is set it grows a little as well.
+///
+/// In plain terms, a glyph or a readout that does something looks like a
+/// label until the pointer finds it. This wraps one. [builder] is handed how
+/// lit it is, 0 to 1, and mixes its own brighter colour in by that much (see
+/// [HoverGlow]). The growing is paint only, so nothing beside it moves.
+///
+/// Swelling is for a mark that stands alone and opens something: a tag, a
+/// close mark, a swatch. A column of switches or a list of names only lights,
+/// since a row of things all bobbing under a passing pointer is noise.
+class HoverMark extends StatefulWidget {
+  final bool swells;
+  final MouseCursor cursor;
+
+  /// The point the growth is measured from.
+  final Alignment alignment;
+  final Widget Function(BuildContext context, double lit) builder;
+
+  const HoverMark({
+    super.key,
+    this.swells = false,
+    this.cursor = SystemMouseCursors.click,
+    this.alignment = Alignment.center,
+    required this.builder,
+  });
+
+  @override
+  State<HoverMark> createState() => _HoverMarkState();
+}
+
+class _HoverMarkState extends State<HoverMark> with TickerProviderStateMixin {
+  late final HoverGlow _glow = HoverGlow(this, () => setState(() {}));
+
+  @override
+  void dispose() {
+    _glow.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final motion = ThemeScope.of(context).motion;
+    final child = widget.builder(context, _glow.light);
+    return MouseRegion(
+      cursor: widget.cursor,
+      onEnter: (_) => _glow.mark(motion, over: true),
+      onExit: (_) => _glow.mark(motion, over: false),
+      child: widget.swells
+          ? Listener(
+              onPointerDown: (_) => _glow.press(motion, down: true),
+              onPointerUp: (_) => _glow.press(motion, down: false),
+              onPointerCancel: (_) => _glow.press(motion, down: false),
+              child: Transform.scale(
+                scale: 1 + (motion.swellScale - 1) * _glow.swell(motion),
+                alignment: widget.alignment,
+                // Pressed where it rests, not where it is drawn on the way.
+                transformHitTests: false,
+                child: child,
+              ),
+            )
+          : child,
+    );
+  }
+}
+
+/// What a twirl opens, coming up into place as it is opened.
+///
+/// In plain terms: the rows under a heading used to be there the instant the
+/// triangle was pressed. They now arrive the way a settings page does, a
+/// short rise and a fade. Only on being opened while on screen: a panel full
+/// of open sections that comes forward is simply there, as it always was.
+/// Shutting is immediate, as every leaving is.
+class OpenReveal extends StatefulWidget {
+  final bool open;
+  final Widget child;
+
+  const OpenReveal({super.key, required this.open, required this.child});
+
+  @override
+  State<OpenReveal> createState() => _OpenRevealState();
+}
+
+class _OpenRevealState extends State<OpenReveal> {
+  /// How many times it has been opened while on screen.
+  int _opened = 0;
+
+  @override
+  void didUpdateWidget(OpenReveal old) {
+    super.didUpdateWidget(old);
+    if (widget.open && !old.open) _opened++;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.open) return const SizedBox.shrink();
+    final motion = ThemeScope.of(context).motion;
+    return Entrance(
+      key: ValueKey<int>(_opened),
+      spec: _opened == 0 ? MotionSpec.still : motion.reveal,
+      rise: motion.revealRise,
+      child: widget.child,
+    );
+  }
 }
 
 /// A twirl's triangle, turned a quarter as it opens or shuts.

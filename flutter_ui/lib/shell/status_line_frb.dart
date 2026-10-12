@@ -718,9 +718,8 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Flexible(
-                  child: MouseRegion(
-                    cursor: SystemMouseCursors.click,
-                    child: GestureDetector(
+                  child: HoverMark(
+                    builder: (context, lit) => GestureDetector(
                       // A notice that leads somewhere goes there, and has
                       // then been read, unless it is one that stays.
                       onTap: switch (notice.onTap) {
@@ -737,12 +736,16 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
                         notice.message,
                         key: const ValueKey('status-notice'),
                         // One that leads somewhere is news, and is drawn
-                        // brighter than the hints beside it.
-                        style: notice.error
-                            ? t.small.copyWith(color: t.warning)
-                            : notice.onTap != null
-                                ? t.small.copyWith(color: t.textPrimary)
-                                : t.small,
+                        // brighter than the hints beside it. The others
+                        // light towards it under the pointer.
+                        style: t.small.copyWith(
+                            color: notice.error
+                                ? Color.lerp(
+                                    t.warning, t.textPrimary, 0.35 * lit)
+                                : notice.onTap != null
+                                    ? t.textPrimary
+                                    : Color.lerp(
+                                        t.small.color, t.textPrimary, lit)),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -864,14 +867,15 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
             Flexible(
               child: LumitTooltip(
                 message: l10n.tipOpenFolder,
-                child: MouseRegion(
-                  cursor: SystemMouseCursors.click,
-                  child: GestureDetector(
+                child: HoverMark(
+                  builder: (context, lit) => GestureDetector(
                     key: const ValueKey('status-export-done'),
                     onTap: () => revealInFolder(path: path),
                     child: Text(
                       l10n.exportedTo(path),
-                      style: t.small,
+                      style: t.small.copyWith(
+                          color:
+                              Color.lerp(t.small.color, t.textPrimary, lit)),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
@@ -1066,19 +1070,23 @@ class _TierMeter extends StatelessWidget {
         key: ValueKey<String>(keyName),
         behavior: HitTestBehavior.opaque,
         onTap: onClear,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(label, style: t.small.copyWith(color: t.textMuted)),
-            const SizedBox(width: 4),
-            SizedBox(width: 32, child: HouseProgressBar(fraction: fraction)),
-            const SizedBox(width: 4),
-            // Used only: the budget is in the tooltip and in Settings, and the
-            // status line is one line shared with the notices and export.
-            Text('${_mibText(used)} MB',
-                style: t.small.copyWith(color: t.textMuted)),
-          ],
-        ),
+        child: HoverMark(builder: (context, lit) {
+          final ink = Color.lerp(t.textMuted, t.textPrimary, lit);
+          return Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(label, style: t.small.copyWith(color: ink)),
+              const SizedBox(width: 4),
+              SizedBox(
+                  width: 32, child: HouseProgressBar(fraction: fraction)),
+              const SizedBox(width: 4),
+              // Used only: the budget is in the tooltip and in Settings, and
+              // the status line is one line shared with the notices and
+              // export.
+              Text('${_mibText(used)} MB', style: t.small.copyWith(color: ink)),
+            ],
+          );
+        }),
       ),
     );
   }

@@ -17,6 +17,11 @@
 // menu or a dialogue following it in. None plays nothing, and a widget given a
 // still spec does not mount a controller at all.
 //
+// **What no level drops.** The light a pressable thing takes under the
+// pointer. It is what says the thing can be pressed, so it is a state and not
+// a manner: Minimal fades it in 50ms and None shows it at once. Only the
+// swell that goes with it at Full is motion.
+//
 // **What the three shapes change.** Studio is quick and quiet. Desk is an
 // instrument, so its movements are shorter, stop dead and never bounce, and a
 // menu only fades. Lantern's cards are soft, so things grow from where they
@@ -68,6 +73,14 @@ const Curve _land = Cubic(0.3, 1.4, 0.6, 1.0);
 /// Lantern's landing, nearer a tenth.
 const Curve _landSoft = Cubic(0.3, 1.6, 0.6, 1.0);
 
+/// A swell's spring: out past its size by about a sixth and back, once. More
+/// than a landing, because a swell travels a pixel or three and a twentieth
+/// of that is nothing anyone sees.
+const Curve _spring = Cubic(0.3, 1.7, 0.5, 1.0);
+
+/// Lantern's spring, nearer a third.
+const Curve _springSoft = Cubic(0.3, 2.2, 0.5, 1.0);
+
 /// Every named movement, for one shape at one level.
 class Motion {
   final ThemeShape shape;
@@ -81,6 +94,18 @@ class Motion {
   /// A menu row's highlight leaving. It always arrives at once: a menu is
   /// read by where the highlight is, and that may not lag the pointer.
   final MotionSpec rowTrail;
+
+  /// A small thing that can be pressed swelling under the pointer: a
+  /// scrollbar's thumb, a readout that opens something. The scale is the size
+  /// it swells to. The light that comes with it is [hoverIn], which every
+  /// level keeps, so what can be pressed still says so with motion off.
+  final MotionSpec swell;
+  final double swellScale;
+
+  /// A list carried to where a notch of the wheel lands it, where it used to
+  /// be there at once. Full only: it is how the list travels, not where it
+  /// went, and at 50ms there is nothing left of it to see.
+  final MotionSpec scroll;
 
   /// A state mark changing: the tab that is fronted, the tool that is armed,
   /// a focus ring.
@@ -155,6 +180,9 @@ class Motion {
     required this.hoverIn,
     required this.hoverOut,
     required this.rowTrail,
+    required this.swell,
+    required this.swellScale,
+    required this.scroll,
     required this.mark,
     required this.pop,
     required this.popScale,
@@ -213,6 +241,9 @@ class Motion {
         hoverIn: MotionSpec.still,
         hoverOut: MotionSpec.still,
         rowTrail: MotionSpec.still,
+        swell: MotionSpec.still,
+        swellScale: 1,
+        scroll: MotionSpec.still,
         mark: MotionSpec.still,
         pop: MotionSpec.still,
         popScale: 1,
@@ -253,6 +284,9 @@ class Motion {
       hoverIn: snap,
       hoverOut: snap,
       rowTrail: MotionSpec.still,
+      swell: MotionSpec.still,
+      swellScale: 1,
+      scroll: MotionSpec.still,
       mark: snap,
       pop: MotionSpec.still,
       popScale: 1,
@@ -289,6 +323,9 @@ class Motion {
     hoverIn: MotionSpec(_ms60, _out),
     hoverOut: MotionSpec(_ms140, _out),
     rowTrail: MotionSpec(_ms90, Curves.easeOut),
+    swell: MotionSpec(_ms180, _spring),
+    swellScale: 1.06,
+    scroll: MotionSpec(_ms140, _out),
     mark: MotionSpec(_ms120, _out),
     pop: MotionSpec(_ms110, _out),
     popScale: 0.5,
@@ -322,6 +359,10 @@ class Motion {
     hoverIn: MotionSpec(_ms50, _detent),
     hoverOut: MotionSpec(_ms90, _detent),
     rowTrail: MotionSpec(_ms60, Curves.easeOut),
+    // A control on an instrument comes up to meet the hand and stops.
+    swell: MotionSpec(_ms80, _detent),
+    swellScale: 1.04,
+    scroll: MotionSpec(_ms90, _detent),
     mark: MotionSpec(_ms80, _detent),
     // A tick on an instrument is on or it is off.
     pop: MotionSpec.still,
@@ -358,6 +399,9 @@ class Motion {
     hoverIn: MotionSpec(_ms90, _out),
     hoverOut: MotionSpec(_ms150, _out),
     rowTrail: MotionSpec(_ms110, Curves.easeOut),
+    swell: MotionSpec(_ms220, _springSoft),
+    swellScale: 1.08,
+    scroll: MotionSpec(_ms180, _out),
     mark: MotionSpec(_ms150, _out),
     pop: MotionSpec(_ms140, _landSoft),
     popScale: 0.4,

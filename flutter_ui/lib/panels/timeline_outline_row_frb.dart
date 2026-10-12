@@ -611,16 +611,20 @@ class _OutlineRowState extends State<OutlineRow> {
             key: ValueKey<String>('tl-twirl-$id'),
             behavior: HitTestBehavior.opaque,
             onTap: widget.onToggleOpen,
-            child: SizedBox(
-              width: 16,
-              height: t.density.laneRow,
-              child: Center(
-                child: TwirlTurn(
-                  open: widget.open,
-                  child: glyph.LumitIcon(
-                    widget.open ? LumitIcons.collapse : LumitIcons.expand,
-                    size: iconSize,
-                    colour: widget.open ? t.textPrimary : t.textMuted,
+            child: HoverMark(
+              builder: (context, lit) => SizedBox(
+                width: 16,
+                height: t.density.laneRow,
+                child: Center(
+                  child: TwirlTurn(
+                    open: widget.open,
+                    child: glyph.LumitIcon(
+                      widget.open ? LumitIcons.collapse : LumitIcons.expand,
+                      size: iconSize,
+                      colour: widget.open
+                          ? t.textPrimary
+                          : Color.lerp(t.textMuted, t.textPrimary, lit),
+                    ),
                   ),
                 ),
               ),
@@ -946,24 +950,27 @@ class _OutlineRowState extends State<OutlineRow> {
         }
         widget.onChanged();
       },
-      child: SizedBox(
-        // 16, not the dot's 6: the swatch opens a picker, so the cell is the
-        // hit target and the dot is what is drawn in the middle of
-        // it. Its 5px of inset either side is also the mockup's own gap
-        // between the dot and the name that follows it.
-        width: 16,
-        height: t.density.laneRow,
-        child: Center(
-          // A 6px **dot**, the mockup's own diameter. It was a 10px rounded
-          // square, which read as a swatch competing with the name beside it;
-          // the mockup marks the layer with a bullet, and a bullet is what a
-          // label colour is for.
-          child: Container(
-            width: _labelDotSize,
-            height: _labelDotSize,
-            decoration: BoxDecoration(
-              color: t.labelColour(label),
-              borderRadius: BorderRadius.circular(_labelDotSize / 2),
+      child: HoverMark(
+        builder: (context, lit) => SizedBox(
+          // 16, not the dot's 6: the swatch opens a picker, so the cell is
+          // the hit target and the dot is what is drawn in the middle of
+          // it. Its 5px of inset either side is also the mockup's own gap
+          // between the dot and the name that follows it.
+          width: 16,
+          height: t.density.laneRow,
+          child: Center(
+            // A 6px **dot**, the mockup's own diameter. It was a 10px rounded
+            // square, which read as a swatch competing with the name beside
+            // it; the mockup marks the layer with a bullet, and a bullet is
+            // what a label colour is for. Under the pointer it grows to 8,
+            // which is as much of a swatch as says it opens the colours.
+            child: Container(
+              width: _labelDotSize + 2 * lit,
+              height: _labelDotSize + 2 * lit,
+              decoration: BoxDecoration(
+                color: t.labelColour(label),
+                borderRadius: BorderRadius.circular(_labelDotSize),
+              ),
             ),
           ),
         ),
@@ -1073,33 +1080,41 @@ class _OutlineRowState extends State<OutlineRow> {
         : loud || !_resting
             ? t.textMuted
             : t.textDisabled;
-    final Widget face = mark != null
-        ? glyph.LumitIcon(on || offMark == null ? mark : offMark,
-            size: iconSize, colour: ink)
-        : lumitIcon(on || offIcon == null ? icon! : offIcon,
-            size: iconSize, color: ink);
+    // The one switch the pointer is on comes up a step further than its
+    // row, so which of the twelve a click would take is plain.
+    Widget face(double lit) {
+      final lifted = on ? ink : Color.lerp(ink, t.textSecondary, lit)!;
+      return mark != null
+          ? glyph.LumitIcon(on || offMark == null ? mark : offMark,
+              size: iconSize, colour: lifted)
+          : lumitIcon(on || offIcon == null ? icon! : offIcon,
+              size: iconSize, color: lifted);
+    }
+
     final cell = GestureDetector(
       key: ValueKey<String>('tl-$name-$id'),
       behavior: HitTestBehavior.opaque,
       onTap: press,
-      child: SizedBox(
-        width: switchCellWidth,
-        height: t.density.laneRow,
-        // **On whole pixels, not centred** (§6.20). A 16px glyph centred in a
-        // 23px row starts at 3.5, and the icons carry a half-pixel nudge of
-        // their own to land their strokes on pixel centres: the two
-        // halves added up, so the whole switch column drew a pixel down and
-        // to the right of the grid, with the strokes smeared across it. The
-        // cell is the same size and takes the same click; only the paint
-        // moves, and it moves back onto the grid the nudge assumes.
-        child: Align(
-          alignment: Alignment.topLeft,
-          child: Padding(
-            padding: EdgeInsets.only(
-              left: wholePixelInset(switchCellWidth, iconSize),
-              top: wholePixelInset(t.density.laneRow, iconSize),
+      child: HoverMark(
+        builder: (context, lit) => SizedBox(
+          width: switchCellWidth,
+          height: t.density.laneRow,
+          // **On whole pixels, not centred** (§6.20). A 16px glyph centred in
+          // a 23px row starts at 3.5, and the icons carry a half-pixel nudge
+          // of their own to land their strokes on pixel centres: the two
+          // halves added up, so the whole switch column drew a pixel down and
+          // to the right of the grid, with the strokes smeared across it. The
+          // cell is the same size and takes the same click; only the paint
+          // moves, and it moves back onto the grid the nudge assumes.
+          child: Align(
+            alignment: Alignment.topLeft,
+            child: Padding(
+              padding: EdgeInsets.only(
+                left: wholePixelInset(switchCellWidth, iconSize),
+                top: wholePixelInset(t.density.laneRow, iconSize),
+              ),
+              child: face(lit),
             ),
-            child: face,
           ),
         ),
       ),

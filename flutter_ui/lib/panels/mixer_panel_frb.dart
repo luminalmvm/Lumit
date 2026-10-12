@@ -460,20 +460,23 @@ class _LimiterLamp extends StatelessWidget {
       valueListenable: feed.clipped,
       builder: (context, lit, _) => LumitTooltip(
         message: lit ? l10n.mixerLimiterClipped : l10n.mixerLimiter,
-        child: GestureDetector(
-          key: const ValueKey('limiter-lamp'),
-          onTap: resetAudioClip,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-            decoration: BoxDecoration(
-              border: Border.all(color: lit ? t.error : t.hairlineStrong),
-              borderRadius: BorderRadius.circular(2),
-            ),
-            child: Text(
-              'LIM',
-              style: t.mono.copyWith(
-                fontSize: 9,
-                color: lit ? t.error : t.textMuted,
+        child: HoverMark(
+          builder: (context, over) => GestureDetector(
+            key: const ValueKey('limiter-lamp'),
+            onTap: resetAudioClip,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+              decoration: BoxDecoration(
+                border: Border.all(color: lit ? t.error : t.hairlineStrong),
+                borderRadius: BorderRadius.circular(2),
+              ),
+              child: Text(
+                'LIM',
+                style: t.mono.copyWith(
+                  fontSize: 9,
+                  color: Color.lerp(lit ? t.error : t.textMuted,
+                      t.textPrimary, 0.35 * over),
+                ),
               ),
             ),
           ),
@@ -806,14 +809,17 @@ class _SwitchGlyph extends StatelessWidget {
     final t = ThemeScope.of(context).theme;
     return LumitTooltip(
       message: tip,
-      child: GestureDetector(
-        key: ValueKey(keyName),
-        onTap: onTap,
-        behavior: HitTestBehavior.opaque,
-        child: glyph.LumitIcon(
-          mark,
-          size: 12,
-          colour: on ? t.warning : t.textMuted,
+      child: HoverMark(
+        builder: (context, lit) => GestureDetector(
+          key: ValueKey(keyName),
+          onTap: onTap,
+          behavior: HitTestBehavior.opaque,
+          child: glyph.LumitIcon(
+            mark,
+            size: 12,
+            colour:
+                on ? t.warning : Color.lerp(t.textMuted, t.textPrimary, lit),
+          ),
         ),
       ),
     );
@@ -832,21 +838,25 @@ class _SoloChip extends StatelessWidget {
     final t = ThemeScope.of(context).theme;
     return LumitTooltip(
       message: on ? l10n.switchSoloed : l10n.switchSolo,
-      child: GestureDetector(
-        key: ValueKey(keyName),
-        onTap: onTap,
-        behavior: HitTestBehavior.opaque,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          decoration: BoxDecoration(
-            border: Border.all(color: on ? t.accent : t.hairlineStrong),
-            borderRadius: BorderRadius.circular(2),
-          ),
-          child: Text(
-            'S',
-            style: t.mono.copyWith(
-              fontSize: 9,
-              color: on ? t.textPrimary : t.textMuted,
+      child: HoverMark(
+        builder: (context, lit) => GestureDetector(
+          key: ValueKey(keyName),
+          onTap: onTap,
+          behavior: HitTestBehavior.opaque,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            decoration: BoxDecoration(
+              border: Border.all(color: on ? t.accent : t.hairlineStrong),
+              borderRadius: BorderRadius.circular(2),
+            ),
+            child: Text(
+              'S',
+              style: t.mono.copyWith(
+                fontSize: 9,
+                color: on
+                    ? t.textPrimary
+                    : Color.lerp(t.textMuted, t.textSecondary, lit),
+              ),
             ),
           ),
         ),

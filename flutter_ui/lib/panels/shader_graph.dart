@@ -740,17 +740,20 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel> {
   /// its toolbar (§4.2). The first two crumbs both leave: the road out of a
   /// shader is one step long however it is spelt.
   Widget _breadcrumb(LumitTheme t) {
-    Widget crumb(String key, String word, VoidCallback? onTap) =>
-        GestureDetector(
-          key: ValueKey<String>(key),
-          behavior: HitTestBehavior.opaque,
-          onTap: onTap,
-          child: Text(
-            word,
-            style: onTap == null
-                ? t.kickerOn
-                : t.kicker.copyWith(color: t.textMuted),
-            overflow: TextOverflow.ellipsis,
+    Widget crumb(String key, String word, VoidCallback? onTap) => HoverMark(
+          cursor: onTap == null ? MouseCursor.defer : SystemMouseCursors.click,
+          builder: (context, lit) => GestureDetector(
+            key: ValueKey<String>(key),
+            behavior: HitTestBehavior.opaque,
+            onTap: onTap,
+            child: Text(
+              word,
+              style: onTap == null
+                  ? t.kickerOn
+                  : t.kicker.copyWith(
+                      color: Color.lerp(t.textMuted, t.textPrimary, lit)),
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         );
     final sep = Padding(
@@ -1183,9 +1186,8 @@ class _ShaderGraphThumbState extends State<ShaderGraphThumb> {
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     final drawn = _drawn;
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
+    return HoverMark(
+      builder: (context, lit) => GestureDetector(
         key: ValueKey<String>('shader-thumb-${widget.effect}'),
         behavior: HitTestBehavior.opaque,
         onTap: widget.onOpen,
@@ -1193,7 +1195,8 @@ class _ShaderGraphThumbState extends State<ShaderGraphThumb> {
           height: widget.height,
           decoration: BoxDecoration(
             color: t.surface0,
-            border: Border.all(color: t.hairline),
+            border: Border.all(
+                color: Color.lerp(t.hairline, t.textPrimary, 0.7 * lit)!),
             borderRadius: BorderRadius.circular(t.tokens.controlRadius),
           ),
           clipBehavior: Clip.antiAlias,

@@ -310,46 +310,51 @@ class _PrecomposeBodyState extends State<_PrecomposeBody> {
     required String label,
     required String caption,
   }) =>
-      GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: enabled ? onPick : null,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                HouseRadio(
-                  key: ValueKey(key),
-                  selected: selected,
-                  enabled: enabled,
-                  onChanged: onPick,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    label,
-                    style: t.small.copyWith(
-                      color: enabled ? t.textPrimary : t.textMuted,
+      HoverMark(
+        cursor: enabled ? SystemMouseCursors.click : MouseCursor.defer,
+        builder: (context, lit) => GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: enabled ? onPick : null,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  HouseRadio(
+                    key: ValueKey(key),
+                    selected: selected,
+                    enabled: enabled,
+                    onChanged: onPick,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      label,
+                      style: t.small.copyWith(
+                        color: enabled ? t.textPrimary : t.textMuted,
+                      ),
                     ),
                   ),
-                ),
-              ],
-            ),
-            Padding(
-              padding: const EdgeInsets.only(left: 22, top: 4),
-              child: Text(
-                caption,
-                style: t.caption.copyWith(
-                  height: 1.3,
-                  // A dimmed explanation under a dimmed choice: it describes
-                  // something that is not on offer for this selection.
-                  color: enabled
-                      ? t.textMuted
-                      : t.textMuted.withValues(alpha: 0.5),
+                ],
+              ),
+              Padding(
+                padding: const EdgeInsets.only(left: 22, top: 4),
+                child: Text(
+                  caption,
+                  style: t.caption.copyWith(
+                    height: 1.3,
+                    // A dimmed explanation under a dimmed choice: it
+                    // describes something that is not on offer for this
+                    // selection. One on offer lights under the pointer, the
+                    // sentence above it being as bright as it goes.
+                    color: enabled
+                        ? Color.lerp(t.textMuted, t.textSecondary, lit)
+                        : t.textMuted.withValues(alpha: 0.5),
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       );
 
@@ -360,19 +365,26 @@ class _PrecomposeBodyState extends State<_PrecomposeBody> {
     required ValueChanged<bool> onChanged,
     required String label,
   }) =>
-      GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () => onChanged(!value),
-        child: Row(
-          children: [
-            HouseCheckbox(
-              key: ValueKey(key),
-              value: value,
-              onChanged: onChanged,
-            ),
-            const SizedBox(width: 8),
-            Expanded(child: Text(label, style: t.small)),
-          ],
+      HoverMark(
+        builder: (context, lit) => GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => onChanged(!value),
+          child: Row(
+            children: [
+              HouseCheckbox(
+                key: ValueKey(key),
+                value: value,
+                onChanged: onChanged,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(label,
+                    style: t.small.copyWith(
+                        color:
+                            Color.lerp(t.small.color, t.textPrimary, lit))),
+              ),
+            ],
+          ),
         ),
       );
 }

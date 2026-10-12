@@ -433,16 +433,23 @@ class FxSection extends StatelessWidget {
           )
         else
           heading,
-        if (open)
-          for (var i = 0; i < rows.length; i++)
-            Container(
-              decoration: BoxDecoration(
-                  border: Border(bottom: BorderSide(color: t.hairline))),
-              padding: const EdgeInsets.fromLTRB(10, 2, 10, 2),
-              child: named == null
-                  ? rows[i]
-                  : named.row('$scope/#$i', rows[i]),
-            ),
+        OpenReveal(
+          open: open,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var i = 0; i < rows.length; i++)
+                Container(
+                  decoration: BoxDecoration(
+                      border: Border(bottom: BorderSide(color: t.hairline))),
+                  padding: const EdgeInsets.fromLTRB(10, 2, 10, 2),
+                  child: named == null
+                      ? rows[i]
+                      : named.row('$scope/#$i', rows[i]),
+                ),
+            ],
+          ),
+        ),
       ],
     );
 
@@ -544,15 +551,19 @@ class FxSection extends StatelessWidget {
                 key: twirlKey,
                 behavior: HitTestBehavior.opaque,
                 onTap: onToggle,
-                child: Padding(
-                  // Room to aim at, now that it is the only way in.
-                  padding: const EdgeInsets.symmetric(horizontal: 2),
-                  child: TwirlTurn(
-                    open: open,
-                    child: lumitIcon(
-                      open ? LumitIcon.twirlOpen : LumitIcon.twirlClosed,
-                      size: iconSize,
-                      color: open ? t.textPrimary : t.textMuted,
+                child: HoverMark(
+                  builder: (context, lit) => Padding(
+                    // Room to aim at, now that it is the only way in.
+                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                    child: TwirlTurn(
+                      open: open,
+                      child: lumitIcon(
+                        open ? LumitIcon.twirlOpen : LumitIcon.twirlClosed,
+                        size: iconSize,
+                        color: open
+                            ? t.textPrimary
+                            : Color.lerp(t.textMuted, t.textPrimary, lit)!,
+                      ),
                     ),
                   ),
                 ),
@@ -595,18 +606,23 @@ class FxSection extends StatelessWidget {
       onSecondaryTapUp: onContextMenu == null
           ? null
           : (details) => onContextMenu!(details.globalPosition),
-      child: picked == null
-          ? _headingBox(t, false, content)
-          : _FxPickedFill(
-              pick: picked,
-              box: (lit) => _headingBox(t, lit, content),
-            ),
+      // The heading lifts a step under the pointer: it is the thing to press
+      // to pick the effect, and looked like a title.
+      child: HoverMark(
+        builder: (context, hover) => picked == null
+            ? _headingBox(t, false, content, hover)
+            : _FxPickedFill(
+                pick: picked,
+                box: (lit) => _headingBox(t, lit, content, hover),
+              ),
+      ),
     );
   }
 
   /// The heading's box, around contents built above it: the fill, the fixed
-  /// height and the padding.
-  Widget _headingBox(LumitTheme t, bool lit, Widget content) => Container(
+  /// height and the padding. [hover] is how far the pointer has lit it.
+  Widget _headingBox(LumitTheme t, bool lit, Widget content, double hover) =>
+      Container(
         height: fxHeadingHeight,
         // Bypassed and unpicked, the heading has no fill at all: the dashed
         // outline is left standing on the panel's own ground, so the effect
@@ -614,8 +630,10 @@ class FxSection extends StatelessWidget {
         color: lit
             ? t.selectionFill
             : enabled
-                ? t.surface2
-                : null,
+                ? Color.alphaBlend(hoverTint(t, hover), t.surface2)
+                : hover > 0
+                    ? hoverTint(t, hover)
+                    : null,
         padding: const EdgeInsets.fromLTRB(10, 2, 10, 2),
         child: content,
       );
@@ -795,55 +813,65 @@ Widget fxGroupHeaderRow(
   Key? key,
 }) {
   final t = ThemeScope.of(context).theme;
-  final name = Text(
-    t.kickerCase(label),
-    style: open ? t.kickerOn : t.kicker,
-    overflow: TextOverflow.ellipsis,
-  );
   return GestureDetector(
     key: key,
     behavior: HitTestBehavior.opaque,
     onTap: onToggle,
-    child: SizedBox(
-      height: fxRowHeight(t),
-      child: LayoutBuilder(
-        builder: (context, constraints) => Row(
-          children: [
-            SizedBox(
-              width: fxKeyColumnWidth,
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Padding(
-                  padding: const EdgeInsets.only(left: 1),
-                  child: TwirlTurn(
-                    open: open,
-                    child: lumitIcon(
-                      open ? LumitIcon.twirlOpen : LumitIcon.twirlClosed,
-                      size: iconSize,
-                      color: open ? t.textPrimary : t.textMuted,
+    child: HoverMark(builder: (context, lit) {
+      // Shut, the name and the twirl light towards how they read open.
+      final ink = open
+          ? t.textPrimary
+          : Color.lerp(t.textMuted, t.textPrimary, lit)!;
+      final name = Text(
+        t.kickerCase(label),
+        style: open
+            ? t.kickerOn
+            : t.kicker.copyWith(
+                color: Color.lerp(t.kicker.color, t.kickerOn.color, lit)),
+        overflow: TextOverflow.ellipsis,
+      );
+      return SizedBox(
+        height: fxRowHeight(t),
+        child: LayoutBuilder(
+          builder: (context, constraints) => Row(
+            children: [
+              SizedBox(
+                width: fxKeyColumnWidth,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 1),
+                    child: TwirlTurn(
+                      open: open,
+                      child: lumitIcon(
+                        open ? LumitIcon.twirlOpen : LumitIcon.twirlClosed,
+                        size: iconSize,
+                        color: ink,
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-            const SizedBox(width: 4),
-            if (summary == null)
-              Expanded(child: name)
-            else ...[
-              SizedBox(
-                  width: fxLabelWidthFor(constraints.maxWidth), child: name),
-              Expanded(
-                child: Text(
-                  summary,
-                  style: t.small.copyWith(color: t.textMuted),
-                  overflow: TextOverflow.ellipsis,
+              const SizedBox(width: 4),
+              if (summary == null)
+                Expanded(child: name)
+              else ...[
+                SizedBox(
+                    width: fxLabelWidthFor(constraints.maxWidth),
+                    child: name),
+                Expanded(
+                  child: Text(
+                    summary,
+                    style: t.small.copyWith(color: t.textMuted),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-              ),
+              ],
             ],
-          ],
+          ),
         ),
-      ),
-    ),
+      );
+    }),
   );
 }
 

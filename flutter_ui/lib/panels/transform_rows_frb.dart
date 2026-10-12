@@ -538,7 +538,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
     // axis menu — on the name rather than the whole row, for the reason
     // the left click is on the name: grabbing a value box must never be a
     // gesture about the property's shape.
-    final label = GestureDetector(
+    Widget name(double lit) => GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: widget.onLabelTap,
       onSecondaryTapUp: group.pair == null
@@ -552,7 +552,8 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
               t.propertyCase(group.label),
               style: widget.graphColours?.isNotEmpty ?? false
                   ? t.body.copyWith(color: widget.graphColours!.first)
-                  : t.body,
+                  : t.body.copyWith(
+                      color: Color.lerp(t.body.color, t.textPrimary, lit)),
               overflow: TextOverflow.ellipsis,
             ),
           ),
@@ -574,6 +575,10 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
         ],
       ),
     );
+    // Only a name that picks its property lights.
+    final label = widget.onLabelTap == null
+        ? name(0)
+        : HoverMark(builder: (context, lit) => name(lit));
 
     if (widget.twoColumn && widget.valueColumn == null) {
       // No padding of its own: the Effect controls panel gives every row the

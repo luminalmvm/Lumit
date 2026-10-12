@@ -15,6 +15,7 @@ export 'controls/menus.dart';
 export 'controls/modal_window.dart';
 export 'controls/motion.dart';
 export 'controls/popups.dart';
+export 'controls/scrollbar.dart';
 export 'controls/slider.dart';
 export 'controls/text_field.dart';
 export 'controls/value_arithmetic.dart';

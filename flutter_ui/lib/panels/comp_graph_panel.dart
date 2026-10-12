@@ -1939,12 +1939,16 @@ class _CompGraphPanelState extends State<CompGraphPanel> {
             const SizedBox(width: 10),
             LumitTooltip(
               message: l10n.graphFrameAll,
-              child: GestureDetector(
-                key: const ValueKey('comp-graph-frame-all'),
-                behavior: HitTestBehavior.opaque,
-                onTap: () => _frameAll(_viewport, layout),
-                child: glyph.LumitIcon(LumitIcons.frameAll,
-                    size: graphIconSize, colour: t.textMuted),
+              child: HoverMark(
+                swells: true,
+                builder: (context, lit) => GestureDetector(
+                  key: const ValueKey('comp-graph-frame-all'),
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => _frameAll(_viewport, layout),
+                  child: glyph.LumitIcon(LumitIcons.frameAll,
+                      size: graphIconSize,
+                      colour: Color.lerp(t.textMuted, t.textPrimary, lit)),
+                ),
               ),
             ),
             const SizedBox(width: 10),

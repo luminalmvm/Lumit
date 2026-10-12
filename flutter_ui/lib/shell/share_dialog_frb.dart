@@ -1287,27 +1287,31 @@ class _ShareDialogState extends State<_ShareDialog> {
   /// The fold the rows most people never need sit under.
   Widget _advancedFold(LumitTheme t) => Padding(
         padding: const EdgeInsets.only(top: 8),
-        child: GestureDetector(
-          key: const ValueKey('share-advanced'),
-          behavior: HitTestBehavior.opaque,
-          onTap: () => setState(() => _advanced = !_advanced),
-          child: Row(
-            children: [
-              SizedBox(
-                width: _leadGlyph,
-                child: TwirlTurn(
-                  open: _advanced,
-                  child: lumitIcon(
-                    _advanced ? LumitIcon.twirlOpen : LumitIcon.twirlClosed,
-                    size: 12,
-                    color: t.textMuted,
+        child: HoverMark(
+          builder: (context, lit) => GestureDetector(
+            key: const ValueKey('share-advanced'),
+            behavior: HitTestBehavior.opaque,
+            onTap: () => setState(() => _advanced = !_advanced),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: _leadGlyph,
+                  child: TwirlTurn(
+                    open: _advanced,
+                    child: lumitIcon(
+                      _advanced ? LumitIcon.twirlOpen : LumitIcon.twirlClosed,
+                      size: 12,
+                      color: Color.lerp(t.textMuted, t.textPrimary, lit)!,
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: _leadGap),
-              Text(l10n.shareAdvanced,
-                  style: t.small.copyWith(color: t.textSecondary)),
-            ],
+                const SizedBox(width: _leadGap),
+                Text(l10n.shareAdvanced,
+                    style: t.small.copyWith(
+                        color:
+                            Color.lerp(t.textSecondary, t.textPrimary, lit))),
+              ],
+            ),
           ),
         ),
       );

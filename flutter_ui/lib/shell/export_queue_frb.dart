@@ -341,8 +341,7 @@ class _ExportQueueState extends State<_ExportQueue> {
           ? row
           : LumitTooltip(
               message: l10n.tipOpenFolder,
-              child: MouseRegion(
-                cursor: SystemMouseCursors.click,
+              child: HoverFill(
                 child: GestureDetector(
                   key: ValueKey<String>('export-queue-open-${item.id}'),
                   behavior: HitTestBehavior.opaque,
@@ -379,28 +378,30 @@ class _ExportQueueState extends State<_ExportQueue> {
               message: item.state is BridgeExportQueueState_Running
                   ? l10n.exportCancel
                   : l10n.exportQueueRemove,
-              child: GestureDetector(
-                key: ValueKey<String>('export-queue-drop-${item.id}'),
-                behavior: HitTestBehavior.opaque,
-                onTap: () {
-                  // Cancel while it writes, forget once it has stopped: one
-                  // mark, because "take this off my list" is one wish.
-                  if (item.state is BridgeExportQueueState_Running) {
-                    exportQueueCancel(id: item.id);
-                  } else {
-                    exportQueueRemove(id: item.id);
-                  }
-                  _refresh();
-                },
-                child: SizedBox(
-                  width: dialogCloseGlyph + 8,
-                  height: exportQueueRow,
-                  child: Center(
-                    child: glyph.LumitIcon(
-                      LumitIcons.close,
-                      size: dialogCloseGlyph,
-                      colour: t.textMuted,
-                      semanticLabel: l10n.exportQueueRemove,
+              child: HoverMark(
+                builder: (context, lit) => GestureDetector(
+                  key: ValueKey<String>('export-queue-drop-${item.id}'),
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    // Cancel while it writes, forget once it has stopped: one
+                    // mark, because "take this off my list" is one wish.
+                    if (item.state is BridgeExportQueueState_Running) {
+                      exportQueueCancel(id: item.id);
+                    } else {
+                      exportQueueRemove(id: item.id);
+                    }
+                    _refresh();
+                  },
+                  child: SizedBox(
+                    width: dialogCloseGlyph + 8,
+                    height: exportQueueRow,
+                    child: Center(
+                      child: glyph.LumitIcon(
+                        LumitIcons.close,
+                        size: dialogCloseGlyph,
+                        colour: Color.lerp(t.textMuted, t.textPrimary, lit),
+                        semanticLabel: l10n.exportQueueRemove,
+                      ),
                     ),
                   ),
                 ),

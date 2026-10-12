@@ -97,20 +97,24 @@ class SoundMixOutlineRow extends StatelessWidget {
           if (twirl)
             LumitTooltip(
               message: open ? l10n.tipSoundMixFold : l10n.tipSoundMixUnfold,
-              child: GestureDetector(
-                key: const ValueKey('tl-sound-mix-twirl'),
-                behavior: HitTestBehavior.opaque,
-                onTap: onToggleOpen,
-                child: SizedBox(
-                  width: 16,
-                  height: t.density.laneRow,
-                  child: Center(
-                    child: TwirlTurn(
-                      open: open,
-                      child: glyph.LumitIcon(
-                        open ? LumitIcons.collapse : LumitIcons.expand,
-                        size: iconSize,
-                        colour: open ? t.textPrimary : t.textMuted,
+              child: HoverMark(
+                builder: (context, lit) => GestureDetector(
+                  key: const ValueKey('tl-sound-mix-twirl'),
+                  behavior: HitTestBehavior.opaque,
+                  onTap: onToggleOpen,
+                  child: SizedBox(
+                    width: 16,
+                    height: t.density.laneRow,
+                    child: Center(
+                      child: TwirlTurn(
+                        open: open,
+                        child: glyph.LumitIcon(
+                          open ? LumitIcons.collapse : LumitIcons.expand,
+                          size: iconSize,
+                          colour: open
+                              ? t.textPrimary
+                              : Color.lerp(t.textMuted, t.textPrimary, lit),
+                        ),
                       ),
                     ),
                   ),

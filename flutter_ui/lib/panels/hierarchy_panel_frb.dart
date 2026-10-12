@@ -168,41 +168,50 @@ class _HierarchyRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      onDoubleTap: onOpenComp,
-      child: Container(
-        height: 22,
-        color: selected ? t.surface2 : null,
-        padding: EdgeInsets.only(left: 6 + depth * _indent, right: 6),
-        child: Row(
-          children: [
-            SizedBox(
-              width: 14,
-              child: expandable
-                  ? GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: onToggle,
-                      child: TwirlTurn(
-                        open: open,
-                        child: lumitIcon(
-                          open ? LumitIcon.twirlOpen : LumitIcon.twirlClosed,
-                          size: iconSize,
-                          color: t.textMuted,
+    return HoverFill(
+      faint: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        onDoubleTap: onOpenComp,
+        child: Container(
+          height: 22,
+          color: selected ? t.surface2 : null,
+          padding: EdgeInsets.only(left: 6 + depth * _indent, right: 6),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 14,
+                child: expandable
+                    ? HoverMark(
+                        builder: (context, lit) => GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: onToggle,
+                          child: TwirlTurn(
+                            open: open,
+                            child: lumitIcon(
+                              open
+                                  ? LumitIcon.twirlOpen
+                                  : LumitIcon.twirlClosed,
+                              size: iconSize,
+                              color:
+                                  Color.lerp(t.textMuted, t.textPrimary, lit)!,
+                            ),
+                          ),
                         ),
-                      ),
-                    )
-                  : null,
-            ),
-            lumitIcon(iconForKind(kind), size: iconSize, color: t.textMuted),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(name, style: t.body, overflow: TextOverflow.ellipsis),
-            ),
-            if (expandable)
-              Text('precomp', style: t.small.copyWith(color: t.textMuted)),
-          ],
+                      )
+                    : null,
+              ),
+              lumitIcon(iconForKind(kind), size: iconSize, color: t.textMuted),
+              const SizedBox(width: 6),
+              Expanded(
+                child:
+                    Text(name, style: t.body, overflow: TextOverflow.ellipsis),
+              ),
+              if (expandable)
+                Text('precomp', style: t.small.copyWith(color: t.textMuted)),
+            ],
+          ),
         ),
       ),
     );

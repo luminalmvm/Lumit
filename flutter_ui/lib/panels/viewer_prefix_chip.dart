@@ -95,28 +95,38 @@ class ViewerPrefixChip extends StatelessWidget {
           top: viewerTagTop,
           child: LumitTooltip(
             message: l10n.tipViewerAtEffect,
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => uiState.setAtSelectedEffect(!on),
-              child: Container(
-                key: const ValueKey('viewer-at-effect'),
-                constraints: const BoxConstraints(maxWidth: 220),
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  border: Border.all(color: on ? t.accent : t.textMuted),
-                  borderRadius: BorderRadius.circular(t.tokens.controlRadius),
-                ),
-                // Engaged, it takes the accent — the same way every other mark
-                // over this picture says it is in force. The Viewer must never
-                // quietly show an unfinished composition, and a chip that read
-                // the same either way would be exactly that.
-                child: Text(
-                  l10n.viewerAtEffect(name),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: t.small.copyWith(color: on ? t.accent : t.textMuted),
-                ),
-              ),
+            child: HoverMark(
+              swells: true,
+              builder: (context, lit) {
+                final ink = on
+                    ? t.accent
+                    : Color.lerp(t.textMuted, t.textPrimary, lit)!;
+                return GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => uiState.setAtSelectedEffect(!on),
+                  child: Container(
+                    key: const ValueKey('viewer-at-effect'),
+                    constraints: const BoxConstraints(maxWidth: 220),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: ink),
+                      borderRadius:
+                          BorderRadius.circular(t.tokens.controlRadius),
+                    ),
+                    // Engaged, it takes the accent — the same way every other
+                    // mark over this picture says it is in force. The Viewer
+                    // must never quietly show an unfinished composition, and a
+                    // chip that read the same either way would be exactly that.
+                    child: Text(
+                      l10n.viewerAtEffect(name),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: t.small.copyWith(color: ink),
+                    ),
+                  ),
+                );
+              },
             ),
           ),
         );

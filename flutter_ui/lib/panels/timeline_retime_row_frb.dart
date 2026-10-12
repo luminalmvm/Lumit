@@ -168,11 +168,15 @@ class _RetimeRowState extends State<RetimeRow> {
             ),
             const SizedBox(width: 4),
             Expanded(
-              child: GestureDetector(
-                key: const ValueKey('tl-retime-name'),
-                behavior: HitTestBehavior.opaque,
-                onTap: widget.onLabelTap,
-                child: Text(t.propertyCase(l10n.retime), style: t.body),
+              child: HoverMark(
+                builder: (context, lit) => GestureDetector(
+                  key: const ValueKey('tl-retime-name'),
+                  behavior: HitTestBehavior.opaque,
+                  onTap: widget.onLabelTap,
+                  child: Text(t.propertyCase(l10n.retime),
+                      style: t.body.copyWith(
+                          color: Color.lerp(t.body.color, t.textPrimary, lit))),
+                ),
               ),
             ),
             SizedBox(

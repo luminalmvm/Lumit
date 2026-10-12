@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 
 import 'base.dart';
+import 'motion.dart';
 
 /// The house progress bar: a fraction of accent fill on a `surface3` track.
 /// One shape for the status line's export and cache meters and the update
@@ -84,26 +85,37 @@ class HintPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tap = onTap;
+    if (tap == null) return IgnorePointer(child: face(context, text));
+    // One that opens something says so under the pointer.
+    return HoverMark(
+      swells: true,
+      builder: (context, lit) => GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapUp: (d) => tap(d.globalPosition),
+        child: face(context, text, lit: lit),
+      ),
+    );
+  }
+
+  /// The pill itself, [lit] by as much as the pointer is on one that can be
+  /// pressed: a brighter fill inside an edge. [radius] is the shape's action
+  /// corner unless a drawing states its own.
+  static Widget face(BuildContext context, String text,
+      {double lit = 0, double? radius}) {
     final t = ThemeScope.of(context).theme;
-    final pill = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+    return Container(
+      // A pixel less than the drawing's 4 and 1, which the edge takes: it is
+      // always there and clear at rest, so lighting the pill moves nothing.
+      padding: const EdgeInsets.symmetric(horizontal: 3),
       decoration: BoxDecoration(
-        color: t.surface4,
-        borderRadius: BorderRadius.circular(t.tokens.actionRadius),
+        color: Color.lerp(t.surface4, t.hairlineStrong, lit),
+        borderRadius: BorderRadius.circular(radius ?? t.tokens.actionRadius),
+        border: Border.all(color: t.textMuted.withValues(alpha: lit)),
       ),
       child: Text(
         text,
         style: t.mono.copyWith(fontSize: 8, color: t.textPrimary),
-      ),
-    );
-    final tap = onTap;
-    if (tap == null) return IgnorePointer(child: pill);
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTapUp: (d) => tap(d.globalPosition),
-        child: pill,
       ),
     );
   }

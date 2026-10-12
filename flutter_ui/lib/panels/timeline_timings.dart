@@ -124,16 +124,21 @@ class RenderTimingsToggle extends StatelessWidget {
         final on = timings.measuring;
         return LumitTooltip(
           message: on ? l10n.tipStopMeasuring : l10n.tipMeasureRenderTimes,
-          child: GestureDetector(
-            key: const ValueKey('status-render-timings'),
-            behavior: HitTestBehavior.opaque,
-            onTap: () => timings.setMeasuring(!on),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 2),
-              child: lumitIcon(
-                LumitIcon.renderTime,
-                size: iconSize,
-                color: on ? t.accent : t.textMuted,
+          child: HoverMark(
+            swells: true,
+            builder: (context, lit) => GestureDetector(
+              key: const ValueKey('status-render-timings'),
+              behavior: HitTestBehavior.opaque,
+              onTap: () => timings.setMeasuring(!on),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2),
+                child: lumitIcon(
+                  LumitIcon.renderTime,
+                  size: iconSize,
+                  color: on
+                      ? t.accent
+                      : Color.lerp(t.textMuted, t.textPrimary, lit)!,
+                ),
               ),
             ),
           ),

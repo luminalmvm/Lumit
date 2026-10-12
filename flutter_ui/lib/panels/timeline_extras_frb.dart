@@ -353,14 +353,17 @@ class SegmentOption extends StatelessWidget {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: active ? t.surface2 : null,
-          borderRadius: BorderRadius.circular(ShapeTokens.stadium),
+      child: HoverMark(
+        builder: (context, lit) => Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            // The one not in force comes half way to it under the pointer.
+            color: active ? t.surface2 : t.surface2.withValues(alpha: 0.5 * lit),
+            borderRadius: BorderRadius.circular(ShapeTokens.stadium),
+          ),
+          child: child,
         ),
-        child: child,
       ),
     );
   }
@@ -438,6 +441,14 @@ Future<T?> showMenuAt<T>({
 /// lives at either call site. Opened by a layer's label dot and by a group's
 /// colour tick, which drew the same popup twice; [keyPrefix] keeps each
 /// surface's long-standing chip keys.
+/// The ring a colour chip wears under the pointer, [lit] of the way there. A
+/// chip cannot brighten, being a colour somebody chose, so it is outlined
+/// instead. Painted over the chip, so it insets nothing.
+BoxDecoration chipRing(LumitTheme t, double lit) => BoxDecoration(
+      borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+      border: Border.all(color: t.textPrimary.withValues(alpha: 0.7 * lit)),
+    );
+
 Future<int?> showLabelPicker(
   BuildContext context,
   Offset position, {
@@ -457,13 +468,18 @@ Future<int?> showLabelPicker(
               GestureDetector(
                 key: ValueKey<String>('$keyPrefix-chip-$i'),
                 onTap: () => close(i),
-                child: Container(
-                  width: 14,
-                  height: 14,
-                  margin: const EdgeInsets.all(2),
-                  decoration: BoxDecoration(
-                    color: t.labelColour(i),
-                    borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+                child: HoverMark(
+                  swells: true,
+                  builder: (context, lit) => Container(
+                    width: 14,
+                    height: 14,
+                    margin: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      color: t.labelColour(i),
+                      borderRadius:
+                          BorderRadius.circular(t.tokens.controlRadius),
+                    ),
+                    foregroundDecoration: chipRing(t, lit),
                   ),
                 ),
               ),
@@ -608,9 +624,9 @@ class MarkerColourChips extends StatelessWidget {
     final t = ThemeScope.of(context).theme;
     Widget chip(int? colour) {
       final on = colour == selected;
-      return MouseRegion(
-        cursor: SystemMouseCursors.click,
-        child: GestureDetector(
+      return HoverMark(
+        swells: true,
+        builder: (context, lit) => GestureDetector(
           key: ValueKey<String>('$keyPrefix-${colour ?? 'none'}'),
           onTap: () => onPicked(colour),
           child: Container(
@@ -624,6 +640,7 @@ class MarkerColourChips extends StatelessWidget {
               // against every colour in the palette.
               border: on ? Border.all(color: t.textPrimary, width: 1.5) : null,
             ),
+            foregroundDecoration: on ? null : chipRing(t, lit),
           ),
         ),
       );
@@ -770,12 +787,17 @@ class _CompTabState extends State<_CompTab> {
                 key: widget.closeKey,
                 behavior: HitTestBehavior.opaque,
                 onTap: widget.onClose,
-                child: SizedBox(
-                  width: 12,
-                  height: round ? null : compTabHeight,
-                  child: Center(
-                    child: Text('×',
-                        style: t.body.copyWith(color: t.textMuted)),
+                child: HoverMark(
+                  swells: true,
+                  builder: (context, lit) => SizedBox(
+                    width: 12,
+                    height: round ? null : compTabHeight,
+                    child: Center(
+                      child: Text('×',
+                          style: t.body.copyWith(
+                              color: Color.lerp(
+                                  t.textMuted, t.textPrimary, lit))),
+                    ),
                   ),
                 ),
               ),
@@ -1129,13 +1151,18 @@ class MattePickerFrb extends StatelessWidget {
         key: ValueKey<String>(key),
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
-        child: SizedBox(
-          width: 14,
-          height: 22,
-          child: Center(
-            child: Text(glyph,
-                style: t.small
-                    .copyWith(color: on ? t.textPrimary : t.textDisabled)),
+        child: HoverMark(
+          builder: (context, lit) => SizedBox(
+            width: 14,
+            height: 22,
+            child: Center(
+              child: Text(glyph,
+                  style: t.small.copyWith(
+                      color: on
+                          ? t.textPrimary
+                          : Color.lerp(
+                              t.textDisabled, t.textSecondary, lit))),
+            ),
           ),
         ),
       ),

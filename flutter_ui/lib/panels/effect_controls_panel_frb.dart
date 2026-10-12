@@ -1084,34 +1084,39 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
   }) {
     final t = ThemeScope.of(context).theme;
     final open = _isOpen(storageKey);
-    return GestureDetector(
-      key: ValueKey<String>('fx-$storageKey'),
-      behavior: HitTestBehavior.opaque,
-      onTap: () => _toggle(storageKey),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(4, 8, 10, 2),
-        child: Row(
-          children: [
-            TwirlTurn(
-              open: open,
-              child: lumitIcon(
-                open ? LumitIcon.twirlOpen : LumitIcon.twirlClosed,
-                size: iconSize,
-                color: t.textMuted,
-              ),
+    return HoverMark(
+      builder: (context, lit) {
+        final ink = Color.lerp(t.textMuted, t.textPrimary, lit)!;
+        return GestureDetector(
+          key: ValueKey<String>('fx-$storageKey'),
+          behavior: HitTestBehavior.opaque,
+          onTap: () => _toggle(storageKey),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(4, 8, 10, 2),
+            child: Row(
+              children: [
+                TwirlTurn(
+                  open: open,
+                  child: lumitIcon(
+                    open ? LumitIcon.twirlOpen : LumitIcon.twirlClosed,
+                    size: iconSize,
+                    color: ink,
+                  ),
+                ),
+                const SizedBox(width: 2),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: t.small.copyWith(color: ink),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (trailing != null) trailing,
+              ],
             ),
-            const SizedBox(width: 2),
-            Expanded(
-              child: Text(
-                label,
-                style: t.small.copyWith(color: t.textMuted),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            if (trailing != null) trailing,
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 

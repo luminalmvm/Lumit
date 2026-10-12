@@ -421,15 +421,17 @@ class _SourceRowsFrbState extends State<SourceRowsFrb> {
               )),
             );
           },
-          child: MouseRegion(
-            cursor: SystemMouseCursors.click,
-            child: Container(
+          child: HoverMark(
+            swells: true,
+            builder: (_, lit) => Container(
               width: 28,
               height: 18,
               decoration: BoxDecoration(
                 color: shown,
                 borderRadius: BorderRadius.circular(t.tokens.controlRadius),
-                border: Border.all(color: t.hairlineStrong),
+                border: Border.all(
+                    color:
+                        Color.lerp(t.hairlineStrong, t.textPrimary, 0.7 * lit)!),
               ),
             ),
           ),

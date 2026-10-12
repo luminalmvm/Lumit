@@ -482,18 +482,23 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
           // is the opposite of true.
           LumitTooltip(
             message: _locked ? l10n.tipAspectLocked : l10n.tipAspectUnlocked,
-            child: GestureDetector(
-              key: const ValueKey('comp-size-lock'),
-              behavior: HitTestBehavior.opaque,
-              onTap: () => setState(() => _locked = !_locked),
-              child: SizedBox(
-                width: 24,
-                height: dialogControlHeight,
-                child: Center(
-                  child: lumitIcon(
-                    _locked ? LumitIcon.link : LumitIcon.unlink,
-                    size: 12,
-                    color: _locked ? t.textPrimary : t.textMuted,
+            child: HoverMark(
+              swells: true,
+              builder: (context, lit) => GestureDetector(
+                key: const ValueKey('comp-size-lock'),
+                behavior: HitTestBehavior.opaque,
+                onTap: () => setState(() => _locked = !_locked),
+                child: SizedBox(
+                  width: 24,
+                  height: dialogControlHeight,
+                  child: Center(
+                    child: lumitIcon(
+                      _locked ? LumitIcon.link : LumitIcon.unlink,
+                      size: 12,
+                      color: _locked
+                          ? t.textPrimary
+                          : Color.lerp(t.textMuted, t.textPrimary, lit)!,
+                    ),
                   ),
                 ),
               ),
@@ -596,17 +601,21 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
 
   Widget _backgroundRow(LumitTheme t) => Row(
         children: [
-          GestureDetector(
-            key: const ValueKey('comp-background'),
-            behavior: HitTestBehavior.opaque,
-            onTapDown: (details) => _pickBackground(details.globalPosition),
-            child: Container(
-              width: compSwatch.width,
-              height: compSwatch.height,
-              decoration: BoxDecoration(
-                color: _backgroundColour,
-                border: Border.all(color: t.hairline),
-                borderRadius: BorderRadius.circular(t.tokens.sectionRadius),
+          HoverMark(
+            swells: true,
+            builder: (context, lit) => GestureDetector(
+              key: const ValueKey('comp-background'),
+              behavior: HitTestBehavior.opaque,
+              onTapDown: (details) => _pickBackground(details.globalPosition),
+              child: Container(
+                width: compSwatch.width,
+                height: compSwatch.height,
+                decoration: BoxDecoration(
+                  color: _backgroundColour,
+                  border: Border.all(
+                      color: Color.lerp(t.hairline, t.textPrimary, 0.7 * lit)!),
+                  borderRadius: BorderRadius.circular(t.tokens.sectionRadius),
+                ),
               ),
             ),
           ),

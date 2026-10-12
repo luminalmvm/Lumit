@@ -74,6 +74,7 @@ class LumitAppNew extends StatelessWidget {
     // in it rather than as Lumit. The backdrop is `surface0` from the theme.
     return MaterialApp(
       debugShowCheckedModeBanner: false,
+      scrollBehavior: const HouseScrollBehavior(),
       // Lumit's own strings come from the `l10n` global rather than from
       // context (l10n/strings.dart); these delegates are still needed for the
       // parts of Flutter that do ask the tree — text selection menus, the

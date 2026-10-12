@@ -2299,25 +2299,30 @@ class _ExportDialogState extends State<_ExportDialog> {
   /// filled action in the footer.
   Widget _typeChip(LumitTheme t, ExportOutputType type) {
     final on = _format.type == type;
-    return GestureDetector(
-      key: ValueKey<String>('export-type-${type.name}'),
-      behavior: HitTestBehavior.opaque,
-      onTap: () => _setFormat(_formats.firstWhere((f) => f.type == type)),
-      child: Container(
-        margin: const EdgeInsets.only(right: dialogTabGap),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(t.tokens.sectionRadius),
-          border: Border.all(
-              color: on ? t.hairlineStrong : const Color(0x00000000)),
-        ),
-        child: Text(
-          t.kickerCase(switch (type) {
-            ExportOutputType.video => l10n.exportTypeVideo,
-            ExportOutputType.imageSequence => l10n.exportTypeImageSequence,
-            ExportOutputType.audioOnly => l10n.exportTypeAudioOnly,
-          }),
-          style: on ? t.kickerOn : t.kicker,
+    return HoverMark(
+      builder: (context, lit) => GestureDetector(
+        key: ValueKey<String>('export-type-${type.name}'),
+        behavior: HitTestBehavior.opaque,
+        onTap: () => _setFormat(_formats.firstWhere((f) => f.type == type)),
+        child: Container(
+          margin: const EdgeInsets.only(right: dialogTabGap),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(t.tokens.sectionRadius),
+            border: Border.all(
+                color: on ? t.hairlineStrong : const Color(0x00000000)),
+          ),
+          child: Text(
+            t.kickerCase(switch (type) {
+              ExportOutputType.video => l10n.exportTypeVideo,
+              ExportOutputType.imageSequence => l10n.exportTypeImageSequence,
+              ExportOutputType.audioOnly => l10n.exportTypeAudioOnly,
+            }),
+            style: on
+                ? t.kickerOn
+                : t.kicker.copyWith(
+                    color: Color.lerp(t.kicker.color, t.textPrimary, lit)),
+          ),
         ),
       ),
     );
