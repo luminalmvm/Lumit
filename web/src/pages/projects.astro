@@ -72,7 +72,6 @@ const projects = [
     layers: 55,
     fonts: [font("Oswald"), font("Lora")],
     c: "indigo",
-    needs: "Needs a version newer than 0.6.0",
   },
   {
     slug: "stack",
@@ -168,7 +167,6 @@ const projects = [
                     Download
                     <span class="size">{project.file.size}</span>
                   </a>
-                  {project.needs && <span class="needs">{project.needs}</span>}
                 </div>
               </div>
             </article>
@@ -258,11 +256,6 @@ const projects = [
   }
   .size {
     color: var(--color-fg-4);
-    font-family: var(--font-mono);
-    font-size: 11px;
-  }
-  .needs {
-    color: var(--color-key);
     font-family: var(--font-mono);
     font-size: 11px;
   }
