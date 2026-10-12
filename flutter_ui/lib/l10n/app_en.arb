@@ -15293,9 +15293,9 @@
   "@shareCouldNotStart": {
     "description": "Line in the Shared project window when sharing failed to start for a reason other than the port being taken."
   },
-  "shareAddress": "Address",
+  "shareAddress": "Extra address",
   "@shareAddress": {
-    "description": "Field label in the Shared project window: this computer's network address, which goes into the invite. The person can type another over it."
+    "description": "Field label under Advanced in the Shared project window, while a project is being shared: one more address this computer can be reached at, such as its address on a VPN, which is added to the invite link. Empty by default. Not a relay's address."
   },
   "shareHostHint": "Anyone with the link can join and edit.",
   "@shareHostHint": {
@@ -15677,9 +15677,9 @@
   "@shareRelayHint": {
     "description": "Quiet line under the Relay field in the Shared project window."
   },
-  "shareAddressHint": "Another address for this computer, such as a VPN's. Optional.",
+  "shareAddressHint": "Adds this computer's VPN address to the link. Most people leave it empty.",
   "@shareAddressHint": {
-    "description": "Quiet line under the Address field, under Advanced, while a project is being shared."
+    "description": "Quiet line under the Extra address field, under Advanced, while a project is being shared. What is typed is an IP address or a host name of this computer, not a relay's."
   },
   "shareOpenChecking": "Checking your connection…",
   "@shareOpenChecking": {
@@ -15693,9 +15693,9 @@
   "@shareOpenRelay": {
     "description": "Quiet line under the invite link when the home router would not let people in but the relay is ready."
   },
-  "shareOpenLocal": "Only people on your network can join. To share further, set a relay under Advanced.",
+  "shareOpenLocal": "Only people on your network can join. To share further, stop sharing and set a relay under Advanced.",
   "@shareOpenLocal": {
-    "description": "Warning line under the invite link when the home router refused, or sits behind another router, and no relay is set."
+    "description": "Warning line under the invite link when the home router refused, or sits behind another router, and no relay is set. The Relay field is only there before sharing starts, so the person has to stop sharing to reach it."
   },
   "shareOpenLocalOff": "Only people on your network can join.",
   "@shareOpenLocalOff": {

@@ -84,16 +84,18 @@ key. The line under the link says who it works for.
 
 | Line | Who can join |
 | --- | --- |
-| Anyone you send this link to can join. | Anyone. The host's router opened the port, or a relay is in use. |
-| Only people on your own network can join with this link. | People on the host's network. The router refused, has no address of its own on the internet, or was not asked. |
+| Anyone with this link can join. | Anyone. The host's router opened the port, or a relay is in use. |
+| Only people on your network can join. | People on the host's network. The router refused, has no address of its own on the internet, or was not asked. |
 
 **Advanced** holds the rest.
 
 - **Internet**: when ticked, Lumit asks the host's router to open the port when sharing
   starts, and to close it when sharing stops. It is ticked by default.
 - **Port**: the port the host listens on.
-- **Relay**: the address of a relay, for guests the router does not let in.
-- **Address**, while sharing: one more address to add to the link, such as a VPN's.
+- **Relay**: the address of a relay, for guests the router does not let in. It is set
+  before sharing starts.
+- **Extra address**, while sharing: one more address of the host's computer to add to the
+  link, such as its address on a VPN. It is an IP address or a name, without a port.
 
 ### Relays
 
