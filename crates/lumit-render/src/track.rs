@@ -2087,6 +2087,45 @@ pub fn planar_job_for(
     let LayerKind::Footage { .. } = layer.kind else {
         return None;
     };
+    let mut job = planar_job(
+        layer,
+        Box::new(move || MediaLuma::open(&path).map(|s| Box::new(s) as Box<dyn LumaFrames>)),
+        analyse,
+    )?;
+    job.key = Some(AnalysisKey::new(fingerprint, job.settings, &job.masks));
+    Some(job)
+}
+
+/// [`planar_job_for`] for a **Precomp** layer: the nested comp is what is
+/// followed, and its frames are rendered rather than decoded.
+///
+/// At the comp's own size, so the quad and the answer are both in the layer's
+/// own pixels and nothing converts. No sidecar entry, for the Camera track's
+/// reason ([`Job::key`]): the answer lives for as long as the project is open.
+///
+/// `None` when the layer is not a precomp, or carries no enabled Planar track.
+#[must_use]
+pub fn planar_job_for_precomp(doc: &Arc<Document>, layer: &Layer, analyse: bool) -> Option<Job> {
+    let LayerKind::Precomp { comp: nested } = layer.kind else {
+        return None;
+    };
+    planar_job(layer, comp_frames(doc, nested), analyse)
+}
+
+/// What opens a nested comp's frames at its own size, on the worker thread.
+fn comp_frames(doc: &Arc<Document>, nested: Uuid) -> OpenFrames {
+    let doc = Arc::clone(doc);
+    Box::new(move || {
+        CompLuma::open_at(doc, nested, 1.0).map(|s| Box::new(s) as Box<dyn LumaFrames>)
+    })
+}
+
+/// What a [`Job`] opens its frames with.
+type OpenFrames = Box<dyn FnOnce() -> Option<Box<dyn LumaFrames>> + Send>;
+
+/// The Planar track job on `layer` over whatever `open` reads, with no sidecar
+/// name yet: the half the footage and the precomp builders share.
+fn planar_job(layer: &Layer, open: OpenFrames, analyse: bool) -> Option<Job> {
     let fx = planar_track_effect(layer)?;
     let settings = AnalysisSettings::of(fx);
     let (kind, masks) = if settings.points() {
@@ -2104,11 +2143,11 @@ pub fn planar_job_for(
     };
     Some(Job {
         media: fx.id,
-        key: Some(AnalysisKey::new(fingerprint, settings, &masks)),
+        key: None,
         settings,
         kind,
         masks,
-        open: Box::new(move || MediaLuma::open(&path).map(|s| Box::new(s) as Box<dyn LumaFrames>)),
+        open,
         analyse,
     })
 }
@@ -2144,6 +2183,31 @@ pub fn points_job_for(
         kind: JobKind::TrackPoints(analysis),
         masks: MaskTrack::default(),
         open: Box::new(move || MediaLuma::open(&path).map(|s| Box::new(s) as Box<dyn LumaFrames>)),
+        analyse,
+    })
+}
+
+/// [`points_job_for`] for a **Precomp** layer, on [`planar_job_for_precomp`]'s
+/// terms: the nested comp rendered at its own size, and no sidecar entry.
+///
+/// `None` when the layer is not a precomp.
+#[must_use]
+pub fn points_job_for_precomp(
+    doc: &Arc<Document>,
+    layer: &Layer,
+    fx: &EffectInstance,
+    analyse: bool,
+) -> Option<Job> {
+    let LayerKind::Precomp { comp: nested } = layer.kind else {
+        return None;
+    };
+    Some(Job {
+        media: fx.id,
+        key: None,
+        settings: AnalysisSettings::default(),
+        kind: JobKind::TrackPoints(Analysis::of(fx, layer)?),
+        masks: MaskTrack::default(),
+        open: comp_frames(doc, nested),
         analyse,
     })
 }
