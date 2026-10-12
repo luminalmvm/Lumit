@@ -1303,6 +1303,11 @@ class EffectParamRowFrb extends StatelessWidget {
               : (v) =>
                   _setLive(BridgeEffectValue.float(BridgeScalar.static_(v))),
           onCommit: write,
+          // The same offer and the same seed the Float row makes.
+          setExpression: animated || currentLayer == null
+              ? null
+              : () => _set(BridgeEffectValue.float(BridgeScalar.expression(
+                  shown.toString(), newExpressionLanguage(context)))),
         ),
         const SizedBox(width: 6),
         AngleDial(
@@ -1812,6 +1817,10 @@ class EffectPointRowFrb extends StatelessWidget {
   /// fold-out today — which is what makes the chain absent rather than dead.
   final VoidCallback? onToggleLink;
 
+  /// Whether a well offers Set expression. Off where the effect sits on no
+  /// layer, a node graph's box, since an expression is worked out about one.
+  final bool canSetExpression;
+
   const EffectPointRowFrb({
     super.key,
     required this.effectId,
@@ -1829,6 +1838,7 @@ class EffectPointRowFrb extends StatelessWidget {
     this.enabled = true,
     this.linked = false,
     this.onToggleLink,
+    this.canSetExpression = false,
   });
 
   /// Whether the pair takes the **position dropper**, and in what unit a pick
@@ -2005,6 +2015,16 @@ class EffectPointRowFrb extends StatelessWidget {
           onChanged: (v) => writeChannel(param, v.toDouble(), live: false),
           onChangeLive: (v) => writeChannel(param, v.toDouble(), live: true),
           onChangeEnd: (v) => writeChannel(param, v.toDouble(), live: false),
+          // Seeded with the number showing, so turning one on does not move
+          // the picture until it is edited. The half then has a row to itself.
+          setExpression: !canSetExpression
+              ? null
+              : () => onWrite(
+                  id,
+                  param.id,
+                  BridgeEffectValue.float(BridgeScalar.expression(
+                      scalar.field0.toString(),
+                      newExpressionLanguage(context)))),
         ),
       );
     }
