@@ -36,9 +36,12 @@ BridgeRotoStatus rotoStatus(
 ///
 /// Read on a frame change and held, never per rebuild.
 ///
-/// `NotFootage` for anything but a footage layer, and for media that will not
-/// probe: a Roto brush on a layer with no file behind it has no source frame to
-/// name, which is a refusal rather than a guess at zero.
+/// A Precomp layer answers with the frame of its nested comp, which is what a
+/// propagation over one renders and counts by.
+///
+/// `NotFootage` for any other kind of layer, and for media that will not
+/// probe: a Roto brush on a layer with nothing behind it has no source frame
+/// to name, which is a refusal rather than a guess at zero.
 PlatformInt64 rotoSourceFrame(
         {required LayerReference layer, required PlatformInt64 frame}) =>
     BridgeLib.instance.api

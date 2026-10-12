@@ -181,6 +181,10 @@ fn provider_code() -> u32 {
 pub struct PlaneKey {
     media: [u8; 16],
     run: [u8; 16],
+    /// The frames are a comp's, rendered, and not a file's. Nothing in the
+    /// name says what that comp looked like when it was read, so pressing
+    /// Analyse reads it again rather than believing the file from last time.
+    rendered: bool,
 }
 
 /// Bump when a record's meaning changes. Old files then hash to a different
@@ -200,8 +204,28 @@ impl PlaneKey {
         h.update(b"lumit-planes/media/");
         h.update(&fingerprint.size.to_le_bytes());
         h.update(fingerprint.head_tail_hash.as_bytes());
+        Self::named(&h, settings, false)
+    }
+
+    /// The key for the nested comp `comp`, read for `instance` on a Precomp
+    /// layer.
+    ///
+    /// A comp has no content to hash the way a file has, so the name is made of
+    /// who asked and what they asked about. The instance, because two effects
+    /// on two layers of one comp may be read at different times and are then
+    /// two answers; the comp, so a layer pointed at another one finds nothing.
+    #[must_use]
+    pub fn rendered(instance: Uuid, comp: Uuid, settings: PlaneSettings) -> Self {
+        let mut h = blake3::Hasher::new();
+        h.update(b"lumit-planes/comp/");
+        h.update(instance.as_bytes());
+        h.update(comp.as_bytes());
+        Self::named(&h, settings, true)
+    }
+
+    fn named(media_hash: &blake3::Hasher, settings: PlaneSettings, rendered: bool) -> Self {
         let mut media = [0u8; 16];
-        media.copy_from_slice(&h.finalize().as_bytes()[..16]);
+        media.copy_from_slice(&media_hash.finalize().as_bytes()[..16]);
 
         let mut h = blake3::Hasher::new();
         h.update(b"lumit-planes/run/");
@@ -210,7 +234,11 @@ impl PlaneKey {
         settings.feed(&mut h);
         let mut run = [0u8; 16];
         run.copy_from_slice(&h.finalize().as_bytes()[..16]);
-        PlaneKey { media, run }
+        PlaneKey {
+            media,
+            run,
+            rendered,
+        }
     }
 
     fn prefix(&self) -> String {
@@ -1086,7 +1114,10 @@ fn run(job: PlaneJob, cancel: &AtomicBool) {
             Some(s) => hit.plane(s).is_some(),
             None => !hit.is_partial(),
         };
-        if !job.analyse || satisfied {
+        // A comp answers a warm pass and nobody else: it may have been edited
+        // since the file was written, and Analyse is how it is read again.
+        let rendered = key.is_some_and(|k| k.rendered);
+        if !job.analyse || (satisfied && !rendered) {
             publish(instance, hit);
             finish(instance, Some(Progress::Done), owns_slot);
             return;
@@ -1094,8 +1125,8 @@ fn run(job: PlaneJob, cancel: &AtomicBool) {
         // Its frames were read by this model under this key, which is the whole
         // of what makes a plane what it is, so they are offered to the run that
         // carries on from them. What may actually be kept is [`analyse`]'s to
-        // say.
-        resume = Some(hit);
+        // say. A comp's are not offered, for the reason above.
+        resume = (!rendered).then_some(hit);
     }
     if !job.analyse {
         // A warm pass found nothing. That is not a failure and must not look
@@ -1285,10 +1316,47 @@ pub fn job_for(
     })
 }
 
+/// [`job_for`] for an instance on a **Precomp** layer: the nested comp `comp`
+/// is what the model reads, and its frames are rendered rather than decoded.
+///
+/// At the comp's own size, since a matte is kept at the raster it was read at.
+/// `None` when it is not a planes-tier effect.
+#[must_use]
+pub fn job_for_comp(
+    fx: &EffectInstance,
+    doc: Arc<Document>,
+    comp: Uuid,
+    analyse: bool,
+) -> Option<PlaneJob> {
+    Some(PlaneJob {
+        open: Box::new(move || {
+            crate::track::CompLuma::open_at(doc, comp, 1.0)
+                .map(|f| Box::new(f) as Box<dyn RotoFrames>)
+        }),
+        analyse,
+        ..warm_job_for_comp(fx, comp)?
+    })
+}
+
+/// The warm pass's half of [`job_for_comp`]: the name of the file and nothing
+/// to open, since a warm pass reads a sidecar and never a frame.
+fn warm_job_for_comp(fx: &EffectInstance, comp: Uuid) -> Option<PlaneJob> {
+    let settings = PlaneSettings::of(fx)?;
+    Some(PlaneJob {
+        instance: fx.id,
+        key: Some(PlaneKey::rendered(fx.id, comp, settings)),
+        settings,
+        open: Box::new(|| None),
+        analyse: false,
+        owns_slot: false,
+        stop_after: None,
+    })
+}
+
 /// Every cached run a document could be holding, as warm-pass jobs: one per
-/// enabled planes-tier effect on a footage layer whose media has a fingerprint,
-/// and one per such box in a node graph, against the footage its picture comes
-/// from.
+/// enabled planes-tier effect on a footage layer whose media has a fingerprint
+/// or on a Precomp layer, and one per such box in a node graph, against the
+/// footage its picture comes from.
 #[must_use]
 pub fn warm_jobs(doc: &Document) -> Vec<PlaneJob> {
     // Where a footage item's file is and what names it, or `None` while it is
@@ -1308,6 +1376,11 @@ pub fn warm_jobs(doc: &Document) -> Vec<PlaneJob> {
             continue;
         };
         for layer in &comp.layers {
+            if let LayerKind::Precomp { comp: nested } = layer.kind {
+                let found = lumit_core::planes::analyses(&layer.effects);
+                out.extend(found.filter_map(|fx| warm_job_for_comp(fx, nested)));
+                continue;
+            }
             let LayerKind::Footage { item: media, .. } = layer.kind else {
                 continue;
             };

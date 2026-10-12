@@ -2276,15 +2276,23 @@ impl CompLuma {
     /// no frames, or this machine has no graphics adapter to render with.
     #[must_use]
     pub fn open(doc: Arc<Document>, comp_id: Uuid) -> Option<Self> {
+        let scale = analysis_scale(doc.comp(comp_id)?);
+        #[allow(clippy::cast_possible_truncation)]
+        let scale = scale.min(1.0) as f32;
+        Self::open_at(doc, comp_id, scale)
+    }
+
+    /// [`Self::open`] at a render scale the caller chooses. One is the comp's
+    /// own raster, which is what an answer kept in the layer's own pixels has
+    /// to be measured at: a matte, a plane, a point.
+    #[must_use]
+    pub fn open_at(doc: Arc<Document>, comp_id: Uuid, scale: f32) -> Option<Self> {
         let comp = doc.comp(comp_id)?;
         let fps = comp.frame_rate.fps();
         let frames = comp
             .frame_rate
             .frame_at(lumit_core::time::CompTime(comp.duration.0));
         let frames = usize::try_from(frames).ok()?;
-        let scale = analysis_scale(comp);
-        #[allow(clippy::cast_possible_truncation)]
-        let scale = scale.min(1.0) as f32;
         // The size the renderer will actually hand back, from the renderer's own
         // rounding rather than a second copy of it.
         let (width, height) = lumit_gpu::composite::scaled_size(comp.width, comp.height, scale);
@@ -2334,6 +2342,24 @@ impl LumaFrames for CompLuma {
 
     fn analysis_scale(&self) -> f64 {
         f64::from(self.scale)
+    }
+}
+
+/// The same rendered frames with their colour kept, for the analyses that read
+/// a picture rather than follow its specks: the planes tier and the Roto brush
+/// on a Precomp layer.
+impl crate::frames::RotoFrames for CompLuma {
+    fn info(&self) -> (usize, u32, u32, f64) {
+        (self.frames, self.width, self.height, self.fps)
+    }
+
+    fn rgba(&mut self, n: usize) -> Option<Vec<u8>> {
+        let frame = u64::try_from(n).ok()?;
+        let (rgba, w, h) = self
+            .renderer
+            .render_rgba(&self.doc, self.comp, frame, self.scale)
+            .ok()?;
+        ((w, h) == (self.width, self.height)).then_some(rgba)
     }
 }
 
