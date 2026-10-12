@@ -1,3 +1,221 @@
 {
-  "@@locale": "it"
+  "@@locale": "it",
+  "aboutBlurb": "Un programma per motion graphics e compositing. Software libero rilasciato sotto la GNU General Public Licence, versione 3.",
+  "@aboutBlurb": {
+    "description": "About window: what Lumit is, and its licence. The licence name is a proper noun — keep it recognisable, and do not translate \"GNU\"."
+  },
+  "addAtPlayhead": "Aggiungilo al cursore di riproduzione",
+  "@addAtPlayhead": {
+    "description": "Button that puts a marker where the playhead is."
+  },
+  "addAudioOnly": "Aggiungi solo l'audio",
+  "@addAudioOnly": {
+    "description": "Project panel context-menu item on a footage clip: put the clip's sound into the open composition as its own layer, without its picture."
+  },
+  "addEffect": "Aggiungi un effetto",
+  "@addEffect": {
+    "description": "Button that opens the list of built-in effects."
+  },
+  "animated": "animato",
+  "@animated": {
+    "description": "Shown in place of a number when the value is animated rather than fixed. Lower case on purpose — it sits where a value would."
+  },
+  "apply": "Applica",
+  "@apply": {
+    "description": "Button that commits a picked value."
+  },
+  "bringForward": "Spostalo su di un livello",
+  "@bringForward": {
+    "description": "Context-menu item: move a layer one place up the stack."
+  },
+  "cache": "Cache",
+  "@cache": {
+    "description": "Bottom strip: heading over the three cache meters."
+  },
+  "cacheDeleteTitle": "Vuoi eliminare i fotogrammi salvati su disco?",
+  "@cacheDeleteTitle": {
+    "description": "Asked before emptying the disk cache, which deletes real files."
+  },
+  "cacheKeepThem": "Mantienili",
+  "@cacheKeepThem": {
+    "description": "Button that declines to delete the parked frames."
+  },
+  "cacheLocationBesideProject": "Accanto al file di progetto",
+  "@cacheLocationBesideProject": {
+    "description": "Choice of where parked frames live: in a folder next to the project file."
+  },
+  "cacheLocationChosenFolder": "In una cartella a mia scelta",
+  "@cacheLocationChosenFolder": {
+    "description": "Choice of where parked frames live: a folder the user picks."
+  },
+  "cacheLocationWithLumit": "Nella cartella di Lumit",
+  "@cacheLocationWithLumit": {
+    "description": "Choice of where parked frames live: in Lumit's own application data folder."
+  },
+  "cameraAngleOfView": "Campo visivo",
+  "@cameraAngleOfView": {
+    "description": "Camera settings row: how wide a view the lens takes in, in degrees."
+  },
+  "cameraAperture": "Apertura",
+  "@cameraAperture": {
+    "description": "A camera's aperture: how wide the lens opens, which decides how strong the depth-of-field blur is."
+  },
+  "cameraBlurLevel": "Quantità di sfocatura",
+  "@cameraBlurLevel": {
+    "description": "A camera's blur level, a percentage: how much of the depth-of-field blur is applied."
+  },
+  "cameraDepthOfField": "Profondità di campo",
+  "@cameraDepthOfField": {
+    "description": "Camera settings row: whether layers away from the focus plane are blurred."
+  },
+  "cameraFStop": "F-stop",
+  "@cameraFStop": {
+    "description": "Camera settings row: the aperture written the way a photographer writes it, such as 5.6."
+  },
+  "cameraFilmSize": "Dimensione del sensore",
+  "@cameraFilmSize": {
+    "description": "Camera settings row: the width of the sensor the focal length is measured against, in millimetres."
+  },
+  "cameraFocalLength": "Lunghezza focale",
+  "@cameraFocalLength": {
+    "description": "Camera settings row: the lens length in millimetres, such as 50."
+  },
+  "cameraFocusDistance": "Distanza di messa a fuoco",
+  "@cameraFocusDistance": {
+    "description": "A camera's focus distance: how far in front of it the sharp plane sits."
+  },
+  "cameraLockToZoom": "Sincronizza la messa a fuoco con lo zoom",
+  "@cameraLockToZoom": {
+    "description": "Camera settings tick: keep the focus distance equal to the zoom, so what fills the frame is what is sharp."
+  },
+  "cameraOneNode": "Un nodo",
+  "@cameraOneNode": {
+    "description": "Camera type: a camera that aims by its own rotation."
+  },
+  "cameraOptions": "Opzioni della videocamera",
+  "@cameraOptions": {
+    "description": "Heading in a camera's Transform group, over the rows about the lens rather than about where the camera stands."
+  },
+  "cameraPresetMm": "{mm} mm",
+  "@cameraPresetMm": {
+    "description": "One of the lens presets in the camera settings, named by its focal length.",
+    "placeholders": {
+      "mm": {
+        "type": "String"
+      }
+    }
+  },
+  "cameraSettings": "Impostazioni della videocamera",
+  "@cameraSettings": {
+    "description": "Layer menu item, and the title of the window it opens: everything about a camera that is not animated."
+  },
+  "cameraTwoNode": "Due nodi",
+  "@cameraTwoNode": {
+    "description": "Camera type: a camera that aims at its point of interest."
+  },
+  "cameraType": "Tipologia",
+  "@cameraType": {
+    "description": "Camera settings row: whether the camera is one-node or two-node."
+  },
+  "cameraUnits": "Unità",
+  "@cameraUnits": {
+    "description": "Camera settings row: which units the distances in the window are shown in."
+  },
+  "cancel": "Annulla",
+  "@cancel": {
+    "description": "Button that abandons a dialogue or a running job."
+  },
+  "channelAlpha": "Alpha",
+  "@channelAlpha": {
+    "description": "A viewing channel: transparency on its own. A technical term — keep it recognisable."
+  },
+  "chooseA": "Seleziona {kind}",
+  "@chooseA": {
+    "description": "Tooltip on a button that opens a file dialogue. {kind} is the sort of file wanted, e.g. 'LUT'.",
+    "placeholders": {
+      "kind": {
+        "type": "String"
+      }
+    }
+  },
+  "chooseConfirm": "Seleziona",
+  "@chooseConfirm": {
+    "description": "The confirm button in the system's folder-picking dialogue."
+  },
+  "chooseEllipsis": "Seleziona...",
+  "@chooseEllipsis": {
+    "description": "Button that opens a file dialogue when nothing has been chosen yet."
+  },
+  "clear": "Svuota",
+  "@clear": {
+    "description": "Tooltip on the button that empties a value."
+  },
+  "clipCopyRowShape": "Copia la curva di velocità dell'intera riga",
+  "@clipCopyRowShape": {
+    "description": "Context-menu item: copy the speed curve of every clip on the layer."
+  },
+  "clipCopyShape": "Copia la curva di velocità di questa clip",
+  "@clipCopyShape": {
+    "description": "Context-menu item on a clip in a Sequence layer: copy its speed curve."
+  },
+  "clipDelete": "Elimina la clip",
+  "@clipDelete": {
+    "description": "Context-menu item: remove a clip from a Sequence layer."
+  },
+  "clipPasteShape": "Incolla la curva di velocità su questo livello",
+  "@clipPasteShape": {
+    "description": "Context-menu item: apply a copied speed curve here."
+  },
+  "clipResetSpeed": "Ripristina la velocità",
+  "@clipResetSpeed": {
+    "description": "Context-menu item: put a clip back to playing at its normal speed."
+  },
+  "clipSpeedTitle": "Velocità della clip",
+  "@clipSpeedTitle": {
+    "description": "Title of the small dialogue that asks for a Sequence clip's playback speed. Speed, never velocity (docs/01-GLOSSARY.md)."
+  },
+  "clipboardValueColumn": "Valore",
+  "@clipboardValueColumn": {
+    "description": "Column heading in the keyframe data copied to the clipboard."
+  },
+  "cloneSourceFirst": "Imposta prima la sorgente da clonare con Alt+click",
+  "@cloneSourceFirst": {
+    "description": "Notice when the clone stamp is used before a source is chosen. Alt is a key name."
+  },
+  "cloneSourceSet": "Sorgente da clonare impostata",
+  "@cloneSourceSet": {
+    "description": "Notice after alt-clicking with the clone stamp."
+  },
+  "close": "Chiudi",
+  "@close": {
+    "description": "Button that shuts a window."
+  },
+  "compositionSettings": "Impostazioni della composizione",
+  "@compositionSettings": {
+    "description": "Title of the dialogue that edits an existing composition."
+  },
+  "compositionSettingsEllipsis": "Impostazioni della composizione...",
+  "@compositionSettingsEllipsis": {
+    "description": "Context-menu item; the ellipsis means a dialogue opens."
+  },
+  "couldNotAddShapeLayer": "Impossibile aggiungere un livello forma",
+  "@couldNotAddShapeLayer": {
+    "description": "Notice when making a shape layer failed."
+  },
+  "couldNotAddTextLayer": "Impossibile aggiungere un livello testo",
+  "@couldNotAddTextLayer": {
+    "description": "Notice when making a text layer failed."
+  },
+  "deletePuppetPin": "Rimuovi il pin",
+  "@deletePuppetPin": {
+    "description": "Context-menu item on a puppet pin's Timeline row: remove that pin."
+  },
+  "fxFadeIn": "Dissolvenza in entrata",
+  "@fxFadeIn": {
+    "description": "Effect controls — a control on Radio waves: how much of a wave's life it spends fading up."
+  },
+  "fxFadeOut": "Dissolvenza in uscita",
+  "@fxFadeOut": {
+    "description": "Effect controls — a control on Radio waves: how much of a wave's life it spends fading out."
+  }
 }
