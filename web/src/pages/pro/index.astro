@@ -21,6 +21,21 @@ const features = [
     c: "mint",
   },
   {
+    h: "Projects that stay online",
+    p: "People can open one and edit while you're away.",
+    c: "teal",
+  },
+  {
+    h: "Review links",
+    p: "Send an edit as a link. The notes come back on your timeline.",
+    c: "violet",
+  },
+  {
+    h: "Backup with history",
+    p: "Every save is kept. Go back to any of them.",
+    c: "indigo",
+  },
+  {
     h: "Settings on every device",
     p: "Shortcuts, themes, workspaces, and presets follow you.",
     c: "azure",
@@ -39,6 +54,9 @@ const compare = [
   { what: "Shared projects through a relay you run yourself", free: true, pro: true },
   { what: "Profiles on one machine, each with its own settings", free: true, pro: true },
   { what: "Shared projects through Lumit's relay, from anywhere", free: false, pro: true },
+  { what: "Shared projects kept online, for people who are never on together", free: false, pro: true },
+  { what: "Review links, with the comments back in your timeline", free: false, pro: true },
+  { what: "A backup of every save, with its history", free: false, pro: true },
   { what: "Settings synced across your machines", free: false, pro: true },
 ];
 
@@ -63,20 +81,24 @@ const questions = [
     a: "Yes. Nothing that was free has moved behind Pro.",
   },
   {
-    q: "Can the relay read my project?",
-    a: "No. Everything is encrypted with the invite's key, which the relay never gets.",
+    q: "Can you read my shared project?",
+    a: "No. It is encrypted with the invite's key, which our servers never get. That goes for a project kept online too.",
   },
   {
     q: "Does everyone sharing a project need Pro?",
-    a: "No, only the host does. Guests don't need an account.",
+    a: "No, only the host does. Guests and reviewers don't need an account.",
   },
   {
     q: "What do you keep about me?",
-    a: "Your email, your name, and the settings you sync. Never your projects, footage, or card.",
+    a: "Your email, your name, the settings you sync, and what you send us: review videos with their comments, and backups of your project files. Never your card.",
+  },
+  {
+    q: "How much can I store?",
+    a: "50 GB, across review links, backups, and footage kept online.",
   },
   {
     q: "What happens if I cancel?",
-    a: "Pro runs to the end of what you paid for, and your settings stay on each machine.",
+    a: "Pro runs to the end of what you paid for. After that your links and backups can still be opened and deleted, and your settings stay on each machine.",
   },
   {
     q: "Can I get a refund?",
@@ -87,7 +109,7 @@ const questions = [
 
 <Base
   title="Lumit Pro"
-  description="Share a Lumit project from anywhere and take your settings to every machine. Lumit itself stays free and open source."
+  description="Share a Lumit project from anywhere, send edits for review, and keep every save. Lumit itself stays free and open source."
 >
   <section class="pt-14 pb-20 sm:pt-20 sm:pb-24">
     <div class="wrap flex flex-col gap-12">

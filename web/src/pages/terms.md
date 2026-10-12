@@ -20,8 +20,9 @@ Lumit and Lumit Pro are made and run by Mackenzie Reed, which is who "we" means 
 
 ## Lumit Pro
 
-Pro is a subscription that adds two things to an account: shared projects through Lumit's
-relay, and settings synced across your machines.
+Pro is a subscription that adds these to an account: shared projects through Lumit's
+relay, shared projects kept online, review links, backups of your projects, and settings
+synced across your machines.
 
 - It is sold by Paddle, who are the merchant of record. Their
   [buyer terms](https://www.paddle.com/legal/checkout-buyer-terms) apply to the payment.
@@ -36,6 +37,18 @@ relay, and settings synced across your machines.
 The relay is there to carry shared projects between the people working on them. Don't use
 it for anything else, don't try to break it, and don't use it to send anything you have no
 right to send. We may slow or stop a connection that is harming the relay for others.
+
+## What you store with us
+
+- It stays yours. We use it only to give it back to you and to the people you share it with.
+- A review link can be opened by anyone who has its address. Set a password on one that
+  shouldn't be.
+- Don't send anything you have no right to share, or anything unlawful. We may remove a
+  link that is reported to us and breaks this.
+- An account can store 50 GB across review links, backups and footage kept online.
+- If Pro ends, what you stored can still be opened and deleted, and nothing new can be
+  added. A project kept online that nobody opens is cleared 90 days after Pro ends.
+- A backup is a second copy. Keep your own project files as well.
 
 ## What we promise, and what we don't
 
