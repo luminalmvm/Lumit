@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 660 460" width="660" height="460" fill="none">
+  <!-- The disk image's window. The drag is drawn the way Lumit would draw it: a
+       motion path from the app (170,188) to Applications (490,188), frame dots
+       eased in and out and gathering weight toward where they are going, over
+       the two keyframes on the timeline underneath. make-dmg.sh places the
+       icons on those centres.
+
+       Paper, not ink, on purpose: Finder draws icon labels black over a
+       background picture whatever the system appearance, so they have to land
+       on something pale. The site's three hero lights are here as a wash.
+       Nothing that matters is below y=350 - a tab bar and a path bar can take
+       a hundred points off the bottom of the window.
+
+       dmg-background.tiff is this file rendered at 1x and 2x. Chrome, because
+       the grain is an feTurbulence that sips and Quick Look do not draw, and
+       with file access allowed so that it will load the font:
+
+         chrome=/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome
+         for s in 1 2; do "$chrome" -headless -allow-file-access-from-files \
+           -screenshot=bg@$s.png -window-size=660,460 \
+           -force-device-scale-factor=$s dmg-background.svg; done
+         for s in 1 2; do sips -s format tiff -s formatOptions lzw bg@$s.png -o bg@$s.tiff; done
+         sips -s dpiWidth 144 -s dpiHeight 144 bg@2.tiff
+         tiffutil -cat bg@1.tiff bg@2.tiff -out dmg-background.tiff
+
+       tiffutil -cat, not -cathidpicheck, which writes the 2x layer back at 72dpi. -->
+  <style>
+    @font-face { font-family: "Paper Mono"; src: url("../../web/src/assets/fonts/PaperMono-Variable.woff2"); }
+    text { font: 11px "Paper Mono", ui-monospace, monospace; letter-spacing: 0.9px; fill: #5e666b; }
+  </style>
+  <defs>
+    <linearGradient id="key-a" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6fdca8"/><stop offset="1" stop-color="#b6e84f"/>
+    </linearGradient>
+    <linearGradient id="key-b" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#86e2ff"/><stop offset="1" stop-color="#2f6fe0"/>
+    </linearGradient>
+    <radialGradient id="light-a"><stop offset="0" stop-color="#38519c" stop-opacity="0.75"/><stop offset="1" stop-color="#38519c" stop-opacity="0"/></radialGradient>
+    <radialGradient id="light-b"><stop offset="0" stop-color="#2d7b89" stop-opacity="0.65"/><stop offset="1" stop-color="#2d7b89" stop-opacity="0"/></radialGradient>
+    <radialGradient id="light-c"><stop offset="0" stop-color="#449a78" stop-opacity="0.5"/><stop offset="1" stop-color="#449a78" stop-opacity="0"/></radialGradient>
+    <filter id="grain" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" stitchTiles="stitch"/>
+      <feColorMatrix values="0 0 0 0 .5  0 0 0 0 .5  0 0 0 0 .5  0 0 0 .9 0"/>
+    </filter>
+  </defs>
+  <rect width="660" height="460" fill="#f5f6f3"/>
+  <g opacity="0.34">
+    <ellipse cx="120" cy="-90" rx="420" ry="290" fill="url(#light-a)"/>
+    <ellipse cx="560" cy="-100" rx="360" ry="280" fill="url(#light-b)"/>
+    <ellipse cx="360" cy="-80" rx="280" ry="210" fill="url(#light-c)"/>
+  </g>
+
+  <!-- the motion path, its two tangent handles, its frames -->
+  <path d="M250 178 C296 102 364 102 410 178" stroke="#d3d8d4"/>
+  <path d="M250 178 L278.5 130.9 M410 178 L381.5 130.9" stroke="#b4bbb7"/>
+  <g fill="#f5f6f3" stroke="#8b9296" stroke-width="1.2">
+    <circle cx="278.5" cy="130.9" r="2.6"/><circle cx="381.5" cy="130.9" r="2.6"/>
+  </g>
+  <g fill="#0b0c0e">
+    <circle cx="250.7" cy="176.9" r="1.24" opacity="0.17"/> <circle cx="252.7" cy="173.6" r="1.28" opacity="0.21"/> <circle cx="256.0" cy="168.6" r="1.32" opacity="0.24"/>
+    <circle cx="260.6" cy="162.4" r="1.37" opacity="0.27"/> <circle cx="266.2" cy="155.3" r="1.41" opacity="0.31"/> <circle cx="273.0" cy="147.9" r="1.45" opacity="0.34"/>
+    <circle cx="280.8" cy="140.8" r="1.49" opacity="0.37"/> <circle cx="289.4" cy="134.2" r="1.53" opacity="0.41"/> <circle cx="298.9" cy="128.7" r="1.57" opacity="0.44"/>
+    <circle cx="308.9" cy="124.5" r="1.62" opacity="0.47"/> <circle cx="319.3" cy="121.9" r="1.66" opacity="0.51"/> <circle cx="330.0" cy="121.0" r="1.70" opacity="0.54"/>
+    <circle cx="340.7" cy="121.9" r="1.74" opacity="0.57"/> <circle cx="351.1" cy="124.5" r="1.78" opacity="0.61"/> <circle cx="361.1" cy="128.7" r="1.82" opacity="0.64"/>
+    <circle cx="370.6" cy="134.2" r="1.87" opacity="0.67"/> <circle cx="379.2" cy="140.8" r="1.91" opacity="0.71"/> <circle cx="387.0" cy="147.9" r="1.95" opacity="0.74"/>
+    <circle cx="393.8" cy="155.3" r="1.99" opacity="0.77"/> <circle cx="399.4" cy="162.4" r="2.03" opacity="0.81"/> <circle cx="404.0" cy="168.6" r="2.08" opacity="0.84"/>
+    <circle cx="407.3" cy="173.6" r="2.12" opacity="0.87"/> <circle cx="409.3" cy="176.9" r="2.16" opacity="0.91"/>
+  </g>
+  <g stroke="#0b0c0e" stroke-width="1.5" stroke-linejoin="round">
+    <path d="M250 170.5 L257.5 178 L250 185.5 L242.5 178Z" fill="url(#key-a)"/>
+    <path d="M410 170.5 L417.5 178 L410 185.5 L402.5 178Z" fill="url(#key-b)"/>
+  </g>
+
+  <!-- the timeline: a ruler (its ticks are the dashes of a fat line), the span, its two keys -->
+  <path d="M0 310 H660" stroke="#d3d8d4"/>
+  <path d="M9.5 312 H660" stroke="#c3c9c5" stroke-width="4" stroke-dasharray="1 15"/>
+  <path d="M9.5 314.5 H660" stroke="#8b9296" stroke-width="9" stroke-dasharray="1 79"/>
+  <path d="M182 340 H478" stroke="#b4bbb7"/>
+  <g fill="#d8a24a" stroke="#0b0c0e" stroke-width="1.5" stroke-linejoin="round">
+    <path d="M170 333.5 L176.5 340 L170 346.5 L163.5 340Z"/><path d="M490 333.5 L496.5 340 L490 346.5 L483.5 340Z"/>
+  </g>
+  <path d="M0 400 H660 M0 430 H660" stroke="#e6e9e5"/>
+
+  <text x="28" y="40">LUMIT</text>
+  <text x="632" y="40" text-anchor="end">DRAG TO INSTALL</text>
+  <rect width="660" height="460" filter="url(#grain)" opacity="0.05"/>
+</svg>

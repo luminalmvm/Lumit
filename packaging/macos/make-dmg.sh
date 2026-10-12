@@ -1,9 +1,9 @@
 #!/bin/sh
 # Builds the macOS disk image: a release build, the Homebrew FFmpeg
 # dylibs bundled INTO the .app (so the image runs on machines without
-# Homebrew), a re-sign, then a DMG laid out by create-dmg: white
-# background (dmg-background.png), the app on the left, an Applications
-# shortcut on the right, a curved arrow between them. macOS only.
+# Homebrew), a re-sign, then a DMG laid out by create-dmg: the app on the
+# left, an Applications shortcut on the right, and the drag drawn between them
+# as a motion path (dmg-background.tiff, from dmg-background.svg). macOS only.
 #
 #   packaging/macos/make-dmg.sh [version]
 #
@@ -298,8 +298,8 @@ if [ -n "${APPLE_API_KEY_PATH:-}" ]; then
 fi
 
 # create-dmg copies the CONTENTS of its source folder, so the app goes into a
-# staging folder first. The icon coordinates are centres in a 660x400 window,
-# matching the arrow baked into dmg-background.png.
+# staging folder first. The icon coordinates are centres in a 660x460 window,
+# matching the ends of the path drawn in dmg-background.svg.
 stage="$(mktemp -d)"
 trap 'rm -rf "$stage"' EXIT
 # ditto rather than cp -R: the stapled ticket and the signature travel as
@@ -323,9 +323,9 @@ rm -f "$out"
 if command -v create-dmg >/dev/null; then
     # The proper drag-into-Applications window (brew install create-dmg).
     create-dmg --volname "Lumit" \
-        --background "$here/dmg-background.png" \
-        --window-size 660 400 --icon-size 128 \
-        --icon "Lumit.app" 165 190 --app-drop-link 495 190 \
+        --background "$here/dmg-background.tiff" \
+        --window-size 660 460 --icon-size 128 \
+        --icon "Lumit.app" 170 188 --app-drop-link 490 188 \
         --hide-extension "Lumit.app" \
         "$out" "$stage"
 else
