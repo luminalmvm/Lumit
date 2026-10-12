@@ -1,115 +1,63 @@
 ---
 title: Backup and history
-description: Project backup with Lumit Pro, a project's history, and opening a project on another machine.
+description: Go back to any save, on any device.
 sidebar:
   order: 0.5
 ---
 
-**Backup** is a copy of a project that Lumit Pro keeps each time the project is saved. Each
-save is kept as a **version**, and a project's versions are its **history**. It is part of
+**Backup** stores a copy of a project each time it is saved. Each copy is a **version**, and
+a project's versions are its **history**. It is part of
 [Lumit Pro](/use/profiles/#lumit-pro).
 
-## What is sent
+## What is backed up
 
-A save sends the `.lum` project file to Lumit's server, with a picture of the composition in
-front at the playhead.
+- The `.lum` project file, with a picture of the open composition.
+- Footage, only when the project is [packed](/use/projects/#packed-projects).
+- Between saves, the newest [autosave](/use/projects/#autosave).
+- Not a project file over 95 MB.
 
-- Footage is not sent.
-- A [packed project](/use/projects/#packed-projects) carries its footage inside the file, and
-  the whole file is sent.
-- A project file over 95 MB is not backed up. Lumit says so once for that project.
-- A save that changed nothing makes no version.
-
-Between saves, the newest [autosave](/use/projects/#autosave) of the open project is sent as
-a version of its own. Lumit looks for one each minute while the project has unsaved changes.
-None is sent for a packed project.
-
-Without a connection the save waits. Lumit tries again every two minutes and at the next
-save.
-
-Saving, autosave and crash recovery do not need Lumit Pro.
+Without a connection the save waits and is sent later.
 
 ## The mark on the bottom strip
 
-Beside **Saved**, a mark shows the backup of the open project. A press on it opens
+Beside **Saved**, a mark shows the backup of the open project. Press it to open
 **Project history**.
 
 | Mark | Meaning |
 | --- | --- |
-| Tick | The file on disk is backed up. |
-| Ring | A save is being sent. |
-| Loop | The save is waiting to be sent. |
-| Warning | The save was refused, or the file is too large. |
-| Arrow down | Another machine has saved a newer version. |
-
-The mark is not drawn without Lumit Pro, before the project has been backed up, or while
-the project is kept out of backup.
+| Tick | Backed up. |
+| Ring | Backing up. |
+| Loop | Waiting to back up. |
+| Warning | Not backed up. |
+| Arrow down | Another device has saved a newer version. |
 
 ## Project history
 
-**File ▸ Project history…** lists the versions of the open project, newest first, under the
-day each was saved. A row has its time, a picture, and its name, or **Save** or **Autosave**
-when it has none. The machine is named when it was another one. A version with a name has a
-diamond on the rail.
+**File ▸ Project history…** lists the versions of the open project, newest first. **All**
+and **Named** filter the list, and **Changed** lists what changed in the chosen version.
 
-The version that is the file on disk is marked **Last save**. When the file on disk is none
-of the versions, a line over the list says it is not backed up.
-
-An autosave is a shorter row, with its time and **Autosave**. Two or more autosaves between
-two saves are one row that says how many there are, and a press on it shows them. The newest
-version always has a whole row. **All** and **Named**, above the list, choose between every
-version and the versions with a name.
-
-The chosen version is shown large, with its time, machine and size. The line under its
-picture names the composition and the timecode the picture shows. **Changed** lists what
-changed in it, a line to each: compositions added, removed and renamed, layers added,
-removed and changed, and effects and footage added and removed. A version is compared with
-the one its machine had when it was saved, or with the one before it in the list when that
-one has been thinned away. Nothing is listed for a project's first version or for a version
-over 32 MB. Changed layers are left out between versions written by different versions of
-Lumit.
+| Action | How |
+| --- | --- |
+| Open a version as a copy | **Open a copy**. It is saved beside the project file. |
+| Bring one composition back | **Bring a composition back…**, choose it, then **Bring back**. |
+| Put a version back | **Put back**. Unsaved changes are saved as a version first. |
+| Name a version | The **…** on its row: **Name this version…** |
+| Remove a name | The **…** on its row: **Remove name** |
+| Save and name in one go | **File ▸ Save a version…**, `Ctrl+Alt+S` by default. |
+| Delete a version | The **…** on its row: **Delete version…** |
+| Back up again | **Back up now** |
+| Free up storage | **Free up space…** |
+| Open a newer version from another device | **Open that version…** |
+| Keep the project out of backup | Switch off **Back up this project**. |
 
 | Key | Does |
 | --- | --- |
 | `Up`, `Down` | Chooses the version above or below. |
 | `Page Up`, `Page Down` | Chooses the version a screen above or below. |
 | `Home`, `End` | Chooses the newest or the oldest version. |
-| `Right` | Opens the chosen row of autosaves. |
-| `Left` | Folds the autosaves the chosen one is among back to one row. |
-| `Enter` | **Put back**, or opens the chosen row of autosaves. |
+| `Right`, `Left` | Opens or folds a row of autosaves. |
+| `Enter` | **Put back** |
 | `Esc` | Closes the window. |
-
-| Action | How |
-| --- | --- |
-| Open a version as a copy | **Open a copy**. The version is written beside the project file as `name (date time).lum` and opened. |
-| Bring one composition back | **Bring a composition back…** at the foot of the window, choose it, then **Bring back**. It is added to the project as a new composition, with the compositions, solids and footage it uses. Footage the project already has is not added again. A composition whose name the project already has is named for the version as well, as in `Titles (Before the regrade)`. |
-| Put a version back | **Put back**, then **Put back** again when asked. |
-| Name a version | The **…** on its row: **Name this version…**, or **Rename…** when it has a name. |
-| Take a name off | The **…** on its row: **Remove name**. |
-| Save and name in one go | **File ▸ Save a version…** The shortcut by default is `Ctrl+Alt+S`. |
-| Delete a version | The **…** on its row: **Delete version…** |
-| Send the file again | **Back up now**, shown while the save is waiting or was refused. |
-| Make room when storage is full | **Free up space…**, which opens **Open from backup**. |
-| Take a newer version from another machine | **Open that version…**, shown when there is one. |
-| Turn backup on again | **Settings…**, shown while backup is off in Settings. |
-| Keep the project out of backup | Switch off **Back up this project**. |
-
-The **…** on a row, and a right click on it, hold every action for that version.
-
-**Put back** saves unsaved changes first, and that save is a version. A file that is a
-version already makes no new one. The chosen version is then recorded as the newest, written
-over the project file, and the project is opened again. It stops, with the file unchanged,
-when the project as it stands cannot be sent. It is not offered for a project kept out of
-backup.
-
-**Save a version…** with nothing changed names the version that is the file on disk. A
-named version is kept for good.
-
-A copy starts a history of its own when it is saved. So does **File ▸ Save as…** to a new
-path.
-
-The only version of a project is not deleted. Deleting the version that is the file on disk
-leaves the project waiting to be backed up, until the next save or **Back up now**.
 
 ### Which versions are kept
 
@@ -131,58 +79,31 @@ Autosaves are thinned sooner.
 
 ## Open from backup
 
-**File ▸ Open from backup…** shows the account's backed-up projects, most recently saved
-first. Each card has a picture, the name, when it was last saved, the machine when it was
-another one, how many versions it has and what they come to. A search field appears with
-more than eight projects.
-
-The line under the title says how much of the account's storage is used, and how much of
-that is backups. Review links and footage kept online use the same storage.
+**File ▸ Open from backup…** shows every backed-up project, most recently saved first, and
+how much storage is used. Review links and footage kept online use the same storage.
 
 | Action | How |
 | --- | --- |
-| Open a project | Click its card, or the **…** on its card: **Open**. |
+| Open a project | Click its card. |
 | See another project's history | The **…** on its card: **Project history…** |
 | Rename a project in backup | The **…** on its card: **Rename…** |
-| Delete a project from backup | The **…** on its card: **Delete from backup…** |
+| Delete a project from backup | The **…** on its card: **Delete from backup…** The file on the device stays. |
 
-A project whose file is on the machine opens that file. Otherwise Lumit asks where to save
-it, fetches the newest version there, and opens it. Its footage is looked for in the folder
-it is saved to.
+A project that is not on the device is downloaded to a folder you choose. When footage is
+missing, the bottom strip says how many files. Press the notice to relink them.
 
-When footage is missing after a project is opened from backup, a version is put back or a
-copy is opened, the bottom strip says how many files are missing. A press on the notice
-selects the first of them in the Project panel and asks where it is, as **Relink…** on its
-menu does. Files that moved with it are found from the one.
+## On another device
 
-**Rename…** changes the name in backup. The file keeps its name.
-
-**Delete from backup…** deletes the project and its history from the server. The file on
-the machine stays, and is kept out of backup on that machine until **Back up this project**
-is switched on again.
-
-The welcome screen lists up to five backed-up projects that are not among the recent ones
-under **Backed up**. **All backups** opens the window.
-
-## On more than one machine
-
-A project opened from backup on a second machine carries on the same history. When a
-project is opened and another machine has saved a newer version, the bottom strip says so,
-and a press on the notice opens **Project history**. **Open that version…** takes it, as
-**Put back** on the newest version does. Saving instead makes the file on this machine the
-newest version.
+Open the project from backup to carry on the same history. When another device has saved a
+newer version, the bottom strip says so, and **Open that version…** takes it.
 
 ## Settings
 
 **Settings ▸ Account ▸ Back up projects when they are saved** turns backup off for the
-profile on that machine. **Storage** shows how much of the account's storage is used, and
-how much of that is backups.
+profile on that device. **Storage** shows how much is used.
 
 :::note
-An account whose Lumit Pro has ended can still open its backed-up projects and fetch their
-versions. Nothing new is sent. **Project history** and **Open from backup** say so under
-their titles, with **Lumit Pro…** beside it. **Put back** goes ahead when the file on disk
-is already a version, and is refused when it is not.
+After Lumit Pro ends, backed-up projects can still be opened. Nothing new is backed up.
 :::
 
 ## Related

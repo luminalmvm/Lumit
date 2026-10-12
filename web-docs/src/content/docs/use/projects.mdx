@@ -133,11 +133,8 @@ Each person has a colour, and what they have in hand is marked in it.
 A row out of sight in a layer that is twirled shut is marked on the layer. Two people on the
 same row or keyframe both show.
 
-The eye on a person's row in the people list of the Shared project window follows them. The
-open composition and the playhead go where theirs go, and the Viewer shows a frame in their
-colour with a **Following** tab that names them. Moving the playhead, opening another
-composition, **Esc** or **Stop** on the tab stops it, and so does their leaving. Following
-selects nothing and edits nothing.
+The eye on a person's row in the Shared project window follows them: the open composition
+and the playhead go where theirs go. **Esc**, or moving the playhead, stops it.
 
 A guest chooses a **Footage folder** when joining, and each footage item is matched to a
 file in it by name and then by content. An item with no match can be relinked, or fetched
@@ -214,9 +211,9 @@ needs the new invite.
 
 ### Keeping a shared project online
 
-A shared project can be **kept online**. Lumit's server holds it and puts everyone's edits
-in order, and nobody's computer has to be on for the others to work. It is part of
-[Lumit Pro](/use/profiles/#lumit-pro): the host needs it, and guests need no account.
+A shared project can be **kept online**, so nobody's computer has to be on for the others
+to work. It is part of [Lumit Pro](/use/profiles/#lumit-pro): the host needs it, and guests
+need no account.
 
 | Action | How |
 | --- | --- |
@@ -230,152 +227,69 @@ in order, and nobody's computer has to be on for the others to work. It is part 
 | Stop | **Stop keeping online**, for the host. A guest has **Leave**. |
 | Stop one whose file is gone | **Stop keeping online** on **Settings ▸ Account**, for the host. |
 
-**Password** works as it does for any shared project. The people list shows who the host is
-and the composition each person has open, and a composition's name opens it.
+**Invite to look** lets someone see the project and follow people, and not edit. Up to
+eight people can look at once. It never asks for the password: with one set, either link
+shows the project, and editing still needs the password.
 
-Someone who joins by **Invite to look** sees the project and the people, can follow, and is
-seen. An edit made on their computer is undone at once and reaches nobody. They are marked
-**look only** in the people list, and their own bottom strip reads **Look only**. They fetch
-footage and send none. **Remove** replaces both invites.
-
-**Invite to look** is off for a new project, and its link opens nothing. The switch on its
-row turns it on and off, for the host. Other windows read **off** on the row while it is
-off. Turning it off removes everyone who is looking, and asks first while someone is. Each
-keeps their copy. Turning it on again brings back the same link.
-
-**Invite to look** never asks for the password. With a password set, a lock marks **Invite
-to edit**, and turning **Invite to look** on asks first: while it is on, either link shows
-the project without the password, changing it still needs the password, and the lock
-reads **to edit**. Up to eight
-people can look at once, and someone who can edit takes the place of the last of them when
-the project is full.
-
-While someone changes a property, its row in the Timeline and in **Effect controls** is
-held for them on every other computer. It is dimmed, carries their name in their colour and
-takes no input until they let go. A row is held while a control on it is dragged or typed
-in, while a menu or a picker opened from it is up, while its keyframes are dragged in the
-lanes or the graph, while the layer's handles are dragged in the Viewer, and while the
-layer's bar is moved or trimmed. A held row's keyframes, its handles in the Viewer and its
-layer's bar cannot be dragged either, and the bar is dimmed under their name as the row is.
-A row left with nothing done to it for 30 seconds is let go.
+While someone changes a property, its row is held for them on every other computer. It is
+dimmed, with their name, until they let go.
 
 The first line of the window says how the computer stands with the server, and the bottom
 strip says the same.
 
 | Line | Meaning |
 | --- | --- |
-| In step | The computer has every edit, and the server has every edit made on it. |
-| Looking for the server | The server cannot be reached. Edits are kept on the computer and merged when it is found, with conflicts listed in the **Conflicts** window. |
-| Invite replaced | The host made a new invite while the computer was away. Edits are kept on the computer and merged when the new invite is pasted under **New invite**. |
-| On hold | The host's Lumit Pro has ended and the server takes no edits. Edits are kept on each computer and merged when it takes them again. |
-| Nearly too large | The project has grown past the 95 MB the server stores, footage not counted. Edits still go in, and stop unless the project gets smaller. |
-| Too large | The server takes no more edits, and edits are kept on each computer. The project cannot be made smaller while it is kept online: the host stops keeping it online, makes it smaller and keeps it online again. |
-| On Lumit 0.6.0, Waiting for the host, Update needed | Another version of Lumit keeps the project. See [After an update](#after-an-update). |
+| In step | Every edit is shared. |
+| Reconnecting | The server cannot be reached. Edits wait on the computer and are merged later. |
+| Invite replaced | The host made a new invite. Paste it under **New invite**. |
+| On hold | The host's Lumit Pro has ended. Edits wait on each computer. |
+| Nearly too large | The project is over 95 MB, footage not counted. Edits stop unless it gets smaller. |
+| Too large | No more edits are shared. The host stops keeping it online, makes it smaller and keeps it online again. |
+| On Lumit 0.6.0, Waiting for the host, Update needed | See [After an update](#after-an-update). |
 
-**Activity** lists who edited the project, newest first: each run of one person's edits
-with no gap of more than ten minutes, with when it was, how many edits it held and the
-compositions they were in. A composition's name opens it. The newest twelve are listed, and
-**Show all** lists the rest, up to 200.
+**Activity** lists who edited the project and where, newest first. Edits made while the
+computer was away are listed first.
 
-A run with edits made while the computer was not in the project is listed first, over a
-rule, with the rest under **Seen**: before it joined, while its copy was closed, or while
-the server could not be reached. The bottom strip says so once when the computer joins or
-comes back, such as *Ana made 34 edits in Titles*, and pressing that opens the window.
+A note is written on the line at the top of **Activity**. It carries the open composition
+and the playhead's time, and shows as a flag on that composition's time ruler. A note holds
+500 characters and cannot be changed. Its writer and the host can take it down.
 
-A note is written on the line at the top of **Activity**. It carries the composition that
-is open, the time the playhead is at and the layer that is selected, and pressing those
-under a note goes there. Notes are listed among the runs of edits by when they were
-written, and one left while the computer was not in the project is listed over the rule.
-The bottom strip shows a note from someone else as it arrives. A note with a composition
-has a flag on that composition's time ruler at its frame, in its writer's colour: pointing
-at the flag shows the note, and pressing it opens the window. A note written while the
-server cannot be reached reads **not sent yet**, and is sent when it is found. A note holds
-500 characters and cannot be changed, and the newest 200 are kept. The cross on a note's
-row takes it down for everyone, with its flag, and it cannot be put back. Its writer has
-the cross on their own notes, and the host on every note, where Lumit asks first for
-someone else's. Someone who joined by **Invite to look** reads notes, writes none and
-takes none down.
+When edits made while away are dropped or left as conflicts, **Open my copy** opens the
+project as it was on the computer just before.
 
-Edits of the computer's own are dropped when it comes back and what they changed is no
-longer there. A notice gives how many and stays until it is dismissed or the window is
-opened. The count heads **Activity**, with what each of the first twenty was and the
-composition and layer it was to.
+**Remove** takes a person out and replaces the invite link. Anyone who is away needs the
+new one from the host.
 
-When edits are dropped or conflicts are left, Lumit keeps the project as it was on the
-computer just before. **Open my copy**, on that row and in the **Conflicts** window, opens
-it as a project of its own, saved beside the shared project's file, or in a place chosen
-then when that has none. Lumit keeps two such copies at most: the first that has not been
-dismissed, and the latest. Each has a row of its own, with the edits that were dropped when
-it was kept, and two are offered by their times. Dismissing the first row deletes both.
-
-A copy that has been saved is still in the project when it is opened again, however it was
-closed. It looks for the server and takes the edits made since. A copy that was never saved
-leaves the project when it is closed, and the project stays online.
-
-**Remove** asks first. It takes a person out and replaces the invite link. Everyone
-connected at that moment gets the new link by themselves. Anyone else needs it from the
-host. Their window reads **Invite replaced** when their computer is back, and the new link
-is pasted under **New invite**. The removed person keeps their copy and the footage they
-had fetched.
-
-An invite that opens nothing says why on **Join a project**: the project is no longer kept
-online, the invite was replaced, or the invite to look is off.
-
-**Stop keeping online** asks first. The server deletes the project and its footage, the
-project stays on the host's computer, and every other copy becomes an ordinary project.
+**Stop keeping online** deletes the project and its footage from the server. Everyone keeps
+their copy.
 
 **Settings ▸ Account** lists every project the account keeps online under **Kept online**,
-with how much the server holds for it and when it was last opened. A project is named by
-its file on the computer that put it online, and is otherwise **Unnamed project** with the
-day it was put online. **Stop keeping online** is there for each. **Storage** on the same
-page is what backups and footage kept online have used.
+with **Stop keeping online** for each.
 
-Footage is kept on the server too. Each computer sends a stand-in of the footage it has
-that a composition uses, and fetches a stand-in of what it lacks. The switches and limits
-under **Advanced** apply. The window lists each file being sent or fetched, how far along it
-is and what failed. The cross on a row stops that file, and a file that failed has a mark
-that tries it again.
+Stand-ins of the footage are kept online too.
 
-- **Keep the originals online**, in the host's window: the host's computer also sends the
-  original files. Unticked, its label gives the size that would be sent.
-- **Fetch the original**, on a footage row's menu: fetches the file from the server. The row
-  reads **Original not online yet** when the server has none.
+- **Keep the originals online**, in the host's window, also sends the original files.
+- **Fetch the original**, on a footage row's menu, fetches one.
 
-Footage counts against the host's Lumit Pro storage. When the storage is full, no more is
-sent. The window says so, with **Manage…** for the host, which opens **Settings ▸ Account**,
-and **Try again**. Lumit asks the server again every five minutes.
+Footage counts against the host's Lumit Pro storage.
 
-The project, the footage, each person's name and what they have selected are encrypted on
-the computer they come from. The key is in the invite link and is never sent to the server.
-The server sees the addresses that connect, the version of Lumit, how many edits are made
-and how large each is, and for each footage file its size and a hash of part of it.
+The project and its footage are encrypted before they leave the computer. The key is in the
+invite link and is never sent to the server.
 
-When the host's Lumit Pro ends, the server stores nothing more. What it holds can still be
-opened and fetched. A project nobody opens for 90 days after that is deleted from the
-server.
+When the host's Lumit Pro ends, the project can still be opened. One that nobody opens for
+90 days after that is deleted from the server.
 
 #### After an update
 
-A project kept online is on the version of Lumit that last stored it, and a computer on
-another version is not in step with it.
+A project kept online is on the version of Lumit that last stored it.
 
 | Computer | What happens |
 | --- | --- |
-| The host's, on a newer Lumit | Lumit asks once whether to move the project forward. **Move it forward** does that, and the project carries on. **Not now** leaves it, and the Shared project window offers the move again. |
+| The host's, on a newer Lumit | Lumit asks whether to move the project forward. **Not now** leaves it, and the Shared project window offers the move again. |
 | A guest's, on a newer Lumit | The copy waits, and joins by itself when the host has moved the project forward. |
-| Anyone's, on an older Lumit | The window names the version the project is on, with the button **Help ▸ Check for updates** has. |
+| Anyone's, on an older Lumit | The window names the version to update to. |
 
-Edits made on a computer that is waiting are kept on it and merged when it is in step
-again. A move cannot be undone. It is refused while someone on the older Lumit goes on
-editing, and when the newer Lumit cannot read an edit the older one stored. The project is
-then unchanged.
-
-:::note
-Everyone needs the same version of Lumit. Image sequences, proxies, files an effect reads
-such as a LUT, and the results of tracking, roto and depth analysis are not sent. A proxy is looked for in the
-footage folder as footage is, and a file an effect reads by its name at the top of that
-folder. A shared project takes up to 16 people.
-:::
+Edits made while waiting are kept and merged afterwards. A move cannot be undone.
 
 ## Autosave
 

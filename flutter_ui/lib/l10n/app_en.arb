@@ -16597,7 +16597,7 @@
   "@proFeatureBackupTitle": {
     "description": "Lumit Pro window: the name of one thing Pro does. Each save of a project is kept on Lumit's server, and the earlier saves are its history."
   },
-  "proFeatureBackupBody": "Every save is kept, and opens on any machine.",
+  "proFeatureBackupBody": "Go back to any save, on any device.",
   "@proFeatureBackupBody": {
     "description": "Lumit Pro window: the one short line under Backup and history."
   },
@@ -16645,7 +16645,7 @@
   "@backupLastSave": {
     "description": "Project history window: small tag on the version that is the open project's file as it was last saved. Autosaves sent since can sit above it in the list."
   },
-  "backupAhead": "The file on this machine is not backed up.",
+  "backupAhead": "The file on this device is not backed up.",
   "@backupAhead": {
     "description": "Project history window: one line over the list when the open project's file is none of the versions listed, because it was saved after the last one was sent and that save has not gone."
   },
@@ -16697,7 +16697,7 @@
       }
     }
   },
-  "backupPutBackNote": "The project as it is now stays in the history.",
+  "backupPutBackNote": "The current project stays in the history.",
   "@backupPutBackNote": {
     "description": "Quiet line under the question asked before a version is put back. Nothing is lost by putting a version back: the project as it stands is kept as a version first."
   },
@@ -16709,7 +16709,7 @@
   "@backupDayYesterdayWithin": {
     "description": "Yesterday, in the middle of a sentence: the version from yesterday, 01:11."
   },
-  "backupPutBackUnsent": "The project as it is now could not be backed up, so nothing was put back.",
+  "backupPutBackUnsent": "The current project could not be backed up, so nothing was put back.",
   "@backupPutBackUnsent": {
     "description": "Bottom-strip warning. Putting a version back first backs up the project as it stands, and stops when that fails."
   },
@@ -16805,7 +16805,7 @@
   "@backupStatusFailed": {
     "description": "State of the open project's backup when the server refused the save. The reason follows it."
   },
-  "backupStatusTooLarge": "Over 95 MB, so not backed up",
+  "backupStatusTooLarge": "Over 95 MB. Not backed up",
   "@backupStatusTooLarge": {
     "description": "State of the open project's backup when its file is over 95 MB."
   },
@@ -16872,7 +16872,7 @@
   "@backupDelete": {
     "description": "Open from backup window: row in a project's menu."
   },
-  "backupDeleteAsk": "Delete {name} and its history from backup? The file on this machine stays.",
+  "backupDeleteAsk": "Delete {name} and its history from backup? The file on this device stays.",
   "@backupDeleteAsk": {
     "description": "Question asked before a project is deleted from backup. {name} is the project's name.",
     "placeholders": {
@@ -16889,7 +16889,7 @@
   "@backupErrorTooLarge": {
     "description": "Said when the server refuses a save because the project file is too large."
   },
-  "backupErrorTooMany": "This account already has 1,000 projects in backup.",
+  "backupErrorTooMany": "Backup is limited to 1,000 projects.",
   "@backupErrorTooMany": {
     "description": "Said when the server refuses a new project because the account holds as many as it may."
   },
@@ -16897,15 +16897,15 @@
   "@backupErrorGone": {
     "description": "Said when a project or a version was asked for and the server no longer has it."
   },
-  "backupErrorLastVersion": "A project keeps its only version. Delete the project from backup instead.",
+  "backupErrorLastVersion": "This is the only version. Delete the project from backup instead.",
   "@backupErrorLastVersion": {
     "description": "Said when the only version of a project is deleted from the Project history window."
   },
-  "backupErrorDownload": "The download did not arrive whole. Try again.",
+  "backupErrorDownload": "Download failed. Try again.",
   "@backupErrorDownload": {
     "description": "Said when a fetched version does not match what the server said it was. Nothing was written."
   },
-  "backupErrorWrite": "The file could not be written there.",
+  "backupErrorWrite": "Could not save the file there.",
   "@backupErrorWrite": {
     "description": "Said when a fetched version could not be written to the folder chosen for it."
   },
@@ -16946,7 +16946,7 @@
       }
     }
   },
-  "backupVersionUnsent": "Saved, but it could not be backed up, so the version has no name yet.",
+  "backupVersionUnsent": "Saved, but not backed up. The version has no name yet.",
   "@backupVersionUnsent": {
     "description": "Bottom-strip warning when Save a version saved the project and the server could not be reached to keep and name the version."
   },
@@ -16978,11 +16978,11 @@
   "@backupNoNamed": {
     "description": "Project history window: shown in the list when only named versions are listed and nothing has a name."
   },
-  "backupKept": "Named versions are kept for good. The rest thin with age.",
+  "backupKept": "Named versions are kept. The rest thin with age.",
   "@backupKept": {
     "description": "Project history window: one quiet line at the foot of the list saying what is kept. It has to fit on one line about 290 pixels wide. Versions with a name are never deleted to save space. Thin is the verb: the others become fewer as they get older."
   },
-  "backupKeptRule": "After a day, autosaves thin to one an hour. After a week, everything without a name thins to one a day, and after three months to one a week.",
+  "backupKeptRule": "Autosaves thin to one an hour after a day. Unnamed versions thin to one a day after a week, and one a week after three months.",
   "@backupKeptRule": {
     "description": "Project history window: tooltip on the line saying what is kept, giving the rule. Every autosave is kept for a day, then the last of each hour. After a week every version without a name, autosave or not, is thinned to the last of each day, and after 90 days to the last of each week."
   },
@@ -17485,7 +17485,7 @@
       }
     }
   },
-  "reviewDeleteLinkNote": "Its versions and comments go with it, and its address stops working.",
+  "reviewDeleteLinkNote": "Its versions and comments are deleted too.",
   "@reviewDeleteLinkNote": {
     "description": "A quiet line under the question asked before a review link is deleted."
   },
@@ -17498,11 +17498,11 @@
       }
     }
   },
-  "reviewDeleteVersionNote": "Its comments go with it.",
+  "reviewDeleteVersionNote": "Its comments are deleted too.",
   "@reviewDeleteVersionNote": {
     "description": "A quiet line under the question asked before one version of a review link is deleted."
   },
-  "reviewDeleteVersionCleanNote": "Its comments go with it, and the video only link stops working.",
+  "reviewDeleteVersionCleanNote": "Its comments are deleted too, and the video only link stops working.",
   "@reviewDeleteVersionCleanNote": {
     "description": "The same quiet line when the version being deleted is the one the link's video only address shows."
   },
@@ -17510,7 +17510,7 @@
   "@reviewDeleteCommentAsk": {
     "description": "Question before a comment on a review link is deleted."
   },
-  "reviewDeleteRepliesNote": "Its replies go with it.",
+  "reviewDeleteRepliesNote": "Its replies are deleted too.",
   "@reviewDeleteRepliesNote": {
     "description": "A quiet line under the question asked before a comment that has replies is deleted."
   },
@@ -17595,7 +17595,7 @@
   "@reviewAddVersion": {
     "description": "Send for review: the same button when the export becomes a new version of an existing link."
   },
-  "reviewLacking": "Footage you have not got will show as colour bars.",
+  "reviewLacking": "Missing footage shows as colour bars.",
   "@reviewLacking": {
     "description": "Send for review: warning in a shared project when some footage has not reached this computer."
   },
@@ -17631,19 +17631,19 @@
   "@reviewErrorPro": {
     "description": "Error in the Review links window when the account has no Lumit Pro."
   },
-  "reviewErrorStorage": "Your storage is full. Delete a link or a version to make room.",
+  "reviewErrorStorage": "Storage full. Delete a link or a version.",
   "@reviewErrorStorage": {
     "description": "Error in the Review links window when the account's files on Lumit's server have reached their limit."
   },
-  "reviewErrorTooLarge": "This export is too large to send. Try 720p or a shorter span.",
+  "reviewErrorTooLarge": "Too large to send. Try 720p or a shorter span.",
   "@reviewErrorTooLarge": {
     "description": "Error in the Review links window when the exported file is over the server's limit. Span is the export dialog's word for the part of a composition that is written."
   },
-  "reviewErrorVersions": "This link has all the versions it can hold. Send a separate link.",
+  "reviewErrorVersions": "This link is full. Send a separate link.",
   "@reviewErrorVersions": {
     "description": "Error in the Review links window when a link already has the most versions allowed."
   },
-  "reviewErrorLinks": "Your account has all the links it can hold. Delete one first.",
+  "reviewErrorLinks": "No room for another link. Delete one first.",
   "@reviewErrorLinks": {
     "description": "Error in the Review links window when a new link is refused because the account already has the most review links allowed."
   },
@@ -17651,7 +17651,7 @@
   "@reviewErrorGone": {
     "description": "Error in the Review links window when the server no longer has a link."
   },
-  "reviewErrorLastVersion": "A link keeps at least one version. Delete the link instead.",
+  "reviewErrorLastVersion": "This is the only version. Delete the link instead.",
   "@reviewErrorLastVersion": {
     "description": "Error in the Review links window when the only version of a link is deleted."
   },
@@ -17663,7 +17663,7 @@
   "@reviewErrorExportFailed": {
     "description": "Error in the Review links window when exporting the composition stopped part way."
   },
-  "reviewErrorComments": "This link has all the comments it can hold.",
+  "reviewErrorComments": "This link is full of comments.",
   "@reviewErrorComments": {
     "description": "Error in the Review links window when a reply is refused because the link has reached the most comments allowed."
   },
@@ -17864,7 +17864,7 @@
   "@reviewCleanRemoveAsk": {
     "description": "Question before a review link's second address, the one that shows only the video, is taken away."
   },
-  "reviewCleanRemoveNote": "Its address stops working at once.",
+  "reviewCleanRemoveNote": "The link stops working at once.",
   "@reviewCleanRemoveNote": {
     "description": "A quiet line under the question asked before a review link's video only address is taken away."
   },
@@ -18054,7 +18054,7 @@
   "@proFeatureReviewTitle": {
     "description": "Third feature in the Lumit Pro window."
   },
-  "proFeatureReviewBody": "Send an export by link. Comments come back on the frame.",
+  "proFeatureReviewBody": "Send an export as a link. Get comments on the frame.",
   "@proFeatureReviewBody": {
     "description": "What the third Lumit Pro feature does: people watch an export in a browser and comment on a frame of it."
   },
@@ -18066,7 +18066,7 @@
   "@shareOnlineStarting": {
     "description": "Share this project page of the Shared project window: what the Start sharing button says while the project is being stored on Lumit's server."
   },
-  "shareOnlineLine": "Kept online. Lumit's server cannot read it.",
+  "shareOnlineLine": "Kept online and encrypted.",
   "@shareOnlineLine": {
     "description": "Shared project window, for a project that is kept online (held on Lumit's server so people can edit when nobody else is there): the quiet line at the top. The project is encrypted before it leaves the computer."
   },
@@ -18074,7 +18074,7 @@
   "@shareOnlineInStep": {
     "description": "Shared project window, for a project that is kept online (held on Lumit's server so people can edit when nobody else is there): shown when this computer has every edit and is connected to Lumit's server."
   },
-  "shareOnlineAway": "Looking for Lumit's server. Edits wait here until it is found.",
+  "shareOnlineAway": "Reconnecting. Your edits wait here.",
   "@shareOnlineAway": {
     "description": "Bottom-strip notice, and the tooltip of the strip's button, for a project kept online when the connection to Lumit's server is lost or not yet made. The person can carry on editing."
   },
@@ -18086,7 +18086,7 @@
   "@shareOnlineBack": {
     "description": "Bottom-strip notice for a project kept online, shown when Lumit's server is found again and the edits made meanwhile were merged."
   },
-  "shareOnlineLooking": "Looking for the server",
+  "shareOnlineLooking": "Reconnecting",
   "@shareOnlineLooking": {
     "description": "Bottom-strip button of a project kept online, and the first line of the Shared project window, in the warning colour, when there is no connection to Lumit's server just now. Short."
   },
@@ -18150,11 +18150,11 @@
   "@shareOnlineNoOriginal": {
     "description": "Row in a footage item's menu in the Project panel, for a project kept online, in place of Fetch the original when Lumit's server does not hold the original file. Short enough for one line of a menu."
   },
-  "shareOnlineNotFound": "No project found by that link. Check the link, and that the host is still sharing it.",
+  "shareOnlineNotFound": "No project found. Check the link with the host.",
   "@shareOnlineNotFound": {
     "description": "Join a project page: shown when an invite link to a project kept online finds nothing on Lumit's server."
   },
-  "shareOnlineNotFoundOrPassword": "No project found by that link, or the password is wrong. Check both, and that the host is still sharing it.",
+  "shareOnlineNotFoundOrPassword": "No project found, or wrong password.",
   "@shareOnlineNotFoundOrPassword": {
     "description": "Join a project page: shown when an invite link to a project kept online, given with a password, finds nothing on Lumit's server. A wrong password looks the same as a wrong link."
   },
@@ -18162,15 +18162,15 @@
   "@shareOnlineErrorPro": {
     "description": "Error in the Shared project window when Lumit's server refuses to keep a project because the account has no Lumit Pro. Lumit Pro is a product name: do not translate it."
   },
-  "shareOnlineErrorTooMany": "This account keeps as many projects online as it can. Stop keeping one online first.",
+  "shareOnlineErrorTooMany": "No room for another project online. Stop keeping one online first.",
   "@shareOnlineErrorTooMany": {
     "description": "Error in the Shared project window when the account already keeps the most projects online that it may."
   },
-  "shareOnlineErrorRefused": "Lumit's server would not do that. Try again in a moment.",
+  "shareOnlineErrorRefused": "Something went wrong. Try again in a moment.",
   "@shareOnlineErrorRefused": {
     "description": "Error in the Shared project window when Lumit's server refuses a call about a project kept online for a reason that has no words of its own."
   },
-  "shareOnlineErrorSignedOut": "Sign in again to do that.",
+  "shareOnlineErrorSignedOut": "Sign in again.",
   "@shareOnlineErrorSignedOut": {
     "description": "Error in the Shared project window when the host of a project kept online tries to remove someone or stop sharing while signed out."
   },
@@ -18346,7 +18346,7 @@
   "@shareOnlineUse": {
     "description": "Share this project page of the Shared project window: beside the Keep online tick box, what ticking it does. No full stop, like the tick box above it."
   },
-  "shareOnlinePro": "Lumit Pro keeps it open without you.",
+  "shareOnlinePro": "Keep it online with Lumit Pro.",
   "@shareOnlinePro": {
     "description": "Share this project page of the Shared project window: beside Keep online, for someone without Lumit Pro, what it would do here. Short enough for one line beside a button. Lumit Pro is a product name: do not translate it."
   },
@@ -18383,7 +18383,7 @@
   "@shareHaveInvite": {
     "description": "Shared project window, for a guest whose project cannot be reached: pressing it shows the field a new invite link is pasted into."
   },
-  "shareShowBodyOnline": "Anyone who sees this link can join the project and change it. Keep it off streams, recordings and screenshots.",
+  "shareShowBodyOnline": "Anyone who sees this link can join and edit. Keep it off streams and screenshots.",
   "@shareShowBodyOnline": {
     "description": "Under the question asked before the invite link of a project kept online is shown. This link holds no address of the person's computer."
   },
@@ -18510,11 +18510,11 @@
   "@shareVersionsNeedsUpdate": {
     "description": "Bottom-strip button of a project kept online, and the first line of the Shared project window, when a newer Lumit keeps the project than the one running. Short."
   },
-  "shareVersionsMovable": "Moving it forward lets this Lumit edit it. Anyone on an older Lumit has to update.",
+  "shareVersionsMovable": "Move it forward to edit it here. Anyone on an older Lumit has to update.",
   "@shareVersionsMovable": {
     "description": "Shared project window, on the host's computer, under words such as On Lumit 0.5.2: an older Lumit keeps the project than the one running. Beside it is the button Move it forward. It does not name the older version again."
   },
-  "shareVersionsHostFirst": "The host has to open this project with Lumit {version} first. It joins by itself after that.",
+  "shareVersionsHostFirst": "Waiting for the host to open it in Lumit {version}.",
   "@shareVersionsHostFirst": {
     "description": "Bottom-strip notice and a line in the Shared project window, under the words Waiting for the host, on a guest's computer that runs a newer Lumit than keeps the project. {version} is the Lumit this computer runs, such as 0.7.0.",
     "placeholders": {
@@ -18523,7 +18523,7 @@
       }
     }
   },
-  "shareVersionsHostFirstJoin": "The host has to open this project with Lumit {version} first. Try again after that.",
+  "shareVersionsHostFirstJoin": "The host has to open this project in Lumit {version} first.",
   "@shareVersionsHostFirstJoin": {
     "description": "Join a project page of the Shared project window, when the link leads to a project kept by an older Lumit than this one. {version} is the Lumit this computer runs, such as 0.7.0.",
     "placeholders": {
@@ -18532,7 +18532,7 @@
       }
     }
   },
-  "shareVersionsUpdate": "This project is on Lumit {version}. Update Lumit to edit it. Your edits are kept.",
+  "shareVersionsUpdate": "Update to Lumit {version} to edit this project. Your edits are kept.",
   "@shareVersionsUpdate": {
     "description": "Bottom-strip notice when a newer Lumit keeps the project than the one running. The project is open on this computer, so it does not say open. A press leads to the update. {version} is a version of Lumit, such as 0.7.0.",
     "placeholders": {
@@ -18541,7 +18541,7 @@
       }
     }
   },
-  "shareVersionsUpdateJoin": "This project is on Lumit {version}. Update Lumit to join it.",
+  "shareVersionsUpdateJoin": "Update to Lumit {version} to join this project.",
   "@shareVersionsUpdateJoin": {
     "description": "Join a project page of the Shared project window, when the link leads to a project kept by a newer Lumit than this one. {version} is a version of Lumit, such as 0.7.0.",
     "placeholders": {
@@ -18559,7 +18559,7 @@
       }
     }
   },
-  "shareForwardBody": "It is on Lumit {version}. Anyone on an older Lumit has to update before they can join again. It cannot be undone.",
+  "shareForwardBody": "It is on Lumit {version}. Anyone on an older Lumit has to update to rejoin. This cannot be undone.",
   "@shareForwardBody": {
     "description": "Under the question about moving a project kept online forward. {version} is the older Lumit that keeps it, such as 0.6.0.",
     "placeholders": {
@@ -18589,7 +18589,7 @@
       }
     }
   },
-  "shareForwardUnreadable": "This Lumit could not read an edit in the project, so it stays as it is. It still opens in Lumit {version}.",
+  "shareForwardUnreadable": "An edit could not be read, so the project stays on Lumit {version}.",
   "@shareForwardUnreadable": {
     "description": "Notice when a project kept online could not be moved forward because the newer Lumit could not read something the older one stored. Nothing was changed. {version} is a version of Lumit, such as 0.7.0.",
     "placeholders": {
@@ -18598,7 +18598,7 @@
       }
     }
   },
-  "shareForwardNotHost": "Only the host can move this project forward. Sign in to the account that keeps it online.",
+  "shareForwardNotHost": "Only the host's account can move this project forward.",
   "@shareForwardNotHost": {
     "description": "Notice when a project kept online could not be moved forward because the account signed in is not its host's."
   },
@@ -18623,7 +18623,7 @@
   "@shareDroppedWhy": {
     "description": "Shared project window, a quiet line under the count of this person's changes that were dropped: why. They, here, is the changes."
   },
-  "shareOnlineAwayLine": "Edits wait here until it is found.",
+  "shareOnlineAwayLine": "Your edits wait here.",
   "@shareOnlineAwayLine": {
     "description": "Shared project window, under the words Looking for the server, for a project kept online with no connection to Lumit's server. It does not say looking again."
   },
@@ -18652,7 +18652,7 @@
   "@shareLinkLook": {
     "description": "Shared project window, for a project kept online: label of the second invite link. Whoever joins by it sees the project and the people and can change nothing."
   },
-  "shareShowBodyLook": "Anyone who sees this link can see the project. Keep it off streams, recordings and screenshots.",
+  "shareShowBodyLook": "Anyone who sees this link can see the project. Keep it off streams and screenshots.",
   "@shareShowBodyLook": {
     "description": "Under the question asked before the invite that can only look is shown. Whoever joins by this link can change nothing."
   },
@@ -18695,7 +18695,7 @@
       }
     }
   },
-  "shareLookJoined": "You can look at this project and not change it. Edits made here are undone.",
+  "shareLookJoined": "You can look, not edit. Changes made here are undone.",
   "@shareLookJoined": {
     "description": "Bottom-strip notice on the computer of someone who joined a shared project by the invite to look. Said when they join, and again whenever something they change is put back. Every tool still works on their computer, and whatever is changed is undone at once, so this says why."
   },
@@ -18708,11 +18708,11 @@
       }
     }
   },
-  "sharePasswordHintOnline": "People you invite to edit have to type this as well as having the link. Leave it empty for no password.",
+  "sharePasswordHintOnline": "Optional. Editors need it as well as the link.",
   "@sharePasswordHintOnline": {
     "description": "Quiet line under the Password field on the Share this project page while Keep online is ticked. The invite to look never asks for the password."
   },
-  "shareFullLook": "That shared project already has as many people looking as it can take. Try again later.",
+  "shareFullLook": "That project has as many people looking as it can take. Try again later.",
   "@shareFullLook": {
     "description": "Notice on the computer of someone who can only look at a shared project, when they are turned away because no more people who only look are taken, or someone who can edit needed the place."
   },
@@ -18724,7 +18724,7 @@
   "@shareLookOnTitle": {
     "description": "Shared project window, on the host's computer, for a project kept online that has a password: the question asked when the host switches on Invite to look, the link people can see the project by and not change it."
   },
-  "shareLookOnBody": "Either link then shows the project without the password. Changing it still needs the password.",
+  "shareLookOnBody": "Either link then shows the project without the password. Editing still needs it.",
   "@shareLookOnBody": {
     "description": "Under the question Turn on the invite to look?. With the invite to look on, someone holding the invite to edit can see the project without typing its password, and so can anyone with the invite to look. Editing still needs the password."
   },
@@ -18790,7 +18790,7 @@
   "@shareOnlineNearlyLargeLine": {
     "description": "Shared project window, under the words Nearly too large, for a project kept online that has grown past what Lumit's server stores. It does not say too large again."
   },
-  "shareOnlineNearlyLargeSaid": "This project is nearly too large to keep online. It has to get smaller.",
+  "shareOnlineNearlyLargeSaid": "This project is nearly too large to keep online.",
   "@shareOnlineNearlyLargeSaid": {
     "description": "Bottom-strip notice, and the tooltip of the strip's button, for a project kept online that has grown past what Lumit's server stores. Edits still go in for now and will stop unless the project gets smaller."
   },
@@ -18831,7 +18831,7 @@
       }
     }
   },
-  "shareNoteDownBody": "It goes for everyone and cannot be put back.",
+  "shareNoteDownBody": "It is removed for everyone.",
   "@shareNoteDownBody": {
     "description": "Under the question Take down {name}'s note?. The note is removed from every computer in the project, for good."
   },
