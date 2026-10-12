@@ -91,6 +91,36 @@ Future<bool> confirmNightlyBuilds(BuildContext context) async {
   return go == true;
 }
 
+/// Act on the bottom strip's update button.
+///
+/// The same road as the row without the two windows in the middle. Pressing
+/// a download arrow is already the yes, and the button draws the progress
+/// itself, so the work carries on underneath. The restart is still asked
+/// about, on the next press.
+Future<void> pressUpdateButton(
+  BuildContext context, {
+  required UpdateService updates,
+  required void Function(String message, {bool error}) notice,
+  required bool Function() projectIsDirty,
+  required Future<void> Function() saveProject,
+}) async {
+  if (updates.stage != UpdateStage.available) {
+    return pressUpdateRow(
+      context,
+      updates: updates,
+      notice: notice,
+      projectIsDirty: projectIsDirty,
+      saveProject: saveProject,
+    );
+  }
+  await updates.downloadUpdate();
+  if (updates.stage == UpdateStage.failed) {
+    notice(updates.failure ?? l10n.updateDownloadFailed, error: true);
+  } else if (updates.stage == UpdateStage.ready) {
+    notice(l10n.updateDownloaded('${updates.release?.version}'));
+  }
+}
+
 /// Ask, download, then move on to the restart question.
 Future<void> _offerAndFetch(
   BuildContext context, {

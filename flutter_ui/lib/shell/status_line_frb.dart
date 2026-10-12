@@ -41,6 +41,7 @@ import 'profile_chip.dart';
 import 'project_history_window.dart';
 import 'review_links_window.dart';
 import 'share_dialog_frb.dart';
+import 'update_chip.dart';
 
 /// Bumped by whatever starts an export — the export dialogue, the console's
 /// snapshot — so the strip knows to start polling. Without a start signal the
@@ -273,8 +274,15 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
         t,
         (width) => [
           // Whose settings these are, first on the line: it is about the
-          // person, and everything after it is about the project.
-          _bubble(t, const ProfileChip()),
+          // person, and everything after it is about the project. The update
+          // button stands with it: both are about this Lumit, not the work.
+          _bubble(
+            t,
+            const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [ProfileChip(), UpdateChip()],
+            ),
+          ),
           _divider(t),
           // Which kind of Lumit this is, when it is not the ordinary kind: in
           // every screenshot of a nightly, and beside the name it belongs to.
