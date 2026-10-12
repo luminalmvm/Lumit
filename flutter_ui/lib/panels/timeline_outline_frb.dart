@@ -935,6 +935,10 @@ class Outline extends StatelessWidget {
   final ScrollController vScroll;
   final double viewport;
 
+  /// Whether a layer in hand is this half's alone to draw: graph view, where
+  /// there are no lanes beside it for the card to run on into.
+  final bool liftWhole;
+
   const Outline({
     super.key,
     required this.comp,
@@ -959,6 +963,7 @@ class Outline extends StatelessWidget {
     required this.groupActions,
     required this.vScroll,
     required this.viewport,
+    this.liftWhole = false,
   });
 
   @override
@@ -992,8 +997,9 @@ class Outline extends StatelessWidget {
         drag: layerDrag,
         heights: blockHeights,
         index: i,
-        // The left end of the one card a layer in hand is drawn as.
-        side: LiftSide.leading,
+        // The left end of the one card a layer in hand is drawn as, or the
+        // whole of it where the card stops at this half's edge.
+        side: liftWhole ? LiftSide.whole : LiftSide.leading,
         // **The selection is listened to here, one layer at a time.** A
         // click that lights a row must not redraw the layers it did not
         // touch, and this is the seam that decides that.

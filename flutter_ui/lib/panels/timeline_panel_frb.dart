@@ -4250,6 +4250,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                             stack: ui.model.heldLayers,
                                             vScroll: _vOutline,
                                             viewport: box.maxHeight,
+                                            liftWhole: _graph,
                                             onOpenSequence: _openLayerView,
                                             layerDrag: _layerDrag,
                                             renameRequest: _renameRequest,
@@ -4379,36 +4380,39 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
               // The stretch of a lifted layer's card that crosses the gutter.
               // The outline's block draws the card's left end and the lanes'
               // block its right; without this the gutter showed between them
-              // and a layer in hand read as two cards.
-              Positioned(
-                top: t.density.navigatorBand + t.density.ruler,
-                right: 0,
-                // A pixel over the columns' edge: the two stretches meet on
-                // a fractional pixel at any interface scale but 1, and
-                // butted there they showed a hairline of the ground between.
-                width: scrollGutterWidth + 1,
-                bottom: 0,
-                child: IgnorePointer(
-                  child: AnimatedBuilder(
-                    animation: Listenable.merge([_vOutline, _layerDrag.band]),
-                    builder: (context, _) {
-                      final band = _layerDrag.band.value;
-                      if (band == null) return const SizedBox.expand();
-                      final scrolled = positionOf(_vOutline)?.pixels ?? 0;
-                      return CustomPaint(
-                        key: const ValueKey('tl-lift-bridge'),
-                        painter: LiftBridgePainter(
-                          top: band.top - scrolled,
-                          bottom: band.bottom - scrolled,
-                          amount: band.amount,
-                          ground: liftGround(t),
-                          shadow: liftShadow(t),
-                        ),
-                      );
-                    },
+              // and a layer in hand read as two cards. Not in graph view,
+              // where the gutter holds the scrollbar and there are no lanes
+              // to run on into: the card ends with the outline.
+              if (!_graph)
+                Positioned(
+                  top: t.density.navigatorBand + t.density.ruler,
+                  right: 0,
+                  // A pixel over the columns' edge: the two stretches meet on
+                  // a fractional pixel at any interface scale but 1, and
+                  // butted there they showed a hairline of the ground between.
+                  width: scrollGutterWidth + 1,
+                  bottom: 0,
+                  child: IgnorePointer(
+                    child: AnimatedBuilder(
+                      animation: Listenable.merge([_vOutline, _layerDrag.band]),
+                      builder: (context, _) {
+                        final band = _layerDrag.band.value;
+                        if (band == null) return const SizedBox.expand();
+                        final scrolled = positionOf(_vOutline)?.pixels ?? 0;
+                        return CustomPaint(
+                          key: const ValueKey('tl-lift-bridge'),
+                          painter: LiftBridgePainter(
+                            top: band.top - scrolled,
+                            bottom: band.bottom - scrolled,
+                            amount: band.amount,
+                            ground: liftGround(t),
+                            shadow: liftShadow(t),
+                          ),
+                        );
+                      },
+                    ),
                   ),
                 ),
-              ),
             ],
           )),
           // The Key readout row, while exactly one key is in hand (§3.3).
