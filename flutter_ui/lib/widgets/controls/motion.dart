@@ -1,5 +1,6 @@
 // The moving parts the house controls share: the entrance a floating surface
-// makes, and the quarter turn a twirl takes.
+// makes, what a pressable thing does under the pointer, and the quarter turn a
+// twirl takes.
 //
 // Timing is never stated here. Each of these is handed a `MotionSpec` from the
 // theme scope's `motion` (theme/motion.dart), which is where the shape and the
@@ -212,6 +213,103 @@ class _EntranceScope extends InheritedWidget {
   // Read once, as the content mounts.
   @override
   bool updateShouldNotify(_EntranceScope old) => false;
+}
+
+/// The lighting and the swelling a pressable thing does under the pointer,
+/// kept apart from any one widget so a scrollbar's thumb and a mark move
+/// alike.
+///
+/// In plain terms: [light] runs from 0 to 1 as the pointer arrives and back as
+/// it leaves, and whatever holds it mixes its lit colour in by that much. Every
+/// animation level keeps the light, because it is what says a thing can be
+/// pressed, and with motion off it is simply there. [swell] is the growing
+/// that goes with it, which only Full plays.
+///
+/// Nothing is made until the pointer first arrives, so a Timeline full of
+/// switches nobody has pointed at holds no controllers.
+class HoverGlow {
+  final TickerProvider _vsync;
+  final VoidCallback _onChange;
+  AnimationController? _light;
+  AnimationController? _swell;
+  bool _over = false;
+  bool _held = false;
+
+  HoverGlow(this._vsync, this._onChange);
+
+  /// Whether it is in the hand: a thumb being dragged.
+  bool get held => _held;
+
+  /// How lit it is, 0 at rest and 1 under the pointer or in the hand.
+  double get light => _light?.value ?? 0;
+
+  /// Note where the pointer is. Only what is given changes. A null [motion]
+  /// is a tree with no theme scope, where nothing is drawn lit anyway.
+  void mark(Motion? motion, {bool? over, bool? held}) {
+    if (motion == null) return;
+    final was = _over || _held;
+    final wasHeld = _held;
+    _over = over ?? _over;
+    _held = held ?? _held;
+    final now = _over || _held;
+    if (now != was) {
+      _run(_light ??= _make(), now ? motion.hoverIn : motion.hoverOut, now);
+      _run(_swell ??= _make(), motion.swell, now);
+    } else if (_held != wasHeld) {
+      // Still lit, but picked up or put down: its colour steps at once.
+      _onChange();
+    }
+  }
+
+  /// A press takes the swell back in, quickly, and letting go springs it out
+  /// again, so a thing that swelled under the pointer gives under the finger.
+  void press(Motion? motion, {required bool down}) {
+    final swell = _swell;
+    if (motion == null || swell == null || motion.swell.isStill || !_over) {
+      return;
+    }
+    if (down) {
+      swell.duration = motion.hoverIn.duration;
+      swell.reverse();
+    } else {
+      _run(swell, motion.swell, true);
+    }
+  }
+
+  /// How far out the swell is: 0 at rest, 1 at its size, and a little past 1
+  /// on the way where the shape springs. Always 0 where nothing swells.
+  double swell(Motion motion) {
+    final controller = _swell;
+    if (controller == null || motion.swell.isStill) return 0;
+    // Out on the swell's own curve, back on a plain ease: a spring run
+    // backwards would grow again before it shrank.
+    return controller.status == AnimationStatus.reverse
+        ? Curves.easeIn.transform(controller.value)
+        : motion.swell.curve.transform(controller.value);
+  }
+
+  AnimationController _make() =>
+      AnimationController(vsync: _vsync)..addListener(_onChange);
+
+  /// To its on or off end the way [spec] says, or there at once where the
+  /// spec is still.
+  static void _run(AnimationController controller, MotionSpec spec, bool on) {
+    if (spec.isStill) {
+      controller.value = on ? 1 : 0;
+      return;
+    }
+    controller.duration = spec.duration;
+    if (on) {
+      controller.forward();
+    } else {
+      controller.reverse();
+    }
+  }
+
+  void dispose() {
+    _light?.dispose();
+    _swell?.dispose();
+  }
 }
 
 /// A twirl's triangle, turned a quarter as it opens or shuts.

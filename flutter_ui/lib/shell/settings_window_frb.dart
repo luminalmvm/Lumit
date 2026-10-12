@@ -762,15 +762,11 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   Widget _pageBody(LumitTheme t, LumitUiState ui) {
     final sections = _everywhere ? _found(t, ui) : _sectionsOf(_page, t, ui);
     return Stack(children: [
-      RawScrollbar(
+      HouseScrollbar(
         controller: _scroll,
         thumbVisibility: true,
         trackVisibility: true,
         thickness: _gutterThickness,
-        radius: const Radius.circular(3),
-        thumbColor: t.surface4,
-        trackColor: t.surface2,
-        trackRadius: const Radius.circular(3),
         padding: const EdgeInsets.fromLTRB(
             0, _gutterEnds, _gutterInset, _gutterEnds),
         // Built whole, so the thumb is sized from the page's real length rather
@@ -823,7 +819,8 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         right: _gutterInset,
         top: _gutterEnds,
         bottom: _gutterEnds,
-        width: _gutterThickness,
+        // As wide as the bar at its widest, under the pointer.
+        width: _gutterThickness + scrollbarSwell,
         child: GestureDetector(
           behavior: HitTestBehavior.translucent,
           onVerticalDragUpdate: _dragGutter,
