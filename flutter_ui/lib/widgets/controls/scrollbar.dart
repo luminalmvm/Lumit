@@ -1,8 +1,15 @@
-// The house scrollbar: the thumb every scrolling list wears, and the scroll
-// behaviour that hands it to them.
+// The house scrollbar: the thumb every scrolling list wears, the glide a
+// wheel gives a list, and the scroll behaviour that hands both to them.
+
+import 'dart:async' show scheduleMicrotask;
 
 import 'package:flutter/gestures.dart'
-    show PointerExitEvent, PointerHoverEvent, Velocity;
+    show
+        PointerExitEvent,
+        PointerHoverEvent,
+        PointerScrollEvent,
+        PointerSignalEvent,
+        Velocity;
 import 'package:flutter/material.dart';
 
 import '../../theme/motion.dart';
@@ -98,9 +105,94 @@ class _HouseScrollbarState extends RawScrollbarState<HouseScrollbar> {
   }
 }
 
-/// Gives every scrolling list in the application a [HouseScrollbar].
+/// Lets a notch of the wheel carry a list to where it lands, where Flutter
+/// puts it there at once.
+///
+/// In plain terms: a mouse wheel moves a list a hundred pixels a notch, and
+/// drawn as a jump that loses the eye its place. This plays the same move as
+/// a short glide. A second notch while one is running adds to where it was
+/// heading, so a spun wheel lands where it always would have.
+///
+/// **How, since a list takes the wheel itself.** The scroll view under
+/// [child] has already claimed the event by the time it reaches here, and
+/// moves when the claim is settled. So this notes where the list stood, and
+/// straight after, before a frame is drawn, puts it back and runs it to
+/// where it was sent. Nothing is ever shown at the far end early.
+///
+/// A step smaller than [_notch] is left alone: that is a wheel that already
+/// turns smoothly, and easing each of its steps would only make it lag.
+class SmoothWheel extends StatefulWidget {
+  final ScrollController? controller;
+  final Widget child;
+
+  const SmoothWheel({super.key, required this.controller, required this.child});
+
+  @override
+  State<SmoothWheel> createState() => _SmoothWheelState();
+}
+
+class _SmoothWheelState extends State<SmoothWheel> {
+  /// The least a step has to be, in pixels, to be a notch.
+  static const double _notch = 24;
+
+  /// Where the glide in flight is heading, or null when none is.
+  double? _target;
+
+  /// Counts the glides, so one that ends late does not clear a newer one.
+  int _glides = 0;
+
+  void _wheel(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent) return;
+    final spec =
+        context.getInheritedWidgetOfExactType<ThemeScope>()?.motion.scroll;
+    if (spec == null || spec.isStill) return;
+    final controller = widget.controller;
+    if (controller == null || controller.positions.length != 1) return;
+    final position = controller.position;
+    final from = position.pixels;
+    // Read now: the list's own move ends the glide in flight, and with it
+    // where that glide was going.
+    final base = _target ?? from;
+    scheduleMicrotask(() {
+      if (!mounted || !position.hasPixels) return;
+      final step = position.pixels - from;
+      if (step.abs() < _notch) return;
+      final target = (base + step)
+          .clamp(position.minScrollExtent, position.maxScrollExtent)
+          .toDouble();
+      // Back by a jump the list's listeners hear, so two lists that scroll
+      // as one are never drawn a frame apart.
+      position.jumpTo(from);
+      final glide = ++_glides;
+      _target = target;
+      position
+          .animateTo(target, duration: spec.duration, curve: spec.curve)
+          .whenComplete(() {
+        if (glide == _glides) _target = null;
+      });
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      Listener(onPointerSignal: _wheel, child: widget.child);
+}
+
+/// Gives every scrolling list in the application a [HouseScrollbar], and its
+/// wheel a glide ([SmoothWheel]).
 class HouseScrollBehavior extends MaterialScrollBehavior {
   const HouseScrollBehavior();
+
+  // Flutter's own hook for wrapping every scroll view, the ones that draw a
+  // scrollbar of their own included. A desktop has no overscroll indicator
+  // to draw, so the wrap is all this adds.
+  @override
+  Widget buildOverscrollIndicator(
+          BuildContext context, Widget child, ScrollableDetails details) =>
+      SmoothWheel(
+        controller: details.controller,
+        child: super.buildOverscrollIndicator(context, child, details),
+      );
 
   @override
   Widget buildScrollbar(

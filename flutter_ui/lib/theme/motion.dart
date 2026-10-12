@@ -102,6 +102,11 @@ class Motion {
   final MotionSpec swell;
   final double swellScale;
 
+  /// A list carried to where a notch of the wheel lands it, where it used to
+  /// be there at once. Full only: it is how the list travels, not where it
+  /// went, and at 50ms there is nothing left of it to see.
+  final MotionSpec scroll;
+
   /// A state mark changing: the tab that is fronted, the tool that is armed,
   /// a focus ring.
   final MotionSpec mark;
@@ -177,6 +182,7 @@ class Motion {
     required this.rowTrail,
     required this.swell,
     required this.swellScale,
+    required this.scroll,
     required this.mark,
     required this.pop,
     required this.popScale,
@@ -237,6 +243,7 @@ class Motion {
         rowTrail: MotionSpec.still,
         swell: MotionSpec.still,
         swellScale: 1,
+        scroll: MotionSpec.still,
         mark: MotionSpec.still,
         pop: MotionSpec.still,
         popScale: 1,
@@ -279,6 +286,7 @@ class Motion {
       rowTrail: MotionSpec.still,
       swell: MotionSpec.still,
       swellScale: 1,
+      scroll: MotionSpec.still,
       mark: snap,
       pop: MotionSpec.still,
       popScale: 1,
@@ -317,6 +325,7 @@ class Motion {
     rowTrail: MotionSpec(_ms90, Curves.easeOut),
     swell: MotionSpec(_ms180, _spring),
     swellScale: 1.06,
+    scroll: MotionSpec(_ms140, _out),
     mark: MotionSpec(_ms120, _out),
     pop: MotionSpec(_ms110, _out),
     popScale: 0.5,
@@ -353,6 +362,7 @@ class Motion {
     // A control on an instrument comes up to meet the hand and stops.
     swell: MotionSpec(_ms80, _detent),
     swellScale: 1.04,
+    scroll: MotionSpec(_ms90, _detent),
     mark: MotionSpec(_ms80, _detent),
     // A tick on an instrument is on or it is off.
     pop: MotionSpec.still,
@@ -391,6 +401,7 @@ class Motion {
     rowTrail: MotionSpec(_ms110, Curves.easeOut),
     swell: MotionSpec(_ms220, _springSoft),
     swellScale: 1.08,
+    scroll: MotionSpec(_ms180, _out),
     mark: MotionSpec(_ms150, _out),
     pop: MotionSpec(_ms140, _landSoft),
     popScale: 0.4,
