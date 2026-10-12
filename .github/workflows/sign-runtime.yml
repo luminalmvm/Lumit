@@ -1,0 +1,162 @@
+# Signs ONNX Runtime's macOS library with Lumit's Developer ID.
+#
+# Lumit runs under the hardened runtime with library validation on, so macOS
+# only lets it load a library signed by Lumit's own team. The model runtime
+# addon took Microsoft's library as published, which is signed by Microsoft's
+# team, so it installed and then would not load. This takes the same file out
+# of the same NuGet package and signs it again with the release certificate.
+#
+# It lives here because this repository holds the certificate. Nothing is
+# published: the zip is left as a run artefact, to be put on a lumit-addons
+# release by hand, which is where the catalogue's macOS block points.
+
+name: sign-runtime
+
+on:
+  # A manual run can't be started until this file is on main, so a push that
+  # changes the file on any other branch runs it too.
+  push:
+    branches-ignore: [main]
+    paths: [".github/workflows/sign-runtime.yml"]
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "NuGet package to take the library from, empty for 1.24.4"
+      sha256:
+        description: "SHA-256 of that package, empty for 1.24.4"
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  sign:
+    name: Sign the macOS runtime
+    runs-on: macos-latest
+    env:
+      # A push carries no inputs, so the defaults are here and not on the
+      # inputs. They match the runtime addon's manifest in lumit-addons.
+      PACKAGE_URL: ${{ inputs.url || 'https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntime/1.24.4' }}
+      PACKAGE_SHA256: ${{ inputs.sha256 || '4b978d5065b85e7004b6c6f60ca494bd978fbe6836cbf0a0b52d82b61ab99638' }}
+      MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+    steps:
+      - name: Fetch the package and take the library out
+        run: |
+          # Signing is the whole job, so a fork with no certificate stops here
+          # instead of falling back to an ad hoc signature.
+          [ -n "$MACOS_SIGN_IDENTITY" ] || {
+            echo "::error::The signing secrets are not set, so there is nothing to sign with"
+            exit 1
+          }
+          curl -fsSL --retry 3 -o package.nupkg "$PACKAGE_URL"
+          echo "$PACKAGE_SHA256  package.nupkg" | shasum -a 256 -c -
+          # upstream/ is never touched again, since the check further down needs
+          # the library exactly as Microsoft published it.
+          unzip -j package.nupkg \
+            runtimes/osx-arm64/native/libonnxruntime.dylib LICENSE -d upstream
+          mkdir signed
+          cp upstream/libonnxruntime.dylib signed/libonnxruntime.dylib
+          cp upstream/LICENSE signed/LICENSE-onnxruntime.txt
+          echo "As published:"
+          codesign -dvv upstream/libonnxruntime.dylib
+      # The same steps as the macOS job in release.yml, which gives the reason
+      # for each line.
+      - name: Import the Developer ID certificate
+        env:
+          CERT_P12_BASE64: ${{ secrets.MACOS_CERT_P12_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          security create-keychain -p ci "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p ci "$keychain"
+          echo "$CERT_P12_BASE64" | base64 -d > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$keychain" \
+            -P "$CERT_PASSWORD" -T /usr/bin/codesign
+          rm -f "$RUNNER_TEMP/cert.p12"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k ci "$keychain"
+          security list-keychains -d user -s "$keychain" login.keychain-db
+      - name: Sign the library
+        run: |
+          codesign --force --timestamp --sign "$MACOS_SIGN_IDENTITY" \
+            signed/libonnxruntime.dylib
+          codesign --verify --strict --verbose=2 signed/libonnxruntime.dylib
+          codesign -dvv signed/libonnxruntime.dylib
+      # A stand-in for Lumit: a program signed the way the app is, with the
+      # hardened runtime and no entitlement that turns library validation off.
+      # Where library validation is enforced it has to refuse Microsoft's copy
+      # for its team and load ours, otherwise the signature was not what
+      # stopped the runtime loading and the zip fixes nothing.
+      - name: Check macOS refuses the published library and loads the signed one
+        run: |
+          cat > probe.c <<'EOF'
+          #include <dlfcn.h>
+          #include <stdio.h>
+          int main(int argc, char **argv) {
+            if (argc < 2 || !dlopen(argv[1], RTLD_NOW)) {
+              puts(argc < 2 ? "no path given" : dlerror());
+              return 1;
+            }
+            puts("loaded");
+            return 0;
+          }
+          EOF
+          clang -o probe probe.c
+          codesign --force --timestamp --options runtime \
+            --sign "$MACOS_SIGN_IDENTITY" probe
+
+          # A library signed by nobody, which library validation always refuses.
+          # If it loads, this machine isn't enforcing library validation and
+          # loading Microsoft's copy here says nothing, so the teams are
+          # compared instead, which is the rule macOS applies.
+          echo 'int control;' > control.c
+          clang -dynamiclib -o control.dylib control.c
+          csrutil status || true
+          if ./probe "$PWD/control.dylib"; then
+            echo "::warning::Library validation is not enforced on this machine, so the teams were compared instead"
+            team() { codesign -dv "$1" 2>&1 | sed -n 's/^TeamIdentifier=//p'; }
+            [ "$(team upstream/libonnxruntime.dylib)" != "$(team probe)" ] || {
+              echo "::error::The published library is already signed by this team"
+              exit 1
+            }
+            [ "$(team signed/libonnxruntime.dylib)" = "$(team probe)" ] || {
+              echo "::error::The signed library is not signed by this team"
+              exit 1
+            }
+          else
+            echo "As published, which has to be refused:"
+            if ./probe "$PWD/upstream/libonnxruntime.dylib" > refused.txt 2>&1; then
+              cat refused.txt
+              echo "::error::The published library loaded, so its signature is not the problem"
+              exit 1
+            fi
+            cat refused.txt
+            # A refusal for any other reason proves nothing about the signature.
+            grep -q "Team ID" refused.txt || {
+              echo "::error::The published library was refused, but not for its team"
+              exit 1
+            }
+          fi
+
+          echo "Signed, which has to load:"
+          ./probe "$PWD/signed/libonnxruntime.dylib"
+      - name: Zip it for the lumit-addons release
+        run: |
+          # The NuGet address ends in the version.
+          zip="onnxruntime-${PACKAGE_URL##*/}-macos-arm64.zip"
+          # Both files at the top level, under the names the addon installs.
+          (cd signed && zip -X "../$zip" libonnxruntime.dylib LICENSE-onnxruntime.txt)
+          # The two numbers the catalogue's macOS block needs.
+          {
+            shasum -a 256 "$zip"
+            stat -f '%z bytes' "$zip"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: onnxruntime-macos-arm64
+          path: onnxruntime-*-macos-arm64.zip
+          if-no-files-found: error
