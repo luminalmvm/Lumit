@@ -42,6 +42,13 @@ const LinearGradient proSweep = LinearGradient(
   colors: brandProSweep,
 );
 
+/// [child] drawn in the sweep, which is how a mark says it is Lumit Pro's.
+Widget proSwept(Widget child) => ShaderMask(
+      blendMode: BlendMode.srcIn,
+      shaderCallback: (bounds) => proSweep.createShader(bounds),
+      child: child,
+    );
+
 /// A profile's picture: the one its account came with, or its initial on
 /// its own colour. With [pro] it stands inside the Pro ring.
 class ProfileAvatar extends StatelessWidget {

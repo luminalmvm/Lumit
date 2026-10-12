@@ -1071,8 +1071,8 @@ class BackupState extends ChangeNotifier {
   /// How much of the account's storage is used, and how much it has.
   int used = 0, limit = 0;
 
-  /// How much of what is used is these backups. Review links fill the same
-  /// storage.
+  /// How much of what is used is these backups. Review links and footage
+  /// kept online fill the same storage.
   int get stored => projects.fold(0, (sum, project) => sum + project.bytes);
 
   /// Whether the server has answered with the list, and why not when the

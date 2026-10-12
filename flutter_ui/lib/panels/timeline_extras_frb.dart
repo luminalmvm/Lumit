@@ -3468,6 +3468,69 @@ class SharePlayheads extends StatelessWidget {
   }
 }
 
+/// The notes left in a project kept online that were written in [comp]: a
+/// small flag each on the ruler at its frame, in its writer's colour. The
+/// words are on hover, and a press opens the Shared project window on them.
+///
+/// It listens to the notes being read, and is all that is rebuilt then. What
+/// it draws is what the share state already holds.
+class ShareNotes extends StatelessWidget {
+  const ShareNotes({super.key, required this.comp, required this.xOf});
+
+  final CompositionReference comp;
+
+  /// Where a frame falls in the view's own pixels.
+  final double Function(int frame) xOf;
+
+  static const double _flag = 9;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    final share = Provider.of<LumitState>(context, listen: false).share;
+    return Positioned.fill(
+      child: ListenableBuilder(
+        listenable: share.activityRead,
+        builder: (context, _) => Stack(
+          children: [
+            for (final note in share.notes)
+              if (note.frame case final frame?
+                  when note.comp?.comp?.internalid == comp.internalid)
+                Positioned(
+                  left: xOf(frame),
+                  top: 0,
+                  child: LumitTooltip(
+                    message: l10n.shareNoteSaid(
+                        note.name, note.text.replaceAll(RegExp(r'\s+'), ' ')),
+                    child: MouseRegion(
+                      cursor: SystemMouseCursors.click,
+                      child: GestureDetector(
+                        key: ValueKey<String>('tl-note-${note.id}'),
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => share.showActivity?.call(),
+                        // A pennant: square at the pole, cut away below.
+                        child: Container(
+                          width: _flag,
+                          height: _flag,
+                          decoration: BoxDecoration(
+                            color: t.personColour(
+                                share.colourOf(note.name, mine: note.mine)),
+                            borderRadius: const BorderRadius.only(
+                                topRight: Radius.circular(2),
+                                bottomRight: Radius.circular(_flag)),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// The keyframes the others in a shared project have selected in the lanes,
 /// each ringed in its person's colour.
 ///

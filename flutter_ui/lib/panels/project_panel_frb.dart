@@ -925,8 +925,10 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
         standIn: _standIns.putIfAbsent(id, () => _isStandIn(item)),
         people: [
           if (item case ItemReference_Composition(:final field0))
-            for (final p in share.inComp(field0)) (p.colour, p.name),
+            for (final p in share.inComp(field0))
+              (p.colour, p.name, share.lettersOf(p.name)),
         ],
+        peopleStale: share.outOfStep,
         holders: share.holding('item:$id'),
         selected: selected,
         shaded: shaded,

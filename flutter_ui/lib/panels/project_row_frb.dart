@@ -7,6 +7,7 @@
 // draws by the panel's own walk, so hovering one row costs nothing at the
 // bridge (the budget test expects zero).
 
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
@@ -41,7 +42,16 @@ const double _badgeBorderAlpha = 0.28;
 
 /// The dot for each other person who has a composition open in a shared
 /// project, the Timeline's label dot's own size.
-const double _personDotSize = 6;
+const double _personDotSize = personDiscSize;
+
+/// How many people a composition's row marks before the last is a count,
+/// and how much wider than a disc that count can be.
+const int _rowPeople = 3;
+const double _countSpare = 8;
+
+/// The least room a row's name keeps, about twelve letters, whatever badges
+/// the row wears.
+const double _nameFloor = 96;
 
 /// The row's label square: an 8px hue-quartered mark in a 14px slot —
 /// the slot is the hit target, and its width is fixed so the squares
@@ -102,6 +112,11 @@ class ProjectBadge extends StatelessWidget {
 
   const ProjectBadge({super.key, required this.label, required this.colour});
 
+  /// How wide a badge saying [label] is drawn, edge to edge.
+  static double widthOf(LumitTheme t, String label, TextScaler scale) =>
+      _lineWidth(label, t.mono.copyWith(fontSize: _badgeTextSize), scale) +
+      2 * (_badgePad + 1);
+
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
@@ -120,6 +135,28 @@ class ProjectBadge extends StatelessWidget {
     );
   }
 }
+
+/// How wide [text] is on one line. Kept once measured, since rows ask on
+/// every build and a panel holds few different names and fewer badges.
+double _lineWidth(String text, TextStyle style, TextScaler scale) {
+  final key = '$text|${style.fontFamily}|${scale.scale(style.fontSize ?? 0)}';
+  // ponytail: emptied when it has grown, not trimmed. A project with more
+  // than a few hundred names on screen at once would want the oldest out.
+  if (_lineWidths.length > 512) _lineWidths.clear();
+  return _lineWidths[key] ??= () {
+    final words = TextPainter(
+      text: TextSpan(text: text, style: style),
+      textDirection: TextDirection.ltr,
+      textScaler: scale,
+      maxLines: 1,
+    )..layout();
+    final width = words.width;
+    words.dispose();
+    return width;
+  }();
+}
+
+final Map<String, double> _lineWidths = {};
 
 /// Relink: ask which file [footage] is now, and point it there. The files
 /// that moved with it are found from the one. False when none was picked.
@@ -180,8 +217,12 @@ class ProjectRowFrb extends StatefulWidget {
   final bool standIn;
 
   /// The other people in a shared project who have this composition open,
-  /// each as their colour and their name. Empty on every other kind of row.
-  final List<(int, String)> people;
+  /// each as their colour, their name and the letters their disc carries.
+  /// Empty on every other kind of row.
+  final List<(int, String, String)> people;
+
+  /// They are only what was last heard, and are drawn fainter.
+  final bool peopleStale;
 
   /// The colour of each other person in a shared project who has this item
   /// selected. The row carries a bar of them. Empty whenever nobody has.
@@ -278,6 +319,7 @@ class ProjectRowFrb extends StatefulWidget {
     required this.proxy,
     this.standIn = false,
     this.people = const [],
+    this.peopleStale = false,
     this.holders = const [],
     required this.selected,
     this.shaded = false,
@@ -541,64 +583,7 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
                 // [projectNameColumn] however wide the panel grows (owner,
                 // desk test). The indent and the badges come out of it exactly
                 // as they always did.
-                Expanded(child: _nameOrEditor(t)),
-                // Who else has this composition open, a dot each in their
-                // colour. The name is the tooltip.
-                for (final (colour, name) in widget.people) ...[
-                  const SizedBox(width: projectRowGap),
-                  LumitTooltip(
-                    message: name,
-                    child: Container(
-                      width: _personDotSize,
-                      height: _personDotSize,
-                      decoration: BoxDecoration(
-                        color: t.personColour(colour),
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  ),
-                ],
-                // Placed somewhere (§12A.3a). Before the missing badge, so a
-                // broken file that is nonetheless *in* a comp reads left to
-                // right as "used, and lost" — which is the order those two
-                // facts matter in.
-                if (widget.inUse) ...[
-                  const SizedBox(width: projectRowGap),
-                  ProjectBadge(
-                    key: ValueKey<String>('in-use-${projectItemId(item)}'),
-                    label: l10n.projectItemInUse,
-                    colour: t.success,
-                  ),
-                ],
-                // Reading from its proxy. **Quiet on purpose**: the
-                // other two badges wear a state colour because they report
-                // something that wants acting on — placed, or lost. A proxy is
-                // neither; it is a fact about which file the item is being
-                // read from, so it takes the badge family's shape at
-                // `text_muted` and claims none of the palette.
-                //
-                // Drawn only while the tick is on: the badge says "this item
-                // is being read from its proxy", so a proxy that is attached
-                // and switched off has nothing to announce.
-                if (widget.proxy?.inUse ?? false) ...[
-                  const SizedBox(width: projectRowGap),
-                  ProjectBadge(
-                    key: ValueKey<String>('proxy-${projectItemId(item)}'),
-                    label: l10n.projectItemProxy,
-                    colour: t.textMuted,
-                  ),
-                ],
-                // Read from a stand-in someone in the shared project sent,
-                // the file itself not being on this computer. Quiet like the
-                // proxy's, and for its reason.
-                if (widget.standIn) ...[
-                  const SizedBox(width: projectRowGap),
-                  ProjectBadge(
-                    key: ValueKey<String>('stand-in-${projectItemId(item)}'),
-                    label: l10n.projectItemStandIn,
-                    colour: t.textMuted,
-                  ),
-                ],
+                Expanded(child: _nameAndBadges(t)),
                 if (widget.missing) ...[
                   const SizedBox(width: projectRowGap),
                   // The badge *is* the relink control: the mockup gives a
@@ -823,6 +808,110 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
           ),
         ),
       ),
+    );
+  }
+
+  /// The name, then who else has the composition open, then the quiet
+  /// badges: placed somewhere, read from a proxy, read from a stand-in.
+  ///
+  /// **The name keeps [_nameFloor] of room, or all it needs when that is
+  /// less.** It is the one thing on the row that cannot be guessed, and two
+  /// badges used to crush it to three letters. So the badges take what is
+  /// left past that, and the ones that do not fit are left out, the last
+  /// first. What a row is stays on the name's tooltip, badge or no badge.
+  /// The badges that want acting on, missing and undecodable, are not among
+  /// these and are never left out.
+  Widget _nameAndBadges(LumitTheme t) {
+    final id = projectItemId(item);
+    final badges = [
+      // Placed somewhere (§12A.3a). Before the missing badge, so a broken
+      // file that is nonetheless *in* a comp reads left to right as "used,
+      // and lost", which is the order those two facts matter in.
+      if (widget.inUse) ('in-use-$id', l10n.projectItemInUse, t.success),
+      // Reading from its proxy. **Quiet on purpose**: a proxy is a fact
+      // about which file the item is being read from, not something that
+      // wants acting on, so it takes the badge family's shape at
+      // `text_muted` and claims none of the palette. Drawn only while the
+      // tick is on: a proxy that is attached and switched off has nothing
+      // to announce.
+      if (widget.proxy?.inUse ?? false)
+        ('proxy-$id', l10n.projectItemProxy, t.textMuted),
+      // Read from a stand-in someone in the shared project sent, the file
+      // itself not being on this computer. Quiet like the proxy's, and for
+      // its reason.
+      if (widget.standIn)
+        ('stand-in-$id', l10n.projectItemStandIn, t.textMuted),
+    ];
+    final name = _nameOrEditor(t);
+    if (badges.isEmpty && widget.people.isEmpty) return name;
+    // Who else has this composition open, a dot each in their colour. The
+    // name is the tooltip.
+    final scale = MediaQuery.textScalerOf(context);
+    return LayoutBuilder(
+      builder: (context, box) {
+        // What is left past the name's floor goes to the people first, as
+        // many as fit and never fewer than a count of them, and then to the
+        // badges, in order, until one does not fit.
+        final needs = widget.renaming
+            ? _nameFloor
+            : math.min(_nameFloor, _lineWidth(widget.name, t.body, scale));
+        var room = box.maxWidth - needs;
+        const each = projectRowGap + _personDotSize;
+        final marks =
+            ((room - _countSpare) / each).floor().clamp(1, _rowPeople);
+        final drawn = peopleDrawn(widget.people.length, marks);
+        final more = widget.people.length - drawn;
+        if (widget.people.isNotEmpty) {
+          room -= drawn * each + (more > 0 ? each + _countSpare : 0);
+        }
+        final fit = badges.takeWhile((badge) {
+          room -= projectRowGap + ProjectBadge.widthOf(t, badge.$2, scale);
+          return room >= 0;
+        }).toList();
+        return Row(
+          children: [
+            Expanded(
+              child: badges.isEmpty
+                  ? name
+                  : LumitTooltip(
+                      message: [
+                        widget.name,
+                        for (final badge in badges) badge.$2
+                      ].join(' · '),
+                      child: name,
+                    ),
+            ),
+            for (final (colour, name, letters)
+                in widget.people.take(drawn)) ...[
+              const SizedBox(width: projectRowGap),
+              LumitTooltip(
+                message: name,
+                child: PersonDisc(
+                    colour: colour,
+                    name: name,
+                    letters: letters,
+                    stale: widget.peopleStale),
+              ),
+            ],
+            if (more > 0) ...[
+              const SizedBox(width: projectRowGap),
+              LumitTooltip(
+                message:
+                    widget.people.skip(drawn).map((p) => p.$2).join(', '),
+                child: MorePeople(count: more),
+              ),
+            ],
+            for (final (key, label, colour) in fit) ...[
+              const SizedBox(width: projectRowGap),
+              ProjectBadge(
+                key: ValueKey<String>(key),
+                label: label,
+                colour: colour,
+              ),
+            ],
+          ],
+        );
+      },
     );
   }
 

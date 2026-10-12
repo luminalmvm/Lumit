@@ -1,9 +1,9 @@
 // A file on its way to Lumit's server or back from it.
 //
-// Two things move files that way: a review link's video and a project's
-// backup. They go up in the pieces the server asks for, and come down into a
-// file beside the one they are to become. Both halves are here, so there is
-// one of each.
+// Three things move files that way: a review link's video, a project's
+// backup, and the footage of a shared project that is kept online. They go up
+// in the pieces the server asks for, and come down into a file beside the one
+// they are to become. Both halves are here, so there is one of each.
 
 import 'dart:async';
 import 'dart:convert';

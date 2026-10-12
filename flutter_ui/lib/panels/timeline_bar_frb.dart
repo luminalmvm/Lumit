@@ -17,6 +17,7 @@ import '../l10n/strings.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/drag_escape.dart';
+import '../widgets/share_marks.dart';
 import 'timeline_extras_frb.dart';
 import 'layer_fold_frb.dart';
 import 'timeline_snap.dart';
@@ -775,6 +776,19 @@ class _BarState extends State<Bar> {
                       // No select here: every drag begins with the down, and the
                       // down already selected.
                       : (d) {
+                          // Someone else in a shared project is changing
+                          // this layer, or one the drag would carry: it does
+                          // not begin, and the release finds nothing to write.
+                          if (heldByOthers({
+                            '${widget.entry.layer.internallayerId}',
+                            if (widget.selected)
+                              ...?widget.selectionMove
+                                  ?.call()
+                                  .layerIds
+                                  .map((id) => '$id'),
+                          })) {
+                            return;
+                          }
                           setState(() {
                             _delta = 0;
                             _deltaPx = 0;
@@ -1058,6 +1072,15 @@ class _BarState extends State<Bar> {
                 ),
               ),
             ),
+          // Someone else in a shared project is changing this layer: its
+          // bar is theirs, dimmed under their name, and takes no press.
+          Positioned(
+            left: left,
+            width: width,
+            top: clipBarInsetOf(t),
+            height: clipBarHeightOf(t),
+            child: HeldVeil(names: ['${widget.entry.layer.internallayerId}']),
+          ),
           // The layer's own markers, over the bar so they take the
           // pointer ahead of it — a flag is a much smaller target than a bar,
           // and a right-click meant for one must not open the bar's menu.

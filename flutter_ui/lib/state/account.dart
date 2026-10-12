@@ -289,7 +289,7 @@ class AccountState extends ChangeNotifier {
 
   /// One request. Throws a [CloudError] for anything but a 2xx answer.
   Future<(int, Map<String, dynamic>)> _send(String method, String path,
-      {Object? body, String? bearer}) async {
+      {Object? body, String? bearer, Map<String, String>? headers}) async {
     final HttpClientResponse response;
     final String text;
     try {
@@ -297,6 +297,7 @@ class AccountState extends ChangeNotifier {
           .openUrl(method, Uri.parse('$cloudUrl$path'))
           .timeout(const Duration(seconds: 15));
       request.followRedirects = false;
+      headers?.forEach(request.headers.set);
       if (bearer != null) {
         request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $bearer');
       }
@@ -328,15 +329,23 @@ class AccountState extends ChangeNotifier {
     return (response.statusCode, json);
   }
 
+  /// A request that needs no account: what it shows the server is in
+  /// [headers], as a shared project's invite is.
+  Future<Map<String, dynamic>> ask(String method, String path,
+          {Object? body, Map<String, String>? headers}) async =>
+      (await _send(method, path, body: body, headers: headers)).$2;
+
   /// A request made as the signed-in account. The short token is renewed
   /// first when it is about to run out, and once more if the server says it
-  /// already has.
+  /// already has. [headers] go with it as they are.
   Future<Map<String, dynamic>> call(String method, String path,
-      {Object? body}) async {
+      {Object? body, Map<String, String>? headers}) async {
     final token = await accessToken();
     if (token == null) throw const CloudError('signed_out', 401);
     try {
-      return (await _send(method, path, body: body, bearer: token)).$2;
+      return (await _send(method, path,
+              body: body, bearer: token, headers: headers))
+          .$2;
     } on CloudError catch (e) {
       // 402 is Pro having ended since the account was last read. It is read
       // again, so the rest of the interface stops saying otherwise.
@@ -347,7 +356,9 @@ class AccountState extends ChangeNotifier {
     _access = null;
     final again = await accessToken();
     if (again == null) throw const CloudError('signed_out', 401);
-    return (await _send(method, path, body: body, bearer: again)).$2;
+    return (await _send(method, path,
+            body: body, bearer: again, headers: headers))
+        .$2;
   }
 
   /// A short token that is good for at least another minute, or null when

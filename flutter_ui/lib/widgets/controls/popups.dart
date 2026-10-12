@@ -274,7 +274,12 @@ class _PopupEntrance extends StatelessWidget {
 /// control near the right edge.
 class _PopupLayout extends SingleChildLayoutDelegate {
   final Offset anchor;
-  const _PopupLayout(this.anchor);
+
+  /// Where the popup's bottom edge goes when there is no room under the
+  /// anchor. A tip on a control at the foot of the window then sits over the
+  /// control and not on top of it. Null only pulls it up as far as fits.
+  final double? above;
+  const _PopupLayout(this.anchor, {this.above});
 
   @override
   BoxConstraints getConstraintsForChild(BoxConstraints constraints) =>
@@ -286,13 +291,20 @@ class _PopupLayout extends SingleChildLayoutDelegate {
       ));
 
   @override
-  Offset getPositionForChild(Size size, Size childSize) => Offset(
-        anchor.dx.clamp(0.0, (size.width - childSize.width).clamp(0.0, 1e6)),
-        anchor.dy.clamp(0.0, (size.height - childSize.height).clamp(0.0, 1e6)),
-      );
+  Offset getPositionForChild(Size size, Size childSize) {
+    final over = above;
+    final top = over != null && anchor.dy + childSize.height > size.height
+        ? over - childSize.height
+        : anchor.dy;
+    return Offset(
+      anchor.dx.clamp(0.0, (size.width - childSize.width).clamp(0.0, 1e6)),
+      top.clamp(0.0, (size.height - childSize.height).clamp(0.0, 1e6)),
+    );
+  }
 
   @override
-  bool shouldRelayout(_PopupLayout old) => old.anchor != anchor;
+  bool shouldRelayout(_PopupLayout old) =>
+      old.anchor != anchor || old.above != above;
 }
 
 /// A tooltip that honours Settings → Interface → Show tooltips app-wide —
@@ -367,6 +379,8 @@ class _HoverTipState extends State<_HoverTip> {
     // its control the further the control is from the window's corner.
     final origin = overlayLocal(
         context, box.localToGlobal(Offset(0, box.size.height + 4)));
+    final above =
+        overlayLocal(context, box.localToGlobal(const Offset(0, -4))).dy;
     final scope = ThemeScope.of(context);
     final t = scope.theme;
     // Null outside the shell (a bare widget test), where there is no keymap.
@@ -383,7 +397,7 @@ class _HoverTipState extends State<_HoverTip> {
           // near the bottom (the Viewer's transport) would otherwise tip below
           // the window entirely.
           child: CustomSingleChildLayout(
-            delegate: _PopupLayout(origin),
+            delegate: _PopupLayout(origin, above: above),
             child: Entrance(
               spec: scope.motion.tooltip,
               rise: scope.motion.tooltipRise,

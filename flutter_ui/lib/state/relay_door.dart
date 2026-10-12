@@ -96,7 +96,7 @@ class RelayDoor {
     final said = StreamIterator<Uint8List>(local);
     WebSocket? relay;
     try {
-      final (line, rest) = await _firstLine(said);
+      final (line, rest) = await firstLine(said, _lineLimit);
       final words = line.startsWith(_call)
           ? line.substring(_call.length).split(' ')
           : const <String>[];
@@ -155,19 +155,21 @@ class RelayDoor {
   }
 
   /// The first line a caller says, and whatever came after it in the same
-  /// read, which belongs to the other end.
-  Future<(String, Uint8List)> _firstLine(StreamIterator<Uint8List> said) async {
+  /// read, which belongs to the other end. Shared with the door to a
+  /// project that is kept online, whose line is longer.
+  static Future<(String, Uint8List)> firstLine(
+      StreamIterator<Uint8List> said, int limit) async {
     final line = BytesBuilder(copy: false);
     while (await said.moveNext().timeout(_patience)) {
       final chunk = said.current;
       final end = chunk.indexOf(0x0a);
       if (end < 0) {
         line.add(chunk);
-        if (line.length > _lineLimit) break;
+        if (line.length > limit) break;
         continue;
       }
       line.add(Uint8List.sublistView(chunk, 0, end));
-      if (line.length > _lineLimit) break;
+      if (line.length > limit) break;
       return (
         ascii.decode(line.takeBytes(), allowInvalid: true).trim(),
         Uint8List.sublistView(chunk, end + 1),

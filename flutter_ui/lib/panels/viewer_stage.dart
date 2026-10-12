@@ -36,6 +36,7 @@ import 'viewer_anchor.dart';
 import 'viewer_camera.dart';
 import 'viewer_dropper_layer.dart';
 import 'viewer_effect_points.dart';
+import 'viewer_follow.dart';
 import 'viewer_gizmo.dart';
 import 'viewer_layer_map.dart';
 import 'viewer_overlays.dart';
@@ -880,6 +881,10 @@ class ViewerStage extends StatelessWidget {
             // is the Viewer's, but it follows the effect selection rather than
             // anything this panel knows.
             ViewerPrefixChip(uiState: uiState),
+            // Whose composition and playhead this machine is following, on
+            // the view that shows the composition in front.
+            if (comp.internalid == uiState.selectedComp?.internalid)
+              ViewerFollow(uiState: uiState),
           ],
         ),
       )),

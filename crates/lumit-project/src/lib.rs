@@ -88,7 +88,10 @@ impl Manifest {
     }
 }
 
-fn semver_triple(s: &str) -> Option<(u64, u64, u64)> {
+/// A version as its three numbers, so that two are held against each other as
+/// versions and not as text. `None` for anything that is not three numbers.
+#[must_use]
+pub fn semver_triple(s: &str) -> Option<(u64, u64, u64)> {
     let mut it = s.split('.').map(|p| p.parse::<u64>().ok());
     match (it.next(), it.next(), it.next()) {
         (Some(Some(a)), Some(Some(b)), Some(Some(c))) => Some((a, b, c)),
@@ -573,14 +576,34 @@ pub fn open(path: &Path) -> Result<(Document, Manifest), ProjectError> {
         // §1). A current-schema file takes the direct path unchanged, so nothing
         // routes through `Value` needlessly.
         match semver_triple(&manifest.schema_version) {
-            Some(v) if manifest.schema_version != SCHEMA_VERSION && !MIGRATIONS.is_empty() => {
-                let value = run_migrations(MIGRATIONS, serde_json::from_str(&s)?, v);
+            Some(_) if manifest.schema_version != SCHEMA_VERSION && !MIGRATIONS.is_empty() => {
+                let value = migrate(serde_json::from_str(&s)?, &manifest.schema_version);
                 serde_json::from_value(value)?
             }
             _ => serde_json::from_str(&s)?,
         }
     };
     let mut doc = doc;
+    forward_migrate(&mut doc)?;
+    Ok((doc, manifest))
+}
+
+/// A document as raw JSON written at `schema_version`, walked up to this
+/// Lumit's schema, ready to be typed. The first half of the road [`open`]
+/// takes a file's `project.json` down, for a document that is not in a file:
+/// a project kept online is one, when a newer Lumit takes it over from an
+/// older. [`forward_migrate`] is the other half.
+#[must_use]
+pub fn migrate(value: serde_json::Value, schema_version: &str) -> serde_json::Value {
+    match semver_triple(schema_version) {
+        Some(v) if schema_version != SCHEMA_VERSION => run_migrations(MIGRATIONS, value, v),
+        _ => value,
+    }
+}
+
+/// What every document from outside is put through once it is typed, whatever
+/// schema it was written at. Doing it again changes nothing.
+pub fn forward_migrate(doc: &mut Document) -> Result<(), ProjectError> {
     // Forward-migrate effect stacks: a built-in whose schema grew
     // since this file was saved gains the new parameters at their defaults,
     // so the panel has values to draw and edits have ids to write.
@@ -624,8 +647,7 @@ pub fn open(path: &Path) -> Result<(Document, Manifest), ProjectError> {
             }
         }
     }
-
-    Ok((doc, manifest))
+    Ok(())
 }
 
 /// Rotating autosaves beside the project: `<stem>.autosave-1.lum` is newest.

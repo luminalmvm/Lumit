@@ -11,7 +11,7 @@ import 'dart:convert';
 import 'dart:io' show Platform;
 import 'dart:ui' show AppExitResponse;
 
-import 'package:flutter/foundation.dart' show listEquals;
+import 'package:flutter/foundation.dart' show listEquals, mapEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart' show Ticker;
 import 'package:flutter/services.dart';
@@ -25,6 +25,7 @@ import 'package:lumit_flutter/panels/shader_editor.dart' show InstanceHome;
 import 'package:lumit_flutter/l10n/strings.dart';
 import 'package:lumit_flutter/panels/viewer_texture_controller.dart';
 import 'package:lumit_flutter/shell/about_window_frb.dart';
+import 'package:lumit_flutter/shell/welcome_frb.dart' show projectDisplayName;
 import 'package:lumit_flutter/src/rust/api/assets.dart'
     show BridgeTextDocument;
 import 'package:lumit_flutter/src/rust/api/audio.dart'
@@ -51,7 +52,9 @@ import 'package:lumit_flutter/src/rust/api/state.dart';
 import 'package:lumit_flutter/src/rust/api/streams.dart'
     show BridgeStreamsArrival;
 import 'package:lumit_flutter/src/rust/api/share.dart' as bridge_share
-    show shareSetLimits, shareSetFootage;
+    show shareOnlineDoor, shareSetLimits, shareSetFootage;
+import 'package:lumit_flutter/src/rust/api/share.dart'
+    show BridgeSharePerson;
 import 'package:lumit_flutter/state/account.dart';
 import 'package:lumit_flutter/state/backup.dart';
 import 'package:lumit_flutter/state/addons.dart';
@@ -66,6 +69,8 @@ import 'package:lumit_flutter/state/viewer_views.dart';
 import 'package:lumit_flutter/state/keymap.dart';
 import 'package:lumit_flutter/state/animated_mask_paths.dart';
 import 'package:lumit_flutter/state/motion_paths.dart';
+import 'package:lumit_flutter/state/online_door.dart';
+import 'package:lumit_flutter/state/online_footage.dart';
 import 'package:lumit_flutter/state/layer_bounds.dart';
 import 'package:lumit_flutter/state/panel_folds.dart';
 import 'package:lumit_flutter/state/playback_loop.dart';
@@ -82,6 +87,8 @@ import 'package:lumit_flutter/state/workspace.dart';
 import 'package:lumit_flutter/state/app_state.dart';
 import 'package:lumit_flutter/theme/theme.dart';
 import 'package:lumit_flutter/widgets/controls.dart';
+import 'package:lumit_flutter/widgets/share_marks.dart'
+    show valuesHeld, valuesInHand;
 import 'package:uuid/uuid.dart';
 
 /// What [LumitUiState.colourSummary] reads before anything has been asked, and
@@ -114,6 +121,17 @@ typedef ShaderGraphEntry = ({
   String effectName,
 });
 
+/// A project the account keeps online, as Lumit's server lists it: what the
+/// server knows it by, its file's name where this machine remembers keeping
+/// it, when it was put online and last opened, and how much is held for it.
+typedef OnlineKept = ({
+  String id,
+  String? name,
+  DateTime created,
+  DateTime opened,
+  int bytes,
+});
+
 class LumitUiState extends ChangeNotifier {
   /// Everything that outlives the session: the panel layout, the appearance,
   /// UI scale, tooltips, autosave and export defaults.
@@ -138,6 +156,284 @@ class LumitUiState extends ChangeNotifier {
 
   /// The way to Lumit's own relay, for a shared project.
   late final RelayDoor relayDoor = RelayDoor(account);
+
+  /// The way to Lumit's server, for a shared project that is kept online.
+  /// Open from the first project that needs it until Lumit closes.
+  late final OnlineDoor onlineDoor = OnlineDoor(
+      account, (port) => bridge_share.shareOnlineDoor(port: port));
+
+  /// What moves the footage of a project kept online to the server and
+  /// back. It follows the open project by itself.
+  late final OnlineFootage onlineFootage;
+
+  /// What the open project's sharing was when its doors were last seen to.
+  String _doorsFor = '';
+
+  /// Whether Lumit's server was taking edits to a project this machine
+  /// hosts, when that was last looked at.
+  bool _taking = false;
+
+  /// Open the doors the open project's sharing goes through. The engine
+  /// dials a door by itself, the moment there is one, and cannot open one.
+  /// So this is done when sharing begins, which a saved copy opened again
+  /// does with nobody at the Shared project window, and again each time the
+  /// other end is lost.
+  void _mindDoors() {
+    final share = _app.share;
+    // The server takes edits to a project this machine hosts for as long as
+    // its account has Pro. Taking them again means Pro is back, so the
+    // account is read again for everything else that was waiting on it.
+    final taking = (share.online?.host ?? false) && share.writable;
+    if (taking && !_taking && !account.pro) unawaited(account.refreshAccount());
+    _taking = taking;
+    // What changes the project is held still on a machine that can only
+    // look at it.
+    tools.lookOnly = share.online?.look ?? false;
+    // What the others are changing right now, which their rows are held by.
+    final held = share.active ? share.changing : null;
+    if (!mapEquals(held, valuesHeld.value)) valuesHeld.value = held;
+    final project = share.active ? _app.project : null;
+    final now = '${project?.internalid}|${share.away}';
+    if (now == _doorsFor) return;
+    _doorsFor = now;
+    _keepWatched();
+    if (project == null) {
+      _watchedFor = null;
+      return;
+    }
+    try {
+      final doors = project.shareDoors();
+      if (doors.relay) unawaited(relayDoor.open());
+      if (!doors.online) return;
+      unawaited(onlineDoor.open());
+      // What this copy had watched when it was last open, before anything
+      // of the list is read.
+      final copy = project.shareId();
+      if (_watchedFor != copy) {
+        _watchedFor = copy;
+        _app.shareWatched
+          ..clear()
+          ..addAll(workspace.shareWatched[copy] ?? const {});
+      }
+      // A new invite the server took and the engine never heard of, because
+      // Lumit went down between the two. The project is found by it now.
+      final id = project.shareId();
+      if (workspace.shareMoved[id] case final link?) {
+        project.shareOnlineMoved(link: link);
+        workspace.setShareMoved(id, null);
+      }
+      _noteHosted();
+    } catch (_) {
+      // Closed again already.
+    }
+  }
+
+  /// The copy whose watched edits are held, by the engine's id for it.
+  String? _watchedFor;
+
+  /// Write down how much of each recent sitting this copy has watched, for
+  /// the next time it is opened. Asked whenever sharing changes, when the
+  /// person steps away from the window, and when Lumit closes.
+  void _keepWatched() {
+    final copy = _watchedFor;
+    if (copy == null) return;
+    final recent = _app.shareWatchedRecent;
+    if (!mapEquals(workspace.shareWatched[copy] ?? const {}, recent)) {
+      workspace.setShareWatched(copy, recent);
+    }
+  }
+
+  /// Remember that this machine keeps the open project online, what the
+  /// server knows it by and which file it is. A copy opened again has not
+  /// found the server yet and is still known for its host's, and the list
+  /// of what the account keeps online can call it by its file's name.
+  void _noteHosted() {
+    final project = _app.project;
+    final online = _app.share.online;
+    if (project == null || online == null || !online.host) return;
+    final kept = 'online/${online.id}/${project.path() ?? ''}';
+    final id = project.shareId();
+    if (workspace.shareHosted[id] != kept) workspace.setShareHosted(id, kept);
+  }
+
+  /// Every project this account keeps online, as Lumit's server lists them,
+  /// newest first. Each is named by its file where this machine remembers
+  /// keeping it. Throws a [CloudError].
+  Future<List<OnlineKept>> keptOnline() async {
+    try {
+      // The open project may have been saved since it was put online.
+      _noteHosted();
+    } catch (_) {
+      // Closed.
+    }
+    final listed = await account.call('GET', '/v1/online');
+    DateTime at(Object? seconds) => DateTime.fromMillisecondsSinceEpoch(
+        (seconds is int ? seconds : 0) * 1000);
+    String? named(String id) {
+      for (final kept in workspace.shareHosted.values) {
+        if (!kept.startsWith('online/$id/')) continue;
+        final path = kept.substring('online/$id/'.length);
+        return path.isEmpty ? null : projectDisplayName(path);
+      }
+      return null;
+    }
+
+    return [
+      if (listed['projects'] case final List<dynamic> projects)
+        for (final project in projects)
+          if (project is Map && project['id'] is String)
+            (
+              id: project['id'] as String,
+              name: named(project['id'] as String),
+              created: at(project['created']),
+              opened: at(project['updated']),
+              bytes: project['bytes'] is int ? project['bytes'] as int : 0,
+            ),
+    ];
+  }
+
+  /// Stop keeping the project the server knows as [id]. The server lets go
+  /// of everything it held for it and tells whoever is in it that it is
+  /// over. When it is the open project, this machine stops sharing too.
+  /// Throws a [CloudError].
+  Future<void> stopKeeping(String id) async {
+    if (_app.share.online?.id == id) {
+      await stopOnline();
+    } else {
+      try {
+        await account.call('DELETE', '/v1/online/$id');
+      } on CloudError catch (e) {
+        // Gone already, which is what was asked for.
+        if (e.code != 'not_found') rethrow;
+      }
+    }
+    for (final MapEntry(:key, :value) in workspace.shareHosted.entries.toList()) {
+      if (!value.startsWith('online/$id/')) continue;
+      workspace.setShareHosted(key, null);
+      workspace.setShareOriginals(key, false);
+    }
+  }
+
+  /// The person this machine is following, by the number the people list
+  /// gives them, or null. Its open composition and playhead go where theirs
+  /// go. Nothing here is selected or edited by it, and nothing is said to
+  /// them.
+  final ValueNotifier<int?> following = ValueNotifier(null);
+
+  /// The composition and frame following last put this machine on. Anything
+  /// else found there is the person's own doing, which ends it.
+  (UuidValue?, int) _followedTo = (null, 0);
+  bool _followMoving = false;
+
+  /// The person being followed, while they are still here.
+  BridgeSharePerson? get followed {
+    final id = following.value;
+    if (id == null) return null;
+    for (final person in _app.share.people) {
+      if (person.id == id && !person.me) return person;
+    }
+    return null;
+  }
+
+  /// Follow the person numbered [id], or with null stop following.
+  void follow(int? id) {
+    if (following.value == id) return;
+    following.value = id;
+    if (id == null) return;
+    _followedTo = (_selectedComp?.internalid, playheadFrame.value);
+    _followAlong();
+  }
+
+  /// Go where the person being followed is. They have gone when they are
+  /// no longer on the list, and so has following them.
+  void _followAlong() {
+    if (following.value == null) return;
+    final them = followed;
+    if (them == null) return follow(null);
+    final comp = them.comp;
+    final frame = them.playhead;
+    _followMoving = true;
+    try {
+      if (comp != null && comp.internalid != _selectedComp?.internalid) {
+        setSelectedComp(comp, atFrame: frame);
+      } else if (frame != null && frame != playheadFrame.value) {
+        playheadFrame.value = frame;
+      }
+    } finally {
+      _followMoving = false;
+    }
+    _followedTo = (_selectedComp?.internalid, playheadFrame.value);
+  }
+
+  /// The playhead or the open composition moved. When that was not
+  /// following's doing it was the person's, and they have stopped following.
+  void _followCheck() {
+    if (following.value == null || _followMoving) return;
+    if (_selectedComp?.internalid != _followedTo.$1 ||
+        playheadFrame.value != _followedTo.$2) {
+      follow(null);
+    }
+  }
+
+  /// For the host of the project kept online: take [person] out and move
+  /// the project to a new invite, which is answered. The one handed out
+  /// before then finds nothing. Everyone still here is sent the new one by
+  /// the server, and anyone away needs it given. Throws a [CloudError].
+  Future<String> removeOnline(int person) async {
+    final project = _app.project;
+    final online = _app.share.online;
+    final move = project?.shareOnlineMove(person: person);
+    if (project == null || online == null || move == null) {
+      throw const CloudError('offline');
+    }
+    _app.quietReturn();
+    await account.call('PUT', '/v1/online/${online.id}/access',
+        body: jsonDecode(move.body),
+        headers: {'X-Lumit-Online': online.access});
+    // The server has moved it, and until the engine has the new invite this
+    // is the only copy of it. So it is written down first.
+    final id = project.shareId();
+    workspace.setShareMoved(id, move.link);
+    project.shareOnlineMoved(link: move.link);
+    workspace.setShareMoved(id, null);
+    return move.link;
+  }
+
+  /// For the host of the project kept online: turn the invite that can only
+  /// look on or off. Off puts out everyone looking. The server tells every
+  /// machine which it now is, this one too. Throws a [CloudError].
+  Future<void> setOnlineLook(bool on) async {
+    final online = _app.share.online;
+    final body = _app.project?.shareOnlineLook(lookOn: on);
+    if (online == null || body == null) throw const CloudError('offline');
+    await account.call('PUT', '/v1/online/${online.id}/look',
+        body: jsonDecode(body), headers: {'X-Lumit-Online': online.access});
+  }
+
+  /// For the host of the project kept online: stop keeping it. The server
+  /// lets go of everything it held and tells everyone else it is over, and
+  /// then this machine leaves too. Throws a [CloudError].
+  Future<void> stopOnline() async {
+    final online = _app.share.online;
+    if (online == null) return;
+    try {
+      await account.call('DELETE', '/v1/online/${online.id}');
+    } on CloudError catch (e) {
+      // Gone already, which is what was asked for.
+      if (e.code != 'not_found') rethrow;
+    }
+    String? id;
+    try {
+      id = _app.project?.shareId();
+    } catch (_) {
+      // Closed meanwhile.
+    }
+    _app.stopSharing();
+    if (id != null) {
+      workspace.setShareHosted(id, null);
+      workspace.setShareOriginals(id, false);
+    }
+  }
 
   /// The account's review links, and the comments left on them.
   late final ReviewsState reviews = ReviewsState(account, profiles);
@@ -2106,11 +2402,22 @@ class LumitUiState extends ChangeNotifier {
     // Sharing starting is the one time what is selected has to be sent
     // without having changed.
     _app.share.roster.addListener(_look);
+    // And what they are changing, the moment a drag or a typing begins.
+    valuesInHand.addListener(_look);
+    _app.share.roster.addListener(_mindDoors);
+    // Following: where they go, and whether this person has moved off.
+    _app.share.addListener(_followAlong);
+    playheadFrame.addListener(_followCheck);
+    addListener(_followCheck);
+    onlineFootage = OnlineFootage(_app, account, this.workspace);
     // Where the playhead was left is worth keeping, and it moves far too often
     // to write down each time. So it is captured when the user steps away from
     // the window and when they close it, alongside the deliberate acts below.
     _lifecycle = AppLifecycleListener(
-      onInactive: rememberSession,
+      onInactive: () {
+        rememberSession();
+        _keepWatched();
+      },
       // Pro may have come back while the window was away: bought on the
       // website, or a late payment gone through. So someone signed in and
       // believed to have none is asked after on coming back to it, at most
@@ -2332,7 +2639,8 @@ class LumitUiState extends ChangeNotifier {
         layers: selectedLayers.value,
         playhead: playheadFrame.value,
         // Gathered only while there is somebody to tell.
-        properties: share.active ? _inHand() : const []);
+        properties: share.active ? _inHand() : const [],
+        changing: valuesInHand.value);
   }
 
   /// A selection made anywhere lets go of the parameter last edited in the
@@ -2401,7 +2709,13 @@ class LumitUiState extends ChangeNotifier {
     reviews.dispose();
     backup.dispose();
     profiles.dispose();
+    _app.share.roster.removeListener(_mindDoors);
+    valuesInHand.removeListener(_look);
+    _app.share.removeListener(_followAlong);
+    _keepWatched();
+    onlineFootage.dispose();
     unawaited(relayDoor.close());
+    unawaited(onlineDoor.dispose());
     account.dispose();
     sub?.cancel();
     _changes?.cancel();

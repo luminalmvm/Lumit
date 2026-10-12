@@ -775,7 +775,11 @@ impl ProjectReference {
             media: MediaRef {
                 relative_path: on_disk,
                 absolute_path: file.to_string_lossy().into_owned(),
-                fingerprint: None,
+                // Stamped now and not left for the first save. A shared
+                // project tells one machine's copy of a file from another's
+                // by it, and files what it sends under it, and a document
+                // that is being edited never passes through a save.
+                fingerprint: lumit_project::fingerprint_path(&file).ok(),
                 extra: serde_json::Map::new(),
             },
             sequence: run.as_ref().map(|_| SequenceRef::default()),

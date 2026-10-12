@@ -11,26 +11,35 @@
 //! being able to read it. That is one somebody runs and gives the address
 //! of, or Lumit's own ([`CLOUD_RELAY`]), the one thing here its makers run.
 //!
+//! A shared project can also be kept online ([`online`]). Lumit's server then
+//! holds it, sealed so that the server cannot read it, and puts the edits in
+//! order where the host's Lumit would. Nobody's machine has to be on for the
+//! others to work, and the host's is a member like the rest.
+//!
 //! Threads: sharing runs its own and none is the UI thread. The host has one
 //! that accepts, a reader and a writer per guest, one that keeps its
 //! router's port open when it was asked to, and one that keeps its room at a
 //! relay when it was given one. A guest has a reader and a writer, and for a
-//! moment one for each address it tries its host at.
+//! moment one for each address it tries its host at. A member of a project
+//! kept online has a reader and a writer too.
 
+mod activity;
 mod bulk;
 mod guest;
 mod host;
 mod invite;
 mod kept;
 mod local;
+pub mod online;
 mod reach;
 mod wire;
 
+pub use activity::{Note, Sitting, NOTE_LENGTH};
 pub use bulk::{Footage, Held, Limits, News, Wanted};
 pub use guest::{join, resume, Guest, Joining, Resuming};
 pub use host::{host, Host};
 pub use invite::{key_from, key_text, Invite, Lock, LINK, LINK_SCHEME, MAX_ADDRESSES};
-pub use kept::forget;
+pub use kept::{before_returns, forget, forget_before_return, BeforeReturn};
 pub use lumit_core::shared::Conflict;
 
 use lumit_core::CompTime;
@@ -74,6 +83,20 @@ pub(crate) fn dialled(relay: &str) -> Option<String> {
     }
 }
 
+/// What an invite to a project that is kept online names where a host's
+/// address would be. Nothing dials it as it is written either: Lumit's
+/// server is spoken to through a second door the interface keeps.
+pub const ONLINE: &str = "online.lumitlab.com:443";
+
+/// The port that door listens on, on this machine. 0 while there is none.
+static ONLINE_DOOR: AtomicU16 = AtomicU16::new(0);
+
+/// Say which port the door to projects kept online is on, or that it has
+/// shut.
+pub fn set_online_door(port: Option<u16>) {
+    ONLINE_DOOR.store(port.unwrap_or(0), Ordering::Relaxed);
+}
+
 /// The most people in one shared project, the host included.
 pub const MAX_PEOPLE: usize = 16;
 
@@ -95,10 +118,18 @@ pub struct Presence {
     pub properties: Vec<String>,
     #[serde(default)]
     pub keys: Vec<String>,
+    /// The controls they are changing right now, dragged or typed in, by
+    /// the names the interface knows them by, for the other interfaces to
+    /// hold for them. Passed on unread, as the two above. A courtesy, and
+    /// no rule: nothing here refuses an edit to one. A project kept online
+    /// lets go of them two seconds after the person last said so.
+    #[serde(default)]
+    pub changing: Vec<String>,
 }
 
 /// The most property rows and keyframes one person's selection is relayed
-/// with, and the longest name any of them goes by.
+/// with, the most controls they are changing being as many as the rows, and
+/// the longest name any of them goes by.
 const MARKED_PROPERTIES: usize = 256;
 const MARKED_KEYS: usize = 2048;
 const MARK_LENGTH: usize = 256;
@@ -112,6 +143,8 @@ impl Presence {
         self.properties.truncate(MARKED_PROPERTIES);
         self.keys.retain(|name| name.len() <= MARK_LENGTH);
         self.keys.truncate(MARKED_KEYS);
+        self.changing.retain(|name| name.len() <= MARK_LENGTH);
+        self.changing.truncate(MARKED_PROPERTIES);
         self
     }
 }
@@ -125,6 +158,15 @@ pub struct Person {
     /// An index into the label palette, from 1, given out in joining order.
     pub colour: u8,
     pub presence: Presence,
+    /// This is the host. For a project kept online that is anyone signed
+    /// in to the account that keeps it, as Lumit's server says: it can be
+    /// more than one of the people here, or none of them.
+    #[serde(default)]
+    pub host: bool,
+    /// This person can only look: they joined a project kept online by the
+    /// invite that changes nothing, as Lumit's server says.
+    #[serde(default)]
+    pub look: bool,
 }
 
 /// Why a host turned a guest away.
@@ -135,6 +177,24 @@ pub enum Refusal {
     Version { host: String },
     /// The project already has [`MAX_PEOPLE`] in it.
     Full,
+}
+
+/// How this machine stands to a project kept online that another version
+/// of Lumit keeps. Each carries that version. Never said of a project this
+/// Lumit can join as it is.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Versions {
+    /// A newer Lumit keeps it. This machine has to be updated to `version`
+    /// before it can join.
+    Update { version: String },
+    /// An older Lumit keeps it, and this is its host's machine, which may
+    /// move it forward to this Lumit: [`online::forward`] before joining,
+    /// [`online::Member::forward`] for a copy opened again. Only when the
+    /// person has agreed, since nobody on the older Lumit can join after.
+    Movable { version: String },
+    /// An older Lumit keeps it, and this is a guest's machine. The host has
+    /// to open the project with the newer Lumit first.
+    HostFirst { version: String },
 }
 
 /// Whether people outside the host's network can reach it.
@@ -195,6 +255,21 @@ pub enum Ending {
     Removed,
 }
 
+/// The most dropped edits a return names.
+pub const MAX_DROPPED: usize = 20;
+
+/// One edit a return dropped, because what it was to was gone: what it did
+/// and to what, by the names this machine had before the merge.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Dropped {
+    /// What the edit is called in the History list.
+    pub step: String,
+    /// The composition it was in, or the project item it was to.
+    pub item: Option<String>,
+    /// The layer it was to, for an edit to one.
+    pub layer: Option<String>,
+}
+
 /// What a shared project tells whoever is sharing it.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Event {
@@ -205,11 +280,23 @@ pub enum Event {
     Away,
     /// The host is back and the edits made meanwhile are merged. The document
     /// was replaced, `held` conflicts wait to be chosen between, and `refused`
-    /// edits no longer applied.
-    Back { held: usize, refused: usize },
+    /// edits no longer applied. `dropped` says what the first
+    /// [`MAX_DROPPED`] of those were to. When this return held or dropped
+    /// anything, the document as it was here just before is kept
+    /// ([`before_returns`]).
+    Back {
+        held: usize,
+        refused: usize,
+        dropped: Vec<Dropped>,
+    },
     /// The invite a guest is looking for its host by leads to a different
     /// project. It goes on looking, and wants another invite.
     Elsewhere,
+    /// For a copy of a project kept online: the invite it finds the project
+    /// by was replaced while this machine was away, and opens nothing now.
+    /// The copy stays a member, away, with what was made on it kept. It asks
+    /// the server no more until it is given the new invite.
+    Replaced,
     /// Sharing is over for this guest. The document stays as it is.
     Ended(Ending),
     /// For a host: what came of asking its router to let people outside
@@ -221,6 +308,39 @@ pub enum Event {
     /// edit. `from` is who, and `body` is theirs to have written and this
     /// end's to judge.
     Note { from: u32, body: serde_json::Value },
+    /// For a project kept online: whether Lumit's server is taking edits to
+    /// it. It stops when the host's account no longer has Lumit Pro, and
+    /// for a project that has grown too large ([`Self::TooLarge`]) once the
+    /// server has kept as many edits past its last snapshot as it will. A
+    /// machine that makes an edit then is away until the server takes them
+    /// again, with what it makes meanwhile kept as it is for any time away.
+    Writable(bool),
+    /// For a project kept online: it has grown too large for this machine
+    /// to store a snapshot of at Lumit's server, or fits again. While it
+    /// does not fit, the server goes on taking edits only until it has kept
+    /// as many past its last snapshot as it will. Then it takes no more,
+    /// and nothing but a smaller project could change that, which no edit
+    /// can then make it. So this is said as soon as a snapshot does not
+    /// fit, while there is still room to make the project smaller.
+    TooLarge(bool),
+    /// For a project kept online: the list of who changed what has changed,
+    /// or the notes people have left. As often as edits go in, which from
+    /// someone at work is many times a second.
+    Activity,
+    /// For a project kept online: the invite that can only look has been
+    /// turned on or off, by the host. Said when it is found out, on joining
+    /// and when it changes.
+    LookInvite(bool),
+    /// For a machine that can only look at a project kept online: something
+    /// the person made on it has just been taken back, as everything made
+    /// there is. Said at the start of a run of them and not again until
+    /// they have stopped for a moment, so a drag says it once.
+    LookOnly,
+    /// For a copy of a project kept online: another version of Lumit keeps
+    /// the project, so this machine is away from it and goes on asking. Said
+    /// when it is found so and again if how it stands changes. It joins by
+    /// itself, with [`Self::Back`], once the two match.
+    Versions(Versions),
 }
 
 /// Where those events go. Called from the share threads with no lock held.
@@ -252,6 +372,13 @@ pub enum ShareError {
     NoRandomness(String),
     #[error("that password could not be used")]
     Password,
+    /// What Lumit's server answered when it would not do what was asked of
+    /// it for a project kept online, in its own word for why.
+    #[error("Lumit's server would not: {0}")]
+    Server(String),
+    /// Another version of Lumit keeps the project kept online.
+    #[error("another version of Lumit keeps that project: {0:?}")]
+    Versions(Versions),
 }
 
 /// This machine's address on its network, for the host to hand out. A guess:
@@ -289,6 +416,8 @@ pub fn global_address() -> Option<String> {
 pub enum Sharing {
     Host(Host),
     Guest(Guest),
+    /// A member of a project that is kept online, the host's machine too.
+    Online(online::Member),
 }
 
 impl Sharing {
@@ -298,6 +427,7 @@ impl Sharing {
         match self {
             Sharing::Host(host) => host.people(),
             Sharing::Guest(guest) => guest.people(),
+            Sharing::Online(member) => member.people(),
         }
     }
 
@@ -307,6 +437,7 @@ impl Sharing {
         match self {
             Sharing::Host(_) => 0,
             Sharing::Guest(guest) => guest.me(),
+            Sharing::Online(member) => member.me(),
         }
     }
 
@@ -315,15 +446,19 @@ impl Sharing {
         match self {
             Sharing::Host(host) => host.set_presence(presence),
             Sharing::Guest(guest) => guest.set_presence(presence),
+            Sharing::Online(member) => member.set_presence(presence),
         }
     }
 
     /// Send and take footage, which is `footage`'s to make and keep, no
-    /// faster than `limits`. Until this is called none crosses.
+    /// faster than `limits`. Until this is called none crosses. None ever
+    /// does for a project kept online: its footage is kept on Lumit's
+    /// server, and the interface moves it there and back.
     pub fn carry_footage(&self, footage: Arc<dyn Footage>, limits: Arc<Limits>) {
         match self {
             Sharing::Host(host) => host.carry_footage(footage, limits),
             Sharing::Guest(guest) => guest.carry_footage(footage, limits),
+            Sharing::Online(_) => {}
         }
     }
 
@@ -333,6 +468,7 @@ impl Sharing {
         match self {
             Sharing::Host(host) => host.set_holds(items),
             Sharing::Guest(guest) => guest.set_holds(items),
+            Sharing::Online(_) => {}
         }
     }
 
@@ -343,6 +479,7 @@ impl Sharing {
         match self {
             Sharing::Host(host) => host.holders(item),
             Sharing::Guest(guest) => guest.holders(item),
+            Sharing::Online(_) => Vec::new(),
         }
     }
 
@@ -352,6 +489,7 @@ impl Sharing {
         match self {
             Sharing::Host(host) => host.want(wanted),
             Sharing::Guest(guest) => guest.want(wanted),
+            Sharing::Online(_) => {}
         }
     }
 
@@ -361,6 +499,7 @@ impl Sharing {
         match self {
             Sharing::Host(host) => host.unwant(wanted),
             Sharing::Guest(guest) => guest.unwant(wanted),
+            Sharing::Online(_) => {}
         }
     }
 
@@ -370,15 +509,20 @@ impl Sharing {
         match self {
             Sharing::Host(host) => host.note(to, body),
             Sharing::Guest(guest) => guest.note(to, body),
+            Sharing::Online(member) => member.note(to, body),
         }
     }
 
     /// Stop sharing for everyone, or leave as a guest. The document stays as
-    /// it is. Dropping a host instead leaves its guests waiting for it.
+    /// it is. Dropping a host instead leaves its guests waiting for it. A
+    /// member of a project kept online leaves, its host too, and the project
+    /// stays online. Ending that is asked of Lumit's server by the host's
+    /// account, which the interface has and this has not.
     pub fn stop(&self) {
         match self {
             Sharing::Host(host) => host.stop(),
             Sharing::Guest(guest) => guest.stop(),
+            Sharing::Online(member) => member.leave(),
         }
     }
 }
@@ -553,6 +697,7 @@ mod tests {
         let back = Event::Back {
             held: 0,
             refused: 0,
+            dropped: Vec::new(),
         };
         until("nothing was merged twice", || heard.lock().contains(&back));
 

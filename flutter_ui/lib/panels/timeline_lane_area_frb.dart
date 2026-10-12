@@ -1171,6 +1171,8 @@ class LayerArea extends StatelessWidget {
             // Where the others in a shared project have their playheads,
             // under this person's own.
             if (sharing) SharePlayheads(comp: comp, xOf: axis.xOf),
+            // And the notes left in this composition, each at its frame.
+            if (sharing) ShareNotes(comp: comp, xOf: axis.xOf),
             // The playhead rides above every bar so it is never hidden behind
             // one, and it is the only thing here that redraws when it moves —
             // on its own layer, so that is true of the *painting* and not only

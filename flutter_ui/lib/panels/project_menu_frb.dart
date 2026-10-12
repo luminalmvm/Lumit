@@ -113,6 +113,19 @@ Future<void> showProjectMenuFrb({
       // The project closed as the menu opened.
     }
   }
+  // In a project kept online the footage is on Lumit's server, and what it
+  // holds is what the mover last heard. Read once, as the menu opens.
+  final online = shared != null &&
+      Provider.of<LumitState>(context, listen: false).share.online != null;
+  final footageOnline =
+      Provider.of<LumitUiState>(context, listen: false).onlineFootage;
+  final (standInOnline, originalOnline) = switch (item) {
+    ItemReference_Footage(:final field0) when online => (
+        footageOnline.standInOnline(field0),
+        footageOnline.originalOnline(field0),
+      ),
+    _ => (false, null),
+  };
   final isComp = item is ItemReference_Composition;
   // The comp the sound would land in. Read once, here, rather than in
   // the row's build: the menu is a gesture, not a rebuild path.
@@ -225,6 +238,32 @@ Future<void> showProjectMenuFrb({
               onPressed: () => close(_ProjectMenuAction.findMissing),
               child: Text(l10n.findMissingFootage),
             ),
+          // Footage this computer has not got, in a project kept online: it
+          // comes from Lumit's server, when the server has it.
+          if (shared != null &&
+              online &&
+              shared.here != BridgeFootageHere.original) ...[
+            if (shared.here == BridgeFootageHere.missing && standInOnline)
+              MenuRow(
+                key: const ValueKey('project-menu-share-stand-in'),
+                onPressed: () => close(_ProjectMenuAction.shareStandIn),
+                child: Text(l10n.shareGetStandIn),
+              ),
+            if (originalOnline != null)
+              MenuRow(
+                key: const ValueKey('project-menu-share-original'),
+                onPressed: () => close(_ProjectMenuAction.shareOriginal),
+                child: Text(
+                    l10n.shareGetOriginal((originalOnline / (1 << 20)).ceil())),
+              )
+            else
+              MenuRow(
+                key: const ValueKey('project-menu-share-original'),
+                onPressed: () {},
+                child: Text(l10n.shareOnlineNoOriginal,
+                    style: TextStyle(color: menuTheme.textDisabled)),
+              ),
+          ],
           // Footage this computer has not got, in a shared project where
           // someone has: ask them for a stand-in to cut with, or the file.
           if (shared != null &&
@@ -521,9 +560,11 @@ Future<void> showProjectMenuFrb({
       }
     case _ProjectMenuAction.shareStandIn || _ProjectMenuAction.shareOriginal:
       if (item case ItemReference_Footage(:final field0)) {
+        final original = action == _ProjectMenuAction.shareOriginal;
         try {
-          field0.shareFetch(
-              original: action == _ProjectMenuAction.shareOriginal);
+          online
+              ? footageOnline.fetch(field0, original: original)
+              : field0.shareFetch(original: original);
         } catch (_) {
           // The project closed between the menu and the click.
         }

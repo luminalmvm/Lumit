@@ -7,6 +7,7 @@ use crate::model::{Composition, Document, ProjectItem};
 use crate::ops::{apply, Op, OpError};
 use serde_json::{Map, Value};
 use std::collections::{BTreeSet, HashMap, HashSet};
+use std::hash::Hash;
 use uuid::Uuid;
 
 /// One part of the document an edit touched: the entity, and a path inside it
@@ -220,9 +221,11 @@ fn variants(a: &Map<String, Value>, b: &Map<String, Value>) -> bool {
 }
 
 /// Whether the ids both lists hold come in a different order in each.
-fn reordered(a: &[&str], b: &[&str]) -> bool {
-    let kept_a = a.iter().filter(|id| b.contains(id));
-    let kept_b = b.iter().filter(|id| a.contains(id));
+fn reordered<I: Copy + Eq + Hash>(a: &[I], b: &[I]) -> bool {
+    let in_a: HashSet<I> = a.iter().copied().collect();
+    let in_b: HashSet<I> = b.iter().copied().collect();
+    let kept_a = a.iter().filter(|id| in_b.contains(*id));
+    let kept_b = b.iter().filter(|id| in_a.contains(*id));
     kept_a.ne(kept_b)
 }
 
@@ -266,7 +269,8 @@ fn walk(id: Uuid, a: &Value, b: &Value, path: &mut String, keys: &mut BTreeSet<K
                 return;
             };
             let old: HashMap<&str, &Value> = a_ids.iter().copied().zip(a).collect();
-            for gone in a_ids.iter().filter(|i| !b_ids.contains(i)) {
+            let new: HashSet<&str> = b_ids.iter().copied().collect();
+            for gone in a_ids.iter().filter(|i| !new.contains(*i)) {
                 part(path, gone, None, None);
             }
             for (entry, now) in b_ids.iter().zip(b) {
@@ -311,6 +315,7 @@ fn merge(was: Option<&Value>, mine: Option<&Value>, theirs: Option<&Value>) -> O
                     (w, &w_ids),
                     (m, &m_ids),
                     (t, &t_ids),
+                    merge,
                 ))),
                 _ => mine.cloned(),
             }
@@ -321,13 +326,15 @@ fn merge(was: Option<&Value>, mine: Option<&Value>, theirs: Option<&Value>) -> O
 
 /// [`merge`] for a list of things with ids. An entry either side removed
 /// stays removed, one either side added is kept, and one both still hold is
-/// merged. The order is mine if I changed it, and otherwise theirs.
-fn merge_lists(
-    (was, was_ids): (&[Value], &[&str]),
-    (mine, mine_ids): (&[Value], &[&str]),
-    (theirs, theirs_ids): (&[Value], &[&str]),
-) -> Vec<Value> {
-    fn by_id<'a>(list: &'a [Value], ids: &[&'a str]) -> HashMap<&'a str, &'a Value> {
+/// merged, by `entry`. The order is mine if I changed it, and otherwise
+/// theirs.
+fn merge_lists<I: Copy + Eq + Hash, V: Clone>(
+    (was, was_ids): (&[V], &[I]),
+    (mine, mine_ids): (&[V], &[I]),
+    (theirs, theirs_ids): (&[V], &[I]),
+    entry: impl Fn(Option<&V>, Option<&V>, Option<&V>) -> Option<V>,
+) -> Vec<V> {
+    fn by_id<'a, I: Copy + Eq + Hash, V>(list: &'a [V], ids: &[I]) -> HashMap<I, &'a V> {
         ids.iter().copied().zip(list).collect()
     }
     let (w, m, t) = (
@@ -335,32 +342,71 @@ fn merge_lists(
         by_id(mine, mine_ids),
         by_id(theirs, theirs_ids),
     );
-    let (lead, other, added) = if reordered(was_ids, mine_ids) {
-        (mine_ids, theirs_ids, theirs)
+    // Whether an id is in a list is looked up, and the list is not gone
+    // through for it: a folder's children are merged for every unanswered
+    // edit that files something into it, each time someone else's edit goes
+    // in underneath.
+    let (lead, other, added, leads, others) = if reordered(was_ids, mine_ids) {
+        (mine_ids, theirs_ids, theirs, &m, &t)
     } else {
-        (theirs_ids, mine_ids, mine)
+        (theirs_ids, mine_ids, mine, &t, &m)
     };
-    let mut merged: Vec<(&str, Value)> = Vec::with_capacity(lead.len());
+    let mut merged: Vec<(I, V)> = Vec::with_capacity(lead.len());
     for id in lead {
         // In both to start with, and the other side has taken it out.
-        if w.contains_key(id) && !other.contains(id) {
+        if w.contains_key(id) && !others.contains_key(id) {
             continue;
         }
         let (was, mine, theirs) = (w.get(id), m.get(id), t.get(id));
-        if let Some(entry) = merge(was.copied(), mine.copied(), theirs.copied()) {
-            merged.push((id, entry));
+        if let Some(entry) = entry(was.copied(), mine.copied(), theirs.copied()) {
+            merged.push((*id, entry));
         }
     }
     // What the other side added goes after whatever it followed there.
     for (at, (id, entry)) in other.iter().zip(added).enumerate() {
-        if w.contains_key(id) || lead.contains(id) {
+        if w.contains_key(id) || leads.contains_key(id) {
             continue;
         }
         let mut before = other.iter().take(at).rev();
         let after = before.find_map(|prev| merged.iter().position(|(i, _)| i == prev));
-        merged.insert(after.map_or(0, |i| i + 1), (id, entry.clone()));
+        merged.insert(after.map_or(0, |i| i + 1), (*id, entry.clone()));
     }
     merged.into_iter().map(|(_, entry)| entry).collect()
+}
+
+/// [`merged_op`] for a folder's children, which are ids and nothing else, by
+/// the rules [`merge`] has for any list of them and without writing the
+/// three lists out to be read back. `None` when that is not what the three
+/// ops are. Every new solid and every imported file is filed into a folder
+/// by an edit that writes the folder's whole list, so a machine with
+/// hundreds of such edits unanswered merges that list hundreds of times for
+/// each edit of someone else's that goes in underneath.
+fn merged_children(was: &Op, mine: &Op, now: &Op) -> Option<Option<Op>> {
+    fn children(op: &Op) -> Option<(Uuid, &[Uuid])> {
+        let Op::SetFolderChildren { folder, children } = op else {
+            return None;
+        };
+        let distinct: HashSet<&Uuid> = children.iter().collect();
+        (distinct.len() == children.len()).then_some((*folder, &children[..]))
+    }
+    let ((folder, w), (mine_in, m), (now_in, t)) =
+        (children(was)?, children(mine)?, children(now)?);
+    if folder != mine_in || folder != now_in {
+        return None;
+    }
+    let children = if m == w {
+        t.to_vec()
+    } else if t == w || t == m {
+        return Some(None);
+    } else {
+        // An id that both still hold is the same on both sides.
+        let entry = |w: Option<&Uuid>, m: Option<&Uuid>, t: Option<&Uuid>| match m == w {
+            true => t.copied(),
+            false => m.copied(),
+        };
+        merge_lists((w, w), (m, m), (t, t), entry)
+    };
+    Some((children != m).then_some(Op::SetFolderChildren { folder, children }))
 }
 
 /// `mine` cut down to what its author changed. They made it where the same
@@ -368,6 +414,9 @@ fn merge_lists(
 /// to cut: the three are not one kind of op, or nobody else's change is in
 /// the way.
 fn merged_op(was: &Op, mine: &Op, now: &Op) -> Option<Op> {
+    if let Some(merged) = merged_children(was, mine, now) {
+        return merged;
+    }
     let value = |op| serde_json::to_value(op).ok();
     let (was, mine, now) = (value(was)?, value(mine)?, value(now)?);
     let kind = mine.get("op_type")?;
@@ -439,22 +488,6 @@ fn fit(doc: &mut Document, op: &Op) -> Result<(Op, Op), OpError> {
 /// else has since shortened names a place that no longer exists. Refusing it
 /// would lose the layer and every edit made to it, so it lands at the end.
 pub fn land(doc: &mut Document, op: &Op, was: Option<&Op>) -> Result<(Op, Op), OpError> {
-    if !matches!(op, Op::Batch { .. }) {
-        return land_on(doc, op, was);
-    }
-    // One copy to work on for the whole batch, however batches sit inside
-    // it. A failure anywhere drops the copy and the document is untouched. A
-    // copy for each batch inside would be the whole document again for every
-    // one of them, and a peer chooses how many there are.
-    let mut scratch = doc.clone();
-    let landed = land_on(&mut scratch, op, was)?;
-    *doc = scratch;
-    Ok(landed)
-}
-
-/// [`land`] on a document that is the caller's to throw away if this fails
-/// part-way through a batch.
-fn land_on(doc: &mut Document, op: &Op, was: Option<&Op>) -> Result<(Op, Op), OpError> {
     if let Op::Batch { ops } = op {
         // A batch's inverse runs backwards, so its last member answers the
         // first.
@@ -463,12 +496,28 @@ fn land_on(doc: &mut Document, op: &Op, was: Option<&Op>) -> Result<(Op, Op), Op
             _ => None,
         };
         let mut landed = Vec::with_capacity(ops.len());
-        let mut inverses = Vec::with_capacity(ops.len());
+        let mut inverses: Vec<Op> = Vec::with_capacity(ops.len());
         for member in ops {
             let old = olds.as_mut().and_then(Iterator::next);
-            let (op, inverse) = land_on(doc, member, old)?;
-            landed.push(op);
-            inverses.push(inverse);
+            match land(doc, member, old) {
+                Ok((op, inverse)) => {
+                    landed.push(op);
+                    inverses.push(inverse);
+                }
+                // What landed of it is taken back, newest first, as `apply`
+                // takes back a batch that fails part-way. That leaves the
+                // document as it was without a copy of it to work on. A
+                // guest lands every edit it has unanswered again each time
+                // someone else's goes in underneath, and a copy of the
+                // whole document for each of hundreds is what kept it from
+                // keeping up.
+                Err(e) => {
+                    for inverse in inverses.iter().rev() {
+                        let _ = apply(doc, inverse);
+                    }
+                    return Err(e);
+                }
+            }
         }
         inverses.reverse();
         return Ok((Op::Batch { ops: landed }, Op::Batch { ops: inverses }));
@@ -515,9 +564,9 @@ pub struct Merge {
     pub clean: Vec<(Op, Op)>,
     /// My edits that touched what they touched. Not applied.
     pub conflicts: Vec<Conflict>,
-    /// How many of my edits no longer apply at all, such as an edit to a layer
-    /// they deleted.
-    pub refused: usize,
+    /// My edits that no longer apply at all, such as an edit to a layer they
+    /// deleted, each as it was made.
+    pub refused: Vec<Op>,
 }
 
 /// Bring `mine`, the edits made since `base`, onto `theirs`, the document the
@@ -545,7 +594,7 @@ pub fn plan_merge(base: &Document, theirs: Document, mine: &[(Op, Op)]) -> Merge
         merged: theirs,
         clean: Vec::new(),
         conflicts: Vec::new(),
-        refused: 0,
+        refused: Vec::new(),
     };
     // Their document with every edit of mine so far on it, held or not.
     // `None` until the first is held: until then it is `merge.merged`.
@@ -569,7 +618,7 @@ pub fn plan_merge(base: &Document, theirs: Document, mine: &[(Op, Op)]) -> Merge
         }
         let mut trial = merge.merged.clone();
         let Ok(landed) = land(&mut trial, op, Some(was)) else {
-            merge.refused += 1;
+            merge.refused.push(op.clone());
             continue;
         };
         let keys = footprint(&merge.merged, &trial);

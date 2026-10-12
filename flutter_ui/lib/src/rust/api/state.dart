@@ -77,7 +77,11 @@ abstract class LumitBridgeState implements RustOpaqueInterface {
   /// `share_events` is for a file that is a guest's own copy of a shared
   /// project, closed while its host was away. It opens as it was left and
   /// carries on looking for the host, and [`ProjectReference::share_guest`]
-  /// says so.
+  /// says so. It is also for a copy of a project that is kept online,
+  /// which is a member of it again however it was closed, and
+  /// [`ProjectReference::share_online_state`] says so. Either looks for
+  /// its project through a door, which [`ProjectReference::share_doors`]
+  /// names, and finds it once that is open.
   ///
   /// Not opened as well when [`crate::api::import::cancel_import`] stopped
   /// it, which leaves whatever was open as it was.

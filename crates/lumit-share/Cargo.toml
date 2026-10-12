@@ -22,11 +22,19 @@ lumit-relay = { path = "../lumit-relay" }
 # so that the relay cannot work the secret out from it. Already in the lock,
 # and what lumit-peer keys its own proofs with.
 blake3 = "1"
+# Seals what a project kept online stores on Lumit's server, which is not to
+# read it. Noise only covers a connection, and nothing here is one. The same
+# cipher snow uses, so already in the lock. Without its default features,
+# which would bring a second source of randomness in.
+chacha20poly1305 = { version = "0.10", default-features = false, features = ["alloc"] }
 # The secret an invite carries, from the operating system's own source, as
 # lumit-peer takes its own. Already in the lock.
 getrandom = "0.4"
 # An invite's key is written as text. Already in the lock.
 hex = "0.4"
+# Deflate, for the whole document a project kept online stores. Already in
+# the lock, and what lumit-media inflates with.
+miniz_oxide = "0.8"
 parking_lot = "0.12"
 # Reading what a router says about itself when it is asked to open a port.
 # Already in the lock.

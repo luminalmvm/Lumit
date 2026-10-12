@@ -237,6 +237,8 @@ pub fn host(
                 name: name.chars().take(64).collect(),
                 colour: 1,
                 presence: Presence::default(),
+                host: true,
+                look: false,
             }],
             links: Vec::new(),
             heard: Vec::new(),
@@ -946,6 +948,8 @@ impl Hub {
                 name: name.chars().take(64).collect(),
                 colour,
                 presence: Presence::default(),
+                host: false,
+                look: false,
             });
             seats.links.push(Link {
                 id,

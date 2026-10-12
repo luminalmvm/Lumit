@@ -223,34 +223,42 @@ class _ProWindowState extends State<_ProWindow>
             children: [
               _Feature(
                 index: 0,
-                mark: LumitIcons.link,
+                mark: LumitIcons.autoWire,
                 title: l10n.proFeatureRelayTitle,
                 body: l10n.proFeatureRelayBody,
                 on: pro,
               ),
               _Feature(
                 index: 1,
+                // The link, which is what this wears everywhere else.
+                mark: LumitIcons.link,
+                title: l10n.proFeatureOnlineTitle,
+                body: l10n.proFeatureOnlineBody,
+                on: pro,
+              ),
+              _Feature(
+                index: 2,
                 mark: LumitIcons.comment,
                 title: l10n.proFeatureReviewTitle,
                 body: l10n.proFeatureReviewBody,
                 on: pro,
               ),
               _Feature(
-                index: 2,
+                index: 3,
                 mark: LumitIcons.undo,
                 title: l10n.proFeatureBackupTitle,
                 body: l10n.proFeatureBackupBody,
                 on: pro,
               ),
               _Feature(
-                index: 3,
+                index: 4,
                 mark: LumitIcons.loop,
                 title: l10n.proFeatureSyncTitle,
                 body: l10n.proFeatureSyncBody,
                 on: pro,
               ),
               _Feature(
-                index: 4,
+                index: 5,
                 mark: LumitIcons.star,
                 title: l10n.proFeatureSupportTitle,
                 body: l10n.proFeatureSupportBody,

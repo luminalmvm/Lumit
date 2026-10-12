@@ -15703,7 +15703,7 @@
   },
   "sharePasswordSet": "People joining need the password as well as this link.",
   "@sharePasswordSet": {
-    "description": "Quiet line under the invite link while a project is shared with a password."
+    "description": "Quiet line under the invite link while a project is shared with a password. For a project kept online it is the tooltip of the lock beside Invite to edit, the only one of the two invites the password is asked for."
   },
   "sharePasswordNeeded": "That invite needs the host's password",
   "@sharePasswordNeeded": {
@@ -17033,7 +17033,7 @@
   },
   "backupStorageIn": "{used} of {limit} used · {backups} in backups",
   "@backupStorageIn": {
-    "description": "How much of the account's storage is used, and how much of that is project backups. Review links use the same storage. Shown in the Open from backup window and under the backup switch in Settings.",
+    "description": "How much of the account's storage is used, and how much of that is project backups. Review links and footage kept online use the same storage. Shown in the Open from backup window and under the backup switch in Settings.",
     "placeholders": {
       "used": {
         "type": "String"
@@ -18058,8 +18058,809 @@
   "@proFeatureReviewBody": {
     "description": "What the third Lumit Pro feature does: people watch an export in a browser and comment on a frame of it."
   },
+  "shareOnline": "Keep online",
+  "@shareOnline": {
+    "description": "Share this project page of the Shared project window: row label of the tick box that keeps the shared project on Lumit's server, which comes with Lumit Pro."
+  },
+  "shareOnlineStarting": "Putting it online…",
+  "@shareOnlineStarting": {
+    "description": "Share this project page of the Shared project window: what the Start sharing button says while the project is being stored on Lumit's server."
+  },
+  "shareOnlineLine": "Kept online. Lumit's server cannot read it.",
+  "@shareOnlineLine": {
+    "description": "Shared project window, for a project that is kept online (held on Lumit's server so people can edit when nobody else is there): the quiet line at the top. The project is encrypted before it leaves the computer."
+  },
+  "shareOnlineInStep": "In step",
+  "@shareOnlineInStep": {
+    "description": "Shared project window, for a project that is kept online (held on Lumit's server so people can edit when nobody else is there): shown when this computer has every edit and is connected to Lumit's server."
+  },
+  "shareOnlineAway": "Looking for Lumit's server. Edits wait here until it is found.",
+  "@shareOnlineAway": {
+    "description": "Bottom-strip notice, and the tooltip of the strip's button, for a project kept online when the connection to Lumit's server is lost or not yet made. The person can carry on editing."
+  },
+  "shareOnlineWaiting": "The host's Lumit Pro has ended. Edits wait here until it is back.",
+  "@shareOnlineWaiting": {
+    "description": "Bottom-strip notice, and a line in the Shared project window, for a project kept online when Lumit's server has stopped taking edits because the host (the person who shared it) no longer has Lumit Pro. Lumit Pro is a product name: do not translate it."
+  },
+  "shareOnlineBack": "In step again",
+  "@shareOnlineBack": {
+    "description": "Bottom-strip notice for a project kept online, shown when Lumit's server is found again and the edits made meanwhile were merged."
+  },
+  "shareOnlineLooking": "Looking for the server",
+  "@shareOnlineLooking": {
+    "description": "Bottom-strip button of a project kept online, and the first line of the Shared project window, in the warning colour, when there is no connection to Lumit's server just now. Short."
+  },
+  "shareOnlineOnHold": "On hold",
+  "@shareOnlineOnHold": {
+    "description": "Bottom-strip button of a project kept online, and the first line of the Shared project window, in the warning colour, when Lumit's server has stopped taking edits because the host's Lumit Pro has ended. Edits wait on each computer. Two words at most."
+  },
+  "shareOnlineNewLink": "This is a new link. Anyone who was away needs it.",
+  "@shareOnlineNewLink": {
+    "description": "Shared project window, for a project that is kept online (held on Lumit's server so people can edit when nobody else is there): shown under the invite link after the host removed someone, which replaces the link. People connected at the time were sent the new one."
+  },
+  "shareOnlineStopTitle": "Stop keeping this project online?",
+  "@shareOnlineStopTitle": {
+    "description": "Question asked before a project stops being kept online, in the Shared project window and on the Settings Account page."
+  },
+  "shareOnlineStopBody": "It stays on this computer, and everyone keeps their copy. Edits are no longer shared.",
+  "@shareOnlineStopBody": {
+    "description": "Under the question asked before a project stops being kept online, when a copy of the project is on this computer."
+  },
+  "shareOnlineStopNo": "Keep online",
+  "@shareOnlineStopNo": {
+    "description": "The careful answer to the question asked before a project stops being kept online."
+  },
+  "shareOnlineOriginals": "Keep the originals online",
+  "@shareOnlineOriginals": {
+    "description": "Shared project window, for a project that is kept online (held on Lumit's server so people can edit when nobody else is there): the host's tick box in the Footage group. When ticked, this computer sends the original footage files to Lumit's server as well as the small stand-ins."
+  },
+  "shareOnlinePreparing": "Getting ready to send",
+  "@shareOnlinePreparing": {
+    "description": "Shared project window, for a project that is kept online (held on Lumit's server so people can edit when nobody else is there): state of a footage file in the Footage list while its stand-in is being made and encrypted, before any of it is sent."
+  },
+  "shareOnlineWaitingSend": "Waiting to send",
+  "@shareOnlineWaitingSend": {
+    "description": "Shared project window, for a project that is kept online (held on Lumit's server so people can edit when nobody else is there): state of a footage file in the Footage list that is queued to be sent to Lumit's server."
+  },
+  "shareOnlineWaitingFetch": "Waiting to fetch",
+  "@shareOnlineWaitingFetch": {
+    "description": "Shared project window, for a project that is kept online (held on Lumit's server so people can edit when nobody else is there): state of a footage file in the Footage list that is queued to be fetched from Lumit's server."
+  },
+  "shareOnlineFailedSend": "Could not be sent",
+  "@shareOnlineFailedSend": {
+    "description": "Shared project window, for a project that is kept online (held on Lumit's server so people can edit when nobody else is there): state of a footage file in the Footage list that Lumit's server refused."
+  },
+  "shareOnlineFailedFetch": "Could not be fetched",
+  "@shareOnlineFailedFetch": {
+    "description": "Shared project window, for a project that is kept online (held on Lumit's server so people can edit when nobody else is there): state of a footage file in the Footage list that could not be fetched from Lumit's server."
+  },
+  "shareOnlineFailedMake": "Could not be made ready",
+  "@shareOnlineFailedMake": {
+    "description": "Shared project window, for a project that is kept online (held on Lumit's server so people can edit when nobody else is there): state of a footage file in the Footage list whose stand-in could not be made on this computer."
+  },
+  "shareOnlineFailedOpen": "Arrived damaged",
+  "@shareOnlineFailedOpen": {
+    "description": "Shared project window, for a project that is kept online (held on Lumit's server so people can edit when nobody else is there): state of a footage file in the Footage list that was fetched from Lumit's server and would not open."
+  },
+  "shareOnlineFull": "The host's storage is full. No more footage is sent.",
+  "@shareOnlineFull": {
+    "description": "Bottom-strip notice, and a line in the Shared project window, when Lumit's server refuses footage for a project kept online because the host's Lumit Pro storage is full."
+  },
+  "shareOnlineNoOriginal": "Original not online yet",
+  "@shareOnlineNoOriginal": {
+    "description": "Row in a footage item's menu in the Project panel, for a project kept online, in place of Fetch the original when Lumit's server does not hold the original file. Short enough for one line of a menu."
+  },
+  "shareOnlineNotFound": "No project found by that link. Check the link, and that the host is still sharing it.",
+  "@shareOnlineNotFound": {
+    "description": "Join a project page: shown when an invite link to a project kept online finds nothing on Lumit's server."
+  },
+  "shareOnlineNotFoundOrPassword": "No project found by that link, or the password is wrong. Check both, and that the host is still sharing it.",
+  "@shareOnlineNotFoundOrPassword": {
+    "description": "Join a project page: shown when an invite link to a project kept online, given with a password, finds nothing on Lumit's server. A wrong password looks the same as a wrong link."
+  },
+  "shareOnlineErrorPro": "Keeping a project online needs Lumit Pro.",
+  "@shareOnlineErrorPro": {
+    "description": "Error in the Shared project window when Lumit's server refuses to keep a project because the account has no Lumit Pro. Lumit Pro is a product name: do not translate it."
+  },
+  "shareOnlineErrorTooMany": "This account keeps as many projects online as it can. Stop keeping one online first.",
+  "@shareOnlineErrorTooMany": {
+    "description": "Error in the Shared project window when the account already keeps the most projects online that it may."
+  },
+  "shareOnlineErrorRefused": "Lumit's server would not do that. Try again in a moment.",
+  "@shareOnlineErrorRefused": {
+    "description": "Error in the Shared project window when Lumit's server refuses a call about a project kept online for a reason that has no words of its own."
+  },
+  "shareOnlineErrorSignedOut": "Sign in again to do that.",
+  "@shareOnlineErrorSignedOut": {
+    "description": "Error in the Shared project window when the host of a project kept online tries to remove someone or stop sharing while signed out."
+  },
+  "proFeatureOnlineTitle": "Projects kept online",
+  "@proFeatureOnlineTitle": {
+    "description": "A feature in the Lumit Pro window: a shared project held on Lumit's server."
+  },
+  "proFeatureOnlineBody": "Guests can edit while you are away.",
+  "@proFeatureOnlineBody": {
+    "description": "What the Lumit Pro feature Projects kept online does: people with the invite can open the shared project and edit it when the host's computer is off."
+  },
+  "shareOnlineOriginal": "{name} (original)",
+  "@shareOnlineOriginal": {
+    "description": "Shared project window, for a project that is kept online (held on Lumit's server so people can edit when nobody else is there): a footage file in the Footage list when it is the original file and not a stand-in of it. {name} is the footage item's name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "shareOnlineSending": "Sending, {percent}%",
+  "@shareOnlineSending": {
+    "description": "Shared project window, for a project that is kept online (held on Lumit's server so people can edit when nobody else is there): state of a footage file in the Footage list while it is being sent to Lumit's server. {percent} is how far along it is.",
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "shareOnlineFetching": "Fetching, {percent}%",
+  "@shareOnlineFetching": {
+    "description": "Shared project window, for a project that is kept online (held on Lumit's server so people can edit when nobody else is there): state of a footage file in the Footage list while it is being fetched from Lumit's server. {percent} is how far along it is.",
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "shareOnlineWaitingOwn": "Your Lumit Pro has ended. Edits wait here until it is back.",
+  "@shareOnlineWaitingOwn": {
+    "description": "Bottom-strip notice and a line in the Shared project window, under the words On hold, shown to the host of a project kept online when Lumit's server has stopped taking edits because their own Lumit Pro has ended. Lumit Pro is a product name: do not translate it."
+  },
+  "shareActivity": "Activity",
+  "@shareActivity": {
+    "description": "Group heading in the Shared project window for a project kept online: who edited it and when, newest first."
+  },
+  "shareActivityAll": "Show all",
+  "@shareActivityAll": {
+    "description": "Quiet button under the Activity list of the Shared project window, which shows only the newest twelve entries until it is pressed."
+  },
+  "shareFollowStop": "Stop following",
+  "@shareFollowStop": {
+    "description": "Tooltip of the eye beside the person being followed, in the people list of the Shared project window."
+  },
+  "settingsOnlineGroup": "Kept online",
+  "@settingsOnlineGroup": {
+    "description": "Section heading on the Settings Account page: the shared projects this account keeps on Lumit's server."
+  },
+  "settingsOnlineStop": "Stop keeping online",
+  "@settingsOnlineStop": {
+    "description": "Button that ends a project being kept on Lumit's server, in the Shared project window and beside each project on the Settings Account page, and the answer that confirms it. It deletes the project from the server. Every copy on a computer stays."
+  },
+  "shareActivityOneIn": "{name} made {count, plural, =1{1 edit} other{{count} edits}} in {comp}",
+  "@shareActivityOneIn": {
+    "description": "Bottom-strip notice for a shared project kept online, shown once when someone edited it while this computer was not there (before it joined, while its copy was closed, or while it had no connection). A press opens the Shared project window. {name} is the person, {count} how many edits, {comp} the one composition they were in.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      },
+      "comp": {
+        "type": "String"
+      }
+    }
+  },
+  "shareActivityOne": "{name} made {count, plural, =1{1 edit} other{{count} edits}}",
+  "@shareActivityOne": {
+    "description": "Bottom-strip notice for a shared project kept online, shown once when someone edited it while this computer was not there (before it joined, while its copy was closed, or while it had no connection). A press opens the Shared project window. Used when the edits were in more than one composition, or in none. {name} is the person, {count} how many edits.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shareActivityTwo": "{name} and {other} made {count, plural, =1{1 edit} other{{count} edits}}",
+  "@shareActivityTwo": {
+    "description": "Bottom-strip notice for a shared project kept online, shown once when someone edited it while this computer was not there (before it joined, while its copy was closed, or while it had no connection). A press opens the Shared project window. Used when two people did. {name} and {other} are the people, {count} how many edits between them.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "other": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shareActivityMany": "{name} and {others} others made {count, plural, =1{1 edit} other{{count} edits}}",
+  "@shareActivityMany": {
+    "description": "Bottom-strip notice for a shared project kept online, shown once when someone edited it while this computer was not there (before it joined, while its copy was closed, or while it had no connection). A press opens the Shared project window. Used when three or more people did. {name} is one of them, {others} how many more there are (always two or more), {count} how many edits between them all.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "others": {
+        "type": "int"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shareActivityEdits": "{count, plural, =1{1 edit} other{{count} edits}}",
+  "@shareActivityEdits": {
+    "description": "Activity list of the Shared project window: how many edits one person made in one sitting.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shareActivityMore": "and {count} more",
+  "@shareActivityMore": {
+    "description": "Activity list of the Shared project window: after the first three compositions a person edited, how many others there were. Lower case, it follows a list of names.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shareFollow": "Follow {name}",
+  "@shareFollow": {
+    "description": "Tooltip on another person in the people list of the Shared project window. Pressing them makes this computer's open composition and playhead go where theirs go. {name} is the person.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "shareFollowing": "Following {name}",
+  "@shareFollowing": {
+    "description": "Chip over the Viewer while this computer follows another person in a shared project: its open composition and playhead go where theirs go. {name} is the person.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsOnlineUnnamed": "Unnamed project",
+  "@settingsOnlineUnnamed": {
+    "description": "Settings Account page, the list of shared projects kept on Lumit's server: what one is called when this computer does not know its file."
+  },
+  "settingsOnlineHolds": "{size} · opened {when}",
+  "@settingsOnlineHolds": {
+    "description": "Settings Account page, under a shared project kept on Lumit's server: how much the server holds for it, such as 12 MB, and when someone last opened it, such as today, 14:32 or 4 October.",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      },
+      "when": {
+        "type": "String"
+      }
+    }
+  },
+  "shareOnlineUse": "People can edit while you are away",
+  "@shareOnlineUse": {
+    "description": "Share this project page of the Shared project window: beside the Keep online tick box, what ticking it does. No full stop, like the tick box above it."
+  },
+  "shareOnlinePro": "Lumit Pro keeps it open without you.",
+  "@shareOnlinePro": {
+    "description": "Share this project page of the Shared project window: beside Keep online, for someone without Lumit Pro, what it would do here. Short enough for one line beside a button. Lumit Pro is a product name: do not translate it."
+  },
+  "shareStatusOnline": "Kept online",
+  "@shareStatusOnline": {
+    "description": "Bottom-strip button of a shared project that is kept on Lumit's server. An ordinary shared project says Shared there."
+  },
+  "shareHostTag": "host",
+  "@shareHostTag": {
+    "description": "People list of the Shared project window: a small tag after the name of the person who shares the project. Lower case, one word."
+  },
+  "shareRemoveTitle": "Remove {name}?",
+  "@shareRemoveTitle": {
+    "description": "Question asked when the host of a shared project presses Remove beside a person.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "shareRemoveBody": "The invite link changes. Anyone who is away will need the new one.",
+  "@shareRemoveBody": {
+    "description": "Under the question asked before the host removes a person from a shared project."
+  },
+  "shareRemoveNo": "Keep",
+  "@shareRemoveNo": {
+    "description": "The careful answer to the question asked before the host removes a person from a shared project: they stay."
+  },
+  "shareRemoving": "Removing…",
+  "@shareRemoving": {
+    "description": "People list of the Shared project window: in place of Remove while the person is being taken out."
+  },
+  "shareHaveInvite": "Have a new invite?",
+  "@shareHaveInvite": {
+    "description": "Shared project window, for a guest whose project cannot be reached: pressing it shows the field a new invite link is pasted into."
+  },
+  "shareShowBodyOnline": "Anyone who sees this link can join the project and change it. Keep it off streams, recordings and screenshots.",
+  "@shareShowBodyOnline": {
+    "description": "Under the question asked before the invite link of a project kept online is shown. This link holds no address of the person's computer."
+  },
+  "shareConflictsHeld": "{count} waiting",
+  "@shareConflictsHeld": {
+    "description": "Shared project window, beside the label Conflicts: how many wait to be chosen between.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shareDropped": "{count, plural, =1{1 of your changes was dropped} other{{count} of your changes were dropped}}",
+  "@shareDropped": {
+    "description": "Bottom-strip notice and a row at the head of the Activity list in the Shared project window, both in the warning colour and both in these words: how many of this person's edits could not be put into a project kept online when their computer came back to it, and are gone.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shareFollowStopShort": "Stop",
+  "@shareFollowStopShort": {
+    "description": "Button on the Following chip over the Viewer: stop following that person. One word."
+  },
+  "shareOnlineFullOwn": "Storage full, {used} of {limit}",
+  "@shareOnlineFullOwn": {
+    "description": "Shared project window, shown to the host of a project kept online when Lumit's server refuses footage because their storage is full. {used} and {limit} are sizes such as 47 GB.",
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "shareOnlineManage": "Manage…",
+  "@shareOnlineManage": {
+    "description": "Shared project window: button beside Storage full that opens the Settings Account page, where the account's storage is listed."
+  },
+  "shareOnlineOriginalsCost": "Keep the originals online ({size})",
+  "@shareOnlineOriginalsCost": {
+    "description": "Shared project window: the host's tick box in the Footage group while it is unticked, with how much ticking it would send, such as 1.2 GB.",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "shareOnlineOriginalsHeld": "{size} online",
+  "@shareOnlineOriginalsHeld": {
+    "description": "Shared project window, beside the ticked Keep the originals online box: how much original footage Lumit's server holds for the project, such as 1.2 GB.",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "shareOnlineRetry": "Try again",
+  "@shareOnlineRetry": {
+    "description": "Tooltip of the mark beside a footage file that could not be sent or fetched, in the Shared project window."
+  },
+  "shareOnlineCount": "{done} of {total}",
+  "@shareOnlineCount": {
+    "description": "Shared project window, on the edge of the Footage group: which file is on its way out of how many, such as 2 of 6.",
+    "placeholders": {
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "settingsOnlinePut": "{size} · put online {date}",
+  "@settingsOnlinePut": {
+    "description": "Settings Account page, under a project kept online that this computer does not know the file of: how much the server holds for it, and the day it was put online, such as 11 October. Size first, as the row above it has it.",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      },
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsOnlineToday": "today, {time}",
+  "@settingsOnlineToday": {
+    "description": "Settings Account page, after the word opened: earlier today, at this time. Lower case.",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsOnlineYesterday": "yesterday, {time}",
+  "@settingsOnlineYesterday": {
+    "description": "Settings Account page, after the word opened: yesterday, at this time. Lower case.",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
   "settingsStorage": "Storage",
   "@settingsStorage": {
     "description": "Settings Account page: row that says how much of the account's Lumit Pro storage is used."
+  },
+  "shareVersionsOlder": "On Lumit {version}",
+  "@shareVersionsOlder": {
+    "description": "Bottom-strip button of a project kept online, and the first line of the Shared project window, on the host's computer when an older Lumit keeps the project than the one running. Short. {version} is a version of Lumit, such as 0.7.0.",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "shareVersionsWaitingHost": "Waiting for the host",
+  "@shareVersionsWaitingHost": {
+    "description": "Bottom-strip button of a project kept online, and the first line of the Shared project window, on a guest's computer that runs a newer Lumit than keeps the project. Not an error. Short."
+  },
+  "shareVersionsNeedsUpdate": "Update needed",
+  "@shareVersionsNeedsUpdate": {
+    "description": "Bottom-strip button of a project kept online, and the first line of the Shared project window, when a newer Lumit keeps the project than the one running. Short."
+  },
+  "shareVersionsMovable": "Moving it forward lets this Lumit edit it. Anyone on an older Lumit has to update.",
+  "@shareVersionsMovable": {
+    "description": "Shared project window, on the host's computer, under words such as On Lumit 0.5.2: an older Lumit keeps the project than the one running. Beside it is the button Move it forward. It does not name the older version again."
+  },
+  "shareVersionsHostFirst": "The host has to open this project with Lumit {version} first. It joins by itself after that.",
+  "@shareVersionsHostFirst": {
+    "description": "Bottom-strip notice and a line in the Shared project window, under the words Waiting for the host, on a guest's computer that runs a newer Lumit than keeps the project. {version} is the Lumit this computer runs, such as 0.7.0.",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "shareVersionsHostFirstJoin": "The host has to open this project with Lumit {version} first. Try again after that.",
+  "@shareVersionsHostFirstJoin": {
+    "description": "Join a project page of the Shared project window, when the link leads to a project kept by an older Lumit than this one. {version} is the Lumit this computer runs, such as 0.7.0.",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "shareVersionsUpdate": "This project is on Lumit {version}. Update Lumit to edit it. Your edits are kept.",
+  "@shareVersionsUpdate": {
+    "description": "Bottom-strip notice when a newer Lumit keeps the project than the one running. The project is open on this computer, so it does not say open. A press leads to the update. {version} is a version of Lumit, such as 0.7.0.",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "shareVersionsUpdateJoin": "This project is on Lumit {version}. Update Lumit to join it.",
+  "@shareVersionsUpdateJoin": {
+    "description": "Join a project page of the Shared project window, when the link leads to a project kept by a newer Lumit than this one. {version} is a version of Lumit, such as 0.7.0.",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "shareForwardTitle": "Move this project forward to Lumit {version}?",
+  "@shareForwardTitle": {
+    "description": "Question asked of the host of a project kept online, when they open it with a newer Lumit than keeps it. {version} is the Lumit this computer runs, such as 0.7.0.",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "shareForwardBody": "It is on Lumit {version}. Anyone on an older Lumit has to update before they can join again. It cannot be undone.",
+  "@shareForwardBody": {
+    "description": "Under the question about moving a project kept online forward. {version} is the older Lumit that keeps it, such as 0.6.0.",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "shareForwardYes": "Move it forward",
+  "@shareForwardYes": {
+    "description": "The answer that moves a project kept online forward to the Lumit running, and the button in the Shared project window that does the same."
+  },
+  "shareForwardNo": "Not now",
+  "@shareForwardNo": {
+    "description": "The careful answer to the question about moving a project kept online forward: it stays as it is."
+  },
+  "shareForwardMoving": "Moving it forward…",
+  "@shareForwardMoving": {
+    "description": "Bottom-strip button, first line of the Shared project window and the Join button, while a project kept online is being moved forward to the Lumit running."
+  },
+  "shareForwardBusy": "Someone is still editing in Lumit {version}. Try again in a moment.",
+  "@shareForwardBusy": {
+    "description": "Notice when a project kept online could not be moved forward because people on the older Lumit went on editing all through. {version} is a version of Lumit, such as 0.7.0.",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "shareForwardUnreadable": "This Lumit could not read an edit in the project, so it stays as it is. It still opens in Lumit {version}.",
+  "@shareForwardUnreadable": {
+    "description": "Notice when a project kept online could not be moved forward because the newer Lumit could not read something the older one stored. Nothing was changed. {version} is a version of Lumit, such as 0.7.0.",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "shareForwardNotHost": "Only the host can move this project forward. Sign in to the account that keeps it online.",
+  "@shareForwardNotHost": {
+    "description": "Notice when a project kept online could not be moved forward because the account signed in is not its host's."
+  },
+  "shareOnlineStopTitleNamed": "Stop keeping {name} online?",
+  "@shareOnlineStopTitleNamed": {
+    "description": "The same question on the Settings Account page, where several projects are listed. {name} is the project.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "shareOnlineStopBodyAway": "This computer has no file for it. Everyone else keeps their copy, and edits are no longer shared.",
+  "@shareOnlineStopBodyAway": {
+    "description": "Under the question asked before a project stops being kept online, when this computer knows no file for it."
+  },
+  "shareActivitySeen": "Seen",
+  "@shareActivitySeen": {
+    "description": "Activity list of the Shared project window: small legend over the sittings the person has already looked at, under the ones that are new to them. One word."
+  },
+  "shareDroppedWhy": "What they changed was no longer there.",
+  "@shareDroppedWhy": {
+    "description": "Shared project window, a quiet line under the count of this person's changes that were dropped: why. They, here, is the changes."
+  },
+  "shareOnlineAwayLine": "Edits wait here until it is found.",
+  "@shareOnlineAwayLine": {
+    "description": "Shared project window, under the words Looking for the server, for a project kept online with no connection to Lumit's server. It does not say looking again."
+  },
+  "shareVersionsUpdateLine": "Update to Lumit {version} to edit it. Your edits are kept.",
+  "@shareVersionsUpdateLine": {
+    "description": "Shared project window, under the words Update needed, when a newer Lumit keeps the project than the one running. Beside it is the button that checks for updates. {version} is a version of Lumit, such as 0.7.0.",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsOnlineEnded": "Lumit Pro has ended",
+  "@settingsOnlineEnded": {
+    "description": "Settings Account page, over the projects the account keeps online: label of a row shown when the account's Lumit Pro has ended. Beside it is the button Lumit Pro. Lumit Pro is a product name: do not translate it."
+  },
+  "settingsOnlineEndedHint": "Edits wait on each computer until it is back.",
+  "@settingsOnlineEndedHint": {
+    "description": "Settings Account page, under the label Lumit Pro has ended: what that means for the projects kept online."
+  },
+  "shareLinkEdit": "Invite to edit",
+  "@shareLinkEdit": {
+    "description": "Shared project window, for a project kept online: label of the invite link that lets people change the project. Under it is the one labelled Invite to look."
+  },
+  "shareLinkLook": "Invite to look",
+  "@shareLinkLook": {
+    "description": "Shared project window, for a project kept online: label of the second invite link. Whoever joins by it sees the project and the people and can change nothing."
+  },
+  "shareShowBodyLook": "Anyone who sees this link can see the project. Keep it off streams, recordings and screenshots.",
+  "@shareShowBodyLook": {
+    "description": "Under the question asked before the invite that can only look is shown. Whoever joins by this link can change nothing."
+  },
+  "shareLookOnly": "Look only",
+  "@shareLookOnly": {
+    "description": "Bottom-strip button of a project kept online, and the first line of the Shared project window, on the computer of someone who joined by the invite to look: they can see the project and not change it. Two words at most."
+  },
+  "shareLookTag": "look only",
+  "@shareLookTag": {
+    "description": "People list of the Shared project window, and the tooltip of a person in the bottom strip: a small tag after the name of someone who can see the project and not change it. Lower case, as the tags you and host are."
+  },
+  "shareOpenMyCopy": "Open my copy",
+  "@shareOpenMyCopy": {
+    "description": "Shared project window and Conflicts window: opens this person's own project as it was just before their computer came back to the shared project and some of their changes were held or dropped. It opens as a project of its own."
+  },
+  "shareReturnCopyKept": "{count, plural, =1{Your copy from before this computer came back} other{Your copies from before this computer came back}}",
+  "@shareReturnCopyKept": {
+    "description": "Shared project window, head of the Activity list: says that this person's own project from just before their computer came back to the shared project is kept. There are one or two. Beside it are the buttons that open them.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shareReturnForgetTitle": "{count, plural, =1{Delete your copy?} other{Delete both your copies?}}",
+  "@shareReturnForgetTitle": {
+    "description": "Question asked when the person dismisses the row about changes of theirs that were dropped, and Lumit holds their own project from before that, once or twice over.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shareReturnForgetBody": "{count, plural, =1{It is your project as it was before this computer came back.} other{Each is your project as it was before this computer came back.}}",
+  "@shareReturnForgetBody": {
+    "description": "Under the question about deleting the copy or copies: what they are.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shareLookJoined": "You can look at this project and not change it. Edits made here are undone.",
+  "@shareLookJoined": {
+    "description": "Bottom-strip notice on the computer of someone who joined a shared project by the invite to look. Said when they join, and again whenever something they change is put back. Every tool still works on their computer, and whatever is changed is undone at once, so this says why."
+  },
+  "shareOpenMyCopyFrom": "Open my copy from {when}",
+  "@shareOpenMyCopyFrom": {
+    "description": "Shared project window: the Open my copy button when Lumit holds two such copies, told apart by when each was written, such as 16:20 or 4 October, 16:20.",
+    "placeholders": {
+      "when": {
+        "type": "String"
+      }
+    }
+  },
+  "sharePasswordHintOnline": "People you invite to edit have to type this as well as having the link. Leave it empty for no password.",
+  "@sharePasswordHintOnline": {
+    "description": "Quiet line under the Password field on the Share this project page while Keep online is ticked. The invite to look never asks for the password."
+  },
+  "shareFullLook": "That shared project already has as many people looking as it can take. Try again later.",
+  "@shareFullLook": {
+    "description": "Notice on the computer of someone who can only look at a shared project, when they are turned away because no more people who only look are taken, or someone who can edit needed the place."
+  },
+  "shareLinkNoPassword": "no password",
+  "@shareLinkNoPassword": {
+    "description": "Shared project window, for a project kept online with a password: a small tag on the Invite to look row, where the Invite to edit row has a lock. Anyone holding that link can see the project without the password. Lower case, as the tags you and host are."
+  },
+  "shareLookOnTitle": "Turn on the invite to look?",
+  "@shareLookOnTitle": {
+    "description": "Shared project window, on the host's computer, for a project kept online that has a password: the question asked when the host switches on Invite to look, the link people can see the project by and not change it."
+  },
+  "shareLookOnBody": "Either link then shows the project without the password. Changing it still needs the password.",
+  "@shareLookOnBody": {
+    "description": "Under the question Turn on the invite to look?. With the invite to look on, someone holding the invite to edit can see the project without typing its password, and so can anyone with the invite to look. Editing still needs the password."
+  },
+  "shareLookOnYes": "Turn on",
+  "@shareLookOnYes": {
+    "description": "The answer that switches on Invite to look in the Shared project window. Beside Cancel."
+  },
+  "shareLookOffTitle": "Turn off the invite to look?",
+  "@shareLookOffTitle": {
+    "description": "Shared project window, on the host's computer: the question asked when the host switches off Invite to look while someone is looking by it."
+  },
+  "shareLookOffBody": "{count, plural, =1{The person looking now is removed and keeps their copy.} other{The {count} people looking now are removed and keep their copies.}}",
+  "@shareLookOffBody": {
+    "description": "Under the question Turn off the invite to look?. {count} is how many people are in the project by the invite to look right now. Switching it off takes them out of the project. What each has of it stays on their own computer as a project of their own.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shareLookOffYes": "Turn off",
+  "@shareLookOffYes": {
+    "description": "The answer that switches off Invite to look in the Shared project window. Beside Cancel."
+  },
+  "shareNoteHint": "Leave a note on where you are",
+  "@shareNoteHint": {
+    "description": "Shared project window, Activity group, for a project kept online: the hint in the empty field where a note for the others is typed. The note carries the composition open, the time the playhead is at and the layer chosen."
+  },
+  "shareNoteSend": "Send",
+  "@shareNoteSend": {
+    "description": "Button beside the field where a note is typed in the Shared project window. It leaves the note for everyone in the project."
+  },
+  "shareNoteWaiting": "not sent yet",
+  "@shareNoteWaiting": {
+    "description": "Shared project window, Activity group: a small tag on a note this person wrote while Lumit's server was out of reach, where the note's time would be. It is sent by itself when the server is found. Lower case, as the tags you and host are."
+  },
+  "shareNoteSaid": "{name}: {text}",
+  "@shareNoteSaid": {
+    "description": "Bottom-strip notice when someone else leaves a note in a project kept online. {name} is who wrote it and {text} is the note's own words. A press opens the list of notes.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "text": {
+        "type": "String"
+      }
+    }
+  },
+  "shareNotesNew": "{count, plural, =1{1 new note} other{{count} new notes}}",
+  "@shareNotesNew": {
+    "description": "Bottom-strip notice when several notes were left in a project kept online while this computer was not there. {count} is how many. A press opens the list.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shareOnlineNearlyLarge": "Nearly too large",
+  "@shareOnlineNearlyLarge": {
+    "description": "Bottom-strip button of a project kept online, and the first line of the Shared project window, in the warning colour, when the project has grown past what Lumit's server stores. Edits still go in for now. Three words at most."
+  },
+  "shareOnlineNearlyLargeLine": "It has to get smaller to stay online.",
+  "@shareOnlineNearlyLargeLine": {
+    "description": "Shared project window, under the words Nearly too large, for a project kept online that has grown past what Lumit's server stores. It does not say too large again."
+  },
+  "shareOnlineNearlyLargeSaid": "This project is nearly too large to keep online. It has to get smaller.",
+  "@shareOnlineNearlyLargeSaid": {
+    "description": "Bottom-strip notice, and the tooltip of the strip's button, for a project kept online that has grown past what Lumit's server stores. Edits still go in for now and will stop unless the project gets smaller."
+  },
+  "shareOnlineTooLarge": "Too large",
+  "@shareOnlineTooLarge": {
+    "description": "Bottom-strip button of a project kept online, and the first line of the Shared project window, in the warning colour, when the project is too large for Lumit's server and edits have stopped going in. Two words at most."
+  },
+  "shareOnlineTooLargeLine": "Edits made here are kept on this computer.",
+  "@shareOnlineTooLargeLine": {
+    "description": "Shared project window, under the words Too large, on the computer of someone who is not the host. The project is too large for Lumit's server, so what this person changes reaches nobody and stays in their own copy. It does not say too large again."
+  },
+  "shareOnlineTooLargeLineOwn": "Edits made here are kept on this computer. Stop keeping it online to make it smaller.",
+  "@shareOnlineTooLargeLineOwn": {
+    "description": "Shared project window, under the words Too large, on the host's computer. The project is too large for Lumit's server, and it cannot be made smaller while it is kept online. Stop keeping online is a button in the same window."
+  },
+  "shareOnlineTooLargeSaid": "This project is too large to keep online. Edits made here are kept on this computer.",
+  "@shareOnlineTooLargeSaid": {
+    "description": "Bottom-strip notice, and the tooltip of the strip's button, for a project kept online that is too large for Lumit's server. Nothing changed on this computer reaches anyone else, and nothing is lost."
+  },
+  "shareLinkLockEdit": "to edit",
+  "@shareLinkLockEdit": {
+    "description": "Shared project window, for a project kept online with a password while the invite to look is on: a small tag beside the lock on the Invite to edit row. The password is then only needed to change the project, and the link by itself shows it. Lower case, as the tags you, host and no password are."
+  },
+  "sharePasswordSetEdit": "People need the password to edit. This link alone shows the project.",
+  "@sharePasswordSetEdit": {
+    "description": "Tooltip on the lock beside the Invite to edit link of a project kept online, while the invite to look is on. In place of the tooltip that says people joining need the password as well as the link."
+  },
+  "shareNoteTakeDown": "Take down",
+  "@shareNoteTakeDown": {
+    "description": "Shared project window, Activity group, for a project kept online: what the small cross at the end of a note's row does, on hover, and the answer that confirms it. The note is removed for everyone in the project. Its writer may do it, and so may the host."
+  },
+  "shareNoteDownTitle": "Take down {name}'s note?",
+  "@shareNoteDownTitle": {
+    "description": "Shared project window, on the host's computer: the question asked before the host takes down a note someone else wrote. {name} is who wrote it.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "shareNoteDownBody": "It goes for everyone and cannot be put back.",
+  "@shareNoteDownBody": {
+    "description": "Under the question Take down {name}'s note?. The note is removed from every computer in the project, for good."
+  },
+  "shareReplaced": "Invite replaced",
+  "@shareReplaced": {
+    "description": "Bottom-strip button of a project kept online, and the first line of the Shared project window, in the warning colour, on a computer that was away when the host made a new invite. Its copy is still part of the project and cannot find it until the new invite is pasted. Two words at most."
+  },
+  "shareReplacedLine": "Edits wait here until the new one is pasted.",
+  "@shareReplacedLine": {
+    "description": "Shared project window, under the words Invite replaced, with the field for a new invite right under it. It does not say the invite was replaced again."
+  },
+  "shareReplacedSaid": "The host replaced the invite. Edits wait here until the new one is pasted.",
+  "@shareReplacedSaid": {
+    "description": "Bottom-strip notice, and the tooltip of the strip's button, on a computer that was away from a project kept online when the host made a new invite. A press opens the Shared project window, where the new invite is pasted."
+  },
+  "shareJoinClosed": "That project is no longer kept online.",
+  "@shareJoinClosed": {
+    "description": "Join a project page, under the invite link: the link was for a project its host has stopped keeping on Lumit's server."
+  },
+  "shareJoinMoved": "That invite was replaced. Ask the host for the new one.",
+  "@shareJoinMoved": {
+    "description": "Join a project page, under the invite link: the host has made a new invite since this one was handed out, so this one opens nothing."
+  },
+  "shareJoinRemoved": "The host removed you from that project.",
+  "@shareJoinRemoved": {
+    "description": "Join a project page, under the invite link: this computer was taken out of the project by its host, and the invite it holds opens nothing."
+  },
+  "shareJoinLookOff": "The invite to look is off. Ask the host to turn it on.",
+  "@shareJoinLookOff": {
+    "description": "Join a project page, under the invite link: the link is the one people can look at a project by and not change it, and the host has that invite switched off."
   }
 }

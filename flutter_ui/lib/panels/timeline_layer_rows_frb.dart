@@ -272,7 +272,11 @@ class FoldRow extends StatelessWidget {
               ? AbsorbPointer(
                   child: Opacity(opacity: 0.5, child: _control(context)),
                 )
-              : _control(context),
+              // A property row is held for whoever else in a shared project
+              // is changing its value.
+              : picks
+                  ? HeldFor(names: [path], child: _control(context))
+                  : _control(context),
         ),
       ),
     );
