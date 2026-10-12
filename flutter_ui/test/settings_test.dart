@@ -66,6 +66,7 @@ void main() {
       rightClickOpensNodeSearch: false,
       tabOpensNodeSearch: false,
       shiftAOpensNodeSearch: false,
+      hangingWires: true,
       room: LanternRoom.night,
       labelCase: LabelCase.lower,
     );
@@ -94,11 +95,12 @@ void main() {
     expect(back.rightClickOpensNodeSearch, isFalse);
     expect(back.tabOpensNodeSearch, isFalse);
     expect(back.shiftAOpensNodeSearch, isFalse);
+    expect(back.hangingWires, isTrue);
     expect(back.room, LanternRoom.night);
     expect(back.labelCase, LabelCase.lower);
     // Every field is one of the above: a new one added without a line here is
     // a setting nothing checks survives the file.
-    expect(all.toJson().keys.length, 29);
+    expect(all.toJson().keys.length, 30);
   });
 
   // The whole first-run rule in two lines: no file means ask, a file means

@@ -884,6 +884,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         settings.rightClickOpensNodeSearch = shipped.rightClickOpensNodeSearch;
         settings.tabOpensNodeSearch = shipped.tabOpensNodeSearch;
         settings.shiftAOpensNodeSearch = shipped.shiftAOpensNodeSearch;
+        settings.hangingWires = shipped.hangingWires;
         workspace.settingsChanged();
       case SettingsPage.viewer:
         workspace.setSmoothZoomedViewer(false);
@@ -1910,6 +1911,11 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               l10n.settingsShiftAOpensNodeSearch,
               value: settings.shiftAOpensNodeSearch, set: (on) {
             settings.shiftAOpensNodeSearch = on;
+            changed();
+          }),
+          _flag(t, 'settings-hanging-wires', l10n.settingsHangingWires,
+              value: settings.hangingWires, set: (on) {
+            settings.hangingWires = on;
             changed();
           }),
         ],

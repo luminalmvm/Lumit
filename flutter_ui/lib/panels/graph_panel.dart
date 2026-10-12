@@ -158,10 +158,20 @@ const double graphWireStub = 40;
 /// back in a round hook no wider than the stub however far apart the boxes
 /// are. The stub is never longer than half the wire, so a short wire stays a
 /// short curve. Free of the painter so its geometry can be asserted directly.
-Path graphWirePath(Offset a, Offset b, {double zoom = 1}) {
+///
+/// With [hanging] the wire is a slack cable instead, which sags a quarter of
+/// its own length below the straight line between the two sockets.
+Path graphWirePath(Offset a, Offset b,
+    {double zoom = 1, bool hanging = false}) {
   final dx = b.dx - a.dx;
   final stub = math.min(graphWireStub * zoom, (b - a).distance / 2);
   final path = Path()..moveTo(a.dx, a.dy);
+  if (hanging) {
+    final mid = (a + b) / 2;
+    // The control point sits twice as low as the curve dips.
+    return path
+      ..quadraticBezierTo(mid.dx, mid.dy + (b - a).distance / 2, b.dx, b.dy);
+  }
   if (dx >= 0) {
     final reach = math.max(stub, dx / 2);
     return path..cubicTo(a.dx + reach, a.dy, b.dx - reach, b.dy, b.dx, b.dy);
@@ -766,9 +776,10 @@ const double graphWireGrab = 18;
 /// A wire is one cubic and twenty points describe it closely enough to say
 /// whether a box was dropped on it — this runs during a drag, over a handful of
 /// wires, and never in an idle rebuild.
-double graphWireDistance(Offset a, Offset b, Offset at) {
+double graphWireDistance(Offset a, Offset b, Offset at,
+    {bool hanging = false}) {
   var best = double.infinity;
-  for (final metric in graphWirePath(a, b).computeMetrics()) {
+  for (final metric in graphWirePath(a, b, hanging: hanging).computeMetrics()) {
     for (var i = 0; i <= 20; i++) {
       final point =
           metric.getTangentForOffset(metric.length * i / 20)?.position;
@@ -2111,7 +2122,11 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     for (final edge in graph.wiring.edges) {
       final ends = _edgeEnds(layout, edge);
       if (ends == null) continue;
-      if (graphWireDistance(ends.$1, ends.$2, at) > graphWireGrab) continue;
+      if (graphWireDistance(ends.$1, ends.$2, at,
+              hanging: _ui!.workspace.interface.hangingWires) >
+          graphWireGrab) {
+        continue;
+      }
       final into = _freeSocket(box, ends.$3, isInput: true);
       final outOf = _freeSocket(box, ends.$3, isInput: false);
       // Both types match the wire's by construction and the box has nothing
@@ -2734,6 +2749,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
                           theme: t,
                           dragged: t.textPrimary,
                           outUnwired: _graph!.wiring.outUnwired,
+                          hanging: ThemeScope.of(context).hangingWires,
                         ),
                       ),
                     ),
@@ -3460,6 +3476,7 @@ class _GraphPainter extends CustomPainter {
   /// Nothing is plugged into the Layer out, so the layer draws nothing
   /// and the last wire is not drawn either.
   final bool outUnwired;
+  final bool hanging;
 
   const _GraphPainter({
     required this.layout,
@@ -3471,6 +3488,7 @@ class _GraphPainter extends CustomPainter {
     required this.dragged,
     required this.theme,
     required this.outUnwired,
+    required this.hanging,
   });
 
   Offset _screen(Offset canvas) => canvas * zoom + pan;
@@ -3540,7 +3558,8 @@ class _GraphPainter extends CustomPainter {
   /// of its producer.
   void _wire(Canvas canvas, Offset from, Offset to, Color colour,
       {required bool dashes, double weight = 1}) {
-    final path = graphWirePath(_screen(from), _screen(to), zoom: zoom);
+    final path = graphWirePath(_screen(from), _screen(to),
+        zoom: zoom, hanging: hanging);
     final paint = Paint()
       ..color = colour
       ..style = PaintingStyle.stroke

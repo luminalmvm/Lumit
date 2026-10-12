@@ -12812,6 +12812,10 @@
   "@settingsShiftAOpensNodeSearch": {
     "description": "Settings window, Timeline page: the name of one setting - whether Shift+A over a focused node graph canvas opens the search for adding a box at the pointer. On by default. Keep Shift+A as the key combination."
   },
+  "settingsHangingWires": "Hanging wires",
+  "@settingsHangingWires": {
+    "description": "Settings window, Timeline page: the name of one setting - whether the wires between boxes in a node graph droop like slack cables instead of running in the usual S-curve. Off by default."
+  },
   "closePanel": "Close panel",
   "@closePanel": {
     "description": "The right-click menu on a panel's tab: the row that takes the panel out of the arrangement. The same thing as un-ticking the panel in the Window menu."
