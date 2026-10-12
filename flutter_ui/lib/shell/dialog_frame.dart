@@ -414,16 +414,19 @@ Widget dialogFooter(
             )
           : Row(
               children: [
-                if (summary.isNotEmpty)
-                  Flexible(
-                    child: Text(
-                      summary,
-                      key: ValueKey<String>('$keyPrefix-summary'),
-                      style: dialogMono(t),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                const Spacer(),
+                // The line takes all the room, which stands the actions at
+                // the far end whatever its length. Sharing the room with a
+                // spacer left them adrift in the middle under a short line.
+                Expanded(
+                  child: summary.isEmpty
+                      ? const SizedBox.shrink()
+                      : Text(
+                          summary,
+                          key: ValueKey<String>('$keyPrefix-summary'),
+                          style: dialogMono(t),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                ),
                 for (final action in actions) ...[
                   const SizedBox(width: dialogFooterGap),
                   SizedBox(height: dialogFooterButton, child: action),
