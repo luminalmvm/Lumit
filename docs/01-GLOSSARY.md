@@ -12,7 +12,7 @@ its entry here first. AE and Vegas names are noted only to help people arriving 
 | **Footage item** | An asset pointing at a media file. Lumit never changes the file |
 | **File layer** | One layer of a layered image file such as a PSD or an Illustrator document, which a footage item can read on its own |
 | **Audio item** | An asset pointing at an audio file |
-| **Audio stream** | One of the sounds a media file carries side by side, such as the game and the microphone of a screen recording. A layer or clip plays the first until it is told others. To **split** gives each a row of its own, to **merge** puts them back on one. Not *audio track* |
+| **Audio stream** | One of the sounds a media file carries side by side, such as the game and the microphone of a screen recording. A file arrives with all of them mixed on one layer or clip unless Settings says otherwise. To **split** gives each a row of its own, to **merge** puts them back on one. Not *audio track* |
 | **Packed project** | A `.lum` that also carries its footage files inside it. The verbs are **pack** and **unpack** |
 | **Shared project** | A project several people edit at once. The **host** shares it and owns the file, the **guests** join with an **invite**, which is written as an **invite link**. One that is **kept online** is held by Lumit's server, which cannot read it and puts the edits in order, so nobody's machine has to be on |
 | **Relay** | A server that passes a shared project's edits between a host and guests who cannot reach each other. It cannot read them. Somebody's own, or **Lumit's relay**, which comes with Lumit Pro |
