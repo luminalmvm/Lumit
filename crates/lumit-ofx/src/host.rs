@@ -335,9 +335,11 @@ fn host_property_set() -> PropertySet {
 }
 
 /// The crate version as OFX wants it: major, minor, patch as whole numbers.
+/// A nightly's suffix (`0.6.1-nightly.20261012.57`) is not part of that.
 fn package_version() -> Vec<i32> {
     env!("CARGO_PKG_VERSION")
-        .split('.')
+        .split(['.', '-'])
+        .take(3)
         .map(|part| part.parse::<i32>().unwrap_or(0))
         .collect()
 }

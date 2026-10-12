@@ -26,6 +26,18 @@ class MainFlutterWindow: NSWindow {
     (NSApp.delegate as? AppDelegate)?.opens.attach(to: flutterViewController)
     // An extension's page is a web view Flutter places in its panel.
     ExtensionViewFactory.register(with: flutterViewController)
+    // A nightly may wear the regular icon (lib/state/app_icon.dart): a path
+    // shows that picture in the Dock, and none puts the bundle's own back. It
+    // lasts as long as Lumit runs; the Finder always draws the bundle's.
+    FlutterMethodChannel(
+      name: "lumit/app_icon",
+      binaryMessenger: flutterViewController.engine.binaryMessenger
+    ).setMethodCallHandler { call, result in
+      NSApp.applicationIconImage = (call.arguments as? String).flatMap {
+        NSImage(contentsOfFile: $0)
+      }
+      result(nil)
+    }
 
     // Open where the last run left the window, and zoomed — macOS's word for
     // maximised — when there is nothing to go back to. `setFrameUsingName`

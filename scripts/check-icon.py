@@ -29,7 +29,11 @@ import json
 import pathlib
 import sys
 
-ICON = pathlib.Path("assets/brand/lumit-icon.icon/icon.json")
+# The stable icon, and the nightly one scripts/stamp-nightly.sh swaps in.
+ICONS = [
+    pathlib.Path("assets/brand/lumit-icon.icon/icon.json"),
+    pathlib.Path("assets/brand/nightly/lumit-icon.icon/icon.json"),
+]
 
 
 def problems(doc: dict) -> list[str]:
@@ -49,20 +53,24 @@ def problems(doc: dict) -> list[str]:
     return found
 
 
-def main() -> int:
-    if not ICON.exists():
-        print(f"{ICON} is missing")
+def check(icon: pathlib.Path) -> int:
+    if not icon.exists():
+        print(f"{icon} is missing")
         return 1
-    found = problems(json.loads(ICON.read_text()))
+    found = problems(json.loads(icon.read_text()))
     if not found:
         return 0
-    print(f"{ICON} uses Icon Composer settings actool cannot compile:")
+    print(f"{icon} uses Icon Composer settings actool cannot compile:")
     for line in found:
         print(f"  - {line}")
     print()
     print("Reopening the icon in Icon Composer and saving puts these back, so")
     print("check this file after any edit to the artwork.")
     return 1
+
+
+def main() -> int:
+    return max(check(icon) for icon in ICONS)
 
 
 if __name__ == "__main__":

@@ -50,3 +50,6 @@ app.*.map.json
 # ever be a stale duplicate of app_en.arb.
 lib/l10n/gen/
 lib/l10n/untranslated.json
+
+# The regular icon scripts/stamp-nightly.sh copies in for a nightly build.
+assets/brand/stable-icon.*

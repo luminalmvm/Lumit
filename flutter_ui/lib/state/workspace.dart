@@ -739,6 +739,15 @@ class Workspace extends ChangeNotifier {
   /// anybody a surprise few hundred megabytes.
   bool autoUpdate = true;
 
+  /// Whether updates follow nightly builds rather than stable releases. Null
+  /// until the user chooses, which the updater reads as "whatever is running"
+  /// (`UpdateService.followsNightly`).
+  bool? nightlyUpdates;
+
+  /// Whether a nightly build wears its own icon. Off shows the regular one
+  /// (`app_icon.dart`). Means nothing to a stable build, which has only one.
+  bool nightlyIcon = true;
+
   /// What Discord shows while Lumit is open. Names are a choice and not the
   /// default, since a project's name can be somebody else's secret.
   DiscordStatus discordStatus = DiscordStatus.app;
@@ -1265,6 +1274,16 @@ class Workspace extends ChangeNotifier {
     settingsChanged();
   }
 
+  void setNightlyUpdates(bool on) {
+    nightlyUpdates = on;
+    settingsChanged();
+  }
+
+  void setNightlyIcon(bool on) {
+    nightlyIcon = on;
+    settingsChanged();
+  }
+
   void setDiscordStatus(DiscordStatus status) {
     discordStatus = status;
     settingsChanged();
@@ -1780,6 +1799,8 @@ class Workspace extends ChangeNotifier {
         'first_run_done': firstRunDone,
         'tour_done': tourDone,
         'auto_update': autoUpdate,
+        'nightly_updates': nightlyUpdates,
+        'nightly_icon': nightlyIcon,
         'discord_status': discordStatus.name,
         'show_welcome_on_launch': showWelcomeOnLaunch,
         'last_update_check_ms': lastUpdateCheckMs,
@@ -1877,6 +1898,8 @@ class Workspace extends ChangeNotifier {
     // for; the default is on, and an existing user gets the same offer a new
     // one does.
     autoUpdate = j['auto_update'] as bool? ?? true;
+    nightlyUpdates = j['nightly_updates'] as bool?;
+    nightlyIcon = j['nightly_icon'] as bool? ?? true;
     // By name. Absent, or a name no build wrote, is the shipped default.
     discordStatus = DiscordStatus.values.asNameMap()[j['discord_status']] ??
         DiscordStatus.app;

@@ -50,6 +50,17 @@ const String updatesRepository = 'luminalmvm/lumit';
 Uri get latestReleaseUrl => Uri.parse(
     'https://api.github.com/repos/$updatesRepository/releases/latest');
 
+/// The recent releases, pre-releases among them. What the nightly channel
+/// reads: GitHub has no "latest nightly" to ask for, so the newest is picked
+/// out of this list.
+Uri get recentReleasesUrl => Uri.parse(
+    'https://api.github.com/repos/$updatesRepository/releases?per_page=30');
+
+/// Whether [version] is a nightly build — `0.6.1-nightly.20261012.57`, cut
+/// from `main` by the release pipeline's schedule and published as a
+/// pre-release. The one kind of pre-release the updater will follow.
+bool isNightlyVersion(String version) => version.contains('-nightly.');
+
 /// How long a check is good for. A day: long enough that launching Lumit six
 /// times in a morning asks GitHub once, short enough that a release is noticed
 /// the day after it lands.
@@ -171,12 +182,18 @@ class UpdateRelease {
     required String platform,
     InstallKind kind = InstallKind.unknown,
     bool replaceable = false,
+    bool nightly = false,
   }) {
     final tag = json['tag_name'];
     if (tag is! String || tag.isEmpty) return null;
     // Draft releases are not published and pre-releases are not what `latest`
     // returns, but both are cheap to refuse and expensive to ship by accident.
-    if (json['draft'] == true || json['prerelease'] == true) return null;
+    // The nightly channel takes nightlies and nothing else that is unfinished:
+    // a release candidate is a rehearsal, not a build anybody follows.
+    if (json['draft'] == true) return null;
+    if (json['prerelease'] == true && !(nightly && isNightlyVersion(tag))) {
+      return null;
+    }
 
     final assets = json['assets'];
     if (assets is! List) return null;
@@ -408,12 +425,24 @@ int compareVersions(String a, String b) {
   // A release beats its own pre-releases.
   if (leftPre.isEmpty) return 1;
   if (rightPre.isEmpty) return -1;
-  return leftPre.compareTo(rightPre);
+  // Part by part, numbers as numbers: `nightly.20261012.9` is older than
+  // `nightly.20261012.10`, which comparing the text gets backwards.
+  final left = leftPre.split('.');
+  final right = rightPre.split('.');
+  for (var i = 0; i < left.length && i < right.length; i++) {
+    final l = int.tryParse(left[i]);
+    final r = int.tryParse(right[i]);
+    final diff =
+        l != null && r != null ? l.compareTo(r) : left[i].compareTo(right[i]);
+    if (diff != 0) return diff;
+  }
+  return left.length.compareTo(right.length);
 }
 
 /// Asking GitHub what the latest release is. Injected so a test can answer
-/// without a network.
-typedef ReleaseFetcher = Future<Map<String, dynamic>> Function(Uri url);
+/// without a network. One release for the stable channel, a list of them for
+/// nightly.
+typedef ReleaseFetcher = Future<Object?> Function(Uri url);
 
 /// Handing the downloaded file to the system. Injected so a test never runs an
 /// installer, which is the one thing in this file that cannot be undone.
@@ -446,6 +475,10 @@ class UpdateService extends ChangeNotifier {
   /// test must not call the engine merely by existing.
   final String? Function() currentVersion;
 
+  /// Whether the user has asked for nightly builds, or null when they have
+  /// never said (see [followsNightly]).
+  final bool? Function() _nightlyChoice;
+
   /// Which platform's attachment to look for. `Platform.operatingSystem` in
   /// the shipped application; set outright in tests.
   final String platform;
@@ -472,6 +505,7 @@ class UpdateService extends ChangeNotifier {
 
   UpdateService({
     required this.currentVersion,
+    bool? Function()? nightly,
     String? platform,
     InstallSite? site,
     ReleaseFetcher? fetch,
@@ -483,7 +517,8 @@ class UpdateService extends ChangeNotifier {
     Quitter? quit,
     int Function()? now,
     Directory Function()? downloadFolder,
-  })  : platform = platform ?? Platform.operatingSystem,
+  })  : _nightlyChoice = nightly ?? _noChoice,
+        platform = platform ?? Platform.operatingSystem,
         site = site ?? InstallSite.detect(),
         _fetch = fetch ?? _fetchReleaseJson,
         _fetchBytes = fetchBytes ?? _fetchSmallFile,
@@ -503,6 +538,16 @@ class UpdateService extends ChangeNotifier {
   bool _cancelRequested = false;
 
   UpdateStage get stage => _stage;
+
+  /// Whether this installation follows nightly builds.
+  ///
+  /// The user's choice once they have made one. Until then it is whatever is
+  /// running, so a nightly installed by hand goes on receiving nightlies
+  /// without anybody finding a switch first.
+  bool get followsNightly => _nightlyChoice() ?? runningNightly;
+
+  /// Whether the Lumit that is running is a nightly build.
+  bool get runningNightly => isNightlyVersion(currentVersion() ?? '');
 
   /// The release that is waiting, once one has been found.
   UpdateRelease? get release => _release;
@@ -562,19 +607,40 @@ class UpdateService extends ChangeNotifier {
         _fail(l10n.updateUnknownVersion);
         return;
       }
-      final json = await _fetch(latestReleaseUrl);
-      final found = UpdateRelease.parse(
-        json,
-        platform: platform,
-        kind: site.kind,
-        replaceable: site.replaceable,
-      );
-      if (found == null || compareVersions(found.version, current) <= 0) {
-        _stage = UpdateStage.upToDate;
-        _release = null;
-      } else {
+      final nightly = followsNightly;
+      final json = await _fetch(nightly ? recentReleasesUrl : latestReleaseUrl);
+      // The newest release this machine can install: the one `latest` named,
+      // or on the nightly channel the best of the recent ones.
+      UpdateRelease? found;
+      for (final entry in json is List ? json : [json]) {
+        if (entry is! Map<String, dynamic>) continue;
+        final release = UpdateRelease.parse(
+          entry,
+          platform: platform,
+          kind: site.kind,
+          replaceable: site.replaceable,
+          nightly: nightly,
+        );
+        if (release != null &&
+            (found == null ||
+                compareVersions(release.version, found.version) > 0)) {
+          found = release;
+        }
+      }
+      // A nightly that has been told to follow stable is offered the stable
+      // release whatever its number: leaving nightly is a step back, and
+      // waiting for stable to overtake would keep it on nightly for weeks.
+      final leavingNightly = !nightly && isNightlyVersion(current);
+      final wanted = found != null &&
+          (leavingNightly
+              ? found.version != current
+              : compareVersions(found.version, current) > 0);
+      if (wanted) {
         _stage = UpdateStage.available;
         _release = found;
+      } else {
+        _stage = UpdateStage.upToDate;
+        _release = null;
       }
     } catch (_) {
       _fail(l10n.updateCheckFailed);
@@ -870,18 +936,20 @@ class UpdateService extends ChangeNotifier {
 
 int _epochMillis() => DateTime.now().millisecondsSinceEpoch;
 
+bool? _noChoice() => null;
+
 void _exitProcess() => exit(0);
 
 Directory _defaultDownloadFolder() =>
     Directory('${lumitCacheDir().path}${Platform.pathSeparator}update');
 
 /// GitHub answers JSON and wants a media type named. The fetch itself is
-/// `download.dart`'s; what comes back has to be an object for the parser above
-/// to read it.
-Future<Map<String, dynamic>> _fetchReleaseJson(Uri url) async {
+/// `download.dart`'s; what comes back has to be a release or a list of them
+/// for the parser above to read it.
+Future<Object?> _fetchReleaseJson(Uri url) async {
   final body = await fetchText(url, accept: 'application/vnd.github+json');
   final json = jsonDecode(body);
-  if (json is! Map<String, dynamic>) {
+  if (json is! Map<String, dynamic> && json is! List) {
     throw FormatException(l10n.updateBadReleaseData);
   }
   return json;

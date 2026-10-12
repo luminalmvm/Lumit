@@ -32,6 +32,17 @@ void main() {
       // A missing place is zero.
       expect(compareVersions('1.2', '1.2.0'), 0);
     });
+
+    test('a nightly sits between two stable releases', () {
+      const nightly = '0.6.1-nightly.20261012.9';
+      expect(compareVersions(nightly, '0.6.0'), greaterThan(0));
+      expect(compareVersions(nightly, '0.6.1'), lessThan(0));
+      // Run ten follows run nine, and a new day follows both.
+      expect(compareVersions('0.6.1-nightly.20261012.10', nightly),
+          greaterThan(0));
+      expect(compareVersions('0.6.1-nightly.20261013.11', nightly),
+          greaterThan(0));
+    });
   });
 
   group('reading a release', () {
@@ -103,6 +114,66 @@ void main() {
       expect(service.failure, 'Could not check for updates');
       // Recoverable: the row offers the check again.
       expect(service.menuLabel, 'Check for updates');
+    });
+  });
+
+  group('nightly builds', () {
+    // What `releases?per_page=30` answers: newest first, every kind mixed in.
+    List<Map<String, dynamic>> recent() => [
+          _releaseJson(tag: 'v0.2.1-nightly.20261013.11', prerelease: true),
+          _releaseJson(tag: 'v0.2.1-nightly.20261012.9', prerelease: true),
+          _releaseJson(tag: 'v0.3.0-rc1', prerelease: true),
+          _releaseJson(tag: 'v0.2.0'),
+        ];
+
+    test('the nightly channel takes the newest nightly, never a candidate',
+        () async {
+      Uri? asked;
+      final service = _service(
+        version: '0.2.0',
+        nightly: () => true,
+        fetch: (url) async {
+          asked = url;
+          return recent();
+        },
+      );
+      await service.check();
+      expect(asked, recentReleasesUrl);
+      expect(service.release?.version, '0.2.1-nightly.20261013.11');
+    });
+
+    test('a nightly follows nightlies without being told to', () async {
+      final service = _service(
+          version: '0.2.1-nightly.20261012.9', fetch: (_) async => recent());
+      expect(service.followsNightly, isTrue);
+      await service.check();
+      expect(service.release?.version, '0.2.1-nightly.20261013.11');
+    });
+
+    test('a stable build is never offered one', () async {
+      Uri? asked;
+      final service = _service(
+        version: '0.2.0',
+        fetch: (url) async {
+          asked = url;
+          return _releaseJson(tag: 'v0.2.0');
+        },
+      );
+      expect(service.followsNightly, isFalse);
+      await service.check();
+      expect(asked, latestReleaseUrl);
+      expect(service.stage, UpdateStage.upToDate);
+    });
+
+    test('leaving nightly offers the stable release, older or not', () async {
+      final service = _service(
+        version: '0.2.1-nightly.20261012.9',
+        nightly: () => false,
+        fetch: (_) async => _releaseJson(tag: 'v0.2.0'),
+      );
+      await service.check();
+      expect(service.stage, UpdateStage.available);
+      expect(service.release?.version, '0.2.0');
     });
   });
 
@@ -487,6 +558,7 @@ Future<UpdateService> _readyService(Directory scratch, {String? notes}) async {
 UpdateService _service({
   String? version = '0.1.0',
   String platform = 'windows',
+  bool? Function()? nightly,
   InstallSite? site,
   ReleaseFetcher? fetch,
   AssetDownloader? download,
@@ -499,6 +571,7 @@ UpdateService _service({
 }) =>
     UpdateService(
       currentVersion: () => version,
+      nightly: nightly,
       platform: platform,
       // Unknown by default, which means "use the installer": a test has to
       // ask for a replaceable installation before anything here will

@@ -227,4 +227,4 @@ crate knows a UI exists. `lumit-core` has no GPU, codec or audio dependency.
 | `scripts/` | `build`, `check`, `codegen`, `translations`, `manual-pages`, `shots`, `win-dev-env`. Each answers `-?` |
 | `packaging/` | Windows installer, macOS dmg, Linux desktop files, Flatpak |
 | `tools/` | The After Effects export script and its audit kit |
-| `.github/workflows/` | `ci.yml`, and `release.yml` on a `v*` tag |
+| `.github/workflows/` | `ci.yml`, and `release.yml` on a `v*` tag and nightly from `main` |
