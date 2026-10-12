@@ -476,6 +476,10 @@ class InterfaceSettings {
   /// Whether Shift+A over a focused node graph canvas opens node search.
   bool shiftAOpensNodeSearch;
 
+  /// Whether node graph wires hang like slack cables rather than running out
+  /// of each socket in an S-curve. Off by default.
+  bool hangingWires;
+
   /// Which weight the icon set draws at, or the style's own.
   IconSet iconSet;
 
@@ -532,6 +536,7 @@ class InterfaceSettings {
     this.rightClickOpensNodeSearch = true,
     this.tabOpensNodeSearch = true,
     this.shiftAOpensNodeSearch = true,
+    this.hangingWires = false,
     this.iconSet = IconSet.styleChoice,
     this.room = LanternRoom.auto,
     this.labelCase,
@@ -567,6 +572,7 @@ class InterfaceSettings {
         'right_click_opens_node_search': rightClickOpensNodeSearch,
         'tab_opens_node_search': tabOpensNodeSearch,
         'shift_a_opens_node_search': shiftAOpensNodeSearch,
+        'hanging_wires': hangingWires,
         'icon_set': iconSet.name,
         'lantern_room': room.name,
         if (labelCase != null) 'label_case': labelCase!.name,
@@ -674,6 +680,7 @@ class InterfaceSettings {
             j['right_click_opens_node_search'] as bool? ?? true,
         tabOpensNodeSearch: j['tab_opens_node_search'] as bool? ?? true,
         shiftAOpensNodeSearch: j['shift_a_opens_node_search'] as bool? ?? true,
+        hangingWires: j['hanging_wires'] == true,
         iconSet: IconSet.values.firstWhere(
           (s) => s.name == j['icon_set'],
           orElse: () => IconSet.styleChoice,

@@ -60,11 +60,15 @@ class ThemeScope extends InheritedWidget {
   final AnimationLevel animationLevel;
   final bool showTooltips;
 
+  /// Whether node graph wires hang like cables, read by every wire painter.
+  final bool hangingWires;
+
   const ThemeScope({
     super.key,
     required this.theme,
     required this.animationLevel,
     required this.showTooltips,
+    this.hangingWires = false,
     required super.child,
   });
 
@@ -84,5 +88,6 @@ class ThemeScope extends InheritedWidget {
   bool updateShouldNotify(ThemeScope old) =>
       old.theme != theme ||
       old.animationLevel != animationLevel ||
-      old.showTooltips != showTooltips;
+      old.showTooltips != showTooltips ||
+      old.hangingWires != hangingWires;
 }

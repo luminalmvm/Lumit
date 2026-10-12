@@ -830,6 +830,7 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel> {
                       pan: _pan,
                       zoom: _zoom,
                       theme: t,
+                      hanging: ThemeScope.of(context).hangingWires,
                     ),
                   ),
                 ),
@@ -1048,6 +1049,7 @@ class _WirePainter extends CustomPainter {
   final Offset pan;
   final double zoom;
   final LumitTheme theme;
+  final bool hanging;
 
   const _WirePainter({
     required this.boxes,
@@ -1056,6 +1058,7 @@ class _WirePainter extends CustomPainter {
     required this.pan,
     required this.zoom,
     required this.theme,
+    required this.hanging,
   });
 
   Offset _screen(Offset canvas) => canvas * zoom + pan;
@@ -1082,7 +1085,8 @@ class _WirePainter extends CustomPainter {
 
   void _wire(Canvas canvas, Offset from, Offset to, Color colour,
       {required bool dashes}) {
-    final path = graphWirePath(_screen(from), _screen(to), zoom: zoom);
+    final path = graphWirePath(_screen(from), _screen(to),
+        zoom: zoom, hanging: hanging);
     final paint = Paint()
       ..color = colour
       ..style = PaintingStyle.stroke
@@ -1205,7 +1209,10 @@ class _ShaderGraphThumbState extends State<ShaderGraphThumb> {
               : CustomPaint(
                   key: ValueKey<String>('shader-thumb-graph-${widget.effect}'),
                   painter: _ThumbPainter(
-                      boxes: drawn.boxes, edges: drawn.edges, theme: t),
+                      boxes: drawn.boxes,
+                      edges: drawn.edges,
+                      theme: t,
+                      hanging: ThemeScope.of(context).hangingWires),
                   child: const SizedBox.expand(),
                 ),
         ),
@@ -1220,11 +1227,13 @@ class _ThumbPainter extends CustomPainter {
   final List<_Box> boxes;
   final List<Map<String, dynamic>> edges;
   final LumitTheme theme;
+  final bool hanging;
 
   const _ThumbPainter({
     required this.boxes,
     required this.edges,
     required this.theme,
+    required this.hanging,
   });
 
   @override
@@ -1257,6 +1266,7 @@ class _ThumbPainter extends CustomPainter {
           at(from.socket(port, isInput: false)),
           at(to.socket(e['to_port'] as int? ?? 0, isInput: true)),
           zoom: zoom,
+          hanging: hanging,
         ),
         Paint()
           ..color = shaderPortColour(theme, from.node.outputs[port].ty)
@@ -1290,5 +1300,8 @@ class _ThumbPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_ThumbPainter old) =>
-      old.boxes != boxes || old.edges != edges || old.theme != theme;
+      old.boxes != boxes ||
+      old.edges != edges ||
+      old.theme != theme ||
+      old.hanging != hanging;
 }
