@@ -1711,6 +1711,12 @@ class Workspace extends ChangeNotifier {
   static File storeFile() {
     final override = storeOverride;
     if (override != null) return File(override);
+    // A test that never set the override, or let it go with a save still to
+    // come, must not reach this machine's own file either.
+    if (Platform.environment.containsKey('FLUTTER_TEST')) {
+      return File('${Directory.systemTemp.path}${Platform.pathSeparator}'
+          'lumit-test-stray${Platform.pathSeparator}workspace.json');
+    }
     final base = Platform.environment['APPDATA'] ??
         '${Platform.environment['HOME'] ?? '.'}/.config';
     return File('$base${Platform.pathSeparator}lumit'

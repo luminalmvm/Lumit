@@ -20,8 +20,6 @@
 // `lumit-bridge`'s `a_prefix_point_cuts_the_stack_and_names_its_own_frame` and
 // `lumit-render/tests/node_prefix_preview.rs`.
 
-import 'dart:io';
-
 import 'package:flutter/widgets.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -30,7 +28,6 @@ import 'package:lumit_flutter/panels/effect_param_row_frb.dart'
     show effectLabelOf;
 import 'package:lumit_flutter/panels/viewer_prefix_chip.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
-import 'package:lumit_flutter/src/rust/frb_generated.dart';
 
 import 'frb_test_support.dart';
 
@@ -65,17 +62,9 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   final counter = _RenderCounter();
 
-  setUpAll(() async {
-    final stem = Platform.isWindows
-        ? 'lumit_bridge.dll'
-        : Platform.isMacOS
-            ? 'liblumit_bridge.dylib'
-            : 'liblumit_bridge.so';
-    await BridgeLib.init(
-      externalLibrary: ExternalLibrary.open('../target/debug/$stem'),
-      handler: counter,
-    );
-  });
+  // Through the shared start-up, which also keeps a run away from this
+  // machine's own settings file.
+  setUpAll(() => initEngineForTests(handler: counter));
 
   group('The Viewer\'s "at effect" chip', () {
     /// A comp with one solid carrying a blur and an exposure, selected.
