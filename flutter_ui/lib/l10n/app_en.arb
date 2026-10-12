@@ -16498,14 +16498,6 @@
   "@proFeatureSyncBody": {
     "description": "What the second Lumit Pro feature does."
   },
-  "proFeatureSupportTitle": "Support Lumit",
-  "@proFeatureSupportTitle": {
-    "description": "Last feature in the Lumit Pro window."
-  },
-  "proFeatureSupportBody": "Helps pay for servers and development.",
-  "@proFeatureSupportBody": {
-    "description": "What the last Lumit Pro feature does."
-  },
   "proMonthly": "Monthly",
   "@proMonthly": {
     "description": "One of the two ways to pay for Lumit Pro, on a two-way switch."

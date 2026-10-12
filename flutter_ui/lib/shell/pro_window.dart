@@ -257,13 +257,6 @@ class _ProWindowState extends State<_ProWindow>
                 body: l10n.proFeatureSyncBody,
                 on: pro,
               ),
-              _Feature(
-                index: 5,
-                mark: LumitIcons.star,
-                title: l10n.proFeatureSupportTitle,
-                body: l10n.proFeatureSupportBody,
-                on: pro,
-              ),
               const SizedBox(height: 14),
               ..._foot(t, account, config),
             ],
