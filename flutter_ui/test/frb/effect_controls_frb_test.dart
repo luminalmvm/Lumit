@@ -162,6 +162,22 @@ void main() {
           reason: 'and not the one it was showing before');
     });
 
+    testWidgets('a layer of the project before is not kept after a swap',
+        (tester) async {
+      // With nothing selected the panel goes on showing the layer it last
+      // drew. After another project takes this one's place that layer is the
+      // old project's, and its rows asked the engine about it as they were
+      // built, which threw.
+      final p = withLayer();
+      await mount(tester, p);
+      await tester.runAsync(() => p.state.newProject(ask: false));
+      p.uiState.setSelectedComp(p.state.project!.newComposition(name: 'Next'));
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+      expect(find.byType(EffectParamRowFrb), findsNothing);
+    });
+
     testWidgets('a parameter edit commits, and reading it back is exact',
         (tester) async {
       final p = withLayer();
