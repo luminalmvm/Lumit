@@ -142,6 +142,14 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   BigInt? _tracksRevision;
   CompositionReference? _tracksComp;
 
+  /// Whether each uncut footage layer's file carries sound, by layer id:
+  /// what gives the layer a sound row below the line. A probe of the file,
+  /// so asked once per layer and kept.
+  // ponytail: a file relinked later is not asked again until the panel is
+  // made anew. Ask again on an items change, as the Timeline does, if that
+  // is missed.
+  final Map<String, bool> _hasAudio = {};
+
   /// The clips that share a link, by clip id: a picture clip and the clip
   /// carrying its sound, which select and travel together while the strip's
   /// Linked switch is on.
@@ -1011,7 +1019,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     }
     _tracksRevision = revision;
     _tracksComp = comp;
-    _tracks = cutTimelineTracks(model.layers);
+    _tracks = cutTimelineTracks(model.layers, hasAudio: _hasAudio);
     final of = <String, int>{};
     final keys = <String>{};
     final byLink = <String, Set<String>>{};
@@ -1097,8 +1105,36 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     _refreshQueued = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _refreshQueued = false;
-      if (mounted) _refreshPictures();
+      if (!mounted) return;
+      _probeSound();
+      _refreshPictures();
     });
+  }
+
+  /// Ask whether each uncut footage layer's file carries sound, once per
+  /// layer. The answer opens the file, so it is asked after the frame and
+  /// never from a build; a yes makes the rows again, with the layer's sound
+  /// row among them.
+  void _probeSound() {
+    for (final track in _tracks) {
+      if (track.kind != CutTrackKind.plain ||
+          track.entry.info.kind != BridgeLayerKind.footage ||
+          _hasAudio.containsKey(track.id)) {
+        continue;
+      }
+      // Claimed first, so a rebuild mid-probe does not ask twice.
+      _hasAudio[track.id] = false;
+      track.entry.layer.hasAudio().then((has) {
+        if (!mounted || !has) return;
+        setState(() {
+          _hasAudio[track.id] = true;
+          // The document has not moved: forget the revision so the rows
+          // are made again.
+          _tracksRevision = null;
+        });
+        // A layer deleted mid-probe has no answer, and wants no row.
+      }, onError: (Object _) {});
+    }
   }
 
   void _refreshPictures() {
@@ -1120,6 +1156,12 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     final live = <String>{};
     for (var i = first; i < last; i++) {
       final track = _tracks[i];
+      if (track.kind == CutTrackKind.layerSound) {
+        live.add(track.id);
+        _wantLayerPeaks(ui, track, axis.frameAtExact(viewLeft) / fps,
+            axis.frameAtExact(viewRight) / fps);
+        continue;
+      }
       final (lo, hi) = track.window(from, to);
       for (var k = lo; k < hi; k++) {
         final clip = track.clips[k];
@@ -1164,6 +1206,40 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     // the time it comes back.
     _peaks.removeWhere((id, _) => !live.contains(id));
     _peakKeys.removeWhere((id, _) => !live.contains(id));
+  }
+
+  /// The peaks of a layer's own sound row over the comp seconds in view,
+  /// as the Audio timeline asks for an uncut layer's.
+  void _wantLayerPeaks(
+      LumitUiState ui, CutTrack track, double viewStart, double viewEnd) {
+    final info = track.entry.info;
+    // The layer's own clock: comp time less where its source starts.
+    final startOffset = rationalSeconds(info.span.startOffset);
+    final request = WaveformRequest.forView(
+      startSeconds: viewStart - startOffset,
+      endSeconds: viewEnd - startOffset,
+      pixels: _laneViewport,
+    );
+    if (request == null) return;
+    // A retimed layer's buckets go through its Retime map, so reshaping the
+    // map changes the answer without moving the window.
+    final key = info.retime == null
+        ? request.key
+        : '${request.key}|${ui.model.heldRevision}';
+    if (_peakKeys[track.id] == key) return;
+    _peakKeys[track.id] = key;
+    track.entry.layer
+        .audioPeaks(
+      startSeconds: request.startSeconds,
+      endSeconds: request.endSeconds,
+      buckets: request.buckets,
+      multiwave: true,
+    )
+        .then((peaks) {
+      if (!mounted || _peakKeys[track.id] != key) return;
+      _peaks[track.id] = peaks;
+      _pictures.value++;
+    });
   }
 
   void _wantThumb(CutTrack track, BridgeClip clip) {
@@ -1691,7 +1767,11 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     var trackShift = 0;
     if (move && tool != CutTool.slide && held.track != null) {
       final over = cutTrackAt(_tracks, held.at.dy, _trackHeight);
-      trackShift = over == null ? 0 : over - held.track!;
+      // A layer's own sound row takes no clips, so over it they stay on
+      // their own track, as they do below the last row.
+      trackShift = over == null || _tracks[over].kind == CutTrackKind.layerSound
+          ? 0
+          : over - held.track!;
     }
     // A slide's neighbours trim and extend to stay against each sliding
     // clip: the one ending where it starts by its end, the one starting
@@ -2027,7 +2107,9 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     final at = _pointOnLanes(global);
     final index = at == null ? null : cutTrackAt(_tracks, at.dy, _trackHeight);
     final track = index == null ? null : _tracks[index];
-    final target = track == null || track.kind == CutTrackKind.plain
+    final target = track == null ||
+            track.kind == CutTrackKind.plain ||
+            track.kind == CutTrackKind.layerSound
         ? null
         : track.entry.layer;
     var frame = at == null ? ui.playheadFrame.value : _laneAxis.frameAt(at.dx);
@@ -2367,7 +2449,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                               ),
                             ),
                           ),
-                          if (_tracks.any((track) => track.sound))
+                          if (_tracks.any((track) => track.below))
                             _divider(t, divider - scrolled),
                         ]);
                       },
@@ -2474,16 +2556,19 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
               ),
             ),
           ),
-          if (track.sound) ...[
+          if (track.below) ...[
             _switch(t, comp, track, 'audible', s.audible,
                 BridgeLayerSwitch.audible,
                 mark: LumitIcons.audio,
                 offMark: LumitIcons.muted,
                 tip: s.audible ? l10n.switchAudible : l10n.switchMuted),
-            _switch(t, comp, track, 'solo', s.solo, BridgeLayerSwitch.solo,
-                mark: LumitIcons.solo,
-                offMark: LumitIcons.solo,
-                tip: s.solo ? l10n.switchSoloed : l10n.switchSolo),
+            // Not on a layer's own sound row: solo there would solo its
+            // picture too.
+            if (track.sound)
+              _switch(t, comp, track, 'solo', s.solo, BridgeLayerSwitch.solo,
+                  mark: LumitIcons.solo,
+                  offMark: LumitIcons.solo,
+                  tip: s.solo ? l10n.switchSoloed : l10n.switchSolo),
           ] else
             _switch(t, comp, track, 'visible', s.visible,
                 BridgeLayerSwitch.visible,
@@ -2727,7 +2812,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                                   ),
                                 ),
                               ),
-                              if (_tracks.any((track) => track.sound))
+                              if (_tracks.any((track) => track.below))
                                 _divider(t, divider),
                               // The box a marquee sweeps, over the clips.
                               ValueListenableBuilder<Rect?>(

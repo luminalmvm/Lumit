@@ -326,7 +326,21 @@ class CutTrackPainter extends CustomPainter {
     final box =
         Rect.fromLTWH(left, cutClipInset, width, size.height - cutClipInset * 2);
     _fill(canvas, box, picked: false);
-    _name(canvas, info.name, box, from: clipEdgeWidth + 4);
+    // A layer's own sound row: its wave under its name. The peaks are on the
+    // layer's clock, which starts where its source does.
+    final own = track.kind == CutTrackKind.layerSound;
+    final summary = own ? peaks[track.id] : null;
+    if (summary != null && axis.perFrame > 0 && fps > 0) {
+      _waveAt(
+          canvas,
+          summary,
+          rationalSeconds(info.span.inPoint) -
+              rationalSeconds(info.span.startOffset),
+          box);
+    }
+    final header = own ? _soundHeader(box) : 0.0;
+    _name(canvas, info.name, box,
+        from: clipEdgeWidth + 4, band: header > 0 ? header : null);
   }
 
   /// The outline of the clip's whole source behind its box while an edge is
@@ -474,6 +488,12 @@ class CutTrackPainter extends CustomPainter {
     final slip = mine && held.tool == CutTool.slip;
     final origin = rationalSeconds(clip.placeStart) +
         (trimIn || slip ? held.shift / fps : 0);
+    _waveAt(canvas, summary, origin, box);
+  }
+
+  /// A wave across [box], whose left edge is [origin] on the peaks' clock.
+  void _waveAt(
+      Canvas canvas, BridgeAudioPeaks summary, double origin, Rect box) {
     // Under the name's header, so the wave never runs through the name.
     final header = _soundHeader(box);
     final tall = box.height - header;

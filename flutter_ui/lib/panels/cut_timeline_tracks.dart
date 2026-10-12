@@ -38,6 +38,11 @@ enum CutTrackKind {
   /// Any other layer, a text or a solid or an uncut footage layer: one plain
   /// bar from its in point to its out point.
   plain,
+
+  /// The sound of an uncut footage layer, which also stands above the line
+  /// as its plain bar: one bar with the layer's waveform. A second row for
+  /// the same layer, so the document holds nothing new.
+  layerSound,
 }
 
 /// One row of the Cut timeline.
@@ -63,6 +68,9 @@ class CutTrack {
   }
 
   bool get sound => kind == CutTrackKind.sound;
+
+  /// Whether the row stands below the dividing line.
+  bool get below => sound || kind == CutTrackKind.layerSound;
 
   /// The index range `[lo, hi)` of the clips touching `[from, to]` in comp
   /// frames. Both ends by binary search: the starts are sorted, and the
@@ -104,10 +112,15 @@ class CutTrack {
 
 /// Every track the panel draws: the picture and plain rows in stack order,
 /// then the sound rows in stack order, so the top-most layer still wins the
-/// picture and every sound row stands below the dividing line.
-List<CutTrack> cutTimelineTracks(List<BridgeLayerEntry> layers) {
+/// picture and every sound row stands below the dividing line. Last come the
+/// sound rows of the uncut footage layers [hasAudio] says carry sound, by
+/// layer id: after the sound tracks, so those stay next to each other and a
+/// clip crosses between them as it always did.
+List<CutTrack> cutTimelineTracks(List<BridgeLayerEntry> layers,
+    {Map<String, bool> hasAudio = const {}}) {
   final above = <CutTrack>[];
   final below = <CutTrack>[];
+  final own = <CutTrack>[];
   for (final entry in layers) {
     final info = entry.info;
     final id = entry.layer.internallayerId.toString();
@@ -119,14 +132,18 @@ List<CutTrack> cutTimelineTracks(List<BridgeLayerEntry> layers) {
       above.add(CutTrack._(entry, id, CutTrackKind.picture, clips));
     } else {
       above.add(CutTrack._(entry, id, CutTrackKind.plain, clips));
+      // An id of its own, since the rows are keyed by it.
+      if (info.kind == BridgeLayerKind.footage && (hasAudio[id] ?? false)) {
+        own.add(CutTrack._(entry, '$id-sound', CutTrackKind.layerSound, clips));
+      }
     }
   }
-  return [...above, ...below];
+  return [...above, ...below, ...own];
 }
 
 /// How many tracks stand above the dividing line.
 int cutPictureCount(List<CutTrack> tracks) {
-  final at = tracks.indexWhere((track) => track.sound);
+  final at = tracks.indexWhere((track) => track.below);
   return at < 0 ? tracks.length : at;
 }
 
